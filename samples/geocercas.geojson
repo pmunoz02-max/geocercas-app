@@ -1,0 +1,38 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Lote A"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -78.4693,
+              -0.1805
+            ],
+            [
+              -78.4685,
+              -0.1805
+            ],
+            [
+              -78.4685,
+              -0.1814
+            ],
+            [
+              -78.4693,
+              -0.1814
+            ],
+            [
+              -78.4693,
+              -0.1805
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
