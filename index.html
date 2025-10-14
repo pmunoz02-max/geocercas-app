@@ -3,24 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>APP CONTROL DE PERSONAL EN GEOCERCAS</title>
-
-    <!-- Cliente de Vite -->
-    <script type="module" src="/@vite/client"></script>
-
-    <!-- Preamble React Fast Refresh (inyectado manualmente) -->
-    <script type="module">
-      import RefreshRuntime from '/@react-refresh'
-      RefreshRuntime.injectIntoGlobalHook(window)
-      window.$RefreshReg$ = () => {}
-      window.$RefreshSig$ = () => (type) => type
-      window.__vite_plugin_react_preamble_installed__ = true
-    </script>
+    <title>App Geocercas</title>
   </head>
-  <body>
+  <body class="bg-slate-50 text-slate-900 antialiased">
     <div id="root"></div>
-
-    <!-- Punto de entrada de tu app -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+
