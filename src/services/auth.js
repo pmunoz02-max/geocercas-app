@@ -1,5 +1,5 @@
 // /src/services/auth.js
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 export async function sendMagicLink(email, redirectTo) {
   const { data, error } = await supabase.auth.signInWithOtp({

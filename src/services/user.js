@@ -1,5 +1,5 @@
 // /src/services/user.js
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 /** Devuelve el usuario autenticado (auth.users) */
 export async function getCurrentUser() {

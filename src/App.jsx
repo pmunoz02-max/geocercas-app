@@ -70,7 +70,7 @@ export default function App() {
           }
         />
 
-        {/* 🔵 NUEVA GEOCERCA (módulo único de geocercas) */}
+        {/* 🔵 NUEVA GEOCERCA */}
         <Route
           path="/nueva-geocerca"
           element={
@@ -106,20 +106,19 @@ export default function App() {
           }
         />
 
-        {/* ===== TRACKER (pantalla principal del módulo tracker) ===== */}
+        {/* ===== TRACKER ===== */}
         <Route
           path="/tracker"
           element={
             <AuthGuard>
               <Shell>
-                {/* contiene el botón “Invitar nuevo tracker” */}
                 <TrackerPage />
               </Shell>
             </AuthGuard>
           }
         />
 
-        {/* 🆕 DASHBOARD DE TRACKING EN TIEMPO REAL */}
+        {/* 🆕 DASHBOARD TRACKING ===== */}
         <Route
           path="/tracker-dashboard"
           element={

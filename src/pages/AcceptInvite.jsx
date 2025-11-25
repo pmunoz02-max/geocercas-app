@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Navigate } from "react-router-dom";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 export default function AcceptInvite() {
   const { token } = useParams();

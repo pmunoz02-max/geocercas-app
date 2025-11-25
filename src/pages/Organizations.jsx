@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createOrganization, listMyOrganizations } from "@/services/orgs";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 export default function Organizations() {
   const [orgs, setOrgs] = useState([]);

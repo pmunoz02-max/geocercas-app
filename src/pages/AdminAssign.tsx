@@ -1,6 +1,6 @@
 // src/pages/AdminAssign.tsx
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 type Org = { id: string; name: string };
 type Role = { id: string; slug: "owner" | "admin" | "tracker"; name: string };

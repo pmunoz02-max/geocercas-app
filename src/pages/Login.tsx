@@ -6,7 +6,7 @@ import {
   signInWithPassword,
   signInWithEmailOtp,
   getSessionSafe,
-} from '@/SupabaseClient';
+} from '@/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {

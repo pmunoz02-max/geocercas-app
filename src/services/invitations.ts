@@ -1,5 +1,5 @@
 // src/services/invitations.ts
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 import type { Role } from "./orgs";
 
 export interface Invitation {

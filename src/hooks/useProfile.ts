@@ -1,6 +1,6 @@
 // src/hooks/useProfile.ts
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/AuthProvider";
 
 // Define los posibles roles de tu app

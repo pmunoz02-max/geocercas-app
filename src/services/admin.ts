@@ -1,6 +1,6 @@
 // src/services/admin.ts
 // Ajusta la ruta si no usas alias "@"
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 export type UUID = string;
 

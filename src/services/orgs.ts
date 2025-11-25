@@ -1,5 +1,5 @@
 // src/services/orgs.ts
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 /** Roles soportados en la BD */
 export type Role = "owner" | "admin" | "tracker" | "viewer";

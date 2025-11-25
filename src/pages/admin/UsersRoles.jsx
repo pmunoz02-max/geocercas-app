@@ -1,6 +1,6 @@
 // src/pages/Admin/UsersRoles.jsx
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 function Notice({ type = "info", children }) {
   const colors =

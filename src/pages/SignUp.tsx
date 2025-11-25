@@ -1,6 +1,6 @@
 // src/pages/SignUp.tsx
 import { FormEvent, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
 
 export default function SignUp() {

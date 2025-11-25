@@ -25,7 +25,11 @@ const SUPABASE_ANON_KEY = readEnv('VITE_SUPABASE_ANON_KEY');
   const missing = [];
   if (!SUPABASE_URL) missing.push('VITE_SUPABASE_URL');
   if (!SUPABASE_ANON_KEY) missing.push('VITE_SUPABASE_ANON_KEY');
-  if (missing.length) throw new Error(`[SupabaseClient] Faltan variables de entorno: ${missing.join(', ')}`);
+  if (missing.length) {
+    throw new Error(
+      `[supabaseClient] Faltan variables de entorno: ${missing.join(', ')}`
+    );
+  }
 })();
 
 // --------------- SINGLETON -------------------
@@ -38,17 +42,30 @@ export function getSupabase() {
         autoRefreshToken: true,
         detectSessionInUrl: true,
       },
-      global: { headers: { 'x-app-name': 'app-geocercas' } },
+      global: {
+        headers: {
+          'x-app-name': 'app-geocercas',
+        },
+      },
     });
   }
   return _supabase;
 }
-export const supabase = getSupabase();
 
-// ✅ Export default para soportar imports por default en archivos antiguos
+export const supabase = getSupabase();
 export default supabase;
 
-// --------------- AUTH HELPERS ----------------
+// ---------------- HELPERS DE AUTENTICACIÓN ----------------
+
+export async function signOutEverywhere() {
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  } catch (err) {
+    console.error('[signOutEverywhere] error', err);
+  }
+}
+
 export async function getSessionSafe() {
   try {
     const { data } = await supabase.auth.getSession();
@@ -69,93 +86,21 @@ export async function getUserSafe() {
   }
 }
 
-export async function signInWithPassword({ email, password }) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return data?.user ?? null;
-}
-
-export async function signInWithEmailOtp(email, redirectTo) {
-  const emailRedirectTo = redirectTo ?? (typeof window !== 'undefined' ? window.location.origin : undefined);
-  const { data, error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo },
-  });
-  if (error) throw error;
-  return data;
-}
-
-export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
-  return true;
-}
-
-export function onAuthChange(callback) {
-  const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-    try {
-      callback?.(event, session);
-    } catch (e) {
-      console.error('[onAuthChange callback]', e);
-    }
-  });
-  return () => sub?.subscription?.unsubscribe?.();
-}
-
-export async function tryExchangeCodeForSessionIfPresent() {
-  try {
-    if (typeof window === 'undefined') return false;
-    const url = new URL(window.location.href);
-
-    const codeFromQuery = url.searchParams.get('code');
-    let codeFromHash = null;
-    if (url.hash && url.hash.includes('code=')) {
-      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
-      codeFromHash = hashParams.get('code');
-    }
-    const code = codeFromQuery || codeFromHash;
-    if (!code) return false;
-
-    await supabase.auth.exchangeCodeForSession({ code }).catch(() => {});
-    if (codeFromQuery) {
-      url.searchParams.delete('code');
-      window.history.replaceState({}, document.title, url.toString());
-    } else if (codeFromHash) {
-      window.history.replaceState({}, document.title, url.toString().split('#')[0]);
-    }
-    return true;
-  } catch (e) {
-    console.warn('[tryExchangeCodeForSessionIfPresent]', e);
-    return false;
-  }
-}
-
-// --------------- PROFILE ----------------
 export async function getProfileSafe() {
   try {
-    const user = await getUserSafe();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('tenant_id:org_id, id, email, full_name, role, is_active, created_at')
+      .select('*')
       .eq('id', user.id)
-      .maybeSingle();
+      .single();
 
-    if (error) {
-      console.warn('[getProfileSafe] RLS/cols', error.message);
-      return null;
-    }
-    return data ?? null;
+    if (error) throw error;
+    return data;
   } catch (e) {
     console.error('[getProfileSafe]', e);
     return null;
   }
 }
-
-// --------------- UTILS ----------------
-export const isEnvReady = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-export const envInfo = {
-  hasUrl: Boolean(SUPABASE_URL),
-  hasAnonKey: Boolean(SUPABASE_ANON_KEY),
-};

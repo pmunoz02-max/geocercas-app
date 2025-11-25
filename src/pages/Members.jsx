@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { listMembers, listMyOrganizations, setMemberRole } from "@/services/orgs";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 const ROLE_OPTIONS = ["owner", "admin", "tracker", "viewer"];
 

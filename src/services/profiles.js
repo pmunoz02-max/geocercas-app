@@ -1,5 +1,5 @@
 // /src/services/profiles.js
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 const TABLE = "profiles";
 
