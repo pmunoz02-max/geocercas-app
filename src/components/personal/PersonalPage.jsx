@@ -1,6 +1,6 @@
 // src/components/personal/PersonalPage.jsx
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient.js";
+import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 
 /**
@@ -53,7 +53,7 @@ export default function PersonalPage() {
     if (!authLoading && user) {
       loadPersonal();
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, onlyActive, q]);
 
   async function loadPersonal() {
     try {
@@ -212,16 +212,28 @@ export default function PersonalPage() {
         throw new Error("No se pudo obtener el usuario actual");
       }
 
+      const nombre = form.nombre.trim();
+      const apellido = form.apellido.trim();
+      const email = form.email.trim().toLowerCase();
+      const telefono = form.telefono.trim();
+
+      if (!nombre) throw new Error("Nombre es obligatorio");
+      if (!email) throw new Error("Email es obligatorio");
+
+      // Política telefónica internacional: si hay teléfono, debe empezar con "+"
+      if (telefono && !telefono.startsWith("+")) {
+        throw new Error(
+          "Por política internacional, el teléfono debe empezar con código de país (ej: +593999999999)."
+        );
+      }
+
       const payload = {
-        nombre: form.nombre.trim(),
-        apellido: form.apellido.trim(),
-        email: form.email.trim().toLowerCase(),
-        telefono: form.telefono.trim(),
+        nombre,
+        apellido,
+        email,
+        telefono,
         vigente: !!form.vigente,
       };
-
-      if (!payload.nombre) throw new Error("Nombre es obligatorio");
-      if (!payload.email) throw new Error("Email es obligatorio");
 
       let query;
       if (form.id) {
@@ -426,7 +438,6 @@ export default function PersonalPage() {
               checked={onlyActive}
               onChange={(e) => {
                 setOnlyActive(e.target.checked);
-                // no recargamos automáticamente para no ser agresivos
               }}
             />
             <span>Solo activos</span>
@@ -489,7 +500,7 @@ export default function PersonalPage() {
             name="telefono"
             value={form.telefono}
             onChange={onChange}
-            placeholder="Teléfono"
+            placeholder="Teléfono (+código país)"
             className="pg-input"
           />
           <label className="pg-check">
