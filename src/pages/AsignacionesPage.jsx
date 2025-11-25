@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/SupabaseClient";
+import { supabase } from "@/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
 const ESTADOS = [
