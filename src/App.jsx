@@ -10,7 +10,7 @@ import TopTabs from "./components/TopTabs.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import TrackerPage from "./pages/TrackerPage.jsx";      // ✅ wrapper principal del módulo Tracker
+import TrackerPage from "./pages/TrackerPage.jsx"; // ✅ wrapper principal del módulo Tracker
 import InvitarTrackerPage from "./pages/InvitarTracker.jsx";
 import Login from "./pages/Login.tsx";
 
@@ -21,7 +21,8 @@ import Inicio from "./pages/Inicio.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
 // 👉 Cliente de Supabase unificado en todo el proyecto
-import { supabase } from "@/SupabaseClient";
+// 🔧 Corregido: antes "@/SupabaseClient" (S mayúscula, rompía en Vercel/Linux)
+import { supabase } from "./supabaseClient";
 
 function Shell({ children }) {
   return (
@@ -111,7 +112,8 @@ export default function App() {
           element={
             <AuthGuard>
               <Shell>
-                <TrackerPage /> {/* contiene el botón “Invitar nuevo tracker” */}
+                {/* contiene el botón “Invitar nuevo tracker” */}
+                <TrackerPage />
               </Shell>
             </AuthGuard>
           }
