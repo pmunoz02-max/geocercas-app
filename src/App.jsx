@@ -1,258 +1,149 @@
 // src/App.jsx
-import React, { useEffect } from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-  useNavigate,
-  Link,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Login from "./pages/Login.jsx"; // ⬅️ Import ÚNICO y ESTÁTICO
+import AuthGuard from "./components/AuthGuard.jsx";
+import PublicOnly from "./components/PublicOnly.jsx";
+import AppHeader from "./components/AppHeader.jsx";
+import TopTabs from "./components/TopTabs.jsx";
 
-const APP_TITLE = "APP DE CONTROL DE PERSONAL CON GEOCERCAS";
+// --- Páginas principales ---
+import PersonalPage from "./components/personal/PersonalPage.jsx";
+import AsignacionesPage from "./pages/AsignacionesPage.jsx";
+import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
+import TrackerPage from "./pages/TrackerPage.jsx";      // ✅ wrapper principal del módulo Tracker
+import InvitarTrackerPage from "./pages/InvitarTracker.jsx";
+import Login from "./pages/Login.tsx";
 
-/* ===== Utilidades de sesión y roles ===== */
-function getSession() {
-  const token = sessionStorage.getItem("token");
-  const userRaw = sessionStorage.getItem("user");
-  const user = userRaw ? JSON.parse(userRaw) : null;
-  return { token, user };
-}
+// Nueva pantalla de inicio
+import Inicio from "./pages/Inicio.jsx";
 
-function roleToPath(role) {
-  switch (role) {
-    case "owner":
-      return "/owner";
-    case "admin":
-      return "/admin";
-    default:
-      return "/tracker";
-  }
-}
+// 🆕 Dashboard de tracking en tiempo real
+import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
-/* ===== Rutas protegidas ===== */
-function ProtectedRoute({ children, allowedRoles }) {
-  const { token, user } = getSession();
-  const location = useLocation();
+// 👉 Cliente de Supabase unificado en todo el proyecto
+import { supabase } from "@/SupabaseClient";
 
-  if (!token) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  }
-
-  if (allowedRoles?.length) {
-    const role = user?.role;
-    if (!role || !allowedRoles.includes(role)) {
-      return <Navigate to={roleToPath(role)} replace />;
-    }
-  }
-
-  return children;
-}
-
-/* ===== Layout con header/footer ===== */
-function AppLayout({ children }) {
-  const { token, user } = getSession();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-    navigate("/login", { replace: true });
-  };
-
+function Shell({ children }) {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-200">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-sm font-semibold tracking-tight">
-            {APP_TITLE}
-          </Link>
-
-          {token ? (
-            <div className="flex items-center gap-3 text-sm">
-              <span className="hidden sm:inline text-slate-600">
-                {user?.email} — <strong>{(user?.role || "").toUpperCase()}</strong>
-              </span>
-              <button
-                onClick={handleLogout}
-                className="rounded-xl border border-slate-300 px-3 py-1.5 hover:bg-slate-100"
-              >
-                Salir
-              </button>
-            </div>
-          ) : (
-            <Link
-              to="/login"
-              className="rounded-xl border border-slate-300 px-3 py-1.5 hover:bg-slate-100 text-sm"
-            >
-              Ingresar
-            </Link>
-          )}
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
-
-      <footer className="mx-auto max-w-6xl px-4 py-8 text-xs text-slate-500">
-        © {new Date().getFullYear()} — {APP_TITLE}
-      </footer>
+    <div className="min-h-screen bg-gray-50">
+      <AppHeader />
+      <TopTabs />
+      <main className="p-3">{children}</main>
     </div>
   );
 }
 
-/* ===== Redirección raíz según sesión/rol ===== */
-function RootRedirect() {
-  const { token, user } = getSession();
-  if (!token) return <Navigate to="/login" replace />;
-  return <Navigate to={roleToPath(user?.role)} replace />;
-}
-
-/* ===== Páginas placeholder (sustituye por tus vistas reales) ===== */
-function OwnerPage() {
+function PublicShell({ children }) {
   return (
-    <section className="space-y-4">
-      <h2 className="text-2xl font-bold">Panel Owner</h2>
-      <p className="text-slate-600">Control total: compañías, billing, seguridad, auditoría.</p>
-    </section>
-  );
-}
-function AdminPage() {
-  return (
-    <section className="space-y-4">
-      <h2 className="text-2xl font-bold">Panel Administrador</h2>
-      <p className="text-slate-600">Gestión de equipos, geocercas y reportes.</p>
-    </section>
-  );
-}
-function TrackerPage() {
-  return (
-    <section className="space-y-4">
-      <h2 className="text-2xl font-bold">Panel Tracker</h2>
-      <p className="text-slate-600">Marcación, ubicación en tiempo real y tareas del día.</p>
-    </section>
+    <div className="min-h-screen bg-gray-50">
+      <AppHeader />
+      <main className="p-3">{children}</main>
+    </div>
   );
 }
 
-/* ===== ErrorBoundary para evitar pantallas en blanco ===== */
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, err: null };
-  }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, err: error };
-  }
-  componentDidCatch(error, info) {
-    console.error("ErrorBoundary:", error, info);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen grid place-items-center p-6">
-          <div className="max-w-xl w-full rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800">
-            <h2 className="text-lg font-semibold mb-2">Se produjo un error en la UI</h2>
-            <p className="text-sm mb-3">Revisa la consola del navegador para más detalles.</p>
-            <pre className="text-xs overflow-auto whitespace-pre-wrap">
-              {String(this.state.err)}
-            </pre>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-/* ===== App principal ===== */
 export default function App() {
-  useEffect(() => {
-    document.title = APP_TITLE;
-  }, []);
-
   return (
     <BrowserRouter>
-      <ErrorBoundary>
-        <Routes>
-          {/* Root decide según sesión/rol */}
-          <Route
-            path="/"
-            element={
-              <AppLayout>
-                <RootRedirect />
-              </AppLayout>
-            }
-          />
+      <Routes>
+        {/* ===== REDIRECCIÓN ROOT → /inicio ===== */}
+        <Route path="/" element={<Navigate to="/inicio" replace />} />
 
-          {/* Login (contenedor propio, sin layout de sesión) */}
-          <Route
-            path="/login"
-            element={
-              <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center p-4">
-                <div className="w-full max-w-2xl">
-                  <Login />
-                </div>
-              </div>
-            }
-          />
+        {/* ===== LOGIN ===== */}
+        <Route
+          path="/login"
+          element={
+            <PublicOnly>
+              <Login />
+            </PublicOnly>
+          }
+        />
 
-          {/* Owner */}
-          <Route
-            path="/owner"
-            element={
-              <ProtectedRoute allowedRoles={["owner"]}>
-                <AppLayout>
-                  <OwnerPage />
-                </AppLayout>
-              </ProtectedRoute>
-            }
-          />
+        {/* ===== INICIO (ACCESO PÚBLICO) ===== */}
+        <Route
+          path="/inicio"
+          element={
+            <PublicShell>
+              <Inicio />
+            </PublicShell>
+          }
+        />
 
-          {/* Admin */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "owner"]}>
-                <AppLayout>
-                  <AdminPage />
-                </AppLayout>
-              </ProtectedRoute>
-            }
-          />
+        {/* 🔵 NUEVA GEOCERCA (módulo único de geocercas) */}
+        <Route
+          path="/nueva-geocerca"
+          element={
+            <AuthGuard>
+              <Shell>
+                <NuevaGeocerca supabaseClient={supabase} />
+              </Shell>
+            </AuthGuard>
+          }
+        />
 
-          {/* Tracker */}
-          <Route
-            path="/tracker"
-            element={
-              <ProtectedRoute allowedRoles={["tracker", "admin", "owner"]}>
-                <AppLayout>
-                  <TrackerPage />
-                </AppLayout>
-              </ProtectedRoute>
-            }
-          />
+        {/* ===== PERSONAL ===== */}
+        <Route
+          path="/personal"
+          element={
+            <AuthGuard>
+              <Shell>
+                <PersonalPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
 
-          {/* 404 */}
-          <Route
-            path="*"
-            element={
-              <AppLayout>
-                <div className="space-y-4">
-                  <h2 className="text-2xl font-bold">404 — Página no encontrada</h2>
-                  <Link
-                    to="/login"
-                    className="inline-block rounded-xl border border-slate-300 px-3 py-2 hover:bg-slate-100 text-sm"
-                  >
-                    Ir al login
-                  </Link>
-                </div>
-              </AppLayout>
-            }
-          />
-        </Routes>
-      </ErrorBoundary>
+        {/* ===== ASIGNACIONES ===== */}
+        <Route
+          path="/asignaciones"
+          element={
+            <AuthGuard>
+              <Shell>
+                <AsignacionesPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ===== TRACKER (pantalla principal del módulo tracker) ===== */}
+        <Route
+          path="/tracker"
+          element={
+            <AuthGuard>
+              <Shell>
+                <TrackerPage /> {/* contiene el botón “Invitar nuevo tracker” */}
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* 🆕 DASHBOARD DE TRACKING EN TIEMPO REAL */}
+        <Route
+          path="/tracker-dashboard"
+          element={
+            <AuthGuard>
+              <Shell>
+                <TrackerDashboard />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ===== INVITAR TRACKER ===== */}
+        <Route
+          path="/invitar-tracker"
+          element={
+            <AuthGuard>
+              <Shell>
+                <InvitarTrackerPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ===== Fallback ===== */}
+        <Route path="*" element={<Navigate to="/inicio" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }

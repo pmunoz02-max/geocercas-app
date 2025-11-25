@@ -1,5 +1,92 @@
 /* src/index.css */
-@import "tailwindcss";
 
-/* extras opcionales sin @apply */
-html, body, #root { height: 100%; }
+/* Tailwind */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Base / Variables ---------- */
+@layer base {
+  :root {
+    --app-bg: #f8fafc;      /* slate-50 */
+    --app-fg: #0f172a;      /* slate-900 */
+    --card-bg: #ffffff;     /* blanco */
+    --muted-fg: #475569;    /* slate-600 */
+    --link: #2563eb;        /* azul */
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--app-bg);
+    color: var(--app-fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  }
+
+  header a {
+    text-decoration: none;
+  }
+  header a:visited {
+    color: inherit;
+  }
+
+  input, select, textarea, button {
+    font: inherit;
+  }
+  input, select, textarea {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  button {
+    background: #0ea5e9;    /* sky-500 */
+    color: #fff;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(0.95); }
+  button:disabled { background: #93c5fd; cursor: default; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: #f1f5f9; }
+  th, td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e2e8f0; }
+}
+
+/* ---------- Componentes utilitarios ---------- */
+@layer components {
+  .app-card {
+    background: var(--card-bg);
+    color: var(--app-fg);
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  }
+
+  .banner-success {
+    background: #34d399;
+    color: #111827;
+    border: 2px solid #059669;
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    font-weight: 700;
+    box-shadow: 0 0 6px rgba(0,0,0,0.2);
+  }
+
+  .banner-error {
+    background: #f87171;
+    color: #111827;
+    border: 2px solid #b91c1c;
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    font-weight: 700;
+    box-shadow: 0 0 6px rgba(0,0,0,0.25);
+  }
+}

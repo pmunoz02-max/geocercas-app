@@ -1,0 +1,57 @@
+:root{
+  --bg: #0b1220;       /* fondo app */
+  --bar: #0f172a;      /* barra superior */
+  --line: #1f2937;     /* línea/borde */
+  --text: #e5e7eb;     /* texto principal */
+  --muted: #9ca3af;    /* texto suave */
+  --active: #22d3ee;   /* cian activo */
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+}
+
+/* Barra superior */
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Contenedor de enlaces */
+.nav{
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+/* Enlaces/tabs */
+.navlink{
+  color: var(--text);
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  line-height: 1;
+  transition: background .15s, color .15s, transform .05s;
+}
+
+.navlink:hover{ background: #1f2937; }
+.navlink:active{ transform: translateY(1px); }
+
+/* Activo bien visible */
+.navlink.active{
+  background: var(--active);
+  color: #062126;
+}
+
+/* Área principal (espaciado) */
+.app-main{
+  padding: 16px;
+}

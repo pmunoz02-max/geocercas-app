@@ -1,0 +1,111 @@
+/* src/app.css */
+
+/* Layout principal */
+.geo-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: calc(100vh - 0px);
+  width: 100%;
+}
+
+/* Panel izquierdo con z-index alto para que SIEMPRE reciba clics */
+.geo-sidebar {
+  position: relative;
+  z-index: 1001; /* por encima de Leaflet controls */
+  background: #0f172a; /* slate-900 */
+  color: #e2e8f0;     /* slate-200 */
+  padding: 12px;
+  border-right: 1px solid #1f2937;
+  overflow: auto;
+}
+
+.geo-title { margin: 6px 0 8px; font-size: 18px; font-weight: 700; }
+.geo-subtitle { margin: 12px 0 6px; font-size: 14px; font-weight: 600; }
+.geo-label { display:block; margin: 6px 0 4px; font-size: 12px; color: #cbd5e1; }
+.geo-input {
+  width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #334155; background:#0b1220; color:#e2e8f0;
+}
+.geo-textarea {
+  width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #334155; background:#0b1220; color:#e2e8f0;
+}
+.geo-row { display:flex; gap:8px; margin: 8px 0; }
+.geo-btn {
+  flex:1;
+  border: 1px solid #334155;
+  background: #111827;
+  color: #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.geo-btn:hover { background:#1f2937; }
+
+.geo-block { margin-top: 8px; }
+
+.geo-live {
+  margin-top: 10px;
+  display:flex; gap:8px; align-items:center; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Contenedor del mapa: asegura que el mapa NO tape el sidebar */
+.geo-mapwrap {
+  position: relative;
+  z-index: 1;
+}
+
+/* Corrige stacking de Leaflet para que los controles no eclipsen el panel */
+.leaflet-map-zfix .leaflet-control-container {
+  z-index: 900 !important;
+}
+.leaflet-container {
+  z-index: 0 !important;
+}
+
+/* En pantallas angostas, panel arriba y mapa abajo */
+@media (max-width: 960px) {
+  .geo-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .geo-mapwrap { height: 70vh; }
+  /* === Personal: tema claro mínimo === */
+html, body {
+  background: #f5f7fb;           /* fondo claro */
+  color: #111827;                /* texto gris oscuro */
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+
+.btn {
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.btn:hover { background: #f3f4f6; }
+.btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.btn.primary:hover { background: #1d4ed8; }
+.input {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fff;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th, .table td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  text-align: left;
+}
+.table thead { background: #f3f4f6; }
+}

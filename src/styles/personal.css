@@ -1,0 +1,113 @@
+/* /src/styles/personal.css  —  Dark theme legible para el módulo Personal */
+
+:root {
+  --bg: #0b1021;               /* fondo principal */
+  --panel: #0f172a;            /* paneles / inputs */
+  --panel-2: #121a30;
+  --text: #e5e7eb;             /* texto principal */
+  --muted: #9aa3b2;            /* texto secundario */
+  --border: #334155;           /* bordes */
+  --accent: #22d3ee;           /* cian */
+  --accent-2: #2dd4bf;         /* banner OK */
+  --danger: #fca5a5;           /* banner error */
+  --row-hover: rgba(255,255,255,0.06);
+  --row-zebra: rgba(255,255,255,0.03);
+}
+
+.personal-page {
+  color: var(--text);
+}
+
+.personal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .5rem;
+  color: var(--text);
+}
+
+.input-dark, .select-dark, .btn, .table-dark {
+  font-size: 14px;
+}
+
+.input-dark, .select-dark {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.input-dark::placeholder {
+  color: var(--muted);
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--row-hover); }
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #0b1021;
+}
+.banner.ok { background: var(--accent-2); }
+.banner.err { background: var(--danger); }
+
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table-dark {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-dark thead th {
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table-dark tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.table-dark tbody tr:nth-child(even) {
+  background: var(--row-zebra);
+}
+
+.table-dark tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.table-dark tbody tr.active {
+  background: rgba(34, 211, 238, 0.16);
+}
+
+.muted {
+  color: var(--muted);
+  font-style: italic;
+}
