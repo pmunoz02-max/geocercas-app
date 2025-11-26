@@ -1,362 +1,245 @@
 // src/pages/InvitarTracker.jsx
-// Invitar tracker por Magic Link, ligado a PERSONAL.
-// Si hay organización activa: filtra por org_id.
-// Si no hay organización activa: filtra por owner_id (quien invita).
-// La Magic Link redirige a http://192.168.100.12:5173/tracker para pruebas en red local.
+// Invitar tracker por Magic Link
+// Usa AuthContext para user + currentOrg y Supabase para PERSONAL.
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthProvider.tsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
-export default function InvitarTracker() {
-  const { currentOrg } = useAuth();
-
-  const [inviterEmail, setInviterEmail] = useState("cargando...");
-  const [inviterId, setInviterId] = useState(null);
+function InvitarTracker() {
+  const { user, currentOrg } = useAuth();
 
   const [personalList, setPersonalList] = useState([]);
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
-  const [email, setEmail] = useState("");
+  const [trackerEmail, setTrackerEmail] = useState("");
+  const [loadingPersonal, setLoadingPersonal] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [dbWarning, setDbWarning] = useState(null);
-
-  // -------------------------------------------------------------
-  // 1) Cargar sesión de Supabase (quién invita)
-  // -------------------------------------------------------------
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSession() {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error("[InvitarTracker] Error sesión:", error);
-          if (!cancelled) setInviterEmail("error de sesión");
-          return;
-        }
-        const user = data?.session?.user || null;
-        if (!cancelled) {
-          setInviterEmail(user?.email || "no autenticado");
-          setInviterId(user?.id || null);
-        }
-      } catch (e) {
-        console.error("[InvitarTracker] Excepción sesión:", e);
-        if (!cancelled) setInviterEmail("error de sesión");
-      }
-    }
-
-    loadSession();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // -------------------------------------------------------------
-  // 2) Cargar PERSONAL:
-  //    - por org_id si hay organización activa
-  //    - si no, por owner_id = quien invita
-  // -------------------------------------------------------------
+  // ------------------------------------------------------------
+  // Cargar PERSONAL según organización activa
+  // ------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
 
     async function loadPersonal() {
-      setPersonalList([]);
-      setSelectedPersonalId("");
-      setEmail("");
+      setLoadingPersonal(true);
+      setError(null);
 
-      if (!inviterId && !currentOrg?.id) {
+      if (!user) {
+        setLoadingPersonal(false);
         return;
       }
 
       try {
         let query = supabase
           .from("personal")
-          .select(
-            "id, org_id, nombre, apellido, email, position_interval_sec, vigente, is_deleted, owner_id"
-          )
-          .eq("vigente", true)
-          .eq("is_deleted", false);
+          .select("id, full_name, email, org_id, owner_id")
+          .order("full_name", { ascending: true });
 
         if (currentOrg && currentOrg.id) {
+          // Personal de la org activa
           query = query.eq("org_id", currentOrg.id);
-        } else if (inviterId) {
-          query = query.eq("owner_id", inviterId);
+        } else {
+          // Fallback: todo el personal asociado al usuario que invita (owner_id)
+          query = query.eq("owner_id", user.id);
         }
 
-        const { data, error } = await query.order("nombre", {
-          ascending: true,
-        });
+        const { data, error: pErr } = await query;
 
-        if (error) {
-          console.error("[InvitarTracker] Error cargando personal:", error);
+        if (pErr) {
+          console.error("[InvitarTracker] error al cargar PERSONAL:", pErr);
+          if (!cancelled) {
+            setError("No se pudo cargar el PERSONAL.");
+          }
           return;
         }
 
-        if (!cancelled && Array.isArray(data)) {
-          setPersonalList(data);
+        if (!cancelled) {
+          const list = data || [];
+          setPersonalList(list);
+
+          // seleccionar automáticamente el primero
+          if (list.length > 0) {
+            setSelectedPersonalId(list[0].id);
+            setTrackerEmail(list[0].email || "");
+          }
         }
       } catch (e) {
-        console.error("[InvitarTracker] Excepción cargando personal:", e);
+        console.error("[InvitarTracker] excepción al cargar PERSONAL:", e);
+        if (!cancelled) {
+          setError("Ocurrió un error inesperado al cargar PERSONAL.");
+        }
+      } finally {
+        if (!cancelled) setLoadingPersonal(false);
       }
     }
 
     loadPersonal();
-
     return () => {
       cancelled = true;
     };
-  }, [inviterId, currentOrg]);
+  }, [user, currentOrg]);
 
-  // Cuando se selecciona una persona en el combo
-  function handleSelectPersonal(e) {
+  // ------------------------------------------------------------
+  // Cambiar selección de persona
+  // ------------------------------------------------------------
+  const handleChangePersonal = (e) => {
     const id = e.target.value;
     setSelectedPersonalId(id);
-    setMsg(null);
-    setErrorMsg(null);
-    setDbWarning(null);
 
-    const p = personalList.find((row) => String(row.id) === String(id));
-    if (p && p.email) {
-      setEmail(p.email);
-    } else {
-      setEmail("");
-    }
-  }
+    const person = personalList.find((p) => p.id === id);
+    setTrackerEmail(person?.email || "");
+  };
 
-  const canInvite = !!inviterId;
-
-  // -------------------------------------------------------------
-  // 3) Enviar Magic Link
-  // -------------------------------------------------------------
-  async function handleSubmit(e) {
+  // ------------------------------------------------------------
+  // Enviar Magic Link
+  // ------------------------------------------------------------
+  const handleSendMagicLink = async (e) => {
     e.preventDefault();
-    setMsg(null);
-    setErrorMsg(null);
-    setDbWarning(null);
+    setError(null);
+    setSuccessMsg(null);
 
-    if (!canInvite) {
-      setErrorMsg("Debes iniciar sesión para invitar trackers.");
+    if (!trackerEmail) {
+      setError("No hay email válido para el tracker seleccionado.");
       return;
     }
 
-    if (!selectedPersonalId) {
-      setErrorMsg("Debes seleccionar primero a la persona (PERSONAL).");
-      return;
-    }
-
-    const persona = personalList.find(
-      (row) => String(row.id) === String(selectedPersonalId)
-    );
-    if (!persona) {
-      setErrorMsg("La persona seleccionada no existe en la lista de PERSONAL.");
-      return;
-    }
-
-    if (!persona.email) {
-      setErrorMsg(
-        "La persona seleccionada no tiene email registrado en PERSONAL."
-      );
-      return;
-    }
-
-    if (persona.email.toLowerCase() !== email.trim().toLowerCase()) {
-      setErrorMsg(
-        "El email no coincide con el registrado en PERSONAL. No se enviará la invitación."
-      );
-      return;
-    }
-
-    setBusy(true);
+    setSending(true);
     try {
-      // 👉 Para pruebas en LAN usamos la IP fija de tu PC:
-      const baseUrl = "http://192.168.100.12:5173/tracker";
-      const redirectTo = baseUrl;
+      const redirectUrl = `${window.location.origin}/login`;
 
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
+      const { error: authErr } = await supabase.auth.signInWithOtp({
+        email: trackerEmail,
         options: {
-          emailRedirectTo: redirectTo,
+          emailRedirectTo: redirectUrl,
         },
       });
 
-      if (otpError) {
-        console.error("[InvitarTracker] Error Magic Link:", otpError);
-        throw otpError;
-      }
-
-      // 2) Registrar en tabla trackers (si existe)
-      try {
-        const { error: dbError } = await supabase.from("trackers").insert([
-          {
-            org_id: persona.org_id || currentOrg?.id || null,
-            owner_id: inviterId,
-            personal_id: persona.id,
-            email: email.trim().toLowerCase(),
-            status: "pending",
-          },
-        ]);
-
-        if (dbError) {
-          console.warn(
-            "[InvitarTracker] No se pudo registrar en 'trackers':",
-            dbError
-          );
-          setDbWarning(
-            "La Magic Link se envió, pero no se pudo registrar el tracker en la tabla 'trackers'. Revisa la BD/RLS."
-          );
-        }
-      } catch (e2) {
-        console.warn("[InvitarTracker] Error registrando tracker:", e2);
-        setDbWarning(
-          "La Magic Link se envió, pero hubo un error al registrar el tracker en la tabla."
+      if (authErr) {
+        console.error("[InvitarTracker] error al enviar Magic Link:", authErr);
+        setError("No se pudo enviar el Magic Link. Revisa la consola.");
+      } else {
+        setSuccessMsg(
+          `Se envió un Magic Link a ${trackerEmail}. Pídele que revise su correo.`
         );
       }
-
-      setMsg(
-        `Magic Link enviada a ${email.trim()} (${persona.nombre}${
-          persona.apellido ? " " + persona.apellido : ""
-        }). Pídele que abra el correo desde su móvil e inicie sesión para comenzar a enviar posiciones.`
-      );
-    } catch (err) {
-      console.error("[InvitarTracker] Error general:", err);
-      setErrorMsg(err?.message || "Error al enviar la Magic Link.");
+    } catch (e) {
+      console.error("[InvitarTracker] excepción enviando Magic Link:", e);
+      setError("Ocurrió un error inesperado al enviar el Magic Link.");
     } finally {
-      setBusy(false);
+      setSending(false);
     }
-  }
+  };
 
-  const orgName =
-    (currentOrg &&
-      (currentOrg.name ||
-        currentOrg.org_name ||
-        currentOrg.label ||
-        currentOrg.descripcion)) ||
-    "—";
+  // ------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------
+  const orgName = currentOrg?.name || null;
 
   return (
-    <div className="max-w-xl mx-auto bg-white rounded-xl shadow p-4 sm:p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Invitar Tracker por Magic Link</h1>
-
-      <p className="text-sm text-slate-600">
-        Solo puedes enviar una Magic Link a personas registradas en{" "}
-        <strong>PERSONAL</strong>. La invitación se enviará al correo registrado
-        en esa ficha.
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-semibold mb-2">Invitar Tracker por Magic Link</h1>
+      <p className="text-gray-600 text-sm mb-6">
+        Solo puedes enviar un Magic Link a personas registradas en PERSONAL.
+        La invitación se enviará al correo registrado en esa ficha.
       </p>
 
-      {/* Datos del que invita */}
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm space-y-1">
-        <div>
-          <span className="font-semibold text-slate-700">
-            Usuario que invita:{" "}
-          </span>
-          <span className="text-slate-800">{inviterEmail}</span>
-        </div>
-        <div>
-          <span className="font-semibold text-slate-700">
-            Organización activa:{" "}
-          </span>
-          <span className="text-slate-800">{orgName}</span>
-        </div>
-        {!currentOrg?.id && (
-          <p className="mt-1 text-xs text-amber-600">
+      {/* Bloque de resumen usuario + organización */}
+      <div className="border rounded-md p-4 mb-4 bg-slate-50">
+        <p className="text-sm">
+          <span className="font-semibold">Usuario que invita:</span>{" "}
+          {user?.email ?? "(desconocido)"}
+        </p>
+        <p className="text-sm mt-1">
+          <span className="font-semibold">Organización activa:</span>{" "}
+          {orgName ?? "—"}
+        </p>
+
+        {!orgName && (
+          <p className="text-xs text-amber-700 mt-2">
             No hay organización activa seleccionada. Se listará el PERSONAL
             asociado a tu usuario (owner_id).
           </p>
         )}
-        {!canInvite && (
-          <p className="mt-1 text-xs text-red-600">
-            Debes iniciar sesión para poder enviar invitaciones.
-          </p>
-        )}
       </div>
 
-      {/* Selección de personal */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-slate-700">
+      {/* Mensajes de error / éxito */}
+      {error && (
+        <div className="border border-red-300 bg-red-50 text-red-800 rounded px-4 py-2 text-sm mb-4">
+          {error}
+        </div>
+      )}
+      {successMsg && (
+        <div className="border border-emerald-300 bg-emerald-50 text-emerald-800 rounded px-4 py-2 text-sm mb-4">
+          {successMsg}
+        </div>
+      )}
+
+      {/* Formulario */}
+      <form onSubmit={handleSendMagicLink} className="space-y-4">
+        {/* Selección de PERSONA */}
+        <div>
+          <label className="block text-sm font-medium mb-1">
             Selecciona a la persona (PERSONAL)
           </label>
           <select
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full border rounded px-3 py-2 text-sm"
             value={selectedPersonalId}
-            onChange={handleSelectPersonal}
-            disabled={busy || personalList.length === 0}
+            onChange={handleChangePersonal}
+            disabled={loadingPersonal || personalList.length === 0}
           >
-            <option value="">— Selecciona —</option>
-            {personalList.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-                {p.apellido ? ` ${p.apellido}` : ""} (
-                {p.email || "sin email"})
-              </option>
-            ))}
+            {loadingPersonal && <option>Cargando PERSONAL…</option>}
+            {!loadingPersonal && personalList.length === 0 && (
+              <option>No hay personas registradas</option>
+            )}
+            {!loadingPersonal &&
+              personalList.length > 0 &&
+              personalList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.email || p.id}{" "}
+                  {p.email ? `(${p.email})` : ""}
+                </option>
+              ))}
           </select>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-gray-500 mt-1">
             Solo se listan personas de la organización activa o, si no hay
             organización, todas las asociadas a tu usuario.
           </p>
         </div>
 
-        {/* Email (solo lectura, viene de PERSONAL) */}
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-slate-700">
+        {/* Email del tracker */}
+        <div>
+          <label className="block text-sm font-medium mb-1">
             Email del tracker (desde PERSONAL)
           </label>
           <input
             type="email"
-            className="w-full border rounded-lg px-3 py-2 text-sm bg-slate-50"
-            value={email}
-            disabled
+            className="w-full border rounded px-3 py-2 text-sm"
+            value={trackerEmail}
+            onChange={(e) => setTrackerEmail(e.target.value)}
+            placeholder="correo@ejemplo.com"
           />
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-gray-500 mt-1">
             El correo se toma de la ficha de PERSONAL. Si está vacío o es
             incorrecto, corrígelo primero en el módulo Personal.
           </p>
         </div>
 
-        <button
-          type="submit"
-          disabled={busy || !canInvite || !selectedPersonalId || !email}
-          className={`px-4 py-2 rounded-lg text-sm font-medium text-white ${
-            busy || !canInvite || !selectedPersonalId || !email
-              ? "bg-slate-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
-          }`}
-        >
-          {busy ? "Enviando..." : "Enviar Magic Link"}
-        </button>
+        {/* Botón */}
+        <div>
+          <button
+            type="submit"
+            disabled={sending || !trackerEmail}
+            className="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-60"
+          >
+            {sending ? "Enviando…" : "Enviar Magic Link"}
+          </button>
+        </div>
       </form>
-
-      {msg && (
-        <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-          {msg}
-        </div>
-      )}
-
-      {errorMsg && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
-          {errorMsg}
-        </div>
-      )}
-
-      {dbWarning && (
-        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          {dbWarning}
-        </div>
-      )}
-
-      <div className="text-xs text-slate-500 border-t pt-3">
-        En desarrollo la Magic Link apunta a{" "}
-        <code className="bg-slate-100 px-1 py-0.5 rounded">
-          http://192.168.100.12:5173/tracker
-        </code>
-        . Para que funcione en el móvil, este equipo y el teléfono deben estar
-        en la misma red WiFi y el servidor Vite debe estar corriendo con{" "}
-        <code>npm run dev -- --host</code>.
-      </div>
     </div>
   );
 }
+
+export default InvitarTracker;
