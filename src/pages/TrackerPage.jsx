@@ -1,12 +1,12 @@
 // src/pages/TrackerPage.jsx
 // Página contenedora del tracker con botón “Invitar nuevo tracker”.
-// Muestra email, rol y organización activa usando AuthProvider + Supabase.
+// Muestra email, rol y organización activa usando AuthContext + Supabase.
 
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Tracker from "./Tracker.jsx";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthProvider.tsx"; // deja este path como lo tengas en el resto de la app
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function TrackerPage() {
   const navigate = useNavigate();
@@ -15,7 +15,7 @@ export default function TrackerPage() {
   const [sessionEmail, setSessionEmail] = useState(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
-  // Cargar sesión directa de Supabase (por si el AuthProvider no trae el email)
+  // Cargar sesión directa de Supabase (por si el AuthContext no trae el email)
   useEffect(() => {
     let cancelled = false;
 
@@ -44,7 +44,7 @@ export default function TrackerPage() {
     };
   }, []);
 
-  // Resolver email combinando AuthProvider + Supabase
+  // Resolver email combinando AuthContext + Supabase
   const emailFromAuth =
     (authUser && (authUser.email || authUser.user?.email)) || null;
 
@@ -68,6 +68,14 @@ export default function TrackerPage() {
   function handleInvite() {
     navigate("/invitar-tracker");
   }
+
+  const canUseTracker =
+    currentRole === "owner" ||
+    currentRole === "admin" ||
+    currentRole === "OWNER" ||
+    currentRole === "ADMIN" ||
+    currentRole === "tracker" ||
+    currentRole === "TRACKER";
 
   return (
     <section className="max-w-6xl mx-auto space-y-4">
@@ -118,7 +126,13 @@ export default function TrackerPage() {
 
       {/* TRACKER */}
       <div className="border rounded-xl p-3 bg-white">
-        <Tracker />
+        {canUseTracker ? (
+          <Tracker />
+        ) : (
+          <p className="text-sm text-red-600">
+            Tu rol actual no tiene permisos para usar el tracker GPS.
+          </p>
+        )}
       </div>
     </section>
   );
