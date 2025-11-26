@@ -1,5 +1,5 @@
 // src/context/AuthContext.jsx
-// MODELO GLOBAL + MULTI-ORG + SELECCIÓN OBLIGATORIA
+// MODELO GLOBAL + MULTI-ORG + ROL DERIVADO DE user_organizations
 
 import React, {
   createContext,
@@ -27,7 +27,6 @@ export function AuthProvider({ children }) {
   const [organizations, setOrganizations] = useState([]); // orgs del usuario
   const [currentOrg, setCurrentOrgState] = useState(null); // org seleccionada
 
-  const [role, setRole] = useState(null); // owner | admin | tracker
   const [loading, setLoading] = useState(true);
 
   // ------------------------------------------------------------
@@ -60,7 +59,6 @@ export function AuthProvider({ children }) {
           setProfile(null);
           setOrganizations([]);
           setCurrentOrgState(null);
-          setRole(null);
         }
       }
     );
@@ -72,14 +70,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ------------------------------------------------------------
-  // 2. Cargar perfil, organizaciones y rol global luego del login
+  // 2. Cargar perfil y organizaciones luego del login
   // ------------------------------------------------------------
   useEffect(() => {
     if (!user) {
       setProfile(null);
       setOrganizations([]);
       setCurrentOrgState(null);
-      setRole(null);
       return;
     }
 
@@ -109,7 +106,6 @@ export function AuthProvider({ children }) {
       }
 
       // ---------- 2.2 ORGANIZACIONES ----------
-      // Paso A: memberships en user_organizations
       let memberships = [];
       try {
         const { data: memData, error: memErr } = await supabase
@@ -126,7 +122,6 @@ export function AuthProvider({ children }) {
         console.error("[AuthContext] memberships exception:", e);
       }
 
-      // Paso B: si no hay memberships, no hay orgs visibles
       let normalizedOrgs = [];
       if (memberships.length > 0) {
         const orgIds = memberships
@@ -152,7 +147,7 @@ export function AuthProvider({ children }) {
                 id: m.org_id,
                 name: org.name || "(sin nombre)",
                 code: org.slug || null,
-                role: m.role || null,
+                role: m.role || null, // OWNER / ADMIN / TRACKER
               };
             });
           }
@@ -163,31 +158,6 @@ export function AuthProvider({ children }) {
 
       if (!cancelled) {
         setOrganizations(normalizedOrgs);
-        // Si solo tiene una, podrías seleccionarla aquí automáticamente:
-        // if (normalizedOrgs.length === 1) {
-        //   setCurrentOrgState(normalizedOrgs[0]);
-        // }
-      }
-
-      // ---------- 2.3 ROL GLOBAL (user_roles_view) ----------
-      try {
-        const { data: rdata, error: rErr } = await supabase
-          .from("user_roles_view")
-          .select("role_name")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (!cancelled) {
-          if (rErr) console.error("[AuthContext] role error:", rErr);
-          const r =
-            rdata?.role_name?.toString().trim().toLowerCase() ?? null;
-          setRole(r);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          console.error("[AuthContext] role exception:", e);
-          setRole(null);
-        }
       }
 
       if (!cancelled) setLoading(false);
@@ -200,7 +170,7 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // ------------------------------------------------------------
-  // 3. Helper setCurrentOrg (acepta id o objeto)
+  // 3. Helper setCurrentOrg (acepta id o objeto) + normaliza
   // ------------------------------------------------------------
   function setCurrentOrg(next) {
     if (!next) {
@@ -208,7 +178,6 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    // Si viene un string, asumimos que es id o code
     if (typeof next === "string") {
       const found =
         organizations.find(
@@ -218,7 +187,6 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    // Si viene un objeto, normalizamos
     const normalized = {
       id: next.id || next.org_id || null,
       name: next.name || next.org_name || null,
@@ -227,7 +195,7 @@ export function AuthProvider({ children }) {
         next.role ??
         next.org_role ??
         (typeof next.role_name === "string"
-          ? next.role_name.toLowerCase()
+          ? next.role_name
           : null),
     };
 
@@ -235,12 +203,24 @@ export function AuthProvider({ children }) {
   }
 
   // ------------------------------------------------------------
-  // 4. Derivados de rol
+  // 4. Rol derivado de memberships (organizations + currentOrg)
   // ------------------------------------------------------------
-  const normalizedRole = (role || "").toString().trim().toLowerCase();
+  let normalizedRole = null;
+
+  if (currentOrg && currentOrg.role) {
+    normalizedRole = currentOrg.role.toString().trim().toLowerCase();
+  } else if (organizations.length > 0) {
+    const roles = organizations
+      .map((o) => (o.role || "").toString().trim().toLowerCase())
+      .filter(Boolean);
+
+    if (roles.includes("owner")) normalizedRole = "owner";
+    else if (roles.includes("admin")) normalizedRole = "admin";
+    else if (roles.includes("tracker")) normalizedRole = "tracker";
+  }
+
   const isOwner = normalizedRole === "owner";
-  const isAdmin =
-    normalizedRole === "admin" || normalizedRole === "owner";
+  const isAdmin = normalizedRole === "admin" || normalizedRole === "owner";
   const isTracker = normalizedRole === "tracker";
 
   // ------------------------------------------------------------
@@ -254,12 +234,12 @@ export function AuthProvider({ children }) {
     profile,
 
     organizations,
-    orgs: organizations, // alias para componentes antiguos
+    orgs: organizations, // alias
     currentOrg,
     setCurrentOrg,
 
     role: normalizedRole,
-    currentRole: normalizedRole, // alias usado por otros componentes
+    currentRole: normalizedRole,
     isOwner,
     isAdmin,
     isTracker,

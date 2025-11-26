@@ -1,7 +1,7 @@
 // src/pages/SeleccionarOrganizacion.jsx
 // Pantalla para elegir organización después del login.
-// Lee directamente de Supabase: user_organizations + organizations,
-// y usa AuthContext solo para setCurrentOrg.
+// Lee directamente de Supabase y usa AuthContext para setCurrentOrg.
+// Si la membresía es TRACKER, redirige a /tracker-dashboard.
 
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -46,9 +46,7 @@ function SeleccionarOrganizacion() {
 
         const memList = memberships || [];
         if (memList.length === 0) {
-          if (!cancelled) {
-            setOrgs([]);
-          }
+          if (!cancelled) setOrgs([]);
           return;
         }
 
@@ -74,19 +72,17 @@ function SeleccionarOrganizacion() {
             id: m.org_id,
             name: org.name || "(sin nombre)",
             code: org.slug || null,
-            role: m.role || null,
+            role: m.role || null, // OWNER / ADMIN / TRACKER
           };
         });
 
         if (!cancelled) {
           setOrgs(normalized);
 
-          // Si ya hay currentOrg válido, no hacemos nada.
-          // Si no hay currentOrg y solo hay una org, la seleccionamos automáticamente.
+          // Auto-selección si solo tiene una
           if (!currentOrg && normalized.length === 1) {
             const onlyOrg = normalized[0];
-            setCurrentOrg(onlyOrg);
-            navigate("/inicio");
+            handleSelectOrgInternal(onlyOrg);
           }
         }
       } catch (e) {
@@ -99,18 +95,31 @@ function SeleccionarOrganizacion() {
     }
 
     loadOrganizations();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, currentOrg, setCurrentOrg, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // ------------------------------------------------------------
-  // Manejar selección manual
+  // Selección de organización (función interna para reuso)
   // ------------------------------------------------------------
-  const handleSelectOrg = (org) => {
+  const handleSelectOrgInternal = (org) => {
     if (!org) return;
+
     setCurrentOrg(org);
-    navigate("/inicio");
+
+    const roleNorm = (org.role || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+
+    if (roleNorm === "tracker") {
+      navigate("/tracker-dashboard");
+    } else {
+      navigate("/inicio");
+    }
+  };
+
+  const handleSelectOrgClick = (org) => {
+    handleSelectOrgInternal(org);
   };
 
   // ------------------------------------------------------------
@@ -169,7 +178,7 @@ function SeleccionarOrganizacion() {
             <button
               key={org.id}
               type="button"
-              onClick={() => handleSelectOrg(org)}
+              onClick={() => handleSelectOrgClick(org)}
               className="w-full text-left border rounded px-4 py-3 hover:bg-slate-50 transition flex items-center justify-between"
             >
               <div>
