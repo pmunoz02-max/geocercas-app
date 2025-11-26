@@ -1,6 +1,7 @@
 // src/pages/InvitarTracker.jsx
 // Invitar tracker por Magic Link
 // Usa AuthContext para user + currentOrg y Supabase para PERSONAL.
+// Incluye fallback robusto si la query "bonita" de PERSONAL da error 400.
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
@@ -15,10 +16,11 @@ function InvitarTracker() {
   const [loadingPersonal, setLoadingPersonal] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [warning, setWarning] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
   // ------------------------------------------------------------
-  // Cargar PERSONAL según organización activa
+  // Cargar PERSONAL según organización activa (con fallback)
   // ------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +28,7 @@ function InvitarTracker() {
     async function loadPersonal() {
       setLoadingPersonal(true);
       setError(null);
+      setWarning(null);
 
       if (!user) {
         setLoadingPersonal(false);
@@ -33,6 +36,7 @@ function InvitarTracker() {
       }
 
       try {
+        // -------- INTENTO 1: query "bonita" con org_id / owner_id ----------
         let query = supabase
           .from("personal")
           .select("id, full_name, email, org_id, owner_id")
@@ -42,11 +46,30 @@ function InvitarTracker() {
           // Personal de la org activa
           query = query.eq("org_id", currentOrg.id);
         } else {
-          // Fallback: todo el personal asociado al usuario que invita (owner_id)
+          // Fallback lógico si no hay org activa: personal de este owner
           query = query.eq("owner_id", user.id);
         }
 
-        const { data, error: pErr } = await query;
+        let { data, error: pErr, status } = await query;
+
+        // Si hay error 400 o de columnas, probamos un fallback más simple
+        if (pErr && (status === 400 || pErr.code?.startsWith("42"))) {
+          console.warn(
+            "[InvitarTracker] PERSONAL query detallada falló, usando fallback simple:",
+            pErr
+          );
+          setWarning(
+            "No se pudo cargar el PERSONAL filtrado por organización. Se muestra un listado simplificado."
+          );
+
+          const fallback = await supabase
+            .from("personal")
+            .select("id, full_name, email");
+
+          data = fallback.data;
+          pErr = fallback.error;
+          status = fallback.status;
+        }
 
         if (pErr) {
           console.error("[InvitarTracker] error al cargar PERSONAL:", pErr);
@@ -165,14 +188,19 @@ function InvitarTracker() {
         )}
       </div>
 
-      {/* Mensajes de error / éxito */}
+      {/* Mensajes de error / aviso / éxito */}
       {error && (
-        <div className="border border-red-300 bg-red-50 text-red-800 rounded px-4 py-2 text-sm mb-4">
+        <div className="border border-red-300 bg-red-50 text-red-800 rounded px-4 py-2 text-sm mb-3">
           {error}
         </div>
       )}
+      {warning && !error && (
+        <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded px-4 py-2 text-sm mb-3">
+          {warning}
+        </div>
+      )}
       {successMsg && (
-        <div className="border border-emerald-300 bg-emerald-50 text-emerald-800 rounded px-4 py-2 text-sm mb-4">
+        <div className="border border-emerald-300 bg-emerald-50 text-emerald-800 rounded px-4 py-2 text-sm mb-3">
           {successMsg}
         </div>
       )}
@@ -204,7 +232,7 @@ function InvitarTracker() {
               ))}
           </select>
           <p className="text-xs text-gray-500 mt-1">
-            Solo se listan personas de la organización activa o, si no hay
+            Se listan personas de la organización activa o, si no hay
             organización, todas las asociadas a tu usuario.
           </p>
         </div>
