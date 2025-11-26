@@ -24,7 +24,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
 
   const [profile, setProfile] = useState(null); // v_app_profiles
-  const [organizations, setOrganizations] = useState([]); // lista de orgs del usuario
+  const [organizations, setOrganizations] = useState([]); // orgs del usuario
   const [currentOrg, setCurrentOrgState] = useState(null); // org seleccionada
 
   const [role, setRole] = useState(null); // owner | admin | tracker
@@ -108,46 +108,65 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // ---------- 2.2 ORGANIZACIONES (user_organizations + organizations) ----------
+      // ---------- 2.2 ORGANIZACIONES ----------
+      // Paso A: memberships en user_organizations
+      let memberships = [];
       try {
-        const { data: orgRows, error: orgErr } = await supabase
+        const { data: memData, error: memErr } = await supabase
           .from("user_organizations")
-          .select(
-            `
-            org_id,
-            role,
-            organizations!inner (
-              id,
-              name,
-              slug
-            )
-          `
-          )
+          .select("org_id, role")
           .eq("user_id", user.id);
 
-        if (!cancelled) {
-          if (orgErr) console.error("[AuthContext] orgs error:", orgErr);
-
-          const normalized =
-            orgRows?.map((row) => ({
-              id: row.org_id ?? row.organizations?.id,
-              name: row.organizations?.name ?? "(sin nombre)",
-              code: row.organizations?.slug ?? null,
-              role: row.role ?? null,
-            })) ?? [];
-
-          setOrganizations(normalized);
-
-          // Opción: si solo tiene una organización, podrías seleccionarla automáticamente
-          // if (normalized.length === 1) {
-          //   setCurrentOrgState(normalized[0]);
-          // }
+        if (memErr) {
+          console.error("[AuthContext] memberships error:", memErr);
+        } else {
+          memberships = memData || [];
         }
       } catch (e) {
-        if (!cancelled) {
+        console.error("[AuthContext] memberships exception:", e);
+      }
+
+      // Paso B: si no hay memberships, no hay orgs visibles
+      let normalizedOrgs = [];
+      if (memberships.length > 0) {
+        const orgIds = memberships
+          .map((m) => m.org_id)
+          .filter((id) => !!id);
+
+        try {
+          const { data: orgData, error: orgErr } = await supabase
+            .from("organizations")
+            .select("id, name, slug")
+            .in("id", orgIds);
+
+          if (orgErr) {
+            console.error("[AuthContext] organizations error:", orgErr);
+          } else {
+            const mapById = new Map(
+              (orgData || []).map((o) => [o.id, o])
+            );
+
+            normalizedOrgs = memberships.map((m) => {
+              const org = mapById.get(m.org_id) || {};
+              return {
+                id: m.org_id,
+                name: org.name || "(sin nombre)",
+                code: org.slug || null,
+                role: m.role || null,
+              };
+            });
+          }
+        } catch (e) {
           console.error("[AuthContext] organizations exception:", e);
-          setOrganizations([]);
         }
+      }
+
+      if (!cancelled) {
+        setOrganizations(normalizedOrgs);
+        // Si solo tiene una, podrías seleccionarla aquí automáticamente:
+        // if (normalizedOrgs.length === 1) {
+        //   setCurrentOrgState(normalizedOrgs[0]);
+        // }
       }
 
       // ---------- 2.3 ROL GLOBAL (user_roles_view) ----------
@@ -235,12 +254,12 @@ export function AuthProvider({ children }) {
     profile,
 
     organizations,
-    orgs: organizations, // alias para componentes antiguos (OrgSelector, etc.)
+    orgs: organizations, // alias para componentes antiguos
     currentOrg,
     setCurrentOrg,
 
     role: normalizedRole,
-    currentRole: normalizedRole, // alias usado por TrackerDashboard, etc.
+    currentRole: normalizedRole, // alias usado por otros componentes
     isOwner,
     isAdmin,
     isTracker,
