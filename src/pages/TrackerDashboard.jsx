@@ -36,15 +36,17 @@ function TrackerDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // ref al contenedor HTML del mapa y a la instancia de Leaflet
+  // refs para el mapa
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
 
-  // refs para las capas
+  // refs para capas
   const geofenceLayersRef = useRef([]);
   const logLayersRef = useRef([]);
 
-  // Cargar geocercas + perfiles que actúan como trackers
+  // ---------------------------
+  // Carga de geocercas + perfiles
+  // ---------------------------
   useEffect(() => {
     if (!currentOrg) return;
     console.log(
@@ -58,7 +60,7 @@ function TrackerDashboard() {
       setLoading(true);
       setError(null);
       try {
-        // GEOCERCAS visibles y activas para la org
+        // Geocercas activas y visibles
         const { data: fencesData, error: fencesErr } = await supabase
           .from("geocercas")
           .select("*")
@@ -73,15 +75,11 @@ function TrackerDashboard() {
           fencesData
         );
 
-        // PROFILES que actúan como trackers en esta org
-        // Usamos solo columnas que sabemos que existen en tu tabla profiles:
-        // id, full_name, email, org_id, tenant_id, user_id, role, created_at
+        // Perfiles que actúan como trackers
         const { data: profilesData, error: profilesErr } = await supabase
           .from("profiles")
           .select("id, full_name, email, org_id, tenant_id")
-          .or(
-            `org_id.eq.${currentOrg.id},tenant_id.eq.${currentOrg.id}`
-          )
+          .or(`org_id.eq.${currentOrg.id},tenant_id.eq.${currentOrg.id}`)
           .order("full_name", { ascending: true });
 
         if (profilesErr) throw profilesErr;
@@ -111,7 +109,9 @@ function TrackerDashboard() {
     };
   }, [currentOrg]);
 
-  // Cargar logs según ventana / tracker seleccionado
+  // ---------------------------
+  // Carga de logs
+  // ---------------------------
   useEffect(() => {
     if (!currentOrg) return;
 
@@ -130,7 +130,7 @@ function TrackerDashboard() {
           to
         );
 
-        // Intento principal: usar el esquema esperado
+        // Query principal (según esquema esperado)
         let query = supabase
           .from("tracker_logs")
           .select(
@@ -147,13 +147,12 @@ function TrackerDashboard() {
 
         let { data: logsData, error: logsErr } = await query;
 
-        // Si la tabla no coincide al 100% con estos nombres, hacemos un fallback
+        // Fallback si el esquema no coincide
         if (logsErr) {
           console.warn(
             "[TrackerDashboard] error en query principal de tracker_logs, intentando fallback *.select('*'):",
             logsErr
           );
-
           const {
             data: fallbackData,
             error: fallbackErr,
@@ -182,7 +181,6 @@ function TrackerDashboard() {
     }
 
     loadLogs();
-
     const interval = setInterval(loadLogs, AUTO_REFRESH_MS);
     return () => {
       cancelled = true;
@@ -190,7 +188,9 @@ function TrackerDashboard() {
     };
   }, [currentOrg, selectedTrackerId, timeWindowHours]);
 
-  // Inicializar mapa (una sola vez, cuando el contenedor exista)
+  // ---------------------------
+  // Inicializar mapa
+  // ---------------------------
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return;
@@ -212,25 +212,23 @@ function TrackerDashboard() {
     };
   }, []);
 
+  // ---------------------------
   // Pintar geocercas + logs en el mapa
+  // ---------------------------
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
     // limpiar capas anteriores
-    geofenceLayersRef.current.forEach((layer) => {
-      map.removeLayer(layer);
-    });
+    geofenceLayersRef.current.forEach((layer) => map.removeLayer(layer));
     geofenceLayersRef.current = [];
 
-    logLayersRef.current.forEach((layer) => {
-      map.removeLayer(layer);
-    });
+    logLayersRef.current.forEach((layer) => map.removeLayer(layer));
     logLayersRef.current = [];
 
     const group = L.featureGroup();
 
-    // Geocercas con geojson
+    // Geocercas
     for (const g of geofences) {
       if (!g) continue;
       const geojson =
@@ -254,7 +252,7 @@ function TrackerDashboard() {
       group.addLayer(layer);
     }
 
-    // Puntos de tracking (intentamos soportar varios nombres de columnas)
+    // Logs / puntos de tracking
     for (const log of logs) {
       if (!log) continue;
 
@@ -318,14 +316,18 @@ function TrackerDashboard() {
     }
   }, [geofences, logs]);
 
-  const stats = useMemo(() => {
-    return {
+  const stats = useMemo(
+    () => ({
       totalGeofences: geofences.length,
       totalTrackers: trackers.length,
       totalLogs: logs.length,
-    };
-  }, [geofences, trackers, logs]);
+    }),
+    [geofences, trackers, logs]
+  );
 
+  // ---------------------------
+  // Control de permisos
+  // ---------------------------
   if (!currentOrg) {
     return (
       <div className="p-4">
@@ -334,13 +336,17 @@ function TrackerDashboard() {
     );
   }
 
+  const normalizedRole = (currentRole || "")
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  console.log("[TrackerDashboard] currentRole normalizado:", normalizedRole);
+
+  // Permitimos owner, admin y tracker; si no hay rol, dejamos pasar igual
   const canSeeDashboard =
-    currentRole === "owner" ||
-    currentRole === "admin" ||
-    currentRole === "OWNER" ||
-    currentRole === "ADMIN" ||
-    currentRole === "tracker" ||
-    currentRole === "TRACKER";
+    !normalizedRole ||
+    ["owner", "admin", "tracker"].includes(normalizedRole);
 
   if (!canSeeDashboard) {
     return (
@@ -352,6 +358,9 @@ function TrackerDashboard() {
 
   const { from, to } = computeWindowRange(timeWindowHours);
 
+  // ---------------------------
+  // Render principal
+  // ---------------------------
   return (
     <div className="p-4 flex flex-col lg:flex-row gap-4">
       <div className="flex-1 min-h-[400px]">
@@ -395,20 +404,6 @@ function TrackerDashboard() {
               ))}
             </select>
           </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              setTimeWindowHours((prev) => {
-                // El useEffect de logs se dispara igual,
-                // este botón solo fuerza una "acción" explícita
-                return prev;
-              })
-            }
-            className="ml-auto inline-flex items-center px-3 py-1 rounded bg-blue-600 text-white text-xs"
-          >
-            Refrescar ahora
-          </button>
         </div>
 
         {/* Mapa */}
@@ -439,21 +434,10 @@ function TrackerDashboard() {
             {stats.totalTrackers}
           </p>
           <p>
-            <span className="font-semibold">Puntos en mapa (filtro actual): </span>
+            <span className="font-semibold">
+              Puntos en mapa (filtro actual):{" "}
+            </span>
             {stats.totalLogs}
-          </p>
-        </div>
-
-        <div className="text-xs text-gray-500">
-          <p className="mb-1 font-semibold">Notas:</p>
-          <p>
-            Los puntos de tracking se muestran directamente en el mapa. Solo se
-            visualizan dentro del área de las geocercas (usando el contorno de
-            cada geocerca como filtro aproximado, si aplica).
-          </p>
-          <p className="mt-1">
-            Puedes cambiar la ventana de tiempo y filtrar por tracker específico
-            para investigar movimientos puntuales.
           </p>
         </div>
 
