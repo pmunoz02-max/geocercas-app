@@ -3,7 +3,7 @@
 //----------------------------------------------------
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../supabaseClient"; // 👈 CORREGIDO
 
 const AuthContext = createContext(null);
 
@@ -17,9 +17,9 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
 
-  const [profile, setProfile] = useState(null);          // v_app_profiles
+  const [profile, setProfile] = useState(null); // v_app_profiles
   const [organizations, setOrganizations] = useState([]); // my_memberships_app
-  const [currentOrg, setCurrentOrg] = useState(null);     // org seleccionada
+  const [currentOrg, setCurrentOrg] = useState(null); // org seleccionada
 
   const [role, setRole] = useState(null); // owner | admin | tracker
   const [loading, setLoading] = useState(true);
