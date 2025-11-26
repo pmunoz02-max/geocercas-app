@@ -1,102 +1,194 @@
 // src/pages/SeleccionarOrganizacion.jsx
-import React, { useEffect } from "react";
+// Pantalla para elegir organización después del login.
+// Lee directamente de Supabase: user_organizations + organizations,
+// y usa AuthContext solo para setCurrentOrg.
+
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 
-export default function SeleccionarOrganizacion() {
-  const {
-    user,
-    organizations = [], // array de orgs desde my_memberships
-    currentOrg,
-    setCurrentOrg,
-    loading,
-  } = useAuth();
-
+function SeleccionarOrganizacion() {
   const navigate = useNavigate();
+  const { user, loading: authLoading, currentOrg, setCurrentOrg } = useAuth();
 
-  // Redirecciones básicas
+  const [orgs, setOrgs] = useState([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(true);
+  const [error, setError] = useState(null);
+
+  // ------------------------------------------------------------
+  // Cargar organizaciones directamente desde Supabase
+  // ------------------------------------------------------------
   useEffect(() => {
-    if (loading) return;
-
     if (!user) {
-      navigate("/login", { replace: true });
+      setLoadingOrgs(false);
       return;
     }
 
-    // Si ya hay una organización seleccionada, vamos directo al dashboard
-    if (currentOrg) {
-      navigate("/inicio", { replace: true });
-    }
-  }, [loading, user, currentOrg, navigate]);
+    let cancelled = false;
 
-  if (loading || !user) {
+    async function loadOrganizations() {
+      setLoadingOrgs(true);
+      setError(null);
+
+      try {
+        // Paso A: memberships en user_organizations
+        const { data: memberships, error: memErr } = await supabase
+          .from("user_organizations")
+          .select("org_id, role")
+          .eq("user_id", user.id);
+
+        if (memErr) {
+          console.error("[SeleccionarOrganizacion] memberships error:", memErr);
+          if (!cancelled) setError("No se pudieron cargar las organizaciones.");
+          return;
+        }
+
+        const memList = memberships || [];
+        if (memList.length === 0) {
+          if (!cancelled) {
+            setOrgs([]);
+          }
+          return;
+        }
+
+        const orgIds = memList.map((m) => m.org_id).filter(Boolean);
+
+        // Paso B: info de organizations
+        const { data: orgData, error: orgErr } = await supabase
+          .from("organizations")
+          .select("id, name, slug")
+          .in("id", orgIds);
+
+        if (orgErr) {
+          console.error("[SeleccionarOrganizacion] organizations error:", orgErr);
+          if (!cancelled) setError("No se pudieron cargar las organizaciones.");
+          return;
+        }
+
+        const mapById = new Map((orgData || []).map((o) => [o.id, o]));
+
+        const normalized = memList.map((m) => {
+          const org = mapById.get(m.org_id) || {};
+          return {
+            id: m.org_id,
+            name: org.name || "(sin nombre)",
+            code: org.slug || null,
+            role: m.role || null,
+          };
+        });
+
+        if (!cancelled) {
+          setOrgs(normalized);
+
+          // Si ya hay currentOrg válido, no hacemos nada.
+          // Si no hay currentOrg y solo hay una org, la seleccionamos automáticamente.
+          if (!currentOrg && normalized.length === 1) {
+            const onlyOrg = normalized[0];
+            setCurrentOrg(onlyOrg);
+            navigate("/inicio");
+          }
+        }
+      } catch (e) {
+        console.error("[SeleccionarOrganizacion] exception:", e);
+        if (!cancelled)
+          setError("Ocurrió un error inesperado al cargar organizaciones.");
+      } finally {
+        if (!cancelled) setLoadingOrgs(false);
+      }
+    }
+
+    loadOrganizations();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, currentOrg, setCurrentOrg, navigate]);
+
+  // ------------------------------------------------------------
+  // Manejar selección manual
+  // ------------------------------------------------------------
+  const handleSelectOrg = (org) => {
+    if (!org) return;
+    setCurrentOrg(org);
+    navigate("/inicio");
+  };
+
+  // ------------------------------------------------------------
+  // Estados de carga / error
+  // ------------------------------------------------------------
+  if (authLoading || loadingOrgs) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-2">
-          <div className="h-10 w-10 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
-          <p className="text-slate-500 text-sm">
-            Preparando tus organizaciones…
-          </p>
-        </div>
+      <div className="p-6 max-w-2xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-2">
+          Seleccionar organización
+        </h1>
+        <p className="text-gray-600 text-sm">
+          Cargando organizaciones asociadas a tu usuario…
+        </p>
       </div>
     );
   }
 
-  const hasOrgs = organizations && organizations.length > 0;
-
-  function handleSelect(org) {
-    // Compatibilidad: normalizamos a { id, name, ... }
-    const normalized = {
-      id: org.id || org.org_id,
-      name: org.name || org.org_name,
-      ...org,
-    };
-
-    setCurrentOrg(normalized);
-    navigate("/inicio", { replace: true });
+  if (!user) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-2">Sesión no válida</h1>
+        <p className="text-gray-600 text-sm">
+          No hay sesión activa. Inicia sesión nuevamente.
+        </p>
+      </div>
+    );
   }
 
+  const hasOrgs = orgs && orgs.length > 0;
+
   return (
-    <div className="max-w-xl mx-auto px-4 py-10">
-      <div className="bg-white shadow-sm rounded-2xl p-6 border border-slate-100 space-y-4">
-        <h1 className="text-2xl font-bold text-slate-800 mb-1">
-          Seleccionar organización
-        </h1>
-        <p className="text-sm text-slate-600 mb-4">
-          Has iniciado sesión correctamente. Ahora elige la organización con la
-          que deseas trabajar en este momento.
-        </p>
+    <div className="p-6 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-semibold mb-2">Seleccionar organización</h1>
+      <p className="text-gray-600 text-sm mb-4">
+        Has iniciado sesión correctamente. Ahora elige la organización con la
+        que deseas trabajar en este momento.
+      </p>
 
-        {!hasOrgs && (
-          <div className="border border-amber-300 bg-amber-50 text-amber-800 text-sm rounded-lg px-3 py-2">
-            No encontramos organizaciones asociadas a tu usuario. Contacta al
-            administrador para que te asigne una.
-          </div>
-        )}
+      {!hasOrgs && !error && (
+        <div className="border border-yellow-300 bg-yellow-50 text-yellow-800 rounded px-4 py-3 text-sm">
+          No encontramos organizaciones asociadas a tu usuario. Contacta al
+          administrador para que te asigne una.
+        </div>
+      )}
 
-        {hasOrgs && (
-          <div className="space-y-3">
-            {organizations.map((org) => {
-              const name = org.name || org.org_name || "Organización sin nombre";
-              const id = org.id || org.org_id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => handleSelect(org)}
-                  className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 transition flex flex-col"
-                >
-                  <span className="font-semibold text-slate-800">{name}</span>
-                  {org.org_code && (
-                    <span className="text-xs text-slate-500">
-                      Código: {org.org_code}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {error && (
+        <div className="border border-red-300 bg-red-50 text-red-800 rounded px-4 py-3 text-sm mb-4">
+          {error}
+        </div>
+      )}
+
+      {hasOrgs && (
+        <div className="space-y-3 mt-3">
+          {orgs.map((org) => (
+            <button
+              key={org.id}
+              type="button"
+              onClick={() => handleSelectOrg(org)}
+              className="w-full text-left border rounded px-4 py-3 hover:bg-slate-50 transition flex items-center justify-between"
+            >
+              <div>
+                <div className="font-medium">{org.name}</div>
+                <div className="text-xs text-gray-500">
+                  {org.code ? `Código: ${org.code}` : "Sin código definido"}
+                </div>
+              </div>
+              {org.role && (
+                <span className="text-xs uppercase font-semibold text-gray-500">
+                  {org.role}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+export default SeleccionarOrganizacion;
