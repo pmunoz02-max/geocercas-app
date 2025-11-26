@@ -14,47 +14,68 @@ export default function Login() {
   const [msg, setMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ---------------------------------------------
-  // 1) Al cargar la página:
-  //    - Si hay ?code=... en la URL (MagicLink),
-  //      hacemos exchangeCodeForSession.
-  //    - Si ya hay sesión, mandamos a flujo interno.
-  // ---------------------------------------------
+  // ------------------------------------------------
+  // 1) Al cargar:
+  //    - Detectar URL de retorno de Magic Link
+  //      * formato PKCE: ?code=...
+  //      * formato clásico: #access_token=...
+  //    - Si ya hay sesión, mandar adentro
+  // ------------------------------------------------
   useEffect(() => {
     const run = async () => {
       setLoading(true);
       setMsg(null);
       setErrorMsg(null);
 
-      const url = new URL(window.location.href);
-      const hasCode = url.searchParams.get("code");
-
       try {
+        const url = new URL(window.location.href);
+        const search = url.search;         // ?code=...
+        const hash = url.hash || "";       // #access_token=...
+        const params = new URLSearchParams(search);
+        const hasCode = params.get("code");
+        const hasAccessToken = hash.includes("access_token=");
+
+        // 1.1 Magic Link formato PKCE (?code=...)
         if (hasCode) {
-          // Caso Magic Link: intercambiar el código por una sesión
-          const { error } = await supabase.auth.exchangeCodeForSession(
-            url.search
-          );
+          console.log("[Login] Detectado code en query, usando exchangeCodeForSession");
+          const { error } = await supabase.auth.exchangeCodeForSession(search);
           if (error) {
             console.error("[Login] exchangeCodeForSession error:", error);
-            setErrorMsg("No se pudo validar el enlace mágico. Intenta de nuevo.");
+            setErrorMsg("No se pudo validar el enlace mágico. Inténtalo de nuevo.");
             setLoading(false);
             return;
           }
 
-          // Sesión creada correctamente → ir al flujo interno
+          // Sesión creada correctamente
           navigate("/seleccionar-organizacion", { replace: true });
           return;
         }
 
-        // Si no hay code, revisar si ya existe una sesión activa
+        // 1.2 Magic Link formato clásico (#access_token=...)
+        if (hasAccessToken) {
+          console.log("[Login] Detectado access_token en hash, usando getSessionFromUrl");
+          const { error } = await supabase.auth.getSessionFromUrl({
+            storeSession: true,
+          });
+          if (error) {
+            console.error("[Login] getSessionFromUrl error:", error);
+            setErrorMsg("No se pudo validar el enlace mágico. Inténtalo de nuevo.");
+            setLoading(false);
+            return;
+          }
+
+          navigate("/seleccionar-organizacion", { replace: true });
+          return;
+        }
+
+        // 1.3 Si no hay parámetros especiales, revisar si ya hay sesión activa
         const { data, error } = await supabase.auth.getSession();
         if (error) {
           console.error("[Login] getSession error:", error);
         }
 
         if (data?.session) {
-          // Usuario ya autenticado → ir al flujo interno
+          console.log("[Login] Sesión ya activa, redirigiendo dentro de la app");
           navigate("/seleccionar-organizacion", {
             replace: true,
             state: { from: location },
@@ -70,9 +91,9 @@ export default function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---------------------------------------------
+  // ------------------------------------------------
   // 2) Login con email + password
-  // ---------------------------------------------
+  // ------------------------------------------------
   async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -95,16 +116,15 @@ export default function Login() {
         return;
       }
 
-      // Sesión creada → ir al flujo interno
       navigate("/seleccionar-organizacion", { replace: true });
     } finally {
       setLoading(false);
     }
   }
 
-  // ---------------------------------------------
+  // ------------------------------------------------
   // 3) Login con Magic Link
-  // ---------------------------------------------
+  // ------------------------------------------------
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -140,7 +160,6 @@ export default function Login() {
           Iniciar sesión
         </h1>
 
-        {/* MENSAJES */}
         {errorMsg && (
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             {errorMsg}
@@ -189,7 +208,6 @@ export default function Login() {
           </button>
         </form>
 
-        {/* SEPARADOR */}
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <div className="flex-1 h-px bg-slate-200" />
           <span>o</span>
