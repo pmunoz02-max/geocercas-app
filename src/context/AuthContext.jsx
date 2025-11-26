@@ -1,186 +1,162 @@
 // src/context/AuthContext.jsx
+// MODELO GLOBAL + MULTI-ORG + SELECCIÓN OBLIGATORIA
+//----------------------------------------------------
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { createContext, useContext, useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null);
+
+  const [profile, setProfile] = useState(null);          // v_app_profiles
+  const [organizations, setOrganizations] = useState([]); // my_memberships_app
+  const [currentOrg, setCurrentOrg] = useState(null);     // org seleccionada
+
+  const [role, setRole] = useState(null); // owner | admin | tracker
   const [loading, setLoading] = useState(true);
 
-  // Organización actual del usuario
-  const [currentOrg, setCurrentOrg] = useState(null);
-
-  // Rol del usuario en la organización actual
-  const [currentRole, setCurrentRole] = useState(null);
-
-  // ----------------------------------------------------
-  // 1) Cargar sesión y usuario
-  // ----------------------------------------------------
+  // ------------------------------------------------------------
+  // 1. Cargar sesión inicial + escuchar cambios de autenticación
+  // ------------------------------------------------------------
   useEffect(() => {
-    let isMounted = true;
+    let active = true;
 
-    async function loadSession() {
+    async function loadInitialSession() {
       const { data, error } = await supabase.auth.getSession();
-      if (!isMounted) return;
+      if (!active) return;
 
-      if (error) {
-        console.error('[AuthContext] error getSession:', error);
-      }
+      if (error) console.error("[AuthContext] getSession error:", error);
 
       setSession(data?.session ?? null);
       setUser(data?.session?.user ?? null);
       setLoading(false);
     }
 
-    loadSession();
+    loadInitialSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!isMounted) return;
-        setSession(session);
-        setUser(session?.user ?? null);
+      (_event, newSession) => {
+        if (!active) return;
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
 
-        if (!session) {
-          // Al cerrar sesión, limpiamos todo
+        if (!newSession) {
+          // LOGOUT → limpiar todo
+          setProfile(null);
+          setOrganizations([]);
           setCurrentOrg(null);
-          setCurrentRole(null);
+          setRole(null);
         }
       }
     );
 
     return () => {
-      isMounted = false;
+      active = false;
       listener.subscription.unsubscribe();
     };
   }, []);
 
-  // ----------------------------------------------------
-  // 2) Asegurar organización y cargar currentOrg
-  // ----------------------------------------------------
+  // ------------------------------------------------------------
+  // 2. Cargar perfil, organizaciones y rol global luego del login
+  // ------------------------------------------------------------
   useEffect(() => {
     if (!user) {
+      setProfile(null);
+      setOrganizations([]);
       setCurrentOrg(null);
+      setRole(null);
       return;
     }
 
     let cancelled = false;
 
-    async function loadOrgForUser() {
-      // 2.0 Asegurar que exista una organización y rol admin para este usuario
-      const { error: initErr } = await supabase.rpc('init_admin_tenant');
-      if (initErr) {
-        console.error('[AuthContext] error init_admin_tenant:', initErr);
-        // seguimos igual, puede que ya exista todo
-      }
+    async function loadAuthData() {
+      setLoading(true);
 
-      // 2.1 Obtener org_id desde profiles
-      const { data: profile, error: profileErr } = await supabase
-        .from('profiles')
-        .select('org_id')
-        .eq('id', user.id)
+      // ---------- 2.1 PERFIL (v_app_profiles) ----------
+      const { data: prof, error: profErr } = await supabase
+        .from("v_app_profiles")
+        .select("*")
+        .eq("user_id", user.id)
         .maybeSingle();
 
-      if (cancelled) return;
-
-      if (profileErr) {
-        console.error('[AuthContext] error cargando perfil:', profileErr);
-        setCurrentOrg(null);
-        return;
+      if (!cancelled) {
+        if (profErr) console.error("[AuthContext] profile error:", profErr);
+        setProfile(prof ?? null);
       }
 
-      if (!profile?.org_id) {
-        console.warn('[AuthContext] usuario sin org_id en profiles');
-        setCurrentOrg(null);
-        return;
+      // ---------- 2.2 ORGANIZACIONES (my_memberships_app) ----------
+      const { data: orgs, error: orgErr } = await supabase
+        .from("my_memberships_app")
+        .select("org_id, org_name, org_code")
+        .eq("user_id", user.id);
+
+      if (!cancelled) {
+        if (orgErr) console.error("[AuthContext] orgs error:", orgErr);
+
+        const normalized =
+          orgs?.map((o) => ({
+            id: o.org_id,
+            name: o.org_name,
+            code: o.org_code,
+          })) ?? [];
+
+        setOrganizations(normalized);
+        // NO seleccionar automáticamente (Opción C)
       }
 
-      // 2.2 Cargar organización real desde orgs
-      const { data: org, error: orgErr } = await supabase
-        .from('orgs')
-        .select('*')
-        .eq('id', profile.org_id)
-        .single();
+      // ---------- 2.3 ROL GLOBAL (user_roles_view) ----------
+      const { data: rdata, error: rErr } = await supabase
+        .from("user_roles_view")
+        .select("role_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      if (cancelled) return;
-
-      if (orgErr) {
-        console.error('[AuthContext] error cargando orgs:', orgErr);
-        setCurrentOrg(null);
-        return;
+      if (!cancelled) {
+        if (rErr) console.error("[AuthContext] role error:", rErr);
+        setRole(rdata?.role_name ?? null);
       }
 
-      setCurrentOrg(org);
-      console.log('[AuthContext] currentOrg cargada:', org);
+      if (!cancelled) setLoading(false);
     }
 
-    loadOrgForUser();
-
+    loadAuthData();
     return () => {
       cancelled = true;
     };
   }, [user]);
 
-  // ----------------------------------------------------
-  // 3) Cargar rol actual vía RPC get_current_role(org_id)
-  // ----------------------------------------------------
-  useEffect(() => {
-    if (!user || !currentOrg?.id) {
-      setCurrentRole(null);
-      return;
-    }
+  // ------------------------------------------------------------
+  // 3. Helpers
+  // ------------------------------------------------------------
+  const isOwner = role === "owner";
+  const isAdmin = role === "admin" || role === "owner";
+  const isTracker = role === "tracker";
 
-    let cancelled = false;
-
-    async function loadRoleForUser() {
-      const { data, error } = await supabase.rpc('get_current_role', {
-        p_org_id: currentOrg.id,
-      });
-
-      if (cancelled) return;
-
-      if (error) {
-        console.error('[AuthContext] error get_current_role:', error);
-        setCurrentRole(null);
-        return;
-      }
-
-      const role = data || 'tracker'; // si no hay fila → tracker por defecto
-      setCurrentRole(role);
-      console.log('[AuthContext] currentRole cargado:', role);
-    }
-
-    loadRoleForUser();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, currentOrg?.id]);
-
-  // Helpers derivados del rol
-  const isOwner = currentRole === 'owner';
-  const isAdmin = currentRole === 'admin' || currentRole === 'owner';
-  const isTracker = !currentRole || currentRole === 'tracker';
-
+  // ------------------------------------------------------------
+  // 4. Valor de contexto
+  // ------------------------------------------------------------
   const value = {
-    user,
     session,
+    user,
     loading,
 
+    profile,
+
+    organizations,
     currentOrg,
     setCurrentOrg,
 
-    currentRole,
+    role,
     isOwner,
     isAdmin,
     isTracker,
@@ -188,5 +164,3 @@ export function AuthProvider({ children }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-export default AuthContext;

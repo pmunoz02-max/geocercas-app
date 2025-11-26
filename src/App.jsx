@@ -14,14 +14,16 @@ import TrackerPage from "./pages/TrackerPage.jsx"; // ✅ wrapper principal del 
 import InvitarTrackerPage from "./pages/InvitarTracker.jsx";
 import Login from "./pages/Login.tsx";
 
-// Nueva pantalla de inicio
+// Dashboard principal
 import Inicio from "./pages/Inicio.jsx";
+
+// Selección de organización
+import SeleccionarOrganizacion from "./pages/SeleccionarOrganizacion.jsx";
 
 // 🆕 Dashboard de tracking en tiempo real
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
 // 👉 Cliente de Supabase unificado en todo el proyecto
-// 🔧 Corregido: antes "@/SupabaseClient" (S mayúscula, rompía en Vercel/Linux)
 import { supabase } from "./supabaseClient";
 
 function Shell({ children }) {
@@ -47,26 +49,42 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ===== REDIRECCIÓN ROOT → /inicio ===== */}
+        {/* ===== ROOT → /inicio (dashboard) ===== */}
         <Route path="/" element={<Navigate to="/inicio" replace />} />
 
-        {/* ===== LOGIN ===== */}
+        {/* ===== LOGIN (público) ===== */}
         <Route
           path="/login"
           element={
             <PublicOnly>
-              <Login />
+              <PublicShell>
+                <Login />
+              </PublicShell>
             </PublicOnly>
           }
         />
 
-        {/* ===== INICIO (ACCESO PÚBLICO) ===== */}
+        {/* ===== SELECCIONAR ORGANIZACIÓN (privado) ===== */}
+        <Route
+          path="/seleccionar-organizacion"
+          element={
+            <AuthGuard>
+              <Shell>
+                <SeleccionarOrganizacion />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ===== INICIO (DASHBOARD PRIVADO) ===== */}
         <Route
           path="/inicio"
           element={
-            <PublicShell>
-              <Inicio />
-            </PublicShell>
+            <AuthGuard>
+              <Shell>
+                <Inicio />
+              </Shell>
+            </AuthGuard>
           }
         />
 
