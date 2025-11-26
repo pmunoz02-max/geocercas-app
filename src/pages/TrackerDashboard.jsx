@@ -36,11 +36,9 @@ function TrackerDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // refs para el mapa
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
 
-  // refs para capas
   const geofenceLayersRef = useRef([]);
   const logLayersRef = useRef([]);
 
@@ -60,7 +58,6 @@ function TrackerDashboard() {
       setLoading(true);
       setError(null);
       try {
-        // Geocercas activas y visibles
         const { data: fencesData, error: fencesErr } = await supabase
           .from("geocercas")
           .select("*")
@@ -75,7 +72,6 @@ function TrackerDashboard() {
           fencesData
         );
 
-        // Perfiles que actúan como trackers
         const { data: profilesData, error: profilesErr } = await supabase
           .from("profiles")
           .select("id, full_name, email, org_id, tenant_id")
@@ -130,7 +126,6 @@ function TrackerDashboard() {
           to
         );
 
-        // Query principal (según esquema esperado)
         let query = supabase
           .from("tracker_logs")
           .select(
@@ -147,7 +142,6 @@ function TrackerDashboard() {
 
         let { data: logsData, error: logsErr } = await query;
 
-        // Fallback si el esquema no coincide
         if (logsErr) {
           console.warn(
             "[TrackerDashboard] error en query principal de tracker_logs, intentando fallback *.select('*'):",
@@ -219,7 +213,6 @@ function TrackerDashboard() {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // limpiar capas anteriores
     geofenceLayersRef.current.forEach((layer) => map.removeLayer(layer));
     geofenceLayersRef.current = [];
 
@@ -228,28 +221,68 @@ function TrackerDashboard() {
 
     const group = L.featureGroup();
 
-    // Geocercas
+    // Geocercas con manejo de GeoJSON inválido
     for (const g of geofences) {
       if (!g) continue;
-      const geojson =
+
+      let geojson =
         g.geometry ||
         g.geojson ||
         g.geom ||
         g.polygon ||
         g.polygon_geojson;
-      if (!geojson) continue;
 
-      const layer = L.geoJSON(geojson, {
-        style: {
-          color: "#2563eb",
-          weight: 2,
-          fillColor: "#60a5fa",
-          fillOpacity: 0.1,
-        },
-      }).addTo(map);
+      if (!geojson) {
+        continue;
+      }
 
-      geofenceLayersRef.current.push(layer);
-      group.addLayer(layer);
+      // Si viene como texto, intentamos parsear
+      if (typeof geojson === "string") {
+        try {
+          geojson = JSON.parse(geojson);
+        } catch (e) {
+          console.warn(
+            "[TrackerDashboard] GeoJSON de geocerca no es JSON válido, se omite. id:",
+            g.id,
+            "valor:",
+            geojson
+          );
+          continue;
+        }
+      }
+
+      // GeoJSON debe ser objeto
+      if (typeof geojson !== "object" || geojson === null) {
+        console.warn(
+          "[TrackerDashboard] GeoJSON de geocerca no es objeto, se omite. id:",
+          g.id,
+          "valor:",
+          geojson
+        );
+        continue;
+      }
+
+      try {
+        const layer = L.geoJSON(geojson, {
+          style: {
+            color: "#2563eb",
+            weight: 2,
+            fillColor: "#60a5fa",
+            fillOpacity: 0.1,
+          },
+        }).addTo(map);
+
+        geofenceLayersRef.current.push(layer);
+        group.addLayer(layer);
+      } catch (e) {
+        console.error(
+          "[TrackerDashboard] GeoJSON inválido al crear layer, se omite. id:",
+          g.id,
+          "error:",
+          e
+        );
+        continue;
+      }
     }
 
     // Logs / puntos de tracking
@@ -343,7 +376,6 @@ function TrackerDashboard() {
 
   console.log("[TrackerDashboard] currentRole normalizado:", normalizedRole);
 
-  // Permitimos owner, admin y tracker; si no hay rol, dejamos pasar igual
   const canSeeDashboard =
     !normalizedRole ||
     ["owner", "admin", "tracker"].includes(normalizedRole);
@@ -359,7 +391,7 @@ function TrackerDashboard() {
   const { from, to } = computeWindowRange(timeWindowHours);
 
   // ---------------------------
-  // Render principal
+  // Render
   // ---------------------------
   return (
     <div className="p-4 flex flex-col lg:flex-row gap-4">
