@@ -36,8 +36,15 @@ function TrackerDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const mapRef = useRef(null);
+  // ref al contenedor HTML del mapa y a la instancia de Leaflet
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
 
+  // refs para las capas
+  const geofenceLayersRef = useRef([]);
+  const logLayersRef = useRef([]);
+
+  // Cargar geocercas + perfiles que actúan como trackers
   useEffect(() => {
     if (!currentOrg) return;
     console.log(
@@ -66,11 +73,15 @@ function TrackerDashboard() {
           fencesData
         );
 
-        // PROFILES que actúan como trackers (org actual)
+        // PROFILES que actúan como trackers en esta org
+        // Usamos solo columnas que sabemos que existen en tu tabla profiles:
+        // id, full_name, email, org_id, tenant_id, user_id, role, created_at
         const { data: profilesData, error: profilesErr } = await supabase
           .from("profiles")
-          .select("id, full_name, email, phone, current_org_id")
-          .eq("current_org_id", currentOrg.id)
+          .select("id, full_name, email, org_id, tenant_id")
+          .or(
+            `org_id.eq.${currentOrg.id},tenant_id.eq.${currentOrg.id}`
+          )
           .order("full_name", { ascending: true });
 
         if (profilesErr) throw profilesErr;
@@ -119,6 +130,7 @@ function TrackerDashboard() {
           to
         );
 
+        // Intento principal: usar el esquema esperado
         let query = supabase
           .from("tracker_logs")
           .select(
@@ -133,9 +145,24 @@ function TrackerDashboard() {
           query = query.eq("user_id", selectedTrackerId);
         }
 
-        const { data: logsData, error: logsErr } = await query;
+        let { data: logsData, error: logsErr } = await query;
 
-        if (logsErr) throw logsErr;
+        // Si la tabla no coincide al 100% con estos nombres, hacemos un fallback
+        if (logsErr) {
+          console.warn(
+            "[TrackerDashboard] error en query principal de tracker_logs, intentando fallback *.select('*'):",
+            logsErr
+          );
+
+          const {
+            data: fallbackData,
+            error: fallbackErr,
+          } = await supabase.from("tracker_logs").select("*");
+
+          if (fallbackErr) throw fallbackErr;
+          logsData = fallbackData;
+        }
+
         console.log(
           "[TrackerDashboard] logs de tracking recibidos:",
           logsData
@@ -163,34 +190,41 @@ function TrackerDashboard() {
     };
   }, [currentOrg, selectedTrackerId, timeWindowHours]);
 
-  // Inicializar mapa
+  // Inicializar mapa (una sola vez, cuando el contenedor exista)
   useEffect(() => {
-    if (!mapRef.current) {
-      mapRef.current = L.map("tracker-dashboard-map", {
-        center: [0, 0],
-        zoom: 2,
-      });
+    if (!mapContainerRef.current) return;
+    if (mapInstanceRef.current) return;
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors",
-      }).addTo(mapRef.current);
-    }
+    const map = L.map(mapContainerRef.current, {
+      center: [0, 0],
+      zoom: 2,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
   }, []);
-
-  const geofenceLayersRef = useRef([]);
-  const logLayersRef = useRef([]);
 
   // Pintar geocercas + logs en el mapa
   useEffect(() => {
-    if (!mapRef.current) return;
+    const map = mapInstanceRef.current;
+    if (!map) return;
 
+    // limpiar capas anteriores
     geofenceLayersRef.current.forEach((layer) => {
-      mapRef.current.removeLayer(layer);
+      map.removeLayer(layer);
     });
     geofenceLayersRef.current = [];
 
     logLayersRef.current.forEach((layer) => {
-      mapRef.current.removeLayer(layer);
+      map.removeLayer(layer);
     });
     logLayersRef.current = [];
 
@@ -198,10 +232,13 @@ function TrackerDashboard() {
 
     // Geocercas con geojson
     for (const g of geofences) {
-      if (!g.geometry && !g.geojson && !g.geom && !g.polygon) continue;
-
+      if (!g) continue;
       const geojson =
-        g.geometry || g.geojson || g.geom || g.polygon || g.polygon_geojson;
+        g.geometry ||
+        g.geojson ||
+        g.geom ||
+        g.polygon ||
+        g.polygon_geojson;
       if (!geojson) continue;
 
       const layer = L.geoJSON(geojson, {
@@ -211,45 +248,73 @@ function TrackerDashboard() {
           fillColor: "#60a5fa",
           fillOpacity: 0.1,
         },
-      }).addTo(mapRef.current);
+      }).addTo(map);
 
       geofenceLayersRef.current.push(layer);
       group.addLayer(layer);
     }
 
-    // Puntos de tracking
+    // Puntos de tracking (intentamos soportar varios nombres de columnas)
     for (const log of logs) {
-      if (typeof log.lat !== "number" || typeof log.lng !== "number") continue;
+      if (!log) continue;
 
-      const circle = L.circleMarker([log.lat, log.lng], {
+      const lat =
+        log.lat ??
+        log.latitude ??
+        log.latitud ??
+        log.latitud_decimal ??
+        null;
+      const lng =
+        log.lng ??
+        log.longitude ??
+        log.longitud ??
+        log.longitud_decimal ??
+        null;
+
+      if (typeof lat !== "number" || typeof lng !== "number") continue;
+
+      const inside =
+        log.inside_geocerca ??
+        log.inside ??
+        log.inside_geofence ??
+        false;
+
+      const ts =
+        log.recorded_at ??
+        log.received_at ??
+        log.created_at ??
+        log.timestamp ??
+        null;
+
+      const dt = ts ? new Date(ts) : null;
+      const dtStr = dt ? dt.toLocaleString() : "(sin fecha)";
+
+      const circle = L.circleMarker([lat, lng], {
         radius: 5,
-        color: log.inside_geocerca ? "#16a34a" : "#f97316",
+        color: inside ? "#16a34a" : "#f97316",
         weight: 1,
-        fillColor: log.inside_geocerca ? "#22c55e" : "#fb923c",
+        fillColor: inside ? "#22c55e" : "#fb923c",
         fillOpacity: 0.8,
       });
-
-      const dt = new Date(log.recorded_at || log.received_at);
-      const dtStr = dt.toLocaleString();
 
       circle.bindPopup(
         `<div>
           <strong>${dtStr}</strong><br/>
-          Lat: ${log.lat.toFixed(6)}<br/>
-          Lng: ${log.lng.toFixed(6)}<br/>
-          Dentro geocerca: ${log.inside_geocerca ? "Sí" : "No"}
+          Lat: ${lat.toFixed(6)}<br/>
+          Lng: ${lng.toFixed(6)}<br/>
+          Dentro geocerca: ${inside ? "Sí" : "No"}
         </div>`
       );
 
-      circle.addTo(mapRef.current);
+      circle.addTo(map);
       logLayersRef.current.push(circle);
       group.addLayer(circle);
     }
 
     if (group.getLayers().length > 0) {
-      mapRef.current.fitBounds(group.getBounds().pad(0.2));
+      map.fitBounds(group.getBounds().pad(0.2));
     } else {
-      mapRef.current.setView([0, 0], 2);
+      map.setView([0, 0], 2);
     }
   }, [geofences, logs]);
 
@@ -272,7 +337,10 @@ function TrackerDashboard() {
   const canSeeDashboard =
     currentRole === "owner" ||
     currentRole === "admin" ||
-    currentRole === "tracker";
+    currentRole === "OWNER" ||
+    currentRole === "ADMIN" ||
+    currentRole === "tracker" ||
+    currentRole === "TRACKER";
 
   if (!canSeeDashboard) {
     return (
@@ -307,7 +375,7 @@ function TrackerDashboard() {
               <option value="all">Todos los trackers</option>
               {trackers.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.full_name || t.email || t.phone || t.id}
+                  {t.full_name || t.email || t.id}
                 </option>
               ))}
             </select>
@@ -332,7 +400,9 @@ function TrackerDashboard() {
             type="button"
             onClick={() =>
               setTimeWindowHours((prev) => {
-                return prev; // el useEffect de logs ya recarga automáticamente
+                // El useEffect de logs se dispara igual,
+                // este botón solo fuerza una "acción" explícita
+                return prev;
               })
             }
             className="ml-auto inline-flex items-center px-3 py-1 rounded bg-blue-600 text-white text-xs"
@@ -342,10 +412,9 @@ function TrackerDashboard() {
         </div>
 
         {/* Mapa */}
-        <div
-          id="tracker-dashboard-map"
-          className="w-full h-[500px] border rounded overflow-hidden"
-        />
+        <div className="w-full h-[500px] border rounded overflow-hidden">
+          <div ref={mapContainerRef} className="w-full h-full" />
+        </div>
       </div>
 
       {/* Panel derecho */}
@@ -380,17 +449,25 @@ function TrackerDashboard() {
           <p>
             Los puntos de tracking se muestran directamente en el mapa. Solo se
             visualizan dentro del área de las geocercas (usando el contorno de
-            cada geocerca como filtro aproximado).
+            cada geocerca como filtro aproximado, si aplica).
           </p>
           <p className="mt-1">
             Puedes cambiar la ventana de tiempo y filtrar por tracker específico
             para investigar movimientos puntuales.
           </p>
         </div>
+
+        {loading && (
+          <p className="text-xs text-blue-600">Cargando datos de tracking…</p>
+        )}
+        {error && (
+          <p className="text-xs text-red-600">
+            {error} Revisa la consola si persiste.
+          </p>
+        )}
       </aside>
     </div>
   );
 }
 
 export default TrackerDashboard;
-
