@@ -308,7 +308,11 @@ export default function GeocercasPage() {
         orgId={orgId}
         geocercas={geocercasForMap}
         getNewFeatureMeta={() => ({
-          nombre: newGeocercaName,
+          nombre: newGeocercaName.trim(),
+          org_id: orgId,
+          owner_id: user?.id ?? null,
+          vigente: true,
+          is_deleted: false,
         })}
       />
     </div>

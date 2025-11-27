@@ -114,7 +114,14 @@ const LoginPage: React.FC = () => {
             <input
               id="email"
               type="email"
-              className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              autoComplete="email"
+              className="
+                w-full rounded-lg border border-slate-600
+                bg-slate-900 px-3 py-2 text-sm
+                focus:outline-none focus:ring-2 focus:ring-emerald-500
+                text-white !text-white [color:white] placeholder-slate-300
+              "
+              style={{ color: "white" }}
               placeholder="tucorreo@empresa.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
