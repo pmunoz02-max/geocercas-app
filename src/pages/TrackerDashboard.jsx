@@ -7,8 +7,10 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 const AUTO_REFRESH_MS = 30_000; // refresco automático cada 30s
 
+// Ventanas de tiempo que puede escoger el administrador (en horas)
 const TIME_WINDOWS = [
   { label: "1 hora", valueHours: 1 },
+  { label: "3 horas", valueHours: 3 },
   { label: "6 horas", valueHours: 6 },
   { label: "12 horas", valueHours: 12 },
   { label: "24 horas", valueHours: 24 },
@@ -26,6 +28,7 @@ function computeWindowRange(hours) {
 function TrackerDashboard() {
   const { currentOrg, currentRole } = useAuth();
 
+  // ventana que escoge el admin (en horas)
   const [timeWindowHours, setTimeWindowHours] = useState(6);
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
 
@@ -58,6 +61,7 @@ function TrackerDashboard() {
       setLoading(true);
       setError(null);
       try {
+        // Geocercas activas/visibles de la organización actual
         const { data: fencesData, error: fencesErr } = await supabase
           .from("geocercas")
           .select("*")
@@ -72,6 +76,7 @@ function TrackerDashboard() {
           fencesData
         );
 
+        // Perfiles asociados a la organización (para el dropdown de trackers)
         const { data: profilesData, error: profilesErr } = await supabase
           .from("profiles")
           .select("id, full_name, email, org_id, tenant_id")
@@ -106,7 +111,8 @@ function TrackerDashboard() {
   }, [currentOrg]);
 
   // ---------------------------
-  // Carga de logs
+  // Carga de logs desde latest_positions_by_user
+  // (usa ventana de tiempo elegida por el administrador)
   // ---------------------------
   useEffect(() => {
     if (!currentOrg) return;
@@ -126,38 +132,47 @@ function TrackerDashboard() {
           to
         );
 
+        // Base: última posición por usuario dentro de la organización y ventana de tiempo
         let query = supabase
-          .from("tracker_logs")
+          .from("latest_positions_by_user")
           .select(
-            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at, inside_geocerca, geocerca_ids"
+            `
+            id,
+            org_id,
+            user_id,
+            personal_id,
+            asignacion_id,
+            lat,
+            lng,
+            accuracy,
+            speed,
+            heading,
+            battery,
+            is_mock,
+            source,
+            recorded_at,
+            created_at,
+            age_minutes
+          `
           )
-          .eq("tenant_id", currentOrg.id)
+          .eq("org_id", currentOrg.id)
           .gte("recorded_at", from)
           .lte("recorded_at", to)
           .order("recorded_at", { ascending: true });
 
+        // Filtro opcional por tracker concreto
         if (selectedTrackerId !== "all") {
           query = query.eq("user_id", selectedTrackerId);
         }
 
-        let { data: logsData, error: logsErr } = await query;
+        const { data: logsData, error: logsErr } = await query;
 
         if (logsErr) {
-          console.warn(
-            "[TrackerDashboard] error en query principal de tracker_logs, intentando fallback *.select('*'):",
-            logsErr
-          );
-          const {
-            data: fallbackData,
-            error: fallbackErr,
-          } = await supabase.from("tracker_logs").select("*");
-
-          if (fallbackErr) throw fallbackErr;
-          logsData = fallbackData;
+          throw logsErr;
         }
 
         console.log(
-          "[TrackerDashboard] logs de tracking recibidos:",
+          "[TrackerDashboard] posiciones recientes recibidas:",
           logsData
         );
 
@@ -167,7 +182,8 @@ function TrackerDashboard() {
       } catch (err) {
         console.error("[TrackerDashboard] loadLogs error:", err);
         if (!cancelled) {
-          setError("Error al cargar logs de tracking.");
+          setError("Error al cargar datos de tracking.");
+          setLogs([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -213,6 +229,7 @@ function TrackerDashboard() {
     const map = mapInstanceRef.current;
     if (!map) return;
 
+    // Limpiar capas anteriores
     geofenceLayersRef.current.forEach((layer) => map.removeLayer(layer));
     geofenceLayersRef.current = [];
 
@@ -285,7 +302,7 @@ function TrackerDashboard() {
       }
     }
 
-    // Logs / puntos de tracking
+    // Logs / puntos de tracking (ahora provenientes de latest_positions_by_user)
     for (const log of logs) {
       if (!log) continue;
 
@@ -304,6 +321,7 @@ function TrackerDashboard() {
 
       if (typeof lat !== "number" || typeof lng !== "number") continue;
 
+      // Por ahora inside_geocerca se deja opcional (lo añadiremos en positions más adelante)
       const inside =
         log.inside_geocerca ??
         log.inside ??
@@ -320,8 +338,11 @@ function TrackerDashboard() {
       const dt = ts ? new Date(ts) : null;
       const dtStr = dt ? dt.toLocaleString() : "(sin fecha)";
 
+      const ageMinutes =
+        typeof log.age_minutes === "number" ? log.age_minutes : null;
+
       const circle = L.circleMarker([lat, lng], {
-        radius: 5,
+        radius: 6,
         color: inside ? "#16a34a" : "#f97316",
         weight: 1,
         fillColor: inside ? "#22c55e" : "#fb923c",
@@ -333,7 +354,12 @@ function TrackerDashboard() {
           <strong>${dtStr}</strong><br/>
           Lat: ${lat.toFixed(6)}<br/>
           Lng: ${lng.toFixed(6)}<br/>
-          Dentro geocerca: ${inside ? "Sí" : "No"}
+          Dentro geocerca: ${inside ? "Sí" : "No"}<br/>
+          ${
+            ageMinutes !== null
+              ? `Antigüedad: ${ageMinutes.toFixed(1)} min`
+              : ""
+          }
         </div>`
       );
 
@@ -401,7 +427,8 @@ function TrackerDashboard() {
         </h1>
         <p className="text-sm text-gray-500 mb-2">
           Visualiza la ubicación de tus trackers sobre tus geocercas activas. Los
-          puntos se actualizan automáticamente cada 30 segundos.
+          puntos se actualizan automáticamente cada 30 segundos. La ventana de
+          tiempo es escogida por el administrador.
         </p>
 
         {/* Filtros */}
@@ -423,7 +450,9 @@ function TrackerDashboard() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1">Ventana</label>
+            <label className="block text-xs font-medium mb-1">
+              Ventana (horas)
+            </label>
             <select
               className="border rounded px-2 py-1 text-sm"
               value={timeWindowHours}
@@ -449,7 +478,7 @@ function TrackerDashboard() {
         <div>
           <h2 className="text-lg font-semibold mb-1">Resumen</h2>
           <p className="text-xs text-gray-500">
-            Ventana:{" "}
+            Ventana seleccionada:{" "}
             <span className="font-medium">
               {timeWindowHours} hora(s) ({from} → {to})
             </span>
