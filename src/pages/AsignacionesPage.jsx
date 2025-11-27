@@ -247,13 +247,18 @@ function AsignacionesPage() {
 
       if (editingId) {
         const payload = {
-          personal_id: personaId,
-          geocerca_id: geocercaId,
-          activity_id: activityId || null,
-          start_time: start.toISOString(),
-          end_time: end.toISOString(),
-          status: estado,
-        };
+  personal_id: personaId,
+  geocerca_id: geocercaId,
+  activity_id: activityId || null,
+  start_time: start.toISOString(),
+  end_time: end.toISOString(),
+  status: estado,
+  frequency_sec: frecuenciaSegundos,        // ✅ nombre correcto según Supabase
+  owner_id: user.id,
+  org_id: currentOrg.id,
+  is_deleted: false,
+};
+
 
         const { data, error: updateErr } = await supabase
           .from("asignaciones")
