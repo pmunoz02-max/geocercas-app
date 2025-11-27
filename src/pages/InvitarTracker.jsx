@@ -1,7 +1,7 @@
 // src/pages/InvitarTracker.jsx
-// Invitar tracker por Magic Link (versión simplificada)
-// - No consulta la tabla PERSONAL.
-// - El admin escribe directamente el email del tracker.
+// Invitar tracker por Magic Link (versión simplificada y correcta).
+// - El admin escribe el email del tracker.
+// - El Magic Link redirige a /tracker (página especial del tracker).
 // - Usa AuthContext para mostrar usuario y organización activa.
 
 import React, { useState } from "react";
@@ -19,7 +19,7 @@ function InvitarTracker() {
   const orgName = currentOrg?.name || null;
 
   // ------------------------------------------------------------
-  // Enviar Magic Link
+  // Enviar Magic Link para tracker
   // ------------------------------------------------------------
   const handleSendMagicLink = async (e) => {
     e.preventDefault();
@@ -34,7 +34,8 @@ function InvitarTracker() {
 
     setSending(true);
     try {
-      const redirectUrl = `${window.location.origin}/login`;
+      // 👇 IMPORTANTE: el Magic Link redirige a /tracker
+      const redirectUrl = `${window.location.origin}/tracker`;
 
       const { error: authErr } = await supabase.auth.signInWithOtp({
         email: emailTrimmed,

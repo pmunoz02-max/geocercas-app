@@ -10,7 +10,7 @@ import TopTabs from "./components/TopTabs.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import TrackerPage from "./pages/TrackerPage.jsx"; // ✅ wrapper principal del módulo Tracker
+import TrackerPage from "./pages/TrackerPage.jsx"; // Página especial de tracker (Magic Link)
 import InvitarTrackerPage from "./pages/InvitarTracker.jsx";
 import Login from "./pages/Login.tsx";
 
@@ -20,10 +20,10 @@ import Inicio from "./pages/Inicio.jsx";
 // Selección de organización
 import SeleccionarOrganizacion from "./pages/SeleccionarOrganizacion.jsx";
 
-// 🆕 Dashboard de tracking en tiempo real
+// Dashboard de tracking en tiempo real (para owner/admin)
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
-// 👉 Cliente de Supabase unificado en todo el proyecto
+// Cliente de Supabase unificado
 import { supabase } from "./supabaseClient";
 
 function Shell({ children }) {
@@ -49,10 +49,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ===== ROOT → /inicio (dashboard) ===== */}
+        {/* ROOT → /inicio (dashboard) */}
         <Route path="/" element={<Navigate to="/inicio" replace />} />
 
-        {/* ===== LOGIN (público) ===== */}
+        {/* LOGIN (público) */}
         <Route
           path="/login"
           element={
@@ -64,7 +64,7 @@ export default function App() {
           }
         />
 
-        {/* ===== SELECCIONAR ORGANIZACIÓN (privado) ===== */}
+        {/* SELECCIONAR ORGANIZACIÓN (privado) */}
         <Route
           path="/seleccionar-organizacion"
           element={
@@ -76,7 +76,7 @@ export default function App() {
           }
         />
 
-        {/* ===== INICIO (DASHBOARD PRIVADO) ===== */}
+        {/* INICIO (dashboard privado owner/admin) */}
         <Route
           path="/inicio"
           element={
@@ -88,7 +88,7 @@ export default function App() {
           }
         />
 
-        {/* 🔵 NUEVA GEOCERCA */}
+        {/* NUEVA GEOCERCA */}
         <Route
           path="/nueva-geocerca"
           element={
@@ -100,7 +100,7 @@ export default function App() {
           }
         />
 
-        {/* ===== PERSONAL ===== */}
+        {/* PERSONAL */}
         <Route
           path="/personal"
           element={
@@ -112,7 +112,7 @@ export default function App() {
           }
         />
 
-        {/* ===== ASIGNACIONES ===== */}
+        {/* ASIGNACIONES */}
         <Route
           path="/asignaciones"
           element={
@@ -124,19 +124,15 @@ export default function App() {
           }
         />
 
-        {/* ===== TRACKER ===== */}
-        <Route
-          path="/tracker"
-          element={
-            <AuthGuard>
-              <Shell>
-                <TrackerPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
+        {/* TRACKER (destino del Magic Link) */}
+        {/* 🔴 OJO: sin AuthGuard ni Shell, para que no redirija a seleccionar-organización
+            ni muestre la UI de admin. TrackerPage se encarga de:
+            - verificar sesión
+            - resolver organización
+            - mostrar mensaje y enviar posición. */}
+        <Route path="/tracker" element={<TrackerPage />} />
 
-        {/* 🆕 DASHBOARD TRACKING ===== */}
+        {/* DASHBOARD TRACKING (para owner/admin) */}
         <Route
           path="/tracker-dashboard"
           element={
@@ -148,7 +144,7 @@ export default function App() {
           }
         />
 
-        {/* ===== INVITAR TRACKER ===== */}
+        {/* INVITAR TRACKER (owner/admin) */}
         <Route
           path="/invitar-tracker"
           element={
@@ -160,7 +156,7 @@ export default function App() {
           }
         />
 
-        {/* ===== Fallback ===== */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
