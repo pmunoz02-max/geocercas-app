@@ -65,10 +65,7 @@ function AsignacionesPage() {
           .eq("is_deleted", false)
           .order("id", { ascending: true });
 
-        if (personalErr) {
-          console.error("[AsignacionesPage] error personal:", personalErr);
-          throw personalErr;
-        }
+        if (personalErr) throw personalErr;
 
         // GEOCERCAS
         const { data: geocercasData, error: geocercasErr } = await supabase
@@ -77,10 +74,7 @@ function AsignacionesPage() {
           .eq("org_id", currentOrg.id)
           .order("nombre", { ascending: true });
 
-        if (geocercasErr) {
-          console.error("[AsignacionesPage] error geocercas:", geocercasErr);
-          throw geocercasErr;
-        }
+        if (geocercasErr) throw geocercasErr;
 
         // ACTIVITIES
         const { data: activitiesData, error: activitiesErr } = await supabase
@@ -89,10 +83,7 @@ function AsignacionesPage() {
           .eq("active", true)
           .order("name", { ascending: true });
 
-        if (activitiesErr) {
-          console.error("[AsignacionesPage] error activities:", activitiesErr);
-          throw activitiesErr;
-        }
+        if (activitiesErr) throw activitiesErr;
 
         // ASIGNACIONES
         const { data: asignacionesData, error: asignacionesErr } =
@@ -104,21 +95,18 @@ function AsignacionesPage() {
             .eq("is_deleted", false)
             .order("id", { ascending: false });
 
-        if (asignacionesErr) {
-          console.error(
-            "[AsignacionesPage] error asignaciones:",
-            asignacionesErr
-          );
-          throw asignacionesErr;
-        }
+        if (asignacionesErr) throw asignacionesErr;
 
         setPersonal(personalData || []);
         setGeocercas(geocercasData || []);
         setActivities(activitiesData || []);
         setAsignaciones(asignacionesData || []);
       } catch (err) {
-        console.error("[AsignacionesPage] loadAll error general:", err);
-        setError("Error al cargar datos de asignaciones. Intenta de nuevo.");
+        console.error("[AsignacionesPage] loadAll error:", err);
+        setError(
+          err.message ||
+            "Error al cargar datos de asignaciones. Intenta de nuevo."
+        );
       } finally {
         setLoading(false);
       }
@@ -247,18 +235,13 @@ function AsignacionesPage() {
 
       if (editingId) {
         const payload = {
-  personal_id: personaId,
-  geocerca_id: geocercaId,
-  activity_id: activityId || null,
-  start_time: start.toISOString(),
-  end_time: end.toISOString(),
-  status: estado,
-  frequency_sec: frecuenciaSegundos,        // ✅ nombre correcto según Supabase
-  owner_id: user.id,
-  org_id: currentOrg.id,
-  is_deleted: false,
-};
-
+          personal_id: personaId,
+          geocerca_id: geocercaId,
+          activity_id: activityId || null,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          status: estado,
+        };
 
         const { data, error: updateErr } = await supabase
           .from("asignaciones")
@@ -287,7 +270,8 @@ function AsignacionesPage() {
           start_time: start.toISOString(),
           end_time: end.toISOString(),
           status: estado,
-          // 👇 nombre correcto de la columna en la BD
+          // 👉 nombre que muestra Supabase en la URL:
+          // ..."status","frecuencia_envio_sec","owner_id"...
           frecuencia_envio_sec: frecuenciaSegundos,
           owner_id: user.id,
           org_id: currentOrg.id,
@@ -305,6 +289,7 @@ function AsignacionesPage() {
             "[AsignacionesPage] handleSubmit INSERT error:",
             insertErr
           );
+          // 👇 Muestra mensaje REAL de Supabase/Postgres
           throw insertErr;
         }
 
@@ -314,11 +299,14 @@ function AsignacionesPage() {
       resetForm();
     } catch (err) {
       console.error("[AsignacionesPage] handleSubmit error general:", err);
-      setError(
-        editingId
+      // Aquí mostramos lo que venga de Supabase:
+      const message =
+        err?.message ||
+        err?.details ||
+        (editingId
           ? "Error al actualizar la asignación."
-          : "Error al crear la asignación."
-      );
+          : "Error al crear la asignación.");
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -345,9 +333,6 @@ function AsignacionesPage() {
     setEstado(asig.estado ?? asig.status ?? "activo");
   };
 
-  // --------------------------------------------------
-  // ELIMINAR (soft delete)
-  // --------------------------------------------------
   const handleDelete = async (asig) => {
     if (!isAdminOrOwner) {
       setError("Solo el owner o un admin pueden eliminar asignaciones.");
@@ -366,18 +351,15 @@ function AsignacionesPage() {
         .eq("id", asig.id)
         .eq("owner_id", user.id);
 
-      if (delErr) {
-        console.error("[AsignacionesPage] handleDelete error:", delErr);
-        throw delErr;
-      }
+      if (delErr) throw delErr;
 
       setAsignaciones((prev) => prev.filter((a) => a.id !== asig.id));
       if (editingId === asig.id) {
         resetForm();
       }
     } catch (err) {
-      console.error("[AsignacionesPage] handleDelete error general:", err);
-      setError("Error al eliminar la asignación.");
+      console.error("[AsignacionesPage] handleDelete error:", err);
+      setError(err?.message || "Error al eliminar la asignación.");
     }
   };
 
@@ -423,10 +405,7 @@ function AsignacionesPage() {
         .select()
         .single();
 
-      if (actErr) {
-        console.error("[AsignacionesPage] handleCreateActivity error:", actErr);
-        throw actErr;
-      }
+      if (actErr) throw actErr;
 
       setActivities((prev) =>
         [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
@@ -435,11 +414,8 @@ function AsignacionesPage() {
       setNewActivityName("");
       setNewActivityDesc("");
     } catch (err) {
-      console.error(
-        "[AsignacionesPage] handleCreateActivity error general:",
-        err
-      );
-      setError("Error al crear la actividad.");
+      console.error("[AsignacionesPage] handleCreateActivity error:", err);
+      setError(err?.message || "Error al crear la actividad.");
     } finally {
       setSavingActivity(false);
     }
@@ -467,7 +443,7 @@ function AsignacionesPage() {
       </p>
 
       {error && (
-        <div className="mb-2 rounded bg-red-100 text-red-800 px-4 py-2">
+        <div className="mb-2 rounded bg-red-100 text-red-800 px-4 py-2 text-sm">
           {error}
         </div>
       )}
@@ -501,7 +477,7 @@ function AsignacionesPage() {
         </div>
       </div>
 
-      {/* Layout principal: tabla arriba, formulario abajo */}
+      {/* Tabla + formulario */}
       <div className="space-y-6">
         {/* Tabla */}
         <div>
@@ -674,7 +650,7 @@ function AsignacionesPage() {
             </div>
 
             <div>
-              <label className="block text.sm font-medium mb-1">
+              <label className="block text-sm font-medium mb-1">
                 Actividad (opcional)
               </label>
               <select
@@ -770,14 +746,14 @@ function AsignacionesPage() {
             </div>
           </form>
 
-          {/* Bloque Nueva actividad */}
+          {/* Nueva actividad */}
           <div className="border rounded px-4 py-3 space-y-2">
             <h3 className="text-sm font-semibold mb-1">
               Nueva actividad rápida
             </h3>
             <p className="text-xs text-gray-500 mb-1">
-              Crea una actividad y quedará disponible en la lista de
-              actividades. Se marcará como activa.
+              Crea una actividad y quedará disponible en la lista. Se marcará
+              como activa.
             </p>
             <form onSubmit={handleCreateActivity} className="space-y-2">
               <div>
