@@ -1,6 +1,7 @@
 // src/context/AuthContext.jsx
 // MODELO GLOBAL + MULTI-ORG + ROL DERIVADO DE user_organizations
-// Versión con autoselección de organización y persistencia en localStorage
+// Versión con autoselección de organización, persistencia en localStorage
+// y flujo de carga robusto (evita rebotes /inicio → /seleccionar-organizacion).
 
 import React, {
   createContext,
@@ -31,7 +32,12 @@ export function AuthProvider({ children }) {
   const [organizations, setOrganizations] = useState([]); // orgs del usuario
   const [currentOrg, setCurrentOrgState] = useState(null); // org seleccionada
 
-  const [loading, setLoading] = useState(true);
+  // loadingSession → estamos resolviendo la sesión de Supabase
+  // loadingData    → estamos cargando perfil + organizaciones
+  const [loadingSession, setLoadingSession] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
+
+  const loading = loadingSession || loadingData;
 
   // ------------------------------------------------------------
   // 1. Cargar sesión inicial + escuchar cambios de autenticación
@@ -40,15 +46,18 @@ export function AuthProvider({ children }) {
     let active = true;
 
     async function loadInitialSession() {
+      setLoadingSession(true);
       const { data, error } = await supabase.auth.getSession();
       if (!active) return;
 
-      if (error) console.error("[AuthContext] getSession error:", error);
+      if (error) {
+        console.error("[AuthContext] getSession error:", error);
+      }
 
       const sess = data?.session ?? null;
       setSession(sess);
       setUser(sess?.user ?? null);
-      setLoading(false);
+      setLoadingSession(false);
     }
 
     loadInitialSession();
@@ -57,14 +66,16 @@ export function AuthProvider({ children }) {
       (_event, newSession) => {
         if (!active) return;
 
+        const authUser = newSession?.user ?? null;
         setSession(newSession);
-        setUser(newSession?.user ?? null);
+        setUser(authUser);
 
         if (!newSession) {
-          // LOGOUT → limpiar todo
+          // LOGOUT → limpiar todo inmediatamente
           setProfile(null);
           setOrganizations([]);
           setCurrentOrgState(null);
+
           try {
             if (typeof window !== "undefined") {
               window.localStorage.removeItem(ORG_STORAGE_KEY);
@@ -83,22 +94,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ------------------------------------------------------------
-  // 2. Cargar perfil y organizaciones luego del login
+  // 2. Cargar perfil y organizaciones cuando cambia user
   // ------------------------------------------------------------
   useEffect(() => {
-    if (!user) {
-      // Sin usuario → limpiar estado derivado
-      setProfile(null);
-      setOrganizations([]);
-      setCurrentOrgState(null);
-      setLoading(false);
-      return;
-    }
-
     let cancelled = false;
 
-    async function loadAuthData() {
-      setLoading(true);
+    const loadAuthData = async () => {
+      if (!user) {
+        // Sin usuario → limpiar estado derivado
+        setProfile(null);
+        setOrganizations([]);
+        setCurrentOrgState(null);
+        setLoadingData(false);
+        return;
+      }
+
+      setLoadingData(true);
 
       // ---------- 2.1 PERFIL (v_app_profiles) ----------
       try {
@@ -121,7 +132,7 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // ---------- 2.2 ORGANIZACIONES ----------
+      // ---------- 2.2 ORGANIZACIONES DESDE user_organizations ----------
       let memberships = [];
       try {
         const { data: memData, error: memErr } = await supabase
@@ -176,8 +187,8 @@ export function AuthProvider({ children }) {
         setOrganizations(normalizedOrgs);
       }
 
-      if (!cancelled) setLoading(false);
-    }
+      setLoadingData(false);
+    };
 
     loadAuthData();
     return () => {
@@ -189,7 +200,11 @@ export function AuthProvider({ children }) {
   // 3. Autoseleccionar currentOrg cuando cambian profile/orgs
   //    y persistir en localStorage
   // ------------------------------------------------------------
-  // 3.1: Pick org automáticamente
+
+  // 3.1: Elegir org automáticamente en función de:
+  //  - localStorage
+  //  - profile.active_tenant_id
+  //  - primera org disponible
   useEffect(() => {
     if (!user) {
       // Sin usuario, nada que seleccionar
@@ -219,6 +234,7 @@ export function AuthProvider({ children }) {
 
     let nextOrg = null;
 
+    // Intentar por localStorage
     try {
       if (typeof window !== "undefined") {
         const storedId = window.localStorage.getItem(ORG_STORAGE_KEY);
@@ -231,7 +247,7 @@ export function AuthProvider({ children }) {
       console.warn("[AuthContext] localStorage read error:", e);
     }
 
-    // Si no se encontró por localStorage, intentar con active_tenant_id
+    // Intentar por active_tenant_id (si existe en el perfil)
     if (!nextOrg && profile?.active_tenant_id) {
       nextOrg =
         organizations.find(
@@ -321,7 +337,7 @@ export function AuthProvider({ children }) {
   const value = {
     session,
     user,
-    loading,
+    loading, // 🔥 ahora significa "sesión y datos listos"
 
     profile,
 
