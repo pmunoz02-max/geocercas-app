@@ -1,7 +1,11 @@
 // src/pages/SeleccionarOrganizacion.jsx
 // Pantalla para elegir organización después del login.
-// Lee directamente de Supabase y usa AuthContext para setCurrentOrg.
-// Si la membresía es TRACKER, redirige a /tracker-dashboard.
+// Ahora:
+//  - Si el usuario solo tiene rol TRACKER en una organización,
+//    se le redirige automáticamente a /tracker.
+//  - Si tiene varias orgs con rol TRACKER, al tocar una tarjeta
+//    va a /tracker (no a /inicio).
+//  - Owner/Admin siguen yendo a /inicio como antes.
 
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +14,14 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 function SeleccionarOrganizacion() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, currentOrg, setCurrentOrg } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    currentOrg,
+    setCurrentOrg,
+    currentRole,
+    organizations: orgsFromContext,
+  } = useAuth();
 
   const [orgs, setOrgs] = useState([]);
   const [loadingOrgs, setLoadingOrgs] = useState(true);
@@ -18,6 +29,7 @@ function SeleccionarOrganizacion() {
 
   // ------------------------------------------------------------
   // Cargar organizaciones directamente desde Supabase
+  // (aunque tengamos algo en el contexto, aquí nos aseguramos).
   // ------------------------------------------------------------
   useEffect(() => {
     if (!user) {
@@ -40,7 +52,9 @@ function SeleccionarOrganizacion() {
 
         if (memErr) {
           console.error("[SeleccionarOrganizacion] memberships error:", memErr);
-          if (!cancelled) setError("No se pudieron cargar las organizaciones.");
+          if (!cancelled) {
+            setError("No se pudieron cargar las organizaciones.");
+          }
           return;
         }
 
@@ -60,7 +74,9 @@ function SeleccionarOrganizacion() {
 
         if (orgErr) {
           console.error("[SeleccionarOrganizacion] organizations error:", orgErr);
-          if (!cancelled) setError("No se pudieron cargar las organizaciones.");
+          if (!cancelled) {
+            setError("No se pudieron cargar las organizaciones.");
+          }
           return;
         }
 
@@ -78,30 +94,52 @@ function SeleccionarOrganizacion() {
 
         if (!cancelled) {
           setOrgs(normalized);
-
-          // Auto-selección si solo tiene una
-          if (!currentOrg && normalized.length === 1) {
-            const onlyOrg = normalized[0];
-            handleSelectOrgInternal(onlyOrg);
-          }
         }
       } catch (e) {
         console.error("[SeleccionarOrganizacion] exception:", e);
-        if (!cancelled)
-          setError("Ocurrió un error inesperado al cargar organizaciones.");
+        if (!cancelled) {
+          setError(
+            "Ocurrió un error inesperado al cargar organizaciones."
+          );
+        }
       } finally {
         if (!cancelled) setLoadingOrgs(false);
       }
     }
 
     loadOrganizations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   // ------------------------------------------------------------
-  // Selección de organización (función interna para reuso)
+  // Auto-redirect para TRACKER con una sola organización
   // ------------------------------------------------------------
-  const handleSelectOrgInternal = (org) => {
+  useEffect(() => {
+    if (authLoading || loadingOrgs) return;
+    if (!user) return;
+    if (!orgs || orgs.length === 0) return;
+
+    // Normalizar roles
+    const roles = orgs
+      .map((o) => (o.role || "").toString().trim().toLowerCase())
+      .filter(Boolean);
+
+    const todasTracker = roles.length > 0 && roles.every((r) => r === "tracker");
+
+    // Caso más común para el tracker: 1 organización, rol TRACKER
+    if (todasTracker && orgs.length === 1) {
+      const onlyOrg = orgs[0];
+      setCurrentOrg(onlyOrg);
+      navigate("/tracker", { replace: true });
+    }
+  }, [authLoading, loadingOrgs, user, orgs, setCurrentOrg, navigate]);
+
+  // ------------------------------------------------------------
+  // Selección de organización (owner/admin → /inicio, tracker → /tracker)
+  // ------------------------------------------------------------
+  const handleSelectOrg = (org) => {
     if (!org) return;
 
     setCurrentOrg(org);
@@ -112,14 +150,12 @@ function SeleccionarOrganizacion() {
       .toLowerCase();
 
     if (roleNorm === "tracker") {
-      navigate("/tracker-dashboard");
+      // TRACKER → siempre a la página especial de tracking
+      navigate("/tracker");
     } else {
+      // Owner/Admin → dashboard normal
       navigate("/inicio");
     }
-  };
-
-  const handleSelectOrgClick = (org) => {
-    handleSelectOrgInternal(org);
   };
 
   // ------------------------------------------------------------
@@ -178,7 +214,7 @@ function SeleccionarOrganizacion() {
             <button
               key={org.id}
               type="button"
-              onClick={() => handleSelectOrgClick(org)}
+              onClick={() => handleSelectOrg(org)}
               className="w-full text-left border rounded px-4 py-3 hover:bg-slate-50 transition flex items-center justify-between"
             >
               <div>
