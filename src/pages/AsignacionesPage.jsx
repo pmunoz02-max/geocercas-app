@@ -282,7 +282,8 @@ function AsignacionesPage() {
           start_time: start.toISOString(),
           end_time: end.toISOString(),
           status: estado,
-          frequency_sec: frecuenciaSegundos,
+          // 👇 nombre correcto de la columna en la BD
+          frecuencia_envio_sec: frecuenciaSegundos,
           owner_id: user.id,
           org_id: currentOrg.id,
           is_deleted: false,
@@ -668,7 +669,7 @@ function AsignacionesPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">
+              <label className="block text.sm font-medium mb-1">
                 Actividad (opcional)
               </label>
               <select
