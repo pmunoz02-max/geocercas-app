@@ -1,5 +1,6 @@
 // src/pages/Geocercas.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import GeoMap from "@/components/GeoMap";
 import { listGeocercas } from "@/services/geocercas";
@@ -7,9 +8,11 @@ import { supabase } from "@/supabaseClient";
 import OrgSelector from "@/components/OrgSelector";
 
 export default function GeocercasPage() {
-  const { role, currentOrg, orgs } = useAuth();
+  const { user, role, currentOrg, orgs, loading } = useAuth();
+  const navigate = useNavigate();
 
   const canEdit = role === "owner" || role === "admin";
+
   const orgId = useMemo(
     () => currentOrg?.org_id ?? currentOrg?.id ?? null,
     [currentOrg]
@@ -172,6 +175,41 @@ export default function GeocercasPage() {
     geocercasForMap.length,
     geocercasForMap
   );
+
+  // ---------------------------------------------------------------------------
+  // Reglas de visibilidad
+  // ---------------------------------------------------------------------------
+
+  // Mientras carga el contexto, no pintamos nada (el layout puede poner un loader)
+  if (loading) {
+    return null;
+  }
+
+  // Si no hay usuario (por ejemplo en /login), esta página no muestra nada.
+  // Así evitamos cualquier mensaje de organizaciones en la pantalla de login.
+  if (!user) {
+    return null;
+  }
+
+  // Si hay usuario pero todavía no hay organización seleccionada,
+  // mostramos un mensaje breve y un botón para ir a la pantalla de selección.
+  if (!orgId) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800">Geocercas</h2>
+        <p className="text-sm text-slate-700">
+          Selecciona una organización para gestionar sus geocercas.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate("/seleccionar-organizacion")}
+          className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          Seleccionar organización
+        </button>
+      </div>
+    );
+  }
 
   const currentOrgName =
     currentOrg?.name ||

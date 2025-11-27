@@ -3,15 +3,18 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createOrganization, listMyOrganizations } from "@/services/orgs";
 import { supabase } from "../supabaseClient";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Organizations() {
+  const { user, loading } = useAuth();
+
   const [orgs, setOrgs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingOrgs, setLoadingOrgs] = useState(true);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
 
   const load = async () => {
-    setLoading(true);
+    setLoadingOrgs(true);
     try {
       const rows = await listMyOrganizations(); // devuelve org_id, org_name, role, slug, created_at
       setOrgs(rows || []);
@@ -19,7 +22,7 @@ export default function Organizations() {
       console.error(err);
       alert("Error cargando organizaciones: " + err.message);
     } finally {
-      setLoading(false);
+      setLoadingOrgs(false);
     }
   };
 
@@ -48,6 +51,25 @@ export default function Organizations() {
     await supabase.auth.signOut();
     location.reload();
   };
+
+  // ---------------------------------------------------------------------------
+  // Reglas de visibilidad
+  // ---------------------------------------------------------------------------
+
+  if (loading) {
+    return null;
+  }
+
+  if (!user) {
+    // Si alguien entra aquí sin sesión, mostramos un mensaje simple.
+    return (
+      <div className="max-w-5xl mx-auto p-6">
+        <p className="text-sm text-slate-700">
+          Debes iniciar sesión para administrar tus organizaciones.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -85,10 +107,12 @@ export default function Organizations() {
         </button>
       </form>
 
-      {loading ? (
+      {loadingOrgs ? (
         <div className="p-4">Cargando…</div>
       ) : orgs.length === 0 ? (
-        <div className="p-4 border rounded-2xl">No tienes organizaciones aún.</div>
+        <div className="p-4 border rounded-2xl">
+          No tienes organizaciones aún.
+        </div>
       ) : (
         <div className="grid gap-3">
           {orgs.map((o) => {
@@ -113,7 +137,7 @@ export default function Organizations() {
                 </div>
 
                 <div className="flex gap-2">
-                  {/* ✅ Enlaces con el UUID real; NUNCA "ID" fijo */}
+                  {/* Enlaces con el UUID real; nunca un ID fijo */}
                   <Link
                     to={`/orgs/${id}/members`}
                     className="px-3 py-2 rounded-xl shadow border hover:bg-gray-50"

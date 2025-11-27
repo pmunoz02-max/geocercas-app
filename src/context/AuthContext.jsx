@@ -1,5 +1,6 @@
 // src/context/AuthContext.jsx
 // MODELO GLOBAL + MULTI-ORG + ROL DERIVADO DE user_organizations
+// Versión con autoselección de organización y persistencia en localStorage
 
 import React, {
   createContext,
@@ -10,6 +11,9 @@ import React, {
 import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
+
+// Clave para guardar la org actual en localStorage
+const ORG_STORAGE_KEY = "app_geocercas_current_org_id";
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
@@ -41,8 +45,9 @@ export function AuthProvider({ children }) {
 
       if (error) console.error("[AuthContext] getSession error:", error);
 
-      setSession(data?.session ?? null);
-      setUser(data?.session?.user ?? null);
+      const sess = data?.session ?? null;
+      setSession(sess);
+      setUser(sess?.user ?? null);
       setLoading(false);
     }
 
@@ -51,6 +56,7 @@ export function AuthProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         if (!active) return;
+
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
@@ -59,6 +65,13 @@ export function AuthProvider({ children }) {
           setProfile(null);
           setOrganizations([]);
           setCurrentOrgState(null);
+          try {
+            if (typeof window !== "undefined") {
+              window.localStorage.removeItem(ORG_STORAGE_KEY);
+            }
+          } catch (e) {
+            console.warn("[AuthContext] localStorage clear on logout:", e);
+          }
         }
       }
     );
@@ -74,9 +87,11 @@ export function AuthProvider({ children }) {
   // ------------------------------------------------------------
   useEffect(() => {
     if (!user) {
+      // Sin usuario → limpiar estado derivado
       setProfile(null);
       setOrganizations([]);
       setCurrentOrgState(null);
+      setLoading(false);
       return;
     }
 
@@ -94,8 +109,9 @@ export function AuthProvider({ children }) {
           .maybeSingle();
 
         if (!cancelled) {
-          if (profErr)
+          if (profErr) {
             console.error("[AuthContext] profile error:", profErr);
+          }
           setProfile(prof ?? null);
         }
       } catch (e) {
@@ -147,7 +163,7 @@ export function AuthProvider({ children }) {
                 id: m.org_id,
                 name: org.name || "(sin nombre)",
                 code: org.slug || null,
-                role: m.role || null, // OWNER / ADMIN / TRACKER
+                role: m.role || null, // OWNER / ADMIN / TRACKER (o variantes)
               };
             });
           }
@@ -170,7 +186,83 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // ------------------------------------------------------------
-  // 3. Helper setCurrentOrg (acepta id o objeto) + normaliza
+  // 3. Autoseleccionar currentOrg cuando cambian profile/orgs
+  //    y persistir en localStorage
+  // ------------------------------------------------------------
+  // 3.1: Pick org automáticamente
+  useEffect(() => {
+    if (!user) {
+      // Sin usuario, nada que seleccionar
+      return;
+    }
+
+    if (!organizations || organizations.length === 0) {
+      // Usuario sin organizaciones
+      setCurrentOrgState(null);
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(ORG_STORAGE_KEY);
+        }
+      } catch (e) {
+        console.warn("[AuthContext] localStorage clear (no orgs):", e);
+      }
+      return;
+    }
+
+    // Si ya hay currentOrg válida dentro de la lista, no tocar
+    if (
+      currentOrg &&
+      organizations.some((o) => o.id === currentOrg.id)
+    ) {
+      return;
+    }
+
+    let nextOrg = null;
+
+    try {
+      if (typeof window !== "undefined") {
+        const storedId = window.localStorage.getItem(ORG_STORAGE_KEY);
+        if (storedId) {
+          nextOrg =
+            organizations.find((o) => o.id === storedId) || null;
+        }
+      }
+    } catch (e) {
+      console.warn("[AuthContext] localStorage read error:", e);
+    }
+
+    // Si no se encontró por localStorage, intentar con active_tenant_id
+    if (!nextOrg && profile?.active_tenant_id) {
+      nextOrg =
+        organizations.find(
+          (o) => o.id === profile.active_tenant_id
+        ) || null;
+    }
+
+    // Si aún no hay, tomar la primera org disponible
+    if (!nextOrg) {
+      nextOrg = organizations[0] || null;
+    }
+
+    setCurrentOrgState(nextOrg || null);
+  }, [user, organizations, profile, currentOrg]);
+
+  // 3.2: Persistir currentOrg en localStorage
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return;
+      if (currentOrg && currentOrg.id) {
+        window.localStorage.setItem(ORG_STORAGE_KEY, currentOrg.id);
+      } else {
+        window.localStorage.removeItem(ORG_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.warn("[AuthContext] localStorage write error:", e);
+    }
+  }, [currentOrg]);
+
+  // ------------------------------------------------------------
+  // 4. Helper setCurrentOrg (acepta id o objeto) + normaliza
   // ------------------------------------------------------------
   function setCurrentOrg(next) {
     if (!next) {
@@ -203,7 +295,7 @@ export function AuthProvider({ children }) {
   }
 
   // ------------------------------------------------------------
-  // 4. Rol derivado de memberships (organizations + currentOrg)
+  // 5. Rol derivado de memberships (organizations + currentOrg)
   // ------------------------------------------------------------
   let normalizedRole = null;
 
@@ -224,7 +316,7 @@ export function AuthProvider({ children }) {
   const isTracker = normalizedRole === "tracker";
 
   // ------------------------------------------------------------
-  // 5. Valor de contexto
+  // 6. Valor de contexto
   // ------------------------------------------------------------
   const value = {
     session,

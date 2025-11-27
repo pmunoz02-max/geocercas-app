@@ -9,8 +9,8 @@ export default function Inicio() {
     user,
     profile,
     currentOrg,
-    role,          // nuevo AuthContext
-    currentRole,   // compatibilidad con AuthContext viejo
+    role,        // nuevo AuthContext
+    currentRole, // compatibilidad con AuthContext viejo
     loading,
   } = useAuth();
 
@@ -41,7 +41,6 @@ export default function Inicio() {
       return;
     }
 
-    // Si la app trabaja con selección obligatoria de organización
     if (!currentOrg) {
       navigate("/seleccionar-organizacion", { replace: true });
     }
@@ -63,13 +62,15 @@ export default function Inicio() {
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
           <div className="h-10 w-10 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" />
-          <p className="text-slate-500 text-sm">Cargando tu espacio de trabajo…</p>
+          <p className="text-slate-500 text-sm">
+            Cargando tu espacio de trabajo…
+          </p>
         </div>
       </div>
     );
   }
 
-  // Si aún no hay user (caso borde mientras redirige)
+  // Caso borde: si aún no hay user (mientras redirige), no pintamos nada
   if (!user) return null;
 
   return (
@@ -164,8 +165,10 @@ export default function Inicio() {
             Resumen de sesión
           </h3>
           <p className="text-sm text-slate-600">
-            Estás conectado como <span className="font-semibold">{displayEmail}</span> con rol{" "}
-            <span className="font-semibold">{effectiveRole}</span> en la organización{" "}
+            Estás conectado como{" "}
+            <span className="font-semibold">{displayEmail}</span> con rol{" "}
+            <span className="font-semibold">{effectiveRole}</span> en la
+            organización{" "}
             <span className="font-semibold">{orgName}</span>.
           </p>
         </div>
