@@ -7,12 +7,17 @@ export default function TopTabs() {
   const { role } = useAuth();
   const location = useLocation();
 
+  // 👉 En la página /inicio NO mostramos las pestañas
+  if (location.pathname === "/inicio") {
+    return null;
+  }
+
   const tabs = [
     { path: "/inicio", label: "Inicio" },
     { path: "/nueva-geocerca", label: "Nueva geocerca" },
     { path: "/personal", label: "Personal" },
 
-    // 🔹 ACTIVIDADES (solo owner/admin)
+    // ACTIVIDADES (solo owner/admin)
     {
       path: "/actividades",
       label: "Actividades",
@@ -21,16 +26,16 @@ export default function TopTabs() {
 
     { path: "/asignaciones", label: "Asignaciones" },
 
-    // 🔹 COSTOS (solo owner/admin)
+    // COSTOS (solo owner/admin)
     {
       path: "/costos",
       label: "Costos",
       onlyFor: ["owner", "admin"],
     },
 
-    { path: "/tracker", label: "Tracker" },
+    { path: "/tracker-dashboard", label: "Tracker" },
 
-    // Solo owners/admins pueden ver la pestaña de invitar tracker
+    // INVITAR TRACKER (solo owner/admin)
     {
       path: "/invitar-tracker",
       label: "Invitar tracker",
@@ -44,9 +49,7 @@ export default function TopTabs() {
   const inactiveClasses =
     "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
 
-  const isActive = (path) => {
-    return location.pathname === path;
-  };
+  const isActive = (path) => location.pathname === path;
 
   return (
     <div className="border-b border-slate-200 bg-white/80 backdrop-blur sticky top-0 z-20">
