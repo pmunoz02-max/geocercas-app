@@ -4,11 +4,11 @@
 //   id, tenant_id, name, description, active,
 //   hourly_rate (numeric), currency_code (text)
 
-import supabase from "../supabaseClient";
+import { supabase } from "../supabaseClient";
 
 /**
  * Lista actividades visibles para el usuario actual.
- * RLS se encarga de filtrar por tenant_id (v_app_profiles / my_org_ids).
+ * RLS se encarga de filtrar por tenant_id.
  *
  * @param {Object} options
  * @param {boolean} options.includeInactive - Si true, incluye inactivas.
@@ -156,10 +156,7 @@ export async function toggleActividadActiva(id, active) {
  * Elimina una actividad por id.
  */
 export async function deleteActividad(id) {
-  const { error } = await supabase
-    .from("activities")
-    .delete()
-    .eq("id", id);
+  const { error } = await supabase.from("activities").delete().eq("id", id);
 
   return { error };
 }
