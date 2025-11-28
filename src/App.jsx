@@ -10,7 +10,7 @@ import TopTabs from "./components/TopTabs.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import TrackerPage from "./pages/TrackerPage.jsx";
+import TrackerPage from "./pages/TrackerPage.jsx"; // Página especial de tracker (Magic Link)
 import InvitarTrackerPage from "./pages/InvitarTracker.jsx";
 import Login from "./pages/Login.tsx";
 
@@ -18,10 +18,8 @@ import Inicio from "./pages/Inicio.jsx";
 import SeleccionarOrganizacion from "./pages/SeleccionarOrganizacion.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
-// 🔹 Actividades
-import ActivitiesPage from "./pages/ActivitiesPage.jsx";
-
-// 🔹 Costos
+// Actividades + Costos
+import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
 
 import { supabase } from "./supabaseClient";
@@ -52,7 +50,7 @@ export default function App() {
         {/* ROOT → /inicio */}
         <Route path="/" element={<Navigate to="/inicio" replace />} />
 
-        {/* LOGIN */}
+        {/* LOGIN (público) */}
         <Route
           path="/login"
           element={
@@ -118,7 +116,7 @@ export default function App() {
           element={
             <AuthGuard>
               <Shell>
-                <ActivitiesPage />
+                <ActividadesPage />
               </Shell>
             </AuthGuard>
           }
@@ -148,7 +146,7 @@ export default function App() {
           }
         />
 
-        {/* TRACKER (Magic Link, sin Shell/AuthGuard) */}
+        {/* TRACKER (destino del Magic Link, sin Shell/AuthGuard) */}
         <Route path="/tracker" element={<TrackerPage />} />
 
         {/* TRACKER DASHBOARD */}
@@ -163,10 +161,10 @@ export default function App() {
           }
         />
 
-        {/* INVITAR TRACKER */}
+        {/* INVITAR TRACKER (owner/admin) */}
         <Route
           path="/invitar-tracker"
-          element{
+          element={
             <AuthGuard>
               <Shell>
                 <InvitarTrackerPage />
