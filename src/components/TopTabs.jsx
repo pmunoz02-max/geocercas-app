@@ -21,7 +21,7 @@ export default function TopTabs() {
 
     { path: "/asignaciones", label: "Asignaciones" },
 
-    // 🔹 COSTOS (nuevo módulo de reportes, solo owner/admin)
+    // 🔹 COSTOS (solo owner/admin)
     {
       path: "/costos",
       label: "Costos",
@@ -29,6 +29,8 @@ export default function TopTabs() {
     },
 
     { path: "/tracker", label: "Tracker" },
+
+    // Solo owners/admins pueden ver la pestaña de invitar tracker
     {
       path: "/invitar-tracker",
       label: "Invitar tracker",
