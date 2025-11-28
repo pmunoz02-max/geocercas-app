@@ -10,20 +10,20 @@ import TopTabs from "./components/TopTabs.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import TrackerPage from "./pages/TrackerPage.jsx"; // Página especial de tracker (Magic Link)
+import TrackerPage from "./pages/TrackerPage.jsx";
 import InvitarTrackerPage from "./pages/InvitarTracker.jsx";
 import Login from "./pages/Login.tsx";
 
-// Dashboard principal
 import Inicio from "./pages/Inicio.jsx";
-
-// Selección de organización
 import SeleccionarOrganizacion from "./pages/SeleccionarOrganizacion.jsx";
-
-// Dashboard de tracking en tiempo real (para owner/admin)
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
-// Cliente de Supabase unificado
+// 🔹 Actividades
+import ActivitiesPage from "./pages/ActivitiesPage.jsx";
+
+// 🔹 Costos
+import CostosPage from "./pages/CostosPage.jsx";
+
 import { supabase } from "./supabaseClient";
 
 function Shell({ children }) {
@@ -49,10 +49,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ROOT → /inicio (dashboard) */}
+        {/* ROOT → /inicio */}
         <Route path="/" element={<Navigate to="/inicio" replace />} />
 
-        {/* LOGIN (público) */}
+        {/* LOGIN */}
         <Route
           path="/login"
           element={
@@ -64,7 +64,7 @@ export default function App() {
           }
         />
 
-        {/* SELECCIONAR ORGANIZACIÓN (privado) */}
+        {/* SELECCIONAR ORGANIZACIÓN */}
         <Route
           path="/seleccionar-organizacion"
           element={
@@ -76,7 +76,7 @@ export default function App() {
           }
         />
 
-        {/* INICIO (dashboard privado owner/admin) */}
+        {/* INICIO */}
         <Route
           path="/inicio"
           element={
@@ -112,6 +112,18 @@ export default function App() {
           }
         />
 
+        {/* ACTIVIDADES */}
+        <Route
+          path="/actividades"
+          element={
+            <AuthGuard>
+              <Shell>
+                <ActivitiesPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
         {/* ASIGNACIONES */}
         <Route
           path="/asignaciones"
@@ -124,15 +136,22 @@ export default function App() {
           }
         />
 
-        {/* TRACKER (destino del Magic Link) */}
-        {/* 🔴 OJO: sin AuthGuard ni Shell, para que no redirija a seleccionar-organización
-            ni muestre la UI de admin. TrackerPage se encarga de:
-            - verificar sesión
-            - resolver organización
-            - mostrar mensaje y enviar posición. */}
+        {/* COSTOS */}
+        <Route
+          path="/costos"
+          element={
+            <AuthGuard>
+              <Shell>
+                <CostosPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* TRACKER (Magic Link, sin Shell/AuthGuard) */}
         <Route path="/tracker" element={<TrackerPage />} />
 
-        {/* DASHBOARD TRACKING (para owner/admin) */}
+        {/* TRACKER DASHBOARD */}
         <Route
           path="/tracker-dashboard"
           element={
@@ -144,10 +163,10 @@ export default function App() {
           }
         />
 
-        {/* INVITAR TRACKER (owner/admin) */}
+        {/* INVITAR TRACKER */}
         <Route
           path="/invitar-tracker"
-          element={
+          element{
             <AuthGuard>
               <Shell>
                 <InvitarTrackerPage />

@@ -11,9 +11,24 @@ export default function TopTabs() {
     { path: "/inicio", label: "Inicio" },
     { path: "/nueva-geocerca", label: "Nueva geocerca" },
     { path: "/personal", label: "Personal" },
+
+    // 🔹 ACTIVIDADES (solo owner/admin)
+    {
+      path: "/actividades",
+      label: "Actividades",
+      onlyFor: ["owner", "admin"],
+    },
+
     { path: "/asignaciones", label: "Asignaciones" },
+
+    // 🔹 COSTOS (nuevo módulo de reportes, solo owner/admin)
+    {
+      path: "/costos",
+      label: "Costos",
+      onlyFor: ["owner", "admin"],
+    },
+
     { path: "/tracker", label: "Tracker" },
-    // Solo owners/admins pueden ver la pestaña de invitar tracker
     {
       path: "/invitar-tracker",
       label: "Invitar tracker",
@@ -23,13 +38,11 @@ export default function TopTabs() {
 
   const baseClasses =
     "inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors border";
-  const activeClasses =
-    "bg-blue-600 text-white border-blue-600 shadow-sm";
+  const activeClasses = "bg-blue-600 text-white border-blue-600 shadow-sm";
   const inactiveClasses =
     "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
 
   const isActive = (path) => {
-    // Consideramos activa la pestaña si el path coincide exactamente
     return location.pathname === path;
   };
 

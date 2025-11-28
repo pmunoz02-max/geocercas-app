@@ -138,13 +138,28 @@ function AsignacionesPage() {
     return m;
   }, [geocercas]);
 
+   const formatActivityLabel = (a) => {
+    if (!a) return "Actividad";
+    const name = a.name || "Actividad";
+
+    if (a.hourly_rate && a.currency_code) {
+      const rate = Number(a.hourly_rate);
+      if (!Number.isNaN(rate) && rate > 0) {
+        return `${name} (${a.currency_code} ${rate.toFixed(2)}/h)`;
+      }
+    }
+
+    return name;
+  };
+
   const activityMap = useMemo(() => {
     const m = {};
     for (const a of activities) {
-      m[a.id] = a.name || "Actividad";
+      m[a.id] = formatActivityLabel(a);
     }
     return m;
   }, [activities]);
+
 
   // --------------------------------------------------
   // FILTRO TABLA
@@ -649,7 +664,7 @@ function AsignacionesPage() {
               </select>
             </div>
 
-            <div>
+             <div>
               <label className="block text-sm font-medium mb-1">
                 Actividad (opcional)
               </label>
@@ -661,11 +676,12 @@ function AsignacionesPage() {
                 <option value="">(Sin actividad)</option>
                 {activities.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}
+                    {formatActivityLabel(a)}
                   </option>
                 ))}
               </select>
             </div>
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

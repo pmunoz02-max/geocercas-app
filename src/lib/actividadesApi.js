@@ -1,24 +1,36 @@
 // src/lib/actividadesApi.js
 // API para manejar el catálogo de actividades
-// Usa la tabla public.activities (id, tenant_id, name, description, active)
+// Usa la tabla public.activities:
+//   id, tenant_id, name, description, active,
+//   hourly_rate (numeric), currency_code (text)
 
-import supabase from '../supabaseClient';
+import supabase from "../supabaseClient";
 
 /**
  * Lista actividades visibles para el usuario actual.
- * RLS se encarga de filtrar por tenant_id (my_org_ids).
+ * RLS se encarga de filtrar por tenant_id (v_app_profiles / my_org_ids).
  *
  * @param {Object} options
  * @param {boolean} options.includeInactive - Si true, incluye inactivas.
  */
 export async function listActividades({ includeInactive = false } = {}) {
   let query = supabase
-    .from('activities')
-    .select('id, tenant_id, name, description, active')
-    .order('name', { ascending: true });
+    .from("activities")
+    .select(
+      `
+      id,
+      tenant_id,
+      name,
+      description,
+      active,
+      hourly_rate,
+      currency_code
+    `
+    )
+    .order("name", { ascending: true });
 
   if (!includeInactive) {
-    query = query.eq('active', true);
+    query = query.eq("active", true);
   }
 
   const { data, error } = await query;
@@ -30,9 +42,19 @@ export async function listActividades({ includeInactive = false } = {}) {
  */
 export async function getActividadById(id) {
   const { data, error } = await supabase
-    .from('activities')
-    .select('id, tenant_id, name, description, active')
-    .eq('id', id)
+    .from("activities")
+    .select(
+      `
+      id,
+      tenant_id,
+      name,
+      description,
+      active,
+      hourly_rate,
+      currency_code
+    `
+    )
+    .eq("id", id)
     .single();
 
   return { data, error };
@@ -40,19 +62,32 @@ export async function getActividadById(id) {
 
 /**
  * Crea una actividad nueva.
+ *
  * payload mínimo:
  *  {
  *    tenant_id: uuid,
  *    name: string,
  *    description?: string | null,
- *    active?: boolean
+ *    active?: boolean,
+ *    hourly_rate?: number | null,
+ *    currency_code?: string | null
  *  }
  */
 export async function createActividad(payload) {
   const { data, error } = await supabase
-    .from('activities')
+    .from("activities")
     .insert([payload])
-    .select()
+    .select(
+      `
+      id,
+      tenant_id,
+      name,
+      description,
+      active,
+      hourly_rate,
+      currency_code
+    `
+    )
     .single();
 
   return { data, error };
@@ -60,16 +95,34 @@ export async function createActividad(payload) {
 
 /**
  * Actualiza una actividad existente.
- * fields puede contener: { name, description, active }
+ *
+ * fields puede contener:
+ *  {
+ *    name?: string,
+ *    description?: string | null,
+ *    active?: boolean,
+ *    hourly_rate?: number | null,
+ *    currency_code?: string | null
+ *  }
  */
 export async function updateActividad(id, fields) {
   const { data, error } = await supabase
-    .from('activities')
+    .from("activities")
     .update({
       ...fields,
     })
-    .eq('id', id)
-    .select()
+    .eq("id", id)
+    .select(
+      `
+      id,
+      tenant_id,
+      name,
+      description,
+      active,
+      hourly_rate,
+      currency_code
+    `
+    )
     .single();
 
   return { data, error };
@@ -80,10 +133,20 @@ export async function updateActividad(id, fields) {
  */
 export async function toggleActividadActiva(id, active) {
   const { data, error } = await supabase
-    .from('activities')
+    .from("activities")
     .update({ active })
-    .eq('id', id)
-    .select()
+    .eq("id", id)
+    .select(
+      `
+      id,
+      tenant_id,
+      name,
+      description,
+      active,
+      hourly_rate,
+      currency_code
+    `
+    )
     .single();
 
   return { data, error };
@@ -94,9 +157,9 @@ export async function toggleActividadActiva(id, active) {
  */
 export async function deleteActividad(id) {
   const { error } = await supabase
-    .from('activities')
+    .from("activities")
     .delete()
-    .eq('id', id);
+    .eq("id", id);
 
   return { error };
 }
