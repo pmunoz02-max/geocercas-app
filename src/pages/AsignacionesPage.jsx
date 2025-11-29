@@ -21,6 +21,7 @@ export default function AsignacionesPage() {
   const [asignaciones, setAsignaciones] = useState([]);
   const [loadingAsignaciones, setLoadingAsignaciones] = useState(true);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   // Filtros
   const [estadoFilter, setEstadoFilter] = useState("todos");
@@ -115,18 +116,26 @@ export default function AsignacionesPage() {
   }, []);
 
   // ---------------------------------------------
-  // Asignaciones filtradas por estado
+  // Asignaciones filtradas por estado y PERSONA
   // ---------------------------------------------
   const filteredAsignaciones = useMemo(() => {
-    if (estadoFilter === "todos") return asignaciones;
-    return (asignaciones || []).filter((a) => a.status === estadoFilter);
-  }, [asignaciones, estadoFilter]);
+    let result = asignaciones || [];
+
+    if (estadoFilter !== "todos") {
+      result = result.filter((a) => a.status === estadoFilter);
+    }
+
+    if (selectedPersonalId) {
+      result = result.filter((a) => a.personal_id === selectedPersonalId);
+    }
+
+    return result;
+  }, [asignaciones, estadoFilter, selectedPersonalId]);
 
   // ---------------------------------------------
   // Manejo de formulario (crear / editar)
   // ---------------------------------------------
   const resetForm = () => {
-    setSelectedPersonalId("");
     setSelectedGeocercaId("");
     setSelectedActivityId("");
     setStartTime("");
@@ -134,11 +143,14 @@ export default function AsignacionesPage() {
     setFrecuenciaEnvioMin(5);
     setStatus("activa");
     setEditingId(null);
+    setError(null);
+    // NO limpiamos selectedPersonalId para que la tabla siga filtrando por esa persona
   };
 
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setError(null);
+    setSuccessMessage(null);
 
     if (!selectedPersonalId || !selectedGeocercaId) {
       setError("Selecciona persona y geocerca");
@@ -172,13 +184,19 @@ export default function AsignacionesPage() {
         const { error: updateError } = await updateAsignacion(editingId, payload);
         if (updateError) {
           console.error("[AsignacionesPage] UPDATE error:", updateError);
-          // Si es el check constraint, damos mensaje amable
           if (
             updateError.message &&
             updateError.message.includes("asignaciones_freq_chk")
           ) {
             setError(
               "La frecuencia no puede ser menor a 5 minutos (regla de la BD)."
+            );
+          } else if (
+            updateError.message &&
+            updateError.message.includes("asignaciones_personal_no_overlap")
+          ) {
+            setError(
+              "Esta persona ya tiene una asignación que se solapa en ese rango de fechas."
             );
           } else {
             setError(
@@ -187,6 +205,7 @@ export default function AsignacionesPage() {
           }
           return;
         }
+        setSuccessMessage("Asignación actualizada correctamente.");
       } else {
         const { error: insertError } = await createAsignacion(payload);
         if (insertError) {
@@ -198,11 +217,19 @@ export default function AsignacionesPage() {
             setError(
               "La frecuencia no puede ser menor a 5 minutos (regla de la BD)."
             );
+          } else if (
+            insertError.message &&
+            insertError.message.includes("asignaciones_personal_no_overlap")
+          ) {
+            setError(
+              "Esta persona ya tiene una asignación que se solapa en ese rango de fechas."
+            );
           } else {
             setError(insertError.message || "Error al crear la asignación");
           }
           return;
         }
+        setSuccessMessage("Asignación creada correctamente.");
       }
 
       await loadAsignaciones();
@@ -226,6 +253,8 @@ export default function AsignacionesPage() {
     const freqSec = asignacion.frecuencia_envio_sec || 300;
     setFrecuenciaEnvioMin(Math.max(5, Math.round(freqSec / 60)));
     setStatus(asignacion.status || "activa");
+    setError(null);
+    setSuccessMessage(null);
   };
 
   const handleDelete = async (id) => {
@@ -236,10 +265,13 @@ export default function AsignacionesPage() {
     if (deleteError) {
       console.error("[AsignacionesPage] delete error:", deleteError);
       setError("No se pudo eliminar la asignación");
+      setSuccessMessage(null);
       return;
     }
 
     await loadAsignaciones();
+    setSuccessMessage("Asignación eliminada correctamente.");
+    setError(null);
   };
 
   // ---------------------------------------------
@@ -386,32 +418,37 @@ export default function AsignacionesPage() {
           </div>
         </form>
 
-        {/* Botones */}
-        <div className="mt-4 flex gap-3">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            {editingId ? "Actualizar" : "Guardar"}
-          </button>
-          {editingId && (
+        {/* Mensajes */}
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="flex gap-3">
             <button
               type="button"
-              onClick={resetForm}
-              className="border px-4 py-2 rounded"
+              onClick={handleSubmit}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
             >
-              Cancelar edición
+              {editingId ? "Actualizar" : "Guardar"}
             </button>
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="border px-4 py-2 rounded"
+              >
+                Cancelar edición
+              </button>
+            )}
+          </div>
+
+          {successMessage && (
+            <p className="text-green-600 font-semibold">{successMessage}</p>
+          )}
+          {error && (
+            <p className="text-red-600 font-semibold">{error}</p>
           )}
         </div>
-
-        {error && (
-          <p className="text-red-600 mt-3 font-semibold">{error}</p>
-        )}
       </div>
 
-      {/* TABLA DE ASIGNACIONES */}
+      {/* TABLA DE ASIGNACIONES (filtrada por estado + persona) */}
       <AsignacionesTable
         asignaciones={filteredAsignaciones}
         loading={loadingAsignaciones}
