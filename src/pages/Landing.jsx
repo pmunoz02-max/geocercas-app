@@ -22,18 +22,13 @@ export default function Landing() {
             </div>
           </div>
 
+          {/* Solo un enlace discreto a Login */}
           <div className="flex items-center gap-2">
             <Link
               to="/login"
               className="text-xs md:text-sm text-slate-200 hover:text-white transition-colors"
             >
               Iniciar sesión
-            </Link>
-            <Link
-              to="/login?mode=magic"
-              className="hidden sm:inline-flex items-center rounded-full border border-emerald-400/70 bg-emerald-500/90 px-3 py-1.5 text-xs md:text-sm font-medium text-slate-950 shadow-md shadow-emerald-500/40 hover:bg-emerald-400 transition-colors"
-            >
-              Entrar con Magic Link
             </Link>
           </div>
         </div>

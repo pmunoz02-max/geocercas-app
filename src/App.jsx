@@ -221,21 +221,17 @@ export default function App() {
         {/* AUTH CALLBACK (Magic Link) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* LOGIN (público) */}
+        {/* LOGIN (público, SIEMPRE visible) */}
         <Route
           path="/login"
-          element=
-          {
-            <PublicOnly>
-              <PublicShell>
-                <Login />
-              </PublicShell>
-            </PublicOnly>
+          element={
+            <PublicShell>
+              <Login />
+            </PublicShell>
           }
         />
 
-        {/* Fallback: si no matchea nada, enviamos al dashboard interno.
-            Más adelante podemos hacer este fallback más inteligente según sesión. */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
