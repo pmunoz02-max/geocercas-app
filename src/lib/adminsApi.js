@@ -1,19 +1,33 @@
 // src/lib/adminsApi.js
 // API para gestionar administradores de la organización actual.
 //
-// Primera versión centrada en LECTURA usando la vista user_roles_view.
-// Más adelante podemos añadir RPCs / mutaciones sobre org_members / memberships
-// para crear/editar/eliminar admins de forma robusta.
+// NOTA IMPORTANTE (BD real):
+// - La vista user_roles_view SOLO expone: user_id, role_name
+// - NO tiene org_id, org_name, email, full_name, created_at
+//   (esto está documentado en la Nota Maestra).
+//
+// Por eso, esta primera versión de listAdmins se centra en:
+//   • Leer user_id + role_name
+//   • Filtrar por roles owner/admin
+//   • Devolver un objeto "normalizado" que la UI pueda mostrar
+//
+// Más adelante podremos cambiar la fuente de datos a una vista
+// más rica (por ejemplo una vista user_organizations con email, nombre, org, etc.)
 
 import { supabase } from "../supabaseClient";
 
 /**
- * Lista administradores (owners + admins) de una organización.
+ * Lista administradores (owners + admins).
  *
- * @param {string} orgId - ID de la organización actual.
+ * Por limitaciones de la vista actual user_roles_view, SOLO podemos
+ * saber user_id y role_name. El orgId se pasa para futuro uso y para
+ * mantener firma consistente, pero NO se utiliza directamente aquí.
+ *
+ * @param {string} orgId - ID de la organización actual (no se usa todavía).
  * @returns {Promise<{data: any[] | null, error: any}>}
  */
 export async function listAdmins(orgId) {
+  // Mantenemos la validación por si acaso en el futuro usamos orgId en la query.
   if (!orgId) {
     return {
       data: [],
@@ -21,25 +35,38 @@ export async function listAdmins(orgId) {
     };
   }
 
+  // Consultamos únicamente columnas que EXISTEN en user_roles_view:
+  //   - user_id
+  //   - role_name
   const { data, error } = await supabase
     .from("user_roles_view")
     .select(
       `
       user_id,
-      org_id,
-      org_name,
-      email,
-      full_name,
-      role,
-      created_at
+      role_name
     `
     )
-    .eq("org_id", orgId)
-    .in("role", ["owner", "admin"])
-    .order("role", { ascending: true })
-    .order("email", { ascending: true });
+    .in("role_name", ["owner", "admin"]);
 
-  return { data, error };
+  if (error) {
+    return { data: null, error };
+  }
+
+  // Normalizamos la respuesta a un formato que la UI pueda consumir
+  // sin romper, aunque falte email, nombre, fechas, etc.
+  const normalized =
+    (data || []).map((row) => ({
+      user_id: row.user_id,
+      // org_id lo igualamos al orgId actual para poder usarlo como key o mostrarlo si hace falta
+      org_id: orgId,
+      org_name: null,
+      email: null,
+      full_name: null,
+      role: row.role_name || null,
+      created_at: null,
+    })) || [];
+
+  return { data: normalized, error: null };
 }
 
 /**
