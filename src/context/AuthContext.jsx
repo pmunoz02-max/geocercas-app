@@ -5,6 +5,7 @@
 // - Carga de organizaciones y roles desde user_organizations
 // - Perfil mínimo desde v_app_profiles
 // - Persistencia de organización actual en localStorage
+// - Aceptación automática de invitaciones (org_invites) al hacer login
 
 import React, {
   createContext,
@@ -119,7 +120,29 @@ export function AuthProvider({ children }) {
     async function loadUserData() {
       setLoading(true);
       try {
+        // -------------------------------------------------------------------
+        // 0) Aceptar invitación si existe (org_invites → user_organizations)
+        // -------------------------------------------------------------------
+        try {
+          const { error: inviteErr } = await supabase.rpc(
+            "accept_invite_on_login"
+          );
+          if (inviteErr) {
+            console.error(
+              "[AuthContext] accept_invite_on_login error:",
+              inviteErr
+            );
+          }
+        } catch (e) {
+          console.error(
+            "[AuthContext] accept_invite_on_login exception:",
+            e
+          );
+        }
+
+        // -------------------------------------------------------------------
         // 1) Perfil mínimo desde v_app_profiles (por email)
+        // -------------------------------------------------------------------
         try {
           const { data: profiles, error: profErr } = await supabase
             .from("v_app_profiles")
@@ -140,7 +163,10 @@ export function AuthProvider({ children }) {
           }
         }
 
+        // -------------------------------------------------------------------
         // 2) Organizaciones + rol desde user_organizations
+        //     (ya debería incluir la org de la invitación aceptada)
+        // -------------------------------------------------------------------
         let orgLinks = [];
         try {
           const { data: links, error: linksErr } = await supabase
@@ -186,7 +212,9 @@ export function AuthProvider({ children }) {
         if (!cancelled) {
           setOrganizations(orgs);
 
-          // Restaurar o elegir organización actual
+          // -----------------------------------------------------------------
+          // 3) Restaurar o elegir organización actual
+          // -----------------------------------------------------------------
           const storedOrgId = loadStoredOrgId();
           let initialOrg = null;
 
