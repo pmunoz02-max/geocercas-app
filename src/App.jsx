@@ -44,6 +44,9 @@ import { useAuth } from "./context/AuthContext.jsx";
 // Top Tabs
 import TopTabs from "./components/TopTabs.jsx";
 
+// ---------------------
+// Layout interno (app)
+// ---------------------
 function Shell({ children }) {
   const { currentRole } = useAuth();
 
@@ -81,11 +84,14 @@ function Shell({ children }) {
   );
 }
 
-function PublicShell({ children }) {
+// ---------------------
+// Layout de LOGIN
+// (SIN AppHeader)
+// ---------------------
+function LoginShell() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
-      <AppHeader />
-      <main className="flex-1 p-4 max-w-3xl mx-auto w-full">{children}</main>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <Login />
     </div>
   );
 }
@@ -217,18 +223,11 @@ export default function App() {
           }
         />
 
-        {/* AUTH CALLBACK (para Magic Links que redirigen aquí) */}
+        {/* AUTH CALLBACK (Magic Link) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* LOGIN: siempre visible, tenga o no sesión */}
-        <Route
-          path="/login"
-          element={
-            <PublicShell>
-              <Login />
-            </PublicShell>
-          }
-        />
+        {/* LOGIN: pantalla aislada, sin AppHeader */}
+        <Route path="/login" element={<LoginShell />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
