@@ -1,242 +1,99 @@
-// src/App.jsx
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+// src/pages/InvitarTracker.jsx
+import React, { useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
-import AuthGuard from "./components/AuthGuard.jsx";
-import PublicOnly from "./components/PublicOnly.jsx";
-import AppHeader from "./components/AppHeader.jsx";
+export default function InvitarTracker() {
+  const { currentOrg } = useAuth();
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState(null);
 
-// --- Páginas / componentes principales ---
-import PersonalPage from "./components/personal/PersonalPage.jsx";
-import AsignacionesPage from "./pages/AsignacionesPage.jsx";
-import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx";
+  const orgName = currentOrg?.name || "tu organización";
 
-// Actividades + Reportes (antes Costos)
-import ActividadesPage from "./pages/ActividadesPage.jsx";
-import CostosPage from "./pages/CostosPage.jsx";
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setMessage(null);
 
-// Módulo de Administradores
-import AdminsPage from "./pages/AdminsPage.jsx";
+    if (!email) {
+      setMessage({ type: "error", text: "Ingresa un correo electrónico." });
+      return;
+    }
 
-// Tracker
-import TrackerDashboard from "./pages/TrackerDashboard.jsx";
+    try {
+      setSending(true);
 
-// 🔁 AQUÍ EL CAMBIO: usamos el componente que SÍ existe
-import InvitarTracker from "./pages/InvitarTracker.jsx";
+      // 🔧 Aquí más adelante conectaremos con tu Edge Function / API real
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
-import Login from "./pages/Login.jsx";
-import AuthCallback from "./pages/AuthCallback.jsx";
-import Inicio from "./pages/Inicio.jsx";
-
-// Contexto de auth
-import { useAuth } from "./context/AuthContext.jsx";
-
-// Top Tabs
-import TopTabs from "./components/TopTabs.jsx";
-
-function Shell({ children }) {
-  const { currentRole } = useAuth();
-
-  const role = currentRole || "tracker";
-
-  const tabs = [
-    { path: "/inicio", label: "Inicio" },
-    { path: "/nueva-geocerca", label: "Nueva geocerca" },
-    { path: "/personal", label: "Personal" },
-    { path: "/actividades", label: "Actividades" },
-    { path: "/asignaciones", label: "Asignaciones" },
-    { path: "/costos", label: "Reportes" },
-    { path: "/tracker-dashboard", label: "Tracker" },
-    { path: "/invitar-tracker", label: "Invitar tracker" },
-  ];
-
-  if (role === "owner") {
-    tabs.push({ path: "/admins", label: "Admins" });
+      setMessage({
+        type: "success",
+        text: `Invitación simulada enviada a ${email}. Luego conectaremos este formulario con la API real.`,
+      });
+      setEmail("");
+    } catch (err) {
+      console.error(err);
+      setMessage({
+        type: "error",
+        text: "Hubo un problema al enviar la invitación.",
+      });
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
-      <AppHeader />
+    <div className="max-w-lg mx-auto">
+      <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-3">
+        Invitar tracker
+      </h1>
+      <p className="text-sm md:text-base text-slate-600 mb-6">
+        Envía una invitación por correo electrónico para que un nuevo usuario se
+        una como <span className="font-semibold">tracker</span> en{" "}
+        <span className="font-semibold">{orgName}</span>.
+      </p>
 
-      {/* Top Tabs */}
-      <div className="border-b border-slate-200 bg-white">
-        <TopTabs tabs={tabs} />
-      </div>
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4"
+      >
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Correo electrónico del tracker
+          </label>
+          <input
+            type="email"
+            required
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            placeholder="tracker@ejemplo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <p className="mt-1 text-[11px] text-slate-500">
+            Más adelante conectaremos este formulario con el envío real de
+            invitaciones (magic link / signup).
+          </p>
+        </div>
 
-      {/* Contenido principal */}
-      <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
-        {children}
-      </main>
+        <button
+          type="submit"
+          disabled={sending}
+          className="inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {sending ? "Enviando..." : "Enviar invitación"}
+        </button>
+
+        {message && (
+          <div
+            className={`mt-2 text-sm ${
+              message.type === "success"
+                ? "text-emerald-700"
+                : "text-red-600"
+            }`}
+          >
+            {message.text}
+          </div>
+        )}
+      </form>
     </div>
-  );
-}
-
-function PublicShell({ children }) {
-  return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
-      <AppHeader />
-      <main className="flex-1 p-4 max-w-3xl mx-auto w-full">{children}</main>
-    </div>
-  );
-}
-
-export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Redirección raíz */}
-        <Route
-          path="/"
-          element={
-            <AuthGuard>
-              <Navigate to="/inicio" replace />
-            </AuthGuard>
-          }
-        />
-
-        {/* INICIO */}
-        <Route
-          path="/inicio"
-          element={
-            <AuthGuard>
-              <Shell>
-                <Inicio />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* NUEVA GEO */}
-        <Route
-          path="/nueva-geocerca"
-          element={
-            <AuthGuard>
-              <Shell>
-                <NuevaGeocerca />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* GEO CERCAS */}
-        <Route
-          path="/geocercas"
-          element={
-            <AuthGuard>
-              <Shell>
-                <GeocercasPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* PERSONAL */}
-        <Route
-          path="/personal"
-          element={
-            <AuthGuard>
-              <Shell>
-                <PersonalPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* ACTIVIDADES */}
-        <Route
-          path="/actividades"
-          element={
-            <AuthGuard>
-              <Shell>
-                <ActividadesPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* ASIGNACIONES */}
-        <Route
-          path="/asignaciones"
-          element={
-            <AuthGuard>
-              <Shell>
-                <AsignacionesPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* REPORTES (antes Costos) */}
-        <Route
-          path="/costos"
-          element={
-            <AuthGuard>
-              <Shell>
-                <CostosPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* TRACKER */}
-        <Route
-          path="/tracker-dashboard"
-          element={
-            <AuthGuard>
-              <Shell>
-                <TrackerDashboard />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* INVITAR TRACKER */}
-        <Route
-          path="/invitar-tracker"
-          element={
-            <AuthGuard>
-              <Shell>
-                <InvitarTracker />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* ADMINS */}
-        <Route
-          path="/admins"
-          element={
-            <AuthGuard>
-              <Shell>
-                <AdminsPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* AUTH CALLBACK */}
-        <Route path="/auth/callback" element={<AuthCallback />} />
-
-        {/* LOGIN (público) */}
-        <Route
-          path="/login"
-          element={
-            <PublicOnly>
-              <PublicShell>
-                <Login />
-              </PublicShell>
-            </PublicOnly>
-          }
-        />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/inicio" replace />} />
-      </Routes>
-    </BrowserRouter>
   );
 }
