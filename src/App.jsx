@@ -26,12 +26,18 @@ import AdminsPage from "./pages/AdminsPage.jsx";
 // Tracker
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
-// 🔁 IMPORT CORRECTO: este archivo SÍ existe en tu repo
+// Invitación de trackers
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 
+// Auth
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.jsx";
+
+// Dashboard interno
 import Inicio from "./pages/Inicio.jsx";
+
+// Nueva landing pública
+import Landing from "./pages/Landing.jsx";
 
 // Contexto de auth
 import { useAuth } from "./context/AuthContext.jsx";
@@ -89,17 +95,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Redirección raíz */}
-        <Route
-          path="/"
-          element={
-            <AuthGuard>
-              <Navigate to="/inicio" replace />
-            </AuthGuard>
-          }
-        />
+        {/* 🔓 RUTA PÚBLICA PRINCIPAL: Landing */}
+        <Route path="/" element={<Landing />} />
 
-        {/* INICIO */}
+        {/* INICIO (dashboard interno) */}
         <Route
           path="/inicio"
           element={
@@ -219,13 +218,14 @@ export default function App() {
           }
         />
 
-        {/* AUTH CALLBACK */}
+        {/* AUTH CALLBACK (Magic Link) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* LOGIN (público) */}
         <Route
           path="/login"
-          element={
+          element=
+          {
             <PublicOnly>
               <PublicShell>
                 <Login />
@@ -234,7 +234,8 @@ export default function App() {
           }
         />
 
-        {/* Fallback */}
+        {/* Fallback: si no matchea nada, enviamos al dashboard interno.
+            Más adelante podemos hacer este fallback más inteligente según sesión. */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
