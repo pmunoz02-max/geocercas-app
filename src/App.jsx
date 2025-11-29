@@ -170,7 +170,7 @@ export default function App() {
           }
         />
 
-        {/* REPORTES (antes Costos) */}
+        {/* REPORTES */}
         <Route
           path="/costos"
           element={
@@ -218,16 +218,18 @@ export default function App() {
           }
         />
 
-        {/* AUTH CALLBACK (Magic Link) */}
+        {/* AUTH CALLBACK (Magic Link general) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* LOGIN (público, SIEMPRE visible) */}
+        {/* LOGIN: solo si NO hay sesión; si ya hay → va a /inicio */}
         <Route
           path="/login"
           element={
-            <PublicShell>
-              <Login />
-            </PublicShell>
+            <PublicOnly>
+              <PublicShell>
+                <Login />
+              </PublicShell>
+            </PublicOnly>
           }
         />
 
