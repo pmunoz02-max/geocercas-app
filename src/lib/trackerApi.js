@@ -5,7 +5,7 @@
 // - upsertPositionCompat: envía posición al Edge Function send_position
 // - suscribirsePosiciones: snapshot + realtime + polling sobre la tabla positions
 
-import supabase from '../supabaseClient';
+import { supabase } from '../supabaseClient';
 
 const EDGE_URL = import.meta.env.VITE_EDGE_SEND_POSITION;
 

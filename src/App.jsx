@@ -1,4 +1,3 @@
-// src/App.jsx
 import {
   BrowserRouter,
   Routes,
@@ -52,6 +51,7 @@ function Shell({ children }) {
 
   const role = currentRole || "tracker";
 
+  // Tabs base visibles para todos los usuarios autenticados
   const tabs = [
     { path: "/inicio", label: "Inicio" },
     { path: "/nueva-geocerca", label: "Nueva geocerca" },
@@ -60,9 +60,14 @@ function Shell({ children }) {
     { path: "/asignaciones", label: "Asignaciones" },
     { path: "/costos", label: "Reportes" },
     { path: "/tracker-dashboard", label: "Tracker" },
-    { path: "/invitar-tracker", label: "Invitar tracker" },
   ];
 
+  // Solo owner / admin pueden invitar trackers
+  if (role === "owner" || role === "admin") {
+    tabs.push({ path: "/invitar-tracker", label: "Invitar tracker" });
+  }
+
+  // Solo owner ve la pestaña de Admins
   if (role === "owner") {
     tabs.push({ path: "/admins", label: "Admins" });
   }
