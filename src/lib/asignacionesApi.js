@@ -1,386 +1,196 @@
-import React, { useEffect, useState, useMemo } from "react";
+// src/lib/asignacionesApi.js
+
 import { supabase } from "../supabaseClient";
-import {
-  getAsignaciones,
-  createAsignacion,
-  updateAsignacion,
-  deleteAsignacion,
-} from "../lib/asignacionesApi";
-import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
 
-const ESTADOS = [
-  { value: "todos", label: "Todos" },
-  { value: "activa", label: "Activas" },
-  { value: "inactiva", label: "Inactivas" },
-];
+/**
+ * Normaliza un string de búsqueda para filtros.
+ */
+function normalizeSearch(q) {
+  if (!q) return "";
+  return q.trim();
+}
 
-export default function AsignacionesPage() {
-  // ---------------------------------------------
-  // Estado general
-  // ---------------------------------------------
-  const [asignaciones, setAsignaciones] = useState([]);
-  const [loadingAsignaciones, setLoadingAsignaciones] = useState(true);
-  const [error, setError] = useState(null);
+/**
+ * Lista asignaciones usando la vista v_asignaciones_ui.
+ * Se mantiene para compatibilidad con código legacy.
+ */
+export async function listAsignaciones(filters = {}) {
+  const { q, estado, geocercaId, personalId, startDate, endDate } = filters;
 
-  // Filtros
-  const [estadoFilter, setEstadoFilter] = useState("todos");
+  let query = supabase.from("v_asignaciones_ui").select("*");
 
-  // Formulario
-  const [selectedPersonalId, setSelectedPersonalId] = useState("");
-  const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
-  const [selectedActivityId, setSelectedActivityId] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [frecuenciaEnvio, setFrecuenciaEnvio] = useState(60);
-  const [status, setStatus] = useState("activa");
-  const [editingId, setEditingId] = useState(null);
+  if (estado && estado !== "todos") {
+    query = query.eq("estado", estado);
+  }
 
-  // Catálogos para dropdowns
-  const [personalOptions, setPersonalOptions] = useState([]);
-  const [geocercaOptions, setGeocercaOptions] = useState([]);
-  const [activityOptions, setActivityOptions] = useState([]);
-  const [loadingCatalogos, setLoadingCatalogos] = useState(true);
+  if (geocercaId) {
+    query = query.eq("geocerca_id", geocercaId);
+  }
 
-  // ---------------------------------------------
-  // Carga de asignaciones
-  // ---------------------------------------------
-  const loadAsignaciones = async () => {
-    setLoadingAsignaciones(true);
-    setError(null);
-    const { data, error } = await getAsignaciones();
-    if (error) {
-      console.error("[AsignacionesPage] Error al cargar asignaciones:", error);
-      setError("Error al cargar asignaciones");
-    } else {
-      setAsignaciones(data || []);
-    }
-    setLoadingAsignaciones(false);
-  };
+  if (personalId) {
+    query = query.eq("personal_id", personalId);
+  }
 
-  // ---------------------------------------------
-  // Carga de catálogos (personal, geocercas, actividades)
-  // ---------------------------------------------
-  const loadCatalogos = async () => {
-    setLoadingCatalogos(true);
-    setError(null);
+  if (startDate) {
+    query = query.gte("start_date", startDate);
+  }
 
-    try {
-      const [
-        { data: personalData, error: personalError },
-        { data: geocercasData, error: geocercasError },
-        { data: activitiesData, error: activitiesError },
-      ] = await Promise.all([
-        supabase
-          .from("personal")
-          .select("id, nombre, apellido, email")
-          .eq("is_deleted", false)
-          .order("nombre", { ascending: true }),
-        supabase
-          .from("geocercas")
-          .select("id, nombre")
-          .eq("is_deleted", false)
-          .order("nombre", { ascending: true }),
-        supabase
-          .from("activities")
-          .select("id, nombre")
-          .eq("is_deleted", false)
-          .order("nombre", { ascending: true }),
-      ]);
+  if (endDate) {
+    query = query.lte("end_date", endDate);
+  }
 
-      if (personalError) throw personalError;
-      if (geocercasError) throw geocercasError;
-      if (activitiesError) throw activitiesError;
+  const search = normalizeSearch(q);
+  if (search) {
+    const like = `%${search}%`;
+    query = query.or(
+      `personal_nombre.ilike.${like},personal_email.ilike.${like},geocerca_nombre.ilike.${like}`
+    );
+  }
 
-      setPersonalOptions(personalData || []);
-      setGeocercaOptions(geocercasData || []);
-      setActivityOptions(activitiesData || []);
-    } catch (err) {
-      console.error("[AsignacionesPage] Error cargando catálogos:", err);
-      setError("Error al cargar catálogos de personal/geocercas/actividades");
-    } finally {
-      setLoadingCatalogos(false);
-    }
-  };
+  const { data, error } = await query.order("start_date", { ascending: true });
 
-  // ---------------------------------------------
-  // useEffect inicial
-  // ---------------------------------------------
-  useEffect(() => {
-    loadAsignaciones();
-    loadCatalogos();
-  }, []);
+  if (error) {
+    console.error("[listAsignaciones] error:", error);
+    throw error;
+  }
 
-  // ---------------------------------------------
-  // Asignaciones filtradas por estado
-  // ---------------------------------------------
-  const filteredAsignaciones = useMemo(() => {
-    if (estadoFilter === "todos") return asignaciones;
-    return (asignaciones || []).filter((a) => a.status === estadoFilter);
-  }, [asignaciones, estadoFilter]);
+  return data || [];
+}
 
-  // ---------------------------------------------
-  // Manejo de formulario (crear / editar)
-  // ---------------------------------------------
-  const resetForm = () => {
-    setSelectedPersonalId("");
-    setSelectedGeocercaId("");
-    setSelectedActivityId("");
-    setStartTime("");
-    setEndTime("");
-    setFrecuenciaEnvio(60);
-    setStatus("activa");
-    setEditingId(null);
-  };
+/**
+ * Obtiene asignaciones desde la tabla base public.asignaciones
+ * para la organización del usuario actual, con joins a personal / geocerca / activity.
+ * Esta es la función que usa AsignacionesPage.jsx.
+ */
+export async function getAsignaciones() {
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
+  if (sessionError) {
+    console.error("[getAsignaciones] Error sesión:", sessionError);
+    return { data: null, error: sessionError };
+  }
 
-    if (!selectedPersonalId || !selectedGeocercaId) {
-      setError("Selecciona persona y geocerca");
-      return;
-    }
-    if (!startTime || !endTime) {
-      setError("Selecciona las fechas de inicio y fin");
-      return;
-    }
+  const user = sessionData?.session?.user;
+  if (!user) {
+    return { data: [], error: null };
+  }
 
-    const payload = {
-      personal_id: selectedPersonalId,
-      geocerca_id: selectedGeocercaId,
-      activity_id: selectedActivityId || null,
-      start_time: startTime,
-      end_time: endTime,
-      frecuencia_envio_sec: frecuenciaEnvio,
+  const orgId = user.user_metadata?.org_id;
+  if (!orgId) {
+    console.warn("[getAsignaciones] Usuario sin org_id en metadata");
+    return { data: [], error: null };
+  }
+
+  const { data, error } = await supabase
+    .from("asignaciones")
+    .select(
+      `
+      id,
+      personal_id,
+      geocerca_id,
+      activity_id,
+      start_time,
+      end_time,
       status,
-      is_deleted: false,
-    };
+      frecuencia_envio_sec,
+      org_id,
+      is_deleted,
+      personal:personal_id (
+        id,
+        nombre,
+        apellido,
+        email
+      ),
+      geocerca:geocerca_id (
+        id,
+        nombre
+      ),
+      activity:activity_id (
+        id,
+        nombre
+      )
+    `
+    )
+    .eq("org_id", orgId)
+    .eq("is_deleted", false)
+    .order("start_time", { ascending: true });
 
-    try {
-      if (editingId) {
-        const { error: updateError } = await updateAsignacion(editingId, payload);
-        if (updateError) {
-          console.error("[AsignacionesPage] UPDATE error:", updateError);
-          setError(updateError.message || "Error al actualizar la asignación");
-          return;
-        }
-      } else {
-        const { error: insertError } = await createAsignacion(payload);
-        if (insertError) {
-          console.error("[AsignacionesPage] INSERT error:", insertError);
-          setError(insertError.message || "Error al crear la asignación");
-          return;
-        }
-      }
+  if (error) {
+    console.error("[getAsignaciones] error:", error);
+  }
 
-      await loadAsignaciones();
-      resetForm();
-    } catch (err) {
-      console.error("[AsignacionesPage] handleSubmit error general:", err);
-      setError("Error al guardar la asignación");
-    }
-  };
+  return { data: data || [], error };
+}
 
-  // ---------------------------------------------
-  // Editar / Eliminar
-  // ---------------------------------------------
-  const handleEdit = (asignacion) => {
-    setEditingId(asignacion.id);
-    setSelectedPersonalId(asignacion.personal_id || "");
-    setSelectedGeocercaId(asignacion.geocerca_id || "");
-    setSelectedActivityId(asignacion.activity_id || "");
-    setStartTime(asignacion.start_time?.slice(0, 16) || "");
-    setEndTime(asignacion.end_time?.slice(0, 16) || "");
-    setFrecuenciaEnvio(asignacion.frecuencia_envio_sec || 60);
-    setStatus(asignacion.status || "activa");
-  };
+/**
+ * Crea una nueva asignación en public.asignaciones.
+ * Devuelve { data, error } para que el caller decida qué hacer.
+ */
+export async function createAsignacion(payload) {
+  const { user_id, ...cleanPayload } = payload || {};
 
-  const handleDelete = async (id) => {
-    const confirmed = window.confirm("¿Eliminar asignación?");
-    if (!confirmed) return;
+  const { data, error } = await supabase
+    .from("asignaciones")
+    .insert(cleanPayload)
+    .select("*");
 
-    const { error: deleteError } = await deleteAsignacion(id);
-    if (deleteError) {
-      console.error("[AsignacionesPage] delete error:", deleteError);
-      setError("No se pudo eliminar la asignación");
-      return;
-    }
+  if (error) {
+    console.error("[createAsignacion] error:", error);
+  }
 
-    await loadAsignaciones();
-  };
+  return { data, error };
+}
 
-  // ---------------------------------------------
-  // Render
-  // ---------------------------------------------
-  return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Asignaciones</h1>
+/**
+ * Actualiza una asignación existente.
+ * Devuelve { data, error }.
+ */
+export async function updateAsignacion(id, patch) {
+  if (!id) {
+    throw new Error("[updateAsignacion] id es obligatorio");
+  }
 
-      {/* FILTRO POR ESTADO */}
-      <div className="mb-4 flex items-center gap-3">
-        <label className="font-medium">Filtrar por estado:</label>
-        <select
-          className="border rounded px-3 py-2"
-          value={estadoFilter}
-          onChange={(e) => setEstadoFilter(e.target.value)}
-        >
-          {ESTADOS.map((e) => (
-            <option key={e.value} value={e.value}>
-              {e.label}
-            </option>
-          ))}
-        </select>
-      </div>
+  const { user_id, ...cleanPatch } = patch || {};
 
-      {/* FORMULARIO NUEVA/EDITAR ASIGNACIÓN */}
-      <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
-        <h2 className="text-lg font-semibold mb-4">
-          {editingId ? "Editar asignación" : "Nueva asignación"}
-        </h2>
+  const { data, error } = await supabase
+    .from("asignaciones")
+    .update(cleanPatch)
+    .eq("id", id)
+    .select("*");
 
-        {(loadingCatalogos || loadingAsignaciones) && (
-          <p className="text-sm text-gray-500 mb-3">
-            Cargando datos…</p>
-        )}
+  if (error) {
+    console.error("[updateAsignacion] error:", error);
+  }
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Persona */}
-          <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Persona</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedPersonalId}
-              onChange={(e) => setSelectedPersonalId(e.target.value)}
-              required
-            >
-              <option value="">Selecciona una persona</option>
-              {personalOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email}
-                </option>
-              ))}
-            </select>
-          </div>
+  return { data, error };
+}
 
-          {/* Geocerca */}
-          <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Geocerca</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedGeocercaId}
-              onChange={(e) => setSelectedGeocercaId(e.target.value)}
-              required
-            >
-              <option value="">Selecciona una geocerca</option>
-              {geocercaOptions.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nombre || "Sin nombre"}
-                </option>
-              ))}
-            </select>
-          </div>
+/**
+ * Soft delete de una asignación (is_deleted = true).
+ * Se mantiene como helper general.
+ */
+export async function softDeleteAsignacion(id) {
+  if (!id) {
+    return { error: new Error("[softDeleteAsignacion] id es obligatorio") };
+  }
 
-          {/* Actividad */}
-          <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Actividad</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedActivityId}
-              onChange={(e) => setSelectedActivityId(e.target.value)}
-            >
-              <option value="">(Opcional) Selecciona una actividad</option>
-              {activityOptions.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre || "Sin nombre"}
-                </option>
-              ))}
-            </select>
-          </div>
+  const { error } = await supabase
+    .from("asignaciones")
+    .update({ is_deleted: true })
+    .eq("id", id);
 
-          {/* Inicio */}
-          <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Inicio</label>
-            <input
-              type="datetime-local"
-              className="border rounded px-3 py-2"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              required
-            />
-          </div>
+  if (error) {
+    console.error("[softDeleteAsignacion] error:", error);
+  }
 
-          {/* Fin */}
-          <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Fin</label>
-            <input
-              type="datetime-local"
-              className="border rounded px-3 py-2"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              required
-            />
-          </div>
+  return { error };
+}
 
-          {/* Estado */}
-          <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Estado</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="activa">Activa</option>
-              <option value="inactiva">Inactiva</option>
-            </select>
-          </div>
-
-          {/* Frecuencia */}
-          <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              Frecuencia envío (segundos)
-            </label>
-            <input
-              type="number"
-              className="border rounded px-3 py-2"
-              value={frecuenciaEnvio}
-              min={5}
-              onChange={(e) => setFrecuenciaEnvio(Number(e.target.value))}
-            />
-          </div>
-        </form>
-
-        {/* Botones */}
-        <div className="mt-4 flex gap-3">
-          <button
-            type="button"
-            onClick={handleSubmit}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            {editingId ? "Actualizar" : "Guardar"}
-          </button>
-          {editingId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="border px-4 py-2 rounded"
-            >
-              Cancelar edición
-            </button>
-          )}
-        </div>
-
-        {error && (
-          <p className="text-red-600 mt-3 font-semibold">{error}</p>
-        )}
-      </div>
-
-      {/* TABLA DE ASIGNACIONES */}
-      <AsignacionesTable
-        asignaciones={filteredAsignaciones}
-        loading={loadingAsignaciones}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-      />
-    </div>
-  );
+/**
+ * deleteAsignacion: wrapper usado por AsignacionesPage.jsx
+ * Devuelve { error }.
+ */
+export async function deleteAsignacion(id) {
+  return softDeleteAsignacion(id);
 }
