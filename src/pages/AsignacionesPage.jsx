@@ -70,20 +70,23 @@ export default function AsignacionesPage() {
         { data: geocercasData, error: geocercasError },
         { data: activitiesData, error: activitiesError },
       ] = await Promise.all([
+        // PERSONAL: aquí SÍ existe is_deleted
         supabase
           .from("personal")
-          .select("id, nombre, apellido, email")
+          .select("id, nombre, apellido, email, is_deleted")
           .eq("is_deleted", false)
           .order("nombre", { ascending: true }),
+
+        // GEOCERCAS: quitamos filtro is_deleted (no existe en la tabla)
         supabase
           .from("geocercas")
           .select("id, nombre")
-          .eq("is_deleted", false)
           .order("nombre", { ascending: true }),
+
+        // ACTIVITIES: igual, sin is_deleted
         supabase
           .from("activities")
           .select("id, nombre")
-          .eq("is_deleted", false)
           .order("nombre", { ascending: true }),
       ]);
 
@@ -91,7 +94,7 @@ export default function AsignacionesPage() {
       if (geocercasError) throw geocercasError;
       if (activitiesError) throw activitiesError;
 
-      setPersonalOptions(personalData || []);
+      setPersonalOptions((personalData || []).filter((p) => p.is_deleted === false));
       setGeocercaOptions(geocercasData || []);
       setActivityOptions(activitiesData || []);
     } catch (err) {
