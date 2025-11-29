@@ -1,3 +1,19 @@
+function localToISOWithTZ(localDateTime) {
+  if (!localDateTime) return null;
+
+  // localDateTime viene como "2025-11-29T12:13"
+  const date = new Date(localDateTime);
+
+  // Convertir a ISO con zona local correcta
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes()
+  ).toISOString();
+}
+
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import {
@@ -171,8 +187,8 @@ export default function AsignacionesPage() {
       personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId || null,
-      start_time: startTime,
-      end_time: endTime,
+      start_time: localToISOWithTZ(startTime),
+end_time: localToISOWithTZ(endTime),
       // Convertimos minutos -> segundos para la BD
       frecuencia_envio_sec: freqMin * 60,
       status,
