@@ -77,17 +77,17 @@ export default function AsignacionesPage() {
           .eq("is_deleted", false)
           .order("nombre", { ascending: true }),
 
-        // GEOCERCAS: quitamos filtro is_deleted (no existe en la tabla)
+        // GEOCERCAS: sin is_deleted (no lo tiene)
         supabase
           .from("geocercas")
           .select("id, nombre")
           .order("nombre", { ascending: true }),
 
-        // ACTIVITIES: igual, sin is_deleted
+        // ACTIVITIES: usamos name (en inglés)
         supabase
           .from("activities")
-          .select("id, nombre")
-          .order("nombre", { ascending: true }),
+          .select("id, name")
+          .order("name", { ascending: true }),
       ]);
 
       if (personalError) throw personalError;
@@ -296,7 +296,7 @@ export default function AsignacionesPage() {
               <option value="">(Opcional) Selecciona una actividad</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.nombre || "Sin nombre"}
+                  {a.name || "Sin nombre"}
                 </option>
               ))}
             </select>
