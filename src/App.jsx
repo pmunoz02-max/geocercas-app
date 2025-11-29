@@ -12,13 +12,13 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import PublicOnly from "./components/PublicOnly.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 
-// --- Páginas principales ---
+// --- Páginas / componentes principales ---
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import GeocercasPage from "./components/geocercas/GeocercasPage.jsx";
+import GeocercasPage from "./pages/GeocercasPage.jsx"; // ⬅️ CAMBIO AQUÍ
 
-// Actividades + Reportes
+// Actividades + Reportes (antes Costos)
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
 
@@ -57,7 +57,7 @@ function Shell({ children }) {
     { path: "/invitar-tracker", label: "Invitar tracker" },
   ];
 
-  // 👉 Solo OWNER ve la pestaña Admins
+  // Solo OWNER ve Admins
   if (role === "owner") {
     tabs.push({ path: "/admins", label: "Admins" });
   }
@@ -210,7 +210,7 @@ export default function App() {
           }
         />
 
-        {/* ADMINS (solo owner, pero la protección fina la puedes tener adentro) */}
+        {/* ADMINS */}
         <Route
           path="/admins"
           element={
