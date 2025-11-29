@@ -1,7 +1,7 @@
 // src/pages/InvitarTracker.jsx
 import React, { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { supabase } from "@/supabaseClient";
+import { supabase } from "../supabaseClient";
 
 export default function InvitarTracker() {
   const { currentOrg } = useAuth();
@@ -10,23 +10,17 @@ export default function InvitarTracker() {
   const [message, setMessage] = useState(null);
 
   const orgName = currentOrg?.name || "tu organización";
-  const orgId = currentOrg?.id || null;
 
   async function handleSubmit(e) {
     e.preventDefault();
     setMessage(null);
 
-    if (!email) {
-      setMessage({ type: "error", text: "Ingresa un correo electrónico." });
-      return;
-    }
+    const trimmedEmail = (email || "").trim().toLowerCase();
 
-    if (!orgId) {
+    if (!trimmedEmail) {
       setMessage({
         type: "error",
-        text:
-          "No se pudo determinar la organización actual. " +
-          "Verifica que tengas una organización activa o contacta al administrador.",
+        text: "Ingresa un correo electrónico.",
       });
       return;
     }
@@ -34,15 +28,16 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      const { data, error } = await supabase.functions.invoke(
-        "invite_tracker",
-        {
-          body: {
-            email: email.trim(),
-            org_id: orgId,
-          },
-        }
-      );
+      const { data, error } = await supabase.functions.invoke("invite-user", {
+        body: {
+          email: trimmedEmail,
+          // Si en tu tabla roles el nombre es distinto (p.ej. "TRACKER"),
+          // ajústalo aquí:
+          role_name: "tracker",
+          // full_name lo dejamos opcional; el tracker lo puede completar luego
+          full_name: null,
+        },
+      });
 
       if (error) {
         console.error("[InvitarTracker] Edge error:", error);
@@ -50,15 +45,17 @@ export default function InvitarTracker() {
           type: "error",
           text:
             error.message ||
-            "Hubo un problema al enviar la invitación. Intenta de nuevo.",
+            "Hubo un problema al contactar al servidor de invitaciones.",
         });
         return;
       }
 
+      // Respuestas de la función invite-user
       if (!data?.ok) {
         const errText =
           data?.error ||
-          "No se pudo completar la invitación. Revisa los datos e intenta nuevamente.";
+          "No se pudo completar la invitación. Revisa el correo e intenta nuevamente.";
+        console.warn("[InvitarTracker] respuesta no-ok:", data);
         setMessage({
           type: "error",
           text: errText,
@@ -66,16 +63,43 @@ export default function InvitarTracker() {
         return;
       }
 
-      setMessage({
-        type: "success",
-        text: `Invitación enviada a ${data.email || email}. Pídeles que revisen su correo para abrir el Magic Link.`,
-      });
+      // Construimos mensaje según el modo
+      const mode = data.mode;
+
+      if (mode === "invited") {
+        setMessage({
+          type: "success",
+          text: `Invitación enviada a ${data.email || trimmedEmail} como tracker. Pídeles que revisen su correo para abrir el link de invitación.`,
+        });
+      } else if (mode === "link_only") {
+        const link = data.invite_link;
+        setMessage({
+          type: "success",
+          text: link
+            ? `No se pudo enviar el correo automáticamente, pero se generó un enlace de invitación. Copia y comparte este link al tracker: ${link}`
+            : `Se generó la invitación, pero no se pudo recuperar el link. Revisa el panel de Supabase.`,
+        });
+      } else if (mode === "created_without_email") {
+        setMessage({
+          type: "success",
+          text:
+            "Se creó el usuario sin enviar correo de invitación. Revisa el panel de Supabase para completar la activación y asignación.",
+        });
+      } else {
+        // fallback genérico
+        setMessage({
+          type: "success",
+          text: `Invitación procesada para ${data.email || trimmedEmail}.`,
+        });
+      }
+
       setEmail("");
     } catch (err) {
       console.error("[InvitarTracker] exception:", err);
       setMessage({
         type: "error",
-        text: "Hubo un problema de red al enviar la invitación.",
+        text:
+          "Hubo un problema de red al enviar la invitación. Verifica tu conexión e intenta nuevamente.",
       });
     } finally {
       setSending(false);
@@ -87,6 +111,7 @@ export default function InvitarTracker() {
       <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-3">
         Invitar tracker
       </h1>
+
       <p className="text-sm md:text-base text-slate-600 mb-6">
         Envía una invitación por correo electrónico para que un nuevo usuario se
         una como <span className="font-semibold">tracker</span> en{" "}
@@ -110,8 +135,8 @@ export default function InvitarTracker() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <p className="mt-1 text-[11px] text-slate-500">
-            Se enviará un Magic Link a este correo para que se conecte como
-            tracker a tu organización.
+            Se enviará una invitación a este correo para que se registre y
+            acceda como tracker a tu organización.
           </p>
         </div>
 
