@@ -1,10 +1,16 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  NavLink,
+  useLocation,
+} from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import PublicOnly from "./components/PublicOnly.jsx";
 import AppHeader from "./components/AppHeader.jsx";
-import TopTabs from "./components/TopTabs.jsx";
 
 // --- Páginas principales ---
 import PersonalPage from "./components/personal/PersonalPage.jsx";
@@ -22,18 +28,79 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
 
-import { supabase } from "./supabaseClient";
+// Módulo de Administradores
+import AdminsPage from "./pages/AdminsPage.jsx";
 
+// Callback de autenticación (Magic Link / OAuth)
+import AuthCallback from "./pages/AuthCallback.jsx";
+
+import { supabase } from "./supabaseClient";
+import { useAuth } from "./context/AuthContext";
+
+// ----------------------
+// Tabs dentro de App.jsx
+// ----------------------
+function TabsNav() {
+  const location = useLocation();
+  const { profile, currentRole } = useAuth();
+
+  const role = (currentRole || profile?.role || "").toLowerCase();
+
+  const tabs = [
+    { path: "/inicio", label: "Inicio" },
+    { path: "/nueva-geocerca", label: "Nueva geocerca" },
+    { path: "/personal", label: "Personal" },
+    { path: "/actividades", label: "Actividades" },
+    { path: "/asignaciones", label: "Asignaciones" },
+    { path: "/costos", label: "Costos" },
+    { path: "/tracker", label: "Tracker" },
+    { path: "/invitar-tracker", label: "Invitar tracker" },
+  ];
+
+  // 👉 Solo OWNER ve la pestaña Admins
+  if (role === "owner") {
+    tabs.push({ path: "/admins", label: "Admins" });
+  }
+
+  const isActive = (path) => location.pathname === path;
+
+  const baseClasses =
+    "inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors border";
+  const activeClasses = "bg-blue-600 text-white border-blue-600 shadow-sm";
+  const inactiveClasses =
+    "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
+
+  return (
+    <div className="border-b border-slate-200 bg-white/80 backdrop-blur sticky top-0 z-20">
+      <div className="max-w-7xl mx-auto px-3 py-2 flex flex-wrap items-center gap-2">
+        {tabs.map((tab) => (
+          <NavLink
+            key={tab.path}
+            to={tab.path}
+            className={`${baseClasses} ${
+              isActive(tab.path) ? activeClasses : inactiveClasses
+            }`}
+          >
+            {tab.label}
+          </NavLink>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Shell privado: header + tabs + contenido
 function Shell({ children }) {
   return (
     <div className="min-h-screen bg-gray-50">
       <AppHeader />
-      <TopTabs />
+      <TabsNav />
       <main className="p-3">{children}</main>
     </div>
   );
 }
 
+// Shell público: solo header + contenido
 function PublicShell({ children }) {
   return (
     <div className="min-h-screen bg-gray-50">
@@ -49,6 +116,9 @@ export default function App() {
       <Routes>
         {/* ROOT → /inicio */}
         <Route path="/" element={<Navigate to="/inicio" replace />} />
+
+        {/* CALLBACK de autenticación (Magic Link / OAuth) */}
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* LOGIN (público) */}
         <Route
@@ -141,6 +211,18 @@ export default function App() {
             <AuthGuard>
               <Shell>
                 <CostosPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ADMINISTRADORES (protegido, pero la visibilidad de pestaña la maneja TabsNav) */}
+        <Route
+          path="/admins"
+          element={
+            <AuthGuard>
+              <Shell>
+                <AdminsPage />
               </Shell>
             </AuthGuard>
           }

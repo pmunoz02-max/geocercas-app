@@ -31,12 +31,10 @@ const LoginPage: React.FC = () => {
             No tienes ninguna organización asignada
           </h1>
           <p className="mb-2">
-            Tu usuario está autenticado, pero todavía no está asociado a
-            ninguna organización activa.
+            Tu usuario está autenticado, pero todavía no está asociado a ninguna organización activa.
           </p>
           <p className="text-sm text-slate-300">
-            Pide a un administrador que te agregue a una organización o crea
-            una nueva desde el panel de administración.
+            Pide a un administrador que te agregue a una organización o crea una nueva desde el panel de administración.
           </p>
         </div>
       </div>
@@ -58,7 +56,8 @@ const LoginPage: React.FC = () => {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          // 🔥 CORREGIDO: ahora redirige al callback que procesa el Magic Link
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
@@ -119,9 +118,8 @@ const LoginPage: React.FC = () => {
                 w-full rounded-lg border border-slate-600
                 bg-slate-900 px-3 py-2 text-sm
                 focus:outline-none focus:ring-2 focus:ring-emerald-500
-                text-white !text-white [color:white] placeholder-slate-300
+                text-white placeholder-slate-300
               "
-              style={{ color: "white" }}
               placeholder="tucorreo@empresa.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
