@@ -89,8 +89,7 @@ export async function getAsignaciones() {
       ),
       activity:activity_id (
         id,
-        name,
-        nombre
+        name
       )
     `
     )
