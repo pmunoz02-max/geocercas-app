@@ -1,7 +1,10 @@
 // src/pages/CostosPage.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getCostosAsignaciones } from "../lib/costosApi";
+import { listPersonal } from "../lib/personalApi";
+import { listGeocercas } from "../lib/geocercasApi";
+import { listActivities } from "../lib/activitiesApi";
 
 /** Devuelve YYYY-MM-DD para un Date o string */
 function formatDateInput(date) {
@@ -24,12 +27,23 @@ function getDefaultRange() {
 
 export default function CostosPage() {
   const { user, currentOrg, currentRole } = useAuth();
+
   const [dateFrom, setDateFrom] = useState(getDefaultRange().from);
   const [dateTo, setDateTo] = useState(getDefaultRange().to);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [rows, setRows] = useState([]);
+
+  // Filtros adicionales
+  const [personasOptions, setPersonasOptions] = useState([]);
+  const [geocercasOptions, setGeocercasOptions] = useState([]);
+  const [activitiesOptions, setActivitiesOptions] = useState([]);
+  const [filtersLoading, setFiltersLoading] = useState(false);
+
+  const [selectedPersonaId, setSelectedPersonaId] = useState(null);
+  const [selectedGeocercaId, setSelectedGeocercaId] = useState(null);
+  const [selectedActivityId, setSelectedActivityId] = useState(null);
 
   // Controles de gráficos
   const [chartGrouping, setChartGrouping] = useState("actividad"); // actividad | persona | geocerca
@@ -44,6 +58,48 @@ export default function CostosPage() {
       </div>
     );
   }
+
+  // Carga de opciones de filtros (persona, geocerca, actividad)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFilterOptions() {
+      try {
+        setFiltersLoading(true);
+        const orgId = currentOrg?.id || currentOrg?.org_id;
+
+        const [personal, geos, acts] = await Promise.all([
+          listPersonal({ orgId, onlyActive: true }).catch((e) => {
+            console.warn("[CostosPage] listPersonal error", e);
+            return [];
+          }),
+          listGeocercas({ orgId, onlyActive: true }).catch((e) => {
+            console.warn("[CostosPage] listGeocercas error", e);
+            return [];
+          }),
+          listActivities({ includeInactive: false }).catch((e) => {
+            console.warn("[CostosPage] listActivities error", e);
+            return [];
+          }),
+        ]);
+
+        if (cancelled) return;
+
+        setPersonasOptions(personal || []);
+        setGeocercasOptions(geos || []);
+        setActivitiesOptions(acts || []);
+      } catch (err) {
+        console.error("[CostosPage] loadFilterOptions exception:", err);
+      } finally {
+        if (!cancelled) setFiltersLoading(false);
+      }
+    }
+
+    loadFilterOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrg?.id]);
 
   async function handleLoad(e) {
     if (e) e.preventDefault();
@@ -85,9 +141,30 @@ export default function CostosPage() {
     }
   }
 
-  /** Exportar tabla detallada a CSV (compatible Excel) */
+  // Aplica filtros (persona / geocerca / actividad) a las filas
+  const filteredRows = useMemo(() => {
+    if (!rows || rows.length === 0) return [];
+
+    return rows.filter((r) => {
+      // Tratamos de inferir los nombres de campos para IDs
+      const personaId =
+        r.personal_id ?? r.persona_id ?? r.person_id ?? r.personaId ?? null;
+      const geocercaId =
+        r.geocerca_id ?? r.geocercaId ?? r.geofence_id ?? null;
+      const activityId =
+        r.activity_id ?? r.actividad_id ?? r.activityId ?? null;
+
+      if (selectedPersonaId && personaId !== selectedPersonaId) return false;
+      if (selectedGeocercaId && geocercaId !== selectedGeocercaId) return false;
+      if (selectedActivityId && activityId !== selectedActivityId) return false;
+
+      return true;
+    });
+  }, [rows, selectedPersonaId, selectedGeocercaId, selectedActivityId]);
+
+  /** Exportar tabla detallada filtrada a CSV (compatible Excel) */
   function handleExportCsv() {
-    if (!rows || rows.length === 0) return;
+    if (!filteredRows || filteredRows.length === 0) return;
 
     const headers = [
       "Persona",
@@ -101,7 +178,7 @@ export default function CostosPage() {
       "Moneda",
     ];
 
-    const csvRows = rows.map((r) => [
+    const csvRows = filteredRows.map((r) => [
       r.persona_nombre || "",
       r.geocerca_nombre || "",
       r.activity_name || "",
@@ -144,50 +221,50 @@ export default function CostosPage() {
   // Totales por moneda
   const totalsByCurrency = useMemo(() => {
     const acc = {};
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const curr = r.currency_code || "SIN_MONEDA";
       acc[curr] = (acc[curr] || 0) + Number(r.costo || 0);
     }
     return acc;
-  }, [rows]);
+  }, [filteredRows]);
 
   // Totales por actividad + moneda
   const totalsByActivity = useMemo(() => {
     const acc = {};
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const key = `${r.activity_name || "Sin actividad"}|${
         r.currency_code || "SIN_MONEDA"
       }`;
       acc[key] = (acc[key] || 0) + Number(r.costo || 0);
     }
     return acc;
-  }, [rows]);
+  }, [filteredRows]);
 
   // Totales por persona + moneda
   const totalsByPersona = useMemo(() => {
     const acc = {};
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const key = `${r.persona_nombre || "Sin persona"}|${
         r.currency_code || "SIN_MONEDA"
       }`;
       acc[key] = (acc[key] || 0) + Number(r.costo || 0);
     }
     return acc;
-  }, [rows]);
+  }, [filteredRows]);
 
-  // ✅ Nuevo: totales por geocerca + moneda
+  // Totales por geocerca + moneda
   const totalsByGeocerca = useMemo(() => {
     const acc = {};
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const key = `${r.geocerca_nombre || "Sin geocerca"}|${
         r.currency_code || "SIN_MONEDA"
       }`;
       acc[key] = (acc[key] || 0) + Number(r.costo || 0);
     }
     return acc;
-  }, [rows]);
+  }, [filteredRows]);
 
-  // Datos para gráficos a partir del tipo de agrupación elegido
+  // Datos para gráficos según agrupación
   const chartEntries = useMemo(() => {
     let source = totalsByActivity;
     if (chartGrouping === "persona") source = totalsByPersona;
@@ -202,7 +279,6 @@ export default function CostosPage() {
       };
     });
 
-    // Ordenar de mayor a menor para que el gráfico sea más claro
     entries.sort((a, b) => b.total - a.total);
     return entries;
   }, [chartGrouping, totalsByActivity, totalsByPersona, totalsByGeocerca]);
@@ -232,66 +308,151 @@ export default function CostosPage() {
       {/* Filtros */}
       <form
         onSubmit={handleLoad}
-        className="mb-6 bg-white shadow-sm rounded-lg p-4 border border-gray-100 space-y-3"
+        className="mb-6 bg-white shadow-sm rounded-lg p-4 border border-gray-100 space-y-4"
       >
-        <h2 className="text-sm font-medium text-gray-700 mb-1">
-          Filtros de rango de fechas
-        </h2>
-        <p className="text-xs text-gray-500 mb-2">
-          El cálculo usa únicamente el tiempo de las asignaciones que cae dentro
-          del rango seleccionado.
-        </p>
+        <div>
+          <h2 className="text-sm font-medium text-gray-700 mb-1">
+            Filtros de rango de fechas
+          </h2>
+          <p className="text-xs text-gray-500 mb-2">
+            El cálculo usa únicamente el tiempo de las asignaciones que cae
+            dentro del rango seleccionado.
+          </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Desde
-            </label>
-            <input
-              type="date"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Desde
+              </label>
+              <input
+                type="date"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Hasta
-            </label>
-            <input
-              type="date"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Hasta
+              </label>
+              <input
+                type="date"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
-              disabled={loading}
-            >
-              {loading ? "Calculando..." : "Calcular costos"}
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
-              onClick={() => {
-                const def = getDefaultRange();
-                setDateFrom(def.from);
-                setDateTo(def.to);
-              }}
-              disabled={loading}
-            >
-              Últimos 7 días
-            </button>
+            <div className="flex flex-col md:flex-row gap-2 md:justify-end">
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+                disabled={loading}
+              >
+                {loading ? "Calculando..." : "Calcular costos"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
+                onClick={() => {
+                  const def = getDefaultRange();
+                  setDateFrom(def.from);
+                  setDateTo(def.to);
+                  setSelectedPersonaId(null);
+                  setSelectedGeocercaId(null);
+                  setSelectedActivityId(null);
+                }}
+                disabled={loading}
+              >
+                Últimos 7 días (reset)
+              </button>
+            </div>
           </div>
         </div>
 
+        {/* Filtros avanzados */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-700 mb-2">
+            Filtros adicionales
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Persona
+              </label>
+              <select
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={selectedPersonaId || ""}
+                onChange={(e) =>
+                  setSelectedPersonaId(e.target.value || null)
+                }
+                disabled={filtersLoading}
+              >
+                <option value="">Todas las personas</option>
+                {personasOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre ||
+                      p.full_name ||
+                      p.name ||
+                      p.email ||
+                      `ID ${p.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Geocerca
+              </label>
+              <select
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={selectedGeocercaId || ""}
+                onChange={(e) =>
+                  setSelectedGeocercaId(e.target.value || null)
+                }
+                disabled={filtersLoading}
+              >
+                <option value="">Todas las geocercas</option>
+                {geocercasOptions.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.nombre || g.name || g.id_text || `ID ${g.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Actividad
+              </label>
+              <select
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={selectedActivityId || ""}
+                onChange={(e) =>
+                  setSelectedActivityId(e.target.value || null)
+                }
+                disabled={filtersLoading}
+              >
+                <option value="">Todas las actividades</option>
+                {activitiesOptions.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name || a.nombre || `ID ${a.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {filtersLoading && (
+            <p className="mt-2 text-[11px] text-gray-400">
+              Cargando opciones de filtros…
+            </p>
+          )}
+        </div>
+
         {errorMsg && (
-          <div className="mt-2 rounded-md bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">
+          <div className="mt-1 rounded-md bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">
             {errorMsg}
           </div>
         )}
@@ -304,9 +465,9 @@ export default function CostosPage() {
           <h2 className="text-sm font-semibold text-gray-700 mb-2">
             Totales por moneda
           </h2>
-          {rows.length === 0 ? (
+          {filteredRows.length === 0 ? (
             <p className="text-xs text-gray-500">
-              No hay datos en el rango seleccionado.
+              No hay datos en el rango / filtros seleccionados.
             </p>
           ) : (
             <ul className="text-xs space-y-1 max-h-56 overflow-y-auto">
@@ -334,9 +495,9 @@ export default function CostosPage() {
           <h2 className="text-sm font-semibold text-gray-700 mb-2">
             Totales por actividad
           </h2>
-          {rows.length === 0 ? (
+          {filteredRows.length === 0 ? (
             <p className="text-xs text-gray-500">
-              No hay datos en el rango seleccionado.
+              No hay datos en el rango / filtros seleccionados.
             </p>
           ) : (
             <ul className="text-xs space-y-1 max-h-56 overflow-y-auto">
@@ -369,9 +530,9 @@ export default function CostosPage() {
           <h2 className="text-sm font-semibold text-gray-700 mb-2">
             Totales por persona
           </h2>
-          {rows.length === 0 ? (
+          {filteredRows.length === 0 ? (
             <p className="text-xs text-gray-500">
-              No hay datos en el rango seleccionado.
+              No hay datos en el rango / filtros seleccionados.
             </p>
           ) : (
             <ul className="text-xs space-y-1 max-h-56 overflow-y-auto">
@@ -399,14 +560,14 @@ export default function CostosPage() {
           )}
         </div>
 
-        {/* ✅ Nueva tarjeta: Geocerca */}
+        {/* Geocerca */}
         <div className="bg-white shadow-sm rounded-lg border border-gray-100 p-4">
           <h2 className="text-sm font-semibold text-gray-700 mb-2">
             Totales por geocerca
           </h2>
-          {rows.length === 0 ? (
+          {filteredRows.length === 0 ? (
             <p className="text-xs text-gray-500">
-              No hay datos en el rango seleccionado.
+              No hay datos en el rango / filtros seleccionados.
             </p>
           ) : (
             <ul className="text-xs space-y-1 max-h-56 overflow-y-auto">
@@ -470,12 +631,12 @@ export default function CostosPage() {
 
         {chartEntries.length === 0 || maxChartValue <= 0 ? (
           <p className="text-xs text-gray-500">
-            No hay datos suficientes para generar el gráfico.
+            No hay datos suficientes para generar el gráfico con los filtros
+            actuales.
           </p>
         ) : (
           <div className="space-y-2">
             {chartType === "bar" ? (
-              // Gráfico de barras simple usando divs
               <div className="flex items-end gap-2 h-48">
                 {chartEntries.map((e) => {
                   const heightPct =
@@ -503,14 +664,12 @@ export default function CostosPage() {
                 })}
               </div>
             ) : (
-              // Gráfico de líneas simple usando SVG
               <div className="h-48">
                 <svg
                   viewBox="0 0 100 100"
                   className="w-full h-full text-indigo-500"
                   preserveAspectRatio="none"
                 >
-                  {/* Línea base */}
                   <line
                     x1="0"
                     y1="100"
@@ -542,7 +701,6 @@ export default function CostosPage() {
               </div>
             )}
 
-            {/* Etiquetas debajo del gráfico */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] text-gray-600">
               {chartEntries.slice(0, 8).map((e) => (
                 <div
@@ -574,22 +732,23 @@ export default function CostosPage() {
               Detalle de asignaciones con costo
             </h2>
             <span className="text-xs text-gray-400">
-              {rows.length} registro(s)
+              {filteredRows.length} registro(s)
             </span>
           </div>
           <button
             type="button"
             onClick={handleExportCsv}
-            disabled={rows.length === 0}
+            disabled={filteredRows.length === 0}
             className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
           >
             Exportar a Excel (CSV)
           </button>
         </div>
 
-        {rows.length === 0 ? (
+        {filteredRows.length === 0 ? (
           <div className="p-4 text-sm text-gray-500">
-            No hay asignaciones con actividad y fechas en el rango seleccionado.
+            No hay asignaciones con actividad y fechas que coincidan con el
+            rango y filtros seleccionados.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -626,8 +785,8 @@ export default function CostosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((r) => (
-                  <tr key={r.asignacion_id}>
+                {filteredRows.map((r) => (
+                  <tr key={r.asignacion_id || `${r.persona_nombre}-${r.start_time}`}>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {r.persona_nombre || "—"}
                     </td>
