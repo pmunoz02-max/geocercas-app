@@ -29,7 +29,7 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 // 🔁 IMPORT CORRECTO: este archivo SÍ existe en tu repo
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 
-import Login from "./pages/Login.jsx";
+import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.jsx";
 import Inicio from "./pages/Inicio.jsx";
 
