@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 
 type Mode = "password" | "magic";
 
@@ -9,15 +10,18 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // 🔐 Traemos la sesión desde el AuthContext
+  const { session, loading } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<Mode>("password");
 
-  const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // Leer ?mode=magic desde la URL para abrir directamente la pestaña de Magic Link
+  // 1) Si en la URL viene ?mode=magic, abrimos directamente esa pestaña
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlMode = params.get("mode");
@@ -25,6 +29,14 @@ const Login: React.FC = () => {
       setMode("magic");
     }
   }, [location.search]);
+
+  // 2) Si YA hay sesión, no tiene sentido mostrar el login:
+  //    redirigimos al dashboard interno.
+  useEffect(() => {
+    if (!loading && session) {
+      navigate("/inicio", { replace: true });
+    }
+  }, [session, loading, navigate]);
 
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +49,7 @@ const Login: React.FC = () => {
     }
 
     try {
-      setLoading(true);
+      setLoadingAction(true);
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -49,14 +61,14 @@ const Login: React.FC = () => {
         return;
       }
 
-      // Si todo va bien, el AuthContext recibirá la sesión.
-      // Redirigimos al dashboard interno.
+      // El AuthContext recibirá la nueva sesión;
+      // el useEffect de arriba hará el navigate a /inicio.
       navigate("/inicio", { replace: true });
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);
       setErrorMsg("Ocurrió un error inesperado. Intenta nuevamente.");
     } finally {
-      setLoading(false);
+      setLoadingAction(false);
     }
   };
 
@@ -71,7 +83,7 @@ const Login: React.FC = () => {
     }
 
     try {
-      setLoading(true);
+      setLoadingAction(true);
 
       // Usamos el origin actual para que funcione tanto en local como en producción.
       const redirectTo = `${window.location.origin}/auth/callback`;
@@ -96,11 +108,22 @@ const Login: React.FC = () => {
       console.error("[Login] signInWithOtp exception:", err);
       setErrorMsg("Ocurrió un error inesperado al enviar el Magic Link.");
     } finally {
-      setLoading(false);
+      setLoadingAction(false);
     }
   };
 
   const isPasswordMode = mode === "password";
+
+  // Mientras AuthContext está resolviendo la sesión, evitamos parpadeos
+  if (loading) {
+    return null;
+  }
+
+  // Si ya hay sesión, el useEffect de arriba hará navigate;
+  // devolvemos null para no mostrar el formulario un instante.
+  if (session) {
+    return null;
+  }
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
@@ -167,7 +190,7 @@ const Login: React.FC = () => {
                 placeholder="tucorreo@ejemplo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
+                disabled={loadingAction}
               />
             </div>
             <div>
@@ -181,15 +204,15 @@ const Login: React.FC = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
+                disabled={loadingAction}
               />
             </div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loadingAction}
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? "Ingresando..." : "Iniciar sesión"}
+              {loadingAction ? "Ingresando..." : "Iniciar sesión"}
             </button>
           </form>
         )}
@@ -208,16 +231,16 @@ const Login: React.FC = () => {
                 placeholder="tucorreo@ejemplo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
+                disabled={loadingAction}
               />
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loadingAction}
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? "Enviando link..." : "Enviar Magic Link"}
+              {loadingAction ? "Enviando link..." : "Enviar Magic Link"}
             </button>
 
             <p className="text-[11px] text-slate-500">
