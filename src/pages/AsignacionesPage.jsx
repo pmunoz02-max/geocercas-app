@@ -1,5 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { getAsignaciones, createAsignacion, updateAsignacion, deleteAsignacion } from "../lib/asignacionesApi";
+import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabaseClient";
+import {
+  getAsignaciones,
+  createAsignacion,
+  updateAsignacion,
+  deleteAsignacion,
+} from "../lib/asignacionesApi";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
 
 const ESTADOS = [
@@ -9,216 +15,374 @@ const ESTADOS = [
 ];
 
 export default function AsignacionesPage() {
+  // ---------------------------------------------
+  // Estado general
+  // ---------------------------------------------
   const [asignaciones, setAsignaciones] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingAsignaciones, setLoadingAsignaciones] = useState(true);
   const [error, setError] = useState(null);
 
-  const [personalId, setPersonalId] = useState("");
-  const [geocercaId, setGeocercaId] = useState("");
-  const [activityId, setActivityId] = useState("");
+  // Filtros
+  const [estadoFilter, setEstadoFilter] = useState("todos");
+
+  // Formulario
+  const [selectedPersonalId, setSelectedPersonalId] = useState("");
+  const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
+  const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [frecuenciaEnvio, setFrecuenciaEnvio] = useState(60);
   const [status, setStatus] = useState("activa");
+  const [editingId, setEditingId] = useState(null);
 
-  const [estadoFilter, setEstadoFilter] = useState("todos");
+  // Catálogos para dropdowns
+  const [personalOptions, setPersonalOptions] = useState([]);
+  const [geocercaOptions, setGeocercaOptions] = useState([]);
+  const [activityOptions, setActivityOptions] = useState([]);
+  const [loadingCatalogos, setLoadingCatalogos] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const { data, error } = await getAsignaciones();
-      if (error) {
-        console.error("[AsignacionesPage] Error al cargar asignaciones:", error);
-        setError("Error al cargar asignaciones");
-      } else {
-        setAsignaciones(data || []);
-      }
-      setLoading(false);
+  // ---------------------------------------------
+  // Carga de asignaciones
+  // ---------------------------------------------
+  const loadAsignaciones = async () => {
+    setLoadingAsignaciones(true);
+    setError(null);
+    const { data, error } = await getAsignaciones();
+    if (error) {
+      console.error("[AsignacionesPage] Error al cargar asignaciones:", error);
+      setError("Error al cargar asignaciones");
+    } else {
+      setAsignaciones(data || []);
     }
-    load();
-  }, []);
+    setLoadingAsignaciones(false);
+  };
 
-  const filteredAsignaciones = asignaciones.filter(a => {
-    if (estadoFilter !== "todos") {
-      return a.status === estadoFilter; // <-- AHORA COINCIDE: activa / inactiva
-    }
-    return true;
-  });
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // ---------------------------------------------
+  // Carga de catálogos (personal, geocercas, actividades)
+  // ---------------------------------------------
+  const loadCatalogos = async () => {
+    setLoadingCatalogos(true);
     setError(null);
 
+    try {
+      const [
+        { data: personalData, error: personalError },
+        { data: geocercasData, error: geocercasError },
+        { data: activitiesData, error: activitiesError },
+      ] = await Promise.all([
+        supabase
+          .from("personal")
+          .select("id, nombre, apellido, email")
+          .eq("is_deleted", false)
+          .order("nombre", { ascending: true }),
+        supabase
+          .from("geocercas")
+          .select("id, nombre")
+          .eq("is_deleted", false)
+          .order("nombre", { ascending: true }),
+        supabase
+          .from("activities")
+          .select("id, nombre")
+          .eq("is_deleted", false)
+          .order("nombre", { ascending: true }),
+      ]);
+
+      if (personalError) throw personalError;
+      if (geocercasError) throw geocercasError;
+      if (activitiesError) throw activitiesError;
+
+      setPersonalOptions(personalData || []);
+      setGeocercaOptions(geocercasData || []);
+      setActivityOptions(activitiesData || []);
+    } catch (err) {
+      console.error("[AsignacionesPage] Error cargando catálogos:", err);
+      setError("Error al cargar catálogos de personal/geocercas/actividades");
+    } finally {
+      setLoadingCatalogos(false);
+    }
+  };
+
+  // ---------------------------------------------
+  // useEffect inicial
+  // ---------------------------------------------
+  useEffect(() => {
+    loadAsignaciones();
+    loadCatalogos();
+  }, []);
+
+  // ---------------------------------------------
+  // Asignaciones filtradas por estado
+  // ---------------------------------------------
+  const filteredAsignaciones = useMemo(() => {
+    if (estadoFilter === "todos") return asignaciones;
+    return (asignaciones || []).filter((a) => a.status === estadoFilter);
+  }, [asignaciones, estadoFilter]);
+
+  // ---------------------------------------------
+  // Manejo de formulario (crear / editar)
+  // ---------------------------------------------
+  const resetForm = () => {
+    setSelectedPersonalId("");
+    setSelectedGeocercaId("");
+    setSelectedActivityId("");
+    setStartTime("");
+    setEndTime("");
+    setFrecuenciaEnvio(60);
+    setStatus("activa");
+    setEditingId(null);
+  };
+
+  const handleSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setError(null);
+
+    if (!selectedPersonalId || !selectedGeocercaId) {
+      setError("Selecciona persona y geocerca");
+      return;
+    }
+    if (!startTime || !endTime) {
+      setError("Selecciona las fechas de inicio y fin");
+      return;
+    }
+
     const payload = {
-      personal_id: personalId,
-      geocerca_id: geocercaId,
-      activity_id: activityId,
+      personal_id: selectedPersonalId,
+      geocerca_id: selectedGeocercaId,
+      activity_id: selectedActivityId || null,
       start_time: startTime,
       end_time: endTime,
       frecuencia_envio_sec: frecuenciaEnvio,
-      status: status,
+      status,
       is_deleted: false,
     };
 
-    console.log("[AsignacionesPage] Enviando payload:", payload);
-
-    let result;
     try {
-      result = await createAsignacion(payload);
+      if (editingId) {
+        const { error: updateError } = await updateAsignacion(editingId, payload);
+        if (updateError) {
+          console.error("[AsignacionesPage] UPDATE error:", updateError);
+          setError(updateError.message || "Error al actualizar la asignación");
+          return;
+        }
+      } else {
+        const { error: insertError } = await createAsignacion(payload);
+        if (insertError) {
+          console.error("[AsignacionesPage] INSERT error:", insertError);
+          setError(insertError.message || "Error al crear la asignación");
+          return;
+        }
+      }
+
+      await loadAsignaciones();
+      resetForm();
     } catch (err) {
       console.error("[AsignacionesPage] handleSubmit error general:", err);
-      setError("Error al guardar asignación");
-      return;
+      setError("Error al guardar la asignación");
     }
+  };
 
-    if (result.error) {
-      console.error("[AsignacionesPage] handleSubmit INSERT error:", result.error);
-      setError(result.error.message || "Error al guardar asignación");
-      return;
-    }
-
-    setAsignaciones(prev => [...prev, result.data[0]]);
+  // ---------------------------------------------
+  // Editar / Eliminar
+  // ---------------------------------------------
+  const handleEdit = (asignacion) => {
+    setEditingId(asignacion.id);
+    setSelectedPersonalId(asignacion.personal_id || "");
+    setSelectedGeocercaId(asignacion.geocerca_id || "");
+    setSelectedActivityId(asignacion.activity_id || "");
+    setStartTime(asignacion.start_time?.slice(0, 16) || "");
+    setEndTime(asignacion.end_time?.slice(0, 16) || "");
+    setFrecuenciaEnvio(asignacion.frecuencia_envio_sec || 60);
+    setStatus(asignacion.status || "activa");
   };
 
   const handleDelete = async (id) => {
     const confirmed = window.confirm("¿Eliminar asignación?");
     if (!confirmed) return;
 
-    const { error } = await deleteAsignacion(id);
-    if (error) {
-      console.error("Error al eliminar", error);
+    const { error: deleteError } = await deleteAsignacion(id);
+    if (deleteError) {
+      console.error("[AsignacionesPage] delete error:", deleteError);
       setError("No se pudo eliminar la asignación");
       return;
     }
-    setAsignaciones(prev => prev.filter(a => a.id !== id));
+
+    await loadAsignaciones();
   };
 
+  // ---------------------------------------------
+  // Render
+  // ---------------------------------------------
   return (
-    <div className="p-4 max-w-5xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Asignaciones</h1>
 
-      {/* FILTRO DE ESTADO */}
-      <div className="mb-4">
-        <label className="block font-medium mb-1">Filtrar por estado:</label>
+      {/* FILTRO POR ESTADO */}
+      <div className="mb-4 flex items-center gap-3">
+        <label className="font-medium">Filtrar por estado:</label>
         <select
-          className="border p-2 rounded"
+          className="border rounded px-3 py-2"
           value={estadoFilter}
           onChange={(e) => setEstadoFilter(e.target.value)}
         >
           {ESTADOS.map((e) => (
-            <option key={e.value} value={e.value}>{e.label}</option>
+            <option key={e.value} value={e.value}>
+              {e.label}
+            </option>
           ))}
         </select>
       </div>
 
-      {/* FORMULARIO */}
-      <form onSubmit={handleSubmit} className="border p-4 rounded mb-6 bg-gray-50">
-        <h2 className="text-lg font-semibold mb-3">Nueva Asignación</h2>
+      {/* FORMULARIO NUEVA/EDITAR ASIGNACIÓN */}
+      <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
+        <h2 className="text-lg font-semibold mb-4">
+          {editingId ? "Editar asignación" : "Nueva asignación"}
+        </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {(loadingCatalogos || loadingAsignaciones) && (
+          <p className="text-sm text-gray-500 mb-3">Cargando datos…</p>
+        )}
 
-          {/* PERSONAL */}
-          <div>
-            <label>Personal ID</label>
-            <input
-              type="text"
-              value={personalId}
-              onChange={(e) => setPersonalId(e.target.value)}
-              className="border p-2 w-full rounded"
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
+          {/* Persona */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">Persona</label>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedPersonalId}
+              onChange={(e) => setSelectedPersonalId(e.target.value)}
               required
-            />
+            >
+              <option value="">Selecciona una persona</option>
+              {personalOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* GEOCERCA */}
-          <div>
-            <label>Geocerca ID</label>
-            <input
-              type="text"
-              value={geocercaId}
-              onChange={(e) => setGeocercaId(e.target.value)}
-              className="border p-2 w-full rounded"
+          {/* Geocerca */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">Geocerca</label>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedGeocercaId}
+              onChange={(e) => setSelectedGeocercaId(e.target.value)}
               required
-            />
+            >
+              <option value="">Selecciona una geocerca</option>
+              {geocercaOptions.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nombre || "Sin nombre"}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* ACTIVIDAD */}
-          <div>
-            <label>Actividad ID</label>
-            <input
-              type="text"
-              value={activityId}
-              onChange={(e) => setActivityId(e.target.value)}
-              className="border p-2 w-full rounded"
-              required
-            />
+          {/* Actividad */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">Actividad</label>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedActivityId}
+              onChange={(e) => setSelectedActivityId(e.target.value)}
+            >
+              <option value="">(Opcional) Selecciona una actividad</option>
+              {activityOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre || "Sin nombre"}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* START */}
-          <div>
-            <label>Inicio</label>
+          {/* Inicio */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">Inicio</label>
             <input
               type="datetime-local"
+              className="border rounded px-3 py-2"
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
-              className="border p-2 w-full rounded"
               required
             />
           </div>
 
-          {/* END */}
-          <div>
-            <label>Fin</label>
+          {/* Fin */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">Fin</label>
             <input
               type="datetime-local"
+              className="border rounded px-3 py-2"
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
-              className="border p-2 w-full rounded"
               required
             />
           </div>
 
-          {/* ESTADO */}
-          <div>
-            <label>Estado</label>
+          {/* Estado */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">Estado</label>
             <select
+              className="border rounded px-3 py-2"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="border p-2 w-full rounded"
             >
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
           </div>
 
-          {/* FRECUENCIA */}
-          <div>
-            <label>Frecuencia envío (segundos)</label>
+          {/* Frecuencia */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">
+              Frecuencia envío (segundos)
+            </label>
             <input
               type="number"
+              className="border rounded px-3 py-2"
               value={frecuenciaEnvio}
+              min={5}
               onChange={(e) => setFrecuenciaEnvio(Number(e.target.value))}
-              className="border p-2 w-full rounded"
-              min="5"
             />
           </div>
-        </div>
+        </form>
 
-        {/* BOTÓN */}
-        <button
-          type="submit"
-          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Guardar
-        </button>
+        {/* Botones */}
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            {editingId ? "Actualizar" : "Guardar"}
+          </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="border px-4 py-2 rounded"
+            >
+              Cancelar edición
+            </button>
+          )}
+        </div>
 
         {error && (
           <p className="text-red-600 mt-3 font-semibold">{error}</p>
         )}
-      </form>
+      </div>
 
-      {/* TABLA */}
-      <AsignacionesTable asignaciones={filteredAsignaciones} onDelete={handleDelete} />
-
+      {/* TABLA DE ASIGNACIONES */}
+      <AsignacionesTable
+        asignaciones={filteredAsignaciones}
+        loading={loadingAsignaciones}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }
