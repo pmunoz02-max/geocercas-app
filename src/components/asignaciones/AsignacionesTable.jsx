@@ -1,6 +1,7 @@
 // src/components/asignaciones/AsignacionesTable.jsx
 
 /* eslint-disable react/prop-types */
+
 export default function AsignacionesTable({
   asignaciones,
   loading,
@@ -16,85 +17,129 @@ export default function AsignacionesTable({
       </div>
 
       {loading ? (
-        <div className="p-4 text-sm text-gray-500">
+        <div className="px-4 py-6 text-sm text-gray-500">
           Cargando asignaciones…
         </div>
-      ) : asignaciones.length === 0 ? (
-        <div className="p-4 text-sm text-gray-500">
-          No hay asignaciones registradas con los filtros actuales.
+      ) : !asignaciones || asignaciones.length === 0 ? (
+        <div className="px-4 py-6 text-sm text-gray-500">
+          No hay asignaciones para los filtros seleccionados.
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full text-xs md:text-sm">
+          <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">
-                  Personal
-                </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">
-                  Geocerca
-                </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">
-                  Inicio
-                </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">
-                  Fin
-                </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">
-                  Frecuencia (min)
-                </th>
-                <th className="px-3 py-2 text-right font-medium text-gray-700">
+              <tr className="text-left text-gray-500">
+                <th className="px-4 py-2 whitespace-nowrap">Persona</th>
+                <th className="px-4 py-2 whitespace-nowrap">Geocerca</th>
+                <th className="px-4 py-2 whitespace-nowrap">Actividad</th>
+                <th className="px-4 py-2 whitespace-nowrap">Inicio</th>
+                <th className="px-4 py-2 whitespace-nowrap">Fin</th>
+                <th className="px-4 py-2 whitespace-nowrap">Freq (min)</th>
+                <th className="px-4 py-2 whitespace-nowrap">Estado</th>
+                <th className="px-4 py-2 whitespace-nowrap text-right">
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody>
-              {asignaciones.map((row) => (
-                <tr key={row.id} className="border-t border-gray-100">
-                  <td className="px-3 py-2 align-top">
-                    <div className="font-medium text-gray-900">
-                      {row.personal_nombre}
-                    </div>
-                    {row.personal_email && (
-                      <div className="text-gray-500">
-                        {row.personal_email}
+            <tbody className="divide-y divide-gray-100">
+              {asignaciones.map((row) => {
+                const personaNombre =
+                  row.personal?.nombre || row.personal_nombre || "";
+                const personaApellido =
+                  row.personal?.apellido || row.personal_apellido || "";
+                const personaEmail =
+                  row.personal?.email || row.personal_email || "";
+
+                const geocercaNombre =
+                  row.geocerca?.nombre || row.geocerca_nombre || "";
+                const activityNombre =
+                  row.activity?.nombre ||
+                  row.activity?.name ||
+                  row.activity_nombre ||
+                  row.activity_name ||
+                  "";
+
+                const freqMin = row.frecuencia_envio_sec
+                  ? Math.round(row.frecuencia_envio_sec / 60)
+                  : "";
+
+                const inicio = row.start_time
+                  ? new Date(row.start_time).toLocaleString()
+                  : "";
+                const fin = row.end_time
+                  ? new Date(row.end_time).toLocaleString()
+                  : "";
+
+                return (
+                  <tr key={row.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-gray-800">
+                          {[personaNombre, personaApellido]
+                            .filter(Boolean)
+                            .join(" ") || "—"}
+                        </span>
+                        {personaEmail && (
+                          <span className="text-xs text-gray-500">
+                            {personaEmail}
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <div className="text-gray-800">
-                      {row.geocerca_nombre}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    {row.start_date || '—'}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    {row.end_date || '—'}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    {row.frecuencia_envio_sec
-                      ? Math.round(row.frecuencia_envio_sec / 60)
-                      : '-'}
-                  </td>
-                  <td className="px-3 py-2 align-top text-right space-x-2">
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                      onClick={() => onEdit(row)}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-red-600 hover:text-red-800"
-                      onClick={() => onDelete(row)}
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {geocercaNombre || "—"}
+                    </td>
+
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {activityNombre || "—"}
+                    </td>
+
+                    <td className="px-4 py-2 whitespace-nowrap">{inicio}</td>
+
+                    <td className="px-4 py-2 whitespace-nowrap">{fin}</td>
+
+                    <td className="px-4 py-2 whitespace-nowrap text-center">
+                      {freqMin || "—"}
+                    </td>
+
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span
+                        className={
+                          row.status === "activa"
+                            ? "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700"
+                            : "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                        }
+                      >
+                        {row.status || "—"}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-2 whitespace-nowrap text-right">
+                      <div className="inline-flex gap-2">
+                        {onEdit && (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(row)}
+                            className="px-2 py-1 text-xs rounded border border-blue-500 text-blue-600 hover:bg-blue-50"
+                          >
+                            Editar
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button
+                            type="button"
+                            onClick={() => onDelete(row.id)}
+                            className="px-2 py-1 text-xs rounded border border-red-500 text-red-600 hover:bg-red-50"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
