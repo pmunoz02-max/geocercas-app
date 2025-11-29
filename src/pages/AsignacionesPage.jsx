@@ -31,7 +31,8 @@ export default function AsignacionesPage() {
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [frecuenciaEnvio, setFrecuenciaEnvio] = useState(60);
+  // Frecuencia en MINUTOS (UI) -> se convierte a segundos para la BD
+  const [frecuenciaEnvioMin, setFrecuenciaEnvioMin] = useState(5);
   const [status, setStatus] = useState("activa");
   const [editingId, setEditingId] = useState(null);
 
@@ -78,23 +79,23 @@ export default function AsignacionesPage() {
           .order("nombre", { ascending: true }),
 
         // GEOCERCAS: sin is_deleted (no lo tiene)
-        supabase
-          .from("geocercas")
-          .select("id, nombre")
-          .order("nombre", { ascending: true }),
+        supabase.from("geocercas").select("id, nombre").order("nombre", {
+          ascending: true,
+        }),
 
         // ACTIVITIES: usamos name (en inglés)
-        supabase
-          .from("activities")
-          .select("id, name")
-          .order("name", { ascending: true }),
+        supabase.from("activities").select("id, name").order("name", {
+          ascending: true,
+        }),
       ]);
 
       if (personalError) throw personalError;
       if (geocercasError) throw geocercasError;
       if (activitiesError) throw activitiesError;
 
-      setPersonalOptions((personalData || []).filter((p) => p.is_deleted === false));
+      setPersonalOptions(
+        (personalData || []).filter((p) => p.is_deleted === false)
+      );
       setGeocercaOptions(geocercasData || []);
       setActivityOptions(activitiesData || []);
     } catch (err) {
@@ -130,7 +131,7 @@ export default function AsignacionesPage() {
     setSelectedActivityId("");
     setStartTime("");
     setEndTime("");
-    setFrecuenciaEnvio(60);
+    setFrecuenciaEnvioMin(5);
     setStatus("activa");
     setEditingId(null);
   };
@@ -148,13 +149,20 @@ export default function AsignacionesPage() {
       return;
     }
 
+    const freqMin = Number(frecuenciaEnvioMin) || 0;
+    if (freqMin < 5) {
+      setError("La frecuencia no puede ser menor a 5 minutos.");
+      return;
+    }
+
     const payload = {
       personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId || null,
       start_time: startTime,
       end_time: endTime,
-      frecuencia_envio_sec: frecuenciaEnvio,
+      // Convertimos minutos -> segundos para la BD
+      frecuencia_envio_sec: freqMin * 60,
       status,
       is_deleted: false,
     };
@@ -164,14 +172,35 @@ export default function AsignacionesPage() {
         const { error: updateError } = await updateAsignacion(editingId, payload);
         if (updateError) {
           console.error("[AsignacionesPage] UPDATE error:", updateError);
-          setError(updateError.message || "Error al actualizar la asignación");
+          // Si es el check constraint, damos mensaje amable
+          if (
+            updateError.message &&
+            updateError.message.includes("asignaciones_freq_chk")
+          ) {
+            setError(
+              "La frecuencia no puede ser menor a 5 minutos (regla de la BD)."
+            );
+          } else {
+            setError(
+              updateError.message || "Error al actualizar la asignación"
+            );
+          }
           return;
         }
       } else {
         const { error: insertError } = await createAsignacion(payload);
         if (insertError) {
           console.error("[AsignacionesPage] INSERT error:", insertError);
-          setError(insertError.message || "Error al crear la asignación");
+          if (
+            insertError.message &&
+            insertError.message.includes("asignaciones_freq_chk")
+          ) {
+            setError(
+              "La frecuencia no puede ser menor a 5 minutos (regla de la BD)."
+            );
+          } else {
+            setError(insertError.message || "Error al crear la asignación");
+          }
           return;
         }
       }
@@ -194,7 +223,8 @@ export default function AsignacionesPage() {
     setSelectedActivityId(asignacion.activity_id || "");
     setStartTime(asignacion.start_time?.slice(0, 16) || "");
     setEndTime(asignacion.end_time?.slice(0, 16) || "");
-    setFrecuenciaEnvio(asignacion.frecuencia_envio_sec || 60);
+    const freqSec = asignacion.frecuencia_envio_sec || 300;
+    setFrecuenciaEnvioMin(Math.max(5, Math.round(freqSec / 60)));
     setStatus(asignacion.status || "activa");
   };
 
@@ -342,14 +372,16 @@ export default function AsignacionesPage() {
           {/* Frecuencia */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">
-              Frecuencia envío (segundos)
+              Frecuencia envío (minutos, mínimo 5)
             </label>
             <input
               type="number"
               className="border rounded px-3 py-2"
-              value={frecuenciaEnvio}
+              value={frecuenciaEnvioMin}
               min={5}
-              onChange={(e) => setFrecuenciaEnvio(Number(e.target.value))}
+              onChange={(e) =>
+                setFrecuenciaEnvioMin(Number(e.target.value) || 5)
+              }
             />
           </div>
         </form>
