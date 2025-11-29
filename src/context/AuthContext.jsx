@@ -5,7 +5,7 @@
 // - Carga de organizaciones y roles desde user_organizations
 // - Perfil mínimo desde v_app_profiles
 // - Persistencia de organización actual en localStorage
-// - Aceptación automática de invitaciones (org_invites) al hacer login
+// - Aceptación de invitaciones (org_invites) hecha en JS (sin RPC)
 
 import React, {
   createContext,
@@ -39,6 +39,85 @@ function storeOrgId(orgId) {
     }
   } catch {
     // ignore
+  }
+}
+
+/**
+ * Acepta una invitación pendiente (si existe) para el usuario actual.
+ *
+ * Pasos:
+ *  1) Busca en org_invites una invitación con status = 'pending'
+ *     para el email del usuario.
+ *  2) Si existe, inserta en user_organizations (org_id, user_id, role).
+ *  3) Marca la invitación como 'accepted'.
+ *
+ * NOTA: Esta función depende de que:
+ *  - org_invites NO tenga RLS (o permita ver/actualizar).
+ *  - user_organizations permita INSERT donde user_id = auth.uid().
+ */
+async function acceptInviteIfAny(user) {
+  if (!user?.email || !user.id) return;
+
+  try {
+    // 1) Buscar invitación pendiente más reciente para ese email
+    const { data: invites, error: invitesErr } = await supabase
+      .from("org_invites")
+      .select("*")
+      .eq("status", "pending")
+      .ilike("email", user.email) // case-insensitive
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (invitesErr) {
+      console.error("[AuthContext] org_invites select error:", invitesErr);
+      return;
+    }
+
+    const invite = invites && invites[0];
+    if (!invite) {
+      // No hay invitaciones pendientes para este email
+      return;
+    }
+
+    // 2) Insertar/actualizar membresía en user_organizations
+    const roleUpper = (invite.role || "admin").toUpperCase();
+
+    const { error: insErr } = await supabase
+      .from("user_organizations")
+      .upsert(
+        {
+          org_id: invite.org_id,
+          user_id: user.id,
+          role: roleUpper,
+        },
+        {
+          onConflict: "org_id,user_id",
+        }
+      );
+
+    if (insErr) {
+      console.error(
+        "[AuthContext] user_organizations upsert error:",
+        insErr
+      );
+      // Si falla la membresía, no marcamos la invitación como aceptada
+      return;
+    }
+
+    // 3) Marcar invitación como aceptada
+    const { error: updErr } = await supabase
+      .from("org_invites")
+      .update({
+        status: "accepted",
+        accepted_at: new Date().toISOString(),
+      })
+      .eq("id", invite.id);
+
+    if (updErr) {
+      console.error("[AuthContext] org_invites update error:", updErr);
+    }
+  } catch (e) {
+    console.error("[AuthContext] acceptInviteIfAny exception:", e);
   }
 }
 
@@ -124,18 +203,10 @@ export function AuthProvider({ children }) {
         // 0) Aceptar invitación si existe (org_invites → user_organizations)
         // -------------------------------------------------------------------
         try {
-          const { error: inviteErr } = await supabase.rpc(
-            "accept_invite_on_login"
-          );
-          if (inviteErr) {
-            console.error(
-              "[AuthContext] accept_invite_on_login error:",
-              inviteErr
-            );
-          }
+          await acceptInviteIfAny(user);
         } catch (e) {
           console.error(
-            "[AuthContext] accept_invite_on_login exception:",
+            "[AuthContext] acceptInviteIfAny exception (outer):",
             e
           );
         }
