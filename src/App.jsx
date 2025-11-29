@@ -7,7 +7,6 @@ import {
 } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
-import PublicOnly from "./components/PublicOnly.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 
 // --- Páginas / componentes principales ---
@@ -218,18 +217,16 @@ export default function App() {
           }
         />
 
-        {/* AUTH CALLBACK (Magic Link general) */}
+        {/* AUTH CALLBACK (para Magic Links que redirigen aquí) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* LOGIN: solo si NO hay sesión; si ya hay → va a /inicio */}
+        {/* LOGIN: siempre visible, tenga o no sesión */}
         <Route
           path="/login"
           element={
-            <PublicOnly>
-              <PublicShell>
-                <Login />
-              </PublicShell>
-            </PublicOnly>
+            <PublicShell>
+              <Login />
+            </PublicShell>
           }
         />
 
