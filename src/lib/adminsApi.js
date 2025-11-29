@@ -1,18 +1,14 @@
 // src/lib/adminsApi.js
 // API para gestionar administradores de la organización actual.
 //
-// NOTA IMPORTANTE (BD real):
-// - La vista user_roles_view SOLO expone: user_id, role_name
-// - NO tiene org_id, org_name, email, full_name, created_at
-//   (esto está documentado en la Nota Maestra).
+// Estado actual del backend:
+// - user_roles_view SOLO expone: user_id, role_name
+// - org_invites almacena invitaciones por organización
 //
-// Por eso, esta primera versión de listAdmins se centra en:
-//   • Leer user_id + role_name
-//   • Filtrar por roles owner/admin
-//   • Devolver un objeto "normalizado" que la UI pueda mostrar
-//
-// Más adelante podremos cambiar la fuente de datos a una vista
-// más rica (por ejemplo una vista user_organizations con email, nombre, org, etc.)
+// En esta fase:
+//   • listAdmins: lee desde user_roles_view (owner/admin globales)
+//   • inviteAdmin: inserta invitación en org_invites
+//   • updateAdmin/deleteAdmin: placeholders (en construcción)
 
 import { supabase } from "../supabaseClient";
 
@@ -27,7 +23,6 @@ import { supabase } from "../supabaseClient";
  * @returns {Promise<{data: any[] | null, error: any}>}
  */
 export async function listAdmins(orgId) {
-  // Mantenemos la validación por si acaso en el futuro usamos orgId en la query.
   if (!orgId) {
     return {
       data: [],
@@ -35,9 +30,6 @@ export async function listAdmins(orgId) {
     };
   }
 
-  // Consultamos únicamente columnas que EXISTEN en user_roles_view:
-  //   - user_id
-  //   - role_name
   const { data, error } = await supabase
     .from("user_roles_view")
     .select(
@@ -52,12 +44,9 @@ export async function listAdmins(orgId) {
     return { data: null, error };
   }
 
-  // Normalizamos la respuesta a un formato que la UI pueda consumir
-  // sin romper, aunque falte email, nombre, fechas, etc.
   const normalized =
     (data || []).map((row) => ({
       user_id: row.user_id,
-      // org_id lo igualamos al orgId actual para poder usarlo como key o mostrarlo si hace falta
       org_id: orgId,
       org_name: null,
       email: null,
@@ -70,19 +59,40 @@ export async function listAdmins(orgId) {
 }
 
 /**
- * PLACEHOLDER: Invitar administrador.
+ * Crea una invitación para un nuevo administrador.
  *
- * Diseño futuro:
- *  - Crear membership en org_members con role = 'admin'
- *  - Enviar magic link al email
+ * Inserta en public.org_invites.
+ * La lógica de envío del Magic Link se hace en el frontend
+ * (AdminsPage.jsx) usando supabase.auth.signInWithOtp.
+ *
+ * @param {string} orgId
+ * @param {{ email: string, role: string, invitedBy: string }} payload
+ * @returns {Promise<{data: any[] | null, error: any}>}
  */
-export async function inviteAdmin(_orgId, _payload) {
-  return {
-    data: null,
-    error: new Error(
-      "Invitación de administradores aún en construcción. (inviteAdmin)"
-    ),
-  };
+export async function inviteAdmin(orgId, payload) {
+  const { email, role, invitedBy } = payload || {};
+
+  if (!orgId) {
+    return { data: null, error: new Error("OrgId requerido") };
+  }
+  if (!email) {
+    return { data: null, error: new Error("Email requerido") };
+  }
+  if (!role) {
+    return { data: null, error: new Error("Rol requerido") };
+  }
+
+  const { data, error } = await supabase
+    .from("org_invites")
+    .insert({
+      org_id: orgId,
+      email,
+      role,
+      invited_by: invitedBy,
+    })
+    .select();
+
+  return { data, error };
 }
 
 /**

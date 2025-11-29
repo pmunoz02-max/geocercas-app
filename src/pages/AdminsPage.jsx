@@ -2,10 +2,11 @@
 // Página de administración de propietarios y administradores.
 // Solo visible para el OWNER de la organización actual.
 //
-// Esta versión está alineada con la API actual de adminsApi.js,
-// que lee los datos desde user_roles_view (user_id + role_name).
-// Algunos campos como email, nombre u organización pueden venir
-// como null; la UI hace fallbacks seguros para no romper.
+// Esta versión:
+//  - Lista admins leyendo user_roles_view (owner/admin).
+//  - Permite registrar invitaciones en org_invites.
+//  - Envía un Magic Link real al correo invitado con signInWithOtp.
+//  - Aún NO crea la membresía automática (Paso 2).
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -15,6 +16,7 @@ import {
   updateAdmin,
   deleteAdmin,
 } from "../lib/adminsApi";
+import { supabase } from "../supabaseClient";
 
 export default function AdminsPage() {
   const { currentOrg, isOwner, user } = useAuth();
@@ -76,12 +78,14 @@ export default function AdminsPage() {
     setLoading(false);
   };
 
-  // Invitación de admin (placeholder mientras inviteAdmin esté en construcción)
+  // Invitación de admin: inserta en org_invites + envía Magic Link real
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
     if (!currentOrg?.id) return;
 
-    if (!inviteEmail) {
+    const email = inviteEmail.trim();
+
+    if (!email) {
       setError("Ingresa un correo electrónico para invitar.");
       return;
     }
@@ -89,27 +93,47 @@ export default function AdminsPage() {
     setLoadingAction(true);
     setError(null);
 
-    const payload = {
-      email: inviteEmail.trim(),
+    // 1) Registrar invitación en org_invites
+    const { data, error: apiError } = await inviteAdmin(currentOrg.id, {
+      email,
       role: inviteRole,
-    };
-
-    const { data, error: apiError } = await inviteAdmin(currentOrg.id, payload);
+      invitedBy: user?.id,
+    });
 
     if (apiError) {
       console.error("[AdminsPage] inviteAdmin error:", apiError);
       setError(
         apiError.message ||
-          "Función de invitación de administradores aún en construcción."
+          "No se pudo registrar la invitación. Revisa los permisos del owner."
       );
-    } else {
-      // En un futuro, cuando inviteAdmin funcione:
-      // - podríamos hacer refresh de la lista automáticamente
-      // - y limpiar el formulario
-      setInviteEmail("");
-      await handleRefresh();
+      setLoadingAction(false);
+      return;
     }
 
+    // 2) Enviar Magic Link real al correo invitado
+    const redirectUrl = `${window.location.origin}/auth/callback`;
+
+    const { error: magicError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectUrl,
+      },
+    });
+
+    if (magicError) {
+      console.error("[AdminsPage] Magic Link error:", magicError);
+      setError(
+        magicError.message ||
+          "La invitación se registró, pero hubo un problema al enviar el Magic Link."
+      );
+      setLoadingAction(false);
+      return;
+    }
+
+    // Si todo fue bien:
+    setInviteEmail("");
+    // En esta fase la invitación no cambia la lista de admins inmediatamente.
+    // Más adelante (Paso 2) cuando el invitado acepte, lo veremos reflejado.
     setLoadingAction(false);
   };
 
@@ -134,16 +158,12 @@ export default function AdminsPage() {
           "No se pudo eliminar al administrador (función en construcción)."
       );
     } else {
-      // Refrescamos la lista localmente
-      setAdmins((prev) =>
-        prev.filter((a) => a.user_id !== admin.user_id)
-      );
+      setAdmins((prev) => prev.filter((a) => a.user_id !== admin.user_id));
     }
 
     setLoadingAction(false);
   };
 
-  // Placeholder de edición (aún no implementado a nivel de API)
   const handleEdit = async (admin) => {
     console.log("[AdminsPage] editar admin (pendiente de implementación)", admin);
     setError(
@@ -192,8 +212,8 @@ export default function AdminsPage() {
         </h2>
         <p className="text-xs text-slate-500 mb-3">
           Ingresa el correo electrónico de la persona a la que quieres invitar
-          como administradora de esta organización. Por ahora esta función está
-          en construcción; el backend aún no crea la invitación real.
+          como administradora de esta organización. Se enviará un Magic Link
+          real al email utilizando Supabase Auth.
         </p>
 
         <form
@@ -223,7 +243,6 @@ export default function AdminsPage() {
               onChange={(e) => setInviteRole(e.target.value)}
             >
               <option value="admin">Admin</option>
-              {/* En el futuro podríamos permitir más roles */}
             </select>
           </div>
 
@@ -237,9 +256,10 @@ export default function AdminsPage() {
         </form>
 
         <p className="mt-2 text-xs text-amber-600">
-          Nota: la lógica de envío de Magic Link y creación de la membresía
-          aún está en desarrollo. Usa este módulo principalmente para revisar
-          quiénes tienen rol de owner/admin.
+          Nota: la lógica de creación automática de la membresía (agregar a la
+          organización con rol admin) se implementará en el siguiente paso. Por
+          ahora, usa este módulo principalmente para revisar quiénes tienen rol
+          de owner/admin y para enviar invitaciones reales por correo.
         </p>
       </section>
 
@@ -304,7 +324,7 @@ export default function AdminsPage() {
                   const role =
                     adm.role ||
                     adm.role_name ||
-                    ""; // por si en el futuro viene como role_name
+                    "";
                   const roleLabel =
                     role === "owner"
                       ? "Owner"
@@ -370,3 +390,4 @@ export default function AdminsPage() {
     </div>
   );
 }
+
