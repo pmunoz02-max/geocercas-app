@@ -4,8 +4,6 @@ import {
   Routes,
   Route,
   Navigate,
-  NavLink,
-  useLocation,
 } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
@@ -16,7 +14,7 @@ import AppHeader from "./components/AppHeader.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx"; // ⬅️ CAMBIO AQUÍ
+import GeocercasPage from "./pages/GeocercasPage.jsx";
 
 // Actividades + Reportes (antes Costos)
 import ActividadesPage from "./pages/ActividadesPage.jsx";
@@ -28,8 +26,9 @@ import AdminsPage from "./pages/AdminsPage.jsx";
 // Tracker
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
-// Páginas de invitación / auth
-import InvitarTrackerPage from "./pages/InvitarTrackerPage.jsx";
+// 🔁 IMPORT CORRECTO: este archivo SÍ existe en tu repo
+import InvitarTracker from "./pages/InvitarTracker.jsx";
+
 import Login from "./pages/Login.jsx";
 import AuthCallback from "./pages/AuthCallback.jsx";
 import Inicio from "./pages/Inicio.jsx";
@@ -41,7 +40,6 @@ import { useAuth } from "./context/AuthContext.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
 function Shell({ children }) {
-  const location = useLocation();
   const { currentRole } = useAuth();
 
   const role = currentRole || "tracker";
@@ -57,7 +55,6 @@ function Shell({ children }) {
     { path: "/invitar-tracker", label: "Invitar tracker" },
   ];
 
-  // Solo OWNER ve Admins
   if (role === "owner") {
     tabs.push({ path: "/admins", label: "Admins" });
   }
@@ -204,7 +201,7 @@ export default function App() {
           element={
             <AuthGuard>
               <Shell>
-                <InvitarTrackerPage />
+                <InvitarTracker />
               </Shell>
             </AuthGuard>
           }
