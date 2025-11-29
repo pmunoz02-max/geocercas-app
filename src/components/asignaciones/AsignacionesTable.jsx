@@ -2,6 +2,30 @@
 
 /* eslint-disable react/prop-types */
 
+// Helper para formatear fechas en HORA LOCAL del navegador
+function formatDateTimeLocal(value) {
+  if (!value) return "";
+
+  try {
+    const d = new Date(value);
+
+    // Si la fecha no es válida, devolvemos el valor original
+    if (isNaN(d.getTime())) return String(value);
+
+    // toLocaleString respeta la zona horaria del navegador
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    // fallback defensivo
+    return String(value);
+  }
+}
+
 export default function AsignacionesTable({
   asignaciones,
   loading,
@@ -63,12 +87,9 @@ export default function AsignacionesTable({
                   ? Math.round(row.frecuencia_envio_sec / 60)
                   : "";
 
-                const inicio = row.start_time
-                  ? new Date(row.start_time).toLocaleString()
-                  : "";
-                const fin = row.end_time
-                  ? new Date(row.end_time).toLocaleString()
-                  : "";
+                // 🚩 Aquí garantizamos que se use SIEMPRE la hora local del navegador
+                const inicio = formatDateTimeLocal(row.start_time);
+                const fin = formatDateTimeLocal(row.end_time);
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
