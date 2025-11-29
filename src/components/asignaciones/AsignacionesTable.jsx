@@ -129,7 +129,7 @@ export default function AsignacionesTable({
                           <button
                             type="button"
                             onClick={() => onEdit(row)}
-                            className="px-2 py-1 text-xs rounded border border-blue-500 text-blue-600 hover:bg-blue-50"
+                            className="px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1"
                           >
                             Editar
                           </button>
@@ -138,7 +138,7 @@ export default function AsignacionesTable({
                           <button
                             type="button"
                             onClick={() => onDelete(row.id)}
-                            className="px-2 py-1 text-xs rounded border border-red-500 text-red-600 hover:bg-red-50"
+                            className="px-3 py-1 text-xs font-semibold rounded-md border border-red-400 bg-red-50 text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
                           >
                             Eliminar
                           </button>
