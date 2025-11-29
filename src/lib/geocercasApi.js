@@ -1,7 +1,7 @@
 // src/lib/geocercasApi.js
 // API oficial de geocercas para toda la app (Asignaciones, etc.)
 
-import supabase from '../supabaseClient';
+import { supabase } from "../supabaseClient";
 
 // Pequeño helper común
 function normalizeError(ctx, error) {
@@ -24,26 +24,26 @@ export async function listGeocercas({ orgId, onlyActive = true } = {}) {
   try {
     // Si aún no hay organización seleccionada, devolvemos vacío
     if (!orgId) {
-      console.warn('[geocercasApi] listGeocercas llamado sin orgId → []');
+      console.warn("[geocercasApi] listGeocercas llamado sin orgId → []");
       return [];
     }
 
     let query = supabase
-      .from('geocercas')
-      .select('id, nombre, org_id, activo')
-      .eq('org_id', orgId)
-      .order('nombre', { ascending: true });
+      .from("geocercas")
+      .select("id, nombre, org_id, activo")
+      .eq("org_id", orgId)
+      .order("nombre", { ascending: true });
 
     if (onlyActive) {
-      query = query.eq('activo', true);
+      query = query.eq("activo", true);
     }
 
     const { data, error } = await query;
 
-    if (error) throw normalizeError('listGeocercas', error);
+    if (error) throw normalizeError("listGeocercas", error);
     return data || [];
   } catch (e) {
-    console.error('[geocercasApi] listGeocercas ERROR:', e);
+    console.error("[geocercasApi] listGeocercas ERROR:", e);
     throw e;
   }
 }
@@ -58,25 +58,25 @@ export async function listGeocercas({ orgId, onlyActive = true } = {}) {
 export async function getGeocerca({ id, orgId }) {
   try {
     if (!orgId) {
-      console.warn('[geocercasApi] getGeocerca llamado sin orgId → null');
+      console.warn("[geocercasApi] getGeocerca llamado sin orgId → null");
       return null;
     }
     if (!id) {
-      console.warn('[geocercasApi] getGeocerca llamado sin id → null');
+      console.warn("[geocercasApi] getGeocerca llamado sin id → null");
       return null;
     }
 
     const { data, error } = await supabase
-      .from('geocercas')
-      .select('*')
-      .eq('id', id)
-      .eq('org_id', orgId)
+      .from("geocercas")
+      .select("*")
+      .eq("id", id)
+      .eq("org_id", orgId)
       .single();
 
-    if (error) throw normalizeError('getGeocerca', error);
+    if (error) throw normalizeError("getGeocerca", error);
     return data;
   } catch (e) {
-    console.error('[geocercasApi] getGeocerca ERROR:', e);
+    console.error("[geocercasApi] getGeocerca ERROR:", e);
     throw e;
   }
 }
@@ -93,7 +93,7 @@ export async function createGeocerca(payload) {
   try {
     const { orgId, ...rest } = payload || {};
     if (!orgId) {
-      throw new Error('createGeocerca requiere orgId');
+      throw new Error("createGeocerca requiere orgId");
     }
 
     const insert = {
@@ -102,15 +102,15 @@ export async function createGeocerca(payload) {
     };
 
     const { data, error } = await supabase
-      .from('geocercas')
+      .from("geocercas")
       .insert(insert)
-      .select('*')
+      .select("*")
       .single();
 
-    if (error) throw normalizeError('createGeocerca', error);
+    if (error) throw normalizeError("createGeocerca", error);
     return data;
   } catch (e) {
-    console.error('[geocercasApi] createGeocerca ERROR:', e);
+    console.error("[geocercasApi] createGeocerca ERROR:", e);
     throw e;
   }
 }
@@ -126,26 +126,26 @@ export async function createGeocerca(payload) {
 export async function updateGeocerca({ id, orgId, changes }) {
   try {
     if (!orgId) {
-      throw new Error('updateGeocerca requiere orgId');
+      throw new Error("updateGeocerca requiere orgId");
     }
     if (!id) {
-      throw new Error('updateGeocerca requiere id');
+      throw new Error("updateGeocerca requiere id");
     }
 
     const { data, error } = await supabase
-      .from('geocercas')
+      .from("geocercas")
       .update({
         ...changes,
       })
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select('*')
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .select("*")
       .single();
 
-    if (error) throw normalizeError('updateGeocerca', error);
+    if (error) throw normalizeError("updateGeocerca", error);
     return data;
   } catch (e) {
-    console.error('[geocercasApi] updateGeocerca ERROR:', e);
+    console.error("[geocercasApi] updateGeocerca ERROR:", e);
     throw e;
   }
 }
@@ -157,22 +157,22 @@ export async function updateGeocerca({ id, orgId, changes }) {
 export async function deleteGeocerca({ id, orgId }) {
   try {
     if (!orgId) {
-      throw new Error('deleteGeocerca requiere orgId');
+      throw new Error("deleteGeocerca requiere orgId");
     }
     if (!id) {
-      throw new Error('deleteGeocerca requiere id');
+      throw new Error("deleteGeocerca requiere id");
     }
 
     const { error } = await supabase
-      .from('geocercas')
+      .from("geocercas")
       .delete()
-      .eq('id', id)
-      .eq('org_id', orgId);
+      .eq("id", id)
+      .eq("org_id", orgId);
 
-    if (error) throw normalizeError('deleteGeocerca', error);
+    if (error) throw normalizeError("deleteGeocerca", error);
     return true;
   } catch (e) {
-    console.error('[geocercasApi] deleteGeocerca ERROR:', e);
+    console.error("[geocercasApi] deleteGeocerca ERROR:", e);
     throw e;
   }
 }
@@ -183,24 +183,24 @@ export async function deleteGeocerca({ id, orgId }) {
 export async function setGeocercaActiva({ id, orgId, activa }) {
   try {
     if (!orgId) {
-      throw new Error('setGeocercaActiva requiere orgId');
+      throw new Error("setGeocercaActiva requiere orgId");
     }
     if (!id) {
-      throw new Error('setGeocercaActiva requiere id');
+      throw new Error("setGeocercaActiva requiere id");
     }
 
     const { data, error } = await supabase
-      .from('geocercas')
+      .from("geocercas")
       .update({ activo: !!activa })
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select('id, activo')
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .select("id, activo")
       .single();
 
-    if (error) throw normalizeError('setGeocercaActiva', error);
+    if (error) throw normalizeError("setGeocercaActiva", error);
     return data;
   } catch (e) {
-    console.error('[geocercasApi] setGeocercaActiva ERROR:', e);
+    console.error("[geocercasApi] setGeocercaActiva ERROR:", e);
     throw e;
   }
 }
