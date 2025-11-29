@@ -5,7 +5,7 @@
 // - Carga de organizaciones y roles desde user_organizations
 // - Perfil mínimo desde v_app_profiles
 // - Persistencia de organización actual en localStorage
-// - Aceptación de invitaciones (org_invites) hecha en JS (sin RPC)
+// - Aceptación de invitaciones (org_invites) hecha en JS, usando SELECT + INSERT
 
 import React, {
   createContext,
@@ -48,12 +48,13 @@ function storeOrgId(orgId) {
  * Pasos:
  *  1) Busca en org_invites una invitación con status = 'pending'
  *     para el email del usuario.
- *  2) Si existe, inserta en user_organizations (org_id, user_id, role).
- *  3) Marca la invitación como 'accepted'.
+ *  2) Si existe, mira si ya hay fila en user_organizations (org_id, user_id).
+ *  3) Si NO hay fila, hace INSERT normal (sin on_conflict).
+ *  4) Marca la invitación como 'accepted'.
  *
  * NOTA: Esta función depende de que:
- *  - org_invites NO tenga RLS (o permita ver/actualizar).
- *  - user_organizations permita INSERT donde user_id = auth.uid().
+ *  - org_invites NO tenga RLS (o permita ver/actualizar) mientras desarrollamos.
+ *  - user_organizations permita SELECT/INSERT donde user_id = auth.uid().
  */
 async function acceptInviteIfAny(user) {
   if (!user?.email || !user.id) return;
@@ -79,32 +80,49 @@ async function acceptInviteIfAny(user) {
       return;
     }
 
-    // 2) Insertar/actualizar membresía en user_organizations
     const roleUpper = (invite.role || "admin").toUpperCase();
 
-    const { error: insErr } = await supabase
+    // 2) Ver si ya existe membresía en user_organizations
+    const { data: existingRows, error: existErr } = await supabase
       .from("user_organizations")
-      .upsert(
-        {
-          org_id: invite.org_id,
-          user_id: user.id,
-          role: roleUpper,
-        },
-        {
-          onConflict: "org_id,user_id",
-        }
-      );
+      .select("org_id, user_id")
+      .eq("org_id", invite.org_id)
+      .eq("user_id", user.id)
+      .limit(1);
 
-    if (insErr) {
+    if (existErr) {
       console.error(
-        "[AuthContext] user_organizations upsert error:",
-        insErr
+        "[AuthContext] user_organizations select error:",
+        existErr
       );
-      // Si falla la membresía, no marcamos la invitación como aceptada
+      // Si no podemos leer, no seguimos con insert para no generar caos
       return;
     }
 
-    // 3) Marcar invitación como aceptada
+    const alreadyMember =
+      Array.isArray(existingRows) && existingRows.length > 0;
+
+    // 3) Si no es miembro todavía, insertar fila nueva
+    if (!alreadyMember) {
+      const { error: insErr } = await supabase
+        .from("user_organizations")
+        .insert({
+          org_id: invite.org_id,
+          user_id: user.id,
+          role: roleUpper,
+        });
+
+      if (insErr) {
+        console.error(
+          "[AuthContext] user_organizations insert error:",
+          insErr
+        );
+        // Si falla la membresía, no marcamos la invitación como aceptada
+        return;
+      }
+    }
+
+    // 4) Marcar invitación como aceptada
     const { error: updErr } = await supabase
       .from("org_invites")
       .update({
