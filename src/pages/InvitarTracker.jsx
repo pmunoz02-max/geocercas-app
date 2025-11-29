@@ -1,6 +1,7 @@
 // src/pages/InvitarTracker.jsx
 import React, { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/supabaseClient";
 
 export default function InvitarTracker() {
   const { currentOrg } = useAuth();
@@ -9,6 +10,7 @@ export default function InvitarTracker() {
   const [message, setMessage] = useState(null);
 
   const orgName = currentOrg?.name || "tu organización";
+  const orgId = currentOrg?.id || null;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -19,22 +21,61 @@ export default function InvitarTracker() {
       return;
     }
 
+    if (!orgId) {
+      setMessage({
+        type: "error",
+        text:
+          "No se pudo determinar la organización actual. " +
+          "Verifica que tengas una organización activa o contacta al administrador.",
+      });
+      return;
+    }
+
     try {
       setSending(true);
 
-      // 🔧 Aquí más adelante conectaremos con tu Edge Function / API real
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      const { data, error } = await supabase.functions.invoke(
+        "invite_tracker",
+        {
+          body: {
+            email: email.trim(),
+            org_id: orgId,
+          },
+        }
+      );
+
+      if (error) {
+        console.error("[InvitarTracker] Edge error:", error);
+        setMessage({
+          type: "error",
+          text:
+            error.message ||
+            "Hubo un problema al enviar la invitación. Intenta de nuevo.",
+        });
+        return;
+      }
+
+      if (!data?.ok) {
+        const errText =
+          data?.error ||
+          "No se pudo completar la invitación. Revisa los datos e intenta nuevamente.";
+        setMessage({
+          type: "error",
+          text: errText,
+        });
+        return;
+      }
 
       setMessage({
         type: "success",
-        text: `Invitación simulada enviada a ${email}. Luego conectaremos este formulario con la API real.`,
+        text: `Invitación enviada a ${data.email || email}. Pídeles que revisen su correo para abrir el Magic Link.`,
       });
       setEmail("");
     } catch (err) {
-      console.error(err);
+      console.error("[InvitarTracker] exception:", err);
       setMessage({
         type: "error",
-        text: "Hubo un problema al enviar la invitación.",
+        text: "Hubo un problema de red al enviar la invitación.",
       });
     } finally {
       setSending(false);
@@ -69,8 +110,8 @@ export default function InvitarTracker() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <p className="mt-1 text-[11px] text-slate-500">
-            Más adelante conectaremos este formulario con el envío real de
-            invitaciones (magic link / signup).
+            Se enviará un Magic Link a este correo para que se conecte como
+            tracker a tu organización.
           </p>
         </div>
 
