@@ -11,7 +11,7 @@ function normalizeSearch(q) {
 }
 
 /**
- * Lista asignaciones usando la vista v_asignaciones_ui.
+ * Lista asignaciones usando una vista de UI (si la sigues usando en otros lados).
  * Se mantiene para compatibilidad con código legacy.
  */
 export async function listAsignaciones(filters = {}) {
@@ -58,30 +58,11 @@ export async function listAsignaciones(filters = {}) {
 }
 
 /**
- * Obtiene asignaciones desde la tabla base public.asignaciones
- * para la organización del usuario actual, con joins a personal / geocerca / activity.
- * Esta es la función que usa AsignacionesPage.jsx.
+ * Obtiene asignaciones desde la tabla base public.asignaciones.
+ * Dejamos que RLS filtre por org_id; aquí solo pedimos las activas (is_deleted = false)
+ * y agregamos joins a personal / geocerca / activity para mostrar nombres en la UI.
  */
 export async function getAsignaciones() {
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession();
-
-  if (sessionError) {
-    console.error("[getAsignaciones] Error sesión:", sessionError);
-    return { data: null, error: sessionError };
-  }
-
-  const user = sessionData?.session?.user;
-  if (!user) {
-    return { data: [], error: null };
-  }
-
-  const orgId = user.user_metadata?.org_id;
-  if (!orgId) {
-    console.warn("[getAsignaciones] Usuario sin org_id en metadata");
-    return { data: [], error: null };
-  }
-
   const { data, error } = await supabase
     .from("asignaciones")
     .select(
@@ -108,11 +89,11 @@ export async function getAsignaciones() {
       ),
       activity:activity_id (
         id,
+        name,
         nombre
       )
     `
     )
-    .eq("org_id", orgId)
     .eq("is_deleted", false)
     .order("start_time", { ascending: true });
 
@@ -168,7 +149,6 @@ export async function updateAsignacion(id, patch) {
 
 /**
  * Soft delete de una asignación (is_deleted = true).
- * Se mantiene como helper general.
  */
 export async function softDeleteAsignacion(id) {
   if (!id) {
@@ -189,7 +169,6 @@ export async function softDeleteAsignacion(id) {
 
 /**
  * deleteAsignacion: wrapper usado por AsignacionesPage.jsx
- * Devuelve { error }.
  */
 export async function deleteAsignacion(id) {
   return softDeleteAsignacion(id);

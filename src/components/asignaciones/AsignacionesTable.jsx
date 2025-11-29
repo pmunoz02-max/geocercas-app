@@ -72,6 +72,7 @@ export default function AsignacionesTable({
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
+                    {/* Persona */}
                     <td className="px-4 py-2 whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className="font-medium text-gray-800">
@@ -87,22 +88,28 @@ export default function AsignacionesTable({
                       </div>
                     </td>
 
+                    {/* Geocerca */}
                     <td className="px-4 py-2 whitespace-nowrap">
                       {geocercaNombre || "—"}
                     </td>
 
+                    {/* Actividad */}
                     <td className="px-4 py-2 whitespace-nowrap">
                       {activityNombre || "—"}
                     </td>
 
+                    {/* Inicio */}
                     <td className="px-4 py-2 whitespace-nowrap">{inicio}</td>
 
+                    {/* Fin */}
                     <td className="px-4 py-2 whitespace-nowrap">{fin}</td>
 
+                    {/* Frecuencia (min) */}
                     <td className="px-4 py-2 whitespace-nowrap text-center">
                       {freqMin || "—"}
                     </td>
 
+                    {/* Estado */}
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span
                         className={
@@ -115,6 +122,7 @@ export default function AsignacionesTable({
                       </span>
                     </td>
 
+                    {/* Acciones */}
                     <td className="px-4 py-2 whitespace-nowrap text-right">
                       <div className="inline-flex gap-2">
                         {onEdit && (
