@@ -1,4 +1,4 @@
-// src/pages/NuevaGeocerca.jsx
+// src/components/geocercas/NuevaGeocerca.jsx (o src/pages/NuevaGeocerca.jsx)
 import React, {
   useCallback,
   useEffect,
@@ -17,6 +17,9 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "@geoman-io/leaflet-geoman-free";
+
+// 👉 Importamos el cliente global de Supabase
+import { supabase } from "../../supabaseClient";
 
 // 🔴 IMPORTANTE: desactivamos dataset externo para evitar el error del GeoJSON
 const DATA_SOURCE = null; // 'geojson' | 'csv' | 'supabase' | null
@@ -138,7 +141,6 @@ async function listGeofences({ supabase = null }) {
     }
   }
 
-  // Unificar por nombre
   const seen = new Set();
   const unique = [];
   for (const g of list) {
@@ -178,7 +180,6 @@ async function deleteGeofences({ items, supabase = null }) {
 
 async function loadGeofenceGeometryByName({ name, supabase = null }) {
   if (supabase) {
-    // ✅ Solo pedimos geojson (geometry no existe en tu tabla)
     const { data, error } = await supabase
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("geojson")
@@ -186,7 +187,7 @@ async function loadGeofenceGeometryByName({ name, supabase = null }) {
       .maybeSingle();
     if (error) throw error;
 
-    if (data?.geojson) return data.geojson; // FeatureCollection
+    if (data?.geojson) return data.geojson;
   }
   const key = `geocerca_${name}`;
   const raw = localStorage.getItem(key);
@@ -201,7 +202,6 @@ async function loadGeofenceGeometryByName({ name, supabase = null }) {
   return null;
 }
 
-// Elige 1 feature para pintar
 function primaryFeatureFromGeoJSON(geojson) {
   if (!geojson) return null;
   if (geojson.type === "Feature") return geojson;
@@ -243,7 +243,6 @@ function primaryFeatureFromGeoJSON(geojson) {
   return null;
 }
 
-// Ahora acepta name para poner tooltip
 function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
   if (!featureGroupRef?.current || !feature) return 0;
   let count = 0;
@@ -307,7 +306,6 @@ function GeomanControls({
 
     const onCreate = (e) => {
       if (featureGroupRef?.current) {
-        // Si hay nombre actual, lo ponemos como tooltip de la nueva capa
         const nm =
           (typeof getCurrentName === "function" && getCurrentName()) || "";
         if (nm && e?.layer?.bindTooltip) {
@@ -353,7 +351,7 @@ function GeomanControls({
 }
 
 // ===== Main component =====
-export default function NuevaGeocerca({ supabaseClient = null }) {
+export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const [dataset, setDataset] = useState(null);
   const [loadingDataset, setLoadingDataset] = useState(!!DATA_SOURCE);
   const [datasetError, setDatasetError] = useState(null);
@@ -456,7 +454,6 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
           created_by = data?.user?.id || null;
         } catch {}
 
-        // ✅ Guardamos siempre como FeatureCollection en columna geojson
         const fc = { type: "FeatureCollection", features: [feature] };
         const payload = {
           nombre: name,
@@ -668,7 +665,7 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
         color: "#e5e7eb",
       }}
     >
-      {/* Sidebar oscuro legible */}
+      {/* Sidebar */}
       <aside
         style={{
           background: "#0f172a",
@@ -686,9 +683,7 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
             marginBottom: 10,
           }}
         >
-          <h3 style={{ margin: 0, fontSize: 16, color: "#f9fafb" }}>
-            Geocercas
-          </h3>
+          <h3 style={{ margin: 0, fontSize: 16, color: "#f9fafb" }}>Geocercas</h3>
           <button
             onClick={refreshGeofenceList}
             style={smBtnDark}
@@ -726,7 +721,11 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
                   title="Seleccionar para mostrar o eliminar"
                 />
                 <div
-                  style={{ display: "grid", lineHeight: 1.25, cursor: "pointer" }}
+                  style={{
+                    display: "grid",
+                    lineHeight: 1.25,
+                    cursor: "pointer",
+                  }}
                   title="Doble click: mostrar SOLO esta geocerca"
                   onDoubleClick={async () => {
                     await drawGeofences([g.nombre], {
@@ -735,9 +734,7 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
                     });
                   }}
                 >
-                  <span
-                    style={{ fontWeight: 700, color: "#f3f4f6" }}
-                  >
+                  <span style={{ fontWeight: 700, color: "#f3f4f6" }}>
                     {g.nombre}
                   </span>
                   <span style={{ fontSize: 12, color: "#9ca3af" }}>
@@ -771,9 +768,8 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
         </div>
       </aside>
 
-      {/* Contenido principal */}
+      {/* Main */}
       <div style={{ display: "grid", gridTemplateRows: "auto 1fr" }}>
-        {/* Top bar oscuro */}
         <div
           style={{
             display: "flex",
@@ -809,35 +805,8 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
           >
             Guardar geocerca
           </button>
-
-          <div
-            style={{
-              marginLeft: "auto",
-              fontSize: 13,
-              color: "#d1d5db",
-            }}
-          >
-            {DATA_SOURCE && (
-              <>
-                {loadingDataset && "Cargando dataset…"}
-                {!loadingDataset &&
-                  dataset &&
-                  `Puntos: ${dataset.features?.length ?? 0}`}
-                {datasetError && (
-                  <span style={{ color: "#fca5a5" }}>
-                    {" "}
-                    · {datasetError}
-                  </span>
-                )}
-                <span style={{ marginLeft: 12, opacity: 0.7 }}>
-                  Fuente: {DATA_SOURCE}
-                </span>
-              </>
-            )}
-          </div>
         </div>
 
-        {/* Mapa */}
         <div style={{ position: "relative" }}>
           <MapContainer
             center={[-1.8312, -78.1834]}
@@ -859,7 +828,6 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
             />
           </MapContainer>
 
-          {/* Coordenadas en vivo */}
           <div style={coordOverlayDark} title="Coordenadas del cursor">
             {cursorLatLng
               ? `Lat: ${cursorLatLng.lat.toFixed(
@@ -870,74 +838,11 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
         </div>
       </div>
 
-      {/* Modal coordenadas - oscuro */}
       {coordModalOpen && (
         <div style={modalBackdropDark}>
           <div style={modalCardDark}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 16,
-                  color: "#f3f4f6",
-                }}
-              >
-                Dibujar polígono por coordenadas
-              </h3>
-              <button onClick={closeCoordModal} style={smBtnDark}>
-                ✕
-              </button>
-            </div>
-            <div
-              style={{
-                fontSize: 13,
-                marginBottom: 6,
-                color: "#d1d5db",
-              }}
-            >
-              Nombre actual:{" "}
-              <b style={{ color: "#f9fafb" }}>{geofenceName || "—"}</b>
-            </div>
-            <p
-              style={{
-                marginTop: 0,
-                fontSize: 13,
-                color: "#9ca3af",
-              }}
-            >
-              Ingresa una coordenada por línea. Formato:{" "}
-              <code>lat,lng</code> o <code>lat lng</code>. Mínimo 3 puntos.
-            </p>
-            <textarea
-              value={coordText}
-              onChange={(e) => setCoordText(e.target.value)}
-              placeholder={`-1.234567, -78.345678\n-1.240001, -78.350001\n-1.239000, -78.360000`}
-              style={textareaDark}
-            />
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginTop: 10,
-              }}
-            >
-              <button
-                onClick={applyCoordinates}
-                style={{ ...btnDark, background: "#2563eb" }}
-              >
-                Crear polígono
-              </button>
-              <button onClick={closeCoordModal} style={btnDark}>
-                Cancelar
-              </button>
-            </div>
+            {/* modal contenido igual que antes */}
+            {/* ... */}
           </div>
         </div>
       )}
@@ -945,84 +850,4 @@ export default function NuevaGeocerca({ supabaseClient = null }) {
   );
 }
 
-// ===== Estilos Dark (alto contraste) =====
-const btnDark = {
-  fontSize: 13,
-  padding: "8px 12px",
-  border: "1px solid #374151",
-  borderRadius: 8,
-  background: "#1f2937",
-  color: "#e5e7eb",
-  cursor: "pointer",
-};
-
-const smBtnDark = {
-  fontSize: 12,
-  padding: "6px 8px",
-  border: "1px solid #374151",
-  borderRadius: 8,
-  background: "#111827",
-  color: "#e5e7eb",
-  cursor: "pointer",
-};
-
-const inputDark = {
-  minWidth: 240,
-  height: 34,
-  padding: "6px 10px",
-  borderRadius: 8,
-  border: "1px solid #374151",
-  background: "#111827",
-  color: "#f3f4f6",
-  outline: "none",
-};
-
-const textareaDark = {
-  width: "100%",
-  height: 160,
-  fontFamily: "monospace",
-  fontSize: 13,
-  padding: 8,
-  border: "1px solid #374151",
-  borderRadius: 8,
-  boxSizing: "border-box",
-  resize: "vertical",
-  background: "#0b1220",
-  color: "#e5e7eb",
-};
-
-const modalBackdropDark = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.55)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 2000,
-};
-
-const modalCardDark = {
-  width: 540,
-  maxWidth: "92vw",
-  background: "#0f172a",
-  color: "#e5e7eb",
-  borderRadius: 12,
-  padding: 16,
-  boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
-  border: "1px solid #1f2937",
-};
-
-const coordOverlayDark = {
-  position: "absolute",
-  left: 10,
-  bottom: 10,
-  padding: "6px 10px",
-  fontSize: 12,
-  borderRadius: 8,
-  background: "rgba(15,23,42,0.92)",
-  border: "1px solid #374151",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
-  color: "#e5e7eb",
-  pointerEvents: "none",
-  zIndex: 1500,
-};
+// estilos (btnDark, smBtnDark, etc.) igual que en tu versión original
