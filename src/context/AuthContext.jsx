@@ -6,6 +6,7 @@
 // - Perfil mínimo desde v_app_profiles
 // - Persistencia de organización actual en localStorage
 // - Aceptación de invitaciones (org_invites) hecha en JS, usando SELECT + INSERT
+// - Sincronización de profiles.active_tenant_id con currentOrg
 
 import React, {
   createContext,
@@ -51,21 +52,16 @@ function storeOrgId(orgId) {
  *  2) Si existe, mira si ya hay fila en user_organizations (org_id, user_id).
  *  3) Si NO hay fila, hace INSERT normal (sin on_conflict).
  *  4) Marca la invitación como 'accepted'.
- *
- * NOTA: Esta función depende de que:
- *  - org_invites NO tenga RLS (o permita ver/actualizar) mientras desarrollamos.
- *  - user_organizations permita SELECT/INSERT donde user_id = auth.uid().
  */
 async function acceptInviteIfAny(user) {
   if (!user?.email || !user.id) return;
 
   try {
-    // 1) Buscar invitación pendiente más reciente para ese email
     const { data: invites, error: invitesErr } = await supabase
       .from("org_invites")
       .select("*")
       .eq("status", "pending")
-      .ilike("email", user.email) // case-insensitive
+      .ilike("email", user.email)
       .order("created_at", { ascending: false })
       .limit(1);
 
@@ -76,13 +72,11 @@ async function acceptInviteIfAny(user) {
 
     const invite = invites && invites[0];
     if (!invite) {
-      // No hay invitaciones pendientes para este email
       return;
     }
 
     const roleUpper = (invite.role || "admin").toUpperCase();
 
-    // 2) Ver si ya existe membresía en user_organizations
     const { data: existingRows, error: existErr } = await supabase
       .from("user_organizations")
       .select("org_id, user_id")
@@ -91,18 +85,13 @@ async function acceptInviteIfAny(user) {
       .limit(1);
 
     if (existErr) {
-      console.error(
-        "[AuthContext] user_organizations select error:",
-        existErr
-      );
-      // Si no podemos leer, no seguimos con insert para no generar caos
+      console.error("[AuthContext] user_organizations select error:", existErr);
       return;
     }
 
     const alreadyMember =
       Array.isArray(existingRows) && existingRows.length > 0;
 
-    // 3) Si no es miembro todavía, insertar fila nueva
     if (!alreadyMember) {
       const { error: insErr } = await supabase
         .from("user_organizations")
@@ -113,16 +102,11 @@ async function acceptInviteIfAny(user) {
         });
 
       if (insErr) {
-        console.error(
-          "[AuthContext] user_organizations insert error:",
-          insErr
-        );
-        // Si falla la membresía, no marcamos la invitación como aceptada
+        console.error("[AuthContext] user_organizations insert error:", insErr);
         return;
       }
     }
 
-    // 4) Marcar invitación como aceptada
     const { error: updErr } = await supabase
       .from("org_invites")
       .update({
@@ -217,9 +201,7 @@ export function AuthProvider({ children }) {
     async function loadUserData() {
       setLoading(true);
       try {
-        // -------------------------------------------------------------------
-        // 0) Aceptar invitación si existe (org_invites → user_organizations)
-        // -------------------------------------------------------------------
+        // 0) Aceptar invitación si existe
         try {
           await acceptInviteIfAny(user);
         } catch (e) {
@@ -229,9 +211,7 @@ export function AuthProvider({ children }) {
           );
         }
 
-        // -------------------------------------------------------------------
-        // 1) Perfil mínimo desde v_app_profiles (por email)
-        // -------------------------------------------------------------------
+        // 1) Perfil mínimo desde v_app_profiles
         try {
           const { data: profiles, error: profErr } = await supabase
             .from("v_app_profiles")
@@ -252,10 +232,7 @@ export function AuthProvider({ children }) {
           }
         }
 
-        // -------------------------------------------------------------------
         // 2) Organizaciones + rol desde user_organizations
-        //     (ya debería incluir la org de la invitación aceptada)
-        // -------------------------------------------------------------------
         let orgLinks = [];
         try {
           const { data: links, error: linksErr } = await supabase
@@ -301,9 +278,7 @@ export function AuthProvider({ children }) {
         if (!cancelled) {
           setOrganizations(orgs);
 
-          // -----------------------------------------------------------------
           // 3) Restaurar o elegir organización actual
-          // -----------------------------------------------------------------
           const storedOrgId = loadStoredOrgId();
           let initialOrg = null;
 
@@ -312,7 +287,6 @@ export function AuthProvider({ children }) {
           }
 
           if (!initialOrg && orgs.length > 0) {
-            // Preferimos OWNER > ADMIN > cualquiera
             initialOrg =
               orgs.find((o) => o.role === "OWNER") ||
               orgs.find((o) => o.role === "ADMIN") ||
@@ -343,7 +317,6 @@ export function AuthProvider({ children }) {
   if (currentOrg?.role) {
     normalizedRole = String(currentOrg.role).toLowerCase();
   } else if (profile?.role) {
-    // fallback: rol del perfil si existiera
     normalizedRole = String(profile.role).toLowerCase();
   }
 
@@ -358,6 +331,36 @@ export function AuthProvider({ children }) {
     setCurrentOrgState(org);
     storeOrgId(org?.id || null);
   };
+
+  // ---------------------------------------------------------------------------
+  // Sincronizar profiles.active_tenant_id con currentOrg
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const activeOrgId = currentOrg?.id || null;
+
+    (async () => {
+      try {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ active_tenant_id: activeOrgId })
+          .eq("user_id", user.id);
+
+        if (error) {
+          console.error(
+            "[AuthContext] Error actualizando profiles.active_tenant_id:",
+            error
+          );
+        }
+      } catch (e) {
+        console.error(
+          "[AuthContext] Excepción actualizando active_tenant_id:",
+          e
+        );
+      }
+    })();
+  }, [user?.id, currentOrg?.id]);
 
   const value = {
     // Sesión Supabase

@@ -33,6 +33,7 @@ export default function InvitarTracker() {
           email: trimmedEmail,
           role_name: "tracker",
           full_name: null,
+          org_id: currentOrg?.id ?? null,
         },
       });
 
@@ -62,15 +63,13 @@ export default function InvitarTracker() {
       const mode = data.mode;
 
       if (mode === "invited") {
-        // Usuario nuevo invitado
         setMessage({
           type: "success",
           text: `Invitación enviada a ${
             data.email || trimmedEmail
-          } como tracker. Pídeles que revisen su correo para abrir el link de invitación.`,
+          } como tracker en ${orgName}. Pídeles que revisen su correo para abrir el link de invitación.`,
         });
       } else if (mode === "magiclink_sent") {
-        // Usuario ya existía → se le envía Magic Link
         setMessage({
           type: "success",
           text: `El usuario ya estaba registrado. Se envió un Magic Link de acceso a ${
@@ -158,9 +157,7 @@ export default function InvitarTracker() {
         {message && (
           <div
             className={`mt-2 text-sm ${
-              message.type === "success"
-                ? "text-emerald-700"
-                : "text-red-600"
+              message.type === "success" ? "text-emerald-700" : "text-red-600"
             }`}
           >
             {message.text}

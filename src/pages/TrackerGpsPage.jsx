@@ -30,31 +30,32 @@ export default function TrackerGpsPage() {
 
         if (!session) {
           if (!active) return;
-          // Sin sesión → vete directo a login, sin mostrar pantalla rara
+          // Sin sesión → vete directo a login
           navigate("/login", { replace: true });
           return;
         }
 
         const { data: rows, error: roleErr } = await supabase
           .from("user_roles_view")
-          .select("role_name")
-          .limit(1);
+          .select("role_name");
 
         if (roleErr) {
           console.warn("[TrackerGps] error user_roles_view:", roleErr);
         }
 
-        const role =
-          rows && rows.length > 0
-            ? String(rows[0].role_name || "").toLowerCase()
-            : "";
+        const hasTrackerRole =
+          Array.isArray(rows) &&
+          rows.some(
+            (r) =>
+              String(r.role_name || "").trim().toLowerCase() === "tracker"
+          );
 
-        console.log("[TrackerGps] rol detectado:", role);
+        console.log("[TrackerGps] tiene rol tracker?:", hasTrackerRole);
 
         if (!active) return;
 
-        // 👇 SI NO ES TRACKER: lo mandamos directo al panel y NO mostramos nada
-        if (role !== "tracker") {
+        // 👇 SI NO ES TRACKER: lo mandamos directo al panel
+        if (!hasTrackerRole) {
           navigate("/inicio", { replace: true });
           return;
         }
@@ -151,7 +152,6 @@ export default function TrackerGpsPage() {
     };
   }, [phase]);
 
-  // Si NO es tracker o no hay sesión, ya habremos navegado a otra ruta → no se renderiza nada especial
   if (phase === "checking") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">

@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useEffect } from "react";
 import {
   BrowserRouter,
@@ -32,7 +33,7 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 
 // Auth
 import Login from "./pages/Login.tsx";
-import AuthCallback from "./pages/AuthCallback"; // ✅ apunta al .tsx
+import AuthCallback from "./pages/AuthCallback";
 
 // Dashboard interno
 import Inicio from "./pages/Inicio.jsx";
@@ -53,10 +54,21 @@ import TopTabs from "./components/TopTabs.jsx";
 // Layout interno (app)
 // ---------------------
 function Shell({ children }) {
-  const { currentRole } = useAuth();
+  const { currentRole, loading } = useAuth();
   const role = (currentRole || "").toLowerCase();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Mientras el AuthContext está cargando, no mostramos nada “real”
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+          Cargando tu sesión…
+        </div>
+      </div>
+    );
+  }
 
   // 🚧 BLOQUEO DURO:
   // Si el usuario es TRACKER y por cualquier motivo entró a una ruta interna
@@ -104,9 +116,7 @@ function Shell({ children }) {
       </div>
 
       {/* Contenido principal */}
-      <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
-        {children}
-      </main>
+      <main className="flex-1 p-4 max-w-6xl mx-auto w-full">{children}</main>
     </div>
   );
 }
