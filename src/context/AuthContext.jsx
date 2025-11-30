@@ -1,13 +1,4 @@
 // src/context/AuthContext.jsx
-// MODELO GLOBAL + MULTI-ORG + ROL DERIVADO DE user_organizations + v_app_profiles
-// Versión estable con:
-// - Autocarga de sesión Supabase
-// - Carga de organizaciones y roles desde user_organizations
-// - Perfil mínimo desde v_app_profiles
-// - Persistencia de organización actual en localStorage
-// - Aceptación de invitaciones (org_invites) hecha en JS, usando SELECT + INSERT
-// - Sincronización de profiles.active_tenant_id con currentOrg
-
 import React, {
   createContext,
   useContext,
@@ -18,7 +9,6 @@ import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
-// Clave para guardar la organización actual en localStorage
 const LS_CURRENT_ORG_ID_KEY = "app_geocercas_current_org_id";
 
 function loadStoredOrgId() {
@@ -43,16 +33,6 @@ function storeOrgId(orgId) {
   }
 }
 
-/**
- * Acepta una invitación pendiente (si existe) para el usuario actual.
- *
- * Pasos:
- *  1) Busca en org_invites una invitación con status = 'pending'
- *     para el email del usuario.
- *  2) Si existe, mira si ya hay fila en user_organizations (org_id, user_id).
- *  3) Si NO hay fila, hace INSERT normal (sin on_conflict).
- *  4) Marca la invitación como 'accepted'.
- */
 async function acceptInviteIfAny(user) {
   if (!user?.email || !user.id) return;
 
@@ -71,9 +51,7 @@ async function acceptInviteIfAny(user) {
     }
 
     const invite = invites && invites[0];
-    if (!invite) {
-      return;
-    }
+    if (!invite) return;
 
     const roleUpper = (invite.role || "admin").toUpperCase();
 
@@ -128,19 +106,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
 
   const [profile, setProfile] = useState(null);
-
-  // Lista de organizaciones del usuario: [{ id, name, slug, role }]
   const [organizations, setOrganizations] = useState([]);
-
-  // Organización actualmente seleccionada
   const [currentOrg, setCurrentOrgState] = useState(null);
-
-  // Estado de carga global
   const [loading, setLoading] = useState(true);
 
-  // ---------------------------------------------------------------------------
-  // Suscripción a cambios de sesión de Supabase
-  // ---------------------------------------------------------------------------
   useEffect(() => {
     let isMounted = true;
 
@@ -156,9 +125,7 @@ export function AuthProvider({ children }) {
       } catch (e) {
         console.error("[AuthContext] getSession exception:", e);
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     }
 
@@ -171,7 +138,6 @@ export function AuthProvider({ children }) {
       setUser(newSession?.user ?? null);
 
       if (!newSession) {
-        // Logout: limpiamos todo
         setProfile(null);
         setOrganizations([]);
         setCurrentOrgState(null);
@@ -185,9 +151,6 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Carga de perfil + organizaciones y roles cuando hay usuario
-  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!user) {
       setProfile(null);
@@ -201,7 +164,6 @@ export function AuthProvider({ children }) {
     async function loadUserData() {
       setLoading(true);
       try {
-        // 0) Aceptar invitación si existe
         try {
           await acceptInviteIfAny(user);
         } catch (e) {
@@ -211,7 +173,7 @@ export function AuthProvider({ children }) {
           );
         }
 
-        // 1) Perfil mínimo desde v_app_profiles
+        // Perfil mínimo
         try {
           const { data: profiles, error: profErr } = await supabase
             .from("v_app_profiles")
@@ -222,17 +184,13 @@ export function AuthProvider({ children }) {
             console.error("[AuthContext] v_app_profiles error:", profErr);
           }
           const profileRow = Array.isArray(profiles) ? profiles[0] : null;
-          if (!cancelled) {
-            setProfile(profileRow || null);
-          }
+          if (!cancelled) setProfile(profileRow || null);
         } catch (e) {
           console.error("[AuthContext] v_app_profiles exception:", e);
-          if (!cancelled) {
-            setProfile(null);
-          }
+          if (!cancelled) setProfile(null);
         }
 
-        // 2) Organizaciones + rol desde user_organizations
+        // user_organizations
         let orgLinks = [];
         try {
           const { data: links, error: linksErr } = await supabase
@@ -266,7 +224,7 @@ export function AuthProvider({ children }) {
                   const link = orgLinks.find((l) => l.org_id === org.id);
                   return {
                     ...org,
-                    role: link?.role || null, // 'OWNER' | 'ADMIN' | 'TRACKER'
+                    role: link?.role || null,
                   };
                 }) || [];
             }
@@ -278,7 +236,6 @@ export function AuthProvider({ children }) {
         if (!cancelled) {
           setOrganizations(orgs);
 
-          // 3) Restaurar o elegir organización actual
           const storedOrgId = loadStoredOrgId();
           let initialOrg = null;
 
@@ -297,9 +254,7 @@ export function AuthProvider({ children }) {
           storeOrgId(initialOrg?.id || null);
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -310,9 +265,6 @@ export function AuthProvider({ children }) {
     };
   }, [user]);
 
-  // ---------------------------------------------------------------------------
-  // Derivar rol actual normalizado (minúsculas) según currentOrg
-  // ---------------------------------------------------------------------------
   let normalizedRole = null;
   if (currentOrg?.role) {
     normalizedRole = String(currentOrg.role).toLowerCase();
@@ -324,59 +276,21 @@ export function AuthProvider({ children }) {
   const isAdmin = normalizedRole === "admin" || isOwner;
   const isTracker = normalizedRole === "tracker";
 
-  // ---------------------------------------------------------------------------
-  // Setter de organización actual con persistencia
-  // ---------------------------------------------------------------------------
   const setCurrentOrg = (org) => {
     setCurrentOrgState(org);
     storeOrgId(org?.id || null);
   };
 
-  // ---------------------------------------------------------------------------
-  // Sincronizar profiles.active_tenant_id con currentOrg
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const activeOrgId = currentOrg?.id || null;
-
-    (async () => {
-      try {
-        const { error } = await supabase
-          .from("profiles")
-          .update({ active_tenant_id: activeOrgId })
-          .eq("user_id", user.id);
-
-        if (error) {
-          console.error(
-            "[AuthContext] Error actualizando profiles.active_tenant_id:",
-            error
-          );
-        }
-      } catch (e) {
-        console.error(
-          "[AuthContext] Excepción actualizando active_tenant_id:",
-          e
-        );
-      }
-    })();
-  }, [user?.id, currentOrg?.id]);
-
   const value = {
-    // Sesión Supabase
     session,
     user,
     loading,
 
-    // Perfil mínimo (v_app_profiles)
     profile,
-
-    // Multi-organización
     organizations,
     currentOrg,
     setCurrentOrg,
 
-    // Rol lógico
     role: normalizedRole,
     currentRole: normalizedRole,
     isOwner,

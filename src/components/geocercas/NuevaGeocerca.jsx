@@ -1,4 +1,4 @@
-// src/components/geocercas/NuevaGeocerca.jsx (o src/pages/NuevaGeocerca.jsx)
+// src/components/geocercas/NuevaGeocerca.jsx
 import React, {
   useCallback,
   useEffect,
@@ -18,10 +18,10 @@ import L from "leaflet";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "@geoman-io/leaflet-geoman-free";
 
-// 👉 Importamos el cliente global de Supabase
+// 🔗 Cliente global de Supabase
 import { supabase } from "../../supabaseClient";
 
-// 🔴 IMPORTANTE: desactivamos dataset externo para evitar el error del GeoJSON
+// 🔴 IMPORTANTE: dataset externo desactivado por ahora
 const DATA_SOURCE = null; // 'geojson' | 'csv' | 'supabase' | null
 const GEOJSON_URL = "/data/mapa_corto_214.geojson";
 const CSV_URL = "/data/mapa_corto_214.csv";
@@ -29,7 +29,7 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 const SUPABASE_POINTS_TABLE = "puntos_mapa_corto";
 const SUPABASE_GEOFENCES_TABLE = "geocercas";
 
-// ===== Utils (dataset) =====
+// ===== Utils dataset =====
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) return [];
@@ -63,7 +63,7 @@ function pointsToFeatureCollection(rows) {
   };
 }
 
-async function loadShortMap({ source = DATA_SOURCE, supabase = null }) {
+async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
   if (!source) return null;
 
   if (source === "geojson") {
@@ -85,9 +85,9 @@ async function loadShortMap({ source = DATA_SOURCE, supabase = null }) {
   }
 
   if (source === "supabase") {
-    if (!supabase)
+    if (!supabaseClient)
       throw new Error("Supabase no disponible para puntos del mapa");
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from(SUPABASE_POINTS_TABLE)
       .select("*")
       .limit(10000);
@@ -106,12 +106,13 @@ async function loadShortMap({ source = DATA_SOURCE, supabase = null }) {
   throw new Error("DATA_SOURCE no reconocido");
 }
 
-// ===== Geocercas helpers =====
-async function listGeofences({ supabase = null }) {
+// ===== Utils Geocercas =====
+async function listGeofences({ supabaseClient = null }) {
   const list = [];
 
-  if (supabase) {
-    const { data, error } = await supabase
+  // 1) Supabase
+  if (supabaseClient) {
+    const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("id, nombre")
       .order("nombre", { ascending: true });
@@ -122,25 +123,29 @@ async function listGeofences({ supabase = null }) {
     }
   }
 
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k) continue;
-    if (k.startsWith("geocerca_")) {
-      try {
-        const raw = localStorage.getItem(k);
-        const obj = JSON.parse(raw || "{}");
-        const nombre = obj?.nombre || k.replace(/^geocerca_/, "");
-        list.push({ key: k, nombre, source: "local" });
-      } catch {
-        list.push({
-          key: k,
-          nombre: k.replace(/^geocerca_/, ""),
-          source: "local",
-        });
+  // 2) LocalStorage legacy
+  if (typeof window !== "undefined") {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k.startsWith("geocerca_")) {
+        try {
+          const raw = localStorage.getItem(k);
+          const obj = JSON.parse(raw || "{}");
+          const nombre = obj?.nombre || k.replace(/^geocerca_/, "");
+          list.push({ key: k, nombre, source: "local" });
+        } catch {
+          list.push({
+            key: k,
+            nombre: k.replace(/^geocerca_/, ""),
+            source: "local",
+          });
+        }
       }
     }
   }
 
+  // 3) Unificar por nombre
   const seen = new Set();
   const unique = [];
   for (const g of list) {
@@ -152,13 +157,13 @@ async function listGeofences({ supabase = null }) {
   return unique;
 }
 
-async function deleteGeofences({ items, supabase = null }) {
+async function deleteGeofences({ items, supabaseClient = null }) {
   let deleted = 0;
 
   const supaTargets = items.filter((x) => x.source === "supabase");
-  if (supabase && supaTargets.length) {
+  if (supabaseClient && supaTargets.length) {
     const nombres = supaTargets.map((x) => x.nombre);
-    const { error, count } = await supabase
+    const { error, count } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .delete({ count: "exact" })
       .in("nombre", nombres);
@@ -167,43 +172,49 @@ async function deleteGeofences({ items, supabase = null }) {
   }
 
   const localTargets = items.filter((x) => x.source === "local");
-  for (const it of localTargets) {
-    const key = it.key || `geocerca_${it.nombre}`;
-    if (localStorage.getItem(key) !== null) {
-      localStorage.removeItem(key);
-      deleted += 1;
+  if (typeof window !== "undefined") {
+    for (const it of localTargets) {
+      const key = it.key || `geocerca_${it.nombre}`;
+      if (localStorage.getItem(key) !== null) {
+        localStorage.removeItem(key);
+        deleted += 1;
+      }
     }
   }
 
   return deleted;
 }
 
-async function loadGeofenceGeometryByName({ name, supabase = null }) {
-  if (supabase) {
-    const { data, error } = await supabase
+async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
+  if (supabaseClient) {
+    const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("geojson")
       .eq("nombre", name)
       .maybeSingle();
     if (error) throw error;
-
     if (data?.geojson) return data.geojson;
   }
-  const key = `geocerca_${name}`;
-  const raw = localStorage.getItem(key);
-  if (raw) {
-    try {
-      const obj = JSON.parse(raw);
-      return obj?.geometry || obj?.geojson || null;
-    } catch {
-      return null;
+
+  if (typeof window !== "undefined") {
+    const key = `geocerca_${name}`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      try {
+        const obj = JSON.parse(raw);
+        return obj?.geometry || obj?.geojson || null;
+      } catch {
+        return null;
+      }
     }
   }
+
   return null;
 }
 
 function primaryFeatureFromGeoJSON(geojson) {
   if (!geojson) return null;
+
   if (geojson.type === "Feature") return geojson;
 
   if (
@@ -350,7 +361,7 @@ function GeomanControls({
   return null;
 }
 
-// ===== Main component =====
+// ===== Componente principal =====
 export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const [dataset, setDataset] = useState(null);
   const [loadingDataset, setLoadingDataset] = useState(!!DATA_SOURCE);
@@ -369,6 +380,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
+  // Carga dataset si DATA_SOURCE está activo
   useEffect(() => {
     let active = true;
     (async () => {
@@ -377,7 +389,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         setLoadingDataset(true);
         const fc = await loadShortMap({
           source: DATA_SOURCE,
-          supabase: supabaseClient,
+          supabaseClient,
         });
         if (!active) return;
         setDataset(fc);
@@ -394,7 +406,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   }, [supabaseClient]);
 
   const refreshGeofenceList = useCallback(async () => {
-    const list = await listGeofences({ supabase: supabaseClient });
+    const list = await listGeofences({ supabaseClient });
     setGeofenceList(list);
   }, [supabaseClient]);
 
@@ -469,14 +481,16 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return { ok: true, via: "supabase:geojson", id: data?.id };
       } else {
         const key = `geocerca_${name}`;
-        localStorage.setItem(
-          key,
-          JSON.stringify({
-            nombre: name,
-            geometry: feature,
-            props: { source: "UI", version: 3 },
-          })
-        );
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              nombre: name,
+              geometry: feature,
+              props: { source: "UI", version: 3 },
+            })
+          );
+        }
         return { ok: true, via: "localStorage", key };
       }
     },
@@ -505,6 +519,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     setCoordModalOpen(true);
   }, []);
   const closeCoordModal = useCallback(() => setCoordModalOpen(false), []);
+
   const applyCoordinates = useCallback(() => {
     const lines = coordText
       .split(/\r?\n/)
@@ -519,9 +534,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       if (Number.isFinite(lat) && Number.isFinite(lng)) latlngs.push([lat, lng]);
     }
     if (latlngs.length < 3) {
-      alert(
-        "Se requieren al menos 3 coordenadas (lat,lng) para un polígono."
-      );
+      alert("Se requieren al menos 3 coordenadas (lat,lng) para un polígono.");
       return;
     }
     const poly = L.polygon(latlngs, { pmIgnore: false });
@@ -555,7 +568,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         try {
           const geojson = await loadGeofenceGeometryByName({
             name,
-            supabase: supabaseClient,
+            supabaseClient,
           });
           const feature = primaryFeatureFromGeoJSON(geojson);
           if (feature)
@@ -625,7 +638,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     try {
       const deletedCount = await deleteGeofences({
         items,
-        supabase: supabaseClient,
+        supabaseClient,
       });
       alert(`🗑️ Eliminadas: ${deletedCount}`);
       setSelectedNames(new Set());
@@ -683,7 +696,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             marginBottom: 10,
           }}
         >
-          <h3 style={{ margin: 0, fontSize: 16, color: "#f9fafb" }}>Geocercas</h3>
+          <h3 style={{ margin: 0, fontSize: 16, color: "#f9fafb" }}>
+            Geocercas
+          </h3>
           <button
             onClick={refreshGeofenceList}
             style={smBtnDark}
@@ -734,7 +749,12 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                     });
                   }}
                 >
-                  <span style={{ fontWeight: 700, color: "#f3f4f6" }}>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: "#f3f4f6",
+                    }}
+                  >
                     {g.nombre}
                   </span>
                   <span style={{ fontSize: 12, color: "#9ca3af" }}>
@@ -768,7 +788,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* Panel principal */}
       <div style={{ display: "grid", gridTemplateRows: "auto 1fr" }}>
         <div
           style={{
@@ -805,8 +825,35 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           >
             Guardar geocerca
           </button>
+
+          <div
+            style={{
+              marginLeft: "auto",
+              fontSize: 13,
+              color: "#d1d5db",
+            }}
+          >
+            {DATA_SOURCE && (
+              <>
+                {loadingDataset && "Cargando dataset…"}
+                {!loadingDataset &&
+                  dataset &&
+                  `Puntos: ${dataset.features?.length ?? 0}`}
+                {datasetError && (
+                  <span style={{ color: "#fca5a5" }}>
+                    {" "}
+                    · {datasetError}
+                  </span>
+                )}
+                <span style={{ marginLeft: 12, opacity: 0.7 }}>
+                  Fuente: {DATA_SOURCE}
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
+        {/* Mapa */}
         <div style={{ position: "relative" }}>
           <MapContainer
             center={[-1.8312, -78.1834]}
@@ -828,6 +875,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             />
           </MapContainer>
 
+          {/* Coordenadas en vivo */}
           <div style={coordOverlayDark} title="Coordenadas del cursor">
             {cursorLatLng
               ? `Lat: ${cursorLatLng.lat.toFixed(
@@ -838,11 +886,74 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         </div>
       </div>
 
+      {/* Modal coordenadas */}
       {coordModalOpen && (
         <div style={modalBackdropDark}>
           <div style={modalCardDark}>
-            {/* modal contenido igual que antes */}
-            {/* ... */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  color: "#f3f4f6",
+                }}
+              >
+                Dibujar polígono por coordenadas
+              </h3>
+              <button onClick={closeCoordModal} style={smBtnDark}>
+                ✕
+              </button>
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                marginBottom: 6,
+                color: "#d1d5db",
+              }}
+            >
+              Nombre actual:{" "}
+              <b style={{ color: "#f9fafb" }}>{geofenceName || "—"}</b>
+            </div>
+            <p
+              style={{
+                marginTop: 0,
+                fontSize: 13,
+                color: "#9ca3af",
+              }}
+            >
+              Ingresa una coordenada por línea. Formato:{" "}
+              <code>lat,lng</code> o <code>lat lng</code>. Mínimo 3 puntos.
+            </p>
+            <textarea
+              value={coordText}
+              onChange={(e) => setCoordText(e.target.value)}
+              placeholder={`-1.234567, -78.345678\n-1.240001, -78.350001\n-1.239000, -78.360000`}
+              style={textareaDark}
+            />
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 10,
+              }}
+            >
+              <button
+                onClick={applyCoordinates}
+                style={{ ...btnDark, background: "#2563eb" }}
+              >
+                Crear polígono
+              </button>
+              <button onClick={closeCoordModal} style={btnDark}>
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -850,4 +961,84 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   );
 }
 
-// estilos (btnDark, smBtnDark, etc.) igual que en tu versión original
+// ===== Estilos Dark =====
+const btnDark = {
+  fontSize: 13,
+  padding: "8px 12px",
+  border: "1px solid #374151",
+  borderRadius: 8,
+  background: "#1f2937",
+  color: "#e5e7eb",
+  cursor: "pointer",
+};
+
+const smBtnDark = {
+  fontSize: 12,
+  padding: "6px 8px",
+  border: "1px solid #374151",
+  borderRadius: 8,
+  background: "#111827",
+  color: "#e5e7eb",
+  cursor: "pointer",
+};
+
+const inputDark = {
+  minWidth: 240,
+  height: 34,
+  padding: "6px 10px",
+  borderRadius: 8,
+  border: "1px solid #374151",
+  background: "#111827",
+  color: "#f3f4f6",
+  outline: "none",
+};
+
+const textareaDark = {
+  width: "100%",
+  height: 160,
+  fontFamily: "monospace",
+  fontSize: 13,
+  padding: 8,
+  border: "1px solid #374151",
+  borderRadius: 8,
+  boxSizing: "border-box",
+  resize: "vertical",
+  background: "#0b1220",
+  color: "#e5e7eb",
+};
+
+const modalBackdropDark = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.55)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 2000,
+};
+
+const modalCardDark = {
+  width: 540,
+  maxWidth: "92vw",
+  background: "#0f172a",
+  color: "#e5e7eb",
+  borderRadius: 12,
+  padding: 16,
+  boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+  border: "1px solid #1f2937",
+};
+
+const coordOverlayDark = {
+  position: "absolute",
+  left: 10,
+  bottom: 10,
+  padding: "6px 10px",
+  fontSize: 12,
+  borderRadius: 8,
+  background: "rgba(15,23,42,0.92)",
+  border: "1px solid #374151",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
+  color: "#e5e7eb",
+  pointerEvents: "none",
+  zIndex: 1500,
+};
