@@ -31,10 +31,7 @@ export default function InvitarTracker() {
       const { data, error } = await supabase.functions.invoke("invite-user", {
         body: {
           email: trimmedEmail,
-          // Si en tu tabla roles el nombre es distinto (p.ej. "TRACKER"),
-          // ajústalo aquí:
           role_name: "tracker",
-          // full_name lo dejamos opcional; el tracker lo puede completar luego
           full_name: null,
         },
       });
@@ -50,7 +47,6 @@ export default function InvitarTracker() {
         return;
       }
 
-      // Respuestas de la función invite-user
       if (!data?.ok) {
         const errText =
           data?.error ||
@@ -63,13 +59,23 @@ export default function InvitarTracker() {
         return;
       }
 
-      // Construimos mensaje según el modo
       const mode = data.mode;
 
       if (mode === "invited") {
+        // Usuario nuevo invitado
         setMessage({
           type: "success",
-          text: `Invitación enviada a ${data.email || trimmedEmail} como tracker. Pídeles que revisen su correo para abrir el link de invitación.`,
+          text: `Invitación enviada a ${
+            data.email || trimmedEmail
+          } como tracker. Pídeles que revisen su correo para abrir el link de invitación.`,
+        });
+      } else if (mode === "magiclink_sent") {
+        // Usuario ya existía → se le envía Magic Link
+        setMessage({
+          type: "success",
+          text: `El usuario ya estaba registrado. Se envió un Magic Link de acceso a ${
+            data.email || trimmedEmail
+          }. Pídeles que revisen su bandeja de entrada.`,
         });
       } else if (mode === "link_only") {
         const link = data.invite_link;
@@ -86,10 +92,11 @@ export default function InvitarTracker() {
             "Se creó el usuario sin enviar correo de invitación. Revisa el panel de Supabase para completar la activación y asignación.",
         });
       } else {
-        // fallback genérico
         setMessage({
           type: "success",
-          text: `Invitación procesada para ${data.email || trimmedEmail}.`,
+          text: `Invitación procesada para ${
+            data.email || trimmedEmail
+          }.`,
         });
       }
 
