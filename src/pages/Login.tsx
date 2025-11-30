@@ -19,19 +19,65 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  //
-  // ⭐ LIMPIAR ERROR DE HASH (otp_expired, invalid, etc)
-  //
+  // 0) Procesar MAGIC LINK que llega directamente a /login#...
+  //    - Si hay error en el hash => mostrarlo y limpiar URL
+  //    - Si hay access_token + refresh_token => setSession y navegar a /inicio
   useEffect(() => {
-    if (location.hash.includes("error")) {
-      // No bloqueamos nada, solo limpiamos el hash
-      window.history.replaceState({}, document.title, "/login");
-    }
-  }, [location.hash]);
+    const rawHash = location.hash || "";
+    const hash = rawHash.startsWith("#") ? rawHash.slice(1) : rawHash;
+    if (!hash) return;
 
-  //
-  // Si la URL es /login?mode=magic
-  //
+    const params = new URLSearchParams(hash);
+    const error = params.get("error") || params.get("error_code");
+    const errorDescription = params.get("error_description");
+
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+
+    // Caso 1: error en el link (otp_expired, access_denied, etc.)
+    if (error) {
+      const msg =
+        decodeURIComponent(errorDescription || error) ||
+        "El enlace de acceso no es válido o ha expirado.";
+      setErrorMsg(msg);
+      // Limpiamos el hash para que no estorbe más
+      window.history.replaceState({}, document.title, "/login");
+      return;
+    }
+
+    // Caso 2: tenemos tokens => iniciar sesión desde aquí mismo
+    if (accessToken && refreshToken) {
+      (async () => {
+        try {
+          const { error: setSessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (setSessionError) {
+            console.error("[Login] setSession error:", setSessionError);
+            setErrorMsg(
+              setSessionError.message ||
+                "No se pudo confirmar la sesión desde el enlace."
+            );
+          } else {
+            // Limpiamos el hash y vamos al panel
+            window.history.replaceState({}, document.title, "/login");
+            navigate("/inicio", { replace: true });
+          }
+        } catch (e: any) {
+          console.error("[Login] excepción en setSession:", e);
+          setErrorMsg(
+            e?.message ||
+              "Ocurrió un error al procesar el enlace de acceso."
+          );
+          window.history.replaceState({}, document.title, "/login");
+        }
+      })();
+    }
+  }, [location.hash, navigate]);
+
+  // 1) Si la URL es /login?mode=magic => abrir pestaña Magic Link
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlMode = params.get("mode");
@@ -40,18 +86,14 @@ const Login: React.FC = () => {
     }
   }, [location.search]);
 
-  //
-  // SI YA HAY SESIÓN → LLEVAR SIEMPRE A /inicio
-  //
+  // 2) Si YA hay sesión (por cualquier vía), enviamos a /inicio
   useEffect(() => {
     if (!loading && session) {
       navigate("/inicio", { replace: true });
     }
   }, [session, loading, navigate]);
 
-  //
-  // LOGIN NORMAL CON CONTRASEÑA
-  //
+  // 3) Login con email + contraseña
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -75,9 +117,7 @@ const Login: React.FC = () => {
         return;
       }
 
-      //
-      // ⭐ REDIRECCIÓN INMEDIATA SIN ESPERAR AL AUTHCONTEXT
-      //
+      // Redirección inmediata; AuthContext se actualizará en paralelo
       navigate("/inicio", { replace: true });
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);
@@ -87,9 +127,7 @@ const Login: React.FC = () => {
     }
   };
 
-  //
-  // MAGIC LINK LOGIN NORMAL
-  //
+  // 4) Enviar Magic Link clásico (para owners/admins)
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -103,7 +141,8 @@ const Login: React.FC = () => {
     try {
       setLoadingAction(true);
 
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      // Enviamos a /login por compatibilidad, ya que ahora lo sabemos procesar
+      const redirectTo = `${window.location.origin}/login`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -121,23 +160,17 @@ const Login: React.FC = () => {
       );
     } catch (err: any) {
       console.error("[Login] signInWithOtp exception:", err);
-      setErrorMsg("Ocurrió un error inesperado.");
+      setErrorMsg("Ocurrió un error inesperado al enviar el Magic Link.");
     } finally {
       setLoadingAction(false);
     }
   };
 
-  //
-  // SI AuthContext todavía no sabe si hay sesión, no parpadeamos
-  //
+  // Mientras AuthContext resuelve la sesión inicial, no mostramos nada
   if (loading) return null;
 
-  //
-  // SI YA HAY SESIÓN → NO MOSTRAR FORMULARIO
-  //
+  // Si ya hay sesión (porque se procesó un Magic Link o login previo), no mostramos el formulario
   if (session) return null;
-
-  // ---------------- UI -----------------
 
   const isPasswordMode = mode === "password";
 
@@ -154,7 +187,7 @@ const Login: React.FC = () => {
           </p>
         </div>
 
-        {/* Tabs modo */}
+        {/* Toggle de modo */}
         <div className="inline-flex items-center rounded-full bg-slate-100 p-1 text-xs font-medium">
           <button
             type="button"
@@ -180,8 +213,9 @@ const Login: React.FC = () => {
           </button>
         </div>
 
+        {/* Mensajes */}
         {errorMsg && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-line">
             {errorMsg}
           </div>
         )}
@@ -191,7 +225,8 @@ const Login: React.FC = () => {
           </div>
         )}
 
-        {isPasswordMode ? (
+        {/* Formulario password */}
+        {isPasswordMode && (
           <form onSubmit={handleSubmitPassword} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -224,12 +259,15 @@ const Login: React.FC = () => {
             <button
               type="submit"
               disabled={loadingAction}
-              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
+              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loadingAction ? "Ingresando..." : "Iniciar sesión"}
             </button>
           </form>
-        ) : (
+        )}
+
+        {/* Formulario Magic Link */}
+        {!isPasswordMode && (
           <form onSubmit={handleSubmitMagic} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -237,7 +275,9 @@ const Login: React.FC = () => {
               </label>
               <input
                 type="email"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                autoComplete="email"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="tucorreo@ejemplo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
@@ -246,10 +286,14 @@ const Login: React.FC = () => {
             <button
               type="submit"
               disabled={loadingAction}
-              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
+              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loadingAction ? "Enviando link..." : "Enviar Magic Link"}
             </button>
+            <p className="text-[11px] text-slate-500">
+              Te enviaremos un correo con un link de acceso. Al hacer clic, se
+              abrirá esta misma página y te conectaremos automáticamente.
+            </p>
           </form>
         )}
       </div>
