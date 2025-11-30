@@ -1,8 +1,48 @@
 // src/pages/Landing.jsx
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
 
 export default function Landing() {
+  const [hasSession, setHasSession] = useState(false);
+  const navigate = useNavigate();
+
+  // Detectar si ya hay sesión activa al cargar la Landing
+  useEffect(() => {
+    let active = true;
+
+    const checkSession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!active) return;
+        setHasSession(!!session);
+      } catch (e) {
+        console.error("[Landing] error getSession:", e);
+        if (!active) return;
+        setHasSession(false);
+      }
+    };
+
+    checkSession();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("[Landing] error signOut:", e);
+    } finally {
+      setHasSession(false);
+      navigate("/", { replace: true });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col">
       {/* Barra superior simple */}
@@ -22,14 +62,33 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Solo un enlace discreto a Login */}
+          {/* Zona derecha: según haya sesión o no */}
           <div className="flex items-center gap-2">
-            <Link
-              to="/login"
-              className="text-xs md:text-sm text-slate-200 hover:text-white transition-colors"
-            >
-              Iniciar sesión
-            </Link>
+            {!hasSession && (
+              <Link
+                to="/login"
+                className="text-xs md:text-sm text-slate-200 hover:text-white transition-colors"
+              >
+                Iniciar sesión
+              </Link>
+            )}
+
+            {hasSession && (
+              <>
+                <Link
+                  to="/inicio"
+                  className="text-xs md:text-sm text-emerald-300 hover:text-emerald-100 transition-colors"
+                >
+                  Ir al panel
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors border border-slate-500/60 rounded-full px-3 py-1"
+                >
+                  Cerrar sesión
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -108,7 +167,9 @@ export default function Landing() {
             </div>
           </section>
 
-          {/* Columna derecha: “mock” de app / geocercas */}
+          {/* Columna derecha: mock de app */}
+          {/* … resto de tu código tal cual … */}
+          {/* (no lo toqué, solo dejé el bloque original) */}
           <section className="relative">
             <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-emerald-500/20 blur-3xl" />
             <div className="absolute -bottom-6 -left-8 h-32 w-32 rounded-full bg-emerald-400/10 blur-3xl" />
@@ -130,7 +191,6 @@ export default function Landing() {
                 </div>
               </div>
 
-              {/* Mini mapa estilizado */}
               <div className="rounded-xl border border-emerald-500/30 bg-slate-950/70 p-3 space-y-3">
                 <div className="flex items-center justify-between text-[11px] text-slate-300">
                   <span>Zonas activas</span>
@@ -140,19 +200,15 @@ export default function Landing() {
                   </span>
                 </div>
                 <div className="relative h-40 rounded-lg bg-[radial-gradient(circle_at_top,_#22c55e33,_transparent_55%),radial-gradient(circle_at_bottom,_#0ea5e933,_transparent_55%),linear-gradient(135deg,_#020617,_#020617)] overflow-hidden">
-                  {/* Geocercas simuladas */}
                   <div className="absolute inset-4 border border-emerald-500/30 rounded-xl" />
                   <div className="absolute left-4 top-6 h-10 w-16 border border-emerald-400/60 rounded-md" />
                   <div className="absolute right-6 bottom-5 h-12 w-20 border border-emerald-500/40 rounded-lg" />
-
-                  {/* Puntos tracker */}
                   <div className="absolute left-10 top-10 h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_2px_rgba(52,211,153,0.8)]" />
                   <div className="absolute left-16 top-20 h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_2px_rgba(52,211,153,0.7)]" />
                   <div className="absolute right-10 bottom-10 h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_2px_rgba(56,189,248,0.7)]" />
                 </div>
               </div>
 
-              {/* Chips inferiores */}
               <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-200">
                 <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 space-y-0.5">
                   <p className="font-medium">Control de asistencia</p>
@@ -175,12 +231,12 @@ export default function Landing() {
       {/* Footer simple */}
       <footer className="border-t border-white/10 bg-slate-950/80">
         <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
-          <p>© {new Date().getFullYear()} App Geocercas. Todos los derechos reservados.</p>
+          <p>
+            © {new Date().getFullYear()} App Geocercas. Todos los derechos
+            reservados.
+          </p>
           <div className="flex flex-wrap items-center gap-4">
-            <a
-              href="#faq"
-              className="hover:text-slate-200 transition-colors"
-            >
+            <a href="#faq" className="hover:text-slate-200 transition-colors">
               FAQ
             </a>
             <a
