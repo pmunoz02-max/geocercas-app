@@ -6,7 +6,7 @@ import { supabase } from "../supabaseClient";
 export default function TrackerGpsPage() {
   const navigate = useNavigate();
 
-  // "checking" | "requesting" | "tracking" | "error" | "no-session" | "not-tracker"
+  // "checking" | "requesting" | "tracking" | "error"
   const [phase, setPhase] = useState("checking");
   const [error, setError] = useState("");
   const [coords, setCoords] = useState(null);
@@ -19,7 +19,6 @@ export default function TrackerGpsPage() {
       try {
         setPhase("checking");
 
-        // Sesión actual
         const {
           data: { session },
           error: sessionError,
@@ -31,17 +30,11 @@ export default function TrackerGpsPage() {
 
         if (!session) {
           if (!active) return;
-          setPhase("no-session");
-          setError(
-            "No hay sesión activa.\nAbre este enlace directamente desde el correo que recibiste."
-          );
-          setTimeout(() => {
-            navigate("/login", { replace: true });
-          }, 1500);
+          // Sin sesión → vete directo a login, sin mostrar pantalla rara
+          navigate("/login", { replace: true });
           return;
         }
 
-        // Leer rol desde user_roles_view
         const { data: rows, error: roleErr } = await supabase
           .from("user_roles_view")
           .select("role_name")
@@ -60,14 +53,9 @@ export default function TrackerGpsPage() {
 
         if (!active) return;
 
+        // 👇 SI NO ES TRACKER: lo mandamos directo al panel y NO mostramos nada
         if (role !== "tracker") {
-          setPhase("not-tracker");
-          setError(
-            "Este enlace es exclusivo para usuarios con rol TRACKER.\nSerás redirigido al panel principal."
-          );
-          setTimeout(() => {
-            navigate("/inicio", { replace: true });
-          }, 1500);
+          navigate("/inicio", { replace: true });
           return;
         }
 
@@ -109,7 +97,6 @@ export default function TrackerGpsPage() {
             setPhase("tracking");
 
             try {
-              // Envía la posición a tu Edge Function de backend
               const { error: fnError } = await supabase.functions.invoke(
                 "send_position",
                 {
@@ -157,7 +144,6 @@ export default function TrackerGpsPage() {
 
     startWatch();
 
-    // Limpieza al salir de la página
     return () => {
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
@@ -165,29 +151,31 @@ export default function TrackerGpsPage() {
     };
   }, [phase]);
 
-  // ---------------- UI ----------------
-  const renderMessage = () => {
-    if (phase === "checking") {
-      return "Verificando tu sesión y permisos…";
-    }
-    if (phase === "requesting") {
-      return "Esperando permiso de ubicación…";
-    }
-    if (phase === "tracking") {
-      return "Tu ubicación se está enviando automáticamente a tu organización.";
-    }
-    if (phase === "no-session") {
-      return "No hay sesión activa.";
-    }
-    if (phase === "not-tracker") {
-      return "Este enlace es solo para usuarios TRACKER.";
-    }
-    if (phase === "error") {
-      return "Se produjo un problema.";
-    }
-    return "";
-  };
+  // Si NO es tracker o no hay sesión, ya habremos navegado a otra ruta → no se renderiza nada especial
+  if (phase === "checking") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+        <div className="w-full max-w-sm rounded-2xl bg-slate-800/80 border border-slate-700 p-6 text-center shadow-lg">
+          <p className="text-sm text-slate-200">
+            Verificando tu sesión de tracker…
+          </p>
+        </div>
+      </div>
+    );
+  }
 
+  if (phase === "error") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+        <div className="w-full max-w-sm rounded-2xl bg-slate-800/80 border border-slate-700 p-6 text-center shadow-lg">
+          <h1 className="text-xl font-semibold mb-2">Error en tracker</h1>
+          <p className="text-sm text-red-300 whitespace-pre-line">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // phase === "requesting" | "tracking"
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white px-4">
       <div className="w-full max-w-sm rounded-2xl bg-slate-800/80 border border-slate-700 p-6 text-center shadow-lg">
@@ -198,9 +186,11 @@ export default function TrackerGpsPage() {
           estén dentro de las geocercas asignadas a tu usuario.
         </p>
 
-        <p className="text-sm text-slate-200 mb-3 whitespace-pre-line">
-          {renderMessage()}
-        </p>
+        {phase === "requesting" && (
+          <p className="text-sm text-slate-200 mb-2">
+            Esperando permiso de ubicación…
+          </p>
+        )}
 
         {phase === "tracking" && coords && (
           <div className="mt-2 text-left bg-slate-900/60 rounded-xl p-3 text-xs">
@@ -217,18 +207,6 @@ export default function TrackerGpsPage() {
               posiciones.
             </p>
           </div>
-        )}
-
-        {phase === "error" && error && (
-          <p className="mt-2 text-sm text-red-400 whitespace-pre-line">
-            {error}
-          </p>
-        )}
-
-        {(phase === "no-session" || phase === "not-tracker") && error && (
-          <p className="mt-2 text-sm text-red-300 whitespace-pre-line">
-            {error}
-          </p>
         )}
       </div>
     </div>
