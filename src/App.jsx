@@ -1,8 +1,11 @@
+import { useEffect } from "react";
 import {
   BrowserRouter,
   Routes,
   Route,
   Navigate,
+  useLocation,
+  useNavigate,
 } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
@@ -29,7 +32,7 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 
 // Auth
 import Login from "./pages/Login.tsx";
-import AuthCallback from "./pages/AuthCallback"; // ✅ sin extensión, apunta al .tsx
+import AuthCallback from "./pages/AuthCallback"; // ✅ apunta al .tsx
 
 // Dashboard interno
 import Inicio from "./pages/Inicio.jsx";
@@ -51,10 +54,26 @@ import TopTabs from "./components/TopTabs.jsx";
 // ---------------------
 function Shell({ children }) {
   const { currentRole } = useAuth();
+  const role = (currentRole || "").toLowerCase();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const role = currentRole || "tracker";
+  // 🚧 BLOQUEO DURO:
+  // Si el usuario es TRACKER y por cualquier motivo entró a una ruta interna
+  // (que usa Shell), lo mandamos a /tracker-gps y NO mostramos el panel.
+  useEffect(() => {
+    if (role === "tracker" && location.pathname !== "/tracker-gps") {
+      navigate("/tracker-gps", { replace: true });
+    }
+  }, [role, location.pathname, navigate]);
 
-  // Tabs base visibles para todos los usuarios autenticados
+  if (role === "tracker" && location.pathname !== "/tracker-gps") {
+    // Mientras redirigimos, no mostramos nada del Shell (ni header ni tabs)
+    return null;
+  }
+
+  // Tabs base visibles para todos los usuarios autenticados (NO trackers,
+  // porque jamás deberían llegar aquí con esta lógica)
   const tabs = [
     { path: "/inicio", label: "Inicio" },
     { path: "/nueva-geocerca", label: "Nueva geocerca" },
@@ -198,7 +217,7 @@ export default function App() {
           }
         />
 
-        {/* TRACKER DASHBOARD NORMAL */}
+        {/* TRACKER DASHBOARD NORMAL (solo admins/owners, nunca trackers con esta lógica) */}
         <Route
           path="/tracker-dashboard"
           element={
