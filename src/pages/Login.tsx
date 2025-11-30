@@ -9,8 +9,6 @@ type Mode = "password" | "magic";
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // 🔐 Traemos la sesión desde el AuthContext
   const { session, loading } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -21,7 +19,19 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // 1) Si en la URL viene ?mode=magic, abrimos directamente esa pestaña
+  //
+  // ⭐ LIMPIAR ERROR DE HASH (otp_expired, invalid, etc)
+  //
+  useEffect(() => {
+    if (location.hash.includes("error")) {
+      // No bloqueamos nada, solo limpiamos el hash
+      window.history.replaceState({}, document.title, "/login");
+    }
+  }, [location.hash]);
+
+  //
+  // Si la URL es /login?mode=magic
+  //
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlMode = params.get("mode");
@@ -30,14 +40,18 @@ const Login: React.FC = () => {
     }
   }, [location.search]);
 
-  // 2) Si YA hay sesión, no tiene sentido mostrar el login:
-  //    redirigimos al dashboard interno.
+  //
+  // SI YA HAY SESIÓN → LLEVAR SIEMPRE A /inicio
+  //
   useEffect(() => {
     if (!loading && session) {
       navigate("/inicio", { replace: true });
     }
   }, [session, loading, navigate]);
 
+  //
+  // LOGIN NORMAL CON CONTRASEÑA
+  //
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -57,12 +71,13 @@ const Login: React.FC = () => {
 
       if (error) {
         console.error("[Login] signInWithPassword error:", error);
-        setErrorMsg(error.message || "No se pudo iniciar sesión.");
+        setErrorMsg(error.message || "Credenciales inválidas.");
         return;
       }
 
-      // El AuthContext recibirá la nueva sesión;
-      // el useEffect de arriba hará el navigate a /inicio.
+      //
+      // ⭐ REDIRECCIÓN INMEDIATA SIN ESPERAR AL AUTHCONTEXT
+      //
       navigate("/inicio", { replace: true });
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);
@@ -72,6 +87,9 @@ const Login: React.FC = () => {
     }
   };
 
+  //
+  // MAGIC LINK LOGIN NORMAL
+  //
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -85,14 +103,11 @@ const Login: React.FC = () => {
     try {
       setLoadingAction(true);
 
-      // Usamos el origin actual para que funcione tanto en local como en producción.
       const redirectTo = `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
+        options: { emailRedirectTo: redirectTo },
       });
 
       if (error) {
@@ -102,28 +117,29 @@ const Login: React.FC = () => {
       }
 
       setInfoMsg(
-        "Te enviamos un link de acceso a tu correo. Revisa tu bandeja de entrada (y spam)."
+        "Te enviamos un link de acceso. Revisa tu bandeja de entrada (y spam)."
       );
     } catch (err: any) {
       console.error("[Login] signInWithOtp exception:", err);
-      setErrorMsg("Ocurrió un error inesperado al enviar el Magic Link.");
+      setErrorMsg("Ocurrió un error inesperado.");
     } finally {
       setLoadingAction(false);
     }
   };
 
+  //
+  // SI AuthContext todavía no sabe si hay sesión, no parpadeamos
+  //
+  if (loading) return null;
+
+  //
+  // SI YA HAY SESIÓN → NO MOSTRAR FORMULARIO
+  //
+  if (session) return null;
+
+  // ---------------- UI -----------------
+
   const isPasswordMode = mode === "password";
-
-  // Mientras AuthContext está resolviendo la sesión, evitamos parpadeos
-  if (loading) {
-    return null;
-  }
-
-  // Si ya hay sesión, el useEffect de arriba hará navigate;
-  // devolvemos null para no mostrar el formulario un instante.
-  if (session) {
-    return null;
-  }
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
@@ -138,7 +154,7 @@ const Login: React.FC = () => {
           </p>
         </div>
 
-        {/* Toggle de modo */}
+        {/* Tabs modo */}
         <div className="inline-flex items-center rounded-full bg-slate-100 p-1 text-xs font-medium">
           <button
             type="button"
@@ -164,7 +180,6 @@ const Login: React.FC = () => {
           </button>
         </div>
 
-        {/* Mensajes de error / info */}
         {errorMsg && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             {errorMsg}
@@ -176,8 +191,7 @@ const Login: React.FC = () => {
           </div>
         )}
 
-        {/* Formulario: password */}
-        {isPasswordMode && (
+        {isPasswordMode ? (
           <form onSubmit={handleSubmitPassword} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -210,15 +224,12 @@ const Login: React.FC = () => {
             <button
               type="submit"
               disabled={loadingAction}
-              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
             >
               {loadingAction ? "Ingresando..." : "Iniciar sesión"}
             </button>
           </form>
-        )}
-
-        {/* Formulario: Magic Link */}
-        {!isPasswordMode && (
+        ) : (
           <form onSubmit={handleSubmitMagic} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -226,41 +237,21 @@ const Login: React.FC = () => {
               </label>
               <input
                 type="email"
-                autoComplete="email"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="tucorreo@ejemplo.com"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
               />
             </div>
-
             <button
               type="submit"
               disabled={loadingAction}
-              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
             >
               {loadingAction ? "Enviando link..." : "Enviar Magic Link"}
             </button>
-
-            <p className="text-[11px] text-slate-500">
-              Te enviaremos un correo con un link de acceso. Al hacer clic,
-              serás redirigido nuevamente a App Geocercas para continuar.
-            </p>
           </form>
         )}
-
-        <p className="text-[11px] text-slate-500">
-          Si necesitas ayuda para acceder a tu cuenta o registrar tu
-          organización, contacta a{" "}
-          <a
-            href="mailto:soporte@tugeocercas.com"
-            className="font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            soporte@tugeocercas.com
-          </a>
-          .
-        </p>
       </div>
     </div>
   );
