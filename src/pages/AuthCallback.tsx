@@ -73,47 +73,54 @@ export default function AuthCallback() {
         // ----------------------------------------
         // 2) Sesión establecida → limpiar URL
         // ----------------------------------------
-        window.history.replaceState(
-          {},
-          document.title,
-          "/auth/callback"
-        );
+        window.history.replaceState({}, document.title, "/auth/callback");
 
         setStatus("success");
         setMessage("Sesión iniciada correctamente. Redirigiendo…");
 
         // ----------------------------------------
-        // 3) Decidir destino final
-        //    a) Si hay ?next= o ?redirect_to= → respetar
-        //    b) Si no, decidir por rol (tracker → /tracker-gps)
+        // 3) Leer rol desde user_roles_view
+        //    (sin maybeSingle, por si hay varias filas)
         // ----------------------------------------
-        const searchParams = new URLSearchParams(url.search);
-        const next = searchParams.get("next") || searchParams.get("redirect_to");
-
-        // Intentar leer rol desde la vista user_roles_view
         let role = "";
         try {
-          const { data: roleRow } = await supabase
+          const { data: rows, error: roleErr } = await supabase
             .from("user_roles_view")
             .select("role_name")
-            .maybeSingle();
+            .limit(1);
 
-          role = (roleRow?.role_name || "").toLowerCase();
+          if (roleErr) {
+            console.warn("[AuthCallback] error user_roles_view:", roleErr);
+          }
+
+          if (rows && rows.length > 0) {
+            role = (rows[0].role_name || "").toLowerCase();
+          }
+
+          console.log("[AuthCallback] rol detectado:", role);
         } catch (e) {
           console.warn("[AuthCallback] No se pudo leer user_roles_view:", e);
         }
 
+        // ----------------------------------------
+        // 4) Decidir destino final
+        //
+        // Regla de oro:
+        //   - Si es tracker  → SIEMPRE /tracker-gps
+        //   - Si NO es tracker → /inicio (panel normal)
+        //
+        // No respetamos ?next ni ?redirect_to para trackers,
+        // para que no haya forma de que terminen en el panel.
+        // ----------------------------------------
         let target = "/inicio";
 
-        if (next) {
-          target = next;
-        } else if (role === "tracker") {
-          // 👉 FLUJO TRACKER-ONLY
+        if (role === "tracker") {
           target = "/tracker-gps";
         } else {
-          // 👉 OWNER / ADMIN / otros
           target = "/inicio";
         }
+
+        console.log("[AuthCallback] redirigiendo a:", target);
 
         setTimeout(() => {
           if (!active) return;
