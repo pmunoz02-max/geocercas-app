@@ -29,7 +29,7 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 
 // Auth
 import Login from "./pages/Login.tsx";
-import AuthCallback from "./pages/AuthCallback.jsx";
+import AuthCallback from "./pages/AuthCallback"; // ✅ sin extensión, apunta al .tsx
 
 // Dashboard interno
 import Inicio from "./pages/Inicio.jsx";
