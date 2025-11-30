@@ -21,7 +21,7 @@ import CostosPage from "./pages/CostosPage.jsx";
 // Módulo de Administradores
 import AdminsPage from "./pages/AdminsPage.jsx";
 
-// Tracker
+// Tracker (dashboard normal)
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 
 // Invitación de trackers
@@ -36,6 +36,9 @@ import Inicio from "./pages/Inicio.jsx";
 
 // Nueva landing pública
 import Landing from "./pages/Landing.jsx";
+
+// Página ESPECIAL de tracker-only GPS
+import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
 // Contexto de auth
 import { useAuth } from "./context/AuthContext.jsx";
@@ -107,6 +110,9 @@ export default function App() {
       <Routes>
         {/* 🔓 RUTA PÚBLICA PRINCIPAL: Landing */}
         <Route path="/" element={<Landing />} />
+
+        {/* ⭐⭐⭐ RUTA ESPECIAL PARA TRACKERS (Magic Link) */}
+        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
         {/* INICIO (dashboard interno) */}
         <Route
@@ -192,7 +198,7 @@ export default function App() {
           }
         />
 
-        {/* TRACKER */}
+        {/* TRACKER DASHBOARD NORMAL */}
         <Route
           path="/tracker-dashboard"
           element={
