@@ -14,32 +14,13 @@ const TIME_WINDOWS = [
   { label: "24 horas", valueHours: 24 },
 ];
 
-// Icono simple para los puntos de tracker (ya no lo usamos como gota, pero lo dejo por si lo quieres luego)
-const trackerIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
 function TrackerDashboard() {
   const { user, currentOrg, currentRole } = useAuth();
 
-  // ---------------------------
-  // Control de permisos
-  // ---------------------------
-
   const normalizedRole = (currentRole || "").toString().trim().toLowerCase();
-
   console.log("[TrackerDashboard] currentRole normalizado:", normalizedRole);
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   if (!currentOrg) {
     return (
@@ -63,13 +44,13 @@ function TrackerDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Refs para Leaflet
+  // Refs Leaflet
   const mapInstanceRef = useRef(null);
   const mapContainerRef = useRef(null);
   const geofencesLayerRef = useRef(null);
   const markersLayerRef = useRef(null);
 
-  // Ventana de tiempo [from, to] en ISO
+  // Ventana de tiempo [from, to] en ISO (para recorded_at)
   const { from, to } = useMemo(() => {
     const now = new Date();
     const toIso = now.toISOString();
@@ -77,7 +58,7 @@ function TrackerDashboard() {
     const fromIso = fromDate.toISOString();
 
     console.log(
-      "[TrackerDashboard] ventana de tiempo desde:",
+      "[TrackerDashboard] ventana de tiempo (recorded_at) desde:",
       fromIso,
       "hasta:",
       toIso
@@ -94,7 +75,7 @@ function TrackerDashboard() {
     if (mapInstanceRef.current || !mapContainerRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [-0.9, -78.5],
+      center: [-0.9, -78.5], // Ecuador aprox
       zoom: 7,
     });
 
@@ -132,7 +113,7 @@ function TrackerDashboard() {
       setError(null);
 
       try {
-        // 1) Geocercas activas y visibles
+        // 1) Geocercas activas y visibles de la org
         const { data: fencesData, error: fencesErr } = await supabase
           .from("geocercas")
           .select("*")
@@ -148,7 +129,7 @@ function TrackerDashboard() {
           fencesData
         );
 
-        // 2) Perfiles / trackers asociados al tenant
+        // 2) Perfiles / trackers de la organización
         const { data: profilesData, error: profilesErr } = await supabase
           .from("profiles")
           .select("id, full_name, email, org_id, tenant_id, user_id")
@@ -162,35 +143,26 @@ function TrackerDashboard() {
           profilesData
         );
 
-        // 3) Posiciones desde tracker_logs
+        // 3) Posiciones desde tracker_logs, filtradas por tenant y recorded_at
         let query = supabase
           .from("tracker_logs")
           .select(
-            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at, inside_geocerca, geocerca_ids, created_at"
+            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at, inside_geocerca, geocerca_ids"
           )
           .eq("tenant_id", currentOrg.id)
-          .gte("created_at", from)
-          .lte("created_at", to)
-          .order("created_at", { ascending: true });
+          .gte("recorded_at", from)
+          .lte("recorded_at", to)
+          .order("recorded_at", { ascending: true });
 
         if (selectedTrackerId !== "all") {
           query = query.eq("user_id", selectedTrackerId);
         }
 
-        let { data: logsData, error: logsErr } = await query;
+        const { data: logsData, error: logsErr } = await query;
 
         if (logsErr) {
-          console.warn(
-            "[TrackerDashboard] error en query principal de tracker_logs, intentando fallback *.select('*'):",
-            logsErr
-          );
-          const {
-            data: fallbackData,
-            error: fallbackErr,
-          } = await supabase.from("tracker_logs").select("*");
-
-          if (fallbackErr) throw fallbackErr;
-          logsData = fallbackData;
+          console.error("[TrackerDashboard] error al cargar tracker_logs:", logsErr);
+          throw logsErr;
         }
 
         console.log(
@@ -265,7 +237,7 @@ function TrackerDashboard() {
       }
     }
 
-    // Primera carga inmediata
+    // Primera carga
     loadData();
 
     // Auto–refresh
@@ -278,7 +250,7 @@ function TrackerDashboard() {
   }, [currentOrg?.id, selectedTrackerId, from, to]);
 
   // ---------------------------
-  // Pintar geocercas y puntos en el mapa
+  // Pintar geocercas y puntos en el mapa (solo círculos + polyline)
   // ---------------------------
 
   useEffect(() => {
@@ -295,7 +267,6 @@ function TrackerDashboard() {
       if (!g.geojson && !g.leaflet_geojson && !g.geoman_json) return;
 
       const raw = g.geojson || g.leaflet_geojson || g.geoman_json || null;
-
       if (!raw) return;
 
       try {
@@ -318,7 +289,7 @@ function TrackerDashboard() {
       }
     });
 
-    // Puntos de tracking
+    // Puntos de tracking (CÍRCULOS, no markers)
     const latlngs = [];
 
     positions.forEach((p, idx) => {
@@ -357,11 +328,9 @@ function TrackerDashboard() {
       circle.addTo(markersLayer);
     });
 
-    // Línea que une la secuencia de puntos dentro de la ventana de tiempo
+    // Línea que une la secuencia de puntos dentro de la ventana
     if (latlngs.length > 1) {
-      const polyline = L.polyline(latlngs, {
-        weight: 2,
-      });
+      const polyline = L.polyline(latlngs, { weight: 2 });
       polyline.addTo(markersLayer);
     }
 
@@ -373,7 +342,7 @@ function TrackerDashboard() {
   }, [geocercas, positions, trackerProfiles]);
 
   // ---------------------------
-  // Cálculos de resumen
+  // Resumen
   // ---------------------------
 
   const resumen = useMemo(() => {
@@ -466,7 +435,7 @@ function TrackerDashboard() {
       <aside className="w-full lg:w-80 border rounded p-3 bg-white flex flex-col gap-3">
         <div>
           <h2 className="text-lg font-semibold mb-1">Resumen</h2>
-          <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500">
             Ventana:{" "}
             <span className="font-medium">
               {timeWindowHours} hora(s) ({from} → {to})
@@ -498,9 +467,7 @@ function TrackerDashboard() {
         </div>
 
         {loading && (
-          <p className="text-xs text-blue-600">
-            Cargando datos de tracking…
-          </p>
+          <p className="text-xs text-blue-600">Cargando datos de tracking…</p>
         )}
         {error && (
           <p className="text-xs text-red-600">
