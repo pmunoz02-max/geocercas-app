@@ -54,10 +54,18 @@ import TopTabs from "./components/TopTabs.jsx";
 // Layout interno (app)
 // ---------------------
 function Shell({ children }) {
-  const { currentRole, loading } = useAuth();
-  const role = (currentRole || "").toLowerCase();
+  const { currentRole, loading, organizations, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  const normalizedRole = (currentRole || "").toLowerCase();
+  const hasOrgs = Array.isArray(organizations) && organizations.length > 0;
+
+  // 💡 Regla de oro:
+  // - Si el rol es "tracker" → tracker
+  // - Si NO hay organizaciones pero sí hay usuario → también lo tratamos como tracker
+  const treatAsTracker =
+    normalizedRole === "tracker" || (!!user && !hasOrgs && !normalizedRole);
 
   // Mientras el AuthContext está cargando, no mostramos nada “real”
   if (loading) {
@@ -71,21 +79,20 @@ function Shell({ children }) {
   }
 
   // 🚧 BLOQUEO DURO:
-  // Si el usuario es TRACKER y por cualquier motivo entró a una ruta interna
-  // (que usa Shell), lo mandamos a /tracker-gps y NO mostramos el panel.
+  // Si el usuario debe ser tratado como tracker y está en cualquier ruta del panel,
+  // lo mandamos a /tracker-gps y NO mostramos el panel.
   useEffect(() => {
-    if (role === "tracker" && location.pathname !== "/tracker-gps") {
+    if (treatAsTracker && location.pathname !== "/tracker-gps") {
       navigate("/tracker-gps", { replace: true });
     }
-  }, [role, location.pathname, navigate]);
+  }, [treatAsTracker, location.pathname, navigate]);
 
-  if (role === "tracker" && location.pathname !== "/tracker-gps") {
+  if (treatAsTracker && location.pathname !== "/tracker-gps") {
     // Mientras redirigimos, no mostramos nada del Shell (ni header ni tabs)
     return null;
   }
 
-  // Tabs base visibles para todos los usuarios autenticados (NO trackers,
-  // porque jamás deberían llegar aquí con esta lógica)
+  // Tabs base visibles solo para usuarios que NO son trackers
   const tabs = [
     { path: "/inicio", label: "Inicio" },
     { path: "/nueva-geocerca", label: "Nueva geocerca" },
@@ -97,12 +104,12 @@ function Shell({ children }) {
   ];
 
   // Solo owner / admin pueden invitar trackers
-  if (role === "owner" || role === "admin") {
+  if (normalizedRole === "owner" || normalizedRole === "admin") {
     tabs.push({ path: "/invitar-tracker", label: "Invitar tracker" });
   }
 
   // Solo owner ve la pestaña de Admins
-  if (role === "owner") {
+  if (normalizedRole === "owner") {
     tabs.push({ path: "/admins", label: "Admins" });
   }
 
@@ -275,4 +282,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
