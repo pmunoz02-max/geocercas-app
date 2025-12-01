@@ -147,7 +147,7 @@ function TrackerDashboard() {
         let query = supabase
           .from("tracker_logs")
           .select(
-            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at, inside_geocerca, geocerca_ids"
+            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at"
           )
           .eq("tenant_id", currentOrg.id)
           .gte("recorded_at", from)
@@ -190,15 +190,10 @@ function TrackerDashboard() {
               return null;
             }
 
-            const inside =
-              log.inside_geocerca ??
-              log.inside ??
-              log.inside_geofence ??
-              false;
-
             const ts =
               log.recorded_at ??
               log.received_at ??
+              log.ts ??
               log.created_at ??
               log.timestamp ??
               null;
@@ -211,7 +206,6 @@ function TrackerDashboard() {
               lat,
               lng,
               accuracy: log.accuracy ?? null,
-              inside,
               recorded_at: ts,
               recorded_date: dt,
             };
@@ -435,7 +429,7 @@ function TrackerDashboard() {
       <aside className="w-full lg:w-80 border rounded p-3 bg-white flex flex-col gap-3">
         <div>
           <h2 className="text-lg font-semibold mb-1">Resumen</h2>
-        <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-500">
             Ventana:{" "}
             <span className="font-medium">
               {timeWindowHours} hora(s) ({from} → {to})

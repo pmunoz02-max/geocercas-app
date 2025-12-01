@@ -50,17 +50,19 @@ export default function MapaTracking() {
     if (!error && data) setLatest(data);
   }
 
-  // Carga rastro (últimos N minutos)
+  // Carga rastro (últimos N minutos) desde tracker_logs
   async function loadTracks(minutes) {
     const { data, error } = await supabase
       .from("tracker_logs")
       .select("user_id, lat, lng, ts")
       .gte("ts", new Date(Date.now() - minutes * 60_000).toISOString())
       .order("ts", { ascending: true });
+
     if (error) {
       console.error("[loadTracks]", error);
       return;
     }
+
     // Agrupar por usuario
     const grouped = {};
     for (const r of data || []) {
