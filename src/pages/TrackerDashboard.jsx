@@ -212,11 +212,7 @@ function TrackerDashboard() {
         const normalizedPositions = (logsData || [])
           .map((log) => {
             const lat =
-              log.lat ??
-              log.latitude ??
-              log.latitud ??
-              log.latitud_decimal ??
-              null;
+              log.lat ?? log.latitude ?? log.latitud ?? log.latitud_decimal ?? null;
             const lng =
               log.lng ??
               log.longitude ??
@@ -407,10 +403,11 @@ function TrackerDashboard() {
             Dashboard de Tracking en tiempo real
           </h1>
           <p className="text-sm text-gray-600 max-w-2xl">
-            Visualiza la ubicación de tus trackers sobre tus geocercas
-            activas. Los puntos se actualizan automáticamente cada 30
-            segundos. La ventana de tiempo es escogida por el
-            administrador.
+            Los puntos se actualizan automáticamente.
+            <br />
+            La frecuencia de envío configurada para esta asignación es de 5 minutos.
+            <br />
+            La ventana de tiempo la define el administrador.
           </p>
         </header>
 
