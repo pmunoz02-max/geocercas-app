@@ -1,29 +1,130 @@
 // src/App.jsx
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
+import AuthGuard from "./components/AuthGuard.jsx";
+import AppHeader from "./components/AppHeader.jsx";
+
+// --- Páginas / componentes principales ---
 import PersonalPage from "./components/personal/PersonalPage.jsx";
-import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-
-// Páginas del panel
-import GeocercasPage from "./pages/GeocercasPage.jsx";
-import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
+import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
+import GeocercasPage from "./pages/GeocercasPage.jsx";
+
+// Actividades + Reportes (antes Costos)
+import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
+
+// Módulo de Administradores
 import AdminsPage from "./pages/AdminsPage.jsx";
+
+// Tracker (dashboard normal)
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
+
+// Invitación de trackers
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 
-// Auth + especiales
-import Login from "./pages/Login.tsx";        // 👈 AQUÍ usamos Login.tsx, no Login.jsx
+// Auth
+import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback";
+
+// Dashboard interno
 import Inicio from "./pages/Inicio.jsx";
+
+// Nueva landing pública
 import Landing from "./pages/Landing.jsx";
+
+// Página ESPECIAL de tracker-only GPS
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
-import ProtectedShell from "./layout/ProtectedShell.jsx";
+// Contexto de auth
+import { useAuth } from "./context/AuthContext.jsx";
 
-// Layout sencillo para la pantalla de login (sin AppHeader)
+// Top Tabs
+import TopTabs from "./components/TopTabs.jsx";
+
+// ---------------------
+// Layout interno (app)
+// ---------------------
+function Shell({ children }) {
+  const { currentRole, loading } = useAuth();
+  const role = (currentRole || "").toLowerCase();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Mientras el AuthContext está cargando, no mostramos nada “real”
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+          Cargando tu sesión…
+        </div>
+      </div>
+    );
+  }
+
+  // 🚧 BLOQUEO DURO:
+  // Si el usuario es TRACKER y por cualquier motivo entró a una ruta interna
+  // (que usa Shell), lo mandamos a /tracker-gps y NO mostramos el panel.
+  useEffect(() => {
+    if (role === "tracker" && location.pathname !== "/tracker-gps") {
+      navigate("/tracker-gps", { replace: true });
+    }
+  }, [role, location.pathname, navigate]);
+
+  if (role === "tracker" && location.pathname !== "/tracker-gps") {
+    // Mientras redirigimos, no mostramos nada del Shell (ni header ni tabs)
+    return null;
+  }
+
+  // Tabs base visibles para todos los usuarios autenticados (NO trackers,
+  // porque jamás deberían llegar aquí con esta lógica)
+  const tabs = [
+    { path: "/inicio", label: "Inicio" },
+    { path: "/nueva-geocerca", label: "Nueva geocerca" },
+    { path: "/personal", label: "Personal" },
+    { path: "/actividades", label: "Actividades" },
+    { path: "/asignaciones", label: "Asignaciones" },
+    { path: "/costos", label: "Reportes" },
+    { path: "/tracker-dashboard", label: "Tracker" },
+  ];
+
+  // Solo owner / admin pueden invitar trackers
+  if (role === "owner" || role === "admin") {
+    tabs.push({ path: "/invitar-tracker", label: "Invitar tracker" });
+  }
+
+  // Solo owner ve la pestaña de Admins
+  if (role === "owner") {
+    tabs.push({ path: "/admins", label: "Admins" });
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      <AppHeader />
+
+      {/* Top Tabs */}
+      <div className="border-b border-slate-200 bg-white">
+        <TopTabs tabs={tabs} />
+      </div>
+
+      {/* Contenido principal */}
+      <main className="flex-1 p-4 max-w-6xl mx-auto w-full">{children}</main>
+    </div>
+  );
+}
+
+// ---------------------
+// Layout de LOGIN
+// (SIN AppHeader)
+// ---------------------
 function LoginShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -36,31 +137,137 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing pública */}
+        {/* 🔓 RUTA PÚBLICA PRINCIPAL: Landing */}
         <Route path="/" element={<Landing />} />
 
-        {/* Ruta especial de tracker (Magic Link, GPS) */}
+        {/* ⭐⭐⭐ RUTA ESPECIAL PARA TRACKERS (Magic Link) */}
         <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
-        {/* Callback de Supabase Auth (Magic Link) */}
+        {/* INICIO (dashboard interno) */}
+        <Route
+          path="/inicio"
+          element={
+            <AuthGuard>
+              <Shell>
+                <Inicio />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* NUEVA GEO */}
+        <Route
+          path="/nueva-geocerca"
+          element={
+            <AuthGuard>
+              <Shell>
+                <NuevaGeocerca />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* GEO CERCAS */}
+        <Route
+          path="/geocercas"
+          element={
+            <AuthGuard>
+              <Shell>
+                <GeocercasPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* PERSONAL */}
+        <Route
+          path="/personal"
+          element={
+            <AuthGuard>
+              <Shell>
+                <PersonalPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ACTIVIDADES */}
+        <Route
+          path="/actividades"
+          element={
+            <AuthGuard>
+              <Shell>
+                <ActividadesPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ASIGNACIONES */}
+        <Route
+          path="/asignaciones"
+          element={
+            <AuthGuard>
+              <Shell>
+                <AsignacionesPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* REPORTES */}
+        <Route
+          path="/costos"
+          element={
+            <AuthGuard>
+              <Shell>
+                <CostosPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* TRACKER DASHBOARD NORMAL (solo admins/owners, nunca trackers con esta lógica) */}
+        <Route
+          path="/tracker-dashboard"
+          element={
+            <AuthGuard>
+              <Shell>
+                <TrackerDashboard />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* INVITAR TRACKER */}
+        <Route
+          path="/invitar-tracker"
+          element={
+            <AuthGuard>
+              <Shell>
+                <InvitarTracker />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ADMINS */}
+        <Route
+          path="/admins"
+          element={
+            <AuthGuard>
+              <Shell>
+                <AdminsPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* AUTH CALLBACK (Magic Link) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* Login aislado, sin AppHeader */}
+        {/* LOGIN: pantalla aislada, sin AppHeader */}
         <Route path="/login" element={<LoginShell />} />
-
-        {/* Rutas protegidas (owner / admin) con layout + tabs */}
-        <Route element={<ProtectedShell />}>
-          <Route path="/inicio" element={<Inicio />} />
-          <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
-          <Route path="/geocercas" element={<GeocercasPage />} />
-          <Route path="/personal" element={<PersonalPage />} />
-          <Route path="/actividades" element={<ActividadesPage />} />
-          <Route path="/asignaciones" element={<AsignacionesPage />} />
-          <Route path="/costos" element={<CostosPage />} />
-          <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
-          <Route path="/invitar-tracker" element={<InvitarTracker />} />
-          <Route path="/admins" element={<AdminsPage />} />
-        </Route>
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
@@ -68,3 +275,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
