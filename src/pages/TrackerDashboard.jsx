@@ -13,14 +13,13 @@ const TIME_WINDOWS = [
   { label: "12 horas", valueHours: 12 },
   { label: "24 horas", valueHours: 24 },
 ];
-// Icono simple para los puntos de tracker
+
+// Icono simple para los puntos de tracker (ya no lo usamos como gota, pero lo dejo por si lo quieres luego)
 const trackerIcon = new L.Icon({
-  iconUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -34,21 +33,14 @@ function TrackerDashboard() {
   // Control de permisos
   // ---------------------------
 
-  const normalizedRole = (currentRole || "")
-    .toString()
-    .trim()
-    .toLowerCase();
+  const normalizedRole = (currentRole || "").toString().trim().toLowerCase();
 
   console.log("[TrackerDashboard] currentRole normalizado:", normalizedRole);
 
-  // Si no hay usuario autenticado, este componente no debe mostrar
-  // el mensaje de organización. Dejamos que el flujo de login
-  // muestre la pantalla correspondiente.
   if (!user) {
     return null;
   }
 
-  // Usuario autenticado pero sin organización seleccionada
   if (!currentOrg) {
     return (
       <div className="p-4">
@@ -81,9 +73,7 @@ function TrackerDashboard() {
   const { from, to } = useMemo(() => {
     const now = new Date();
     const toIso = now.toISOString();
-    const fromDate = new Date(
-      now.getTime() - timeWindowHours * 60 * 60 * 1000
-    );
+    const fromDate = new Date(now.getTime() - timeWindowHours * 60 * 60 * 1000);
     const fromIso = fromDate.toISOString();
 
     console.log(
@@ -104,12 +94,12 @@ function TrackerDashboard() {
     if (mapInstanceRef.current || !mapContainerRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [-0.9, -78.5], // Ecuador aprox
+      center: [-0.9, -78.5],
       zoom: 7,
     });
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: "&copy; OpenStreetMap contributors",
       maxZoom: 19,
     }).addTo(map);
 
@@ -176,12 +166,12 @@ function TrackerDashboard() {
         let query = supabase
           .from("tracker_logs")
           .select(
-            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at, inside_geocerca, geocerca_ids"
+            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at, inside_geocerca, geocerca_ids, created_at"
           )
           .eq("tenant_id", currentOrg.id)
-          .gte("recorded_at", from)
-          .lte("recorded_at", to)
-          .order("recorded_at", { ascending: true });
+          .gte("created_at", from)
+          .lte("created_at", to)
+          .order("created_at", { ascending: true });
 
         if (selectedTrackerId !== "all") {
           query = query.eq("user_id", selectedTrackerId);
@@ -212,7 +202,11 @@ function TrackerDashboard() {
         const normalizedPositions = (logsData || [])
           .map((log) => {
             const lat =
-              log.lat ?? log.latitude ?? log.latitud ?? log.latitud_decimal ?? null;
+              log.lat ??
+              log.latitude ??
+              log.latitud ??
+              log.latitud_decimal ??
+              null;
             const lng =
               log.lng ??
               log.longitude ??
@@ -261,8 +255,7 @@ function TrackerDashboard() {
         console.error("[TrackerDashboard] error general loadData:", e);
         if (!cancelled) {
           setError(
-            e?.message ||
-              "Error cargando datos de tracking. Revisa la consola."
+            e?.message || "Error cargando datos de tracking. Revisa la consola."
           );
         }
       } finally {
@@ -301,14 +294,12 @@ function TrackerDashboard() {
     geocercas.forEach((g) => {
       if (!g.geojson && !g.leaflet_geojson && !g.geoman_json) return;
 
-      const raw =
-        g.geojson || g.leaflet_geojson || g.geoman_json || null;
+      const raw = g.geojson || g.leaflet_geojson || g.geoman_json || null;
 
       if (!raw) return;
 
       try {
-        const gj =
-          typeof raw === "string" ? JSON.parse(raw) : raw;
+        const gj = typeof raw === "string" ? JSON.parse(raw) : raw;
         const layer = L.geoJSON(gj, {
           style: {
             color: "#ff7800",
@@ -328,8 +319,11 @@ function TrackerDashboard() {
     });
 
     // Puntos de tracking
-    positions.forEach((p) => {
-      const marker = L.marker([p.lat, p.lng], { icon: trackerIcon });
+    const latlngs = [];
+
+    positions.forEach((p, idx) => {
+      const latlng = [p.lat, p.lng];
+      latlngs.push(latlng);
 
       const trackerProfile = trackerProfiles.find(
         (tp) => tp.user_id === p.user_id || tp.id === p.user_id
@@ -345,7 +339,14 @@ function TrackerDashboard() {
         ? p.recorded_date.toLocaleString()
         : p.recorded_at || "";
 
-      marker.bindPopup(
+      // Círculo pequeño para cada punto; el último un poco más grande
+      const circle = L.circleMarker(latlng, {
+        radius: idx === positions.length - 1 ? 7 : 5,
+        weight: idx === positions.length - 1 ? 2 : 1,
+        fillOpacity: 0.9,
+      });
+
+      circle.bindPopup(
         `<div>
           <strong>${label}</strong><br/>
           ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}<br/>
@@ -353,12 +354,19 @@ function TrackerDashboard() {
         </div>`
       );
 
-      marker.addTo(markersLayer);
+      circle.addTo(markersLayer);
     });
+
+    // Línea que une la secuencia de puntos dentro de la ventana de tiempo
+    if (latlngs.length > 1) {
+      const polyline = L.polyline(latlngs, {
+        weight: 2,
+      });
+      polyline.addTo(markersLayer);
+    }
 
     // Ajustar bounds si hay puntos
     if (positions.length > 0) {
-      const latlngs = positions.map((p) => [p.lat, p.lng]);
       const bounds = L.latLngBounds(latlngs);
       map.fitBounds(bounds, { padding: [20, 20] });
     }
@@ -374,9 +382,7 @@ function TrackerDashboard() {
     const totalPuntos = positions.length;
 
     const ultimo =
-      positions.length > 0
-        ? positions[positions.length - 1]
-        : null;
+      positions.length > 0 ? positions[positions.length - 1] : null;
 
     const ultimoTs = ultimo?.recorded_date
       ? ultimo.recorded_date.toLocaleString()
@@ -405,7 +411,8 @@ function TrackerDashboard() {
           <p className="text-sm text-gray-600 max-w-2xl">
             Los puntos se actualizan automáticamente.
             <br />
-            La frecuencia de envío configurada para esta asignación es de 5 minutos.
+            La frecuencia de envío configurada para esta asignación es de 5
+            minutos.
             <br />
             La ventana de tiempo la define el administrador.
           </p>
@@ -420,16 +427,11 @@ function TrackerDashboard() {
             <select
               className="border rounded px-2 py-1 text-sm"
               value={selectedTrackerId}
-              onChange={(e) =>
-                setSelectedTrackerId(e.target.value)
-              }
+              onChange={(e) => setSelectedTrackerId(e.target.value)}
             >
               <option value="all">Todos los trackers</option>
               {trackerProfiles.map((tp) => (
-                <option
-                  key={tp.id}
-                  value={tp.user_id || tp.id}
-                >
+                <option key={tp.id} value={tp.user_id || tp.id}>
                   {tp.full_name || tp.email || tp.user_id}
                 </option>
               ))}
@@ -443,15 +445,10 @@ function TrackerDashboard() {
             <select
               className="border rounded px-2 py-1 text-sm"
               value={timeWindowHours}
-              onChange={(e) =>
-                setTimeWindowHours(Number(e.target.value))
-              }
+              onChange={(e) => setTimeWindowHours(Number(e.target.value))}
             >
               {TIME_WINDOWS.map((tw) => (
-                <option
-                  key={tw.valueHours}
-                  value={tw.valueHours}
-                >
+                <option key={tw.valueHours} value={tw.valueHours}>
                   {tw.label}
                 </option>
               ))}
@@ -479,15 +476,11 @@ function TrackerDashboard() {
 
         <div className="space-y-1 text-sm">
           <p>
-            <span className="font-medium">
-              Geocercas activas:
-            </span>{" "}
+            <span className="font-medium">Geocercas activas:</span>{" "}
             {resumen.totalGeocercas}
           </p>
           <p>
-            <span className="font-medium">
-              Trackers (perfiles):
-            </span>{" "}
+            <span className="font-medium">Trackers (perfiles):</span>{" "}
             {resumen.totalTrackers}
           </p>
           <p>
@@ -499,9 +492,7 @@ function TrackerDashboard() {
           {resumen.ultimoTs && (
             <p className="text-xs text-gray-500">
               Último punto registrado:{" "}
-              <span className="font-medium">
-                {resumen.ultimoTs}
-              </span>
+              <span className="font-medium">{resumen.ultimoTs}</span>
             </p>
           )}
         </div>
