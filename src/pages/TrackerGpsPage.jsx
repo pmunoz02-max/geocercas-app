@@ -1,211 +1,304 @@
 // src/pages/TrackerGpsPage.jsx
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 
+// Intervalo de envío desde el cliente.
+// Debe ser >= MIN_INTERVAL_MS de la función (10s) para evitar 429.
+const CLIENT_SEND_INTERVAL_MS = 12_000;
+
 export default function TrackerGpsPage() {
-  const navigate = useNavigate();
+  const [status, setStatus] = useState("Iniciando tracker…");
+  const [coords, setCoords] = useState(null); // { lat, lng, accuracy }
+  const [lastSend, setLastSend] = useState(null); // fecha/hora último envío ok
+  const [lastError, setLastError] = useState(null);
+  const [isSending, setIsSending] = useState(false);
 
-  // "checking" | "requesting" | "tracking" | "error"
-  const [phase, setPhase] = useState("checking");
-  const [error, setError] = useState("");
-  const [coords, setCoords] = useState(null);
+  const watchIdRef = useRef(null);
+  const intervalRef = useRef(null);
+  const lastCoordsRef = useRef(null);
 
-  // 1) Validar sesión y rol directamente con Supabase (SIN AuthContext)
+  // ---------------------------------------------------
+  // 1) Obtener sesión (para saber si el tracker está logueado)
+  // ---------------------------------------------------
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
 
-    const checkSessionAndRole = async () => {
-      try {
-        setPhase("checking");
-
-        const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          console.error("[TrackerGps] getSession error:", sessionError);
+    async function checkSession() {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error("[TrackerGpsPage] error getSession:", error);
+        if (!cancelled) {
+          setStatus("Error obteniendo sesión");
+          setLastError(error.message || String(error));
         }
-
-        if (!session) {
-          if (!active) return;
-          // Sin sesión → vete directo a login
-          navigate("/login", { replace: true });
-          return;
-        }
-
-        const { data: rows, error: roleErr } = await supabase
-          .from("user_roles_view")
-          .select("role_name");
-
-        if (roleErr) {
-          console.warn("[TrackerGps] error user_roles_view:", roleErr);
-        }
-
-        const hasTrackerRole =
-          Array.isArray(rows) &&
-          rows.some(
-            (r) =>
-              String(r.role_name || "").trim().toLowerCase() === "tracker"
-          );
-
-        console.log("[TrackerGps] tiene rol tracker?:", hasTrackerRole);
-
-        if (!active) return;
-
-        // 👇 SI NO ES TRACKER: lo mandamos directo al panel
-        if (!hasTrackerRole) {
-          navigate("/inicio", { replace: true });
-          return;
-        }
-
-        // ✅ Es tracker → pasamos a la fase de geolocalización
-        setPhase("requesting");
-      } catch (e) {
-        console.error("[TrackerGps] excepción en checkSessionAndRole:", e);
-        if (!active) return;
-        setPhase("error");
-        setError("Ocurrió un error al validar tu sesión. Intenta de nuevo.");
+        return;
       }
-    };
+      if (!data?.session) {
+        console.warn("[TrackerGpsPage] NO hay sesión activa");
+        if (!cancelled) {
+          setStatus("No hay sesión activa. Abre el tracker desde el enlace de invitación.");
+          setLastError("Sesión nula: el usuario no está autenticado");
+        }
+      } else {
+        console.log(
+          "[TrackerGpsPage] sesión OK, user_id:",
+          data.session.user.id,
+          "email:",
+          data.session.user.email
+        );
+        if (!cancelled) {
+          setStatus("Sesión OK. Iniciando geolocalización…");
+        }
+      }
+    }
 
-    checkSessionAndRole();
+    checkSession();
 
     return () => {
-      active = false;
+      cancelled = true;
     };
-  }, [navigate]);
+  }, []);
 
-  // 2) Si el rol ES tracker (phase === "requesting"), iniciar geolocalización
+  // ---------------------------------------------------
+  // 2) Iniciar geolocalización del navegador
+  // ---------------------------------------------------
   useEffect(() => {
-    if (phase !== "requesting") return;
-
     if (!("geolocation" in navigator)) {
-      setPhase("error");
-      setError("Este dispositivo no soporta geolocalización.");
+      setStatus("Este dispositivo no soporta geolocalización.");
       return;
     }
 
-    let watchId = null;
+    setStatus("Solicitando permiso de ubicación…");
 
-    const startWatch = async () => {
-      try {
-        watchId = navigator.geolocation.watchPosition(
-          async (pos) => {
-            const { latitude, longitude, accuracy } = pos.coords;
-            setCoords({ latitude, longitude, accuracy });
-            setPhase("tracking");
-
-            try {
-              const { error: fnError } = await supabase.functions.invoke(
-                "send_position",
-                {
-                  body: {
-                    lat: latitude,
-                    lng: longitude,
-                    accuracy,
-                    source: "tracker-magic-link",
-                  },
-                }
-              );
-
-              if (fnError) {
-                console.error(
-                  "[TrackerGps] error al enviar posición:",
-                  fnError
-                );
-              }
-            } catch (err) {
-              console.error("[TrackerGps] excepción al enviar posición:", err);
-            }
-          },
-          (geoError) => {
-            console.error("[TrackerGps] geolocation error:", geoError);
-            let msg = "No se pudo obtener tu ubicación.";
-            if (geoError.code === geoError.PERMISSION_DENIED) {
-              msg =
-                "No se pudo obtener tu ubicación.\nDebes permitir el acceso al GPS.";
-            }
-            setPhase("error");
-            setError(msg);
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 10_000,
-            timeout: 20_000,
-          }
-        );
-      } catch (e) {
-        console.error("[TrackerGps] excepción general en geolocalización:", e);
-        setPhase("error");
-        setError("Ocurrió un error al iniciar el tracker.");
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const c = {
+          lat: latitude,
+          lng: longitude,
+          accuracy: accuracy ?? null,
+        };
+        lastCoordsRef.current = c;
+        setCoords(c);
+        setStatus("Tracker activo. Ubicación obtenida.");
+        // No enviamos aquí directamente, dejamos que lo haga el intervalo.
+      },
+      (err) => {
+        console.error("[TrackerGpsPage] error geolocalización:", err);
+        setStatus("No se pudo obtener la ubicación.");
+        setLastError(err.message || String(err));
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5_000,
+        timeout: 20_000,
       }
-    };
+    );
 
-    startWatch();
+    watchIdRef.current = watchId;
 
     return () => {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [phase]);
+  }, []);
 
-  if (phase === "checking") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="w-full max-w-sm rounded-2xl bg-slate-800/80 border border-slate-700 p-6 text-center shadow-lg">
-          <p className="text-sm text-slate-200">
-            Verificando tu sesión de tracker…
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // ---------------------------------------------------
+  // 3) Enviar posición periódicamente a la Edge Function
+  // ---------------------------------------------------
+  useEffect(() => {
+    async function sendPositionOnce() {
+      const c = lastCoordsRef.current;
+      if (!c) {
+        // Aún no hay coordenadas
+        return;
+      }
 
-  if (phase === "error") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="w-full max-w-sm rounded-2xl bg-slate-800/80 border border-slate-700 p-6 text-center shadow-lg">
-          <h1 className="text-xl font-semibold mb-2">Error en tracker</h1>
-          <p className="text-sm text-red-300 whitespace-pre-line">{error}</p>
-        </div>
-      </div>
-    );
-  }
+      setIsSending(true);
+      setLastError(null);
 
-  // phase === "requesting" | "tracking"
+      const payload = {
+        lat: c.lat,
+        lng: c.lng,
+        accuracy: c.accuracy,
+        at: new Date().toISOString(),
+        source: "tracker-gps-page",
+      };
+
+      console.log("[TrackerGpsPage] enviando posición → send_position:", payload);
+
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          "send_position",
+          {
+            body: payload,
+          }
+        );
+
+        if (error) {
+          console.error("[TrackerGpsPage] error invoke send_position:", error);
+          setLastError(error.message || String(error));
+          setStatus("Error al enviar posición al servidor.");
+        } else {
+          console.log("[TrackerGpsPage] respuesta send_position:", data);
+          setStatus("Posición enviada correctamente.");
+          setLastSend(new Date());
+        }
+      } catch (e) {
+        console.error("[TrackerGpsPage] excepción invoke send_position:", e);
+        setLastError(e.message || String(e));
+        setStatus("Error de red al enviar posición.");
+      } finally {
+        setIsSending(false);
+      }
+    }
+
+    // Intervalo periódico
+    const id = setInterval(sendPositionOnce, CLIENT_SEND_INTERVAL_MS);
+    intervalRef.current = id;
+
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  // ---------------------------------------------------
+  // Render UI
+  // ---------------------------------------------------
+
+  const formattedLastSend = lastSend
+    ? lastSend.toLocaleTimeString()
+    : "—";
+
+  const latText =
+    coords?.lat != null ? coords.lat.toFixed(6) : "—";
+  const lngText =
+    coords?.lng != null ? coords.lng.toFixed(6) : "—";
+  const accText =
+    coords?.accuracy != null ? `${coords.accuracy.toFixed(1)} m` : "—";
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-slate-800/80 border border-slate-700 p-6 text-center shadow-lg">
-        <h1 className="text-xl font-semibold mb-2">Tracker activo</h1>
-        <p className="text-sm text-slate-300 mb-4">
-          Mantén esta pantalla abierta. Tu ubicación se enviará
-          automáticamente mientras te muevas. El sistema solo usa los puntos que
-          estén dentro de las geocercas asignadas a tu usuario.
+    <div
+      style={{
+        minHeight: "100vh",
+        margin: 0,
+        padding: "16px",
+        background: "radial-gradient(circle at top, #243b53 0, #111827 55%, #020617 100%)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        color: "#e5e7eb",
+        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 420,
+          width: "100%",
+          background: "rgba(15, 23, 42, 0.92)",
+          borderRadius: 24,
+          padding: 24,
+          boxShadow: "0 20px 45px rgba(0,0,0,0.55)",
+          border: "1px solid rgba(148, 163, 184, 0.25)",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: 24,
+            fontWeight: 600,
+            textAlign: "center",
+            marginBottom: 12,
+          }}
+        >
+          Tracker activo
+        </h1>
+
+        <p
+          style={{
+            fontSize: 13,
+            lineHeight: 1.5,
+            textAlign: "center",
+            color: "#cbd5f5",
+            marginBottom: 18,
+          }}
+        >
+          Mantén esta pantalla abierta. Tu ubicación se enviará automáticamente mientras te mueves.
+          El sistema registra todos los puntos para el dashboard, y usa especialmente los que están
+          dentro de las geocercas asignadas a tu usuario.
         </p>
 
-        {phase === "requesting" && (
-          <p className="text-sm text-slate-200 mb-2">
-            Esperando permiso de ubicación…
-          </p>
-        )}
+        <div
+          style={{
+            background: "rgba(15, 23, 42, 0.85)",
+            borderRadius: 16,
+            padding: 16,
+            border: "1px solid rgba(148,163,184,0.35)",
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "monospace",
+              fontSize: 14,
+              lineHeight: 1.6,
+            }}
+          >
+            <div>
+              <span style={{ color: "#9ca3af" }}>Lat:</span>{" "}
+              <span>{latText}</span>
+            </div>
+            <div>
+              <span style={{ color: "#9ca3af" }}>Lng:</span>{" "}
+              <span>{lngText}</span>
+            </div>
+            <div>
+              <span style={{ color: "#9ca3af" }}>Precisión:</span>{" "}
+              <span>{accText}</span>
+            </div>
+            <div>
+              <span style={{ color: "#9ca3af" }}>Último envío:</span>{" "}
+              <span>{formattedLastSend}</span>
+            </div>
+          </div>
 
-        {phase === "tracking" && coords && (
-          <div className="mt-2 text-left bg-slate-900/60 rounded-xl p-3 text-xs">
-            <p className="font-mono">
-              Lat: {coords.latitude.toFixed(6)}
-              <br />
-              Lng: {coords.longitude.toFixed(6)}
-              <br />
-              Precisión: {Math.round(coords.accuracy)} m
-            </p>
-            <p className="mt-2 text-[11px] text-slate-400">
-              Puedes bloquear la pantalla; mientras esta página esté abierta en
-              segundo plano y el GPS siga activo, seguiremos recibiendo tus
-              posiciones.
-            </p>
+          <p
+            style={{
+              fontSize: 11,
+              color: "#9ca3af",
+              marginTop: 12,
+            }}
+          >
+            Puedes bloquear la pantalla; mientras esta página esté abierta en segundo plano y el GPS
+            siga activo, seguiremos recibiendo tus posiciones (según cobertura y batería).
+          </p>
+        </div>
+
+        <div
+          style={{
+            fontSize: 12,
+            marginBottom: 8,
+            color: isSending ? "#a5b4fc" : "#bbf7d0",
+          }}
+        >
+          {status}
+        </div>
+
+        {lastError && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "#fecaca",
+              background: "rgba(127,29,29,0.35)",
+              borderRadius: 12,
+              padding: 8,
+              border: "1px solid rgba(248,113,113,0.4)",
+              marginTop: 4,
+            }}
+          >
+            <strong>Error:</strong> {lastError}
           </div>
         )}
       </div>

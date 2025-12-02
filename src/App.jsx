@@ -44,6 +44,9 @@ import Landing from "./pages/Landing.jsx";
 // Página ESPECIAL de tracker-only GPS
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
+// 🔐 Nueva página de reset de contraseña
+import ResetPassword from "./pages/ResetPassword.jsx";
+
 // Contexto de auth
 import { useAuth } from "./context/AuthContext.jsx";
 
@@ -149,6 +152,9 @@ export default function App() {
 
         {/* ⭐⭐⭐ RUTA ESPECIAL PARA TRACKERS (Magic Link) */}
         <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+
+        {/* 🔐 RUTA PÚBLICA PARA RESET DE CONTRASEÑA (admins y trackers) */}
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* INICIO (dashboard interno) */}
         <Route
