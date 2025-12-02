@@ -47,6 +47,7 @@ function TrackerDashboard() {
 
   const [timeWindowHours, setTimeWindowHours] = useState(6);
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
+  const [selectedGeocercaId, setSelectedGeocercaId] = useState("all");
 
   const [geocercas, setGeocercas] = useState([]);
   const [trackerProfiles, setTrackerProfiles] = useState([]);
@@ -310,6 +311,15 @@ function TrackerDashboard() {
   }, [positions, trackerProfiles]);
 
   // ---------------------------
+  // Geocercas filtradas por dropdown
+  // ---------------------------
+
+  const geocercasFiltradas = useMemo(() => {
+    if (selectedGeocercaId === "all") return geocercas;
+    return geocercas.filter((g) => String(g.id) === String(selectedGeocercaId));
+  }, [geocercas, selectedGeocercaId]);
+
+  // ---------------------------
   // Pintar geocercas y puntos/rutas en el mapa
   // ---------------------------
 
@@ -322,8 +332,8 @@ function TrackerDashboard() {
     geofencesLayer.clearLayers();
     markersLayer.clearLayers();
 
-    // Geocercas
-    geocercas.forEach((g) => {
+    // Geocercas filtradas
+    geocercasFiltradas.forEach((g) => {
       if (!g.geojson && !g.leaflet_geojson && !g.geoman_json) return;
 
       const raw = g.geojson || g.leaflet_geojson || g.geoman_json || null;
@@ -402,7 +412,7 @@ function TrackerDashboard() {
       const bounds = L.latLngBounds(allLatLngs);
       map.fitBounds(bounds, { padding: [20, 20] });
     }
-  }, [geocercas, trackerGroups]);
+  }, [geocercasFiltradas, trackerGroups]);
 
   // ---------------------------
   // Resumen
@@ -482,6 +492,24 @@ function TrackerDashboard() {
               {TIME_WINDOWS.map((tw) => (
                 <option key={tw.valueHours} value={tw.valueHours}>
                   {tw.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-xs font-medium text-gray-600">
+              Geocerca
+            </label>
+            <select
+              className="border rounded px-2 py-1 text-sm"
+              value={selectedGeocercaId}
+              onChange={(e) => setSelectedGeocercaId(e.target.value)}
+            >
+              <option value="all">Todas las geocercas</option>
+              {geocercas.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nombre || g.name || `Geocerca ${g.id}`}
                 </option>
               ))}
             </select>
