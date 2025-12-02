@@ -14,6 +14,17 @@ const TIME_WINDOWS = [
   { label: "24 horas", valueHours: 24 },
 ];
 
+// Paleta de colores para trackers
+const TRACKER_COLORS = [
+  "#007AFF", // azul
+  "#FF3B30", // rojo
+  "#34C759", // verde
+  "#FF9500", // naranja
+  "#AF52DE", // púrpura
+  "#5856D6", // índigo
+  "#FF2D55", // rosa fuerte
+];
+
 function TrackerDashboard() {
   const { user, currentOrg, currentRole } = useAuth();
 
@@ -152,7 +163,7 @@ function TrackerDashboard() {
           .eq("tenant_id", currentOrg.id)
           .gte("recorded_at", from)
           .lte("recorded_at", to)
-          .order("recorded_at", { ascending: true });
+          .order("recorded_at", { ascending: true }); // <-- orden cronológico
 
         if (selectedTrackerId !== "all") {
           query = query.eq("user_id", selectedTrackerId);
@@ -161,7 +172,10 @@ function TrackerDashboard() {
         const { data: logsData, error: logsErr } = await query;
 
         if (logsErr) {
-          console.error("[TrackerDashboard] error al cargar tracker_logs:", logsErr);
+          console.error(
+            "[TrackerDashboard] error al cargar tracker_logs:",
+            logsErr
+          );
           throw logsErr;
         }
 
@@ -244,7 +258,59 @@ function TrackerDashboard() {
   }, [currentOrg?.id, selectedTrackerId, from, to]);
 
   // ---------------------------
-  // Pintar geocercas y puntos en el mapa (solo círculos + polyline)
+  // Agrupar posiciones por tracker + colores + datos de leyenda
+  // ---------------------------
+
+  const trackerGroups = useMemo(() => {
+    if (!positions || positions.length === 0) return [];
+
+    const groups = new Map();
+
+    positions.forEach((p) => {
+      const trackerId = p.user_id || "desconocido";
+      if (!groups.has(trackerId)) groups.set(trackerId, []);
+      groups.get(trackerId).push(p);
+    });
+
+    // Orden estable de trackers (alfabético por id)
+    const trackerIds = Array.from(groups.keys()).sort();
+
+    return trackerIds.map((trackerId, index) => {
+      const pts = groups.get(trackerId) || [];
+
+      // Orden cronológico por seguridad
+      pts.sort((a, b) => {
+        const ta = a.recorded_date?.getTime() || 0;
+        const tb = b.recorded_date?.getTime() || 0;
+        return ta - tb;
+      });
+
+      const profile = trackerProfiles.find(
+        (tp) => tp.user_id === trackerId || tp.id === trackerId
+      );
+
+      const label =
+        profile?.full_name || profile?.email || trackerId || "Tracker";
+
+      const color = TRACKER_COLORS[index % TRACKER_COLORS.length];
+
+      const last = pts.length > 0 ? pts[pts.length - 1] : null;
+      const lastTs = last?.recorded_date
+        ? last.recorded_date.toLocaleString()
+        : last?.recorded_at || null;
+
+      return {
+        trackerId,
+        label,
+        color,
+        points: pts,
+        lastTs,
+      };
+    });
+  }, [positions, trackerProfiles]);
+
+  // ---------------------------
+  // Pintar geocercas y puntos/rutas en el mapa
   // ---------------------------
 
   useEffect(() => {
@@ -283,57 +349,60 @@ function TrackerDashboard() {
       }
     });
 
-    // Puntos de tracking (CÍRCULOS, no markers)
-    const latlngs = [];
+    // Puntos y rutas por tracker
+    const allLatLngs = [];
 
-    positions.forEach((p, idx) => {
-      const latlng = [p.lat, p.lng];
-      latlngs.push(latlng);
+    trackerGroups.forEach((group) => {
+      const { color, points, label, trackerId } = group;
 
-      const trackerProfile = trackerProfiles.find(
-        (tp) => tp.user_id === p.user_id || tp.id === p.user_id
-      );
-
-      const label =
-        trackerProfile?.full_name ||
-        trackerProfile?.email ||
-        p.user_id ||
-        "Tracker";
-
-      const ts = p.recorded_date
-        ? p.recorded_date.toLocaleString()
-        : p.recorded_at || "";
-
-      // Círculo pequeño para cada punto; el último un poco más grande
-      const circle = L.circleMarker(latlng, {
-        radius: idx === positions.length - 1 ? 7 : 5,
-        weight: idx === positions.length - 1 ? 2 : 1,
-        fillOpacity: 0.9,
+      const latlngs = points.map((p) => {
+        const ll = [p.lat, p.lng];
+        allLatLngs.push(ll);
+        return ll;
       });
 
-      circle.bindPopup(
-        `<div>
-          <strong>${label}</strong><br/>
-          ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}<br/>
-          <small>${ts}</small>
-        </div>`
-      );
+      // Puntos (último más grande)
+      points.forEach((p, idx) => {
+        const isLast = idx === points.length - 1;
+        const latlng = [p.lat, p.lng];
 
-      circle.addTo(markersLayer);
+        const ts = p.recorded_date
+          ? p.recorded_date.toLocaleString()
+          : p.recorded_at || "";
+
+        const circle = L.circleMarker(latlng, {
+          radius: isLast ? 7 : 5,
+          weight: isLast ? 2 : 1,
+          fillOpacity: 0.9,
+          color,
+          fillColor: color,
+        });
+
+        circle.bindPopup(
+          `<div>
+             <strong>${label}</strong><br/>
+             ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}<br/>
+             <small>${ts}</small><br/>
+             <small>ID: ${trackerId}</small>
+           </div>`
+        );
+
+        circle.addTo(markersLayer);
+      });
+
+      // Ruta cronológica
+      if (latlngs.length > 1) {
+        const polyline = L.polyline(latlngs, { weight: 3, color });
+        polyline.addTo(markersLayer);
+      }
     });
 
-    // Línea que une la secuencia de puntos dentro de la ventana
-    if (latlngs.length > 1) {
-      const polyline = L.polyline(latlngs, { weight: 2 });
-      polyline.addTo(markersLayer);
-    }
-
     // Ajustar bounds si hay puntos
-    if (positions.length > 0) {
-      const bounds = L.latLngBounds(latlngs);
+    if (allLatLngs.length > 0) {
+      const bounds = L.latLngBounds(allLatLngs);
       map.fitBounds(bounds, { padding: [20, 20] });
     }
-  }, [geocercas, positions, trackerProfiles]);
+  }, [geocercas, trackerGroups]);
 
   // ---------------------------
   // Resumen
@@ -459,6 +528,38 @@ function TrackerDashboard() {
             </p>
           )}
         </div>
+
+        {/* Leyenda de colores por tracker */}
+        {trackerGroups.length > 0 && (
+          <div className="mt-2">
+            <p className="text-xs font-semibold text-gray-700 mb-1">
+              Leyenda de trackers
+            </p>
+            <ul className="space-y-1">
+              {trackerGroups.map((g) => (
+                <li
+                  key={g.trackerId}
+                  className="flex items-center justify-between text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block w-3 h-3 rounded-full"
+                      style={{ backgroundColor: g.color }}
+                    />
+                    <span className="font-medium truncate max-w-[9rem]">
+                      {g.label}
+                    </span>
+                  </div>
+                  {g.lastTs && (
+                    <span className="text-[10px] text-gray-500 text-right">
+                      Último: {g.lastTs}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {loading && (
           <p className="text-xs text-blue-600">Cargando datos de tracking…</p>

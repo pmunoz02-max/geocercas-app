@@ -1,21 +1,28 @@
 // src/components/tracker/TrackerMap.jsx
 // Mapa para visualizar geocercas y posiciones de trackers en el dashboard.
 // Acepta geocercas en formato GeoJSON o arrays de coordenadas,
-// y posiciones como array de { lat, lng, user_id?, label? }.
+// y posiciones como array de { lat, lng, user_id?, label?, recorded_at? }.
 
 import React, { useMemo } from "react";
-import { MapContainer, TileLayer, Marker, Polygon } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Polygon,
+  Polyline,
+  CircleMarker,
+} from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import L from "leaflet";
 
-const markerIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  shadowSize: [41, 41],
-});
+// Paleta de colores para trackers
+const TRACKER_COLORS = [
+  "#007AFF", // azul
+  "#FF3B30", // rojo
+  "#34C759", // verde
+  "#FF9500", // naranja
+  "#AF52DE", // púrpura
+  "#5856D6", // índigo
+  "#FF2D55", // rosa fuerte
+];
 
 // -------------------------------------------------------------
 // Helpers de normalización
@@ -121,8 +128,6 @@ function normalizeGeofenceToPolygons(input) {
 
   // Ya es array de arrays lat,lng
   if (Array.isArray(input)) {
-    // Caso 1: array de geocercas
-    // Caso 2: un solo polígono: array de coords
     const maybePolygon = input.every(
       (c) =>
         Array.isArray(c) ||
@@ -133,10 +138,7 @@ function normalizeGeofenceToPolygons(input) {
     );
 
     if (maybePolygon) {
-      // Un solo polígono
-      const poly = input
-        .map((c) => toLatLng(c))
-        .filter((p) => p !== null);
+      const poly = input.map((c) => toLatLng(c)).filter((p) => p !== null);
       if (poly.length > 2) result.push(poly);
       return result;
     }
@@ -175,7 +177,7 @@ function normalizeGeofenceToPolygons(input) {
  *
  * Props:
  * - geofences: GeoJSON | array de geocercas | array de coords
- * - positions: array de { lat, lng, user_id?, label? }
+ * - positions: array de { lat, lng, user_id?, label?, recorded_at? }
  * - center: [lat, lng] opcional
  * - zoom: number (default 15)
  * - className: string opcional para el contenedor
@@ -200,15 +202,41 @@ export default function TrackerMap({
     return positions
       .map((p) => {
         if (typeof p.lat === "number" && typeof p.lng === "number") {
+          const recordedDate = p.recorded_at
+            ? new Date(p.recorded_at)
+            : p.recorded_date || null;
           return {
             ...p,
             latLng: [p.lat, p.lng],
+            recordedDate,
           };
         }
         return null;
       })
       .filter((x) => x !== null);
   }, [positions]);
+
+  // Agrupar por tracker (user_id o label)
+  const groupedByTracker = useMemo(() => {
+    const groups = new Map();
+    markerPositions.forEach((p) => {
+      const key = p.user_id || p.label || "tracker";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    });
+
+    // Ordenar cronológicamente cada grupo
+    const entries = Array.from(groups.entries()).map(([key, pts]) => {
+      pts.sort((a, b) => {
+        const ta = a.recordedDate?.getTime() || 0;
+        const tb = b.recordedDate?.getTime() || 0;
+        return ta - tb;
+      });
+      return { trackerId: key, points: pts };
+    });
+
+    return entries;
+  }, [markerPositions]);
 
   // Centro del mapa:
   // 1) center prop
@@ -251,14 +279,41 @@ export default function TrackerMap({
           <Polygon key={`poly-${idx}`} positions={poly} pathOptions={{ weight: 2 }} />
         ))}
 
-        {/* Trackers */}
-        {markerPositions.map((p, idx) => (
-          <Marker
-            key={p.user_id || p.id || idx}
-            position={p.latLng}
-            icon={markerIcon}
-          />
-        ))}
+        {/* Trackers: puntos + rutas por color */}
+        {groupedByTracker.map(({ trackerId, points }, index) => {
+          const color = TRACKER_COLORS[index % TRACKER_COLORS.length];
+          const latlngs = points.map((p) => p.latLng);
+
+          return (
+            <React.Fragment key={trackerId}>
+              {/* Ruta cronológica */}
+              {latlngs.length > 1 && (
+                <Polyline
+                  positions={latlngs}
+                  pathOptions={{ color, weight: 3 }}
+                />
+              )}
+
+              {/* Puntos */}
+              {points.map((p, idxPoint) => {
+                const isLast = idxPoint === points.length - 1;
+                return (
+                  <CircleMarker
+                    key={`${trackerId}-${idxPoint}`}
+                    center={p.latLng}
+                    radius={isLast ? 7 : 5}
+                    pathOptions={{
+                      color,
+                      fillColor: color,
+                      weight: isLast ? 2 : 1,
+                      fillOpacity: 0.9,
+                    }}
+                  />
+                );
+              })}
+            </React.Fragment>
+          );
+        })}
       </MapContainer>
     </div>
   );
