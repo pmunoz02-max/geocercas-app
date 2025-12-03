@@ -653,7 +653,7 @@ export default function CostosPage() {
                   return (
                     <div
                       key={`${e.label}-${e.currency}`}
-                      className="flex-1 flex flex-col items-center min-w-[40px]"
+                      className="flex-1 flex flex-col items-center min-w-[40px] h-full"
                     >
                       <div
                         className="w-full rounded-t-md bg-indigo-500"
