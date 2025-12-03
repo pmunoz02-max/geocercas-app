@@ -122,9 +122,17 @@ export default function CostosPage() {
         return;
       }
 
+      const orgId = currentOrg?.id || currentOrg?.org_id;
+      if (!orgId) {
+        setErrorMsg("No se pudo determinar la organización actual.");
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await getCostosAsignaciones({
         from: fromDate.toISOString(),
         to: toDate.toISOString(),
+        orgId,
       });
 
       if (error) {
@@ -146,7 +154,6 @@ export default function CostosPage() {
     if (!rows || rows.length === 0) return [];
 
     return rows.filter((r) => {
-      // Tratamos de inferir los nombres de campos para IDs
       const personaId =
         r.personal_id ?? r.persona_id ?? r.person_id ?? r.personaId ?? null;
       const geocercaId =
@@ -786,7 +793,12 @@ export default function CostosPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredRows.map((r) => (
-                  <tr key={r.asignacion_id || `${r.persona_nombre}-${r.start_time}`}>
+                  <tr
+                    key={
+                      r.asignacion_id ||
+                      `${r.persona_nombre}-${r.start_time}`
+                    }
+                  >
                     <td className="px-3 py-2 whitespace-nowrap">
                       {r.persona_nombre || "—"}
                     </td>
