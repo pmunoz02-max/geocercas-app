@@ -304,7 +304,9 @@ export default function ActividadesPage() {
                   <tr key={act.id} className="border-t border-gray-100">
                     {/* Nombre */}
                     <td className="px-4 py-2 align-top">
-                      <div className="font-medium text-gray-900">{act.name}</div>
+                      <div className="font-medium text-gray-900">
+                        {act.name}
+                      </div>
                     </td>
 
                     {/* Descripción */}
@@ -338,7 +340,7 @@ export default function ActividadesPage() {
                         <>
                           <button
                             type="button"
-                            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                            className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700"
                             onClick={() => handleEdit(act)}
                           >
                             Editar
@@ -346,7 +348,7 @@ export default function ActividadesPage() {
 
                           <button
                             type="button"
-                            className="text-xs font-medium text-gray-600 hover:text-gray-800"
+                            className="inline-flex items-center rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-600"
                             onClick={() => handleToggle(act)}
                           >
                             {act.active ? "Desactivar" : "Activar"}
@@ -354,7 +356,7 @@ export default function ActividadesPage() {
 
                           <button
                             type="button"
-                            className="text-xs font-medium text-red-600 hover:text-red-800"
+                            className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
                             onClick={() => handleDelete(act)}
                           >
                             Eliminar
