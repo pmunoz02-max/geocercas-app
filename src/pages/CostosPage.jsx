@@ -9,7 +9,7 @@ const emptyOption = { value: "", label: "Todos" };
 function summarizeByCurrency(rows) {
   const map = new Map();
 
-  for (const row of rows) {
+  for (const row of rows || []) {
     const currency = row.currency_code || "N/A";
     const prev = map.get(currency) || { currency, totalCost: 0, totalHours: 0 };
 
@@ -48,17 +48,25 @@ function formatDateTime(value) {
 const CostosPage = () => {
   const { currentOrg, currentRole } = useAuth();
 
+  // Filtros
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedPersonaId, setSelectedPersonaId] = useState("");
   const [selectedActividadId, setSelectedActividadId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
 
+  // Datos para combos
   const [personas, setPersonas] = useState([]);
   const [actividades, setActividades] = useState([]);
   const [geocercas, setGeocercas] = useState([]);
 
+  // Filas detalladas del reporte
   const [rows, setRows] = useState([]);
+
+  // Estado del panel de gráficos
+  const [chartGrouping, setChartGrouping] = useState("actividad"); // actividad | persona | geocerca
+  const [chartType, setChartType] = useState("bar"); // bar | line | pie
+
   const [loading, setLoading] = useState(false);
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [error, setError] = useState("");
@@ -67,7 +75,7 @@ const CostosPage = () => {
   const role = (currentRole || "").toLowerCase();
   const canView = role === "owner" || role === "admin";
 
-  // Cargar combos básicos
+  // Cargar combos básicos (personas, actividades, geocercas)
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
 
@@ -122,7 +130,7 @@ const CostosPage = () => {
     loadFilters();
   }, [currentOrg?.id, canView]);
 
-  // Cargar reporte
+  // Cargar reporte principal
   const fetchReport = async () => {
     if (!currentOrg?.id || !canView) return;
 
@@ -132,22 +140,22 @@ const CostosPage = () => {
     try {
       /**
        * IMPORTANTE:
-       * Aquí asumimos que existe una vista v_costos_detalle que ya
-       * devuelve las filas detalladas con la siguiente forma:
+       * Aquí asumimos que existe una vista v_costos_detalle que devuelve:
+       *  - id
+       *  - org_id
+       *  - personal_id, personal_nombre
+       *  - actividad_id, actividad_nombre
+       *  - geocerca_id, geocerca_nombre
+       *  - start_time, end_time
+       *  - horas
+       *  - hourly_rate
+       *  - costo
+       *  - currency_code
        *
-       * - org_id
-       * - personal_id, personal_nombre
-       * - actividad_id, actividad_nombre
-       * - geocerca_id, geocerca_nombre
-       * - start_time, end_time
-       * - horas          (número de horas trabajadas)
-       * - hourly_rate    (tarifa por hora)
-       * - costo          (costo total = horas * tarifa)
-       * - currency_code  (ej: "USD")
-       *
-       * Si tu implementación actual usa otra vista o RPC,
-       * puedes reemplazar este bloque manteniendo el shape de `rows`.
+       * Si ya tienes otra vista/RPC que usabas antes,
+       * puedes reemplazar esta query manteniendo el shape de los campos.
        */
+
       let query = supabase
         .from("v_costos_detalle")
         .select(
@@ -174,7 +182,6 @@ const CostosPage = () => {
         query = query.gte("start_time", fromDate);
       }
       if (toDate) {
-        // Para incluir el final del día, agregamos 23:59:59
         const to = new Date(toDate);
         to.setHours(23, 59, 59, 999);
         query = query.lte("end_time", to.toISOString());
@@ -207,27 +214,72 @@ const CostosPage = () => {
     }
   };
 
-  // Cargar automáticamente cuando haya org y filtros mínimos
+  // Carga inicial automática (puedes quitarla si prefieres usar solo el botón)
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
-    // Puedes dejar el auto-load o forzar a usar el botón "Aplicar filtros"
     fetchReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id, canView]);
 
-  const resumenMoneda = useMemo(() => summarizeByCurrency(rows), [rows]);
+  // === RESÚMENES NUMÉRICOS ===
+  const resumenMoneda = useMemo(
+    () => summarizeByCurrency(rows || []),
+    [rows]
+  );
 
   const totalGlobal = useMemo(() => {
     let totalCost = 0;
     let totalHours = 0;
 
-    for (const r of rows) {
+    for (const r of rows || []) {
       totalCost += Number(r.costo) || 0;
       totalHours += Number(r.horas) || 0;
     }
 
     return { totalCost, totalHours };
   }, [rows]);
+
+  // === DATOS PARA CostosChartPanel (agrupar y sumar) ===
+  const chartEntries = useMemo(() => {
+    if (!rows || rows.length === 0) return [];
+
+    const map = new Map();
+
+    for (const r of rows) {
+      const currency = r.currency_code || "N/A";
+
+      let label = "Sin dato";
+      if (chartGrouping === "actividad") {
+        label = r.actividad_nombre || "Sin actividad";
+      } else if (chartGrouping === "persona") {
+        label = r.personal_nombre || "Sin persona";
+      } else if (chartGrouping === "geocerca") {
+        label = r.geocerca_nombre || "Sin geocerca";
+      }
+
+      const key = `${label}__${currency}`;
+      const prev = map.get(key) || { label, currency, total: 0 };
+
+      const costo = Number(r.costo) || 0;
+
+      map.set(key, {
+        label,
+        currency,
+        total: prev.total + costo,
+      });
+    }
+
+    // Ordenar de mayor a menor total
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [rows, chartGrouping]);
+
+  const maxChartValue = useMemo(() => {
+    if (!chartEntries.length) return 0;
+    return chartEntries.reduce(
+      (max, e) => Math.max(max, Number(e.total) || 0),
+      0
+    );
+  }, [chartEntries]);
 
   if (!canView) {
     return (
@@ -248,8 +300,8 @@ const CostosPage = () => {
         <div>
           <h1 className="text-2xl font-bold">Reportes de Costos</h1>
           <p className="text-sm text-gray-600">
-            Analiza horas trabajadas, costos por actividad, persona y geocerca.
-            Panel tipo Power BI con tarjetas, gráficos y tabla detallada.
+            Analiza horas trabajadas y costos por actividad, persona y geocerca.
+            Incluye tarjetas, panel gráfico tipo Power BI y tabla detallada.
           </p>
         </div>
         {loading && (
@@ -446,8 +498,15 @@ const CostosPage = () => {
         </div>
       )}
 
-      {/* PANEL DE GRÁFICOS (tipo Power BI) */}
-      <CostosChartPanel rows={rows} />
+      {/* PANEL DE GRÁFICOS TIPO POWER BI */}
+      <CostosChartPanel
+        chartEntries={chartEntries}
+        maxChartValue={maxChartValue}
+        chartGrouping={chartGrouping}
+        chartType={chartType}
+        onChangeChartGrouping={setChartGrouping}
+        onChangeChartType={setChartType}
+      />
 
       {/* Tabla detallada */}
       <div className="bg-white rounded-xl shadow p-4">
@@ -456,8 +515,8 @@ const CostosPage = () => {
             Detalle de registros
           </h2>
           <span className="text-[11px] text-gray-500">
-            Puedes exportar esta tabla a Excel/CSV desde tu módulo actual si ya
-            lo tienes implementado.
+            Puedes exportar esta tabla a Excel/CSV con tu módulo actual si ya lo
+            tienes implementado.
           </span>
         </div>
 
@@ -495,7 +554,7 @@ const CostosPage = () => {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
+              {(!rows || rows.length === 0) && (
                 <tr>
                   <td
                     colSpan={9}
@@ -505,7 +564,7 @@ const CostosPage = () => {
                   </td>
                 </tr>
               )}
-              {rows.map((r) => (
+              {(rows || []).map((r) => (
                 <tr key={r.id} className="border-t border-gray-100">
                   <td className="px-2 py-1">
                     {r.personal_nombre || "Sin nombre"}
