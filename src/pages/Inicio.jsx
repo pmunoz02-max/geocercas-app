@@ -9,6 +9,7 @@ export default function Inicio() {
   const userEmail = user?.email || "";
   const roleLabel = (currentRole || "—").toUpperCase();
   const orgName = currentOrg?.name || "—";
+  const orgId = currentOrg?.id || "—";
   const profileName =
     profile?.full_name || profile?.nombre || profile?.name || "";
 
@@ -21,8 +22,7 @@ export default function Inicio() {
             Bienvenido a tu panel
           </h1>
           <p className="text-sm md:text-base text-slate-600">
-            Gestiona geocercas, personal, actividades, asignaciones y reportes
-            de costos en un solo lugar.
+            Gestiona geocercas, personal, actividades, asignaciones y reportes de costos en un solo lugar.
           </p>
         </section>
 
@@ -128,15 +128,14 @@ export default function Inicio() {
             </div>
           </article>
 
-          {/* 🔥 Reportes (antes Costos) */}
+          {/* Reportes */}
           <article className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 mb-1">
                 Reportes
               </h2>
               <p className="text-sm text-slate-600">
-                Consulta reportes de costos por actividad, geocerca, persona y
-                fechas.
+                Consulta reportes de costos por actividad, geocerca, persona y fechas.
               </p>
             </div>
             <div className="mt-4">
@@ -145,6 +144,26 @@ export default function Inicio() {
                 className="inline-flex items-center text-sm font-medium text-emerald-600 hover:text-emerald-700"
               >
                 Ir a Reportes →
+              </Link>
+            </div>
+          </article>
+
+          {/* Dashboard de costos */}
+          <article className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 mb-1">
+                Dashboard de costos
+              </h2>
+              <p className="text-sm text-slate-600">
+                Panel gráfico tipo Power BI para explorar costos y horas por persona, actividad y geocerca.
+              </p>
+            </div>
+            <div className="mt-4">
+              <Link
+                to="/costos-dashboard"
+                className="inline-flex items-center text-sm font-medium text-emerald-600 hover:text-emerald-700"
+              >
+                Ir al Dashboard →
               </Link>
             </div>
           </article>
@@ -223,6 +242,10 @@ export default function Inicio() {
               Usuario: <span className="font-semibold">{profileName}</span>
             </p>
           )}
+          <p className="text-xs text-slate-500">
+            Org ID actual:{" "}
+            <span className="font-mono">{orgId}</span>
+          </p>
         </section>
       </main>
     </div>
