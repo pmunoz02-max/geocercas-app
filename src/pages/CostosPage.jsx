@@ -95,23 +95,21 @@ const CostosPage = () => {
         if (personasErr) throw personasErr;
 
         // Actividades
-        const { data: actData, error: actErr } = await supabase
-          .from("activities")
-          .select("id, name")
-          .eq("tenant_id", currentOrg.id)
-          .eq("active", true)
-          .order("name", { ascending: true });
+       const { data: geoData, error: geoErr } = await supabase
+  .from("geocercas")
+  .select("id, nombre")
+  .eq("org_id", currentOrg.id)
+  .order("nombre", { ascending: true });
 
         if (actErr) throw actErr;
 
-        // Geocercas
-        const { data: geoData, error: geoErr } = await supabase
+        // Geocercas (QUITAMOS is_deleted para evitar error 400)
+        
           .from("geocercas")
           .select("id, nombre")
           .eq("org_id", currentOrg.id)
-          .eq("is_deleted", false)
           .order("nombre", { ascending: true });
-
+const { data: geoData, error: geoErr } = await supabase
         if (geoErr) throw geoErr;
 
         setPersonas(personasData || []);
@@ -140,7 +138,7 @@ const CostosPage = () => {
     try {
       /**
        * IMPORTANTE:
-       * Aquí asumimos que existe una vista v_costos_detalle que devuelve:
+       * Aquí asumimos que existe una vista v_costos_detalle con:
        *  - id
        *  - org_id
        *  - personal_id, personal_nombre
@@ -151,9 +149,6 @@ const CostosPage = () => {
        *  - hourly_rate
        *  - costo
        *  - currency_code
-       *
-       * Si ya tienes otra vista/RPC que usabas antes,
-       * puedes reemplazar esta query manteniendo el shape de los campos.
        */
 
       let query = supabase
@@ -197,9 +192,22 @@ const CostosPage = () => {
         query = query.eq("geocerca_id", selectedGeocercaId);
       }
 
-      const { data, error: dataErr } = await query;
+      const { data, error: dataErr, status } = await query;
 
-      if (dataErr) throw dataErr;
+      if (dataErr) {
+        // Si la vista no existe todavía, evitamos romper la página
+        if (status === 404) {
+          console.warn(
+            "[CostosPage] La vista v_costos_detalle no existe aún en Supabase."
+          );
+          setRows([]);
+          setError(
+            "La vista v_costos_detalle aún no existe en la base de datos. Créala en Supabase para ver datos."
+          );
+          return;
+        }
+        throw dataErr;
+      }
 
       setRows(data || []);
     } catch (e) {
@@ -214,7 +222,7 @@ const CostosPage = () => {
     }
   };
 
-  // Carga inicial automática (puedes quitarla si prefieres usar solo el botón)
+  // Carga inicial automática
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
     fetchReport();
