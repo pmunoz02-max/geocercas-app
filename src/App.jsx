@@ -21,7 +21,7 @@ import GeocercasPage from "./pages/GeocercasPage.jsx";
 // Actividades + Reportes (antes Costos)
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
-import CostosDashboardPage from "./pages/CostosDashboardPage.jsx"; // ⬅ NUEVO
+import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
 // Módulo de Administradores
 import AdminsPage from "./pages/AdminsPage.jsx";
@@ -45,7 +45,7 @@ import Landing from "./pages/Landing.jsx";
 // Página ESPECIAL de tracker-only GPS
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
-// 🔐 Nueva página de reset de contraseña
+// Reset de contraseña
 import ResetPassword from "./pages/ResetPassword.jsx";
 
 // Contexto de auth
@@ -58,7 +58,7 @@ import TopTabs from "./components/TopTabs.jsx";
 // Layout interno (app)
 // ---------------------
 function Shell({ children }) {
-  const { currentRole, loading, organizations, user } = useAuth();
+  const { currentRole, loading, organizations } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -66,10 +66,9 @@ function Shell({ children }) {
   const hasOrgs = Array.isArray(organizations) && organizations.length > 0;
 
   // 💡 Regla de oro:
-  // - Si el rol es "tracker" → tracker
-  // - Si NO hay organizaciones pero sí hay usuario → también lo tratamos como tracker
-  const treatAsTracker =
-    normalizedRole === "tracker" || (!!user && !hasOrgs && !normalizedRole);
+  // - SOLO rol "tracker" se trata como tracker.
+  // - Owners/Admins NUNCA se redirigen a /tracker-gps.
+  const treatAsTracker = normalizedRole === "tracker";
 
   // Mientras el AuthContext está cargando, no mostramos nada “real”
   if (loading) {
@@ -82,9 +81,8 @@ function Shell({ children }) {
     );
   }
 
-  // 🚧 BLOQUEO DURO:
-  // Si el usuario debe ser tratado como tracker y está en cualquier ruta del panel,
-  // lo mandamos a /tracker-gps y NO mostramos el panel.
+  // 🚧 BLOQUEO DURO para trackers:
+  // Si es tracker y está en cualquier ruta del panel, lo mandamos a /tracker-gps
   useEffect(() => {
     if (treatAsTracker && location.pathname !== "/tracker-gps") {
       navigate("/tracker-gps", { replace: true });
@@ -104,9 +102,12 @@ function Shell({ children }) {
     { path: "/actividades", label: "Actividades" },
     { path: "/asignaciones", label: "Asignaciones" },
     { path: "/costos", label: "Reportes" },
-    { path: "/costos-dashboard", label: "Dashboard" }, // ⬅ NUEVO TAB
+    { path: "/costos-dashboard", label: "Dashboard" },
     { path: "/tracker-dashboard", label: "Tracker" },
   ];
+
+  // Si en el futuro quieres usar hasOrgs para algo:
+  // console.log("hasOrgs", hasOrgs);
 
   // Solo owner / admin pueden invitar trackers
   if (normalizedRole === "owner" || normalizedRole === "admin") {
@@ -155,7 +156,7 @@ export default function App() {
         {/* ⭐⭐⭐ RUTA ESPECIAL PARA TRACKERS (Magic Link) */}
         <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
-        {/* 🔐 RUTA PÚBLICA PARA RESET DE CONTRASEÑA (admins y trackers) */}
+        {/* 🔐 RUTA PÚBLICA PARA RESET DE CONTRASEÑA */}
         <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* INICIO (dashboard interno) */}
@@ -254,7 +255,7 @@ export default function App() {
           }
         />
 
-        {/* TRACKER DASHBOARD NORMAL (solo admins/owners, nunca trackers con esta lógica) */}
+        {/* TRACKER DASHBOARD NORMAL (solo admins/owners) */}
         <Route
           path="/tracker-dashboard"
           element={

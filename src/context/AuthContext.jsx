@@ -110,6 +110,9 @@ export function AuthProvider({ children }) {
   const [currentOrg, setCurrentOrgState] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // --------------------------
+  // Inicializar sesión
+  // --------------------------
   useEffect(() => {
     let isMounted = true;
 
@@ -151,6 +154,9 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // --------------------------
+  // Cargar datos de usuario
+  // --------------------------
   useEffect(() => {
     if (!user) {
       setProfile(null);
@@ -164,6 +170,7 @@ export function AuthProvider({ children }) {
     async function loadUserData() {
       setLoading(true);
       try {
+        // 1) Aceptar invitación de org (AdminsPage) si existe
         try {
           await acceptInviteIfAny(user);
         } catch (e) {
@@ -173,7 +180,7 @@ export function AuthProvider({ children }) {
           );
         }
 
-        // Perfil mínimo
+        // 2) Perfil mínimo
         try {
           const { data: profiles, error: profErr } = await supabase
             .from("v_app_profiles")
@@ -190,12 +197,12 @@ export function AuthProvider({ children }) {
           if (!cancelled) setProfile(null);
         }
 
-        // user_organizations
+        // 3) user_organizations (organizaciones del usuario)
         let orgLinks = [];
         try {
           const { data: links, error: linksErr } = await supabase
             .from("user_organizations")
-            .select("org_id, role")
+            .select("org_id, role, created_at")
             .eq("user_id", user.id);
 
           if (linksErr) {
@@ -207,6 +214,45 @@ export function AuthProvider({ children }) {
           console.error("[AuthContext] user_organizations exception:", e);
         }
 
+        // 3.b) Si NO tiene ninguna organización, crearle una propia (OWNER)
+        if (orgLinks.length === 0) {
+          try {
+            const { data: newOrgId, error: ownerOrgErr } =
+              await supabase.rpc("ensure_owner_org_for_user", {
+                p_user_id: user.id,
+                p_email: user.email,
+              });
+
+            if (ownerOrgErr) {
+              console.error(
+                "[AuthContext] ensure_owner_org_for_user error:",
+                ownerOrgErr
+              );
+            } else if (newOrgId) {
+              // Volvemos a leer user_organizations después de crear la org
+              const { data: linksAfter, error: linksAfterErr } = await supabase
+                .from("user_organizations")
+                .select("org_id, role, created_at")
+                .eq("user_id", user.id);
+
+              if (linksAfterErr) {
+                console.error(
+                  "[AuthContext] user_organizations re-fetch error:",
+                  linksAfterErr
+                );
+              } else {
+                orgLinks = linksAfter || [];
+              }
+            }
+          } catch (e) {
+            console.error(
+              "[AuthContext] ensure_owner_org_for_user exception:",
+              e
+            );
+          }
+        }
+
+        // 4) Cargar organizaciones a partir de orgLinks
         let orgs = [];
         if (orgLinks.length > 0) {
           const orgIds = orgLinks.map((l) => l.org_id);
@@ -233,6 +279,7 @@ export function AuthProvider({ children }) {
           }
         }
 
+        // 5) Seleccionar organización actual
         if (!cancelled) {
           setOrganizations(orgs);
 
@@ -265,6 +312,9 @@ export function AuthProvider({ children }) {
     };
   }, [user]);
 
+  // --------------------------
+  // Rol normalizado
+  // --------------------------
   let normalizedRole = null;
   if (currentOrg?.role) {
     normalizedRole = String(currentOrg.role).toLowerCase();
