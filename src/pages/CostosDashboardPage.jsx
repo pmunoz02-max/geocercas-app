@@ -20,7 +20,7 @@ import {
   CartesianGrid,
 } from "recharts";
 
-// === Utilidades comunes (copiadas de CostosPage para consistencia) ===
+// === Utilidades comunes (alineadas con CostosPage) ===
 
 const emptyOption = { value: "", label: "Todos" };
 
@@ -61,6 +61,41 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * Normaliza las fechas de filtro (inputs type="date") a un rango de
+ * timestamptz ISO listo para enviar a Supabase.
+ *
+ * - fromDateStr → YYYY-MM-DD → fromIso = ese día a las 00:00:00
+ * - toDateStr   → YYYY-MM-DD → toIsoExclusive = día siguiente a las 00:00:00
+ *
+ * El rango se aplica como:
+ *   start_time >= fromIso
+ *   start_time  < toIsoExclusive
+ *
+ * De esta forma se incluye TODO el día "Hasta" completo.
+ */
+function buildDateRange(fromDateStr, toDateStr) {
+  let fromIso = null;
+  let toIsoExclusive = null;
+
+  if (fromDateStr) {
+    const d = new Date(fromDateStr + "T00:00:00");
+    if (!Number.isNaN(d.getTime())) {
+      fromIso = d.toISOString();
+    }
+  }
+
+  if (toDateStr) {
+    const d = new Date(toDateStr + "T00:00:00");
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 1); // día siguiente a las 00:00
+      toIsoExclusive = d.toISOString();
+    }
+  }
+
+  return { fromIso, toIsoExclusive };
 }
 
 // Configuración de dimensiones para el análisis
@@ -152,7 +187,13 @@ function aggregateBy(rows, { groupKey, labelField }) {
 
 // === Componente para renderizar gráficos según tipo ===
 
-function ChartRenderer({ chartType, data, metricKey, valueLabel, maxItems = 15 }) {
+function ChartRenderer({
+  chartType,
+  data,
+  metricKey,
+  valueLabel,
+  maxItems = 15,
+}) {
   const trimmedData = (data || []).slice(0, maxItems);
   const hasData = trimmedData.length > 0;
 
@@ -199,7 +240,10 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel, maxItems = 15 }
   if (chartType === "line") {
     return (
       <ResponsiveContainer width="100%" height={320}>
-        <LineChart data={trimmedData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+        <LineChart
+          data={trimmedData}
+          margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
+        >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
@@ -227,7 +271,10 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel, maxItems = 15 }
   // Default: barras
   return (
     <ResponsiveContainer width="100%" height={320}>
-      <BarChart data={trimmedData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+      <BarChart
+        data={trimmedData}
+        margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
+      >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis
           dataKey="label"
@@ -344,6 +391,13 @@ const CostosDashboardPage = () => {
     setError("");
 
     try {
+      // Validación sencilla de rango
+      if (fromDate && toDate && fromDate > toDate) {
+        setRows([]);
+        setError('La fecha "Desde" no puede ser mayor que la fecha "Hasta".');
+        return;
+      }
+
       let query = supabase
         .from("v_costos_detalle")
         .select(
@@ -367,22 +421,24 @@ const CostosDashboardPage = () => {
         )
         .eq("org_id", currentOrg.id);
 
-      if (fromDate) {
-        query = query.gte("start_time", fromDate);
+      // Rango de fechas normalizado sobre start_time (igual que CostosPage)
+      const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
+
+      if (fromIso) {
+        query = query.gte("start_time", fromIso);
       }
-      if (toDate) {
-        const to = new Date(toDate);
-        to.setHours(23, 59, 59, 999);
-        query = query.lte("end_time", to.toISOString());
+      if (toIsoExclusive) {
+        query = query.lt("start_time", toIsoExclusive);
       }
 
-      if (selectedPersonaId) {
+      // Filtros adicionales
+      if (selectedPersonaId && selectedPersonaId !== emptyOption.value) {
         query = query.eq("personal_id", selectedPersonaId);
       }
-      if (selectedActividadId) {
+      if (selectedActividadId && selectedActividadId !== emptyOption.value) {
         query = query.eq("actividad_id", selectedActividadId);
       }
-      if (selectedGeocercaId) {
+      if (selectedGeocercaId && selectedGeocercaId !== emptyOption.value) {
         query = query.eq("geocerca_id", selectedGeocercaId);
       }
 
@@ -494,7 +550,7 @@ const CostosDashboardPage = () => {
         </div>
       </div>
 
-      {/* Filtros (igual lógica que CostosPage) */}
+      {/* Filtros */}
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">
@@ -603,6 +659,7 @@ const CostosDashboardPage = () => {
               setSelectedPersonaId("");
               setSelectedActividadId("");
               setSelectedGeocercaId("");
+              setError("");
             }}
             disabled={loading || loadingFilters}
           >
