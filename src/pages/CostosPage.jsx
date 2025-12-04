@@ -1,7 +1,7 @@
 // src/pages/CostosPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../context/AuthContext";
 import CostosChartPanel from "../components/CostosChartPanel";
 
 const emptyOption = { value: "", label: "Todos" };
