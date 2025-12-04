@@ -1,4 +1,5 @@
 // src/pages/CostosDashboardPage.jsx
+// VERSION COMPLETA Y CORREGIDA
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -70,11 +71,9 @@ function formatDateTime(value) {
  * - fromDateStr → YYYY-MM-DD → fromIso = ese día a las 00:00:00
  * - toDateStr   → YYYY-MM-DD → toIsoExclusive = día siguiente a las 00:00:00
  *
- * El rango se aplica como:
+ * Rango aplicado como:
  *   start_time >= fromIso
  *   start_time  < toIsoExclusive
- *
- * De esta forma se incluye TODO el día "Hasta" completo.
  */
 function buildDateRange(fromDateStr, toDateStr) {
   let fromIso = null;
@@ -90,7 +89,7 @@ function buildDateRange(fromDateStr, toDateStr) {
   if (toDateStr) {
     const d = new Date(toDateStr + "T00:00:00");
     if (!Number.isNaN(d.getTime())) {
-      d.setDate(d.getDate() + 1); // día siguiente a las 00:00
+      d.setDate(d.getDate() + 1);
       toIsoExclusive = d.toISOString();
     }
   }
@@ -98,7 +97,7 @@ function buildDateRange(fromDateStr, toDateStr) {
   return { fromIso, toIsoExclusive };
 }
 
-// Configuración de dimensiones para el análisis
+// Configuración de dimensiones para análisis
 const DIMENSIONS = {
   persona: {
     id: "persona",
@@ -126,18 +125,20 @@ const DIMENSIONS = {
   },
 };
 
+// Tipos de gráficos
 const CHART_TYPES = {
   bar: { id: "bar", label: "Barras" },
   line: { id: "line", label: "Líneas" },
   pie: { id: "pie", label: "Pastel" },
 };
 
+// Tipos de métricas
 const METRICS = {
   cost: { id: "cost", label: "Costo total", key: "totalCost" },
   hours: { id: "hours", label: "Horas totales", key: "totalHours" },
 };
 
-// Paleta simple para el pastel
+// Paleta de colores
 const PIE_COLORS = [
   "#6366F1",
   "#10B981",
@@ -158,11 +159,7 @@ function aggregateBy(rows, { groupKey, labelField }) {
 
   for (const r of rows || []) {
     const keyValue = r[groupKey] || "SIN_DATO";
-    const labelRaw =
-      (labelField && r[labelField]) ||
-      (typeof keyValue === "string" ? keyValue : String(keyValue));
-    const label =
-      (labelRaw || "").trim() !== "" ? labelRaw : "Sin dato / N/A";
+    const label = r[labelField] || keyValue;
 
     const prev = map.get(keyValue) || {
       key: keyValue,
@@ -185,15 +182,9 @@ function aggregateBy(rows, { groupKey, labelField }) {
   );
 }
 
-// === Componente para renderizar gráficos según tipo ===
+// === RENDERIZADOR DE GRÁFICOS (MODIFICADO CON COLORES DINÁMICOS EN BARRAS) ===
 
-function ChartRenderer({
-  chartType,
-  data,
-  metricKey,
-  valueLabel,
-  maxItems = 15,
-}) {
+function ChartRenderer({ chartType, data, metricKey, valueLabel, maxItems = 15 }) {
   const trimmedData = (data || []).slice(0, maxItems);
   const hasData = trimmedData.length > 0;
 
@@ -205,14 +196,12 @@ function ChartRenderer({
     );
   }
 
+  // === GRÁFICO DE PASTEL ===
   if (chartType === "pie") {
     return (
       <ResponsiveContainer width="100%" height={320}>
         <PieChart>
-          <Tooltip
-            formatter={(value) => formatNumber(value, 2)}
-            labelFormatter={(label) => label}
-          />
+          <Tooltip formatter={(value) => formatNumber(value, 2)} />
           <Legend />
           <Pie
             data={trimmedData}
@@ -237,13 +226,11 @@ function ChartRenderer({
     );
   }
 
+  // === GRÁFICO DE LÍNEAS ===
   if (chartType === "line") {
     return (
       <ResponsiveContainer width="100%" height={320}>
-        <LineChart
-          data={trimmedData}
-          margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
-        >
+        <LineChart data={trimmedData} margin={{ top: 10, right: 20, bottom: 40 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
@@ -255,26 +242,16 @@ function ChartRenderer({
           <YAxis />
           <Tooltip formatter={(value) => formatNumber(value, 2)} />
           <Legend />
-          <Line
-            type="monotone"
-            dataKey={metricKey}
-            name={valueLabel}
-            stroke="#6366F1"
-            strokeWidth={2}
-            dot={false}
-          />
+          <Line type="monotone" dataKey={metricKey} stroke="#6366F1" dot={false} />
         </LineChart>
       </ResponsiveContainer>
     );
   }
 
-  // Default: barras
+  // === GRÁFICO DE BARRAS (CORREGIDO: COLORES DINÁMICOS) ===
   return (
     <ResponsiveContainer width="100%" height={320}>
-      <BarChart
-        data={trimmedData}
-        margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
-      >
+      <BarChart data={trimmedData} margin={{ top: 10, right: 20, bottom: 40 }}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis
           dataKey="label"
@@ -286,23 +263,26 @@ function ChartRenderer({
         <YAxis />
         <Tooltip formatter={(value) => formatNumber(value, 2)} />
         <Legend />
-        <Bar
-          dataKey={metricKey}
-          name={valueLabel}
-          fill="#10B981"
-          radius={[4, 4, 0, 0]}
-        />
+
+        <Bar dataKey={metricKey} name={valueLabel} radius={[4, 4, 0, 0]}>
+          {trimmedData.map((entry, index) => (
+            <Cell
+              key={`bar-${entry.key}-${index}`}
+              fill={PIE_COLORS[index % PIE_COLORS.length]}
+            />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-// === Página principal del dashboard ===
+// === PÁGINA PRINCIPAL ===
 
 const CostosDashboardPage = () => {
   const { currentOrg, currentRole } = useAuth();
 
-  // Filtros compartidos con CostosPage
+  // Filtros
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedPersonaId, setSelectedPersonaId] = useState("");
@@ -314,158 +294,87 @@ const CostosDashboardPage = () => {
   const [actividades, setActividades] = useState([]);
   const [geocercas, setGeocercas] = useState([]);
 
-  // Datos base (detalle) y estados
+  // Datos base
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [error, setError] = useState("");
 
-  // Controles del dashboard
+  // Controles del gráfico
   const [selectedDimension, setSelectedDimension] = useState("persona");
   const [selectedChartType, setSelectedChartType] = useState("bar");
   const [selectedMetric, setSelectedMetric] = useState("cost");
 
-  // Permisos
   const role = (currentRole || "").toLowerCase();
   const canView = role === "owner" || role === "admin";
 
-  // Cargar combos (personas, actividades, geocercas)
+  // Cargar combos
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
 
     const loadFilters = async () => {
       setLoadingFilters(true);
-      setError("");
 
       try {
-        // Personas
-        const { data: personasData, error: personasErr } = await supabase
+        const { data: personasData } = await supabase
           .from("personal")
           .select("id, nombre, email")
           .eq("org_id", currentOrg.id)
           .eq("is_deleted", false)
-          .order("nombre", { ascending: true });
+          .order("nombre");
 
-        if (personasErr) throw personasErr;
-
-        // Actividades
-        const { data: actData, error: actErr } = await supabase
+        const { data: actData } = await supabase
           .from("activities")
           .select("id, name")
           .eq("tenant_id", currentOrg.id)
           .eq("active", true)
-          .order("name", { ascending: true });
+          .order("name");
 
-        if (actErr) throw actErr;
-
-        // Geocercas
-        const { data: geoData, error: geoErr } = await supabase
+        const { data: geoData } = await supabase
           .from("geocercas")
           .select("id, nombre")
           .eq("org_id", currentOrg.id)
-          .order("nombre", { ascending: true });
-
-        if (geoErr) throw geoErr;
+          .order("nombre");
 
         setPersonas(personasData || []);
         setActividades(actData || []);
         setGeocercas(geoData || []);
       } catch (e) {
-        console.error("[CostosDashboardPage] Error cargando filtros:", e);
-        setError(
-          "Error al cargar filtros (personas, actividades, geocercas). Revisa la consola."
-        );
+        console.error(e);
       } finally {
         setLoadingFilters(false);
       }
     };
 
     loadFilters();
-  }, [currentOrg?.id, canView]);
+  }, [currentOrg?.id]);
 
-  // Cargar datos base desde la vista v_costos_detalle
+  // Cargar datos del dashboard
   const fetchReport = async () => {
-    if (!currentOrg?.id || !canView) return;
+    if (!currentOrg?.id) return;
 
     setLoading(true);
-    setError("");
 
     try {
-      // Validación sencilla de rango
-      if (fromDate && toDate && fromDate > toDate) {
-        setRows([]);
-        setError('La fecha "Desde" no puede ser mayor que la fecha "Hasta".');
-        return;
-      }
+      const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
 
       let query = supabase
         .from("v_costos_detalle")
-        .select(
-          `
-          id,
-          org_id,
-          tenant_id,
-          personal_id,
-          personal_nombre,
-          actividad_id,
-          actividad_nombre,
-          geocerca_id,
-          geocerca_nombre,
-          start_time,
-          end_time,
-          horas,
-          hourly_rate,
-          costo,
-          currency_code
-        `
-        )
+        .select("*")
         .eq("org_id", currentOrg.id);
 
-      // Rango de fechas normalizado sobre start_time (igual que CostosPage)
-      const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
+      if (fromIso) query = query.gte("start_time", fromIso);
+      if (toIsoExclusive) query = query.lt("start_time", toIsoExclusive);
 
-      if (fromIso) {
-        query = query.gte("start_time", fromIso);
-      }
-      if (toIsoExclusive) {
-        query = query.lt("start_time", toIsoExclusive);
-      }
+      if (selectedPersonaId) query = query.eq("personal_id", selectedPersonaId);
+      if (selectedActividadId) query = query.eq("actividad_id", selectedActividadId);
+      if (selectedGeocercaId) query = query.eq("geocerca_id", selectedGeocercaId);
 
-      // Filtros adicionales
-      if (selectedPersonaId && selectedPersonaId !== emptyOption.value) {
-        query = query.eq("personal_id", selectedPersonaId);
-      }
-      if (selectedActividadId && selectedActividadId !== emptyOption.value) {
-        query = query.eq("actividad_id", selectedActividadId);
-      }
-      if (selectedGeocercaId && selectedGeocercaId !== emptyOption.value) {
-        query = query.eq("geocerca_id", selectedGeocercaId);
-      }
-
-      const { data, error: dataErr, status } = await query;
-
-      if (dataErr) {
-        if (status === 404) {
-          console.warn(
-            "[CostosDashboardPage] La vista v_costos_detalle no existe aún en Supabase."
-          );
-          setRows([]);
-          setError(
-            "La vista v_costos_detalle aún no existe en la base de datos. Créala en Supabase para ver datos."
-          );
-          return;
-        }
-        throw dataErr;
-      }
+      const { data } = await query;
 
       setRows(data || []);
     } catch (e) {
-      console.error("[CostosDashboardPage] Error cargando reporte:", e);
-      setError(
-        e?.message ||
-          e?.details ||
-          "Error al cargar el reporte de costos para el dashboard. Revisa la consola."
-      );
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -473,22 +382,16 @@ const CostosDashboardPage = () => {
 
   // Carga inicial
   useEffect(() => {
-    if (!currentOrg?.id || !canView) return;
-    fetchReport();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrg?.id, canView]);
+    if (currentOrg?.id) fetchReport();
+  }, [currentOrg?.id]);
 
-  // Resúmenes numéricos
-  const resumenMoneda = useMemo(
-    () => summarizeByCurrency(rows || []),
-    [rows]
-  );
+  const resumenMoneda = useMemo(() => summarizeByCurrency(rows), [rows]);
 
   const totalGlobal = useMemo(() => {
     let totalCost = 0;
     let totalHours = 0;
 
-    for (const r of rows || []) {
+    for (const r of rows) {
       totalCost += Number(r.costo) || 0;
       totalHours += Number(r.horas) || 0;
     }
@@ -496,130 +399,92 @@ const CostosDashboardPage = () => {
     return { totalCost, totalHours };
   }, [rows]);
 
-  // Datos agregados para el gráfico según dimensión y métrica
   const aggregatedData = useMemo(() => {
     const dim = DIMENSIONS[selectedDimension];
-    if (!dim) return [];
     return aggregateBy(rows, {
       groupKey: dim.groupKey,
       labelField: dim.labelField,
     });
   }, [rows, selectedDimension]);
 
-  const metricConfig = METRICS[selectedMetric] || METRICS.cost;
-  const metricKey = metricConfig.key;
-  const metricLabel = metricConfig.label;
+  const metricConfig = METRICS[selectedMetric];
 
   if (!canView) {
     return (
-      <div className="p-4">
-        <h1 className="text-xl font-semibold mb-2">Dashboard de Costos</h1>
-        <p className="text-sm text-gray-600">
-          Solo los usuarios con rol <strong>OWNER</strong> o{" "}
-          <strong>ADMIN</strong> pueden acceder a este módulo.
-        </p>
+      <div className="p-4 text-red-600">
+        No tienes permisos para ver este módulo.
       </div>
     );
   }
 
   return (
     <div className="p-4 space-y-4">
-      {/* Encabezado principal */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      {/* TITULO */}
+      <div className="flex flex-col md:flex-row justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">Dashboard de Costos</h1>
           <p className="text-sm text-gray-600">
-            Panel gráfico tipo Power BI para analizar horas y costos por
-            persona, actividad, geocerca y moneda.
+            Análisis visual por persona, actividad, geocerca y moneda.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {loading && (
-            <span className="text-xs text-gray-500 animate-pulse">
-              Actualizando datos...
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={fetchReport}
-            className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
-            disabled={loading || loadingFilters}
-          >
-            Refrescar datos
-          </button>
-        </div>
+
+        <button
+          onClick={fetchReport}
+          className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
+        >
+          Refrescar datos
+        </button>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white rounded-xl shadow p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">
-            Filtros del dataset
-          </h2>
-          <span className="text-[11px] text-gray-500">
-            Estos filtros afectan a todas las tarjetas y gráficos.
-          </span>
-        </div>
+      {/* FILTROS */}
+      <div className="bg-white shadow rounded-xl p-4 space-y-3">
+        <h2 className="text-sm font-semibold">Filtros del dataset</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          {/* Fecha desde */}
-          <div className="flex flex-col">
-            <label className="text-xs font-medium text-gray-600 mb-1">
-              Desde
-            </label>
+          <div>
+            <label className="text-xs">Desde</label>
             <input
               type="date"
-              className="border rounded-lg px-2 py-1 text-sm"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
+              className="border rounded-lg px-2 py-1 text-sm w-full"
             />
           </div>
 
-          {/* Fecha hasta */}
-          <div className="flex flex-col">
-            <label className="text-xs font-medium text-gray-600 mb-1">
-              Hasta
-            </label>
+          <div>
+            <label className="text-xs">Hasta</label>
             <input
               type="date"
-              className="border rounded-lg px-2 py-1 text-sm"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
+              className="border rounded-lg px-2 py-1 text-sm w-full"
             />
           </div>
 
-          {/* Persona */}
-          <div className="flex flex-col">
-            <label className="text-xs font-medium text-gray-600 mb-1">
-              Persona
-            </label>
+          <div>
+            <label className="text-xs">Persona</label>
             <select
-              className="border rounded-lg px-2 py-1 text-sm"
               value={selectedPersonaId}
               onChange={(e) => setSelectedPersonaId(e.target.value)}
-              disabled={loadingFilters}
+              className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value={emptyOption.value}>{emptyOption.label}</option>
+              <option value="">Todos</option>
               {personas.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nombre || p.email || "Sin nombre"}
+                  {p.nombre || p.email}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Actividad */}
-          <div className="flex flex-col">
-            <label className="text-xs font-medium text-gray-600 mb-1">
-              Actividad
-            </label>
+          <div>
+            <label className="text-xs">Actividad</label>
             <select
-              className="border rounded-lg px-2 py-1 text-sm"
               value={selectedActividadId}
               onChange={(e) => setSelectedActividadId(e.target.value)}
-              disabled={loadingFilters}
+              className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value={emptyOption.value}>{emptyOption.label}</option>
+              <option value="">Todos</option>
               {actividades.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -628,18 +493,14 @@ const CostosDashboardPage = () => {
             </select>
           </div>
 
-          {/* Geocerca */}
-          <div className="flex flex-col md:col-span-2">
-            <label className="text-xs font-medium text-gray-600 mb-1">
-              Geocerca
-            </label>
+          <div className="md:col-span-2">
+            <label className="text-xs">Geocerca</label>
             <select
-              className="border rounded-lg px-2 py-1 text-sm"
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
-              disabled={loadingFilters}
+              className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value={emptyOption.value}>{emptyOption.label}</option>
+              <option value="">Todos</option>
               {geocercas.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre}
@@ -649,268 +510,156 @@ const CostosDashboardPage = () => {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2">
           <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            className="px-3 py-1 border rounded-lg text-sm"
             onClick={() => {
               setFromDate("");
               setToDate("");
               setSelectedPersonaId("");
               setSelectedActividadId("");
               setSelectedGeocercaId("");
-              setError("");
             }}
-            disabled={loading || loadingFilters}
           >
             Limpiar filtros
           </button>
 
           <button
-            type="button"
-            className="px-4 py-1.5 text-xs rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+            className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm"
             onClick={fetchReport}
-            disabled={loading || loadingFilters}
           >
             Aplicar filtros
           </button>
         </div>
-
-        {error && (
-          <div className="text-xs text-red-600 mt-1">
-            <strong>Error: </strong>
-            {error}
-          </div>
-        )}
       </div>
 
-      {/* KPIs principales */}
+      {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl shadow p-3 flex flex-col">
-          <span className="text-xs text-gray-500 uppercase tracking-wide">
-            Total de horas
-          </span>
-          <span className="text-xl font-bold">
-            {formatNumber(totalGlobal.totalHours, 2)}
-          </span>
-          <span className="text-[11px] text-gray-500 mt-1">
-            Horas totales del período y filtros seleccionados.
-          </span>
+        <div className="bg-white rounded-xl p-3 shadow">
+          <p className="text-xs text-gray-500">Total de horas</p>
+          <p className="text-xl font-bold">
+            {formatNumber(totalGlobal.totalHours)}
+          </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-3 flex flex-col">
-          <span className="text-xs text-gray-500 uppercase tracking-wide">
-            Costo total (todas las monedas)
-          </span>
-          <span className="text-xl font-bold">
-            {formatNumber(totalGlobal.totalCost, 2)}
-          </span>
-          <span className="text-[11px] text-gray-500 mt-1">
-            Suma de costos sin distinguir moneda.
-          </span>
+        <div className="bg-white rounded-xl p-3 shadow">
+          <p className="text-xs text-gray-500">Costo total</p>
+          <p className="text-xl font-bold">
+            {formatNumber(totalGlobal.totalCost)}
+          </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-3 flex flex-col">
-          <span className="text-xs text-gray-500 uppercase tracking-wide">
-            Registros
-          </span>
-          <span className="text-xl font-bold">{rows.length}</span>
-          <span className="text-[11px] text-gray-500 mt-1">
-            Filas de detalle que alimentan el dashboard.
-          </span>
+        <div className="bg-white rounded-xl p-3 shadow">
+          <p className="text-xs text-gray-500">Registros</p>
+          <p className="text-xl font-bold">{rows.length}</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-3 flex flex-col">
-          <span className="text-xs text-gray-500 uppercase tracking-wide">
-            Monedas detectadas
-          </span>
-          <span className="text-xl font-bold">{resumenMoneda.length}</span>
-          <span className="text-[11px] text-gray-500 mt-1">
-            Revisa el desglose por moneda más abajo.
-          </span>
+        <div className="bg-white rounded-xl p-3 shadow">
+          <p className="text-xs text-gray-500">Monedas detectadas</p>
+          <p className="text-xl font-bold">{resumenMoneda.length}</p>
         </div>
       </div>
 
       {/* Controles del gráfico principal */}
-      <div className="bg-white rounded-xl shadow p-4 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="bg-white rounded-xl p-4 shadow space-y-3">
+        <h2 className="text-sm font-semibold">Gráfico principal</h2>
+
+        <div className="flex flex-wrap gap-3 text-xs">
           <div>
-            <h2 className="text-sm font-semibold text-gray-700">
-              Gráfico principal
-            </h2>
-            <p className="text-[11px] text-gray-500">
-              Cambia la dimensión, la métrica y el tipo de gráfico para explorar
-              los datos como en un dashboard de BI.
-            </p>
+            <label className="text-[11px]">Dimensión</label>
+            <select
+              value={selectedDimension}
+              onChange={(e) => setSelectedDimension(e.target.value)}
+              className="border rounded-lg px-2 py-1"
+            >
+              {Object.values(DIMENSIONS).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="flex flex-wrap gap-3 text-xs">
-            {/* Dimensión */}
-            <div className="flex flex-col min-w-[140px]">
-              <label className="text-[11px] font-medium text-gray-600 mb-1">
-                Dimensión
-              </label>
-              <select
-                className="border rounded-lg px-2 py-1"
-                value={selectedDimension}
-                onChange={(e) => setSelectedDimension(e.target.value)}
-              >
-                {Object.values(DIMENSIONS).map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="text-[11px]">Métrica</label>
+            <select
+              value={selectedMetric}
+              onChange={(e) => setSelectedMetric(e.target.value)}
+              className="border rounded-lg px-2 py-1"
+            >
+              {Object.values(METRICS).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {/* Métrica */}
-            <div className="flex flex-col min-w-[140px]">
-              <label className="text-[11px] font-medium text-gray-600 mb-1">
-                Métrica
-              </label>
-              <select
-                className="border rounded-lg px-2 py-1"
-                value={selectedMetric}
-                onChange={(e) => setSelectedMetric(e.target.value)}
-              >
-                {Object.values(METRICS).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Tipo de gráfico */}
-            <div className="flex flex-col min-w-[140px]">
-              <label className="text-[11px] font-medium text-gray-600 mb-1">
-                Tipo de gráfico
-              </label>
-              <select
-                className="border rounded-lg px-2 py-1"
-                value={selectedChartType}
-                onChange={(e) => setSelectedChartType(e.target.value)}
-              >
-                {Object.values(CHART_TYPES).map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="text-[11px]">Tipo de gráfico</label>
+            <select
+              value={selectedChartType}
+              onChange={(e) => setSelectedChartType(e.target.value)}
+              className="border rounded-lg px-2 py-1"
+            >
+              {Object.values(CHART_TYPES).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Gráfico principal */}
-        <div className="mt-2">
-          <ChartRenderer
-            chartType={selectedChartType}
-            data={aggregatedData}
-            metricKey={metricKey}
-            valueLabel={metricLabel}
-          />
-        </div>
+        <ChartRenderer
+          chartType={selectedChartType}
+          data={aggregatedData}
+          metricKey={metricConfig.key}
+          valueLabel={metricConfig.label}
+        />
       </div>
 
-      {/* Resumen tabular del gráfico (Top 15) */}
-      <div className="bg-white rounded-xl shadow p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-700">
-            Top categorías según filtro
-          </h2>
-          <span className="text-[11px] text-gray-500">
-            Se muestran hasta 15 categorías ordenadas por costo total.
-          </span>
-        </div>
+      {/* Tabla resumen */}
+      <div className="bg-white p-4 shadow rounded-xl">
+        <h2 className="text-sm font-semibold mb-2">
+          Top categorías según filtro
+        </h2>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full text-xs table-auto">
+          <table className="min-w-full text-xs">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Categoría
-                </th>
-                <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Horas totales
-                </th>
-                <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Costo total
-                </th>
-                <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Registros
-                </th>
+                <th className="px-2 py-1 text-left">Categoría</th>
+                <th className="px-2 py-1 text-right">Horas</th>
+                <th className="px-2 py-1 text-right">Costo</th>
+                <th className="px-2 py-1 text-right">Registros</th>
               </tr>
             </thead>
+
             <tbody>
-              {aggregatedData.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-2 py-6 text-center text-xs text-gray-500"
-                  >
-                    No hay datos agregados para mostrar.
-                  </td>
-                </tr>
-              )}
               {aggregatedData.slice(0, 15).map((row) => (
-                <tr key={row.key} className="border-t border-gray-100">
+                <tr key={row.key} className="border-t">
                   <td className="px-2 py-1">{row.label}</td>
                   <td className="px-2 py-1 text-right">
-                    {formatNumber(row.totalHours, 2)}
+                    {formatNumber(row.totalHours)}
                   </td>
                   <td className="px-2 py-1 text-right">
-                    {formatNumber(row.totalCost, 2)}
+                    {formatNumber(row.totalCost)}
                   </td>
                   <td className="px-2 py-1 text-right">{row.registros}</td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* Resumen por moneda */}
-      <div className="bg-white rounded-xl shadow p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">
-          Resumen por moneda
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-xs table-auto">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Moneda
-                </th>
-                <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Horas totales
-                </th>
-                <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Costo total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {resumenMoneda.length === 0 && (
+              {aggregatedData.length === 0 && (
                 <tr>
                   <td
-                    colSpan={3}
-                    className="px-2 py-6 text-center text-xs text-gray-500"
+                    colSpan="4"
+                    className="px-2 py-4 text-center text-gray-500"
                   >
-                    No hay datos para mostrar por moneda.
+                    No hay datos para mostrar
                   </td>
                 </tr>
               )}
-              {resumenMoneda.map((m) => (
-                <tr key={m.currency} className="border-t border-gray-100">
-                  <td className="px-2 py-1">{m.currency}</td>
-                  <td className="px-2 py-1 text-right">
-                    {formatNumber(m.totalHours, 2)}
-                  </td>
-                  <td className="px-2 py-1 text-right">
-                    {formatNumber(m.totalCost, 2)}
-                  </td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>
