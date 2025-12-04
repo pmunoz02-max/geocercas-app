@@ -18,11 +18,10 @@ import L from "leaflet";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "@geoman-io/leaflet-geoman-free";
 
-// 🔗 Cliente global de Supabase
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 
-// 🔴 IMPORTANTE: dataset externo desactivado por ahora
+// Puedes activar dataset si quieres puntos de referencia
 const DATA_SOURCE = null; // 'geojson' | 'csv' | 'supabase' | null
 const GEOJSON_URL = "/data/mapa_corto_214.geojson";
 const CSV_URL = "/data/mapa_corto_214.csv";
@@ -30,7 +29,8 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 const SUPABASE_POINTS_TABLE = "puntos_mapa_corto";
 const SUPABASE_GEOFENCES_TABLE = "geocercas";
 
-// ===== Utils dataset =====
+/* ----------------- Utils dataset externos ----------------- */
+
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) return [];
@@ -107,11 +107,12 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
   throw new Error("DATA_SOURCE no reconocido");
 }
 
-// ===== Utils Geocercas =====
+/* ----------------- Utils geocercas multi-tenant ----------------- */
+
 async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
 
-  // 1) Supabase
+  // Supabase (multi-tenant)
   if (supabaseClient && orgId) {
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
@@ -125,7 +126,7 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
     }
   }
 
-  // 2) LocalStorage legacy
+  // Legacy localStorage (por si queda algo viejo)
   if (typeof window !== "undefined") {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -147,7 +148,7 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
     }
   }
 
-  // 3) Unificar por nombre
+  // Unificar por nombre
   const seen = new Set();
   const unique = [];
   for (const g of list) {
@@ -228,28 +229,7 @@ async function loadGeofenceGeometryByName({
   return null;
 }
 
-function primaryFeatureFromGeoJSON(geojson) {
-  if (!geojson) return null;
-
-  if (geojson.type === "Feature") return geojson;
-
-  if (
-    geojson.type === "FeatureCollection" &&
-    Array.isArray(geojson.features) &&
-    geojson.features.length
-  ) {
-    let best = geojson.features[0];
-    for (const f of geojson.features) {
-      if (!f?.geometry) continue;
-      const areaBest = approximateArea(best.geometry);
-      const areaNew = approximateArea(f.geometry);
-      if (areaNew > areaBest) best = f;
-    }
-    return best;
-  }
-
-  return null;
-}
+/* ----------------- Helpers de GeoJSON ----------------- */
 
 function approximateArea(geometry) {
   if (!geometry) return 0;
@@ -281,6 +261,29 @@ function approximateArea(geometry) {
   return 0;
 }
 
+function primaryFeatureFromGeoJSON(geojson) {
+  if (!geojson) return null;
+
+  if (geojson.type === "Feature") return geojson;
+
+  if (
+    geojson.type === "FeatureCollection" &&
+    Array.isArray(geojson.features) &&
+    geojson.features.length
+  ) {
+    let best = geojson.features[0];
+    for (const f of geojson.features) {
+      if (!f?.geometry) continue;
+      const areaBest = approximateArea(best.geometry);
+      const areaNew = approximateArea(f.geometry);
+      if (areaNew > areaBest) best = f;
+    }
+    return best;
+  }
+
+  return null;
+}
+
 function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
   if (!featureGroupRef.current || !feature?.geometry) return 0;
 
@@ -304,6 +307,8 @@ function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
   featureGroupRef.current.addLayer(layer);
   return 1;
 }
+
+/* ----------------- Componentes auxiliares ----------------- */
 
 function fitFeatureGroup(map, featureGroupRef, { padding = [20, 20] } = {}) {
   if (!map || !featureGroupRef.current) return;
@@ -333,6 +338,8 @@ function CursorPos({ setCursorLatLng }) {
   return null;
 }
 
+/* ----------------- Componente principal ----------------- */
+
 function NuevaGeocerca({ supabaseClient = supabase }) {
   const { currentOrg } = useAuth();
 
@@ -353,6 +360,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
+  /* ---- Cargar dataset externo opcional ---- */
   useEffect(() => {
     let isMounted = true;
     if (!DATA_SOURCE) {
@@ -384,6 +392,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     };
   }, [supabaseClient]);
 
+  /* ---- Listado de geocercas (multi-tenant) ---- */
   const refreshGeofenceList = useCallback(async () => {
     if (!currentOrg?.id) {
       setGeofenceList([]);
@@ -397,9 +406,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     refreshGeofenceList();
   }, [refreshGeofenceList]);
 
+  /* ---- Inicializar mapa + Geoman ---- */
+
   const onMapReady = useCallback(
     (map) => {
       mapRef.current = map;
+
+      // Actualizar coordenadas del cursor
       const move = (e) => {
         const { lat, lng } = e.latlng || {};
         if (typeof lat === "number" && typeof lng === "number") {
@@ -407,33 +420,73 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         }
       };
       map.on("mousemove", move);
-      return () => {
-        map.off("mousemove", move);
-      };
+
+      // Asegurar FeatureGroup base
+      if (!featureGroupRef.current) {
+        featureGroupRef.current = L.featureGroup().addTo(map);
+      }
+
+      // Configurar controles de Leaflet-Geoman
+      if (map.pm) {
+        map.pm.addControls({
+          position: "topleft",
+          drawMarker: false,
+          drawCircleMarker: false,
+          drawPolyline: false,
+          drawRectangle: true,
+          drawPolygon: true,
+          drawCircle: true,
+          editMode: true,
+          dragMode: true,
+          cutPolygon: false,
+          removalMode: true,
+        });
+
+        map.pm.setGlobalOptions({
+          snappable: true,
+          snapDistance: 20,
+        });
+
+        // Cuando se crea una geometría
+        map.on("pm:create", (e) => {
+          const layer = e.layer;
+          if (!layer) return;
+
+          if (featureGroupRef.current) {
+            featureGroupRef.current.addLayer(layer);
+          } else {
+            const fg = L.featureGroup([layer]).addTo(map);
+            featureGroupRef.current = fg;
+          }
+
+          selectedLayerRef.current = layer;
+          lastCreatedLayerRef.current = layer;
+        });
+
+        // Cuando se elimina desde la barra
+        map.on("pm:remove", () => {
+          selectedLayerRef.current = null;
+          lastCreatedLayerRef.current = null;
+        });
+
+        // Cuando se edita
+        map.on("pm:edit", (e) => {
+          if (e.layer) {
+            selectedLayerRef.current = e.layer;
+            lastCreatedLayerRef.current = e.layer;
+          }
+        });
+      }
     },
     [setCursorLatLng]
   );
 
-  const handleCreated = useCallback((e) => {
-    lastCreatedLayerRef.current = e.layer;
-    selectedLayerRef.current = e.layer;
-  }, []);
+  /* ---- Operaciones sobre FeatureGroup ---- */
 
-  const handleDeleted = useCallback(() => {
+  const clearCanvas = useCallback(() => {
+    featureGroupRef.current?.clearLayers();
     selectedLayerRef.current = null;
     lastCreatedLayerRef.current = null;
-  }, []);
-
-  const handleEditStart = useCallback((e) => {
-    if (e.layer) {
-      selectedLayerRef.current = e.layer;
-    }
-  }, []);
-
-  const handleEditStop = useCallback((e) => {
-    if (e.layer) {
-      selectedLayerRef.current = e.layer;
-    }
   }, []);
 
   const drawGeofences = useCallback(
@@ -508,12 +561,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     },
     [geofenceList, supabaseClient, currentOrg]
   );
-
-  const clearCanvas = useCallback(() => {
-    featureGroupRef.current?.clearLayers();
-    selectedLayerRef.current = null;
-    lastCreatedLayerRef.current = null;
-  }, []);
 
   const saveGeofenceCollection = useCallback(
     async ({ name }) => {
@@ -590,6 +637,8 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     },
     [geofenceList, supabaseClient, currentOrg]
   );
+
+  /* ---- Handlers de UI ---- */
 
   const handleSave = useCallback(async () => {
     const name = geofenceName.trim();
@@ -733,6 +782,8 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     []
   );
 
+  /* ----------------- RENDER ----------------- */
+
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-140px)]">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -846,6 +897,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               <GeoJSON data={dataset} {...pointStyle} key="points-layer" />
             )}
 
+            {/* FeatureGroup base para dibujar / cargar geocercas */}
             <FeatureGroup ref={featureGroupRef}>
               <CursorPos setCursorLatLng={setCursorLatLng} />
             </FeatureGroup>
