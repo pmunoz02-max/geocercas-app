@@ -20,6 +20,7 @@ import "@geoman-io/leaflet-geoman-free";
 
 // 🔗 Cliente global de Supabase
 import { supabase } from "../../supabaseClient";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 // 🔴 IMPORTANTE: dataset externo desactivado por ahora
 const DATA_SOURCE = null; // 'geojson' | 'csv' | 'supabase' | null
@@ -107,14 +108,15 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
 }
 
 // ===== Utils Geocercas =====
-async function listGeofences({ supabaseClient = null }) {
+async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
 
   // 1) Supabase
-  if (supabaseClient) {
+  if (supabaseClient && orgId) {
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("id, nombre")
+      .eq("org_id", orgId)
       .order("nombre", { ascending: true });
     if (!error && data) {
       data.forEach((r) =>
@@ -133,13 +135,13 @@ async function listGeofences({ supabaseClient = null }) {
           const raw = localStorage.getItem(k);
           const obj = JSON.parse(raw || "{}");
           const nombre = obj?.nombre || k.replace(/^geocerca_/, "");
-          list.push({ key: k, nombre, source: "local" });
-        } catch {
           list.push({
             key: k,
-            nombre: k.replace(/^geocerca_/, ""),
+            nombre,
             source: "local",
           });
+        } catch {
+          // ignore
         }
       }
     }
@@ -153,19 +155,21 @@ async function listGeofences({ supabaseClient = null }) {
     seen.add(g.nombre);
     unique.push(g);
   }
+
   unique.sort((a, b) => a.nombre.localeCompare(b.nombre));
   return unique;
 }
 
-async function deleteGeofences({ items, supabaseClient = null }) {
+async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   let deleted = 0;
 
   const supaTargets = items.filter((x) => x.source === "supabase");
-  if (supabaseClient && supaTargets.length) {
+  if (supabaseClient && supaTargets.length && orgId) {
     const nombres = supaTargets.map((x) => x.nombre);
     const { error, count } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .delete({ count: "exact" })
+      .eq("org_id", orgId)
       .in("nombre", nombres);
     if (error) throw error;
     deleted += count || 0;
@@ -185,11 +189,16 @@ async function deleteGeofences({ items, supabaseClient = null }) {
   return deleted;
 }
 
-async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
-  if (supabaseClient) {
+async function loadGeofenceGeometryByName({
+  name,
+  supabaseClient = null,
+  orgId = null,
+}) {
+  if (supabaseClient && orgId) {
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("geojson")
+      .eq("org_id", orgId)
       .eq("nombre", name)
       .maybeSingle();
     if (error) throw error;
@@ -202,9 +211,16 @@ async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
     if (raw) {
       try {
         const obj = JSON.parse(raw);
-        return obj?.geometry || obj?.geojson || null;
+        if (obj?.geojson) return obj.geojson;
+        if (obj?.geometry) {
+          return {
+            type: "Feature",
+            properties: obj.props || {},
+            geometry: obj.geometry,
+          };
+        }
       } catch {
-        return null;
+        // ignore
       }
     }
   }
@@ -223,146 +239,103 @@ function primaryFeatureFromGeoJSON(geojson) {
     geojson.features.length
   ) {
     let best = geojson.features[0];
-    let bestScore = -Infinity;
-
     for (const f of geojson.features) {
-      try {
-        const lyr = L.geoJSON(f);
-        const b = lyr.getBounds();
-        if (b && b.isValid()) {
-          const score = Math.abs(
-            (b.getNorth() - b.getSouth()) * (b.getEast() - b.getWest())
-          );
-          if (score > bestScore) {
-            best = f;
-            bestScore = score;
-          }
-        }
-      } catch {}
+      if (!f?.geometry) continue;
+      const areaBest = approximateArea(best.geometry);
+      const areaNew = approximateArea(f.geometry);
+      if (areaNew > areaBest) best = f;
     }
-    return best || null;
-  }
-
-  if (
-    geojson.type === "MultiPolygon" ||
-    geojson.type === "Polygon" ||
-    geojson.type === "GeometryCollection"
-  ) {
-    return { type: "Feature", properties: {}, geometry: geojson };
+    return best;
   }
 
   return null;
+}
+
+function approximateArea(geometry) {
+  if (!geometry) return 0;
+  if (
+    geometry.type === "Polygon" &&
+    Array.isArray(geometry.coordinates) &&
+    geometry.coordinates.length
+  ) {
+    const ring = geometry.coordinates[0];
+    let sum = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const [x1, y1] = ring[i];
+      const [x2, y2] = ring[(i + 1) % ring.length];
+      sum += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(sum) / 2;
+  }
+  if (
+    geometry.type === "MultiPolygon" &&
+    Array.isArray(geometry.coordinates)
+  ) {
+    return geometry.coordinates
+      .map((poly) => ({
+        type: "Polygon",
+        coordinates: poly[0] ? [poly[0]] : poly,
+      }))
+      .reduce((acc, g) => acc + approximateArea(g), 0);
+  }
+  return 0;
 }
 
 function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
-  if (!featureGroupRef?.current || !feature) return 0;
-  let count = 0;
-  const layer = L.geoJSON(feature, { pmIgnore: false });
-  layer.eachLayer((lyr) => {
-    if (name) {
-      try {
-        lyr.bindTooltip(String(name), {
-          direction: "top",
-          permanent: false,
-        });
-      } catch {}
-    }
-    featureGroupRef.current.addLayer(lyr);
-    count += 1;
+  if (!featureGroupRef.current || !feature?.geometry) return 0;
+
+  const layer = L.geoJSON(feature, {
+    style: {
+      color: "#0ea5e9",
+      weight: 2,
+      fillColor: "#38bdf8",
+      fillOpacity: 0.15,
+    },
   });
-  return count;
+
+  layer.eachLayer((l) => {
+    l.bindTooltip(name, {
+      permanent: true,
+      direction: "center",
+      className: "geofence-label",
+    });
+  });
+
+  featureGroupRef.current.addLayer(layer);
+  return 1;
 }
 
-function fitToFeatureCollection(map, fc) {
-  try {
-    const layer = L.geoJSON(fc);
-    const b = layer.getBounds();
-    if (b.isValid()) map.fitBounds(b.pad(0.2));
-  } catch (e) {
-    console.warn("No fue posible calcular bounds del dataset", e);
+function fitFeatureGroup(map, featureGroupRef, { padding = [20, 20] } = {}) {
+  if (!map || !featureGroupRef.current) return;
+  const fg = featureGroupRef.current;
+  const bounds = fg.getBounds();
+  if (bounds && bounds.isValid()) {
+    map.fitBounds(bounds, { padding });
   }
 }
 
-// ===== Geoman controls =====
-function GeomanControls({
-  featureGroupRef,
-  selectedLayerRef,
-  lastCreatedLayerRef,
-  getCurrentName,
-}) {
+function CursorPos({ setCursorLatLng }) {
   const map = useMap();
 
   useEffect(() => {
-    if (!map) return;
-
-    map.pm.addControls({
-      position: "topleft",
-      drawMarker: true,
-      drawCircleMarker: false,
-      drawPolyline: true,
-      drawRectangle: true,
-      drawPolygon: true,
-      drawCircle: false,
-      editMode: true,
-      dragMode: true,
-      cutPolygon: true,
-      removalMode: true,
-    });
-
-    map.pm.setGlobalOptions({
-      snappable: true,
-      snapDistance: 20,
-      allowSelfIntersection: false,
-    });
-
-    const onCreate = (e) => {
-      if (featureGroupRef?.current) {
-        const nm =
-          (typeof getCurrentName === "function" && getCurrentName()) || "";
-        if (nm && e?.layer?.bindTooltip) {
-          try {
-            e.layer.bindTooltip(String(nm), {
-              direction: "top",
-              permanent: false,
-            });
-          } catch {}
-        }
-        featureGroupRef.current.addLayer(e.layer);
-        lastCreatedLayerRef.current = e.layer;
+    const move = (e) => {
+      const { lat, lng } = e.latlng || {};
+      if (typeof lat === "number" && typeof lng === "number") {
+        setCursorLatLng({ lat, lng });
       }
     };
-
-    const onSelect = (e) => {
-      selectedLayerRef.current = e.layer || null;
-    };
-    const onUnselect = () => {
-      selectedLayerRef.current = null;
-    };
-
-    map.on("pm:create", onCreate);
-    map.on("pm:globaleditmodetoggled", onUnselect);
-    map.on("pm:remove", onUnselect);
-    map.on("pm:markerdragstart", onSelect);
-    map.on("pm:dragstart", onSelect);
-    map.on("pm:select", onSelect);
-    map.on("pm:deselect", onUnselect);
-
+    map.on("mousemove", move);
     return () => {
-      map.off("pm:create", onCreate);
-      map.off("pm:globaleditmodetoggled", onUnselect);
-      map.off("pm:remove", onUnselect);
-      map.off("pm:markerdragstart", onSelect);
-      map.off("pm:dragstart", onSelect);
-      map.off("pm:select", onSelect);
-      map.off("pm:deselect", onUnselect);
+      map.off("mousemove", move);
     };
-  }, [map, featureGroupRef, selectedLayerRef, lastCreatedLayerRef, getCurrentName]);
+  }, [map, setCursorLatLng]);
 
   return null;
 }
 
-// ===== Componente principal =====
-export default function NuevaGeocerca({ supabaseClient = supabase }) {
+function NuevaGeocerca({ supabaseClient = supabase }) {
+  const { currentOrg } = useAuth();
+
   const [dataset, setDataset] = useState(null);
   const [loadingDataset, setLoadingDataset] = useState(!!DATA_SOURCE);
   const [datasetError, setDatasetError] = useState(null);
@@ -380,35 +353,45 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
-  // Carga dataset si DATA_SOURCE está activo
   useEffect(() => {
-    let active = true;
-    (async () => {
-      if (!DATA_SOURCE) return;
+    let isMounted = true;
+    if (!DATA_SOURCE) {
+      setLoadingDataset(false);
+      setDataset(null);
+      setDatasetError(null);
+      return;
+    }
+
+    async function loadData() {
+      setLoadingDataset(true);
+      setDatasetError(null);
       try {
-        setLoadingDataset(true);
-        const fc = await loadShortMap({
-          source: DATA_SOURCE,
-          supabaseClient,
-        });
-        if (!active) return;
-        setDataset(fc);
+        const data = await loadShortMap({ source: DATA_SOURCE, supabaseClient });
+        if (!isMounted) return;
+        setDataset(data);
       } catch (e) {
-        if (!active) return;
-        setDatasetError(e.message || "Error al cargar dataset");
+        console.error("Error cargando dataset externo:", e);
+        if (!isMounted) return;
+        setDatasetError(e);
       } finally {
-        if (active) setLoadingDataset(false);
+        if (isMounted) setLoadingDataset(false);
       }
-    })();
+    }
+
+    loadData();
     return () => {
-      active = false;
+      isMounted = false;
     };
   }, [supabaseClient]);
 
   const refreshGeofenceList = useCallback(async () => {
-    const list = await listGeofences({ supabaseClient });
+    if (!currentOrg?.id) {
+      setGeofenceList([]);
+      return;
+    }
+    const list = await listGeofences({ supabaseClient, orgId: currentOrg.id });
     setGeofenceList(list);
-  }, [supabaseClient]);
+  }, [supabaseClient, currentOrg]);
 
   useEffect(() => {
     refreshGeofenceList();
@@ -424,15 +407,113 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         }
       };
       map.on("mousemove", move);
-      if (dataset) fitToFeatureCollection(map, dataset);
-      return () => map.off("mousemove", move);
+      return () => {
+        map.off("mousemove", move);
+      };
     },
-    [dataset]
+    [setCursorLatLng]
   );
 
-  useEffect(() => {
-    if (mapRef.current && dataset) fitToFeatureCollection(mapRef.current, dataset);
-  }, [dataset]);
+  const handleCreated = useCallback((e) => {
+    lastCreatedLayerRef.current = e.layer;
+    selectedLayerRef.current = e.layer;
+  }, []);
+
+  const handleDeleted = useCallback(() => {
+    selectedLayerRef.current = null;
+    lastCreatedLayerRef.current = null;
+  }, []);
+
+  const handleEditStart = useCallback((e) => {
+    if (e.layer) {
+      selectedLayerRef.current = e.layer;
+    }
+  }, []);
+
+  const handleEditStop = useCallback((e) => {
+    if (e.layer) {
+      selectedLayerRef.current = e.layer;
+    }
+  }, []);
+
+  const drawGeofences = useCallback(
+    ({ names, append = false, zoom = true } = {}) => {
+      if (!featureGroupRef.current) return 0;
+      featureGroupRef.current.clearLayers();
+      selectedLayerRef.current = null;
+      lastCreatedLayerRef.current = null;
+      if (!names || !names.length) return 0;
+
+      let shown = 0;
+
+      const supaNames = geofenceList
+        .filter((g) => g.source === "supabase" && names.includes(g.nombre))
+        .map((g) => g.nombre);
+
+      const localNames = geofenceList
+        .filter((g) => g.source === "local" && names.includes(g.nombre))
+        .map((g) => g.nombre);
+
+      const doDraw = async () => {
+        if (supaNames.length && supabaseClient && currentOrg?.id) {
+          for (const name of supaNames) {
+            try {
+              const geojson = await loadGeofenceGeometryByName({
+                name,
+                supabaseClient,
+                orgId: currentOrg?.id || null,
+              });
+              const feature = primaryFeatureFromGeoJSON(geojson);
+              if (feature)
+                shown += addSingleFeatureToFeatureGroup({
+                  featureGroupRef,
+                  feature,
+                  name,
+                });
+            } catch (e) {
+              console.warn("No se pudo cargar geocerca", name, e);
+            }
+          }
+        }
+
+        if (typeof window !== "undefined") {
+          for (const name of localNames) {
+            try {
+              const geojson = await loadGeofenceGeometryByName({
+                name,
+                supabaseClient: null,
+              });
+              const feature = primaryFeatureFromGeoJSON(geojson);
+              if (feature)
+                shown += addSingleFeatureToFeatureGroup({
+                  featureGroupRef,
+                  feature,
+                  name,
+                });
+            } catch (e) {
+              console.warn("No se pudo cargar geocerca local", name, e);
+            }
+          }
+        }
+
+        if (zoom && mapRef.current) {
+          fitFeatureGroup(mapRef.current, featureGroupRef, {
+            padding: [40, 40],
+          });
+        }
+      };
+
+      doDraw();
+      return shown;
+    },
+    [geofenceList, supabaseClient, currentOrg]
+  );
+
+  const clearCanvas = useCallback(() => {
+    featureGroupRef.current?.clearLayers();
+    selectedLayerRef.current = null;
+    lastCreatedLayerRef.current = null;
+  }, []);
 
   const saveGeofenceCollection = useCallback(
     async ({ name }) => {
@@ -471,30 +552,43 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           nombre: name,
           geojson: fc,
           ...(created_by ? { created_by } : {}),
+          ...(currentOrg?.id ? { org_id: currentOrg.id } : {}),
         };
         const { data, error } = await supabaseClient
           .from(SUPABASE_GEOFENCES_TABLE)
           .insert(payload)
           .select("id")
           .single();
-        if (error) throw error;
-        return { ok: true, via: "supabase:geojson", id: data?.id };
-      } else {
+
+        if (error) {
+          console.error("Error guardando geocerca en Supabase:", error);
+          throw error;
+        }
+
+        return { ok: true, via: "supabase", id: data?.id };
+      }
+
+      if (typeof window !== "undefined") {
         const key = `geocerca_${name}`;
-        if (typeof window !== "undefined") {
-          localStorage.setItem(
-            key,
-            JSON.stringify({
-              nombre: name,
-              geometry: feature,
-              props: { source: "UI", version: 3 },
-            })
+        const existing = localStorage.getItem(key);
+        if (existing) {
+          throw new Error(
+            "Ya existe una geocerca con ese nombre en localStorage."
           );
         }
+        const fc = { type: "FeatureCollection", features: [feature] };
+        const payload = {
+          nombre: name,
+          geojson: fc,
+          props: { source: "UI", version: 3 },
+        };
+        localStorage.setItem(key, JSON.stringify(payload));
         return { ok: true, via: "localStorage", key };
       }
+
+      return { ok: false };
     },
-    [geofenceList, supabaseClient]
+    [geofenceList, supabaseClient, currentOrg]
   );
 
   const handleSave = useCallback(async () => {
@@ -518,109 +612,76 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     setCoordText("");
     setCoordModalOpen(true);
   }, []);
-  const closeCoordModal = useCallback(() => setCoordModalOpen(false), []);
+  const closeCoordModal = useCallback(() => {
+    setCoordModalOpen(false);
+  }, []);
 
-  const applyCoordinates = useCallback(() => {
-    const lines = coordText
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const latlngs = [];
-    for (const line of lines) {
-      const parts = line.split(/[,\s]+/).map((x) => x.trim());
-      if (parts.length < 2) continue;
-      const lat = parseFloat(parts[0]);
-      const lng = parseFloat(parts[1]);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) latlngs.push([lat, lng]);
-    }
-    if (latlngs.length < 3) {
-      alert("Se requieren al menos 3 coordenadas (lat,lng) para un polígono.");
+  const handleCoordTextChange = useCallback((e) => {
+    setCoordText(e.target.value);
+  }, []);
+
+  const handleDrawFromCoords = useCallback(() => {
+    const text = coordText.trim();
+    if (!text) return;
+    const parts = text.split(/[,;\s]+/).filter(Boolean);
+    if (parts.length < 2) {
+      alert("Ingresa al menos latitud y longitud.");
       return;
     }
-    const poly = L.polygon(latlngs, { pmIgnore: false });
-    const nm = geofenceName.trim();
-    if (nm) {
-      try {
-        poly.bindTooltip(nm, { direction: "top", permanent: false });
-      } catch {}
+    const lat = parseFloat(parts[0].replace(",", "."));
+    const lng = parseFloat(parts[1].replace(",", "."));
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      alert("Coordenadas inválidas.");
+      return;
     }
-    featureGroupRef.current?.addLayer(poly);
-    lastCreatedLayerRef.current = poly;
-    try {
-      const bounds = poly.getBounds();
-      if (mapRef.current && bounds.isValid())
-        mapRef.current.fitBounds(bounds.pad(0.2));
-    } catch {}
-    setCoordModalOpen(false);
-  }, [coordText, geofenceName]);
 
-  const clearCanvas = useCallback(() => {
-    featureGroupRef.current?.clearLayers();
-    selectedLayerRef.current = null;
-    lastCreatedLayerRef.current = null;
-  }, []);
+    clearCanvas();
 
-  const drawGeofences = useCallback(
-    async (names, { append = false, zoom = true } = {}) => {
-      if (!append) clearCanvas();
-      let shown = 0;
-      for (const name of names) {
-        try {
-          const geojson = await loadGeofenceGeometryByName({
-            name,
-            supabaseClient,
-          });
-          const feature = primaryFeatureFromGeoJSON(geojson);
-          if (feature)
-            shown += addSingleFeatureToFeatureGroup({
-              featureGroupRef,
-              feature,
-              name,
-            });
-        } catch (e) {
-          console.warn("No se pudo cargar geocerca", name, e);
-        }
-      }
-      if (shown > 0 && zoom && mapRef.current) {
-        try {
-          const bounds = featureGroupRef.current?.getBounds();
-          if (bounds?.isValid()) mapRef.current.fitBounds(bounds.pad(0.2));
-        } catch {}
-      }
-      if (!shown) alert("No se pudo mostrar ninguna geometría.");
-    },
-    [supabaseClient, clearCanvas]
-  );
+    const map = mapRef.current;
+    if (!map) return;
 
-  const toggleSelected = useCallback((nombre) => {
-    setSelectedNames((prev) => {
-      const next = new Set(prev);
-      if (next.has(nombre)) next.delete(nombre);
-      else next.add(nombre);
-      return next;
+    const layer = L.circle([lat, lng], {
+      radius: 30,
+      color: "#22c55e",
+      fillColor: "#22c55e",
+      fillOpacity: 0.3,
     });
-  }, []);
+
+    if (!featureGroupRef.current) {
+      featureGroupRef.current = L.featureGroup().addTo(map);
+    }
+    featureGroupRef.current.addLayer(layer);
+    selectedLayerRef.current = layer;
+    lastCreatedLayerRef.current = layer;
+
+    map.setView([lat, lng], 19);
+
+    setCoordModalOpen(false);
+    setCoordText("");
+  }, [coordText, clearCanvas]);
+
+  const handleSelectGeofence = useCallback(
+    (nombre) => {
+      const newSet = new Set(selectedNames);
+      if (newSet.has(nombre)) newSet.delete(nombre);
+      else newSet.add(nombre);
+      setSelectedNames(newSet);
+    },
+    [selectedNames]
+  );
 
   const handleShowSelected = useCallback(async () => {
     if (!selectedNames.size) {
       alert("Selecciona al menos una geocerca en el listado.");
       return;
     }
-    await drawGeofences(Array.from(selectedNames), {
-      append: false,
-      zoom: true,
-    });
+    const names = Array.from(selectedNames);
+    drawGeofences({ names, append: false, zoom: true });
   }, [selectedNames, drawGeofences]);
 
-  const handleShowAll = useCallback(async () => {
-    if (!geofenceList.length) {
-      alert("No hay geocercas guardadas.");
-      return;
-    }
-    await drawGeofences(
-      geofenceList.map((g) => g.nombre),
-      { append: false, zoom: true }
-    );
+  const handleShowAll = useCallback(() => {
+    const names = geofenceList.map((g) => g.nombre);
+    drawGeofences({ names, append: false, zoom: true });
   }, [geofenceList, drawGeofences]);
 
   const handleDeleteSelected = useCallback(async () => {
@@ -639,6 +700,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const deletedCount = await deleteGeofences({
         items,
         supabaseClient,
+        orgId: currentOrg?.id || null,
       });
       alert(`🗑️ Eliminadas: ${deletedCount}`);
       setSelectedNames(new Set());
@@ -653,305 +715,181 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     supabaseClient,
     refreshGeofenceList,
     clearCanvas,
+    currentOrg,
   ]);
 
   const pointStyle = useMemo(
     () => ({
       pointToLayer: (feature, latlng) =>
-        L.circleMarker(latlng, { radius: 4, weight: 1 }),
-      onEachFeature: (feature, layer) => {
-        const p = feature?.properties || {};
-        const label = Object.keys(p).length ? JSON.stringify(p) : "Punto";
-        layer.bindTooltip(label, { direction: "top" });
-      },
+        L.circleMarker(latlng, {
+          radius: 4,
+          fillColor: "#22c55e",
+          color: "#064e3b",
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.8,
+        }),
     }),
     []
   );
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "300px 1fr",
-        height: "100%",
-        background: "#0b1220",
-        color: "#e5e7eb",
-      }}
-    >
-      {/* Sidebar */}
-      <aside
-        style={{
-          background: "#0f172a",
-          color: "#e5e7eb",
-          borderRight: "1px solid #1f2937",
-          padding: 12,
-          overflow: "auto",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 10,
-          }}
-        >
-          <h3 style={{ margin: 0, fontSize: 16, color: "#f9fafb" }}>
-            Geocercas
-          </h3>
-          <button
-            onClick={refreshGeofenceList}
-            style={smBtnDark}
-            title="Actualizar listado"
-          >
-            ↻
-          </button>
-        </div>
-
-        {geofenceList.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#9ca3af" }}>
-            No hay geocercas guardadas.
-          </div>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {geofenceList.map((g) => (
-              <li
-                key={g.id || g.key || g.nombre}
-                style={{
-                  border: "1px solid #374151",
-                  borderRadius: 10,
-                  padding: 10,
-                  marginBottom: 10,
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  background: "#111827",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedNames.has(g.nombre)}
-                  onChange={() => toggleSelected(g.nombre)}
-                  style={{ transform: "scale(1.1)" }}
-                  title="Seleccionar para mostrar o eliminar"
-                />
-                <div
-                  style={{
-                    display: "grid",
-                    lineHeight: 1.25,
-                    cursor: "pointer",
-                  }}
-                  title="Doble click: mostrar SOLO esta geocerca"
-                  onDoubleClick={async () => {
-                    await drawGeofences([g.nombre], {
-                      append: false,
-                      zoom: true,
-                    });
-                  }}
-                >
-                  <span
-                    style={{
-                      fontWeight: 700,
-                      color: "#f3f4f6",
-                    }}
-                  >
-                    {g.nombre}
-                  </span>
-                  <span style={{ fontSize: 12, color: "#9ca3af" }}>
-                    {g.source === "supabase" ? "Supabase" : "Local"}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-          <button
-            onClick={handleShowSelected}
-            style={{ ...btnDark, background: "#2563eb" }}
-          >
-            Mostrar seleccionadas
-          </button>
-          <button onClick={handleShowAll} style={btnDark}>
-            Mostrar todas
-          </button>
-          <button
-            onClick={handleDeleteSelected}
-            style={{ ...btnDark, background: "#ef4444" }}
-          >
-            Eliminar seleccionadas
-          </button>
-          <button onClick={clearCanvas} style={btnDark}>
-            Limpiar dibujos (canvas)
-          </button>
-        </div>
-      </aside>
-
-      {/* Panel principal */}
-      <div style={{ display: "grid", gridTemplateRows: "auto 1fr" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            alignItems: "center",
-            padding: "10px 12px",
-            borderBottom: "1px solid #1f2937",
-            background: "#0f172a",
-            position: "sticky",
-            top: 0,
-            zIndex: 1000,
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: 18, color: "#f9fafb" }}>
+    <div className="flex flex-col gap-4 h-[calc(100vh-140px)]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold text-slate-100">
             Nueva Geocerca
-          </h2>
+          </h1>
+          <p className="text-xs text-slate-300">
+            Dibuja geocercas de manera precisa y guárdalas en Supabase para
+            usarlas en asignaciones, trackers y reportes.
+          </p>
+        </div>
 
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
           <input
             type="text"
+            className="px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            placeholder="Nombre de la geocerca"
             value={geofenceName}
             onChange={(e) => setGeofenceName(e.target.value)}
-            placeholder="Nombre de la geocerca"
-            style={inputDark}
           />
-
-          <button onClick={openCoordModal} style={btnDark}>
+          <button
+            onClick={openCoordModal}
+            className="px-3 py-2 rounded-md text-xs font-medium bg-slate-800 border border-slate-600 text-slate-100 hover:bg-slate-700"
+          >
             Dibujar por coordenadas
           </button>
-
           <button
             onClick={handleSave}
-            style={{ ...btnDark, background: "#16a34a" }}
+            className="px-3 py-2 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
           >
             Guardar geocerca
           </button>
-
-          <div
-            style={{
-              marginLeft: "auto",
-              fontSize: 13,
-              color: "#d1d5db",
-            }}
-          >
-            {DATA_SOURCE && (
-              <>
-                {loadingDataset && "Cargando dataset…"}
-                {!loadingDataset &&
-                  dataset &&
-                  `Puntos: ${dataset.features?.length ?? 0}`}
-                {datasetError && (
-                  <span style={{ color: "#fca5a5" }}>
-                    {" "}
-                    · {datasetError}
-                  </span>
-                )}
-                <span style={{ marginLeft: 12, opacity: 0.7 }}>
-                  Fuente: {DATA_SOURCE}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Mapa */}
-        <div style={{ position: "relative" }}>
-          <MapContainer
-            center={[-1.8312, -78.1834]}
-            zoom={6}
-            style={{ height: "calc(100vh - 56px)", width: "100%" }}
-            whenReady={(e) => onMapReady(e.target)}
-          >
-            <TileLayer
-              attribution="&copy; OpenStreetMap contributors"
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {dataset && <GeoJSON data={dataset} {...pointStyle} />}
-            <FeatureGroup ref={featureGroupRef} />
-            <GeomanControls
-              featureGroupRef={featureGroupRef}
-              selectedLayerRef={selectedLayerRef}
-              lastCreatedLayerRef={lastCreatedLayerRef}
-              getCurrentName={() => geofenceName.trim()}
-            />
-          </MapContainer>
-
-          {/* Coordenadas en vivo */}
-          <div style={coordOverlayDark} title="Coordenadas del cursor">
-            {cursorLatLng
-              ? `Lat: ${cursorLatLng.lat.toFixed(
-                  6
-                )} · Lng: ${cursorLatLng.lng.toFixed(6)}`
-              : "Mueve el cursor sobre el mapa"}
-          </div>
         </div>
       </div>
 
-      {/* Modal coordenadas */}
-      {coordModalOpen && (
-        <div style={modalBackdropDark}>
-          <div style={modalCardDark}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 16,
-                  color: "#f3f4f6",
-                }}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col">
+          <h2 className="text-sm font-semibold text-slate-100 mb-2">
+            Geocercas
+          </h2>
+
+          <div className="flex-1 overflow-auto space-y-1 pr-1">
+            {geofenceList.length === 0 && (
+              <div className="text-xs text-slate-400">
+                No hay geocercas guardadas todavía.
+              </div>
+            )}
+            {geofenceList.map((g) => (
+              <label
+                key={`${g.source}-${g.nombre}`}
+                className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600"
               >
-                Dibujar polígono por coordenadas
-              </h3>
-              <button onClick={closeCoordModal} style={smBtnDark}>
-                ✕
-              </button>
-            </div>
-            <div
-              style={{
-                fontSize: 13,
-                marginBottom: 6,
-                color: "#d1d5db",
-              }}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedNames.has(g.nombre)}
+                    onChange={() => handleSelectGeofence(g.nombre)}
+                  />
+                  <span className="text-xs text-slate-100">{g.nombre}</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                  {g.source === "supabase" ? "Supabase" : "Local"}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              onClick={handleShowSelected}
+              className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 text-white hover:bg-sky-500"
             >
-              Nombre actual:{" "}
-              <b style={{ color: "#f9fafb" }}>{geofenceName || "—"}</b>
-            </div>
-            <p
-              style={{
-                marginTop: 0,
-                fontSize: 13,
-                color: "#9ca3af",
-              }}
+              Mostrar seleccionadas
+            </button>
+            <button
+              onClick={handleShowAll}
+              className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-800 text-slate-100 hover:bg-slate-700"
             >
-              Ingresa una coordenada por línea. Formato:{" "}
-              <code>lat,lng</code> o <code>lat lng</code>. Mínimo 3 puntos.
+              Mostrar todas
+            </button>
+            <button
+              onClick={handleDeleteSelected}
+              className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-red-600 text-white hover:bg-red-500"
+            >
+              Eliminar seleccionadas
+            </button>
+            <button
+              onClick={clearCanvas}
+              className="w-full px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
+            >
+              Limpiar dibujos (canvas)
+            </button>
+          </div>
+        </div>
+
+        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative">
+          <MapContainer
+            center={[-0.2, -78.5]}
+            zoom={8}
+            scrollWheelZoom={true}
+            style={{ height: "100%", width: "100%" }}
+            whenCreated={onMapReady}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+
+            {dataset && (
+              <GeoJSON data={dataset} {...pointStyle} key="points-layer" />
+            )}
+
+            <FeatureGroup ref={featureGroupRef}>
+              <CursorPos setCursorLatLng={setCursorLatLng} />
+            </FeatureGroup>
+          </MapContainer>
+
+          {cursorLatLng && (
+            <div className="absolute left-3 bottom-3 px-2 py-1 rounded-md bg-black/60 text-[11px] text-slate-100">
+              {cursorLatLng.lat.toFixed(6)}, {cursorLatLng.lng.toFixed(6)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {coordModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3">
+            <h2 className="text-sm font-semibold text-slate-100 mb-1">
+              Dibujar por coordenadas
+            </h2>
+            <p className="text-xs text-slate-400">
+              Ingresa latitud y longitud separadas por coma o espacio. Ejemplo:
+              <br />
+              <span className="font-mono text-[11px]">
+                -0.180653, -78.467838
+              </span>
             </p>
             <textarea
+              rows={3}
+              className="w-full rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               value={coordText}
-              onChange={(e) => setCoordText(e.target.value)}
-              placeholder={`-1.234567, -78.345678\n-1.240001, -78.350001\n-1.239000, -78.360000`}
-              style={textareaDark}
+              onChange={handleCoordTextChange}
             />
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginTop: 10,
-              }}
-            >
+            <div className="flex justify-end gap-2 mt-2">
               <button
-                onClick={applyCoordinates}
-                style={{ ...btnDark, background: "#2563eb" }}
+                onClick={closeCoordModal}
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
               >
-                Crear polígono
-              </button>
-              <button onClick={closeCoordModal} style={btnDark}>
                 Cancelar
+              </button>
+              <button
+                onClick={handleDrawFromCoords}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
+              >
+                Dibujar
               </button>
             </div>
           </div>
@@ -961,84 +899,4 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   );
 }
 
-// ===== Estilos Dark =====
-const btnDark = {
-  fontSize: 13,
-  padding: "8px 12px",
-  border: "1px solid #374151",
-  borderRadius: 8,
-  background: "#1f2937",
-  color: "#e5e7eb",
-  cursor: "pointer",
-};
-
-const smBtnDark = {
-  fontSize: 12,
-  padding: "6px 8px",
-  border: "1px solid #374151",
-  borderRadius: 8,
-  background: "#111827",
-  color: "#e5e7eb",
-  cursor: "pointer",
-};
-
-const inputDark = {
-  minWidth: 240,
-  height: 34,
-  padding: "6px 10px",
-  borderRadius: 8,
-  border: "1px solid #374151",
-  background: "#111827",
-  color: "#f3f4f6",
-  outline: "none",
-};
-
-const textareaDark = {
-  width: "100%",
-  height: 160,
-  fontFamily: "monospace",
-  fontSize: 13,
-  padding: 8,
-  border: "1px solid #374151",
-  borderRadius: 8,
-  boxSizing: "border-box",
-  resize: "vertical",
-  background: "#0b1220",
-  color: "#e5e7eb",
-};
-
-const modalBackdropDark = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.55)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 2000,
-};
-
-const modalCardDark = {
-  width: 540,
-  maxWidth: "92vw",
-  background: "#0f172a",
-  color: "#e5e7eb",
-  borderRadius: 12,
-  padding: 16,
-  boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
-  border: "1px solid #1f2937",
-};
-
-const coordOverlayDark = {
-  position: "absolute",
-  left: 10,
-  bottom: 10,
-  padding: "6px 10px",
-  fontSize: 12,
-  borderRadius: 8,
-  background: "rgba(15,23,42,0.92)",
-  border: "1px solid #374151",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
-  color: "#e5e7eb",
-  pointerEvents: "none",
-  zIndex: 1500,
-};
+export default NuevaGeocerca;

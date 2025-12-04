@@ -19,64 +19,6 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // 0) Procesar MAGIC LINK que llega directamente a /login#...
-  //    - Si hay error en el hash => mostrarlo y limpiar URL
-  //    - Si hay access_token + refresh_token => setSession y navegar a /inicio
-  useEffect(() => {
-    const rawHash = location.hash || "";
-    const hash = rawHash.startsWith("#") ? rawHash.slice(1) : rawHash;
-    if (!hash) return;
-
-    const params = new URLSearchParams(hash);
-    const error = params.get("error") || params.get("error_code");
-    const errorDescription = params.get("error_description");
-
-    const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
-
-    // Caso 1: error en el link (otp_expired, access_denied, etc.)
-    if (error) {
-      const msg =
-        decodeURIComponent(errorDescription || error) ||
-        "El enlace de acceso no es válido o ha expirado.";
-      setErrorMsg(msg);
-      // Limpiamos el hash para que no estorbe más
-      window.history.replaceState({}, document.title, "/login");
-      return;
-    }
-
-    // Caso 2: tenemos tokens => iniciar sesión desde aquí mismo
-    if (accessToken && refreshToken) {
-      (async () => {
-        try {
-          const { error: setSessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (setSessionError) {
-            console.error("[Login] setSession error:", setSessionError);
-            setErrorMsg(
-              setSessionError.message ||
-                "No se pudo confirmar la sesión desde el enlace."
-            );
-          } else {
-            // Limpiamos el hash y vamos al panel
-            window.history.replaceState({}, document.title, "/login");
-            navigate("/inicio", { replace: true });
-          }
-        } catch (e: any) {
-          console.error("[Login] excepción en setSession:", e);
-          setErrorMsg(
-            e?.message ||
-              "Ocurrió un error al procesar el enlace de acceso."
-          );
-          window.history.replaceState({}, document.title, "/login");
-        }
-      })();
-    }
-  }, [location.hash, navigate]);
-
   // 1) Si la URL es /login?mode=magic => abrir pestaña Magic Link
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -86,12 +28,24 @@ const Login: React.FC = () => {
     }
   }, [location.search]);
 
-  // 2) Si YA hay sesión (por cualquier vía), enviamos a /inicio
-  useEffect(() => {
-    if (!loading && session) {
-      navigate("/inicio", { replace: true });
+  // 2) Política híbrida:
+  //    - Si vienen por Magic Link, NO pasan por aquí (van a /auth/callback).
+  //    - Si el usuario abre /login a mano y ya tiene sesión, le mostramos
+  //      un pequeño panel para ir al dashboard o cerrar sesión.
+  const handleGoToDashboard = () => {
+    navigate("/inicio", { replace: true });
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("[Login] signOut error:", e);
+    } finally {
+      // Volvemos a /login en limpio
+      navigate("/login", { replace: true });
     }
-  }, [session, loading, navigate]);
+  };
 
   // 3) Login con email + contraseña
   const handleSubmitPassword = async (e: React.FormEvent) => {
@@ -141,8 +95,8 @@ const Login: React.FC = () => {
     try {
       setLoadingAction(true);
 
-      // Enviamos a /login por compatibilidad, ya que ahora lo sabemos procesar
-      const redirectTo = `${window.location.origin}/login`;
+      // 👉 Ahora usamos /auth/callback, que es el handler correcto de Magic Link
+      const redirectTo = `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -166,16 +120,60 @@ const Login: React.FC = () => {
     }
   };
 
-  // Mientras AuthContext resuelve la sesión inicial, no mostramos nada
-  if (loading) return null;
-
-  // Si ya hay sesión (porque se procesó un Magic Link o login previo), no mostramos el formulario
-  if (session) return null;
-
   const isPasswordMode = mode === "password";
 
+  // ------------------------------
+  // Renders según estado
+  // ------------------------------
+
+  // Mientras AuthContext resuelve la sesión inicial, mostramos un loader sencillo
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
+        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+          Cargando tu sesión…
+        </div>
+      </div>
+    );
+  }
+
+  // Si YA hay sesión y el usuario entra a /login manualmente,
+  // mostramos un pequeño panel de control en vez de nada (pantalla blanca).
+  if (session) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-4">
+          <h1 className="text-xl font-semibold text-slate-900">
+            Ya tienes una sesión activa
+          </h1>
+          <p className="text-sm text-slate-600">
+            Puedes ir directamente a tu panel o cerrar sesión si quieres entrar
+            con otra cuenta.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleGoToDashboard}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
+            >
+              Ir al panel
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Sin sesión → formulario normal
   return (
-    <div className="min-h-[60vh] flex items-center justify-center">
+    <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-5">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-slate-900">
@@ -292,7 +290,7 @@ const Login: React.FC = () => {
             </button>
             <p className="text-[11px] text-slate-500">
               Te enviaremos un correo con un link de acceso. Al hacer clic, se
-              abrirá esta misma página y te conectaremos automáticamente.
+              abrirá la app, procesaremos el enlace y te llevaremos a tu panel.
             </p>
           </form>
         )}
