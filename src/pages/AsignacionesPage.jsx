@@ -1,3 +1,4 @@
+// src/pages/AsignacionesPage.jsx
 function localToISOWithTZ(localDateTime) {
   if (!localDateTime) return null;
 
@@ -188,7 +189,7 @@ export default function AsignacionesPage() {
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId || null,
       start_time: localToISOWithTZ(startTime),
-end_time: localToISOWithTZ(endTime),
+      end_time: localToISOWithTZ(endTime),
       // Convertimos minutos -> segundos para la BD
       frecuencia_envio_sec: freqMin * 60,
       status,
@@ -197,7 +198,11 @@ end_time: localToISOWithTZ(endTime),
 
     try {
       if (editingId) {
-        const { error: updateError } = await updateAsignacion(editingId, payload);
+        // --------- UPDATE con actualización inmediata en memoria ---------
+        const { data: updatedRows, error: updateError } = await updateAsignacion(
+          editingId,
+          payload
+        );
         if (updateError) {
           console.error("[AsignacionesPage] UPDATE error:", updateError);
           if (
@@ -221,9 +226,19 @@ end_time: localToISOWithTZ(endTime),
           }
           return;
         }
+
+        const updatedRow = updatedRows?.[0];
+        if (updatedRow) {
+          setAsignaciones((prev) =>
+            prev.map((a) => (a.id === updatedRow.id ? updatedRow : a))
+          );
+        }
+
         setSuccessMessage("Asignación actualizada correctamente.");
       } else {
-        const { error: insertError } = await createAsignacion(payload);
+        // --------- INSERT con actualización inmediata en memoria ---------
+        const { data: insertedRows, error: insertError } =
+          await createAsignacion(payload);
         if (insertError) {
           console.error("[AsignacionesPage] INSERT error:", insertError);
           if (
@@ -245,10 +260,17 @@ end_time: localToISOWithTZ(endTime),
           }
           return;
         }
+
+        if (insertedRows && insertedRows.length > 0) {
+          setAsignaciones((prev) => [...prev, ...insertedRows]);
+        }
+
         setSuccessMessage("Asignación creada correctamente.");
       }
 
-      await loadAsignaciones();
+      // Ya que actualizamos el estado local, no es obligatorio recargar.
+      // Si quieres forzar sincronización con el servidor, podríamos llamar:
+      // loadAsignaciones();
       resetForm();
     } catch (err) {
       console.error("[AsignacionesPage] handleSubmit error general:", err);
@@ -285,7 +307,9 @@ end_time: localToISOWithTZ(endTime),
       return;
     }
 
-    await loadAsignaciones();
+    // Eliminación instantánea en la UI
+    setAsignaciones((prev) => prev.filter((a) => a.id !== id));
+
     setSuccessMessage("Asignación eliminada correctamente.");
     setError(null);
   };
@@ -297,20 +321,31 @@ end_time: localToISOWithTZ(endTime),
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Asignaciones</h1>
 
-      {/* FILTRO POR ESTADO */}
-      <div className="mb-4 flex items-center gap-3">
-        <label className="font-medium">Filtrar por estado:</label>
-        <select
-          className="border rounded px-3 py-2"
-          value={estadoFilter}
-          onChange={(e) => setEstadoFilter(e.target.value)}
+      {/* FILTRO POR ESTADO + BOTÓN REFRESCAR */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <label className="font-medium">Filtrar por estado:</label>
+          <select
+            className="border rounded px-3 py-2"
+            value={estadoFilter}
+            onChange={(e) => setEstadoFilter(e.target.value)}
+          >
+            {ESTADOS.map((e) => (
+              <option key={e.value} value={e.value}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="button"
+          onClick={loadAsignaciones}
+          disabled={loadingAsignaciones}
+          className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {ESTADOS.map((e) => (
-            <option key={e.value} value={e.value}>
-              {e.label}
-            </option>
-          ))}
-        </select>
+          {loadingAsignaciones ? "Actualizando…" : "Refrescar"}
+        </button>
       </div>
 
       {/* FORMULARIO NUEVA/EDITAR ASIGNACIÓN */}
@@ -458,9 +493,7 @@ end_time: localToISOWithTZ(endTime),
           {successMessage && (
             <p className="text-green-600 font-semibold">{successMessage}</p>
           )}
-          {error && (
-            <p className="text-red-600 font-semibold">{error}</p>
-          )}
+          {error && <p className="text-red-600 font-semibold">{error}</p>}
         </div>
       </div>
 
