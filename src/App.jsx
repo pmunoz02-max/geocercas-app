@@ -21,6 +21,7 @@ import GeocercasPage from "./pages/GeocercasPage.jsx";
 // Actividades + Reportes (antes Costos)
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
+import CostosDashboardPage from "./pages/CostosDashboardPage.jsx"; // ⬅ NUEVO
 
 // Módulo de Administradores
 import AdminsPage from "./pages/AdminsPage.jsx";
@@ -103,6 +104,7 @@ function Shell({ children }) {
     { path: "/actividades", label: "Actividades" },
     { path: "/asignaciones", label: "Asignaciones" },
     { path: "/costos", label: "Reportes" },
+    { path: "/costos-dashboard", label: "Dashboard" }, // ⬅ NUEVO TAB
     { path: "/tracker-dashboard", label: "Tracker" },
   ];
 
@@ -235,6 +237,18 @@ export default function App() {
             <AuthGuard>
               <Shell>
                 <CostosPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* DASHBOARD DE COSTOS (GRÁFICOS) */}
+        <Route
+          path="/costos-dashboard"
+          element={
+            <AuthGuard>
+              <Shell>
+                <CostosDashboardPage />
               </Shell>
             </AuthGuard>
           }

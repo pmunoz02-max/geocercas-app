@@ -214,13 +214,14 @@ const CostosPage = () => {
         query = query.lte("end_time", to.toISOString());
       }
 
-      if (selectedPersonaId) {
+      // 🔎 Aplicar filtros SOLO si hay un valor real (no vacío)
+      if (selectedPersonaId && selectedPersonaId !== emptyOption.value) {
         query = query.eq("personal_id", selectedPersonaId);
       }
-      if (selectedActividadId) {
+      if (selectedActividadId && selectedActividadId !== emptyOption.value) {
         query = query.eq("actividad_id", selectedActividadId);
       }
-      if (selectedGeocercaId) {
+      if (selectedGeocercaId && selectedGeocercaId !== emptyOption.value) {
         query = query.eq("geocerca_id", selectedGeocercaId);
       }
 
