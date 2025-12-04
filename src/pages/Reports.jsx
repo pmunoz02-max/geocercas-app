@@ -2,6 +2,39 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase.js";
 
+/**
+ * Para filtros de fecha en columnas tipo DATE o TIMESTAMPTZ:
+ * - startStr → "YYYY-MM-DD"
+ * - endStr   → "YYYY-MM-DD"
+ *
+ * Devolvemos:
+ *   { fromDate: "YYYY-MM-DD", toDateExclusive: "YYYY-MM-DD" }
+ *
+ * Y se aplica como:
+ *   work_day >= fromDate
+ *   work_day  < toDateExclusive
+ *
+ * Así el día "Hasta" se incluye completo.
+ */
+function buildDateRangeForDates(startStr, endStr) {
+  let fromDate = null;
+  let toDateExclusive = null;
+
+  if (startStr) {
+    fromDate = startStr;
+  }
+
+  if (endStr) {
+    const d = new Date(endStr + "T00:00:00");
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 1);
+      toDateExclusive = d.toISOString().slice(0, 10); // solo YYYY-MM-DD
+    }
+  }
+
+  return { fromDate, toDateExclusive };
+}
+
 export default function Reports() {
   const [rows, setRows] = useState([]);
   const [geofences, setGeofences] = useState([]);
@@ -36,10 +69,26 @@ export default function Reports() {
   // ============================
   async function loadReport() {
     setLoading(true);
+
+    // Validación simple del rango
+    if (start && end && start > end) {
+      alert('La fecha "Desde" no puede ser mayor que la fecha "Hasta".');
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     let query = supabase.from("v_attendance_daily").select("*");
 
-    if (start) query = query.gte("work_day", start);
-    if (end) query = query.lte("work_day", end);
+    const { fromDate, toDateExclusive } = buildDateRangeForDates(start, end);
+
+    if (fromDate) {
+      query = query.gte("work_day", fromDate);
+    }
+    if (toDateExclusive) {
+      query = query.lt("work_day", toDateExclusive);
+    }
+
     if (selectedGeofence)
       query = query.eq("geofence_name", selectedGeofence);
 

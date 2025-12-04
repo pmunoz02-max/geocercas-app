@@ -44,6 +44,41 @@ function formatDateTime(value) {
   });
 }
 
+/**
+ * Normaliza las fechas de filtro (inputs type="date") a un rango de
+ * timestamptz ISO listo para enviar a Supabase.
+ *
+ * - fromDateStr → YYYY-MM-DD → fromIso = ese día a las 00:00:00
+ * - toDateStr   → YYYY-MM-DD → toIsoExclusive = día siguiente a las 00:00:00
+ *
+ * El rango se aplica como:
+ *   start_time >= fromIso
+ *   start_time  < toIsoExclusive
+ *
+ * De esta forma se incluye TODO el día "Hasta" completo.
+ */
+function buildDateRange(fromDateStr, toDateStr) {
+  let fromIso = null;
+  let toIsoExclusive = null;
+
+  if (fromDateStr) {
+    const d = new Date(fromDateStr + "T00:00:00");
+    if (!Number.isNaN(d.getTime())) {
+      fromIso = d.toISOString();
+    }
+  }
+
+  if (toDateStr) {
+    const d = new Date(toDateStr + "T00:00:00");
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 1); // día siguiente a las 00:00
+      toIsoExclusive = d.toISOString();
+    }
+  }
+
+  return { fromIso, toIsoExclusive };
+}
+
 const CostosPage = () => {
   const { currentOrg, currentRole } = useAuth();
 
@@ -182,6 +217,13 @@ const CostosPage = () => {
     setError("");
 
     try {
+      // Validación sencilla de rango
+      if (fromDate && toDate && fromDate > toDate) {
+        setRows([]);
+        setError('La fecha "Desde" no puede ser mayor que la fecha "Hasta".');
+        return;
+      }
+
       let query = supabase
         .from("v_costos_detalle")
         .select(
@@ -205,16 +247,17 @@ const CostosPage = () => {
         )
         .eq("org_id", currentOrg.id);
 
-      if (fromDate) {
-        query = query.gte("start_time", fromDate);
+      // Rango de fechas normalizado sobre start_time
+      const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
+
+      if (fromIso) {
+        query = query.gte("start_time", fromIso);
       }
-      if (toDate) {
-        const to = new Date(toDate);
-        to.setHours(23, 59, 59, 999);
-        query = query.lte("end_time", to.toISOString());
+      if (toIsoExclusive) {
+        query = query.lt("start_time", toIsoExclusive);
       }
 
-      // 🔎 Aplicar filtros SOLO si hay un valor real (no vacío)
+      // Aplicar filtros de persona / actividad / geocerca
       if (selectedPersonaId && selectedPersonaId !== emptyOption.value) {
         query = query.eq("personal_id", selectedPersonaId);
       }
@@ -412,6 +455,7 @@ const CostosPage = () => {
               setSelectedPersonaId("");
               setSelectedActividadId("");
               setSelectedGeocercaId("");
+              setError("");
             }}
             disabled={loading || loadingFilters}
           >
