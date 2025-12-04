@@ -161,7 +161,7 @@ export default function AsignacionesPage() {
     setStatus("activa");
     setEditingId(null);
     setError(null);
-    // NO limpiamos selectedPersonalId para que la tabla siga filtrando por esa persona
+    // NO limpiamos selectedPersonalId aquí para que la tabla siga filtrando
   };
 
   const handleSubmit = async (e) => {
@@ -268,9 +268,6 @@ export default function AsignacionesPage() {
         setSuccessMessage("Asignación creada correctamente.");
       }
 
-      // Ya que actualizamos el estado local, no es obligatorio recargar.
-      // Si quieres forzar sincronización con el servidor, podríamos llamar:
-      // loadAsignaciones();
       resetForm();
     } catch (err) {
       console.error("[AsignacionesPage] handleSubmit error general:", err);
@@ -315,6 +312,18 @@ export default function AsignacionesPage() {
   };
 
   // ---------------------------------------------
+  // REFRESCAR: limpia filtros y recarga
+  // ---------------------------------------------
+  const handleRefresh = async () => {
+    // Mostrar TODO de nuevo
+    setEstadoFilter("todos");
+    setSelectedPersonalId("");
+    setSuccessMessage(null);
+    setError(null);
+    await loadAsignaciones();
+  };
+
+  // ---------------------------------------------
   // Render
   // ---------------------------------------------
   return (
@@ -340,11 +349,11 @@ export default function AsignacionesPage() {
 
         <button
           type="button"
-          onClick={loadAsignaciones}
+          onClick={handleRefresh}
           disabled={loadingAsignaciones}
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loadingAsignaciones ? "Actualizando…" : "Refrescar"}
+          {loadingAsignaciones ? "Actualizando…" : "Refrescar (ver todo)"}
         </button>
       </div>
 
