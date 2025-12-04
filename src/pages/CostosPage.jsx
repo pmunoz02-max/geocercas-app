@@ -271,6 +271,36 @@ export default function CostosPage() {
     return acc;
   }, [filteredRows]);
 
+  // KPIs generales estilo "tarjetas Power BI"
+  const kpis = useMemo(() => {
+    const totalCost = filteredRows.reduce(
+      (sum, r) => sum + Number(r.costo || 0),
+      0
+    );
+    const totalHours = filteredRows.reduce(
+      (sum, r) => sum + Number(r.horas_trabajadas || 0),
+      0
+    );
+
+    const personasSet = new Set(
+      filteredRows.map((r) => r.persona_nombre || r.personal_id)
+    );
+    const geosSet = new Set(
+      filteredRows.map((r) => r.geocerca_nombre || r.geocerca_id)
+    );
+    const actsSet = new Set(
+      filteredRows.map((r) => r.activity_name || r.activity_id)
+    );
+
+    return {
+      totalCost,
+      totalHours,
+      personasCount: personasSet.size || 0,
+      geosCount: geosSet.size || 0,
+      actsCount: actsSet.size || 0,
+    };
+  }, [filteredRows]);
+
   // Datos para gráficos según agrupación
   const chartEntries = useMemo(() => {
     let source = totalsByActivity;
@@ -465,7 +495,72 @@ export default function CostosPage() {
         )}
       </form>
 
-      {/* Resumen de totales */}
+      {/* KPIs estilo panel */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white border border-indigo-100 shadow-sm rounded-lg p-4">
+          <p className="text-[11px] uppercase tracking-wide text-indigo-500 font-semibold mb-1">
+            Costo total
+          </p>
+          <p className="text-xl font-bold text-gray-900 mb-1">
+            {kpis.totalCost.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}{" "}
+            <span className="text-xs text-gray-400">
+              {Object.keys(totalsByCurrency)[0] || ""}
+            </span>
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Suma de todos los costos en el rango.
+          </p>
+        </div>
+
+        <div className="bg-white border border-indigo-100 shadow-sm rounded-lg p-4">
+          <p className="text-[11px] uppercase tracking-wide text-indigo-500 font-semibold mb-1">
+            Horas trabajadas
+          </p>
+          <p className="text-xl font-bold text-gray-900 mb-1">
+            {kpis.totalHours.toLocaleString(undefined, {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            })}{" "}
+            <span className="text-xs text-gray-400">h</span>
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Horas efectivas según asignaciones.
+          </p>
+        </div>
+
+        <div className="bg-white border border-indigo-100 shadow-sm rounded-lg p-4">
+          <p className="text-[11px] uppercase tracking-wide text-indigo-500 font-semibold mb-1">
+            Personas
+          </p>
+          <p className="text-xl font-bold text-gray-900 mb-1">
+            {kpis.personasCount}
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Personas con asignaciones en el rango.
+          </p>
+        </div>
+
+        <div className="bg-white border border-indigo-100 shadow-sm rounded-lg p-4">
+          <p className="text-[11px] uppercase tracking-wide text-indigo-500 font-semibold mb-1">
+            Geocercas / Actividades
+          </p>
+          <p className="text-xl font-bold text-gray-900 mb-1">
+            {kpis.geosCount}{" "}
+            <span className="text-xs text-gray-400">geocercas</span>
+            <span className="mx-1 text-gray-300">·</span>
+            {kpis.actsCount}{" "}
+            <span className="text-xs text-gray-400">activ.</span>
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Cobertura del rango seleccionado.
+          </p>
+        </div>
+      </div>
+
+      {/* Resumen de totales por dimensión */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
         {/* Moneda */}
         <div className="bg-white shadow-sm rounded-lg border border-gray-100 p-4">
@@ -603,7 +698,7 @@ export default function CostosPage() {
         </div>
       </div>
 
-      {/* Visualización gráfica */}
+      {/* Visualización gráfica tipo panel */}
       <div className="bg-white shadow-sm rounded-lg border border-gray-100 p-4 mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <h2 className="text-sm font-semibold text-gray-700">
@@ -642,90 +737,129 @@ export default function CostosPage() {
             actuales.
           </p>
         ) : (
-          <div className="space-y-2">
-            {chartType === "bar" ? (
-              <div className="flex items-end gap-2 h-48">
-                {chartEntries.map((e) => {
-                  const heightPct =
-                    maxChartValue > 0
-                      ? Math.max((e.total / maxChartValue) * 100, 4)
-                      : 0;
-                  return (
-                    <div
-                      key={`${e.label}-${e.currency}`}
-                      className="flex-1 flex flex-col items-center min-w-[40px] h-full"
-                    >
-                      <div
-                        className="w-full rounded-t-md bg-indigo-500"
-                        style={{ height: `${heightPct}%` }}
-                        title={`${e.label} (${e.currency}) - ${e.total.toLocaleString(
-                          undefined,
-                          {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          }
-                        )}`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="h-48">
-                <svg
-                  viewBox="0 0 100 100"
-                  className="w-full h-full text-indigo-500"
-                  preserveAspectRatio="none"
-                >
-                  <line
-                    x1="0"
-                    y1="100"
-                    x2="100"
-                    y2="100"
-                    stroke="#E5E7EB"
-                    strokeWidth="0.5"
-                  />
-                  {chartEntries.length > 0 && (
-                    <polyline
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      points={chartEntries
-                        .map((e, i) => {
-                          const x =
-                            (i / Math.max(chartEntries.length - 1, 1)) * 100;
-                          const y =
-                            100 -
-                            (maxChartValue > 0
-                              ? (e.total / maxChartValue) * 100
-                              : 0);
-                          return `${x},${y}`;
-                        })
-                        .join(" ")}
-                    />
-                  )}
-                </svg>
-              </div>
-            )}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Gráfico principal */}
+            <div className="lg:col-span-2">
+              {chartType === "bar" ? (
+                <div className="relative h-56 px-2">
+                  {/* Líneas guía horizontales */}
+                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                    <div className="border-t border-dashed border-gray-200" />
+                    <div className="border-t border-dashed border-gray-200" />
+                    <div className="border-t border-dashed border-gray-200" />
+                  </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] text-gray-600">
-              {chartEntries.slice(0, 8).map((e) => (
-                <div
-                  key={`${e.label}-${e.currency}-label`}
-                  className="truncate"
-                  title={`${e.label} (${e.currency})`}
-                >
-                  <span className="font-medium">{e.label}</span>{" "}
-                  <span className="text-gray-400">
-                    ({e.currency}{" "}
-                    {e.total.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
+                  <div className="relative h-full flex items-end gap-3">
+                    {chartEntries.map((e, idx) => {
+                      // Escalamos 10–90% para dar margen tipo BI
+                      const scaledPct =
+                        maxChartValue > 0
+                          ? 10 + (e.total / maxChartValue) * 80
+                          : 0;
+
+                      return (
+                        <div
+                          key={`${e.label}-${e.currency}-${idx}`}
+                          className="flex-1 flex flex-col items-center min-w-[50px] h-full"
+                        >
+                          {/* valor numérico */}
+                          <div className="mb-1 text-[10px] text-gray-600 font-semibold whitespace-nowrap">
+                            {e.currency}{" "}
+                            {e.total.toLocaleString(undefined, {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
+                          </div>
+                          {/* barra */}
+                          <div className="w-full flex-1 flex items-end">
+                            <div
+                              className="w-full rounded-t-md bg-indigo-500 shadow-sm"
+                              style={{ height: `${scaledPct}%` }}
+                              title={`${e.label} (${e.currency}) - ${e.total.toLocaleString(
+                                undefined,
+                                {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                }
+                              )}`}
+                            />
+                          </div>
+                        </div>
+                      );
                     })}
-                    )
-                  </span>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div className="h-56">
+                  <svg
+                    viewBox="0 0 100 100"
+                    className="w-full h-full text-indigo-500"
+                    preserveAspectRatio="none"
+                  >
+                    <line
+                      x1="0"
+                      y1="100"
+                      x2="100"
+                      y2="100"
+                      stroke="#E5E7EB"
+                      strokeWidth="0.5"
+                    />
+                    {chartEntries.length > 0 && (
+                      <polyline
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        points={chartEntries
+                          .map((e, i) => {
+                            const x =
+                              (i / Math.max(chartEntries.length - 1, 1)) * 100;
+                            const y =
+                              100 -
+                              (maxChartValue > 0
+                                ? (e.total / maxChartValue) * 100
+                                : 0);
+                            return `${x},${y}`;
+                          })
+                          .join(" ")}
+                      />
+                    )}
+                  </svg>
+                </div>
+              )}
+            </div>
+
+            {/* Ranking a la derecha, estilo tabla de BI */}
+            <div className="border-l border-gray-100 pl-4">
+              <p className="text-xs font-semibold text-gray-600 mb-2">
+                Top {Math.min(chartEntries.length, 6)}{" "}
+                {chartGrouping === "actividad"
+                  ? "actividades"
+                  : chartGrouping === "persona"
+                  ? "personas"
+                  : "geocercas"}
+              </p>
+              <ul className="space-y-1 text-[11px] text-gray-600 max-h-56 overflow-y-auto">
+                {chartEntries.slice(0, 6).map((e, idx) => (
+                  <li
+                    key={`${e.label}-${e.currency}-rank-${idx}`}
+                    className="flex justify-between gap-2 border-b border-gray-100 pb-1"
+                  >
+                    <span className="truncate">
+                      <span className="font-medium text-gray-800">
+                        {idx + 1}.
+                      </span>{" "}
+                      {e.label}
+                    </span>
+                    <span className="whitespace-nowrap font-semibold">
+                      {e.currency}{" "}
+                      {e.total.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         )}
