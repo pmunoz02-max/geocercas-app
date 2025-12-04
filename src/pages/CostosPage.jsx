@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import CostosChartPanel from "../components/CostosChartPanel";
 
 const emptyOption = { value: "", label: "Todos" };
 
@@ -63,10 +62,6 @@ const CostosPage = () => {
   // Filas detalladas del reporte
   const [rows, setRows] = useState([]);
 
-  // Estado del panel de gráficos
-  const [chartGrouping, setChartGrouping] = useState("actividad"); // actividad | persona | geocerca
-  const [chartType, setChartType] = useState("bar"); // bar | line | pie
-
   const [loading, setLoading] = useState(false);
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [error, setError] = useState("");
@@ -74,6 +69,56 @@ const CostosPage = () => {
   // Solo owner/admin pueden ver Costos/Reportes
   const role = (currentRole || "").toLowerCase();
   const canView = role === "owner" || role === "admin";
+
+  // EXPORTAR CSV
+  const handleExportCSV = () => {
+    if (!rows || rows.length === 0) {
+      alert("No hay datos para exportar.");
+      return;
+    }
+
+    const header = [
+      "Persona",
+      "Geocerca",
+      "Actividad",
+      "Inicio",
+      "Fin",
+      "Horas",
+      "Tarifa",
+      "Costo",
+      "Moneda",
+    ];
+
+    const csvRows = [header.join(";")];
+
+    for (const r of rows) {
+      const line = [
+        (r.personal_nombre || "").replace(/;/g, ","),
+        (r.geocerca_nombre || "").replace(/;/g, ","),
+        (r.actividad_nombre || "").replace(/;/g, ","),
+        formatDateTime(r.start_time),
+        formatDateTime(r.end_time),
+        String(r.horas ?? "").replace(/;/g, ","),
+        String(r.hourly_rate ?? "").replace(/;/g, ","),
+        String(r.costo ?? "").replace(/;/g, ","),
+        r.currency_code || "",
+      ];
+      csvRows.push(line.join(";"));
+    }
+
+    const blob = new Blob([csvRows.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const today = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `costos_${today}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Cargar combos básicos (personas, actividades, geocercas)
   useEffect(() => {
@@ -104,7 +149,7 @@ const CostosPage = () => {
 
         if (actErr) throw actErr;
 
-        // Geocercas (quitamos is_deleted para evitar error 400)
+        // Geocercas
         const { data: geoData, error: geoErr } = await supabase
           .from("geocercas")
           .select("id, nombre")
@@ -137,20 +182,6 @@ const CostosPage = () => {
     setError("");
 
     try {
-      /**
-       * Vista v_costos_detalle:
-       *  - id
-       *  - org_id, tenant_id
-       *  - personal_id, personal_nombre
-       *  - actividad_id, actividad_nombre
-       *  - geocerca_id, geocerca_nombre
-       *  - start_time, end_time
-       *  - horas
-       *  - hourly_rate
-       *  - costo
-       *  - currency_code
-       */
-
       let query = supabase
         .from("v_costos_detalle")
         .select(
@@ -247,48 +278,6 @@ const CostosPage = () => {
     return { totalCost, totalHours };
   }, [rows]);
 
-  // === DATOS PARA CostosChartPanel (agrupar y sumar) ===
-  const chartEntries = useMemo(() => {
-    if (!rows || rows.length === 0) return [];
-
-    const map = new Map();
-
-    for (const r of rows) {
-      const currency = r.currency_code || "N/A";
-
-      let label = "Sin dato";
-      if (chartGrouping === "actividad") {
-        label = r.actividad_nombre || "Sin actividad";
-      } else if (chartGrouping === "persona") {
-        label = r.personal_nombre || "Sin persona";
-      } else if (chartGrouping === "geocerca") {
-        label = r.geocerca_nombre || "Sin geocerca";
-      }
-
-      const key = `${label}__${currency}`;
-      const prev = map.get(key) || { label, currency, total: 0 };
-
-      const costo = Number(r.costo) || 0;
-
-      map.set(key, {
-        label,
-        currency,
-        total: prev.total + costo,
-      });
-    }
-
-    // Ordenar de mayor a menor total
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [rows, chartGrouping]);
-
-  const maxChartValue = useMemo(() => {
-    if (!chartEntries.length) return 0;
-    return chartEntries.reduce(
-      (max, e) => Math.max(max, Number(e.total) || 0),
-      0
-    );
-  }, [chartEntries]);
-
   if (!canView) {
     return (
       <div className="p-4">
@@ -309,7 +298,7 @@ const CostosPage = () => {
           <h1 className="text-2xl font-bold">Reportes de Costos</h1>
           <p className="text-sm text-gray-600">
             Analiza horas trabajadas y costos por actividad, persona y geocerca.
-            Incluye tarjetas, panel gráfico tipo Power BI y tabla detallada.
+            Incluye tarjetas resumen, tabla detallada y descarga a CSV.
           </p>
         </div>
         {loading && (
@@ -478,54 +467,29 @@ const CostosPage = () => {
           </span>
           <span className="text-xl font-bold">{rows.length}</span>
           <span className="text-[11px] text-gray-500 mt-1">
-            Número de filas detalladas que alimentan las tarjetas, gráficos y
-            tabla.
+            Número de filas detalladas que alimentan las tarjetas y la tabla.
           </span>
         </div>
       </div>
 
-      {/* Tarjetas por moneda */}
-      {resumenMoneda.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          {resumenMoneda.map((m) => (
-            <div
-              key={m.currency}
-              className="bg-white rounded-xl shadow p-3 flex flex-col border border-emerald-50"
-            >
-              <span className="text-xs text-gray-500 uppercase tracking-wide">
-                {m.currency}
-              </span>
-              <span className="text-lg font-semibold">
-                {formatNumber(m.totalCost, 2)}
-              </span>
-              <span className="text-[11px] text-gray-500">
-                Horas: {formatNumber(m.totalHours, 2)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* PANEL DE GRÁFICOS TIPO POWER BI */}
-      <CostosChartPanel
-        chartEntries={chartEntries}
-        maxChartValue={maxChartValue}
-        chartGrouping={chartGrouping}
-        chartType={chartType}
-        onChangeChartGrouping={setChartGrouping}
-        onChangeChartType={setChartType}
-      />
-
-      {/* Tabla detallada */}
+      {/* Tabla detallada + botón exportar */}
       <div className="bg-white rounded-xl shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700">
             Detalle de registros
           </h2>
-          <span className="text-[11px] text-gray-500">
-            Puedes exportar esta tabla a Excel/CSV con tu módulo actual si ya lo
-            tienes implementado.
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-500">
+              Exporta esta tabla a una hoja de cálculo.
+            </span>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="px-3 py-1 text-xs rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              Descargar CSV
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
