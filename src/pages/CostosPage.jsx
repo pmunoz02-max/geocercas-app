@@ -95,21 +95,22 @@ const CostosPage = () => {
         if (personasErr) throw personasErr;
 
         // Actividades
-       const { data: geoData, error: geoErr } = await supabase
-  .from("geocercas")
-  .select("id, nombre")
-  .eq("org_id", currentOrg.id)
-  .order("nombre", { ascending: true });
+        const { data: actData, error: actErr } = await supabase
+          .from("activities")
+          .select("id, name")
+          .eq("tenant_id", currentOrg.id)
+          .eq("active", true)
+          .order("name", { ascending: true });
 
         if (actErr) throw actErr;
 
-        // Geocercas (QUITAMOS is_deleted para evitar error 400)
-        
+        // Geocercas (quitamos is_deleted para evitar error 400)
+        const { data: geoData, error: geoErr } = await supabase
           .from("geocercas")
           .select("id, nombre")
           .eq("org_id", currentOrg.id)
           .order("nombre", { ascending: true });
-const { data: geoData, error: geoErr } = await supabase
+
         if (geoErr) throw geoErr;
 
         setPersonas(personasData || []);
@@ -137,10 +138,9 @@ const { data: geoData, error: geoErr } = await supabase
 
     try {
       /**
-       * IMPORTANTE:
-       * Aquí asumimos que existe una vista v_costos_detalle con:
+       * Vista v_costos_detalle:
        *  - id
-       *  - org_id
+       *  - org_id, tenant_id
        *  - personal_id, personal_nombre
        *  - actividad_id, actividad_nombre
        *  - geocerca_id, geocerca_nombre
@@ -157,6 +157,7 @@ const { data: geoData, error: geoErr } = await supabase
           `
           id,
           org_id,
+          tenant_id,
           personal_id,
           personal_nombre,
           actividad_id,
@@ -195,7 +196,6 @@ const { data: geoData, error: geoErr } = await supabase
       const { data, error: dataErr, status } = await query;
 
       if (dataErr) {
-        // Si la vista no existe todavía, evitamos romper la página
         if (status === 404) {
           console.warn(
             "[CostosPage] La vista v_costos_detalle no existe aún en Supabase."
