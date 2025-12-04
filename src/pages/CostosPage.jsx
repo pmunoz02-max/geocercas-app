@@ -47,7 +47,7 @@ export default function CostosPage() {
 
   // Controles de gráficos
   const [chartGrouping, setChartGrouping] = useState("actividad"); // actividad | persona | geocerca
-  const [chartType, setChartType] = useState("bar"); // bar | line
+  const [chartType, setChartType] = useState("bar"); // bar | line | pie
 
   const isAdminOrOwner = currentRole === "owner" || currentRole === "admin";
 
@@ -324,6 +324,49 @@ export default function CostosPage() {
     if (!chartEntries.length) return 0;
     return Math.max(...chartEntries.map((e) => e.total));
   }, [chartEntries]);
+
+  // Datos para gráfico de pastel
+  const pieData = useMemo(() => {
+    if (!chartEntries.length) return { total: 0, segments: [] };
+
+    const total = chartEntries.reduce((s, e) => s + e.total, 0);
+    if (total <= 0) return { total: 0, segments: [] };
+
+    const palette = [
+      "#6366F1",
+      "#22C55E",
+      "#F97316",
+      "#E11D48",
+      "#14B8A6",
+      "#A855F7",
+      "#0EA5E9",
+      "#84CC16",
+    ];
+
+    let accumulated = 0;
+    const segments = chartEntries.map((e, idx) => {
+      const value = e.total;
+      const angle = (value / total) * 360;
+      const start = accumulated;
+      const end = accumulated + angle;
+      accumulated = end;
+      return {
+        ...e,
+        start,
+        end,
+        color: palette[idx % palette.length],
+      };
+    });
+
+    return { total, segments };
+  }, [chartEntries]);
+
+  const pieGradient = useMemo(() => {
+    if (!pieData.segments.length) return "";
+    return pieData.segments
+      .map((s) => `${s.color} ${s.start}deg ${s.end}deg`)
+      .join(", ");
+  }, [pieData]);
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -698,7 +741,7 @@ export default function CostosPage() {
         </div>
       </div>
 
-      {/* Visualización gráfica tipo panel */}
+      {/* Visualización gráfica tipo panel (barras / líneas / pastel) */}
       <div className="bg-white shadow-sm rounded-lg border border-gray-100 p-4 mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <h2 className="text-sm font-semibold text-gray-700">
@@ -726,6 +769,7 @@ export default function CostosPage() {
               >
                 <option value="bar">Barras</option>
                 <option value="line">Líneas</option>
+                <option value="pie">Pastel</option>
               </select>
             </div>
           </div>
@@ -740,7 +784,7 @@ export default function CostosPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Gráfico principal */}
             <div className="lg:col-span-2">
-              {chartType === "bar" ? (
+              {chartType === "bar" && (
                 <div className="relative h-56 px-2">
                   {/* Líneas guía horizontales */}
                   <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
@@ -759,7 +803,7 @@ export default function CostosPage() {
 
                       return (
                         <div
-                          key={`${e.label}-${e.currency}-${idx}`}
+                          key={`${e.label}-${e.currency}-bar-${idx}`}
                           className="flex-1 flex flex-col items-center min-w-[50px] h-full"
                         >
                           {/* valor numérico */}
@@ -789,13 +833,16 @@ export default function CostosPage() {
                     })}
                   </div>
                 </div>
-              ) : (
+              )}
+
+              {chartType === "line" && (
                 <div className="h-56">
                   <svg
                     viewBox="0 0 100 100"
                     className="w-full h-full text-indigo-500"
                     preserveAspectRatio="none"
                   >
+                    {/* eje base */}
                     <line
                       x1="0"
                       y1="100"
@@ -804,31 +851,95 @@ export default function CostosPage() {
                       stroke="#E5E7EB"
                       strokeWidth="0.5"
                     />
+                    {/* líneas guía */}
+                    <line
+                      x1="0"
+                      y1="66"
+                      x2="100"
+                      y2="66"
+                      stroke="#E5E7EB"
+                      strokeWidth="0.3"
+                      strokeDasharray="1 2"
+                    />
+                    <line
+                      x1="0"
+                      y1="33"
+                      x2="100"
+                      y2="33"
+                      stroke="#E5E7EB"
+                      strokeWidth="0.3"
+                      strokeDasharray="1 2"
+                    />
+
                     {chartEntries.length > 0 && (
-                      <polyline
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1"
-                        points={chartEntries
-                          .map((e, i) => {
-                            const x =
-                              (i / Math.max(chartEntries.length - 1, 1)) * 100;
-                            const y =
-                              100 -
-                              (maxChartValue > 0
-                                ? (e.total / maxChartValue) * 100
-                                : 0);
-                            return `${x},${y}`;
-                          })
-                          .join(" ")}
-                      />
+                      <>
+                        <polyline
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1"
+                          points={chartEntries
+                            .map((e, i) => {
+                              const x =
+                                (i / Math.max(chartEntries.length - 1, 1)) *
+                                100;
+                              const y =
+                                100 -
+                                (maxChartValue > 0
+                                  ? (e.total / maxChartValue) * 100
+                                  : 0);
+                              return `${x},${y}`;
+                            })
+                            .join(" ")}
+                        />
+                        {chartEntries.map((e, i) => {
+                          const x =
+                            (i / Math.max(chartEntries.length - 1, 1)) * 100;
+                          const y =
+                            100 -
+                            (maxChartValue > 0
+                              ? (e.total / maxChartValue) * 100
+                              : 0);
+                          return (
+                            <circle
+                              key={`${e.label}-${i}-point`}
+                              cx={x}
+                              cy={y}
+                              r={1.5}
+                              fill="currentColor"
+                            />
+                          );
+                        })}
+                      </>
                     )}
                   </svg>
                 </div>
               )}
+
+              {chartType === "pie" && (
+                <div className="flex flex-col items-center justify-center h-56">
+                  <div
+                    className="relative w-40 h-40 rounded-full shadow-sm"
+                    style={{
+                      backgroundImage: `conic-gradient(${pieGradient})`,
+                    }}
+                  >
+                    <div className="absolute inset-6 bg-white rounded-full flex items-center justify-center">
+                      <div className="text-[11px] text-center text-gray-600">
+                        Total{" "}
+                        <span className="block text-sm font-semibold text-gray-900">
+                          {pieData.total.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Ranking a la derecha, estilo tabla de BI */}
+            {/* Ranking / leyenda a la derecha */}
             <div className="border-l border-gray-100 pl-4">
               <p className="text-xs font-semibold text-gray-600 mb-2">
                 Top {Math.min(chartEntries.length, 6)}{" "}
@@ -838,6 +949,31 @@ export default function CostosPage() {
                   ? "personas"
                   : "geocercas"}
               </p>
+
+              {/* Leyenda de colores si es pastel */}
+              {chartType === "pie" && pieData.segments.length > 0 && (
+                <div className="mb-3 space-y-1 text-[11px]">
+                  {pieData.segments.slice(0, 6).map((s, idx) => (
+                    <div
+                      key={`${s.label}-legend-${idx}`}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="inline-block w-3 h-3 rounded-sm"
+                          style={{ backgroundColor: s.color }}
+                        />
+                        <span className="truncate">{s.label}</span>
+                      </div>
+                      <span className="whitespace-nowrap text-gray-700">
+                        {((s.total / pieData.total) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Ranking numérico */}
               <ul className="space-y-1 text-[11px] text-gray-600 max-h-56 overflow-y-auto">
                 {chartEntries.slice(0, 6).map((e, idx) => (
                   <li
