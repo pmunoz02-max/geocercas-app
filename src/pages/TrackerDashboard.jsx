@@ -226,21 +226,29 @@ function TrackerDashboard() {
     geofencesLayer.clearLayers();
     markersLayer.clearLayers();
 
-    // Geocercas
+    // ===================== Geocercas =====================
+    let geofenceBounds = null;
+
     geocercasFiltradas.forEach((g) => {
       const raw = g.geojson || g.leaflet_geojson || g.geoman_json;
       if (!raw) return;
       try {
         const gj = typeof raw === "string" ? JSON.parse(raw) : raw;
-        L.geoJSON(gj, {
+        const layer = L.geoJSON(gj, {
           style: { color: "#ff7800", weight: 2, fillOpacity: 0.1 },
         }).addTo(geofencesLayer);
+
+        // Capturar bounds del polígono (para zoom a geocerca)
+        const lb = layer.getBounds();
+        if (lb && lb.isValid()) {
+          geofenceBounds = geofenceBounds ? geofenceBounds.extend(lb) : lb;
+        }
       } catch {
         // ignorar errores de parseo
       }
     });
 
-    // Trackers
+    // ===================== Trackers =====================
     const allLatLngs = [];
 
     trackerGroups.forEach((group) => {
@@ -294,12 +302,27 @@ function TrackerDashboard() {
       }
     });
 
-    // Ajustar mapa a todos los puntos
+    // ===================== Lógica de ZOOM =====================
+    // 1) Si el usuario seleccionó una geocerca específica y tenemos su polígono,
+    //    hacemos zoom a esa geocerca (aunque no haya puntos).
+    if (selectedGeocercaId !== "all" && geofenceBounds?.isValid()) {
+      map.fitBounds(geofenceBounds.pad(0.15));
+      return;
+    }
+
+    // 2) Si hay puntos de trackers, ajustamos al conjunto de puntos
     if (allLatLngs.length > 0) {
       const bounds = L.latLngBounds(allLatLngs);
       map.fitBounds(bounds, { padding: [20, 20] });
+      return;
     }
-  }, [geocercasFiltradas, trackerGroups]);
+
+    // 3) Si no hay puntos pero sí geocercas (caso "Todas"),
+    //    ajustamos al conjunto de geocercas
+    if (geofenceBounds?.isValid()) {
+      map.fitBounds(geofenceBounds.pad(0.15));
+    }
+  }, [geocercasFiltradas, trackerGroups, selectedGeocercaId]);
 
   // Resumen general
   const resumen = useMemo(() => {
@@ -425,9 +448,7 @@ function TrackerDashboard() {
         </div>
 
         {loading && (
-          <p className="text-xs text-blue-600">
-            Cargando datos de tracking…
-          </p>
+          <p className="text-xs text-blue-600">Cargando datos de tracking…</p>
         )}
         {error && (
           <p className="text-xs text-red-600">
