@@ -871,12 +871,14 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             </FeatureGroup>
           </MapContainer>
 
-          {/* Cuadro de coordenadas SIEMPRE visible */}
-          <div className="absolute right-3 top-3 px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono">
+          {/* Cuadro de coordenadas SIEMPRE visible, encima del mapa */}
+          <div className="absolute right-3 top-3 z-[9999] px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
             {cursorLatLng ? (
               <>
                 <span>Lat: {cursorLatLng.lat.toFixed(6)}</span>
-                <span className="ml-2">Lng: {cursorLatLng.lng.toFixed(6)}</span>
+                <span className="ml-2">
+                  Lng: {cursorLatLng.lng.toFixed(6)}
+                </span>
               </>
             ) : (
               <span>Mueve el cursor sobre el mapa</span>
@@ -887,8 +889,8 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
       {/* Modal coordenadas */}
       {coordModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
             <h2 className="text-sm font-semibold text-slate-100 mb-1">
               Dibujar por coordenadas
             </h2>
