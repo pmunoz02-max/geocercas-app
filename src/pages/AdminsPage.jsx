@@ -1,13 +1,4 @@
 // src/pages/AdminsPage.jsx
-// Página de administración de propietarios y administradores.
-// Solo visible para el OWNER de la organización actual.
-//
-// Esta versión:
-//  - Lista admins leyendo user_roles_view (owner/admin).
-//  - Invita admins usando la Edge Function invite-user.
-//  - Muestra mensajes de éxito / error al enviar invitaciones.
-//  - El botón "Refrescar" vuelve a consultar la lista.
-
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
@@ -27,9 +18,8 @@ export default function AdminsPage() {
   const [successMessage, setSuccessMessage] = useState(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("admin"); // único rol invitado por ahora
+  const [inviteRole, setInviteRole] = useState("admin");
 
-  // Cargar lista de administradores
   useEffect(() => {
     if (!isOwner) {
       setLoading(false);
@@ -83,14 +73,12 @@ export default function AdminsPage() {
     setLoading(false);
   };
 
-  // Invitación de admin: usa Edge Function invite-user
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
     if (!currentOrg?.id) return;
 
     const email = inviteEmail.trim();
 
-    // Reset de mensajes
     setError(null);
     setSuccessMessage(null);
 
@@ -108,7 +96,6 @@ export default function AdminsPage() {
       invitedBy: user?.id,
     });
 
-    // Error técnico al invocar la función
     if (apiError) {
       console.error("[AdminsPage] inviteAdmin error:", apiError);
       setError(
@@ -119,7 +106,6 @@ export default function AdminsPage() {
       return;
     }
 
-    // La función respondió pero con ok = false (error de negocio)
     if (!data || data.ok === false) {
       console.error("[AdminsPage] inviteAdmin business error:", data);
       const detail =
@@ -131,7 +117,6 @@ export default function AdminsPage() {
       return;
     }
 
-    // Éxito
     setInviteEmail("");
     setSuccessMessage(`La invitación fue enviada al correo ${email}.`);
     setLoadingAction(false);
@@ -173,8 +158,6 @@ export default function AdminsPage() {
     setSuccessMessage(null);
   };
 
-  // --- RENDER ---
-
   if (!isOwner) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -190,7 +173,6 @@ export default function AdminsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      {/* Encabezado */}
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">
           Administradores actuales
@@ -207,7 +189,6 @@ export default function AdminsPage() {
         </p>
       </header>
 
-      {/* Formulario de invitación */}
       <section className="mb-8 border border-slate-200 rounded-xl p-4 bg-white">
         <h2 className="text-sm font-semibold text-slate-900 mb-2">
           Invitar nuevo administrador
@@ -265,7 +246,6 @@ export default function AdminsPage() {
         </p>
       </section>
 
-      {/* Mensajes de error / éxito */}
       {error && (
         <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
@@ -277,7 +257,6 @@ export default function AdminsPage() {
         </div>
       )}
 
-      {/* Tabla de administradores */}
       <section className="border border-slate-200 rounded-xl bg-white">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-900">
@@ -328,23 +307,24 @@ export default function AdminsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {admins.map((adm) => {
-                  const role =
-                    adm.role || adm.role_name || "";
+                  const roleRaw = adm.role || adm.role_name || "";
+                  const roleNorm = String(roleRaw).toUpperCase();
+
                   const roleLabel =
-                    role === "owner"
+                    roleNorm === "OWNER"
                       ? "Owner"
-                      : role === "admin"
+                      : roleNorm === "ADMIN"
                       ? "Admin"
-                      : role || "—";
+                      : roleRaw || "—";
 
                   return (
                     <tr key={adm.user_id}>
                       <td className="px-3 py-2 align-middle">
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            role === "owner"
+                            roleNorm === "OWNER"
                               ? "bg-purple-50 text-purple-700"
-                              : role === "admin"
+                              : roleNorm === "ADMIN"
                               ? "bg-blue-50 text-blue-700"
                               : "bg-slate-100 text-slate-600"
                           }`}

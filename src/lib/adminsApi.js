@@ -1,29 +1,19 @@
 // src/lib/adminsApi.js
 // API para gestionar administradores de la organización actual.
 //
-// Estado actual del backend:
-// - user_roles_view expone roles (owner/admin) por usuario.
-// - Edge Function invite-user se encarga de:
-//     • Validar email, rol y org_id
-//     • Registrar en org_invites / pending_invites
-//     • Enviar el correo de invitación (Magic Link / inviteUserByEmail)
-//     • Crear / asegurar la membresía en app_user_roles vía ensure_tracker_membership
-//
-// En esta fase:
-//   • listAdmins: lee desde user_roles_view (owner/admin globales)
-//   • inviteAdmin: llama a la Edge Function invite-user
-//   • updateAdmin/deleteAdmin: placeholders (en construcción)
+// listAdmins:
+//   - Lee la tabla app_user_roles, filtrando por org_id y rol OWNER / ADMIN.
+// inviteAdmin:
+//   - Llama a la Edge Function 'invite-user'.
+// updateAdmin / deleteAdmin:
+//   - Placeholders por ahora.
 
 import { supabase } from "../supabaseClient";
 
 /**
- * Lista administradores (owners + admins).
+ * Lista administradores (owners + admins) para una organización.
  *
- * Por limitaciones de la vista actual user_roles_view, SOLO podemos
- * saber user_id y role_name. El orgId se pasa para futuro uso y para
- * mantener firma consistente, pero NO se utiliza directamente aquí.
- *
- * @param {string} orgId - ID de la organización actual (no se usa todavía).
+ * @param {string} orgId - ID de la organización actual.
  * @returns {Promise<{data: any[] | null, error: any}>}
  */
 export async function listAdmins(orgId) {
@@ -35,28 +25,25 @@ export async function listAdmins(orgId) {
   }
 
   const { data, error } = await supabase
-    .from("user_roles_view")
-    .select(
-      `
-      user_id,
-      role_name
-    `
-    )
-    .in("role_name", ["owner", "admin"]);
+    .from("app_user_roles")
+    .select("user_id, org_id, role, created_at")
+    .eq("org_id", orgId)
+    .in("role", ["OWNER", "ADMIN"]);
 
   if (error) {
     return { data: null, error };
   }
 
+  // Normalizamos para el frontend
   const normalized =
     (data || []).map((row) => ({
       user_id: row.user_id,
-      org_id: orgId,
+      org_id: row.org_id,
       org_name: null,
       email: null,
       full_name: null,
-      role: row.role_name || null,
-      created_at: null,
+      role: row.role, // esperado en MAYÚSCULAS: OWNER / ADMIN
+      created_at: row.created_at,
     })) || [];
 
   return { data: normalized, error: null };
@@ -65,12 +52,6 @@ export async function listAdmins(orgId) {
 /**
  * Crea una invitación para un nuevo administrador usando la Edge Function
  * `invite-user`.
- *
- * IMPORTANTE:
- *   - La Edge Function es la que envía el correo (Magic Link / invitación).
- *   - También registra la invitación en org_invites y pending_invites.
- *   - Además se apoya en la RPC ensure_tracker_membership para crear
- *     la membresía en app_user_roles.
  *
  * @param {string} orgId
  * @param {{ email: string, role: string, full_name?: string, invitedBy?: string }} payload
@@ -89,7 +70,7 @@ export async function inviteAdmin(orgId, payload) {
     return { data: null, error: new Error("Rol requerido") };
   }
 
-  // La Edge Function espera role_name en MAYÚSCULAS: ADMIN / TRACKER / OWNER
+  // La Edge Function espera role_name en MAYÚSCULAS
   const role_name = String(role).toUpperCase();
 
   const { data, error } = await supabase.functions.invoke("invite-user", {
@@ -101,15 +82,9 @@ export async function inviteAdmin(orgId, payload) {
     },
   });
 
-  // OJO:
-  //  - error ≠ null  → error técnico (red, permisos, etc.)
-  //  - data.ok === false → error de negocio que viene desde la función
   return { data, error };
 }
 
-/**
- * PLACEHOLDER: Actualizar administrador (cambiar nombre/estado/rol).
- */
 export async function updateAdmin(_orgId, _userId, _fields) {
   return {
     data: null,
@@ -119,9 +94,6 @@ export async function updateAdmin(_orgId, _userId, _fields) {
   };
 }
 
-/**
- * PLACEHOLDER: Eliminar administrador de la organización.
- */
 export async function deleteAdmin(_orgId, _userId) {
   return {
     error: new Error(
