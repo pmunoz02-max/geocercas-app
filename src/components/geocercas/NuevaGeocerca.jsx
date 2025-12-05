@@ -823,15 +823,46 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             )}
 
             {/* FeatureGroup base + barra de Geoman */}
-            <FeatureGroup
-              ref={(fg) => {
-                // react-leaflet pasa la instancia de Leaflet como .leafletElement o directamente
-                if (!fg) {
-                  featureGroupRef.current = null;
-                  return;
-                }
-                featureGroupRef.current = fg; // v3 usa el propio layer group
-              }}
+            {/* Lat/Lng vivos — DEBE IR AQUÍ */}
+<CursorPos setCursorLatLng={setCursorLatLng} />
+
+<FeatureGroup
+  ref={(fg) => {
+    featureGroupRef.current = fg;
+  }}
+>
+  <GeomanControls
+    options={{
+      position: "topleft",
+      drawMarker: false,
+      drawCircleMarker: false,
+      drawPolyline: false,
+      drawText: false,
+      drawRectangle: true,
+      drawPolygon: true,
+      drawCircle: true,
+      editMode: true,
+      dragMode: true,
+      removalMode: true,
+    }}
+    globalOptions={{
+      continueDrawing: false,
+      editable: true,
+    }}
+    onCreate={(e) => {
+      selectedLayerRef.current = e.layer;
+      lastCreatedLayerRef.current = e.layer;
+    }}
+    onEdit={(e) => {
+      selectedLayerRef.current = e.layer;
+      lastCreatedLayerRef.current = e.layer;
+    }}
+    onUpdate={(e) => {
+      selectedLayerRef.current = e.layer;
+      lastCreatedLayerRef.current = e.layer;
+    }}
+  />
+</FeatureGroup>
             >
               <GeomanControls
                 options={{
