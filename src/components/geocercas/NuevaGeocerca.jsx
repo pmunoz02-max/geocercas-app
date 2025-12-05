@@ -871,11 +871,17 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             </FeatureGroup>
           </MapContainer>
 
-          {cursorLatLng && (
-            <div className="absolute left-3 bottom-3 px-2 py-1 rounded-md bg-black/70 text-[11px] text-slate-100 font-mono">
-              {cursorLatLng.lat.toFixed(6)}, {cursorLatLng.lng.toFixed(6)}
-            </div>
-          )}
+          {/* Cuadro de coordenadas SIEMPRE visible */}
+          <div className="absolute right-3 top-3 px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono">
+            {cursorLatLng ? (
+              <>
+                <span>Lat: {cursorLatLng.lat.toFixed(6)}</span>
+                <span className="ml-2">Lng: {cursorLatLng.lng.toFixed(6)}</span>
+              </>
+            ) : (
+              <span>Mueve el cursor sobre el mapa</span>
+            )}
+          </div>
         </div>
       </div>
 
