@@ -11,14 +11,14 @@ import {
   TileLayer,
   GeoJSON,
   FeatureGroup,
-  useMap,
+  useMapEvents,
 } from "react-leaflet";
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// 👇 Estos IMPORTS activan Leaflet-Geoman (JS + CSS)
-import "@geoman-io/leaflet-geoman-free";
+// 👇 Wrapper oficial para Geoman + CSS de la barra
+import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
 import { supabase } from "../../supabaseClient";
@@ -31,7 +31,7 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 const SUPABASE_POINTS_TABLE = "puntos_mapa_corto";
 const SUPABASE_GEOFENCES_TABLE = "geocercas";
 
-/* ---------- Utils dataset (igual que antes) ---------- */
+/* ----------------- Utils dataset externos ----------------- */
 
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
@@ -109,7 +109,7 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
   throw new Error("DATA_SOURCE no reconocido");
 }
 
-/* ---------- Utils geocercas multi-tenant (igual que antes) ---------- */
+/* ----------------- Utils geocercas multi-tenant ----------------- */
 
 async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
@@ -228,7 +228,7 @@ async function loadGeofenceGeometryByName({
   return null;
 }
 
-/* ---------- Helpers GeoJSON (igual que antes) ---------- */
+/* ----------------- Helpers GeoJSON ----------------- */
 
 function approximateArea(geometry) {
   if (!geometry) return 0;
@@ -307,7 +307,7 @@ function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
   return 1;
 }
 
-/* ---------- Auxiliares ---------- */
+/* ----------------- Auxiliares ----------------- */
 
 function fitFeatureGroup(map, featureGroupRef, { padding = [20, 20] } = {}) {
   if (!map || !featureGroupRef.current) return;
@@ -319,25 +319,18 @@ function fitFeatureGroup(map, featureGroupRef, { padding = [20, 20] } = {}) {
 }
 
 function CursorPos({ setCursorLatLng }) {
-  const map = useMap();
-
-  useEffect(() => {
-    const move = (e) => {
-      const { lat, lng } = e.latlng || {};
-      if (typeof lat === "number" && typeof lng === "number") {
-        setCursorLatLng({ lat, lng });
-      }
-    };
-    map.on("mousemove", move);
-    return () => {
-      map.off("mousemove", move);
-    };
-  }, [map, setCursorLatLng]);
-
+  useMapEvents({
+    mousemove(e) {
+      setCursorLatLng({
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+      });
+    },
+  });
   return null;
 }
 
-/* ---------- Componente principal ---------- */
+/* ----------------- Componente principal ----------------- */
 
 function NuevaGeocerca({ supabaseClient = supabase }) {
   const { currentOrg } = useAuth();
@@ -359,7 +352,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
-  /* Carga dataset opcional */
+  /* ---- Cargar dataset externo opcional ---- */
   useEffect(() => {
     let isMounted = true;
     if (!DATA_SOURCE) {
@@ -391,7 +384,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     };
   }, [supabaseClient]);
 
-  /* Listado geocercas */
+  /* ---- Listado de geocercas (multi-tenant) ---- */
   const refreshGeofenceList = useCallback(async () => {
     if (!currentOrg?.id) {
       setGeofenceList([]);
@@ -405,82 +398,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     refreshGeofenceList();
   }, [refreshGeofenceList]);
 
-  /* Inicializar mapa + Geoman */
-  const onMapReady = useCallback(
-    (map) => {
-      mapRef.current = map;
+  /* ---- Cuando se crea el mapa (solo guardamos ref) ---- */
+  const onMapReady = useCallback((map) => {
+    mapRef.current = map;
+  }, []);
 
-      const move = (e) => {
-        const { lat, lng } = e.latlng || {};
-        if (typeof lat === "number" && typeof lng === "number") {
-          setCursorLatLng({ lat, lng });
-        }
-      };
-      map.on("mousemove", move);
+  /* ---- Operaciones sobre FeatureGroup ---- */
 
-      if (!featureGroupRef.current) {
-        featureGroupRef.current = L.featureGroup().addTo(map);
-      }
-
-      // 🔥 Asegurarse de que Geoman ya está cargado
-      setTimeout(() => {
-        if (!map.pm) {
-          console.warn("❌ Geoman NO está disponible en map.pm");
-          return;
-        }
-
-        console.log("✅ Geoman activo, añadiendo controles");
-
-        map.pm.addControls({
-          position: "topleft",
-          drawMarker: false,
-          drawCircleMarker: false,
-          drawPolyline: false,
-          drawRectangle: true,
-          drawPolygon: true,
-          drawCircle: true,
-          editMode: true,
-          dragMode: true,
-          removalMode: true,
-        });
-
-        map.pm.setGlobalOptions({
-          snappable: true,
-          snapDistance: 20,
-        });
-
-        map.on("pm:create", (e) => {
-          const layer = e.layer;
-          if (!layer) return;
-
-          if (featureGroupRef.current) {
-            featureGroupRef.current.addLayer(layer);
-          } else {
-            const fg = L.featureGroup([layer]).addTo(map);
-            featureGroupRef.current = fg;
-          }
-
-          selectedLayerRef.current = layer;
-          lastCreatedLayerRef.current = layer;
-        });
-
-        map.on("pm:remove", () => {
-          selectedLayerRef.current = null;
-          lastCreatedLayerRef.current = null;
-        });
-
-        map.on("pm:edit", (e) => {
-          if (e.layer) {
-            selectedLayerRef.current = e.layer;
-            lastCreatedLayerRef.current = e.layer;
-          }
-        });
-      }, 50);
-    },
-    [setCursorLatLng]
-  );
-
-  /* Canvas helpers */
   const clearCanvas = useCallback(() => {
     featureGroupRef.current?.clearLayers();
     selectedLayerRef.current = null;
@@ -636,7 +560,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     [geofenceList, supabaseClient, currentOrg]
   );
 
-  /* Handlers de UI (igual que antes) */
+  /* ---- Handlers de UI ---- */
 
   const handleSave = useCallback(async () => {
     const name = geofenceName.trim();
@@ -780,38 +704,39 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     []
   );
 
-  /* Render */
+  /* ----------------- RENDER ----------------- */
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-140px)]">
+      {/* TOP BAR con botones más visibles */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold text-slate-100">
-            Nueva Geocerca
+          <h1 className="text-2xl font-semibold text-slate-100">
+            Nueva geocerca
           </h1>
           <p className="text-xs text-slate-300">
-            Dibuja geocercas de manera precisa y guárdalas en Supabase para
-            usarlas en asignaciones, trackers y reportes.
+            Dibuja geocercas y guárdalas en Supabase para usarlas en
+            asignaciones, trackers y reportes.
           </p>
         </div>
 
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
           <input
             type="text"
-            className="px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="px-4 py-2.5 rounded-lg bg-slate-900 border border-emerald-400/60 text-sm md:text-base text-slate-100 placeholder:text-slate-500 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
             placeholder="Nombre de la geocerca"
             value={geofenceName}
             onChange={(e) => setGeofenceName(e.target.value)}
           />
           <button
             onClick={openCoordModal}
-            className="px-3 py-2 rounded-md text-xs font-medium bg-slate-800 border border-slate-600 text-slate-100 hover:bg-slate-700"
+            className="px-4 py-2.5 rounded-lg text-sm md:text-base font-semibold bg-slate-800 text-slate-50 border border-slate-600 shadow-sm hover:bg-slate-700 active:bg-slate-800"
           >
             Dibujar por coordenadas
           </button>
           <button
             onClick={handleSave}
-            className="px-3 py-2 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
+            className="px-4 py-2.5 rounded-lg text-sm md:text-base font-semibold bg-emerald-600 text-white shadow-md hover:bg-emerald-500 active:bg-emerald-700"
           >
             Guardar geocerca
           </button>
@@ -819,6 +744,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* PANEL IZQUIERDO */}
         <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">
             Geocercas
@@ -878,6 +804,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
           </div>
         </div>
 
+        {/* MAPA */}
         <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative">
           <MapContainer
             center={[-0.2, -78.5]}
@@ -895,19 +822,68 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               <GeoJSON data={dataset} {...pointStyle} key="points-layer" />
             )}
 
-            <FeatureGroup ref={featureGroupRef}>
+            {/* FeatureGroup base + barra de Geoman */}
+            <FeatureGroup
+              ref={(fg) => {
+                // react-leaflet pasa la instancia de Leaflet como .leafletElement o directamente
+                if (!fg) {
+                  featureGroupRef.current = null;
+                  return;
+                }
+                featureGroupRef.current = fg; // v3 usa el propio layer group
+              }}
+            >
+              <GeomanControls
+                options={{
+                  position: "topleft",
+                  drawMarker: false,
+                  drawCircleMarker: false,
+                  drawPolyline: false,
+                  drawText: false,
+                  drawRectangle: true,
+                  drawPolygon: true,
+                  drawCircle: true,
+                  editMode: true,
+                  dragMode: true,
+                  removalMode: true,
+                }}
+                globalOptions={{
+                  continueDrawing: false,
+                  editable: true,
+                }}
+                onCreate={(e) => {
+                  const layer = e.layer;
+                  selectedLayerRef.current = layer;
+                  lastCreatedLayerRef.current = layer;
+                }}
+                onEdit={(e) => {
+                  if (e.layer) {
+                    selectedLayerRef.current = e.layer;
+                    lastCreatedLayerRef.current = e.layer;
+                  }
+                }}
+                onUpdate={(e) => {
+                  if (e.layer) {
+                    selectedLayerRef.current = e.layer;
+                    lastCreatedLayerRef.current = e.layer;
+                  }
+                }}
+              />
+
+              {/* Lat/Lng vivos */}
               <CursorPos setCursorLatLng={setCursorLatLng} />
             </FeatureGroup>
           </MapContainer>
 
           {cursorLatLng && (
-            <div className="absolute left-3 bottom-3 px-2 py-1 rounded-md bg-black/60 text-[11px] text-slate-100">
+            <div className="absolute left-3 bottom-3 px-2 py-1 rounded-md bg-black/70 text-[11px] text-slate-100 font-mono">
               {cursorLatLng.lat.toFixed(6)}, {cursorLatLng.lng.toFixed(6)}
             </div>
           )}
         </div>
       </div>
 
+      {/* Modal coordenadas */}
       {coordModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3">
@@ -915,7 +891,11 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               Dibujar por coordenadas
             </h2>
             <p className="text-xs text-slate-400">
-              Ingresa latitud y longitud separadas por coma o espacio.
+              Ingresa latitud y longitud separadas por coma o espacio. Ejemplo:
+              <br />
+              <span className="font-mono text-[11px]">
+                -0.180653, -78.467838
+              </span>
             </p>
             <textarea
               rows={3}
