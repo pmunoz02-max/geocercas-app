@@ -15,8 +15,6 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
-import "@geoman-io/leaflet-geoman-free";
 
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -426,7 +424,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         featureGroupRef.current = L.featureGroup().addTo(map);
       }
 
-      // Configurar controles de Leaflet-Geoman
+      // Configurar controles de Leaflet-Geoman (cargado globalmente)
       if (map.pm) {
         map.pm.addControls({
           position: "topleft",
@@ -476,6 +474,8 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             lastCreatedLayerRef.current = e.layer;
           }
         });
+      } else {
+        console.warn("Geoman no está disponible en map.pm");
       }
     },
     [setCursorLatLng]

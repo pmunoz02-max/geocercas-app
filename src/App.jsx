@@ -9,6 +9,9 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+// 🔹 CARGA GLOBAL DE LEAFLET + GEOMAN
+import "./leafletGeomanSetup.js";
+
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 
