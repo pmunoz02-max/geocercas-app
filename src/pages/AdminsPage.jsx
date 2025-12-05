@@ -4,9 +4,9 @@
 //
 // Esta versión:
 //  - Lista admins leyendo user_roles_view (owner/admin).
-//  - Permite registrar invitaciones en org_invites.
-//  - Envía un Magic Link real al correo invitado con signInWithOtp.
-//  - Aún NO crea la membresía automática (Paso 2).
+//  - Invita admins usando la Edge Function invite-user.
+//  - Muestra mensajes de éxito / error al enviar invitaciones.
+//  - El botón "Refrescar" vuelve a consultar la lista.
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -16,7 +16,6 @@ import {
   updateAdmin,
   deleteAdmin,
 } from "../lib/adminsApi";
-import { supabase } from "../supabaseClient";
 
 export default function AdminsPage() {
   const { currentOrg, isOwner, user } = useAuth();
@@ -25,6 +24,7 @@ export default function AdminsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin"); // único rol invitado por ahora
@@ -44,14 +44,16 @@ export default function AdminsPage() {
     const fetchAdmins = async () => {
       setLoading(true);
       setError(null);
-      const orgId = currentOrg.id;
+      setSuccessMessage(null);
 
+      const orgId = currentOrg.id;
       const { data, error: fetchError } = await listAdmins(orgId);
 
       if (fetchError) {
         console.error("[AdminsPage] listAdmins error:", fetchError);
         setError(
-          fetchError.message || "No se pudo cargar la lista de administradores."
+          fetchError.message ||
+            "No se pudo cargar la lista de administradores."
         );
       } else {
         setAdmins(data || []);
@@ -66,11 +68,14 @@ export default function AdminsPage() {
     if (!currentOrg?.id || !isOwner) return;
     setLoading(true);
     setError(null);
+    setSuccessMessage(null);
+
     const { data, error: fetchError } = await listAdmins(currentOrg.id);
     if (fetchError) {
       console.error("[AdminsPage] listAdmins error:", fetchError);
       setError(
-        fetchError.message || "No se pudo actualizar la lista de administradores."
+        fetchError.message ||
+          "No se pudo actualizar la lista de administradores."
       );
     } else {
       setAdmins(data || []);
@@ -78,12 +83,16 @@ export default function AdminsPage() {
     setLoading(false);
   };
 
-  // Invitación de admin: inserta en org_invites + envía Magic Link real
+  // Invitación de admin: usa Edge Function invite-user
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
     if (!currentOrg?.id) return;
 
     const email = inviteEmail.trim();
+
+    // Reset de mensajes
+    setError(null);
+    setSuccessMessage(null);
 
     if (!email) {
       setError("Ingresa un correo electrónico para invitar.");
@@ -91,49 +100,40 @@ export default function AdminsPage() {
     }
 
     setLoadingAction(true);
-    setError(null);
 
-    // 1) Registrar invitación en org_invites
     const { data, error: apiError } = await inviteAdmin(currentOrg.id, {
       email,
       role: inviteRole,
+      full_name: null,
       invitedBy: user?.id,
     });
 
+    // Error técnico al invocar la función
     if (apiError) {
       console.error("[AdminsPage] inviteAdmin error:", apiError);
       setError(
         apiError.message ||
-          "No se pudo registrar la invitación. Revisa los permisos del owner."
+          "Error al enviar la invitación. Revisa la configuración del servidor."
       );
       setLoadingAction(false);
       return;
     }
 
-    // 2) Enviar Magic Link real al correo invitado
-    const redirectUrl = `${window.location.origin}/auth/callback`;
-
-    const { error: magicError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
-    });
-
-    if (magicError) {
-      console.error("[AdminsPage] Magic Link error:", magicError);
-      setError(
-        magicError.message ||
-          "La invitación se registró, pero hubo un problema al enviar el Magic Link."
-      );
+    // La función respondió pero con ok = false (error de negocio)
+    if (!data || data.ok === false) {
+      console.error("[AdminsPage] inviteAdmin business error:", data);
+      const detail =
+        data?.error ||
+        data?.detail ||
+        "No se pudo enviar la invitación (respuesta del servidor).";
+      setError(detail);
       setLoadingAction(false);
       return;
     }
 
-    // Si todo fue bien:
+    // Éxito
     setInviteEmail("");
-    // En esta fase la invitación no cambia la lista de admins inmediatamente.
-    // Más adelante (Paso 2) cuando el invitado acepte, lo veremos reflejado.
+    setSuccessMessage(`La invitación fue enviada al correo ${email}.`);
     setLoadingAction(false);
   };
 
@@ -145,6 +145,7 @@ export default function AdminsPage() {
 
     setLoadingAction(true);
     setError(null);
+    setSuccessMessage(null);
 
     const { error: deleteError } = await deleteAdmin(
       currentOrg.id,
@@ -169,6 +170,7 @@ export default function AdminsPage() {
     setError(
       "Edición de administradores aún en construcción. Solo lectura por ahora."
     );
+    setSuccessMessage(null);
   };
 
   // --- RENDER ---
@@ -212,8 +214,9 @@ export default function AdminsPage() {
         </h2>
         <p className="text-xs text-slate-500 mb-3">
           Ingresa el correo electrónico de la persona a la que quieres invitar
-          como administradora de esta organización. Se enviará un Magic Link
-          real al email utilizando Supabase Auth.
+          como administradora de esta organización. Se enviará una invitación
+          real por correo utilizando Supabase Auth a través de la función
+          <span className="font-mono"> invite-user</span>.
         </p>
 
         <form
@@ -256,17 +259,21 @@ export default function AdminsPage() {
         </form>
 
         <p className="mt-2 text-xs text-amber-600">
-          Nota: la lógica de creación automática de la membresía (agregar a la
-          organización con rol admin) se implementará en el siguiente paso. Por
-          ahora, usa este módulo principalmente para revisar quiénes tienen rol
-          de owner/admin y para enviar invitaciones reales por correo.
+          Cuando el nuevo administrador reciba el correo y haga login con su
+          enlace, se creará/asegurará su rol en la organización. Luego de eso,
+          al pulsar el botón <strong>Refrescar</strong> aparecerá en la lista.
         </p>
       </section>
 
-      {/* Mensajes de error */}
+      {/* Mensajes de error / éxito */}
       {error && (
         <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          {successMessage}
         </div>
       )}
 
@@ -322,9 +329,7 @@ export default function AdminsPage() {
               <tbody className="divide-y divide-slate-100">
                 {admins.map((adm) => {
                   const role =
-                    adm.role ||
-                    adm.role_name ||
-                    "";
+                    adm.role || adm.role_name || "";
                   const roleLabel =
                     role === "owner"
                       ? "Owner"

@@ -2,12 +2,16 @@
 // API para gestionar administradores de la organización actual.
 //
 // Estado actual del backend:
-// - user_roles_view SOLO expone: user_id, role_name
-// - org_invites almacena invitaciones por organización
+// - user_roles_view expone roles (owner/admin) por usuario.
+// - Edge Function invite-user se encarga de:
+//     • Validar email, rol y org_id
+//     • Registrar en org_invites / pending_invites
+//     • Enviar el correo de invitación (Magic Link / inviteUserByEmail)
+//     • Crear / asegurar la membresía en app_user_roles vía ensure_tracker_membership
 //
 // En esta fase:
 //   • listAdmins: lee desde user_roles_view (owner/admin globales)
-//   • inviteAdmin: inserta invitación en org_invites
+//   • inviteAdmin: llama a la Edge Function invite-user
 //   • updateAdmin/deleteAdmin: placeholders (en construcción)
 
 import { supabase } from "../supabaseClient";
@@ -59,18 +63,21 @@ export async function listAdmins(orgId) {
 }
 
 /**
- * Crea una invitación para un nuevo administrador.
+ * Crea una invitación para un nuevo administrador usando la Edge Function
+ * `invite-user`.
  *
- * Inserta en public.org_invites.
- * La lógica de envío del Magic Link se hace en el frontend
- * (AdminsPage.jsx) usando supabase.auth.signInWithOtp.
+ * IMPORTANTE:
+ *   - La Edge Function es la que envía el correo (Magic Link / invitación).
+ *   - También registra la invitación en org_invites y pending_invites.
+ *   - Además se apoya en la RPC ensure_tracker_membership para crear
+ *     la membresía en app_user_roles.
  *
  * @param {string} orgId
- * @param {{ email: string, role: string, invitedBy: string }} payload
- * @returns {Promise<{data: any[] | null, error: any}>}
+ * @param {{ email: string, role: string, full_name?: string, invitedBy?: string }} payload
+ * @returns {Promise<{data: any | null, error: any}>}
  */
 export async function inviteAdmin(orgId, payload) {
-  const { email, role, invitedBy } = payload || {};
+  const { email, role, full_name } = payload || {};
 
   if (!orgId) {
     return { data: null, error: new Error("OrgId requerido") };
@@ -82,16 +89,21 @@ export async function inviteAdmin(orgId, payload) {
     return { data: null, error: new Error("Rol requerido") };
   }
 
-  const { data, error } = await supabase
-    .from("org_invites")
-    .insert({
-      org_id: orgId,
-      email,
-      role,
-      invited_by: invitedBy,
-    })
-    .select();
+  // La Edge Function espera role_name en MAYÚSCULAS: ADMIN / TRACKER / OWNER
+  const role_name = String(role).toUpperCase();
 
+  const { data, error } = await supabase.functions.invoke("invite-user", {
+    body: {
+      email,
+      full_name: full_name ?? null,
+      role_name,
+      org_id: orgId,
+    },
+  });
+
+  // OJO:
+  //  - error ≠ null  → error técnico (red, permisos, etc.)
+  //  - data.ok === false → error de negocio que viene desde la función
   return { data, error };
 }
 
