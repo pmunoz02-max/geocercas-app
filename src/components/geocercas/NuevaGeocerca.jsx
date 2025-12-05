@@ -17,7 +17,6 @@ import {
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// 👇 Wrapper oficial para Geoman + CSS de la barra
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
@@ -384,7 +383,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     };
   }, [supabaseClient]);
 
-  /* ---- Listado de geocercas (multi-tenant) ---- */
+  /* ---- Listado de geocercas ---- */
   const refreshGeofenceList = useCallback(async () => {
     if (!currentOrg?.id) {
       setGeofenceList([]);
@@ -398,7 +397,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     refreshGeofenceList();
   }, [refreshGeofenceList]);
 
-  /* ---- Cuando se crea el mapa (solo guardamos ref) ---- */
+  /* ---- Cuando se crea el mapa ---- */
   const onMapReady = useCallback((map) => {
     mapRef.current = map;
   }, []);
@@ -560,7 +559,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     [geofenceList, supabaseClient, currentOrg]
   );
 
-  /* ---- Handlers de UI ---- */
+  /* ---- Handlers UI ---- */
 
   const handleSave = useCallback(async () => {
     const name = geofenceName.trim();
@@ -708,7 +707,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-140px)]">
-      {/* TOP BAR con botones más visibles */}
+      {/* TOP BAR */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-slate-100">
@@ -723,7 +722,10 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
           <input
             type="text"
-            className="px-4 py-2.5 rounded-lg bg-slate-900 border border-emerald-400/60 text-sm md:text-base text-slate-100 placeholder:text-slate-500 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="px-4 py-2.5 rounded-lg bg-slate-900 border border-emerald-400/60 
+                       text-sm md:text-base text-white placeholder:text-slate-300 
+                       font-semibold shadow-sm focus:outline-none focus:ring-2 
+                       focus:ring-emerald-400"
             placeholder="Nombre de la geocerca"
             value={geofenceName}
             onChange={(e) => setGeofenceName(e.target.value)}
@@ -822,47 +824,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               <GeoJSON data={dataset} {...pointStyle} key="points-layer" />
             )}
 
-            {/* FeatureGroup base + barra de Geoman */}
-            {/* Lat/Lng vivos — DEBE IR AQUÍ */}
-<CursorPos setCursorLatLng={setCursorLatLng} />
+            {/* Lat/Lng vivos */}
+            <CursorPos setCursorLatLng={setCursorLatLng} />
 
-<FeatureGroup
-  ref={(fg) => {
-    featureGroupRef.current = fg;
-  }}
->
-  <GeomanControls
-    options={{
-      position: "topleft",
-      drawMarker: false,
-      drawCircleMarker: false,
-      drawPolyline: false,
-      drawText: false,
-      drawRectangle: true,
-      drawPolygon: true,
-      drawCircle: true,
-      editMode: true,
-      dragMode: true,
-      removalMode: true,
-    }}
-    globalOptions={{
-      continueDrawing: false,
-      editable: true,
-    }}
-    onCreate={(e) => {
-      selectedLayerRef.current = e.layer;
-      lastCreatedLayerRef.current = e.layer;
-    }}
-    onEdit={(e) => {
-      selectedLayerRef.current = e.layer;
-      lastCreatedLayerRef.current = e.layer;
-    }}
-    onUpdate={(e) => {
-      selectedLayerRef.current = e.layer;
-      lastCreatedLayerRef.current = e.layer;
-    }}
-  />
-</FeatureGroup>
+            <FeatureGroup
+              ref={(fg) => {
+                featureGroupRef.current = fg;
+              }}
             >
               <GeomanControls
                 options={{
@@ -900,9 +868,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
                   }
                 }}
               />
-
-              {/* Lat/Lng vivos */}
-              <CursorPos setCursorLatLng={setCursorLatLng} />
             </FeatureGroup>
           </MapContainer>
 
