@@ -1,11 +1,13 @@
+// src/pages/Home.jsx
+import React from "react";
+import Inicio from "./Inicio.jsx";
+
+/**
+ * Home actúa como un alias de la página Inicio.
+ * Cualquier ruta antigua que todavía apunte a <Home />
+ * mostrará exactamente el mismo contenido que /inicio,
+ * incluyendo las nuevas tarjetas de ayuda.
+ */
 export default function Home() {
-  return (
-    <section className="max-w-6xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-2">Inicio</h1>
-      <p className="text-gray-700">
-        Bienvenido. Usa la barra superior para entrar a Geocercas o Tracker. 
-        Desde allí siempre podrás volver a esta pantalla sin perder el estado global.
-      </p>
-    </section>
-  );
+  return <Inicio />;
 }
