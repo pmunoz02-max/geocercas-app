@@ -226,5 +226,67 @@
 
     "errorCoordsMin": "Saisissez au moins une latitude et une longitude.",
     "errorCoordsInvalid": "Coordonnées invalides."
+  },
+
+  "personal": {
+    "title": "Personnel",
+    "orgInfoLabel": "Organisation actuelle :",
+    "orgFallback": "Organisation sans nom",
+    "roleLabel": "Rôle :",
+    "pillCanEdit": "Droits d’édition (admin/owner)",
+    "pillReadOnly": "Lecture seule (tracker)",
+
+    "searchPlaceholder": "Rechercher par nom, prénom, e-mail ou téléphone",
+    "onlyActive": "Uniquement actifs",
+    "buttonRefresh": "Rafraîchir",
+    "buttonFullList": "Liste complète",
+    "buttonNew": "Nouveau",
+    "buttonEdit": "Modifier",
+    "buttonSave": "Enregistrer",
+    "buttonDelete": "Supprimer",
+
+    "fieldName": "Nom",
+    "fieldLastName": "Prénom",
+    "fieldEmail": "E-mail",
+    "fieldPhone": "Téléphone",
+    "fieldPhonePlaceholder": "Téléphone (+indicatif pays)",
+    "fieldActive": "Actif",
+
+    "tableName": "Nom",
+    "tableLastName": "Prénom",
+    "tableEmail": "E-mail",
+    "tablePhone": "Téléphone",
+    "tableActive": "Actif",
+    "tableNoResults": "Aucun résultat",
+
+    "yes": "Oui",
+    "no": "Non",
+
+    "bannerRefreshedOk": "Rafraîchi avec succès.",
+    "bannerSelected": "Enregistrement sélectionné : vous pouvez modifier puis Enregistrer.",
+    "bannerNewMode": "Mode nouveau : complétez les données puis cliquez sur Enregistrer.",
+    "bannerEditMode": "Mode édition : ajustez les données puis cliquez sur Enregistrer.",
+    "bannerDeletedOk": "Enregistrement supprimé (soft delete) avec succès.",
+    "bannerLoadingSession": "Chargement de la session…",
+    "bannerLoginRequired": "Vous devez vous connecter pour accéder au module Personnel.",
+    "processing": "Traitement en cours…",
+
+    "errorLoad": "Erreur lors du chargement du personnel",
+    "errorSave": "Erreur lors de l’enregistrement",
+    "errorDelete": "Erreur lors de la suppression",
+    "errorNoPermissionCreate": "Vous n’avez pas l’autorisation de créer (owner/admin uniquement).",
+    "errorNoPermissionEdit": "Vous n’avez pas l’autorisation de modifier (owner/admin uniquement).",
+    "errorNoPermissionSave": "Vous n’avez pas l’autorisation d’enregistrer (owner/admin uniquement).",
+    "errorNoPermissionDelete": "Vous n’avez pas l’autorisation de supprimer (owner/admin uniquement).",
+    "errorMustSelectForEdit": "Sélectionnez une personne dans le tableau avant de modifier.",
+    "errorMustSelectForDelete": "Sélectionnez une personne dans le tableau avant de supprimer.",
+    "errorMissingUser": "Impossible d’obtenir l’utilisateur actuel",
+    "errorNoAuthUser": "Il n’y a aucun utilisateur authentifié",
+    "errorMissingName": "Le nom est obligatoire",
+    "errorMissingEmail": "L’e-mail est obligatoire",
+    "errorPhonePolicy": "Par politique internationale, le téléphone doit commencer par un indicatif pays (ex : +593999999999).",
+    "errorSaveNoRecord": "Impossible d’enregistrer l’enregistrement",
+
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (Il sera marqué comme supprimé et ne figurera plus dans la liste)."
   }
 }

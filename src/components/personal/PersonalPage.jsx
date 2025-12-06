@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { useTranslation } from "react-i18next";
 
 /**
  * Versión simplificada de la página de Personal:
@@ -32,6 +33,8 @@ export default function PersonalPage() {
     role: legacyRole,
   } = useAuth();
 
+  const { t } = useTranslation();
+
   const effectiveRole = currentRole || legacyRole || "tracker";
   const canEdit =
     isAdmin || isOwner || effectiveRole === "owner" || effectiveRole === "admin";
@@ -41,7 +44,7 @@ export default function PersonalPage() {
   const [form, setForm] = useState(emptyForm());
   const [banner, setBanner] = useState({
     type: "ok",
-    msg: "Refrescado correctamente",
+    msg: "",
   });
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
@@ -53,13 +56,13 @@ export default function PersonalPage() {
     if (!authLoading && user) {
       loadPersonal();
     }
-  }, [authLoading, user, onlyActive, q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user, onlyActive, q, t]);
 
   async function loadPersonal() {
     try {
       setLoading(true);
 
-      // 1) Obtener usuario actual (para auth.uid)
       const {
         data: { user: authUser },
         error: userError,
@@ -67,13 +70,12 @@ export default function PersonalPage() {
 
       if (userError) {
         console.error("[PersonalPage] Error auth.getUser:", userError);
-        throw new Error("No se pudo obtener el usuario actual");
+        throw new Error(t("personal.errorMissingUser"));
       }
       if (!authUser) {
-        throw new Error("No hay usuario autenticado");
+        throw new Error(t("personal.errorNoAuthUser"));
       }
 
-      // 2) Leer todos los registros de personal del owner actual
       let query = supabase
         .from("personal")
         .select("*")
@@ -115,13 +117,13 @@ export default function PersonalPage() {
       }
 
       setItems(rows);
-      setBanner({ type: "ok", msg: "Refrescado correctamente" });
+      setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
       console.error("[PersonalPage] Error cargando personal:", err);
       setItems([]);
       setBanner({
         type: "err",
-        msg: err.message || "Error al cargar personal",
+        msg: err.message || t("personal.errorLoad"),
       });
     } finally {
       setLoading(false);
@@ -142,7 +144,7 @@ export default function PersonalPage() {
     });
     setBanner({
       type: "ok",
-      msg: "Registro seleccionado: puedes editar y luego Guardar.",
+      msg: t("personal.bannerSelected"),
     });
   }
 
@@ -150,7 +152,7 @@ export default function PersonalPage() {
     if (!canEdit) {
       setBanner({
         type: "err",
-        msg: "No tienes permisos para crear (solo owner/admin).",
+        msg: t("personal.errorNoPermissionCreate"),
       });
       return;
     }
@@ -158,7 +160,7 @@ export default function PersonalPage() {
     setForm(emptyForm());
     setBanner({
       type: "ok",
-      msg: "Modo nuevo: completa los datos y pulsa Guardar.",
+      msg: t("personal.bannerNewMode"),
     });
   }
 
@@ -166,20 +168,20 @@ export default function PersonalPage() {
     if (!canEdit) {
       setBanner({
         type: "err",
-        msg: "No tienes permisos para editar (solo owner/admin).",
+        msg: t("personal.errorNoPermissionEdit"),
       });
       return;
     }
     if (!selectedId) {
       setBanner({
         type: "err",
-        msg: "Primero selecciona una persona en la tabla para editar.",
+        msg: t("personal.errorMustSelectForEdit"),
       });
       return;
     }
     setBanner({
       type: "ok",
-      msg: "Modo edición: ajusta los datos en el formulario y pulsa Guardar.",
+      msg: t("personal.bannerEditMode"),
     });
   }
 
@@ -196,7 +198,7 @@ export default function PersonalPage() {
       if (!canEdit) {
         setBanner({
           type: "err",
-          msg: "No tienes permisos para guardar (solo owner/admin).",
+          msg: t("personal.errorNoPermissionSave"),
         });
         return;
       }
@@ -209,7 +211,7 @@ export default function PersonalPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !authUser) {
-        throw new Error("No se pudo obtener el usuario actual");
+        throw new Error(t("personal.errorMissingUser"));
       }
 
       const nombre = form.nombre.trim();
@@ -217,14 +219,11 @@ export default function PersonalPage() {
       const email = form.email.trim().toLowerCase();
       const telefono = form.telefono.trim();
 
-      if (!nombre) throw new Error("Nombre es obligatorio");
-      if (!email) throw new Error("Email es obligatorio");
+      if (!nombre) throw new Error(t("personal.errorMissingName"));
+      if (!email) throw new Error(t("personal.errorMissingEmail"));
 
-      // Política telefónica internacional: si hay teléfono, debe empezar con "+"
       if (telefono && !telefono.startsWith("+")) {
-        throw new Error(
-          "Por política internacional, el teléfono debe empezar con código de país (ej: +593999999999)."
-        );
+        throw new Error(t("personal.errorPhonePolicy"));
       }
 
       const payload = {
@@ -237,7 +236,6 @@ export default function PersonalPage() {
 
       let query;
       if (form.id) {
-        // UPDATE
         query = supabase
           .from("personal")
           .update({
@@ -250,7 +248,6 @@ export default function PersonalPage() {
           .select("*")
           .maybeSingle();
       } else {
-        // INSERT
         const now = new Date().toISOString();
         query = supabase
           .from("personal")
@@ -270,13 +267,13 @@ export default function PersonalPage() {
       console.log("[PersonalPage] Resultado upsert:", { data, error });
 
       if (error) throw error;
-      if (!data) throw new Error("No se pudo guardar el registro");
+      if (!data) throw new Error(t("personal.errorSaveNoRecord"));
 
       setBanner({
         type: "ok",
         msg: form.id
-          ? "Registro actualizado correctamente"
-          : "Registro creado correctamente",
+          ? t("personal.bannerUpdated")
+          : t("personal.bannerCreated"),
       });
       setSelectedId(data.id);
       setForm({
@@ -293,7 +290,7 @@ export default function PersonalPage() {
       console.error("[PersonalPage] Error onGuardar:", err);
       setBanner({
         type: "err",
-        msg: err.message || "Error al guardar",
+        msg: err.message || t("personal.errorSave"),
       });
     } finally {
       setLoading(false);
@@ -305,21 +302,19 @@ export default function PersonalPage() {
       if (!canEdit) {
         setBanner({
           type: "err",
-          msg: "No tienes permisos para eliminar (solo owner/admin).",
+          msg: t("personal.errorNoPermissionDelete"),
         });
         return;
       }
       if (!selectedId) {
         setBanner({
           type: "err",
-          msg: "Primero selecciona una persona en la tabla para eliminar.",
+          msg: t("personal.errorMustSelectForDelete"),
         });
         return;
       }
 
-      const confirmed = window.confirm(
-        "¿Seguro que deseas eliminar este registro? (Se marcará como eliminado y no aparecerá en la lista)."
-      );
+      const confirmed = window.confirm(t("personal.confirmDelete"));
       if (!confirmed) return;
 
       setLoading(true);
@@ -330,7 +325,7 @@ export default function PersonalPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !authUser) {
-        throw new Error("No se pudo obtener el usuario actual");
+        throw new Error(t("personal.errorMissingUser"));
       }
 
       const now = new Date().toISOString();
@@ -355,7 +350,7 @@ export default function PersonalPage() {
 
       setBanner({
         type: "ok",
-        msg: "Registro eliminado (soft delete) correctamente.",
+        msg: t("personal.bannerDeletedOk"),
       });
       setSelectedId(null);
       setForm(emptyForm());
@@ -365,7 +360,7 @@ export default function PersonalPage() {
       console.error("[PersonalPage] Error onEliminar:", err);
       setBanner({
         type: "err",
-        msg: err.message || "Error al eliminar",
+        msg: err.message || t("personal.errorDelete"),
       });
     } finally {
       setLoading(false);
@@ -377,7 +372,8 @@ export default function PersonalPage() {
   if (authLoading) {
     return (
       <div className="pg-screen">
-        <div className="pg-card">Cargando sesión…</div>
+        <style>{baseStyles}</style>
+        <div className="pg-card">{t("personal.bannerLoadingSession")}</div>
       </div>
     );
   }
@@ -385,9 +381,8 @@ export default function PersonalPage() {
   if (!user) {
     return (
       <div className="pg-screen">
-        <div className="pg-card">
-          Debes iniciar sesión para ver el módulo de Personal.
-        </div>
+        <style>{baseStyles}</style>
+        <div className="pg-card">{t("personal.bannerLoginRequired")}</div>
       </div>
     );
   }
@@ -396,30 +391,37 @@ export default function PersonalPage() {
     <div className="pg-screen">
       <style>{baseStyles}</style>
 
-      <div
-        className={`pg-banner ${banner.type === "ok" ? "pg-ok" : "pg-err"}`}
-      >
-        {banner.type === "ok" ? "✔ " : "✖ "}
-        {banner.msg}
-      </div>
+      {banner.msg && (
+        <div
+          className={`pg-banner ${
+            banner.type === "ok" ? "pg-ok" : "pg-err"
+          }`}
+        >
+          {banner.type === "ok" ? "✔ " : "✖ "}
+          {banner.msg}
+        </div>
+      )}
 
       <div className="pg-card">
         <div className="pg-headerRow">
           <div>
-            <h1 className="pg-title">Personal</h1>
+            <h1 className="pg-title">{t("personal.title")}</h1>
             <p className="pg-muted">
-              Org actual:{" "}
-              <strong>{currentOrg?.name || "Organización sin nombre"}</strong> ·
-              Rol: <strong>{effectiveRole}</strong>
+              {t("personal.orgInfoLabel")}{" "}
+              <strong>
+                {currentOrg?.name || t("personal.orgFallback")}
+              </strong>{" "}
+              · {t("personal.roleLabel")}{" "}
+              <strong>{effectiveRole}</strong>
             </p>
           </div>
           {canEdit ? (
             <span className="pill ok">
-              <i /> Permisos de edición (admin/owner)
+              <i /> {t("personal.pillCanEdit")}
             </span>
           ) : (
             <span className="pill off">
-              <i /> Solo lectura (tracker)
+              <i /> {t("personal.pillReadOnly")}
             </span>
           )}
         </div>
@@ -428,7 +430,7 @@ export default function PersonalPage() {
         <div className="pg-row wrap">
           <input
             className="pg-input w-300"
-            placeholder="Buscar por nombre, apellido, email o teléfono"
+            placeholder={t("personal.searchPlaceholder")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -440,10 +442,10 @@ export default function PersonalPage() {
                 setOnlyActive(e.target.checked);
               }}
             />
-            <span>Solo activos</span>
+            <span>{t("personal.onlyActive")}</span>
           </label>
           <button className="pg-btn" onClick={loadPersonal}>
-            Refrescar
+            {t("personal.buttonRefresh")}
           </button>
           <button
             className="pg-btn"
@@ -453,23 +455,23 @@ export default function PersonalPage() {
               loadPersonal();
             }}
           >
-            Listado completo
+            {t("personal.buttonFullList")}
           </button>
 
           <div className="pg-spacer" />
 
           {/* Botones de acción */}
           <button className="pg-btn" onClick={onNuevo}>
-            Nuevo
+            {t("personal.buttonNew")}
           </button>
           <button className="pg-btn" onClick={onEditar}>
-            Editar
+            {t("personal.buttonEdit")}
           </button>
           <button className="pg-btn pg-btn-primary" onClick={onGuardar}>
-            Guardar
+            {t("personal.buttonSave")}
           </button>
           <button className="pg-btn pg-btn-danger" onClick={onEliminar}>
-            Eliminar
+            {t("personal.buttonDelete")}
           </button>
         </div>
 
@@ -479,28 +481,28 @@ export default function PersonalPage() {
             name="nombre"
             value={form.nombre}
             onChange={onChange}
-            placeholder="Nombre"
+            placeholder={t("personal.fieldName")}
             className="pg-input"
           />
           <input
             name="apellido"
             value={form.apellido}
             onChange={onChange}
-            placeholder="Apellido"
+            placeholder={t("personal.fieldLastName")}
             className="pg-input"
           />
           <input
             name="email"
             value={form.email}
             onChange={onChange}
-            placeholder="Correo"
+            placeholder={t("personal.fieldEmail")}
             className="pg-input wide"
           />
           <input
             name="telefono"
             value={form.telefono}
             onChange={onChange}
-            placeholder="Teléfono (+código país)"
+            placeholder={t("personal.fieldPhonePlaceholder")}
             className="pg-input"
           />
           <label className="pg-check">
@@ -510,7 +512,7 @@ export default function PersonalPage() {
               checked={form.vigente}
               onChange={onChange}
             />
-            <span>Vigente</span>
+            <span>{t("personal.fieldActive")}</span>
           </label>
         </div>
       </div>
@@ -520,18 +522,18 @@ export default function PersonalPage() {
         <table className="pg-table">
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>Apellido</th>
-              <th className="w-xxl">Email</th>
-              <th className="w-lg">Teléfono</th>
-              <th className="w-sm">Vigente</th>
+              <th>{t("personal.tableName")}</th>
+              <th>{t("personal.tableLastName")}</th>
+              <th className="w-xxl">{t("personal.tableEmail")}</th>
+              <th className="w-lg">{t("personal.tablePhone")}</th>
+              <th className="w-sm">{t("personal.tableActive")}</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
               <tr>
                 <td colSpan={5} className="pg-empty">
-                  Sin resultados
+                  {t("personal.tableNoResults")}
                 </td>
               </tr>
             )}
@@ -554,11 +556,11 @@ export default function PersonalPage() {
                   <td>
                     {r.vigente ? (
                       <span className="pill ok">
-                        <i /> Sí
+                        <i /> {t("personal.yes")}
                       </span>
                     ) : (
                       <span className="pill off">
-                        <i /> No
+                        <i /> {t("personal.no")}
                       </span>
                     )}
                   </td>
@@ -569,7 +571,7 @@ export default function PersonalPage() {
         </table>
       </div>
 
-      {loading && <div className="pg-muted mt-8">Procesando…</div>}
+      {loading && <div className="pg-muted mt-8">{t("personal.processing")}</div>}
     </div>
   );
 }

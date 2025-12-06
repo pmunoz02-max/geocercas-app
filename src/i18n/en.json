@@ -226,5 +226,67 @@
 
     "errorCoordsMin": "Enter at least latitude and longitude.",
     "errorCoordsInvalid": "Invalid coordinates."
+  },
+
+  "personal": {
+    "title": "Staff",
+    "orgInfoLabel": "Current org:",
+    "orgFallback": "Organization without name",
+    "roleLabel": "Role:",
+    "pillCanEdit": "Edit permissions (admin/owner)",
+    "pillReadOnly": "Read-only (tracker)",
+
+    "searchPlaceholder": "Search by name, last name, email or phone",
+    "onlyActive": "Only active",
+    "buttonRefresh": "Refresh",
+    "buttonFullList": "Full list",
+    "buttonNew": "New",
+    "buttonEdit": "Edit",
+    "buttonSave": "Save",
+    "buttonDelete": "Delete",
+
+    "fieldName": "Name",
+    "fieldLastName": "Last name",
+    "fieldEmail": "Email",
+    "fieldPhone": "Phone",
+    "fieldPhonePlaceholder": "Phone (+country code)",
+    "fieldActive": "Active",
+
+    "tableName": "Name",
+    "tableLastName": "Last name",
+    "tableEmail": "Email",
+    "tablePhone": "Phone",
+    "tableActive": "Active",
+    "tableNoResults": "No results",
+
+    "yes": "Yes",
+    "no": "No",
+
+    "bannerRefreshedOk": "Refreshed successfully.",
+    "bannerSelected": "Record selected: you can edit and then Save.",
+    "bannerNewMode": "New mode: fill in the data and press Save.",
+    "bannerEditMode": "Edit mode: adjust the data and press Save.",
+    "bannerDeletedOk": "Record deleted (soft delete) successfully.",
+    "bannerLoadingSession": "Loading session…",
+    "bannerLoginRequired": "You must sign in to see the Staff module.",
+    "processing": "Processing…",
+
+    "errorLoad": "Error loading staff",
+    "errorSave": "Error saving",
+    "errorDelete": "Error deleting",
+    "errorNoPermissionCreate": "You do not have permission to create (owner/admin only).",
+    "errorNoPermissionEdit": "You do not have permission to edit (owner/admin only).",
+    "errorNoPermissionSave": "You do not have permission to save (owner/admin only).",
+    "errorNoPermissionDelete": "You do not have permission to delete (owner/admin only).",
+    "errorMustSelectForEdit": "Select a person in the table before editing.",
+    "errorMustSelectForDelete": "Select a person in the table before deleting.",
+    "errorMissingUser": "Could not get current user",
+    "errorNoAuthUser": "There is no authenticated user",
+    "errorMissingName": "Name is required",
+    "errorMissingEmail": "Email is required",
+    "errorPhonePolicy": "For international policy, the phone number must start with a country code (e.g., +593999999999).",
+    "errorSaveNoRecord": "The record could not be saved",
+
+    "confirmDelete": "Are you sure you want to delete this record? (It will be marked as deleted and will not appear in the list)."
   }
 }

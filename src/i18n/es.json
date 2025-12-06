@@ -226,5 +226,67 @@
 
     "errorCoordsMin": "Ingresa al menos latitud y longitud.",
     "errorCoordsInvalid": "Coordenadas inválidas."
+  },
+
+  "personal": {
+    "title": "Personal",
+    "orgInfoLabel": "Org actual:",
+    "orgFallback": "Organización sin nombre",
+    "roleLabel": "Rol:",
+    "pillCanEdit": "Permisos de edición (admin/owner)",
+    "pillReadOnly": "Solo lectura (tracker)",
+
+    "searchPlaceholder": "Buscar por nombre, apellido, email o teléfono",
+    "onlyActive": "Solo activos",
+    "buttonRefresh": "Refrescar",
+    "buttonFullList": "Listado completo",
+    "buttonNew": "Nuevo",
+    "buttonEdit": "Editar",
+    "buttonSave": "Guardar",
+    "buttonDelete": "Eliminar",
+
+    "fieldName": "Nombre",
+    "fieldLastName": "Apellido",
+    "fieldEmail": "Correo",
+    "fieldPhone": "Teléfono",
+    "fieldPhonePlaceholder": "Teléfono (+código país)",
+    "fieldActive": "Vigente",
+
+    "tableName": "Nombre",
+    "tableLastName": "Apellido",
+    "tableEmail": "Email",
+    "tablePhone": "Teléfono",
+    "tableActive": "Vigente",
+    "tableNoResults": "Sin resultados",
+
+    "yes": "Sí",
+    "no": "No",
+
+    "bannerRefreshedOk": "Refrescado correctamente",
+    "bannerSelected": "Registro seleccionado: puedes editar y luego Guardar.",
+    "bannerNewMode": "Modo nuevo: completa los datos y pulsa Guardar.",
+    "bannerEditMode": "Modo edición: ajusta los datos en el formulario y pulsa Guardar.",
+    "bannerDeletedOk": "Registro eliminado (soft delete) correctamente.",
+    "bannerLoadingSession": "Cargando sesión…",
+    "bannerLoginRequired": "Debes iniciar sesión para ver el módulo de Personal.",
+    "processing": "Procesando…",
+
+    "errorLoad": "Error al cargar personal",
+    "errorSave": "Error al guardar",
+    "errorDelete": "Error al eliminar",
+    "errorNoPermissionCreate": "No tienes permisos para crear (solo owner/admin).",
+    "errorNoPermissionEdit": "No tienes permisos para editar (solo owner/admin).",
+    "errorNoPermissionSave": "No tienes permisos para guardar (solo owner/admin).",
+    "errorNoPermissionDelete": "No tienes permisos para eliminar (solo owner/admin).",
+    "errorMustSelectForEdit": "Primero selecciona una persona en la tabla para editar.",
+    "errorMustSelectForDelete": "Primero selecciona una persona en la tabla para eliminar.",
+    "errorMissingUser": "No se pudo obtener el usuario actual",
+    "errorNoAuthUser": "No hay usuario autenticado",
+    "errorMissingName": "Nombre es obligatorio",
+    "errorMissingEmail": "Email es obligatorio",
+    "errorPhonePolicy": "Por política internacional, el teléfono debe empezar con código de país (ej: +593999999999).",
+    "errorSaveNoRecord": "No se pudo guardar el registro",
+
+    "confirmDelete": "¿Seguro que deseas eliminar este registro? (Se marcará como eliminado y no aparecerá en la lista)."
   }
 }
