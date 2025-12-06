@@ -396,27 +396,48 @@
 
   "dashboard": {
     "title": "Tableau de coûts",
-    "subtitle": "Visualisez les coûts agrégés par personne, activité et géofence.",
-    "cards": {
-      "totalCost": "Coût total",
-      "totalHours": "Heures totales",
-      "totalPersons": "Personnes",
-      "totalGeofences": "Géofences"
-    },
-    "filters": {
-      "dateFromLabel": "De",
-      "dateToLabel": "À",
-      "apply": "Appliquer",
-      "clear": "Effacer"
-    },
-    "charts": {
-      "costByActivity": "Coût par activité",
-      "costByPerson": "Coût par personne",
-      "costByGeofence": "Coût par géofence",
-      "hoursByDay": "Heures par jour"
-    },
-    "errorLoad": "Erreur lors du chargement du tableau de coûts."
-  },
+  "subtitle": "Visualisez les indicateurs et graphiques de coûts par personne, activité et géofence.",
+
+  "refreshButton": "Rafraîchir les données",
+
+  "filtersTitle": "Filtres",
+  "filtersFrom": "De",
+  "filtersTo": "À",
+  "filtersPerson": "Personne",
+  "filtersActivity": "Activité",
+  "filtersGeofence": "Géofence",
+  "filtersAll": "Tous",
+  "filtersClear": "Effacer les filtres",
+  "filtersApply": "Appliquer les filtres",
+
+  "kpiTotalHours": "Heures totales",
+  "kpiTotalCost": "Coût total",
+  "kpiRecords": "Enregistrements",
+  "kpiCurrencies": "Devises",
+
+  "chartTitle": "Graphique des coûts",
+  "chartDimension": "Dimension",
+  "chartMetric": "Métrique",
+  "dimensionPersona": "Personne",
+  "dimensionActividad": "Activité",
+  "dimensionGeocerca": "Géofence",
+  "dimensionFecha": "Date",
+  "metricCost": "Coût",
+  "metricHours": "Heures",
+  "metricRecords": "Enregistrements",
+
+  "tableTitle": "Détail pour la dimension sélectionnée",
+  "colPersona": "Personne",
+  "colActividad": "Activité",
+  "colGeocerca": "Géofence",
+  "colFecha": "Date",
+  "colHoras": "Heures",
+  "colCosto": "Coût",
+  "colMoneda": "Devise",
+  "tableNoResults": "Aucune donnée pour les filtres actuels.",
+
+  "errorLoad": "Erreur lors du chargement du tableau de coûts."
+}
 
   "tracker": {
     "title": "Tracker GPS",
