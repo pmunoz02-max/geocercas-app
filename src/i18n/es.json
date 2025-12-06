@@ -182,5 +182,44 @@
       "userLabel": "Usuario:",
       "orgIdLabel": "Org ID actual:"
     }
+  },
+
+  "geocercas": {
+    "titleNew": "Nueva geocerca",
+    "subtitleNew": "Dibuja geocercas y guárdalas en Supabase para usarlas en asignaciones, trackers y reportes.",
+    "placeholderName": "Nombre de la geocerca",
+    "buttonDrawByCoords": "Dibujar por coordenadas",
+    "buttonSave": "Guardar geocerca",
+
+    "panelTitle": "Geocercas",
+    "noGeofences": "No hay geocercas guardadas todavía.",
+    "sourceSupabase": "Supabase",
+    "sourceLocal": "Local",
+
+    "buttonShowSelected": "Mostrar seleccionadas",
+    "buttonShowAll": "Mostrar todas",
+    "buttonDeleteSelected": "Eliminar seleccionadas",
+    "buttonClearCanvas": "Limpiar dibujos (canvas)",
+
+    "cursorHint": "Mueve el cursor sobre el mapa",
+
+    "modalTitle": "Dibujar por coordenadas",
+    "modalInstruction": "Ingresa latitud y longitud separadas por coma o espacio. Ejemplo:",
+    "modalCancel": "Cancelar",
+    "modalDraw": "Dibujar",
+
+    "errorSelectOneGeometry": "Selecciona una única geometría antes de guardar.",
+    "errorDuplicateName": "La geocerca ya existe, cambia de nombre.",
+    "errorNameRequired": "Escribe el nombre de la geocerca.",
+    "saveSuccess": "✅ Geocerca \"{{name}}\" guardada.",
+    "errorSave": "❌ No se pudo guardar la geocerca: {{error}}",
+
+    "errorSelectAtLeastOne": "Selecciona al menos una geocerca en el listado.",
+    "deleteConfirm": "¿Eliminar las geocercas seleccionadas? Esta acción es irreversible.",
+    "deletedCount": "🗑️ Eliminadas: {{count}}",
+    "errorDelete": "❌ No se pudo eliminar: {{error}}",
+
+    "errorCoordsMin": "Ingresa al menos latitud y longitud.",
+    "errorCoordsInvalid": "Coordenadas inválidas."
   }
 }

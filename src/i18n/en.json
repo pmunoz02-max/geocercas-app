@@ -182,6 +182,45 @@
       "userLabel": "User:",
       "orgIdLabel": "Current Org ID:"
     }
+  },
+
+  "geocercas": {
+    "titleNew": "New geofence",
+    "subtitleNew": "Draw geofences and save them in Supabase to use them in assignments, trackers and reports.",
+    "placeholderName": "Geofence name",
+    "buttonDrawByCoords": "Draw by coordinates",
+    "buttonSave": "Save geofence",
+
+    "panelTitle": "Geofences",
+    "noGeofences": "There are no saved geofences yet.",
+    "sourceSupabase": "Supabase",
+    "sourceLocal": "Local",
+
+    "buttonShowSelected": "Show selected",
+    "buttonShowAll": "Show all",
+    "buttonDeleteSelected": "Delete selected",
+    "buttonClearCanvas": "Clear drawings (canvas)",
+
+    "cursorHint": "Move the cursor over the map",
+
+    "modalTitle": "Draw by coordinates",
+    "modalInstruction": "Enter latitude and longitude separated by comma or space. Example:",
+    "modalCancel": "Cancel",
+    "modalDraw": "Draw",
+
+    "errorSelectOneGeometry": "Select a single geometry before saving.",
+    "errorDuplicateName": "This geofence already exists, please use another name.",
+    "errorNameRequired": "Please enter a geofence name.",
+    "saveSuccess": "✅ Geofence \"{{name}}\" saved.",
+    "errorSave": "❌ The geofence could not be saved: {{error}}",
+
+    "errorSelectAtLeastOne": "Select at least one geofence in the list.",
+    "deleteConfirm": "Delete the selected geofences? This action is irreversible.",
+    "deletedCount": "🗑️ Deleted: {{count}}",
+    "errorDelete": "❌ Could not delete: {{error}}",
+
+    "errorCoordsMin": "Enter at least latitude and longitude.",
+    "errorCoordsInvalid": "Invalid coordinates."
   }
 }
 

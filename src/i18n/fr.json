@@ -182,5 +182,44 @@
       "userLabel": "Utilisateur :",
       "orgIdLabel": "ID d’organisation actuel :"
     }
+  },
+
+  "geocercas": {
+    "titleNew": "Nouvelle géofence",
+    "subtitleNew": "Dessinez des géofences et enregistrez-les dans Supabase pour les utiliser dans les affectations, le tracking et les rapports.",
+    "placeholderName": "Nom de la géofence",
+    "buttonDrawByCoords": "Dessiner par coordonnées",
+    "buttonSave": "Enregistrer la géofence",
+
+    "panelTitle": "Géofences",
+    "noGeofences": "Il n’y a pas encore de géofences enregistrées.",
+    "sourceSupabase": "Supabase",
+    "sourceLocal": "Local",
+
+    "buttonShowSelected": "Afficher la sélection",
+    "buttonShowAll": "Tout afficher",
+    "buttonDeleteSelected": "Supprimer la sélection",
+    "buttonClearCanvas": "Effacer les dessins (canvas)",
+
+    "cursorHint": "Déplacez le curseur sur la carte",
+
+    "modalTitle": "Dessiner par coordonnées",
+    "modalInstruction": "Saisissez latitude et longitude séparées par une virgule ou un espace. Exemple :",
+    "modalCancel": "Annuler",
+    "modalDraw": "Dessiner",
+
+    "errorSelectOneGeometry": "Sélectionnez une seule géométrie avant d’enregistrer.",
+    "errorDuplicateName": "Cette géofence existe déjà, veuillez choisir un autre nom.",
+    "errorNameRequired": "Veuillez saisir un nom de géofence.",
+    "saveSuccess": "✅ Géofence \"{{name}}\" enregistrée.",
+    "errorSave": "❌ Impossible d’enregistrer la géofence : {{error}}",
+
+    "errorSelectAtLeastOne": "Sélectionnez au moins une géofence dans la liste.",
+    "deleteConfirm": "Supprimer les géofences sélectionnées ? Cette action est irréversible.",
+    "deletedCount": "🗑️ Supprimées : {{count}}",
+    "errorDelete": "❌ Impossible de supprimer : {{error}}",
+
+    "errorCoordsMin": "Saisissez au moins une latitude et une longitude.",
+    "errorCoordsInvalid": "Coordonnées invalides."
   }
 }
