@@ -14,6 +14,7 @@
       "back": "Back"
     }
   },
+
   "app": {
     "title": "App Geocercas",
     "header": {
@@ -40,6 +41,7 @@
       "admins": "Admin"
     }
   },
+
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Staff control by geofences",
@@ -72,6 +74,7 @@
     "footerPrivacy": "Privacy",
     "rightsReserved": "All rights reserved"
   },
+
   "login": {
     "title": "Log in",
     "subtitle": "Access your App Geocercas account",
@@ -89,6 +92,7 @@
       "unknown": "An error occurred while logging in."
     }
   },
+
   "inicio": {
     "header": {
       "badge": "Help & resources center",
@@ -141,6 +145,7 @@
       "orgIdLabel": "Organization ID:"
     }
   },
+
   "geocercas": {
     "titleNew": "New geofence",
     "subtitleNew": "Draw a geofence on the map and assign it to your staff or activities.",
@@ -154,6 +159,7 @@
     "buttonDeleteSelected": "Delete selected",
     "buttonClearCanvas": "Clear map"
   },
+
   "personal": {
     "title": "Staff",
     "orgInfoLabel": "Organization:",
@@ -209,6 +215,7 @@
     "no": "No",
     "processing": "Processing…"
   },
+
   "actividades": {
     "title": "Activities",
     "formTitleNew": "New activity",
@@ -251,6 +258,7 @@
     "errorMissingCurrency": "Currency is required.",
     "errorMissingRate": "Hourly rate is required."
   },
+
   "asignaciones": {
     "title": "Assignments",
     "filters": {
@@ -313,6 +321,7 @@
       "missingEnd": "You must enter an end date/time."
     }
   },
+
   "reportes": {
     "title": "Cost reports",
     "headerSubtitle": "View and export costs by person, activity and geofence.",
@@ -377,6 +386,7 @@
       "noResults": "No records found for the selected filters."
     }
   },
+
   "dashboard": {
     "title": "Cost dashboard",
     "subtitle": "Visualize aggregated costs by person, activity and geofence.",
@@ -400,6 +410,7 @@
     },
     "errorLoad": "Error loading cost dashboard."
   },
+
   "dashboardCostos": {
     "title": "Cost dashboard",
     "subtitle": "View KPIs and charts of costs by person, activity and geofence.",
@@ -424,7 +435,7 @@
     "dimensionActividad": "Activity",
     "dimensionGeocerca": "Geofence",
     "dimensionFecha": "Date",
-    "metricCost": "Cost",
+    "metricCost": "Costs",
     "metricHours": "Hours",
     "metricRecords": "Records",
     "tableTitle": "Detail for selected dimension",
@@ -436,8 +447,9 @@
     "colCosto": "Cost",
     "colMoneda": "Currency",
     "tableNoResults": "No data for current filters.",
-    "errorLoad": "Error loading cost dashboard."
+    "errorLoad": "Dashboard data could not be loaded."
   },
+
   "tracker": {
     "title": "GPS Tracker",
     "subtitle": "View in real time the location of trackers inside your geofences.",
@@ -467,6 +479,51 @@
     },
     "errorLoad": "Error loading tracker positions."
   },
+
+  "trackerDashboard": {
+    "title": "Real-time tracking dashboard",
+    "subtitle": "Points are updated automatically. The sending frequency is defined by the administrator.",
+    "filters": {
+      "trackerLabel": "Tracker",
+      "timeWindowLabel": "Time window",
+      "timeWindowSuffix": "hours",
+      "geofenceLabel": "Geofence",
+      "allTrackers": "All trackers",
+      "allGeofences": "All geofences"
+    },
+    "summary": {
+      "title": "Summary",
+      "geofencesActive": "Active geofences",
+      "trackersProfiles": "Trackers (profiles)",
+      "pointsInMap": "Map points (current filter)",
+      "lastPoint": "Last recorded point",
+      "noPoints": "No points for the current filter."
+    },
+    "legend": {
+      "title": "Tracker legend",
+      "points": "pts"
+    },
+    "popup": {
+      "tracker": "Tracker",
+      "time": "Time",
+      "accuracy": "Accuracy",
+      "countHere": "Records at this position",
+      "activity": "Activity",
+      "geofence": "Geofence",
+      "inside": "Inside geofence",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "messages": {
+      "noOrg": "You must select an organization.",
+      "autoRefresh": "Points refresh automatically. You do not need to reload the page.",
+      "loading": "Loading tracking data…",
+      "noData": "No positions found for the selected filters.",
+      "error": "Error loading tracking data.",
+      "checkConsole": "Check the console if it persists."
+    }
+  },
+
   "admins": {
     "title": "Administrators",
     "subtitle": "Manage your organization administrators and their roles.",
@@ -499,35 +556,6 @@
       "invite": "Could not send invitation.",
       "updateRole": "Could not update role.",
       "remove": "Could not remove administrator."
-    }
-  },
-  "trackerDashboard": {
-    "title": "Real-time tracking dashboard",
-    "subtitle": "Points are updated automatically. The sending frequency is defined by the administrator.",
-    "filters": {
-      "trackerLabel": "Tracker",
-      "timeWindowLabel": "Time window (hours)",
-      "geofenceLabel": "Geofence",
-      "allTrackers": "All trackers",
-      "allGeofences": "All geofences"
-    },
-    "summary": {
-      "title": "Summary",
-      "geofencesActive": "Active geofences",
-      "trackersProfiles": "Trackers (profiles)",
-      "pointsInMap": "Map points (current filter)",
-      "lastPoint": "Last recorded point",
-      "noPoints": "No points for the current filter."
-    },
-    "legend": {
-      "title": "Tracker legend",
-      "points": "pts"
-    },
-    "messages": {
-      "autoRefresh": "Points refresh automatically. You do not need to reload the page.",
-      "loading": "Loading tracking data…",
-      "noData": "No positions found for the selected filters.",
-      "error": "Error loading tracking data."
     }
   }
 }

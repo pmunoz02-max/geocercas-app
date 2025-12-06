@@ -35,6 +35,7 @@
       "asignaciones": "Asignaciones",
       "reportes": "Reportes",
       "dashboard": "Dashboard Costos",
+      "dashboardCostos": "Dashboard Costos",
       "tracker": "Tracker",
       "invitarTracker": "Invitar Tracker",
       "admins": "Administrador"
@@ -480,11 +481,12 @@
   },
 
   "trackerDashboard": {
-    "title": "Dashboard de tracking en tiempo real",
+    "title": "Dashboard de Tracking en tiempo real",
     "subtitle": "Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador.",
     "filters": {
       "trackerLabel": "Tracker",
-      "timeWindowLabel": "Ventana (horas)",
+      "timeWindowLabel": "Ventana",
+      "timeWindowSuffix": "horas",
       "geofenceLabel": "Geocerca",
       "allTrackers": "Todos los trackers",
       "allGeofences": "Todas las geocercas"
@@ -501,11 +503,24 @@
       "title": "Leyenda de trackers",
       "points": "pts"
     },
+    "popup": {
+      "tracker": "Tracker",
+      "time": "Hora",
+      "accuracy": "Precisión",
+      "countHere": "Registros en esta posición",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "inside": "Dentro de geocerca",
+      "yes": "Sí",
+      "no": "No"
+    },
     "messages": {
+      "noOrg": "Debes seleccionar una organización.",
       "autoRefresh": "Los puntos se actualizan automáticamente. No necesitas recargar la página.",
       "loading": "Cargando datos de tracking…",
       "noData": "No se encontraron posiciones para los filtros seleccionados.",
-      "error": "Error al cargar los datos de tracking."
+      "error": "Error cargando datos de tracking.",
+      "checkConsole": "Revisa la consola si persiste."
     }
   },
 

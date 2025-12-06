@@ -4,14 +4,15 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useTranslation } from "react-i18next";
 
 const AUTO_REFRESH_MS = 30_000; // refresco automático cada 30s
 
 const TIME_WINDOWS = [
-  { label: "1 hora", valueHours: 1 },
-  { label: "6 horas", valueHours: 6 },
-  { label: "12 horas", valueHours: 12 },
-  { label: "24 horas", valueHours: 24 },
+  { label: "1", valueHours: 1 },
+  { label: "6", valueHours: 6 },
+  { label: "12", valueHours: 12 },
+  { label: "24", valueHours: 24 },
 ];
 
 const TRACKER_COLORS = [
@@ -25,11 +26,12 @@ const TRACKER_COLORS = [
 ];
 
 function TrackerDashboard() {
+  const { t } = useTranslation();
   const { user, currentOrg } = useAuth();
 
   if (!user) return null;
   if (!currentOrg) {
-    return <div className="p-4">Debes seleccionar una organización.</div>;
+    return <div className="p-4">{t("trackerDashboard.messages.noOrg", "Debes seleccionar una organización.")}</div>;
   }
 
   const [timeWindowHours, setTimeWindowHours] = useState(6);
@@ -81,7 +83,7 @@ function TrackerDashboard() {
     markersLayerRef.current = markersLayer;
   }, []);
 
-  // Cargar datos periódicamente
+  // Cargar datos periódicamente (vista v_positions_with_activity)
   useEffect(() => {
     if (!currentOrg?.id) return;
 
@@ -113,13 +115,11 @@ function TrackerDashboard() {
 
         if (profilesErr) throw profilesErr;
 
-        // 3) Logs de tracking
+        // 3) Posiciones desde la vista v_positions_with_activity
         let query = supabase
-          .from("tracker_logs")
-          .select(
-            "id, tenant_id, user_id, lat, lng, accuracy, recorded_at, received_at"
-          )
-          .eq("tenant_id", currentOrg.id)
+          .from("v_positions_with_activity")
+          .select("*")
+          .or(`org_id.eq.${currentOrg.id},tenant_id.eq.${currentOrg.id}`)
           .gte("recorded_at", from)
           .lte("recorded_at", to)
           .order("recorded_at", { ascending: true });
@@ -151,8 +151,15 @@ function TrackerDashboard() {
           setPositions(normalized);
         }
       } catch (e) {
-        if (!cancelled)
-          setError(e.message || "Error cargando datos de tracking.");
+        if (!cancelled) {
+          setError(
+            e.message ||
+              t(
+                "trackerDashboard.messages.error",
+                "Error cargando datos de tracking."
+              )
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -164,9 +171,9 @@ function TrackerDashboard() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [currentOrg?.id, selectedTrackerId, from, to]);
+  }, [currentOrg?.id, selectedTrackerId, from, to, t]);
 
-  // Agrupar posiciones por tracker (universal)
+  // Agrupar posiciones por tracker
   const trackerGroups = useMemo(() => {
     if (!positions || positions.length === 0) return [];
 
@@ -238,7 +245,6 @@ function TrackerDashboard() {
           style: { color: "#ff7800", weight: 2, fillOpacity: 0.1 },
         }).addTo(geofencesLayer);
 
-        // Capturar bounds del polígono (para zoom a geocerca)
         const lb = layer.getBounds();
         if (lb && lb.isValid()) {
           geofenceBounds = geofenceBounds ? geofenceBounds.extend(lb) : lb;
@@ -273,6 +279,43 @@ function TrackerDashboard() {
         const key = `${p.lat.toFixed(6)}|${p.lng.toFixed(6)}`;
         const countHere = posCounts.get(key) || 1;
 
+        const hora =
+          p.recorded_date?.toLocaleString() || p.recorded_at || "sin hora";
+
+        // Campos opcionales de la vista v_positions_with_activity
+        const actividad =
+          p.activity_name || p.actividad_nombre || p.activity || null;
+        const geocercaNombre =
+          p.geofence_name || p.geocerca_nombre || p.geocerca || null;
+        const inside =
+          typeof p.inside_geofence === "boolean"
+            ? p.inside_geofence
+            : undefined;
+
+        let extraLines = "";
+        if (actividad) {
+          extraLines += `<div><strong>${t(
+            "trackerDashboard.popup.activity",
+            "Actividad"
+          )}:</strong> ${actividad}</div>`;
+        }
+        if (geocercaNombre) {
+          extraLines += `<div><strong>${t(
+            "trackerDashboard.popup.geofence",
+            "Geocerca"
+          )}:</strong> ${geocercaNombre}</div>`;
+        }
+        if (inside !== undefined) {
+          extraLines += `<div><strong>${t(
+            "trackerDashboard.popup.inside",
+            "Dentro de geocerca"
+          )}:</strong> ${
+            inside
+              ? t("trackerDashboard.popup.yes", "Sí")
+              : t("trackerDashboard.popup.no", "No")
+          }</div>`;
+        }
+
         const circle = L.circleMarker([p.lat, p.lng], {
           radius: isLast ? 7 : 5,
           weight: isLast ? 2 : 1,
@@ -281,17 +324,25 @@ function TrackerDashboard() {
           fillColor: color,
         }).addTo(markersLayer);
 
-        const hora =
-          p.recorded_date?.toLocaleString() || p.recorded_at || "sin hora";
-
         circle.bindPopup(
           `<div style="font-size:12px;">
-             <div><strong>Tracker:</strong> ${label}</div>
-             <div><strong>Hora:</strong> ${hora}</div>
-             <div><strong>Accuracy:</strong> ${
-               p.accuracy ?? "–"
-             } m</div>
-             <div><strong>Registros en esta posición:</strong> ${countHere}</div>
+             <div><strong>${t(
+               "trackerDashboard.popup.tracker",
+               "Tracker"
+             )}:</strong> ${label}</div>
+             <div><strong>${t(
+               "trackerDashboard.popup.time",
+               "Hora"
+             )}:</strong> ${hora}</div>
+             <div><strong>${t(
+               "trackerDashboard.popup.accuracy",
+               "Precisión"
+             )}:</strong> ${p.accuracy ?? "–"} m</div>
+             <div><strong>${t(
+               "trackerDashboard.popup.countHere",
+               "Registros en esta posición"
+             )}:</strong> ${countHere}</div>
+             ${extraLines}
            </div>`
         );
       });
@@ -322,7 +373,7 @@ function TrackerDashboard() {
     if (geofenceBounds?.isValid()) {
       map.fitBounds(geofenceBounds.pad(0.15));
     }
-  }, [geocercasFiltradas, trackerGroups, selectedGeocercaId]);
+  }, [geocercasFiltradas, trackerGroups, selectedGeocercaId, t]);
 
   // Resumen general
   const resumen = useMemo(() => {
@@ -341,24 +392,27 @@ function TrackerDashboard() {
       <div className="flex-1 flex flex-col gap-3">
         <header>
           <h1 className="text-2xl font-semibold mb-1">
-            Dashboard de Tracking en tiempo real
+            {t("trackerDashboard.title")}
           </h1>
           <p className="text-xs text-gray-600">
-            Los puntos se actualizan automáticamente. La frecuencia de envío la
-            define el administrador.
+            {t("trackerDashboard.subtitle")}
           </p>
         </header>
 
         {/* Filtros */}
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="text-xs text-gray-600 block mb-1">Tracker</label>
+            <label className="text-xs text-gray-600 block mb-1">
+              {t("trackerDashboard.filters.trackerLabel")}
+            </label>
             <select
               className="border rounded px-2 py-1 text-sm"
               value={selectedTrackerId}
               onChange={(e) => setSelectedTrackerId(e.target.value)}
             >
-              <option value="all">Todos los trackers</option>
+              <option value="all">
+                {t("trackerDashboard.filters.allTrackers")}
+              </option>
               {trackerProfiles.map((tp) => (
                 <option key={tp.id} value={tp.id}>
                   {tp.full_name || tp.email || tp.id}
@@ -369,7 +423,7 @@ function TrackerDashboard() {
 
           <div>
             <label className="text-xs text-gray-600 block mb-1">
-              Ventana (horas)
+              {t("trackerDashboard.filters.timeWindowLabel")}
             </label>
             <select
               className="border rounded px-2 py-1 text-sm"
@@ -378,20 +432,25 @@ function TrackerDashboard() {
             >
               {TIME_WINDOWS.map((tw) => (
                 <option key={tw.valueHours} value={tw.valueHours}>
-                  {tw.label}
+                  {tw.label}{" "}
+                  {t("trackerDashboard.filters.timeWindowSuffix", "horas")}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-xs text-gray-600 block mb-1">Geocerca</label>
+            <label className="text-xs text-gray-600 block mb-1">
+              {t("trackerDashboard.filters.geofenceLabel")}
+            </label>
             <select
               className="border rounded px-2 py-1 text-sm"
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
             >
-              <option value="all">Todas</option>
+              <option value="all">
+                {t("trackerDashboard.filters.allGeofences")}
+              </option>
               {geocercas.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre || `Geocerca ${g.id}`}
@@ -409,23 +468,31 @@ function TrackerDashboard() {
 
       {/* Panel derecho: resumen + leyenda */}
       <aside className="w-full lg:w-80 border rounded p-3 bg-white flex flex-col gap-3">
-        <h2 className="text-lg font-semibold mb-1">Resumen</h2>
+        <h2 className="text-lg font-semibold mb-1">
+          {t("trackerDashboard.summary.title")}
+        </h2>
 
         <p className="text-sm">
-          <b>Geocercas activas:</b> {resumen.totalGeocercas}
+          <b>{t("trackerDashboard.summary.geofencesActive")}:</b>{" "}
+          {resumen.totalGeocercas}
         </p>
         <p className="text-sm">
-          <b>Trackers (perfiles):</b> {resumen.totalTrackers}
+          <b>{t("trackerDashboard.summary.trackersProfiles")}:</b>{" "}
+          {resumen.totalTrackers}
         </p>
         <p className="text-sm">
-          <b>Puntos en mapa (filtro actual):</b> {resumen.totalPuntos}
+          <b>{t("trackerDashboard.summary.pointsInMap")}:</b>{" "}
+          {resumen.totalPuntos}
         </p>
         <p className="text-sm">
-          <b>Último punto registrado:</b> {resumen.ultimoTs || "-"}
+          <b>{t("trackerDashboard.summary.lastPoint")}:</b>{" "}
+          {resumen.ultimoTs || "-"}
         </p>
 
         <div className="mt-3">
-          <p className="text-xs font-semibold mb-1">Leyenda de trackers</p>
+          <p className="text-xs font-semibold mb-1">
+            {t("trackerDashboard.legend.title")}
+          </p>
           <ul className="space-y-1">
             {trackerGroups.map((g) => (
               <li
@@ -440,7 +507,7 @@ function TrackerDashboard() {
                   {g.label}
                 </span>
                 <span className="ml-auto text-[10px] text-gray-500">
-                  {g.points.length} pts
+                  {g.points.length} {t("trackerDashboard.legend.points")}
                 </span>
               </li>
             ))}
@@ -448,11 +515,17 @@ function TrackerDashboard() {
         </div>
 
         {loading && (
-          <p className="text-xs text-blue-600">Cargando datos de tracking…</p>
+          <p className="text-xs text-blue-600">
+            {t("trackerDashboard.messages.loading")}
+          </p>
         )}
         {error && (
           <p className="text-xs text-red-600">
-            {error} Revisa la consola si persiste.
+            {error}{" "}
+            {t(
+              "trackerDashboard.messages.checkConsole",
+              "Revisa la consola si persiste."
+            )}
           </p>
         )}
       </aside>

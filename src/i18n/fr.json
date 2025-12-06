@@ -14,6 +14,7 @@
       "back": "Retour"
     }
   },
+
   "app": {
     "title": "App Geocercas",
     "header": {
@@ -40,6 +41,7 @@
       "admins": "Admin"
     }
   },
+
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Contrôle du personnel par géofences",
@@ -72,6 +74,7 @@
     "footerPrivacy": "Confidentialité",
     "rightsReserved": "Tous droits réservés"
   },
+
   "login": {
     "title": "Connexion",
     "subtitle": "Accédez à votre compte App Geocercas",
@@ -89,6 +92,7 @@
       "unknown": "Une erreur s’est produite lors de la connexion."
     }
   },
+
   "inicio": {
     "header": {
       "badge": "Centre d’aide et de ressources",
@@ -141,6 +145,7 @@
       "orgIdLabel": "ID d’organisation :"
     }
   },
+
   "geocercas": {
     "titleNew": "Nouvelle géofence",
     "subtitleNew": "Dessinez une géofence sur la carte et affectez-la à votre personnel ou à vos activités.",
@@ -154,6 +159,7 @@
     "buttonDeleteSelected": "Supprimer la sélection",
     "buttonClearCanvas": "Effacer la carte"
   },
+
   "personal": {
     "title": "Personnel",
     "orgInfoLabel": "Organisation :",
@@ -209,6 +215,7 @@
     "no": "Non",
     "processing": "Traitement…"
   },
+
   "actividades": {
     "title": "Activités",
     "formTitleNew": "Nouvelle activité",
@@ -251,6 +258,7 @@
     "errorMissingCurrency": "La devise est obligatoire.",
     "errorMissingRate": "Le tarif horaire est obligatoire."
   },
+
   "asignaciones": {
     "title": "Affectations",
     "filters": {
@@ -313,6 +321,7 @@
       "missingEnd": "Vous devez saisir la date/heure de fin."
     }
   },
+
   "reportes": {
     "title": "Rapports de coûts",
     "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
@@ -377,6 +386,7 @@
       "noResults": "Aucun enregistrement trouvé pour les filtres sélectionnés."
     }
   },
+
   "dashboard": {
     "title": "Tableau des coûts",
     "subtitle": "Visualisez les coûts agrégés par personne, activité et géofence.",
@@ -400,6 +410,7 @@
     },
     "errorLoad": "Erreur lors du chargement du tableau des coûts."
   },
+
   "dashboardCostos": {
     "title": "Tableau des coûts",
     "subtitle": "Visualisez des KPI et graphiques de coûts par personne, activité et géofence.",
@@ -438,6 +449,7 @@
     "tableNoResults": "Aucune donnée pour les filtres actuels.",
     "errorLoad": "Erreur lors du chargement du tableau des coûts."
   },
+
   "tracker": {
     "title": "Tracker GPS",
     "subtitle": "Visualisez en temps réel la position des trackers dans vos géofences.",
@@ -467,6 +479,51 @@
     },
     "errorLoad": "Erreur lors du chargement des positions du tracker."
   },
+
+  "trackerDashboard": {
+    "title": "Tableau de tracking en temps réel",
+    "subtitle": "Les points sont mis à jour automatiquement. La fréquence d’envoi est définie par l’administrateur.",
+    "filters": {
+      "trackerLabel": "Tracker",
+      "timeWindowLabel": "Fenêtre",
+      "timeWindowSuffix": "heures",
+      "geofenceLabel": "Géofence",
+      "allTrackers": "Tous les trackers",
+      "allGeofences": "Toutes les géofences"
+    },
+    "summary": {
+      "title": "Résumé",
+      "geofencesActive": "Géofences actives",
+      "trackersProfiles": "Trackers (profils)",
+      "pointsInMap": "Points sur la carte (filtre actuel)",
+      "lastPoint": "Dernier point enregistré",
+      "noPoints": "Aucun point pour le filtre actuel."
+    },
+    "legend": {
+      "title": "Légende des trackers",
+      "points": "pts"
+    },
+    "popup": {
+      "tracker": "Tracker",
+      "time": "Heure",
+      "accuracy": "Précision",
+      "countHere": "Enregistrements à cette position",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "inside": "Dans la géofence",
+      "yes": "Oui",
+      "no": "Non"
+    },
+    "messages": {
+      "noOrg": "Vous devez sélectionner une organisation.",
+      "autoRefresh": "Les points sont actualisés automatiquement. Vous n’avez pas besoin de recharger la page.",
+      "loading": "Chargement des données de tracking…",
+      "noData": "Aucune position trouvée pour les filtres sélectionnés.",
+      "error": "Erreur lors du chargement des données de tracking.",
+      "checkConsole": "Consultez la console si le problème persiste."
+    }
+  },
+
   "admins": {
     "title": "Administrateurs",
     "subtitle": "Gérez les administrateurs de votre organisation et leurs rôles.",
@@ -499,35 +556,6 @@
       "invite": "Impossible d’envoyer l’invitation.",
       "updateRole": "Impossible de mettre à jour le rôle.",
       "remove": "Impossible de retirer l’administrateur."
-    }
-  },
-  "trackerDashboard": {
-    "title": "Tableau de tracking en temps réel",
-    "subtitle": "Les points sont mis à jour automatiquement. La fréquence d’envoi est définie par l’administrateur.",
-    "filters": {
-      "trackerLabel": "Tracker",
-      "timeWindowLabel": "Fenêtre (heures)",
-      "geofenceLabel": "Géofence",
-      "allTrackers": "Tous les trackers",
-      "allGeofences": "Toutes les géofences"
-    },
-    "summary": {
-      "title": "Résumé",
-      "geofencesActive": "Géofences actives",
-      "trackersProfiles": "Trackers (profils)",
-      "pointsInMap": "Points sur la carte (filtre actuel)",
-      "lastPoint": "Dernier point enregistré",
-      "noPoints": "Aucun point pour le filtre actuel."
-    },
-    "legend": {
-      "title": "Légende des trackers",
-      "points": "pts"
-    },
-    "messages": {
-      "autoRefresh": "Les points sont actualisés automatiquement. Vous n’avez pas besoin de recharger la page.",
-      "loading": "Chargement des données de tracking…",
-      "noData": "Aucune position trouvée pour les filtres sélectionnés.",
-      "error": "Erreur lors du chargement des données de tracking."
     }
   }
 }
