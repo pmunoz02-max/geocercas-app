@@ -12,7 +12,6 @@ export default function ProtectedShell() {
 
   const role = (currentRole || "").toLowerCase();
 
-  // ⏳ Mientras cargan los datos de auth
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center text-slate-600">
@@ -21,41 +20,44 @@ export default function ProtectedShell() {
     );
   }
 
-  // 🔐 Si no hay sesión → login
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // 🛑 Si es TRACKER y está intentando ver el panel → mandarlo a /tracker-gps
   useEffect(() => {
     if (role === "tracker" && location.pathname !== "/tracker-gps") {
       navigate("/tracker-gps", { replace: true });
     }
   }, [role, location.pathname, navigate]);
 
-  // Mientras redirigimos, no mostramos el panel
   if (role === "tracker" && location.pathname !== "/tracker-gps") {
     return null;
   }
 
-  // 🧭 Tabs superiores según rol
+  // 🔥 TABS con i18n usando memo
   const tabs = useMemo(() => {
     const base = [
-      { path: "/inicio", label: "Inicio" },
-      { path: "/nueva-geocerca", label: "Nueva geocerca" },
-      { path: "/personal", label: "Personal" },
-      { path: "/actividades", label: "Actividades" },
-      { path: "/asignaciones", label: "Asignaciones" },
-      { path: "/costos", label: "Reportes" },
-      { path: "/tracker-dashboard", label: "Tracker" },
+      { path: "/inicio", labelKey: "app.tabs.inicio" },
+      { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
+      { path: "/personal", labelKey: "app.tabs.personal" },
+      { path: "/actividades", labelKey: "app.tabs.actividades" },
+      { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
+      { path: "/costos", labelKey: "app.tabs.reportes" },
+      { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" }
     ];
 
     if (role === "owner" || role === "admin") {
-      base.push({ path: "/invitar-tracker", label: "Invitar tracker" });
+      base.push({
+        path: "/invitar-tracker",
+        labelKey: "app.tabs.invitarTracker",
+      });
     }
 
     if (role === "owner") {
-      base.push({ path: "/admins", label: "Admins" });
+      base.push({
+        path: "/admins",
+        labelKey: "app.tabs.admins",
+      });
     }
 
     return base;
@@ -65,12 +67,10 @@ export default function ProtectedShell() {
     <div className="min-h-screen flex flex-col bg-slate-50">
       <AppHeader />
 
-      {/* Tabs superiores */}
       <div className="border-b border-slate-200 bg-slate-50/80 backdrop-blur">
         <TopTabs tabs={tabs} />
       </div>
 
-      {/* Contenido principal */}
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
         <Outlet />
       </main>

@@ -12,50 +12,34 @@ import {
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 
-// --- Páginas / componentes principales ---
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 
-// Actividades + Reportes (antes Costos)
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
-// Módulo de Administradores
 import AdminsPage from "./pages/AdminsPage.jsx";
 
-// Tracker (dashboard normal)
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
-
-// Invitación de trackers
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 
-// Auth
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback";
 
-// Dashboard interno
 import Inicio from "./pages/Inicio.jsx";
-
-// Nueva landing pública
 import Landing from "./pages/Landing.jsx";
-
-// Página ESPECIAL de tracker-only GPS
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
-
-// Reset de contraseña
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Contexto de auth
 import { useAuth } from "./context/AuthContext.jsx";
 
-// Top Tabs
 import TopTabs from "./components/TopTabs.jsx";
 
 // ---------------------
-// Layout interno (app)
+// Layout interno (aplicación)
 // ---------------------
 function Shell({ children }) {
   const { currentRole, loading, organizations } = useAuth();
@@ -63,9 +47,6 @@ function Shell({ children }) {
   const navigate = useNavigate();
 
   const normalizedRole = (currentRole || "").toLowerCase();
-  const hasOrgs = Array.isArray(organizations) && organizations.length > 0;
-
-  // SOLO rol "tracker" se trata como tracker.
   const treatAsTracker = normalizedRole === "tracker";
 
   if (loading) {
@@ -88,43 +69,39 @@ function Shell({ children }) {
     return null;
   }
 
+  // 🔥 TABS CON i18n
   const tabs = [
-    { path: "/inicio", label: "Inicio" },
-    { path: "/nueva-geocerca", label: "Nueva geocerca" },
-    { path: "/personal", label: "Personal" },
-    { path: "/actividades", label: "Actividades" },
-    { path: "/asignaciones", label: "Asignaciones" },
-    { path: "/costos", label: "Reportes" },
-    { path: "/costos-dashboard", label: "Dashboard" },
-    { path: "/tracker-dashboard", label: "Tracker" },
+    { path: "/inicio", labelKey: "app.tabs.inicio" },
+    { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
+    { path: "/personal", labelKey: "app.tabs.personal" },
+    { path: "/actividades", labelKey: "app.tabs.actividades" },
+    { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
+    { path: "/costos", labelKey: "app.tabs.reportes" },
+    { path: "/costos-dashboard", labelKey: "app.tabs.dashboard" },
+    { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" }
   ];
 
   if (normalizedRole === "owner" || normalizedRole === "admin") {
-    tabs.push({ path: "/invitar-tracker", label: "Invitar tracker" });
+    tabs.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
   }
 
   if (normalizedRole === "owner") {
-    tabs.push({ path: "/admins", label: "Admins" });
+    tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
-
-  // hasOrgs lo usamos luego si quieres lógicas adicionales
-  // console.log("hasOrgs", hasOrgs);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <AppHeader />
-
       <div className="border-b border-slate-200 bg-white">
         <TopTabs tabs={tabs} />
       </div>
-
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">{children}</main>
     </div>
   );
 }
 
 // ---------------------
-// Layout de LOGIN
+// Layout LOGIN
 // ---------------------
 function LoginShell() {
   return (
@@ -138,16 +115,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing pública */}
         <Route path="/" element={<Landing />} />
-
-        {/* Tracker GPS (magic link) */}
         <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-
-        {/* Reset password */}
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Inicio */}
         <Route
           path="/inicio"
           element={
@@ -159,7 +130,6 @@ export default function App() {
           }
         />
 
-        {/* Nueva geocerca */}
         <Route
           path="/nueva-geocerca"
           element={
@@ -171,7 +141,6 @@ export default function App() {
           }
         />
 
-        {/* Geocercas */}
         <Route
           path="/geocercas"
           element={
@@ -183,7 +152,6 @@ export default function App() {
           }
         />
 
-        {/* Personal */}
         <Route
           path="/personal"
           element={
@@ -195,7 +163,6 @@ export default function App() {
           }
         />
 
-        {/* Actividades */}
         <Route
           path="/actividades"
           element={
@@ -207,7 +174,6 @@ export default function App() {
           }
         />
 
-        {/* Asignaciones */}
         <Route
           path="/asignaciones"
           element={
@@ -219,7 +185,6 @@ export default function App() {
           }
         />
 
-        {/* Reportes */}
         <Route
           path="/costos"
           element={
@@ -231,7 +196,6 @@ export default function App() {
           }
         />
 
-        {/* Dashboard de costos */}
         <Route
           path="/costos-dashboard"
           element={
@@ -243,7 +207,6 @@ export default function App() {
           }
         />
 
-        {/* Tracker dashboard (admin/owner) */}
         <Route
           path="/tracker-dashboard"
           element={
@@ -255,7 +218,6 @@ export default function App() {
           }
         />
 
-        {/* Invitar tracker */}
         <Route
           path="/invitar-tracker"
           element={
@@ -267,7 +229,6 @@ export default function App() {
           }
         />
 
-        {/* Admins */}
         <Route
           path="/admins"
           element={
@@ -279,13 +240,10 @@ export default function App() {
           }
         />
 
-        {/* Callback de auth (Magic link) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* Login */}
         <Route path="/login" element={<LoginShell />} />
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
