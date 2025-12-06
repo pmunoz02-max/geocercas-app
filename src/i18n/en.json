@@ -157,5 +157,68 @@
     "buttonShowAll": "Show all",
     "buttonDeleteSelected": "Delete selected",
     "buttonClearCanvas": "Clear map"
+  },
+
+  "personal": {
+    "title": "Staff",
+    "orgInfoLabel": "Organization:",
+    "orgFallback": "No organization",
+    "roleLabel": "Role:",
+    "pillCanEdit": "Editable",
+    "pillReadOnly": "Read only",
+
+    "bannerLoadingSession": "Loading session…",
+    "bannerLoginRequired": "You must be logged in to access this section.",
+    "bannerRefreshedOk": "Data refreshed successfully.",
+    "bannerSelected": "Record selected.",
+    "bannerNewMode": "Create staff mode.",
+    "bannerEditMode": "Edit mode.",
+    "bannerCreated": "Staff created successfully.",
+    "bannerUpdated": "Staff updated correctly.",
+    "bannerDeletedOk": "Record deleted successfully.",
+
+    "errorMissingUser": "Could not retrieve authenticated user.",
+    "errorNoAuthUser": "No authenticated user.",
+    "errorLoad": "Error loading staff.",
+    "errorNoPermissionCreate": "You do not have permission to create staff.",
+    "errorNoPermissionEdit": "You do not have permission to edit staff.",
+    "errorMustSelectForEdit": "You must select a record to edit.",
+    "errorNoPermissionSave": "You do not have permission to save changes.",
+    "errorMissingName": "Name is required.",
+    "errorMissingEmail": "Email is required.",
+    "errorPhonePolicy": "Phone number must start with + (E.164 format).",
+    "errorSaveNoRecord": "No updated record received.",
+    "errorSave": "Could not save staff.",
+    "errorNoPermissionDelete": "You do not have permission to delete staff.",
+    "errorMustSelectForDelete": "You must select a record to delete.",
+    "errorDelete": "Could not delete the record.",
+
+    "confirmDelete": "Are you sure you want to delete this record? (soft delete)",
+
+    "searchPlaceholder": "Search by name, last name, email or phone…",
+    "onlyActive": "Only active",
+    "buttonRefresh": "Refresh",
+    "buttonFullList": "Full list",
+    "buttonNew": "New",
+    "buttonEdit": "Edit",
+    "buttonSave": "Save",
+    "buttonDelete": "Delete",
+
+    "fieldName": "First name",
+    "fieldLastName": "Last name",
+    "fieldEmail": "Email",
+    "fieldPhonePlaceholder": "Phone (+1…)",
+    "fieldActive": "Active",
+
+    "tableName": "First name",
+    "tableLastName": "Last name",
+    "tableEmail": "Email",
+    "tablePhone": "Phone",
+    "tableActive": "Active",
+    "tableNoResults": "No results found.",
+
+    "yes": "Yes",
+    "no": "No",
+    "processing": "Processing…"
   }
 }

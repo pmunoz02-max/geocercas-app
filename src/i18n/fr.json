@@ -157,5 +157,68 @@
     "buttonShowAll": "Afficher toutes",
     "buttonDeleteSelected": "Supprimer sélectionnées",
     "buttonClearCanvas": "Effacer la carte"
+  },
+
+  "personal": {
+    "title": "Personnel",
+    "orgInfoLabel": "Organisation :",
+    "orgFallback": "Aucune organisation",
+    "roleLabel": "Rôle :",
+    "pillCanEdit": "Modifiable",
+    "pillReadOnly": "Lecture seule",
+
+    "bannerLoadingSession": "Chargement de la session…",
+    "bannerLoginRequired": "Vous devez être connecté pour accéder à cette section.",
+    "bannerRefreshedOk": "Données mises à jour avec succès.",
+    "bannerSelected": "Enregistrement sélectionné.",
+    "bannerNewMode": "Mode création de personnel.",
+    "bannerEditMode": "Mode édition.",
+    "bannerCreated": "Personnel créé avec succès.",
+    "bannerUpdated": "Personnel mis à jour.",
+    "bannerDeletedOk": "Enregistrement supprimé avec succès.",
+
+    "errorMissingUser": "Impossible d’obtenir l’utilisateur authentifié.",
+    "errorNoAuthUser": "Aucun utilisateur authentifié.",
+    "errorLoad": "Erreur lors du chargement du personnel.",
+    "errorNoPermissionCreate": "Vous n'avez pas la permission de créer du personnel.",
+    "errorNoPermissionEdit": "Vous n'avez pas la permission d’éditer le personnel.",
+    "errorMustSelectForEdit": "Vous devez sélectionner un enregistrement à éditer.",
+    "errorNoPermissionSave": "Vous n'avez pas la permission d’enregistrer les changements.",
+    "errorMissingName": "Le nom est requis.",
+    "errorMissingEmail": "L’e-mail est requis.",
+    "errorPhonePolicy": "Le numéro doit commencer par + (format international E.164).",
+    "errorSaveNoRecord": "Aucun enregistrement mis à jour reçu.",
+    "errorSave": "Impossible d’enregistrer le personnel.",
+    "errorNoPermissionDelete": "Vous n'avez pas la permission de supprimer du personnel.",
+    "errorMustSelectForDelete": "Vous devez sélectionner un enregistrement à supprimer.",
+    "errorDelete": "Impossible de supprimer l’enregistrement.",
+
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (soft delete)",
+
+    "searchPlaceholder": "Rechercher par nom, prénom, e-mail ou téléphone…",
+    "onlyActive": "Uniquement actifs",
+    "buttonRefresh": "Actualiser",
+    "buttonFullList": "Tout afficher",
+    "buttonNew": "Nouveau",
+    "buttonEdit": "Éditer",
+    "buttonSave": "Enregistrer",
+    "buttonDelete": "Supprimer",
+
+    "fieldName": "Nom",
+    "fieldLastName": "Prénom",
+    "fieldEmail": "E-mail",
+    "fieldPhonePlaceholder": "Téléphone (+33…)",
+    "fieldActive": "Actif",
+
+    "tableName": "Nom",
+    "tableLastName": "Prénom",
+    "tableEmail": "E-mail",
+    "tablePhone": "Téléphone",
+    "tableActive": "Actif",
+    "tableNoResults": "Aucun résultat.",
+
+    "yes": "Oui",
+    "no": "Non",
+    "processing": "Traitement…"
   }
 }

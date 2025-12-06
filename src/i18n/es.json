@@ -157,5 +157,68 @@
     "buttonShowAll": "Mostrar todas",
     "buttonDeleteSelected": "Eliminar seleccionadas",
     "buttonClearCanvas": "Limpiar mapa"
+  },
+
+  "personal": {
+    "title": "Personal",
+    "orgInfoLabel": "Organización:",
+    "orgFallback": "Sin organización",
+    "roleLabel": "Rol:",
+    "pillCanEdit": "Editable",
+    "pillReadOnly": "Solo lectura",
+
+    "bannerLoadingSession": "Cargando sesión…",
+    "bannerLoginRequired": "Debes iniciar sesión para acceder a esta sección.",
+    "bannerRefreshedOk": "Datos actualizados correctamente.",
+    "bannerSelected": "Registro seleccionado.",
+    "bannerNewMode": "Modo creación de personal.",
+    "bannerEditMode": "Modo edición.",
+    "bannerCreated": "Personal creado exitosamente.",
+    "bannerUpdated": "Personal actualizado correctamente.",
+    "bannerDeletedOk": "Registro eliminado correctamente.",
+
+    "errorMissingUser": "No se pudo obtener el usuario autenticado.",
+    "errorNoAuthUser": "No existe un usuario autenticado.",
+    "errorLoad": "Error al cargar el personal.",
+    "errorNoPermissionCreate": "No tienes permisos para crear personal.",
+    "errorNoPermissionEdit": "No tienes permisos para editar personal.",
+    "errorMustSelectForEdit": "Debes seleccionar un registro para editarlo.",
+    "errorNoPermissionSave": "No tienes permisos para guardar cambios.",
+    "errorMissingName": "El nombre es requerido.",
+    "errorMissingEmail": "El email es requerido.",
+    "errorPhonePolicy": "El teléfono debe comenzar con + (formato internacional E.164).",
+    "errorSaveNoRecord": "No se recibió registro actualizado.",
+    "errorSave": "No se pudo guardar el personal.",
+    "errorNoPermissionDelete": "No tienes permisos para eliminar personal.",
+    "errorMustSelectForDelete": "Debes seleccionar un registro para eliminarlo.",
+    "errorDelete": "No se pudo eliminar el registro.",
+
+    "confirmDelete": "¿Está seguro que desea eliminar este registro? (soft delete)",
+
+    "searchPlaceholder": "Buscar por nombre, apellido, email o teléfono…",
+    "onlyActive": "Solo activos",
+    "buttonRefresh": "Actualizar",
+    "buttonFullList": "Ver todo",
+    "buttonNew": "Nuevo",
+    "buttonEdit": "Editar",
+    "buttonSave": "Guardar",
+    "buttonDelete": "Eliminar",
+
+    "fieldName": "Nombre",
+    "fieldLastName": "Apellido",
+    "fieldEmail": "Correo",
+    "fieldPhonePlaceholder": "Teléfono (+593…)",
+    "fieldActive": "Activo",
+
+    "tableName": "Nombre",
+    "tableLastName": "Apellido",
+    "tableEmail": "Correo",
+    "tablePhone": "Teléfono",
+    "tableActive": "Activo",
+    "tableNoResults": "No se encontraron resultados.",
+
+    "yes": "Sí",
+    "no": "No",
+    "processing": "Procesando…"
   }
 }
