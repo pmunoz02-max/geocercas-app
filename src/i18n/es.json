@@ -220,5 +220,47 @@
     "yes": "Sí",
     "no": "No",
     "processing": "Procesando…"
+  },
+
+  "actividades": {
+    "title": "Actividades",
+    "formTitleNew": "Nueva actividad",
+
+    "fieldName": "Nombre de la actividad",
+    "fieldNamePlaceholder": "Ej. Siembra, Riego, Cosecha",
+    "fieldDescription": "Descripción",
+    "fieldDescriptionPlaceholder": "Descripción breve de la actividad…",
+    "fieldCurrency": "Moneda",
+    "fieldHourlyRate": "Tarifa por hora",
+    "fieldHourlyRatePlaceholder": "Ej. 3.50",
+
+    "currencies": {
+      "USD": "Dólar estadounidense",
+      "EUR": "Euro",
+      "GBP": "Libra esterlina",
+      "LOCAL": "Moneda local"
+    },
+
+    "buttonCreate": "Crear actividad",
+    "buttonUpdate": "Actualizar actividad",
+    "buttonCancel": "Cancelar",
+
+    "tableTitle": "Listado de actividades",
+    "tableName": "Actividad",
+    "tableDescription": "Descripción",
+    "tableCurrency": "Moneda",
+    "tableHourlyRate": "Tarifa/hora",
+    "tableActive": "Activa",
+    "tableNoResults": "No hay actividades registradas.",
+
+    "bannerCreated": "Actividad creada correctamente.",
+    "bannerUpdated": "Actividad actualizada correctamente.",
+    "bannerDeleted": "Actividad eliminada.",
+    "errorLoad": "Error al cargar las actividades.",
+    "errorSave": "No se pudo guardar la actividad.",
+    "errorDelete": "No se pudo eliminar la actividad.",
+    "errorMissingName": "El nombre de la actividad es obligatorio.",
+    "errorMissingCurrency": "La moneda es obligatoria.",
+    "errorMissingRate": "La tarifa por hora es obligatoria."
   }
 }

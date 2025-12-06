@@ -220,5 +220,47 @@
     "yes": "Oui",
     "no": "Non",
     "processing": "Traitement…"
+  },
+
+  "actividades": {
+    "title": "Activités",
+    "formTitleNew": "Nouvelle activité",
+
+    "fieldName": "Nom de l’activité",
+    "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
+    "fieldDescription": "Description",
+    "fieldDescriptionPlaceholder": "Brève description de l’activité…",
+    "fieldCurrency": "Devise",
+    "fieldHourlyRate": "Tarif horaire",
+    "fieldHourlyRatePlaceholder": "Ex. 3,50",
+
+    "currencies": {
+      "USD": "Dollar américain",
+      "EUR": "Euro",
+      "GBP": "Livre sterling",
+      "LOCAL": "Devise locale"
+    },
+
+    "buttonCreate": "Créer l’activité",
+    "buttonUpdate": "Mettre à jour l’activité",
+    "buttonCancel": "Annuler",
+
+    "tableTitle": "Liste des activités",
+    "tableName": "Activité",
+    "tableDescription": "Description",
+    "tableCurrency": "Devise",
+    "tableHourlyRate": "Tarif horaire",
+    "tableActive": "Active",
+    "tableNoResults": "Aucune activité enregistrée.",
+
+    "bannerCreated": "Activité créée avec succès.",
+    "bannerUpdated": "Activité mise à jour avec succès.",
+    "bannerDeleted": "Activité supprimée.",
+    "errorLoad": "Erreur lors du chargement des activités.",
+    "errorSave": "Impossible d’enregistrer l’activité.",
+    "errorDelete": "Impossible de supprimer l’activité.",
+    "errorMissingName": "Le nom de l’activité est requis.",
+    "errorMissingCurrency": "La devise est requise.",
+    "errorMissingRate": "Le tarif horaire est requis."
   }
 }

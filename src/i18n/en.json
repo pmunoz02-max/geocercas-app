@@ -220,5 +220,47 @@
     "yes": "Yes",
     "no": "No",
     "processing": "Processing…"
+  },
+
+  "actividades": {
+    "title": "Activities",
+    "formTitleNew": "New activity",
+
+    "fieldName": "Activity name",
+    "fieldNamePlaceholder": "e.g. Planting, Irrigation, Harvest",
+    "fieldDescription": "Description",
+    "fieldDescriptionPlaceholder": "Short description of the activity…",
+    "fieldCurrency": "Currency",
+    "fieldHourlyRate": "Hourly rate",
+    "fieldHourlyRatePlaceholder": "e.g. 3.50",
+
+    "currencies": {
+      "USD": "US Dollar",
+      "EUR": "Euro",
+      "GBP": "British Pound",
+      "LOCAL": "Local currency"
+    },
+
+    "buttonCreate": "Create activity",
+    "buttonUpdate": "Update activity",
+    "buttonCancel": "Cancel",
+
+    "tableTitle": "Activity list",
+    "tableName": "Activity",
+    "tableDescription": "Description",
+    "tableCurrency": "Currency",
+    "tableHourlyRate": "Hourly rate",
+    "tableActive": "Active",
+    "tableNoResults": "No activities registered.",
+
+    "bannerCreated": "Activity created successfully.",
+    "bannerUpdated": "Activity updated successfully.",
+    "bannerDeleted": "Activity deleted.",
+    "errorLoad": "Error loading activities.",
+    "errorSave": "Could not save the activity.",
+    "errorDelete": "Could not delete the activity.",
+    "errorMissingName": "Activity name is required.",
+    "errorMissingCurrency": "Currency is required.",
+    "errorMissingRate": "Hourly rate is required."
   }
 }
