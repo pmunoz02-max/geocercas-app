@@ -256,5 +256,195 @@
     "errorMissingName": "Activity name is required.",
     "errorMissingCurrency": "Currency is required.",
     "errorMissingRate": "Hourly rate is required."
+  },
+
+  "asignaciones": {
+    "title": "Assignments",
+    "filters": {
+      "statusLabel": "Status",
+      "status": {
+        "todos": "All",
+        "activo": "Active",
+        "inactivo": "Inactive"
+      },
+      "refresh": "Refresh"
+    },
+    "form": {
+      "newTitle": "New assignment",
+      "personLabel": "Person",
+      "personPlaceholder": "Select a person",
+      "activityLabel": "Activity",
+      "activityPlaceholder": "Select an activity",
+      "geofenceLabel": "Geofence",
+      "geofencePlaceholder": "Select a geofence",
+      "startLabel": "Start date/time",
+      "endLabel": "End date/time",
+      "statusLabel": "Status",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "frequencyLabel": "Frequency (min)",
+      "buttonCreate": "Create assignment",
+      "buttonUpdate": "Update assignment",
+      "buttonCancel": "Cancel"
+    },
+    "table": {
+      "title": "Assignments list",
+      "person": "Person",
+      "activity": "Activity",
+      "geofence": "Geofence",
+      "start": "Start",
+      "end": "End",
+      "status": "Status",
+      "actions": "Actions",
+      "noResults": "No assignments registered."
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "activate": "Activate",
+      "deactivate": "Deactivate"
+    },
+    "banner": {
+      "created": "Assignment created successfully.",
+      "updated": "Assignment updated.",
+      "deleted": "Assignment deleted."
+    },
+    "error": {
+      "load": "Error loading assignments.",
+      "save": "Could not save assignment.",
+      "delete": "Could not delete assignment.",
+      "missingPerson": "A person must be selected.",
+      "missingGeofence": "A geofence must be selected.",
+      "missingActivity": "An activity must be selected.",
+      "missingStart": "Start date/time is required.",
+      "missingEnd": "End date/time is required."
+    }
+  },
+
+  "reportes": {
+    "title": "Cost reports",
+    "subtitle": "View and export costs per person, activity and geofence.",
+    "filters": {
+      "dateFromLabel": "From",
+      "dateToLabel": "To",
+      "personLabel": "Person",
+      "activityLabel": "Activity",
+      "geofenceLabel": "Geofence",
+      "apply": "Apply filters",
+      "clear": "Clear filters"
+    },
+    "table": {
+      "title": "Cost details",
+      "person": "Person",
+      "activity": "Activity",
+      "geofence": "Geofence",
+      "start": "Start",
+      "end": "End",
+      "hours": "Hours",
+      "rate": "Rate/hour",
+      "total": "Total cost",
+      "currency": "Currency",
+      "noResults": "No records found for the selected filters."
+    },
+    "csvHeaderInicio": "Start",
+    "csvHeaderFin": "End",
+    "csvHeaderPersona": "Person",
+    "csvHeaderActividad": "Activity",
+    "csvHeaderGeocerca": "Geofence",
+    "csvHeaderHoras": "Hours",
+    "csvHeaderTarifa": "Rate_hour",
+    "csvHeaderTotal": "Total_cost",
+    "buttonDownloadCsv": "Download CSV",
+    "errorLoad": "Error loading reports.",
+    "errorCsv": "CSV file could not be generated."
+  },
+
+  "dashboard": {
+    "title": "Cost dashboard",
+    "subtitle": "Visualize aggregated costs by person, activity and geofence.",
+    "cards": {
+      "totalCost": "Total cost",
+      "totalHours": "Total hours",
+      "totalPersons": "Persons",
+      "totalGeofences": "Geofences"
+    },
+    "filters": {
+      "dateFromLabel": "From",
+      "dateToLabel": "To",
+      "apply": "Apply",
+      "clear": "Clear"
+    },
+    "charts": {
+      "costByActivity": "Cost by activity",
+      "costByPerson": "Cost by person",
+      "costByGeofence": "Cost by geofence",
+      "hoursByDay": "Hours per day"
+    },
+    "errorLoad": "Error loading cost dashboard."
+  },
+
+  "tracker": {
+    "title": "GPS Tracker",
+    "subtitle": "See tracker locations in real time inside your geofences.",
+    "status": {
+      "online": "Tracker online",
+      "offline": "No recent data"
+    },
+    "controls": {
+      "centerOnUser": "Center on my position",
+      "refresh": "Refresh positions",
+      "showAll": "Show all",
+      "showInside": "Only inside geofences"
+    },
+    "legend": {
+      "insideFence": "Inside geofence",
+      "outsideFence": "Outside geofence",
+      "geofence": "Geofence"
+    },
+    "table": {
+      "title": "Latest positions",
+      "person": "Person",
+      "activity": "Activity",
+      "geofence": "Geofence",
+      "timestamp": "Date/time",
+      "status": "Status",
+      "noResults": "No positions registered."
+    },
+    "errorLoad": "Error loading tracker positions."
+  },
+
+  "admins": {
+    "title": "Admins",
+    "subtitle": "Manage your organization admins and their roles.",
+    "table": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "actions": "Actions",
+      "noResults": "No admins registered."
+    },
+    "form": {
+      "inviteTitle": "Invite new admin",
+      "emailLabel": "Email",
+      "roleLabel": "Role",
+      "buttonInvite": "Send invitation"
+    },
+    "actions": {
+      "makeOwner": "Make owner",
+      "makeAdmin": "Make admin",
+      "remove": "Remove access"
+    },
+    "banner": {
+      "invitationSent": "Invitation sent successfully.",
+      "roleUpdated": "Role updated.",
+      "removed": "Admin removed from organization."
+    },
+    "error": {
+      "load": "Error loading admin list.",
+      "invite": "Invitation could not be sent.",
+      "updateRole": "Role could not be updated.",
+      "remove": "Admin could not be removed."
+    }
   }
 }

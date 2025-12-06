@@ -256,5 +256,195 @@
     "errorMissingName": "Le nom de l’activité est requis.",
     "errorMissingCurrency": "La devise est requise.",
     "errorMissingRate": "Le tarif horaire est requis."
+  },
+
+  "asignaciones": {
+    "title": "Affectations",
+    "filters": {
+      "statusLabel": "Statut",
+      "status": {
+        "todos": "Tous",
+        "activo": "Actifs",
+        "inactivo": "Inactifs"
+      },
+      "refresh": "Rafraîchir"
+    },
+    "form": {
+      "newTitle": "Nouvelle affectation",
+      "personLabel": "Personne",
+      "personPlaceholder": "Sélectionnez une personne",
+      "activityLabel": "Activité",
+      "activityPlaceholder": "Sélectionnez une activité",
+      "geofenceLabel": "Géofence",
+      "geofencePlaceholder": "Sélectionnez une géofence",
+      "startLabel": "Date/heure début",
+      "endLabel": "Date/heure fin",
+      "statusLabel": "Statut",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "frequencyLabel": "Fréquence (min)",
+      "buttonCreate": "Créer l'affectation",
+      "buttonUpdate": "Mettre à jour",
+      "buttonCancel": "Annuler"
+    },
+    "table": {
+      "title": "Liste des affectations",
+      "person": "Personne",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "start": "Début",
+      "end": "Fin",
+      "status": "Statut",
+      "actions": "Actions",
+      "noResults": "Aucune affectation enregistrée."
+    },
+    "actions": {
+      "edit": "Éditer",
+      "delete": "Supprimer",
+      "activate": "Activer",
+      "deactivate": "Désactiver"
+    },
+    "banner": {
+      "created": "Affectation créée avec succès.",
+      "updated": "Affectation mise à jour.",
+      "deleted": "Affectation supprimée."
+    },
+    "error": {
+      "load": "Erreur lors du chargement des affectations.",
+      "save": "Impossible d’enregistrer l’affectation.",
+      "delete": "Impossible de supprimer l'affectation.",
+      "missingPerson": "Vous devez sélectionner une personne.",
+      "missingGeofence": "Vous devez sélectionner une géofence.",
+      "missingActivity": "Vous devez sélectionner une activité.",
+      "missingStart": "La date/heure de début est requise.",
+      "missingEnd": "La date/heure de fin est requise."
+    }
+  },
+
+  "reportes": {
+    "title": "Rapports de coûts",
+    "subtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
+    "filters": {
+      "dateFromLabel": "De",
+      "dateToLabel": "À",
+      "personLabel": "Personne",
+      "activityLabel": "Activité",
+      "geofenceLabel": "Géofence",
+      "apply": "Appliquer les filtres",
+      "clear": "Effacer les filtres"
+    },
+    "table": {
+      "title": "Détail des coûts",
+      "person": "Personne",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "start": "Début",
+      "end": "Fin",
+      "hours": "Heures",
+      "rate": "Tarif/heure",
+      "total": "Coût total",
+      "currency": "Devise",
+      "noResults": "Aucun enregistrement pour les filtres sélectionnés."
+    },
+    "csvHeaderInicio": "Début",
+    "csvHeaderFin": "Fin",
+    "csvHeaderPersona": "Personne",
+    "csvHeaderActividad": "Activité",
+    "csvHeaderGeocerca": "Géofence",
+    "csvHeaderHoras": "Heures",
+    "csvHeaderTarifa": "Tarif_heure",
+    "csvHeaderTotal": "Coût_total",
+    "buttonDownloadCsv": "Télécharger CSV",
+    "errorLoad": "Erreur lors du chargement des rapports.",
+    "errorCsv": "Impossible de générer le fichier CSV."
+  },
+
+  "dashboard": {
+    "title": "Tableau de coûts",
+    "subtitle": "Visualisez les coûts agrégés par personne, activité et géofence.",
+    "cards": {
+      "totalCost": "Coût total",
+      "totalHours": "Heures totales",
+      "totalPersons": "Personnes",
+      "totalGeofences": "Géofences"
+    },
+    "filters": {
+      "dateFromLabel": "De",
+      "dateToLabel": "À",
+      "apply": "Appliquer",
+      "clear": "Effacer"
+    },
+    "charts": {
+      "costByActivity": "Coût par activité",
+      "costByPerson": "Coût par personne",
+      "costByGeofence": "Coût par géofence",
+      "hoursByDay": "Heures par jour"
+    },
+    "errorLoad": "Erreur lors du chargement du tableau de coûts."
+  },
+
+  "tracker": {
+    "title": "Tracker GPS",
+    "subtitle": "Visualisez en temps réel la position des trackers dans vos géofences.",
+    "status": {
+      "online": "Tracker en ligne",
+      "offline": "Pas de données récentes"
+    },
+    "controls": {
+      "centerOnUser": "Centrer sur ma position",
+      "refresh": "Rafraîchir les positions",
+      "showAll": "Tout afficher",
+      "showInside": "Seulement dans les géofences"
+    },
+    "legend": {
+      "insideFence": "Dans la géofence",
+      "outsideFence": "Hors géofence",
+      "geofence": "Géofence"
+    },
+    "table": {
+      "title": "Dernières positions",
+      "person": "Personne",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "timestamp": "Date/heure",
+      "status": "Statut",
+      "noResults": "Aucune position enregistrée."
+    },
+    "errorLoad": "Erreur lors du chargement des positions du tracker."
+  },
+
+  "admins": {
+    "title": "Administrateurs",
+    "subtitle": "Gérez les administrateurs de votre organisation et leurs rôles.",
+    "table": {
+      "name": "Nom",
+      "email": "E-mail",
+      "role": "Rôle",
+      "status": "Statut",
+      "actions": "Actions",
+      "noResults": "Aucun administrateur enregistré."
+    },
+    "form": {
+      "inviteTitle": "Inviter un nouvel administrateur",
+      "emailLabel": "E-mail",
+      "roleLabel": "Rôle",
+      "buttonInvite": "Envoyer l’invitation"
+    },
+    "actions": {
+      "makeOwner": "Définir comme propriétaire",
+      "makeAdmin": "Définir comme admin",
+      "remove": "Retirer l’accès"
+    },
+    "banner": {
+      "invitationSent": "Invitation envoyée avec succès.",
+      "roleUpdated": "Rôle mis à jour.",
+      "removed": "Administrateur retiré de l’organisation."
+    },
+    "error": {
+      "load": "Erreur lors du chargement de la liste des administrateurs.",
+      "invite": "Impossible d’envoyer l’invitation.",
+      "updateRole": "Impossible de mettre à jour le rôle.",
+      "remove": "Impossible de retirer l’administrateur."
+    }
   }
 }

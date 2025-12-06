@@ -247,7 +247,7 @@
     "actionActivate": "Activar",
     "actionDelete": "Eliminar",
     "tableNoResults": "No hay actividades registradas.",
-    "bannerCreated": "Actividad creada correctamente.",
+    "bannerCreated": "Actividad creado correctamente.",
     "bannerUpdated": "Actividad actualizada correctamente.",
     "bannerDeleted": "Actividad eliminada.",
     "errorLoad": "Error al cargar las actividades.",
@@ -256,5 +256,195 @@
     "errorMissingName": "El nombre de la actividad es obligatorio.",
     "errorMissingCurrency": "La moneda es obligatoria.",
     "errorMissingRate": "La tarifa por hora es obligatoria."
+  },
+
+  "asignaciones": {
+    "title": "Asignaciones",
+    "filters": {
+      "statusLabel": "Estado",
+      "status": {
+        "todos": "Todos",
+        "activo": "Activos",
+        "inactivo": "Inactivos"
+      },
+      "refresh": "Refrescar"
+    },
+    "form": {
+      "newTitle": "Nueva asignación",
+      "personLabel": "Persona",
+      "personPlaceholder": "Selecciona una persona",
+      "activityLabel": "Actividad",
+      "activityPlaceholder": "Selecciona una actividad",
+      "geofenceLabel": "Geocerca",
+      "geofencePlaceholder": "Selecciona una geocerca",
+      "startLabel": "Fecha/hora inicio",
+      "endLabel": "Fecha/hora fin",
+      "statusLabel": "Estado",
+      "statusActive": "Activa",
+      "statusInactive": "Inactiva",
+      "frequencyLabel": "Frecuencia (min)",
+      "buttonCreate": "Crear asignación",
+      "buttonUpdate": "Actualizar asignación",
+      "buttonCancel": "Cancelar"
+    },
+    "table": {
+      "title": "Listado de asignaciones",
+      "person": "Persona",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "start": "Inicio",
+      "end": "Fin",
+      "status": "Estado",
+      "actions": "Acciones",
+      "noResults": "No hay asignaciones registradas."
+    },
+    "actions": {
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "activate": "Activar",
+      "deactivate": "Desactivar"
+    },
+    "banner": {
+      "created": "Asignación creada correctamente.",
+      "updated": "Asignación actualizada.",
+      "deleted": "Asignación eliminada."
+    },
+    "error": {
+      "load": "Error al cargar las asignaciones.",
+      "save": "No se pudo guardar la asignación.",
+      "delete": "No se pudo eliminar la asignación.",
+      "missingPerson": "Debe seleccionar una persona.",
+      "missingGeofence": "Debe seleccionar una geocerca.",
+      "missingActivity": "Debe seleccionar una actividad.",
+      "missingStart": "Debe ingresar fecha/hora de inicio.",
+      "missingEnd": "Debe ingresar fecha/hora de fin."
+    }
+  },
+
+  "reportes": {
+    "title": "Reportes de costos",
+    "subtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
+    "filters": {
+      "dateFromLabel": "Desde",
+      "dateToLabel": "Hasta",
+      "personLabel": "Persona",
+      "activityLabel": "Actividad",
+      "geofenceLabel": "Geocerca",
+      "apply": "Aplicar filtros",
+      "clear": "Limpiar filtros"
+    },
+    "table": {
+      "title": "Detalle de costos",
+      "person": "Persona",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "start": "Inicio",
+      "end": "Fin",
+      "hours": "Horas",
+      "rate": "Tarifa/hora",
+      "total": "Costo total",
+      "currency": "Moneda",
+      "noResults": "No se encontraron registros para los filtros seleccionados."
+    },
+    "csvHeaderInicio": "Inicio",
+    "csvHeaderFin": "Fin",
+    "csvHeaderPersona": "Persona",
+    "csvHeaderActividad": "Actividad",
+    "csvHeaderGeocerca": "Geocerca",
+    "csvHeaderHoras": "Horas",
+    "csvHeaderTarifa": "Tarifa_hora",
+    "csvHeaderTotal": "Costo_total",
+    "buttonDownloadCsv": "Descargar CSV",
+    "errorLoad": "Error al cargar los reportes.",
+    "errorCsv": "No se pudo generar el archivo CSV."
+  },
+
+  "dashboard": {
+    "title": "Dashboard de costos",
+    "subtitle": "Visualiza los costos agregados por persona, actividad y geocerca.",
+    "cards": {
+      "totalCost": "Costo total",
+      "totalHours": "Horas totales",
+      "totalPersons": "Personas",
+      "totalGeofences": "Geocercas"
+    },
+    "filters": {
+      "dateFromLabel": "Desde",
+      "dateToLabel": "Hasta",
+      "apply": "Aplicar",
+      "clear": "Limpiar"
+    },
+    "charts": {
+      "costByActivity": "Costo por actividad",
+      "costByPerson": "Costo por persona",
+      "costByGeofence": "Costo por geocerca",
+      "hoursByDay": "Horas por día"
+    },
+    "errorLoad": "Error al cargar el dashboard de costos."
+  },
+
+  "tracker": {
+    "title": "Tracker GPS",
+    "subtitle": "Visualiza en tiempo real la ubicación de los trackers dentro de tus geocercas.",
+    "status": {
+      "online": "Tracker en línea",
+      "offline": "Sin datos recientes"
+    },
+    "controls": {
+      "centerOnUser": "Centrar en mi posición",
+      "refresh": "Refrescar posiciones",
+      "showAll": "Mostrar todos",
+      "showInside": "Solo dentro de geocercas"
+    },
+    "legend": {
+      "insideFence": "Dentro de geocerca",
+      "outsideFence": "Fuera de geocerca",
+      "geofence": "Geocerca"
+    },
+    "table": {
+      "title": "Últimas posiciones",
+      "person": "Persona",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "timestamp": "Fecha/hora",
+      "status": "Estado",
+      "noResults": "No hay posiciones registradas."
+    },
+    "errorLoad": "Error al cargar las posiciones de tracker."
+  },
+
+  "admins": {
+    "title": "Administradores",
+    "subtitle": "Gestiona los administradores de tu organización y sus roles.",
+    "table": {
+      "name": "Nombre",
+      "email": "Correo",
+      "role": "Rol",
+      "status": "Estado",
+      "actions": "Acciones",
+      "noResults": "No hay administradores registrados."
+    },
+    "form": {
+      "inviteTitle": "Invitar nuevo administrador",
+      "emailLabel": "Correo electrónico",
+      "roleLabel": "Rol",
+      "buttonInvite": "Enviar invitación"
+    },
+    "actions": {
+      "makeOwner": "Convertir en propietario",
+      "makeAdmin": "Convertir en admin",
+      "remove": "Eliminar acceso"
+    },
+    "banner": {
+      "invitationSent": "Invitación enviada correctamente.",
+      "roleUpdated": "Rol actualizado.",
+      "removed": "Administrador eliminado de la organización."
+    },
+    "error": {
+      "load": "Error al cargar la lista de administradores.",
+      "invite": "No se pudo enviar la invitación.",
+      "updateRole": "No se pudo actualizar el rol.",
+      "remove": "No se pudo eliminar al administrador."
+    }
   }
 }
