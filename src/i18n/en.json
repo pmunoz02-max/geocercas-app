@@ -143,5 +143,19 @@
       "userLabel": "User:",
       "orgIdLabel": "Organization ID:"
     }
+  },
+
+  "geocercas": {
+    "titleNew": "New geofence",
+    "subtitleNew": "Draw a geofence on the map and assign it to your staff or activities.",
+    "panelTitle": "Geofences",
+    "noGeofences": "You don't have any geofences yet.",
+    "placeholderName": "Geofence name",
+    "buttonDrawByCoords": "Draw by coordinates",
+    "buttonSave": "Save geofence",
+    "buttonShowSelected": "Show selected",
+    "buttonShowAll": "Show all",
+    "buttonDeleteSelected": "Delete selected",
+    "buttonClearCanvas": "Clear map"
   }
 }

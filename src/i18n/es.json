@@ -143,5 +143,19 @@
       "userLabel": "Usuario:",
       "orgIdLabel": "ID de organización:"
     }
+  },
+
+  "geocercas": {
+    "titleNew": "Nueva geocerca",
+    "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
+    "panelTitle": "Geocercas",
+    "noGeofences": "Aún no tienes geocercas creadas.",
+    "placeholderName": "Nombre de la geocerca",
+    "buttonDrawByCoords": "Dibujar por coordenadas",
+    "buttonSave": "Guardar geocerca",
+    "buttonShowSelected": "Mostrar seleccionadas",
+    "buttonShowAll": "Mostrar todas",
+    "buttonDeleteSelected": "Eliminar seleccionadas",
+    "buttonClearCanvas": "Limpiar mapa"
   }
 }

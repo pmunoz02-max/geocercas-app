@@ -143,5 +143,19 @@
       "userLabel": "Utilisateur :",
       "orgIdLabel": "ID de l’organisation :"
     }
+  },
+
+  "geocercas": {
+    "titleNew": "Nouvelle géofence",
+    "subtitleNew": "Dessinez une géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
+    "panelTitle": "Géofences",
+    "noGeofences": "Vous n’avez pas encore de géofences.",
+    "placeholderName": "Nom de la géofence",
+    "buttonDrawByCoords": "Dessiner par coordonnées",
+    "buttonSave": "Enregistrer la géofence",
+    "buttonShowSelected": "Afficher sélectionnées",
+    "buttonShowAll": "Afficher toutes",
+    "buttonDeleteSelected": "Supprimer sélectionnées",
+    "buttonClearCanvas": "Effacer la carte"
   }
 }
