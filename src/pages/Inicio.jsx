@@ -15,98 +15,62 @@ export default function Inicio() {
   const profileName =
     profile?.full_name || profile?.nombre || profile?.name || "";
 
-  // Definición de tarjetas: solo guardamos las KEYS aquí
+  // NUEVOS CARDS: solo información / ayuda
   const cards = [
     {
-      key: "nueva",
-      route: "/nueva-geocerca",
-      badgeKey: "inicio.cards.nueva.badge",
-      titleKey: "inicio.cards.nueva.title",
-      bodyKey: "inicio.cards.nueva.body",
-      ctaKey: "inicio.cards.nueva.cta",
+      key: "instrucciones",
+      route: "/inicio#instrucciones",
+      badgeKey: "inicio.cards.instrucciones.badge",
+      titleKey: "inicio.cards.instrucciones.title",
+      bodyKey: "inicio.cards.instrucciones.body",
+      ctaKey: "inicio.cards.instrucciones.cta",
       accent: "emerald",
     },
     {
-      key: "geocercas",
-      route: "/geocercas",
-      badgeKey: "inicio.cards.geocercas.badge",
-      titleKey: "inicio.cards.geocercas.title",
-      bodyKey: "inicio.cards.geocercas.body",
-      ctaKey: "inicio.cards.geocercas.cta",
-      accent: "emerald",
-    },
-    {
-      key: "personal",
-      route: "/personal",
-      badgeKey: "inicio.cards.personal.badge",
-      titleKey: "inicio.cards.personal.title",
-      bodyKey: "inicio.cards.personal.body",
-      ctaKey: "inicio.cards.personal.cta",
+      key: "faq",
+      route: "/inicio#faq",
+      badgeKey: "inicio.cards.faq.badge",
+      titleKey: "inicio.cards.faq.title",
+      bodyKey: "inicio.cards.faq.body",
+      ctaKey: "inicio.cards.faq.cta",
       accent: "sky",
     },
     {
-      key: "actividades",
-      route: "/actividades",
-      badgeKey: "inicio.cards.actividades.badge",
-      titleKey: "inicio.cards.actividades.title",
-      bodyKey: "inicio.cards.actividades.body",
-      ctaKey: "inicio.cards.actividades.cta",
+      key: "videoDemo",
+      route: "/inicio#video-demo",
+      badgeKey: "inicio.cards.videoDemo.badge",
+      titleKey: "inicio.cards.videoDemo.title",
+      bodyKey: "inicio.cards.videoDemo.body",
+      ctaKey: "inicio.cards.videoDemo.cta",
       accent: "amber",
     },
     {
-      key: "asignaciones",
-      route: "/asignaciones",
-      badgeKey: "inicio.cards.asignaciones.badge",
-      titleKey: "inicio.cards.asignaciones.title",
-      bodyKey: "inicio.cards.asignaciones.body",
-      ctaKey: "inicio.cards.asignaciones.cta",
+      key: "soporte",
+      route: "/inicio#soporte",
+      badgeKey: "inicio.cards.soporte.badge",
+      titleKey: "inicio.cards.soporte.title",
+      bodyKey: "inicio.cards.soporte.body",
+      ctaKey: "inicio.cards.soporte.cta",
       accent: "violet",
     },
     {
-      key: "reportes",
-      route: "/costos",
-      badgeKey: "inicio.cards.reportes.badge",
-      titleKey: "inicio.cards.reportes.title",
-      bodyKey: "inicio.cards.reportes.body",
-      ctaKey: "inicio.cards.reportes.cta",
-      accent: "emerald",
-    },
-    {
-      key: "dashboardCostos",
-      route: "/costos-dashboard",
-      badgeKey: "inicio.cards.dashboardCostos.badge",
-      titleKey: "inicio.cards.dashboardCostos.title",
-      bodyKey: "inicio.cards.dashboardCostos.body",
-      ctaKey: "inicio.cards.dashboardCostos.cta",
+      key: "queEs",
+      route: "/inicio#que-es",
+      badgeKey: "inicio.cards.queEs.badge",
+      titleKey: "inicio.cards.queEs.title",
+      bodyKey: "inicio.cards.queEs.body",
+      ctaKey: "inicio.cards.queEs.cta",
       accent: "indigo",
     },
     {
-      key: "tracker",
-      route: "/tracker-dashboard",
-      badgeKey: "inicio.cards.tracker.badge",
-      titleKey: "inicio.cards.tracker.title",
-      bodyKey: "inicio.cards.tracker.body",
-      ctaKey: "inicio.cards.tracker.cta",
+      key: "novedades",
+      route: "/inicio#novedades",
+      badgeKey: "inicio.cards.novedades.badge",
+      titleKey: "inicio.cards.novedades.title",
+      bodyKey: "inicio.cards.novedades.body",
+      ctaKey: "inicio.cards.novedades.cta",
       accent: "cyan",
-    },
-    {
-      key: "invitarTracker",
-      route: "/invitar-tracker",
-      badgeKey: "inicio.cards.invitarTracker.badge",
-      titleKey: "inicio.cards.invitarTracker.title",
-      bodyKey: "inicio.cards.invitarTracker.body",
-      ctaKey: "inicio.cards.invitarTracker.cta",
-      accent: "emerald",
-    },
-    {
-      key: "admins",
-      route: "/admins",
-      badgeKey: "inicio.cards.admins.badge",
-      titleKey: "inicio.cards.admins.title",
-      bodyKey: "inicio.cards.admins.body",
-      ctaKey: "inicio.cards.admins.cta",
-      accent: "amber",
-    },
+    }
   ];
 
   const accentClasses = {
@@ -156,7 +120,6 @@ export default function Inicio() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Hero */}
       <main className="max-w-6xl mx-auto px-4 pb-10 pt-6 space-y-8">
         {/* Encabezado */}
         <section className="space-y-3">
@@ -175,7 +138,7 @@ export default function Inicio() {
           </div>
         </section>
 
-        {/* Tarjetas principales */}
+        {/* Tarjetas de información / ayuda */}
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {cards.map((card) => {
             const accent = accentClasses[card.accent] ?? accentClasses.emerald;
@@ -184,7 +147,6 @@ export default function Inicio() {
                 key={card.key}
                 className={`group relative overflow-hidden rounded-2xl border bg-white shadow-sm hover:shadow-lg transition-all duration-200 ${accent.border} ${accent.hoverBorder}`}
               >
-                {/* Halo */}
                 <div
                   className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accent.halo} opacity-0 group-hover:opacity-100 transition-opacity duration-200`}
                 />

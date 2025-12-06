@@ -1,345 +1,137 @@
 {
   "common": {
-    "language": "Language",
-    "spanish": "Spanish",
-    "english": "English",
-    "french": "French"
+    "language": {
+      "es": "Spanish",
+      "en": "English",
+      "fr": "French"
+    },
+    "actions": {
+      "close": "Close",
+      "cancel": "Cancel",
+      "save": "Save",
+      "delete": "Delete",
+      "edit": "Edit",
+      "back": "Back"
+    }
   },
-  "login": {
-    "title": "Sign in to your account",
-    "subtitle": "Manage your staff and geofences from a single place.",
-    "emailLabel": "Email",
-    "emailPlaceholder": "you@email.com",
-    "passwordLabel": "Password",
-    "passwordPlaceholder": "Your password",
-    "submit": "Sign in",
-    "or": "or",
-    "magicLinkTitle": "Access with a magic link",
-    "magicLinkDescription": "We will send you a sign-in link to your email.",
-    "magicLinkButton": "Send me a magic link",
-    "languageLabel": "Language",
-    "errorMissingCredentials": "Please enter email and password.",
-    "errorInvalidCredentials": "Invalid credentials.",
-    "errorUnexpected": "Unexpected error. Please try again.",
-    "errorMissingEmail": "Please enter your email.",
-    "errorMagicLink": "Magic link could not be sent.",
-    "errorMagicLinkUnexpected": "Unexpected error sending magic link.",
-    "infoMagicLinkSent": "A magic link has been sent to your email. Check your inbox (and spam).",
-    "loadingSession": "Loading your session…",
-    "alreadyLoggedInTitle": "You already have an active session",
-    "alreadyLoggedInBody": "You can go directly to your dashboard or sign out to use another account.",
-    "goToDashboard": "Go to dashboard",
-    "logout": "Sign out",
-    "modePassword": "Email + password",
-    "modeMagic": "Magic Link",
-    "submitting": "Signing in...",
-    "magicSubmitting": "Sending link...",
-    "magicButton": "Send Magic Link",
-    "magicDescription": "We will send you a magic access link. When you click it, the app will open and take you to your dashboard."
-  },
-  "landing": {
-    "brandName": "App Geocercas",
-    "brandTagline": "Geofence-based personnel control",
-    "loginButton": "Sign in",
-    "goToDashboard": "Go to dashboard",
-    "logout": "Sign out",
-    "heroBadge": "SaaS for agricultural and field operations",
-    "heroTitlePrefix": "Control your staff",
-    "heroTitleHighlight": "with geofences",
-    "heroTitleSuffix": "in real time.",
-    "heroSubtitle": "App Geocercas helps you organize geofences, staff, activities, and cost reports in a single platform.",
-    "ctaLogin": "Sign in",
-    "ctaMagic": "Receive a magic link by email",
-    "bulletGeocercasTitle": "Geofences",
-    "bulletGeocercasBody": "Draw work zones and track who enters, leaves, and how long they stay.",
-    "bulletPersonalTitle": "Staff & Activities",
-    "bulletPersonalBody": "Assign people to activities, shifts, and geofences according to your daily planning.",
-    "bulletCostsTitle": "Cost reports",
-    "bulletCostsBody": "Get reports per person, activity, geofence, or date range.",
-    "livePanelLabel": "Live panel",
-    "livePanelTitle": "Geofences & Tracker",
-    "zonesActive": "Active zones",
-    "statusOnline": "Online",
-    "assistanceControlTitle": "Attendance control",
-    "assistanceControlBody": "From the field to your cost reports.",
-    "multiOrgTitle": "Multi-organization",
-    "multiOrgBody": "Manage multiple farms, lots, or business units.",
-    "rightsReserved": "All rights reserved.",
-    "footerFaq": "FAQ",
-    "footerSupport": "Support",
-    "footerTerms": "Terms",
-    "footerPrivacy": "Privacy"
-  },
+
   "app": {
+    "title": "App Geocercas",
     "header": {
-      "login": "Sign in",
-      "loginMagic": "Sign in with Magic Link",
-      "logout": "Sign out",
-      "admins": "Admins",
+      "loggedAs": "Signed in as",
+      "logout": "Logout",
+      "login": "Log in",
+      "goToPanel": "Go to dashboard",
       "roleOwner": "Owner",
       "roleAdmin": "Admin",
       "roleTracker": "Tracker"
     },
     "tabs": {
       "inicio": "Home",
-      "personal": "Staff",
       "geocercas": "Geofences",
       "nuevaGeocerca": "Geofence",
+      "personal": "Staff",
       "actividades": "Activities",
       "asignaciones": "Assignments",
       "reportes": "Reports",
       "dashboard": "Cost dashboard",
       "tracker": "Tracker",
       "invitarTracker": "Invite tracker",
-      "admins": "Administrator"
+      "admins": "Admin"
     }
   },
+
+  "landing": {
+    "hero": {
+      "titleLine1": "Control your field teams",
+      "titleLine2": "with smart geofences",
+      "titleLine3": "anywhere in the world",
+      "subtitle": "App Geocercas lets you assign people to zones, log activities and calculate costs in real time."
+    },
+    "cta": {
+      "primary": "Go to dashboard",
+      "secondary": "Try with magic link"
+    },
+    "sections": {
+      "howItWorksTitle": "How it works",
+      "multiTenantTitle": "Built for multiple organizations",
+      "trackerTitle": "GPS tracker for field teams"
+    },
+    "footer": {
+      "rights": "All rights reserved"
+    }
+  },
+
+  "login": {
+    "title": "Sign in",
+    "subtitle": "Access your App Geocercas account",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "passwordLoginButton": "Sign in with password",
+    "magicLinkTitle": "Sign in with magic link",
+    "magicLinkDescription": "We will send a secure link to your email so you can log in without a password.",
+    "magicLinkButton": "Send magic link",
+    "magicLinkSent": "We have sent a magic link to your email.",
+    "sessionActive": "You already have an active session.",
+    "goToDashboard": "Go to dashboard",
+    "errors": {
+      "invalidEmail": "Please enter a valid email address.",
+      "unknown": "An error occurred while signing in."
+    }
+  },
+
   "inicio": {
     "header": {
-      "badge": "Control panel · App Geocercas",
+      "badge": "Help & resources center",
       "title": "Welcome to your dashboard",
-      "subtitle": "Manage geofences, staff, activities, assignments and cost reports in one place."
+      "subtitle": "From here you can access instructions, FAQs, support and the latest news about App Geocercas."
     },
+
     "cards": {
-      "nueva": {
-        "badge": "Geofences",
-        "title": "New geofence",
-        "body": "Create a new geofence to control field activities.",
-        "cta": "Go to New geofence"
+      "instrucciones": {
+        "badge": "Quick guide",
+        "title": "Instructions",
+        "body": "Learn step by step how to configure organizations, geofences, staff, activities and trackers.",
+        "cta": "View instructions"
       },
-      "geocercas": {
-        "badge": "Geofences",
-        "title": "Geofences",
-        "body": "Manage existing geofences and assign staff.",
-        "cta": "Go to Geofences"
+      "faq": {
+        "badge": "Help",
+        "title": "Frequently asked questions",
+        "body": "Find answers to common questions about invitations, roles, costs and tracker usage.",
+        "cta": "View FAQs"
       },
-      "personal": {
-        "badge": "Staff",
-        "title": "Staff",
-        "body": "Register and manage the staff in your organization.",
-        "cta": "Go to Staff"
+      "videoDemo": {
+        "badge": "Video",
+        "title": "Demo video",
+        "body": "Watch a short demo showing how App Geocercas works in real scenarios.",
+        "cta": "Watch demo video"
       },
-      "actividades": {
-        "badge": "Rates",
-        "title": "Activities",
-        "body": "Configure activities, hourly rates and cost settings.",
-        "cta": "Go to Activities"
+      "soporte": {
+        "badge": "Support",
+        "title": "Contact / Support",
+        "body": "Need help? Get in touch for technical support, billing or account questions.",
+        "cta": "Go to support"
       },
-      "asignaciones": {
-        "badge": "Operations",
-        "title": "Assignments",
-        "body": "Assign staff to geofences and activities on specific dates.",
-        "cta": "Go to Assignments"
+      "queEs": {
+        "badge": "Overview",
+        "title": "What is App Geocercas?",
+        "body": "Learn about the vision, use cases and benefits of App Geocercas for your organization.",
+        "cta": "Read more"
       },
-      "reportes": {
-        "badge": "Costs",
-        "title": "Reports",
-        "body": "View cost reports by person, activity, geofence and date range.",
-        "cta": "Go to Reports"
-      },
-      "dashboardCostos": {
-        "badge": "Costs",
-        "title": "Cost dashboard",
-        "body": "Visualize a Power BI–style dashboard with your operation costs.",
-        "cta": "Go to Dashboard"
-      },
-      "tracker": {
-        "badge": "Tracker",
-        "title": "Tracker",
-        "body": "Review the real-time location dashboard (tracker version).",
-        "cta": "Go to Tracker"
-      },
-      "invitarTracker": {
-        "badge": "Tracker",
-        "title": "Invite tracker",
-        "body": "Send email invitations to new trackers with Magic Link.",
-        "cta": "Invite tracker"
-      },
-      "admins": {
-        "badge": "Admins",
-        "title": "Admins",
-        "body": "Manage additional admins for your organization.",
-        "cta": "Go to Admins"
+      "novedades": {
+        "badge": "Updates",
+        "title": "What’s new / Changelog",
+        "body": "Review the history of changes, new features, improvements and fixes in the platform.",
+        "cta": "View changelog"
       }
     },
+
     "userInfo": {
-      "connectedAs": "You are connected as",
+      "connectedAs": "Connected as",
       "withRole": "with role",
       "inOrg": "in organization",
       "userLabel": "User:",
-      "orgIdLabel": "Current Org ID:"
+      "orgIdLabel": "Organization ID:"
     }
-  },
-  "asignaciones": {
-    "title": "Assignments",
-    "filters": {
-      "statusLabel": "Filter by status:",
-      "status": {
-        "todos": "All",
-        "activa": "Active",
-        "inactiva": "Inactive"
-      },
-      "refresh": "Refresh (show all)",
-      "refreshLoading": "Refreshing…"
-    },
-    "form": {
-      "newTitle": "New assignment",
-      "editTitle": "Edit assignment",
-      "personLabel": "Person",
-      "personPlaceholder": "Select a person",
-      "geofenceLabel": "Geofence",
-      "geofencePlaceholder": "Select a geofence",
-      "activityLabel": "Activity",
-      "activityPlaceholder": "No specific activity",
-      "startLabel": "Start (date and time)",
-      "endLabel": "End (date and time)",
-      "statusLabel": "Status",
-      "statusActive": "Active",
-      "statusInactive": "Inactive",
-      "frequencyLabel": "Send frequency (minutes, minimum 5)",
-      "saveButton": "Save",
-      "updateButton": "Update",
-      "cancelEditButton": "Cancel edit"
-    },
-    "messages": {
-      "loadingData": "Loading data…",
-      "loadError": "Error loading assignments",
-      "catalogError": "Error loading staff/geofences/activities catalogs",
-      "selectPersonAndFence": "Select person and geofence",
-      "selectDates": "Select start and end dates",
-      "frequencyTooLow": "Frequency cannot be less than 5 minutes.",
-      "frequencyInvalidRange": "Frequency must be greater than 0 and less than or equal to 12 hours.",
-      "overlapError": "This person already has an assignment that overlaps in that date range.",
-      "createGenericError": "Error creating assignment",
-      "updateGenericError": "Error updating assignment",
-      "saveGenericError": "Error saving assignment",
-      "deleteError": "Could not delete assignment",
-      "createSuccess": "Assignment created successfully.",
-      "updateSuccess": "Assignment updated successfully.",
-      "deleteSuccess": "Assignment deleted successfully.",
-      "confirmDelete": "Delete assignment?"
-    }
-  },
-  "geocercas": {
-    "titleNew": "New geofence",
-    "subtitleNew": "Create or edit geofences for your organization.",
-    "placeholderName": "Geofence name",
-    "buttonDrawByCoords": "Draw by coordinates",
-    "buttonSave": "Save geofence",
-    "panelTitle": "Existing geofences",
-    "noGeofences": "You have no registered geofences.",
-    "sourceSupabase": "cloud",
-    "sourceLocal": "local",
-    "buttonShowSelected": "Show selected",
-    "buttonShowAll": "Show all",
-    "buttonDeleteSelected": "Delete selected",
-    "buttonClearCanvas": "Clear canvas",
-    "errorSelectOneGeometry": "Draw or select a geometry first.",
-    "errorDuplicateName": "There is already a geofence with that name.",
-    "errorNameRequired": "Geofence name is required.",
-    "errorSave": "Could not save: {{error}}",
-    "saveSuccess": "Geofence \"{{name}}\" saved successfully.",
-    "errorSelectAtLeastOne": "Select at least one geofence.",
-    "deleteConfirm": "Delete selected geofences?",
-    "deletedCount": "Deleted geofences: {{count}}",
-    "errorDelete": "Could not delete: {{error}}",
-    "cursorHint": "Move the cursor over the map to view Lat/Lng",
-    "modalTitle": "Draw geofence by coordinates",
-    "modalInstruction": "Enter coordinates in Lat,Lng format. Example:",
-    "modalCancel": "Cancel",
-    "modalDraw": "Draw",
-    "errorCoordsMin": "You must enter at least one valid coordinate.",
-    "errorCoordsInvalid": "Invalid coordinates. Use Lat,Lng format."
-  },
-  "reportes": {
-    "title": "Cost reports",
-    "noAccessBody": "Only users with role OWNER or ADMIN can access this module.",
-    "headerSubtitle": "Analyze working hours and costs per activity, person and geofence. Includes summary cards, detailed table and CSV export.",
-    "loadingReport": "Calculating report...",
-    "filtersTitle": "Report filters",
-    "filtersFrom": "From",
-    "filtersTo": "To",
-    "filtersPerson": "Person",
-    "filtersActivity": "Activity",
-    "filtersGeofence": "Geofence",
-    "filtersAll": "All",
-    "filtersClear": "Clear filters",
-    "filtersApply": "Apply filters",
-    "errorLabel": "Error:",
-    "errorLoadFilters": "Error loading filters (staff, activities, geofences). Check the console.",
-    "errorLoadReport": "Error loading cost report. Check the console.",
-    "errorRangeInvalid": "The \"From\" date cannot be greater than the \"To\" date.",
-    "errorViewMissing": "The view v_costos_detalle does not exist yet in the database. Create it in Supabase to see data.",
-    "summaryTotalHoursLabel": "Total hours",
-    "summaryTotalHoursHelp": "Sum of all hours worked in the selected period.",
-    "summaryTotalCostLabel": "Total cost (all currencies)",
-    "summaryTotalCostHelp": "Global sum without distinguishing currency. See below by currency.",
-    "summaryRecordsLabel": "Records",
-    "summaryRecordsHelp": "Number of detailed rows feeding the cards and the table.",
-    "tableTitle": "Records detail",
-    "tableExportHelp": "Export this table to a spreadsheet.",
-    "tableExportButton": "Download CSV",
-    "tableEmpty": "There is no data for the selected filters.",
-    "exportNoData": "There is no data to export.",
-    "colPersona": "Person",
-    "colGeocerca": "Geofence",
-    "colActividad": "Activity",
-    "colInicio": "Start",
-    "colFin": "End",
-    "colHoras": "Hours",
-    "colTarifa": "Rate",
-    "colCosto": "Cost",
-    "colMoneda": "Currency",
-    "personNoName": "No name",
-    "geofenceNoName": "No geofence",
-    "activityNoName": "No activity",
-    "csvHeaderPersona": "Person",
-    "csvHeaderGeocerca": "Geofence",
-    "csvHeaderActividad": "Activity",
-    "csvHeaderInicio": "Start",
-    "csvHeaderFin": "End",
-    "csvHeaderHoras": "Hours",
-    "csvHeaderTarifa": "Rate",
-    "csvHeaderCosto": "Cost",
-    "csvHeaderMoneda": "Currency"
-  },
-  "dashboardCostos": {
-    "noAccess": "You do not have permissions to see this module.",
-    "title": "Cost dashboard",
-    "subtitle": "Visual analysis by person, activity, geofence and currency.",
-    "refreshButton": "Refresh data",
-    "filtersTitle": "Dataset filters",
-    "filtersFrom": "From",
-    "filtersTo": "To",
-    "filtersPerson": "Person",
-    "filtersActivity": "Activity",
-    "filtersGeofence": "Geofence",
-    "filtersAll": "All",
-    "filtersClear": "Clear filters",
-    "filtersApply": "Apply filters",
-    "kpiTotalHours": "Total hours",
-    "kpiTotalCost": "Total cost",
-    "kpiRecords": "Records",
-    "kpiCurrencies": "Detected currencies",
-    "chartTitle": "Main chart",
-    "chartDimension": "Dimension",
-    "chartMetric": "Metric",
-    "chartType": "Chart type",
-    "dimensionPersona": "By person",
-    "dimensionActividad": "By activity",
-    "dimensionGeocerca": "By geofence",
-    "dimensionMoneda": "By currency",
-    "metricCost": "Total cost",
-    "metricHours": "Total hours",
-    "chartTypeBar": "Bars",
-    "chartTypeLine": "Lines",
-    "chartTypePie": "Pie",
-    "chartNoData": "No data to chart with the current filters.",
-    "tableTitle": "Top categories by filter",
-    "tableEmpty": "No data to show.",
-    "colCategoria": "Category",
-    "colHoras": "Hours",
-    "colCosto": "Cost",
-    "colRegistros": "Records"
   }
 }
