@@ -42,24 +42,36 @@
   },
 
   "landing": {
-    "hero": {
-      "titleLine1": "Contrôlez vos équipes terrain",
-      "titleLine2": "avec des géofences intelligentes",
-      "titleLine3": "partout dans le monde",
-      "subtitle": "App Geocercas vous permet d’assigner des personnes à des zones, d’enregistrer des activités et de calculer les coûts en temps réel."
-    },
-    "cta": {
-      "primary": "Aller au tableau de bord",
-      "secondary": "Essayer avec un lien magique"
-    },
-    "sections": {
-      "howItWorksTitle": "Comment ça marche",
-      "multiTenantTitle": "Conçu pour plusieurs organisations",
-      "trackerTitle": "Tracker GPS pour équipes terrain"
-    },
-    "footer": {
-      "rights": "Tous droits réservés"
-    }
+    "brandName": "App Geocercas",
+    "brandTagline": "Contrôle du personnel par géofences",
+    "heroBadge": "Contrôle intelligent du terrain",
+    "heroTitlePrefix": "Contrôlez vos équipes terrain",
+    "heroTitleHighlight": "avec des géofences intelligentes",
+    "heroTitleSuffix": "partout dans le monde",
+    "heroSubtitle": "App Geocercas vous permet d’assigner des personnes à des zones, d’enregistrer des activités et de calculer les coûts en temps réel.",
+    "ctaLogin": "Aller au tableau de bord",
+    "ctaMagic": "Se connecter avec lien magique",
+    "bulletGeocercasTitle": "Géofences",
+    "bulletGeocercasBody": "Créez et gérez des géofences pour vos champs, exploitations, usines ou points de service.",
+    "bulletPersonalTitle": "Personnel",
+    "bulletPersonalBody": "Enregistrez votre personnel et assignez-le à des activités et zones spécifiques.",
+    "bulletCostsTitle": "Coûts",
+    "bulletCostsBody": "Consultez des tableaux de bord type Power BI avec les coûts par personne, activité et géofence.",
+    "livePanelLabel": "Panneau en direct",
+    "livePanelTitle": "Opérations en temps réel",
+    "zonesActive": "Zones actives",
+    "statusOnline": "Système en ligne",
+    "assistanceControlTitle": "Contrôle de présence",
+    "assistanceControlBody": "Vérifiez qui est entré dans chaque géofence, à quelle heure et dans quelle activité.",
+    "multiOrgTitle": "Multi organisation",
+    "multiOrgBody": "Gérez plusieurs entreprises ou projets depuis un seul compte avec des rôles et permissions séparés.",
+    "goToDashboard": "Aller au tableau de bord",
+    "logout": "Se déconnecter",
+    "footerFaq": "FAQ",
+    "footerSupport": "Support",
+    "footerTerms": "Conditions",
+    "footerPrivacy": "Confidentialité",
+    "rightsReserved": "Tous droits réservés"
   },
 
   "login": {
@@ -86,7 +98,6 @@
       "title": "Bienvenue sur votre tableau de bord",
       "subtitle": "Depuis ici, accédez aux instructions, FAQ, support et nouveautés d’App Geocercas."
     },
-
     "cards": {
       "instrucciones": {
         "badge": "Guide rapide",
@@ -125,7 +136,6 @@
         "cta": "Voir le changelog"
       }
     },
-
     "userInfo": {
       "connectedAs": "Connecté en tant que",
       "withRole": "avec le rôle",

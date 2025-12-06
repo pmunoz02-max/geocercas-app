@@ -42,24 +42,36 @@
   },
 
   "landing": {
-    "hero": {
-      "titleLine1": "Controla a tu personal",
-      "titleLine2": "con geocercas inteligentes",
-      "titleLine3": "en cualquier parte del mundo",
-      "subtitle": "App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real."
-    },
-    "cta": {
-      "primary": "Entrar al panel",
-      "secondary": "Probar con link mágico"
-    },
-    "sections": {
-      "howItWorksTitle": "¿Cómo funciona?",
-      "multiTenantTitle": "Diseñado para múltiples organizaciones",
-      "trackerTitle": "Tracker GPS para campo"
-    },
-    "footer": {
-      "rights": "Todos los derechos reservados"
-    }
+    "brandName": "App Geocercas",
+    "brandTagline": "Control de personal por geocercas",
+    "heroBadge": "Control inteligente de campo",
+    "heroTitlePrefix": "Controla a tu personal",
+    "heroTitleHighlight": "con geocercas inteligentes",
+    "heroTitleSuffix": "en cualquier parte del mundo",
+    "heroSubtitle": "App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real.",
+    "ctaLogin": "Ir al panel de control",
+    "ctaMagic": "Entrar con link mágico",
+    "bulletGeocercasTitle": "Geocercas",
+    "bulletGeocercasBody": "Crea y administra geocercas para tus campos, fincas, plantas o puntos de servicio.",
+    "bulletPersonalTitle": "Personal",
+    "bulletPersonalBody": "Registra a tu personal y asígnalo a actividades y zonas específicas.",
+    "bulletCostsTitle": "Costos",
+    "bulletCostsBody": "Consulta paneles tipo Power BI con los costos por persona, actividad y geocerca.",
+    "livePanelLabel": "Panel en vivo",
+    "livePanelTitle": "Operaciones en tiempo real",
+    "zonesActive": "Zonas activas",
+    "statusOnline": "Sistema en línea",
+    "assistanceControlTitle": "Control de asistencia",
+    "assistanceControlBody": "Verifica quién estuvo dentro de cada geocerca, en qué horario y en qué actividad.",
+    "multiOrgTitle": "Multi organización",
+    "multiOrgBody": "Administra varias empresas o proyectos desde una sola cuenta, con roles y permisos separados.",
+    "goToDashboard": "Ir al panel",
+    "logout": "Salir",
+    "footerFaq": "Preguntas frecuentes",
+    "footerSupport": "Soporte",
+    "footerTerms": "Términos",
+    "footerPrivacy": "Privacidad",
+    "rightsReserved": "Todos los derechos reservados"
   },
 
   "login": {
@@ -86,7 +98,6 @@
       "title": "Bienvenido a tu panel",
       "subtitle": "Desde aquí puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de App Geocercas."
     },
-
     "cards": {
       "instrucciones": {
         "badge": "Guía rápida",
@@ -125,7 +136,6 @@
         "cta": "Ver changelog"
       }
     },
-
     "userInfo": {
       "connectedAs": "Conectado como",
       "withRole": "con el rol",

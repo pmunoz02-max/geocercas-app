@@ -42,24 +42,36 @@
   },
 
   "landing": {
-    "hero": {
-      "titleLine1": "Control your field teams",
-      "titleLine2": "with smart geofences",
-      "titleLine3": "anywhere in the world",
-      "subtitle": "App Geocercas lets you assign people to zones, log activities and calculate costs in real time."
-    },
-    "cta": {
-      "primary": "Go to dashboard",
-      "secondary": "Try with magic link"
-    },
-    "sections": {
-      "howItWorksTitle": "How it works",
-      "multiTenantTitle": "Built for multiple organizations",
-      "trackerTitle": "GPS tracker for field teams"
-    },
-    "footer": {
-      "rights": "All rights reserved"
-    }
+    "brandName": "App Geocercas",
+    "brandTagline": "Geofence-based staff control",
+    "heroBadge": "Smart field control",
+    "heroTitlePrefix": "Control your field teams",
+    "heroTitleHighlight": "with smart geofences",
+    "heroTitleSuffix": "anywhere in the world",
+    "heroSubtitle": "App Geocercas lets you assign people to zones, log activities and calculate costs in real time.",
+    "ctaLogin": "Go to dashboard",
+    "ctaMagic": "Sign in with magic link",
+    "bulletGeocercasTitle": "Geofences",
+    "bulletGeocercasBody": "Create and manage geofences for your fields, farms, plants or service locations.",
+    "bulletPersonalTitle": "Staff",
+    "bulletPersonalBody": "Register your staff and assign them to activities and specific zones.",
+    "bulletCostsTitle": "Costs",
+    "bulletCostsBody": "View Power BI–style dashboards with costs per person, activity and geofence.",
+    "livePanelLabel": "Live panel",
+    "livePanelTitle": "Operations in real time",
+    "zonesActive": "Active zones",
+    "statusOnline": "System online",
+    "assistanceControlTitle": "Attendance control",
+    "assistanceControlBody": "Check who was inside each geofence, at what time and in which activity.",
+    "multiOrgTitle": "Multi organization",
+    "multiOrgBody": "Manage multiple companies or projects from a single account with separate roles and permissions.",
+    "goToDashboard": "Go to dashboard",
+    "logout": "Logout",
+    "footerFaq": "FAQ",
+    "footerSupport": "Support",
+    "footerTerms": "Terms",
+    "footerPrivacy": "Privacy",
+    "rightsReserved": "All rights reserved"
   },
 
   "login": {
@@ -86,7 +98,6 @@
       "title": "Welcome to your dashboard",
       "subtitle": "From here you can access instructions, FAQs, support and the latest news about App Geocercas."
     },
-
     "cards": {
       "instrucciones": {
         "badge": "Quick guide",
@@ -125,7 +136,6 @@
         "cta": "View changelog"
       }
     },
-
     "userInfo": {
       "connectedAs": "Connected as",
       "withRole": "with role",
