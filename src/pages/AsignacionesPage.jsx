@@ -1,11 +1,22 @@
 // src/pages/AsignacionesPage.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { supabase } from "./supabaseClient";
+import {
+  getAsignaciones,
+  createAsignacion,
+  updateAsignacion,
+  deleteAsignacion,
+} from "./lib/asignacionesApi";
+import AsignacionesTable from "./components/asignaciones/AsignacionesTable";
+
+// Helper para asegurar que el datetime-local se guarda con zona horaria local
 function localToISOWithTZ(localDateTime) {
   if (!localDateTime) return null;
 
-  // localDateTime viene como "2025-11-29T12:13"
   const date = new Date(localDateTime);
 
-  // Convertir a ISO con zona local correcta
   return new Date(
     date.getFullYear(),
     date.getMonth(),
@@ -15,23 +26,12 @@ function localToISOWithTZ(localDateTime) {
   ).toISOString();
 }
 
-import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
-import {
-  getAsignaciones,
-  createAsignacion,
-  updateAsignacion,
-  deleteAsignacion,
-} from "../lib/asignacionesApi";
-import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
-
-const ESTADOS = [
-  { value: "todos", label: "Todos" },
-  { value: "activa", label: "Activas" },
-  { value: "inactiva", label: "Inactivas" },
-];
+// Estados posibles para el filtro
+const ESTADOS = ["todos", "activa", "inactiva"];
 
 export default function AsignacionesPage() {
+  const { t } = useTranslation();
+
   // ---------------------------------------------
   // Estado general
   // ---------------------------------------------
@@ -69,7 +69,7 @@ export default function AsignacionesPage() {
     const { data, error } = await getAsignaciones();
     if (error) {
       console.error("[AsignacionesPage] Error al cargar asignaciones:", error);
-      setError("Error al cargar asignaciones");
+      setError(t("asignaciones.messages.loadError"));
     } else {
       setAsignaciones(data || []);
     }
@@ -96,10 +96,11 @@ export default function AsignacionesPage() {
           .eq("is_deleted", false)
           .order("nombre", { ascending: true }),
 
-        // GEOCERCAS: sin is_deleted (no lo tiene)
-        supabase.from("geocercas").select("id, nombre").order("nombre", {
-          ascending: true,
-        }),
+        // GEOCERCAS: sin is_deleted
+        supabase
+          .from("geocercas")
+          .select("id, nombre")
+          .order("nombre", { ascending: true }),
 
         // ACTIVITIES: usamos name (en inglés)
         supabase.from("activities").select("id, name").order("name", {
@@ -118,7 +119,7 @@ export default function AsignacionesPage() {
       setActivityOptions(activitiesData || []);
     } catch (err) {
       console.error("[AsignacionesPage] Error cargando catálogos:", err);
-      setError("Error al cargar catálogos de personal/geocercas/actividades");
+      setError(t("asignaciones.messages.catalogError"));
     } finally {
       setLoadingCatalogos(false);
     }
@@ -130,6 +131,7 @@ export default function AsignacionesPage() {
   useEffect(() => {
     loadAsignaciones();
     loadCatalogos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------------------------------------
@@ -161,7 +163,7 @@ export default function AsignacionesPage() {
     setStatus("activa");
     setEditingId(null);
     setError(null);
-    // NO limpiamos selectedPersonalId aquí para que la tabla siga filtrando
+    // NO limpiamos selectedPersonalId para que la tabla siga filtrando
   };
 
   const handleSubmit = async (e) => {
@@ -170,17 +172,23 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     if (!selectedPersonalId || !selectedGeocercaId) {
-      setError("Selecciona persona y geocerca");
+      setError(t("asignaciones.messages.selectPersonAndFence"));
       return;
     }
     if (!startTime || !endTime) {
-      setError("Selecciona las fechas de inicio y fin");
+      setError(t("asignaciones.messages.selectDates"));
       return;
     }
 
     const freqMin = Number(frecuenciaEnvioMin) || 0;
     if (freqMin < 5) {
-      setError("La frecuencia no puede ser menor a 5 minutos.");
+      setError(t("asignaciones.messages.frequencyTooLow"));
+      return;
+    }
+
+    const freqSec = freqMin * 60;
+    if (freqSec <= 0 || freqSec > 12 * 3600) {
+      setError(t("asignaciones.messages.frequencyInvalidRange"));
       return;
     }
 
@@ -190,73 +198,66 @@ export default function AsignacionesPage() {
       activity_id: selectedActivityId || null,
       start_time: localToISOWithTZ(startTime),
       end_time: localToISOWithTZ(endTime),
-      // Convertimos minutos -> segundos para la BD
-      frecuencia_envio_sec: freqMin * 60,
+      frecuencia_envio_sec: freqSec,
       status,
-      is_deleted: false,
     };
 
     try {
       if (editingId) {
-        // --------- UPDATE con actualización inmediata en memoria ---------
+        // UPDATE
         const { data: updatedRows, error: updateError } = await updateAsignacion(
           editingId,
           payload
         );
+
         if (updateError) {
-          console.error("[AsignacionesPage] UPDATE error:", updateError);
+          console.error(
+            "[AsignacionesPage] updateAsignacion error:",
+            updateError
+          );
           if (
-            updateError.message &&
-            updateError.message.includes("asignaciones_freq_chk")
-          ) {
-            setError(
-              "La frecuencia no puede ser menor a 5 minutos (regla de la BD)."
-            );
-          } else if (
             updateError.message &&
             updateError.message.includes("asignaciones_personal_no_overlap")
           ) {
-            setError(
-              "Esta persona ya tiene una asignación que se solapa en ese rango de fechas."
-            );
+            setError(t("asignaciones.messages.overlapError"));
           } else {
             setError(
-              updateError.message || "Error al actualizar la asignación"
+              updateError.message ||
+                t("asignaciones.messages.updateGenericError")
             );
           }
           return;
         }
 
-        const updatedRow = updatedRows?.[0];
-        if (updatedRow) {
+        if (updatedRows && updatedRows.length > 0) {
           setAsignaciones((prev) =>
-            prev.map((a) => (a.id === updatedRow.id ? updatedRow : a))
+            prev.map((a) => (a.id === editingId ? updatedRows[0] : a))
           );
         }
 
-        setSuccessMessage("Asignación actualizada correctamente.");
+        setSuccessMessage(t("asignaciones.messages.updateSuccess"));
       } else {
-        // --------- INSERT con actualización inmediata en memoria ---------
-        const { data: insertedRows, error: insertError } =
-          await createAsignacion(payload);
+        // INSERT
+        const {
+          data: insertedRows,
+          error: insertError,
+        } = await createAsignacion(payload);
+
         if (insertError) {
-          console.error("[AsignacionesPage] INSERT error:", insertError);
+          console.error(
+            "[AsignacionesPage] createAsignacion error:",
+            insertError
+          );
           if (
-            insertError.message &&
-            insertError.message.includes("asignaciones_freq_chk")
-          ) {
-            setError(
-              "La frecuencia no puede ser menor a 5 minutos (regla de la BD)."
-            );
-          } else if (
             insertError.message &&
             insertError.message.includes("asignaciones_personal_no_overlap")
           ) {
-            setError(
-              "Esta persona ya tiene una asignación que se solapa en ese rango de fechas."
-            );
+            setError(t("asignaciones.messages.overlapError"));
           } else {
-            setError(insertError.message || "Error al crear la asignación");
+            setError(
+              insertError.message ||
+                t("asignaciones.messages.createGenericError")
+            );
           }
           return;
         }
@@ -265,13 +266,13 @@ export default function AsignacionesPage() {
           setAsignaciones((prev) => [...prev, ...insertedRows]);
         }
 
-        setSuccessMessage("Asignación creada correctamente.");
+        setSuccessMessage(t("asignaciones.messages.createSuccess"));
       }
 
       resetForm();
     } catch (err) {
       console.error("[AsignacionesPage] handleSubmit error general:", err);
-      setError("Error al guardar la asignación");
+      setError(t("asignaciones.messages.saveGenericError"));
     }
   };
 
@@ -293,13 +294,13 @@ export default function AsignacionesPage() {
   };
 
   const handleDelete = async (id) => {
-    const confirmed = window.confirm("¿Eliminar asignación?");
+    const confirmed = window.confirm(t("asignaciones.messages.confirmDelete"));
     if (!confirmed) return;
 
     const { error: deleteError } = await deleteAsignacion(id);
     if (deleteError) {
       console.error("[AsignacionesPage] delete error:", deleteError);
-      setError("No se pudo eliminar la asignación");
+      setError(t("asignaciones.messages.deleteError"));
       setSuccessMessage(null);
       return;
     }
@@ -307,7 +308,7 @@ export default function AsignacionesPage() {
     // Eliminación instantánea en la UI
     setAsignaciones((prev) => prev.filter((a) => a.id !== id));
 
-    setSuccessMessage("Asignación eliminada correctamente.");
+    setSuccessMessage(t("asignaciones.messages.deleteSuccess"));
     setError(null);
   };
 
@@ -315,7 +316,6 @@ export default function AsignacionesPage() {
   // REFRESCAR: limpia filtros y recarga
   // ---------------------------------------------
   const handleRefresh = async () => {
-    // Mostrar TODO de nuevo
     setEstadoFilter("todos");
     setSelectedPersonalId("");
     setSuccessMessage(null);
@@ -328,20 +328,24 @@ export default function AsignacionesPage() {
   // ---------------------------------------------
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Asignaciones</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        {t("asignaciones.title")}
+      </h1>
 
       {/* FILTRO POR ESTADO + BOTÓN REFRESCAR */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <label className="font-medium">Filtrar por estado:</label>
+          <label className="font-medium">
+            {t("asignaciones.filters.statusLabel")}
+          </label>
           <select
             className="border rounded px-3 py-2"
             value={estadoFilter}
             onChange={(e) => setEstadoFilter(e.target.value)}
           >
-            {ESTADOS.map((e) => (
-              <option key={e.value} value={e.value}>
-                {e.label}
+            {ESTADOS.map((value) => (
+              <option key={value} value={value}>
+                {t(`asignaciones.filters.status.${value}`)}
               </option>
             ))}
           </select>
@@ -353,18 +357,24 @@ export default function AsignacionesPage() {
           disabled={loadingAsignaciones}
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loadingAsignaciones ? "Actualizando…" : "Refrescar (ver todo)"}
+          {loadingAsignaciones
+            ? t("asignaciones.filters.refreshLoading")
+            : t("asignaciones.filters.refresh")}
         </button>
       </div>
 
       {/* FORMULARIO NUEVA/EDITAR ASIGNACIÓN */}
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
         <h2 className="text-lg font-semibold mb-4">
-          {editingId ? "Editar asignación" : "Nueva asignación"}
+          {editingId
+            ? t("asignaciones.form.editTitle")
+            : t("asignaciones.form.newTitle")}
         </h2>
 
         {(loadingCatalogos || loadingAsignaciones) && (
-          <p className="text-sm text-gray-500 mb-3">Cargando datos…</p>
+          <p className="text-sm text-gray-500 mb-3">
+            {t("asignaciones.messages.loadingData")}
+          </p>
         )}
 
         <form
@@ -373,17 +383,23 @@ export default function AsignacionesPage() {
         >
           {/* Persona */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Persona</label>
+            <label className="mb-1 font-medium text-sm">
+              {t("asignaciones.form.personLabel")}
+            </label>
             <select
               className="border rounded px-3 py-2"
               value={selectedPersonalId}
               onChange={(e) => setSelectedPersonalId(e.target.value)}
               required
             >
-              <option value="">Selecciona una persona</option>
+              <option value="">
+                {t("asignaciones.form.personPlaceholder")}
+              </option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email}
+                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() ||
+                    p.email ||
+                    p.id}
                 </option>
               ))}
             </select>
@@ -391,34 +407,42 @@ export default function AsignacionesPage() {
 
           {/* Geocerca */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Geocerca</label>
+            <label className="mb-1 font-medium text-sm">
+              {t("asignaciones.form.geofenceLabel")}
+            </label>
             <select
               className="border rounded px-3 py-2"
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
               required
             >
-              <option value="">Selecciona una geocerca</option>
+              <option value="">
+                {t("asignaciones.form.geofencePlaceholder")}
+              </option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.nombre || "Sin nombre"}
+                  {g.nombre || g.id}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Actividad */}
+          {/* Actividad (opcional) */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Actividad</label>
+            <label className="mb-1 font-medium text-sm">
+              {t("asignaciones.form.activityLabel")}
+            </label>
             <select
               className="border rounded px-3 py-2"
               value={selectedActivityId}
               onChange={(e) => setSelectedActivityId(e.target.value)}
             >
-              <option value="">(Opcional) Selecciona una actividad</option>
+              <option value="">
+                {t("asignaciones.form.activityPlaceholder")}
+              </option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name || "Sin nombre"}
+                  {a.name || a.id}
                 </option>
               ))}
             </select>
@@ -426,7 +450,9 @@ export default function AsignacionesPage() {
 
           {/* Inicio */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Inicio</label>
+            <label className="mb-1 font-medium text-sm">
+              {t("asignaciones.form.startLabel")}
+            </label>
             <input
               type="datetime-local"
               className="border rounded px-3 py-2"
@@ -438,7 +464,9 @@ export default function AsignacionesPage() {
 
           {/* Fin */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Fin</label>
+            <label className="mb-1 font-medium text-sm">
+              {t("asignaciones.form.endLabel")}
+            </label>
             <input
               type="datetime-local"
               className="border rounded px-3 py-2"
@@ -450,21 +478,27 @@ export default function AsignacionesPage() {
 
           {/* Estado */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Estado</label>
+            <label className="mb-1 font-medium text-sm">
+              {t("asignaciones.form.statusLabel")}
+            </label>
             <select
               className="border rounded px-3 py-2"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
-              <option value="activa">Activa</option>
-              <option value="inactiva">Inactiva</option>
+              <option value="activa">
+                {t("asignaciones.form.statusActive")}
+              </option>
+              <option value="inactiva">
+                {t("asignaciones.form.statusInactive")}
+              </option>
             </select>
           </div>
 
           {/* Frecuencia */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">
-              Frecuencia envío (minutos, mínimo 5)
+              {t("asignaciones.form.frequencyLabel")}
             </label>
             <input
               type="number"
@@ -478,7 +512,7 @@ export default function AsignacionesPage() {
           </div>
         </form>
 
-        {/* Mensajes */}
+        {/* Mensajes + botones */}
         <div className="mt-4 flex flex-col gap-2">
           <div className="flex gap-3">
             <button
@@ -486,7 +520,9 @@ export default function AsignacionesPage() {
               onClick={handleSubmit}
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
             >
-              {editingId ? "Actualizar" : "Guardar"}
+              {editingId
+                ? t("asignaciones.form.updateButton")
+                : t("asignaciones.form.saveButton")}
             </button>
             {editingId && (
               <button
@@ -494,7 +530,7 @@ export default function AsignacionesPage() {
                 onClick={resetForm}
                 className="border px-4 py-2 rounded"
               >
-                Cancelar edición
+                {t("asignaciones.form.cancelEditButton")}
               </button>
             )}
           </div>

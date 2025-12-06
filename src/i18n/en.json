@@ -5,6 +5,7 @@
     "english": "English",
     "french": "French"
   },
+
   "login": {
     "title": "Sign in to your account",
     "subtitle": "Manage your staff and geofences from a single place.",
@@ -18,6 +19,7 @@
     "magicLinkDescription": "We will send you a sign-in link to your email.",
     "magicLinkButton": "Send me a magic link",
     "languageLabel": "Language",
+
     "errorMissingCredentials": "Please enter email and password.",
     "errorInvalidCredentials": "Invalid credentials.",
     "errorUnexpected": "Unexpected error. Please try again.",
@@ -25,11 +27,13 @@
     "errorMagicLink": "Magic link could not be sent.",
     "errorMagicLinkUnexpected": "Unexpected error sending magic link.",
     "infoMagicLinkSent": "A magic link has been sent to your email. Check your inbox (and spam).",
+
     "loadingSession": "Loading your session…",
     "alreadyLoggedInTitle": "You already have an active session",
     "alreadyLoggedInBody": "You can go directly to your dashboard or sign out to use another account.",
     "goToDashboard": "Go to dashboard",
     "logout": "Sign out",
+
     "modePassword": "Email + password",
     "modeMagic": "Magic Link",
     "submitting": "Signing in...",
@@ -37,39 +41,51 @@
     "magicButton": "Send Magic Link",
     "magicDescription": "We will send you a magic access link. When you click it, the app will open and take you to your dashboard."
   },
+
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Geofence-based personnel control",
     "loginButton": "Sign in",
     "goToDashboard": "Go to dashboard",
     "logout": "Sign out",
+
     "heroBadge": "SaaS for agricultural and field operations",
+
     "heroTitlePrefix": "Control your staff",
     "heroTitleHighlight": "with geofences",
     "heroTitleSuffix": "in real time.",
     "heroSubtitle": "App Geocercas helps you organize geofences, staff, activities, and cost reports in a single platform.",
+
     "ctaLogin": "Sign in",
     "ctaMagic": "Receive a magic link by email",
+
     "bulletGeocercasTitle": "Geofences",
     "bulletGeocercasBody": "Draw work zones and track who enters, leaves, and how long they stay.",
+
     "bulletPersonalTitle": "Staff & Activities",
     "bulletPersonalBody": "Assign people to activities, shifts, and geofences according to your daily planning.",
+
     "bulletCostsTitle": "Cost reports",
     "bulletCostsBody": "Get reports per person, activity, geofence, or date range.",
+
     "livePanelLabel": "Live panel",
     "livePanelTitle": "Geofences & Tracker",
     "zonesActive": "Active zones",
     "statusOnline": "Online",
+
     "assistanceControlTitle": "Attendance control",
     "assistanceControlBody": "From the field to your cost reports.",
+
     "multiOrgTitle": "Multi-organization",
     "multiOrgBody": "Manage multiple farms, lots, or business units.",
+
     "rightsReserved": "All rights reserved.",
     "footerFaq": "FAQ",
     "footerSupport": "Support",
     "footerTerms": "Terms",
     "footerPrivacy": "Privacy"
   },
+
   "app": {
     "header": {
       "login": "Sign in",
@@ -82,19 +98,15 @@
     },
     "tabs": {
       "inicio": "Home",
-      "nuevaGeocerca": "New geofence",
       "personal": "Staff",
       "geocercas": "Geofences",
-      "actividades": "Activities",
       "asignaciones": "Assignments",
+      "actividades": "Activities",
       "costos": "Costs",
-      "reportes": "Reports",
-      "dashboard": "Dashboard",
-      "tracker": "Tracker",
-      "invitarTracker": "Invite tracker",
-      "admins": "Admins"
+      "reportes": "Reports"
     }
   },
+
   "inicio": {
     "header": {
       "badge": "Control panel · App Geocercas",
@@ -171,139 +183,55 @@
       "orgIdLabel": "Current Org ID:"
     }
   },
-  "geocercas": {
-    "titleNew": "New geofence",
-    "subtitleNew": "Draw geofences and save them in Supabase to use them in assignments, trackers and reports.",
-    "placeholderName": "Geofence name",
-    "buttonDrawByCoords": "Draw by coordinates",
-    "buttonSave": "Save geofence",
-    "panelTitle": "Geofences",
-    "noGeofences": "There are no saved geofences yet.",
-    "sourceSupabase": "Supabase",
-    "sourceLocal": "Local",
-    "buttonShowSelected": "Show selected",
-    "buttonShowAll": "Show all",
-    "buttonDeleteSelected": "Delete selected",
-    "buttonClearCanvas": "Clear drawings (canvas)",
-    "cursorHint": "Move the cursor over the map",
-    "modalTitle": "Draw by coordinates",
-    "modalInstruction": "Enter latitude and longitude separated by comma or space. Example:",
-    "modalCancel": "Cancel",
-    "modalDraw": "Draw",
-    "errorSelectOneGeometry": "Select a single geometry before saving.",
-    "errorDuplicateName": "This geofence already exists, please use another name.",
-    "errorNameRequired": "Please enter a geofence name.",
-    "saveSuccess": "✅ Geofence \"{{name}}\" saved.",
-    "errorSave": "❌ The geofence could not be saved: {{error}}",
-    "errorSelectAtLeastOne": "Select at least one geofence in the list.",
-    "deleteConfirm": "Delete the selected geofences? This action is irreversible.",
-    "deletedCount": "🗑️ Deleted: {{count}}",
-    "errorDelete": "❌ Could not delete: {{error}}",
-    "errorCoordsMin": "Enter at least latitude and longitude.",
-    "errorCoordsInvalid": "Invalid coordinates."
-  },
-  "personal": {
-    "title": "Staff",
-    "orgInfoLabel": "Current org:",
-    "orgFallback": "Organization without name",
-    "roleLabel": "Role:",
-    "pillCanEdit": "Edit permissions (admin/owner)",
-    "pillReadOnly": "Read-only (tracker)",
-    "searchPlaceholder": "Search by name, last name, email or phone",
-    "onlyActive": "Only active",
-    "buttonRefresh": "Refresh",
-    "buttonFullList": "Full list",
-    "buttonNew": "New",
-    "buttonEdit": "Edit",
-    "buttonSave": "Save",
-    "buttonDelete": "Delete",
-    "fieldName": "Name",
-    "fieldLastName": "Last name",
-    "fieldEmail": "Email",
-    "fieldPhone": "Phone",
-    "fieldPhonePlaceholder": "Phone (+country code)",
-    "fieldActive": "Active",
-    "tableName": "Name",
-    "tableLastName": "Last name",
-    "tableEmail": "Email",
-    "tablePhone": "Phone",
-    "tableActive": "Active",
-    "tableNoResults": "No results",
-    "yes": "Yes",
-    "no": "No",
-    "bannerRefreshedOk": "Refreshed successfully.",
-    "bannerSelected": "Record selected: you can edit and then Save.",
-    "bannerNewMode": "New mode: fill in the data and press Save.",
-    "bannerEditMode": "Edit mode: adjust the data and press Save.",
-    "bannerDeletedOk": "Record deleted (soft delete) successfully.",
-    "bannerLoadingSession": "Loading session…",
-    "bannerLoginRequired": "You must sign in to see the Staff module.",
-    "processing": "Processing…",
-    "errorLoad": "Error loading staff",
-    "errorSave": "Error saving",
-    "errorDelete": "Error deleting",
-    "errorNoPermissionCreate": "You do not have permission to create (owner/admin only).",
-    "errorNoPermissionEdit": "You do not have permission to edit (owner/admin only).",
-    "errorNoPermissionSave": "You do not have permission to save (owner/admin only).",
-    "errorNoPermissionDelete": "You do not have permission to delete (owner/admin only).",
-    "errorMustSelectForEdit": "Select a person in the table before editing.",
-    "errorMustSelectForDelete": "Select a person in the table before deleting.",
-    "errorMissingUser": "Could not get current user",
-    "errorNoAuthUser": "There is no authenticated user",
-    "errorMissingName": "Name is required",
-    "errorMissingEmail": "Email is required",
-    "errorPhonePolicy": "For international policy, the phone number must start with a country code (e.g., +593999999999).",
-    "errorSaveNoRecord": "The record could not be saved",
-    "confirmDelete": "Are you sure you want to delete this record? (It will be marked as deleted and will not appear in the list)."
-  },
-  "actividades": {
-    "title": "Activities",
-    "formTitleNew": "New activity",
-    "formTitleEdit": "Edit activity",
-    "fieldName": "Name",
-    "fieldNamePlaceholder": "E.g. Field inspection",
-    "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "Short description (optional)",
-    "fieldCurrency": "Currency",
-    "fieldHourlyRate": "Hourly rate",
-    "fieldHourlyRatePlaceholder": "E.g. 5.00",
-    "buttonCreate": "Create activity",
-    "buttonSave": "Save changes",
-    "buttonCancel": "Cancel",
-    "readOnlyNote": "(Read-only mode — trackers cannot modify activities)",
-    "tableTitle": "Activities list",
-    "loading": "Loading activities…",
-    "empty": "No activities registered.",
-    "thName": "Name",
-    "thDescription": "Description",
-    "thCost": "Cost/hour",
-    "thStatus": "Status",
-    "thActions": "Actions",
-    "statusActive": "Active",
-    "statusInactive": "Inactive",
-    "actionEdit": "Edit",
-    "actionDeactivate": "Deactivate",
-    "actionActivate": "Activate",
-    "actionDelete": "Delete",
-    "errorLoad": "Error loading activities",
-    "errorSave": "Error saving activity",
-    "errorToggle": "Error updating status",
-    "errorDelete": "Error deleting activity",
-    "errorNameRequired": "Activity name is required",
-    "errorRatePositive": "Hourly rate must be a number greater than 0",
-    "errorMissingTenant": "Could not find tenant_id/org_id in user profile",
-    "confirmDelete": "Delete activity \"{{name}}\"?",
-    "currencies": {
-      "USD": "US Dollar",
-      "EUR": "Euro",
-      "MXN": "Mexican peso",
-      "COP": "Colombian peso",
-      "PEN": "Peruvian sol",
-      "CLP": "Chilean peso",
-      "ARS": "Argentine peso",
-      "BRL": "Brazilian real",
-      "CAD": "Canadian dollar",
-      "GBP": "Pound sterling"
+
+  "asignaciones": {
+    "title": "Assignments",
+    "filters": {
+      "statusLabel": "Filter by status:",
+      "status": {
+        "todos": "All",
+        "activa": "Active",
+        "inactiva": "Inactive"
+      },
+      "refresh": "Refresh (show all)",
+      "refreshLoading": "Refreshing…"
+    },
+    "form": {
+      "newTitle": "New assignment",
+      "editTitle": "Edit assignment",
+      "personLabel": "Person",
+      "personPlaceholder": "Select a person",
+      "geofenceLabel": "Geofence",
+      "geofencePlaceholder": "Select a geofence",
+      "activityLabel": "Activity",
+      "activityPlaceholder": "No specific activity",
+      "startLabel": "Start (date and time)",
+      "endLabel": "End (date and time)",
+      "statusLabel": "Status",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "frequencyLabel": "Send frequency (minutes, minimum 5)",
+      "saveButton": "Save",
+      "updateButton": "Update",
+      "cancelEditButton": "Cancel edit"
+    },
+    "messages": {
+      "loadingData": "Loading data…",
+      "loadError": "Error loading assignments",
+      "catalogError": "Error loading staff/geofences/activities catalogs",
+      "selectPersonAndFence": "Select person and geofence",
+      "selectDates": "Select start and end dates",
+      "frequencyTooLow": "Frequency cannot be less than 5 minutes.",
+      "frequencyInvalidRange": "Frequency must be greater than 0 and less than or equal to 12 hours.",
+      "overlapError": "This person already has an assignment that overlaps in that date range.",
+      "createGenericError": "Error creating assignment",
+      "updateGenericError": "Error updating assignment",
+      "saveGenericError": "Error saving assignment",
+      "deleteError": "Could not delete assignment",
+      "createSuccess": "Assignment created successfully.",
+      "updateSuccess": "Assignment updated successfully.",
+      "deleteSuccess": "Assignment deleted successfully.",
+      "confirmDelete": "Delete assignment?"
     }
   }
 }

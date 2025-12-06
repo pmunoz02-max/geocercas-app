@@ -5,6 +5,7 @@
     "english": "Anglais",
     "french": "Français"
   },
+
   "login": {
     "title": "Connectez-vous à votre compte",
     "subtitle": "Gérez votre personnel et vos géofences depuis un seul endroit.",
@@ -18,6 +19,7 @@
     "magicLinkDescription": "Nous vous enverrons un lien de connexion à votre e-mail.",
     "magicLinkButton": "M'envoyer un lien magique",
     "languageLabel": "Langue",
+
     "errorMissingCredentials": "Veuillez saisir votre e-mail et votre mot de passe.",
     "errorInvalidCredentials": "Identifiants invalides.",
     "errorUnexpected": "Erreur inattendue. Veuillez réessayer.",
@@ -25,11 +27,13 @@
     "errorMagicLink": "Le lien magique n'a pas pu être envoyé.",
     "errorMagicLinkUnexpected": "Erreur inattendue lors de l’envoi du lien magique.",
     "infoMagicLinkSent": "Un lien magique a été envoyé à votre e-mail. Vérifiez votre boîte de réception (et spam).",
+
     "loadingSession": "Chargement de votre session…",
     "alreadyLoggedInTitle": "Vous êtes déjà connecté",
     "alreadyLoggedInBody": "Accédez à votre tableau de bord ou déconnectez-vous pour utiliser un autre compte.",
     "goToDashboard": "Aller au tableau de bord",
     "logout": "Se déconnecter",
+
     "modePassword": "Email + mot de passe",
     "modeMagic": "Lien magique",
     "submitting": "Connexion...",
@@ -37,43 +41,55 @@
     "magicButton": "Envoyer le lien magique",
     "magicDescription": "Nous vous enverrons un lien d’accès. En cliquant dessus, l'application s’ouvrira et vous mènera à votre tableau de bord."
   },
+
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Contrôle du personnel par géofences",
     "loginButton": "Se connecter",
     "goToDashboard": "Aller au tableau de bord",
     "logout": "Se déconnecter",
-    "heroBadge": "SaaS pour opérations agricoles et de terrain",
+
+    "heroBadge": "SaaS pour les opérations agricoles et de terrain",
+
     "heroTitlePrefix": "Contrôlez votre personnel",
     "heroTitleHighlight": "avec des géofences",
     "heroTitleSuffix": "en temps réel.",
     "heroSubtitle": "App Geocercas vous aide à organiser géofences, personnel, activités et rapports de coûts dans une seule plateforme.",
+
     "ctaLogin": "Se connecter",
     "ctaMagic": "Recevoir un lien magique par e-mail",
+
     "bulletGeocercasTitle": "Géofences",
     "bulletGeocercasBody": "Dessinez des zones de travail et voyez qui entre, sort et combien de temps ils restent.",
+
     "bulletPersonalTitle": "Personnel & Activités",
-    "bulletPersonalBody": "Assignez des personnes à des activités, des équipes et des zones selon votre planification quotidienne.",
+    "bulletPersonalBody": "Assignez des personnes à des activités, des équipes et des géofences selon votre planification quotidienne.",
+
     "bulletCostsTitle": "Rapports de coûts",
-    "bulletCostsBody": "Obtenez des rapports par personne, activité, géofence ou période.",
-    "livePanelLabel": "Panel en direct",
+    "bulletCostsBody": "Obtenez des rapports par personne, activité, géofence ou plage de dates.",
+
+    "livePanelLabel": "Panneau en direct",
     "livePanelTitle": "Géofences & Tracker",
     "zonesActive": "Zones actives",
     "statusOnline": "En ligne",
-    "assistanceControlTitle": "Contrôle d’assiduité",
+
+    "assistanceControlTitle": "Contrôle de présence",
     "assistanceControlBody": "Du terrain jusqu’aux rapports de coûts.",
+
     "multiOrgTitle": "Multi-organisation",
-    "multiOrgBody": "Gérez plusieurs exploitations, lots ou unités commerciales.",
+    "multiOrgBody": "Gérez plusieurs fermes, parcelles ou unités commerciales.",
+
     "rightsReserved": "Tous droits réservés.",
     "footerFaq": "FAQ",
     "footerSupport": "Support",
     "footerTerms": "Conditions",
     "footerPrivacy": "Confidentialité"
   },
+
   "app": {
     "header": {
       "login": "Se connecter",
-      "loginMagic": "Se connecter avec lien magique",
+      "loginMagic": "Se connecter avec un lien magique",
       "logout": "Se déconnecter",
       "admins": "Admins",
       "roleOwner": "Owner",
@@ -82,24 +98,20 @@
     },
     "tabs": {
       "inicio": "Accueil",
-      "nuevaGeocerca": "Nouvelle géofence",
       "personal": "Personnel",
       "geocercas": "Géofences",
-      "actividades": "Activités",
       "asignaciones": "Affectations",
+      "actividades": "Activités",
       "costos": "Coûts",
-      "reportes": "Rapports",
-      "dashboard": "Tableau de bord",
-      "tracker": "Tracker",
-      "invitarTracker": "Inviter un tracker",
-      "admins": "Admins"
+      "reportes": "Rapports"
     }
   },
+
   "inicio": {
     "header": {
       "badge": "Tableau de bord · App Geocercas",
       "title": "Bienvenue sur votre tableau de bord",
-      "subtitle": "Gérez géofences, personnel, activités, affectations et rapports de coûts en un seul endroit."
+      "subtitle": "Gérez géofences, personnel, activités, affectations et rapports de coûts au même endroit."
     },
     "cards": {
       "nueva": {
@@ -112,43 +124,43 @@
         "badge": "Géofences",
         "title": "Géofences",
         "body": "Gérez les géofences existantes et assignez du personnel.",
-        "cta": "Aller à Géofences"
+        "cta": "Aller aux Géofences"
       },
       "personal": {
         "badge": "Personnel",
         "title": "Personnel",
         "body": "Enregistrez et gérez le personnel de votre organisation.",
-        "cta": "Aller à Personnel"
+        "cta": "Aller au Personnel"
       },
       "actividades": {
         "badge": "Tarifs",
         "title": "Activités",
         "body": "Configurez activités, tarifs horaires et paramètres de coûts.",
-        "cta": "Aller à Activités"
+        "cta": "Aller aux Activités"
       },
       "asignaciones": {
         "badge": "Opérations",
         "title": "Affectations",
-        "body": "Affectez du personnel à des géofences et activités à des dates spécifiques.",
-        "cta": "Aller à Affectations"
+        "body": "Assignez du personnel à des géofences et des activités à des dates spécifiques.",
+        "cta": "Aller aux Affectations"
       },
       "reportes": {
         "badge": "Coûts",
         "title": "Rapports",
-        "body": "Consultez des rapports de coûts par personne, activité, géofence et période.",
-        "cta": "Aller à Rapports"
+        "body": "Consultez des rapports de coûts par personne, activité, géofence et plage de dates.",
+        "cta": "Aller aux Rapports"
       },
       "dashboardCostos": {
         "badge": "Coûts",
-        "title": "Tableau de bord des coûts",
-        "body": "Visualisez un tableau de bord de style Power BI avec les coûts de vos opérations.",
-        "cta": "Aller au Tableau de bord"
+        "title": "Dashboard de coûts",
+        "body": "Visualisez un tableau de bord type Power BI avec les coûts de vos opérations.",
+        "cta": "Aller au Dashboard"
       },
       "tracker": {
         "badge": "Tracker",
         "title": "Tracker",
-        "body": "Consultez le tableau de bord des localisations en temps réel (version tracker).",
-        "cta": "Aller à Tracker"
+        "body": "Consultez le tableau de localisation en temps réel (version tracker).",
+        "cta": "Aller au Tracker"
       },
       "invitarTracker": {
         "badge": "Tracker",
@@ -160,150 +172,66 @@
         "badge": "Admins",
         "title": "Admins",
         "body": "Gérez des administrateurs supplémentaires pour votre organisation.",
-        "cta": "Aller à Admins"
+        "cta": "Aller aux Admins"
       }
     },
     "userInfo": {
-      "connectedAs": "Vous êtes connecté en tant que",
+      "connectedAs": "Connecté en tant que",
       "withRole": "avec le rôle",
       "inOrg": "dans l’organisation",
       "userLabel": "Utilisateur :",
-      "orgIdLabel": "ID d’organisation actuel :"
+      "orgIdLabel": "Org ID actuel :"
     }
   },
-  "geocercas": {
-    "titleNew": "Nouvelle géofence",
-    "subtitleNew": "Dessinez des géofences et enregistrez-les dans Supabase pour les utiliser dans les affectations, le tracking et les rapports.",
-    "placeholderName": "Nom de la géofence",
-    "buttonDrawByCoords": "Dessiner par coordonnées",
-    "buttonSave": "Enregistrer la géofence",
-    "panelTitle": "Géofences",
-    "noGeofences": "Il n’y a pas encore de géofences enregistrées.",
-    "sourceSupabase": "Supabase",
-    "sourceLocal": "Local",
-    "buttonShowSelected": "Afficher la sélection",
-    "buttonShowAll": "Tout afficher",
-    "buttonDeleteSelected": "Supprimer la sélection",
-    "buttonClearCanvas": "Effacer les dessins (canvas)",
-    "cursorHint": "Déplacez le curseur sur la carte",
-    "modalTitle": "Dessiner par coordonnées",
-    "modalInstruction": "Saisissez latitude et longitude séparées par une virgule ou un espace. Exemple :",
-    "modalCancel": "Annuler",
-    "modalDraw": "Dessiner",
-    "errorSelectOneGeometry": "Sélectionnez une seule géométrie avant d’enregistrer.",
-    "errorDuplicateName": "Cette géofence existe déjà, veuillez choisir un autre nom.",
-    "errorNameRequired": "Veuillez saisir un nom de géofence.",
-    "saveSuccess": "✅ Géofence \"{{name}}\" enregistrée.",
-    "errorSave": "❌ Impossible d’enregistrer la géofence : {{error}}",
-    "errorSelectAtLeastOne": "Sélectionnez au moins une géofence dans la liste.",
-    "deleteConfirm": "Supprimer les géofences sélectionnées ? Cette action est irréversible.",
-    "deletedCount": "🗑️ Supprimées : {{count}}",
-    "errorDelete": "❌ Impossible de supprimer : {{error}}",
-    "errorCoordsMin": "Saisissez au moins une latitude et une longitude.",
-    "errorCoordsInvalid": "Coordonnées invalides."
-  },
-  "personal": {
-    "title": "Personnel",
-    "orgInfoLabel": "Organisation actuelle :",
-    "orgFallback": "Organisation sans nom",
-    "roleLabel": "Rôle :",
-    "pillCanEdit": "Droits d’édition (admin/owner)",
-    "pillReadOnly": "Lecture seule (tracker)",
-    "searchPlaceholder": "Rechercher par nom, prénom, e-mail ou téléphone",
-    "onlyActive": "Uniquement actifs",
-    "buttonRefresh": "Rafraîchir",
-    "buttonFullList": "Liste complète",
-    "buttonNew": "Nouveau",
-    "buttonEdit": "Modifier",
-    "buttonSave": "Enregistrer",
-    "buttonDelete": "Supprimer",
-    "fieldName": "Nom",
-    "fieldLastName": "Prénom",
-    "fieldEmail": "E-mail",
-    "fieldPhone": "Téléphone",
-    "fieldPhonePlaceholder": "Téléphone (+indicatif pays)",
-    "fieldActive": "Actif",
-    "tableName": "Nom",
-    "tableLastName": "Prénom",
-    "tableEmail": "E-mail",
-    "tablePhone": "Téléphone",
-    "tableActive": "Actif",
-    "tableNoResults": "Aucun résultat",
-    "yes": "Oui",
-    "no": "Non",
-    "bannerRefreshedOk": "Rafraîchi avec succès.",
-    "bannerSelected": "Enregistrement sélectionné : vous pouvez modifier puis Enregistrer.",
-    "bannerNewMode": "Mode nouveau : complétez les données puis cliquez sur Enregistrer.",
-    "bannerEditMode": "Mode édition : ajustez les données puis cliquez sur Enregistrer.",
-    "bannerDeletedOk": "Enregistrement supprimé (soft delete) avec succès.",
-    "bannerLoadingSession": "Chargement de la session…",
-    "bannerLoginRequired": "Vous devez vous connecter pour accéder au module Personnel.",
-    "processing": "Traitement en cours…",
-    "errorLoad": "Erreur lors du chargement du personnel",
-    "errorSave": "Erreur lors de l’enregistrement",
-    "errorDelete": "Erreur lors de la suppression",
-    "errorNoPermissionCreate": "Vous n’avez pas l’autorisation de créer (owner/admin uniquement).",
-    "errorNoPermissionEdit": "Vous n’avez pas l’autorisation de modifier (owner/admin uniquement).",
-    "errorNoPermissionSave": "Vous n’avez pas l’autorisation d’enregistrer (owner/admin uniquement).",
-    "errorNoPermissionDelete": "Vous n’avez pas l’autorisation de supprimer (owner/admin uniquement).",
-    "errorMustSelectForEdit": "Sélectionnez une personne dans le tableau avant de modifier.",
-    "errorMustSelectForDelete": "Sélectionnez une personne dans le tableau avant de supprimer.",
-    "errorMissingUser": "Impossible d’obtenir l’utilisateur actuel",
-    "errorNoAuthUser": "Il n’y a aucun utilisateur authentifié",
-    "errorMissingName": "Le nom est obligatoire",
-    "errorMissingEmail": "L’e-mail est obligatoire",
-    "errorPhonePolicy": "Par politique internationale, le téléphone doit commencer par un indicatif pays (ex : +593999999999).",
-    "errorSaveNoRecord": "Impossible d’enregistrer l’enregistrement",
-    "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (Il sera marqué comme supprimé et ne figurera plus dans la liste)."
-  },
-  "actividades": {
-    "title": "Activités",
-    "formTitleNew": "Nouvelle activité",
-    "formTitleEdit": "Modifier l’activité",
-    "fieldName": "Nom",
-    "fieldNamePlaceholder": "Ex. Inspection de champ",
-    "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "Brève description (optionnel)",
-    "fieldCurrency": "Devise",
-    "fieldHourlyRate": "Tarif horaire",
-    "fieldHourlyRatePlaceholder": "Ex. 5.00",
-    "buttonCreate": "Créer l’activité",
-    "buttonSave": "Enregistrer les modifications",
-    "buttonCancel": "Annuler",
-    "readOnlyNote": "(Mode lecture seule — les trackers ne peuvent pas modifier les activités)",
-    "tableTitle": "Liste des activités",
-    "loading": "Chargement des activités…",
-    "empty": "Aucune activité enregistrée.",
-    "thName": "Nom",
-    "thDescription": "Description",
-    "thCost": "Coût/h",
-    "thStatus": "Statut",
-    "thActions": "Actions",
-    "statusActive": "Active",
-    "statusInactive": "Inactive",
-    "actionEdit": "Modifier",
-    "actionDeactivate": "Désactiver",
-    "actionActivate": "Activer",
-    "actionDelete": "Supprimer",
-    "errorLoad": "Erreur lors du chargement des activités",
-    "errorSave": "Erreur lors de l’enregistrement de l’activité",
-    "errorToggle": "Erreur lors de la mise à jour du statut",
-    "errorDelete": "Erreur lors de la suppression de l’activité",
-    "errorNameRequired": "Le nom de l’activité est obligatoire",
-    "errorRatePositive": "Le tarif horaire doit être un nombre supérieur à 0",
-    "errorMissingTenant": "Impossible de trouver tenant_id/org_id dans le profil utilisateur",
-    "confirmDelete": "Supprimer l’activité \"{{name}}\" ?",
-    "currencies": {
-      "USD": "Dollar américain",
-      "EUR": "Euro",
-      "MXN": "Peso mexicain",
-      "COP": "Peso colombien",
-      "PEN": "Sol péruvien",
-      "CLP": "Peso chilien",
-      "ARS": "Peso argentin",
-      "BRL": "Réel brésilien",
-      "CAD": "Dollar canadien",
-      "GBP": "Livre sterling"
+
+  "asignaciones": {
+    "title": "Affectations",
+    "filters": {
+      "statusLabel": "Filtrer par statut :",
+      "status": {
+        "todos": "Tous",
+        "activa": "Actives",
+        "inactiva": "Inactives"
+      },
+      "refresh": "Rafraîchir (tout voir)",
+      "refreshLoading": "Rafraîchissement…"
+    },
+    "form": {
+      "newTitle": "Nouvelle affectation",
+      "editTitle": "Modifier l’affectation",
+      "personLabel": "Personne",
+      "personPlaceholder": "Sélectionnez une personne",
+      "geofenceLabel": "Géofence",
+      "geofencePlaceholder": "Sélectionnez une géofence",
+      "activityLabel": "Activité",
+      "activityPlaceholder": "Aucune activité spécifique",
+      "startLabel": "Début (date et heure)",
+      "endLabel": "Fin (date et heure)",
+      "statusLabel": "Statut",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "frequencyLabel": "Fréquence d’envoi (minutes, minimum 5)",
+      "saveButton": "Enregistrer",
+      "updateButton": "Mettre à jour",
+      "cancelEditButton": "Annuler l’édition"
+    },
+    "messages": {
+      "loadingData": "Chargement des données…",
+      "loadError": "Erreur lors du chargement des affectations",
+      "catalogError": "Erreur lors du chargement des catalogues personnel/géofences/activités",
+      "selectPersonAndFence": "Sélectionnez une personne et une géofence",
+      "selectDates": "Sélectionnez les dates de début et de fin",
+      "frequencyTooLow": "La fréquence ne peut pas être inférieure à 5 minutes.",
+      "frequencyInvalidRange": "La fréquence doit être supérieure à 0 et inférieure ou égale à 12 heures.",
+      "overlapError": "Cette personne a déjà une affectation qui se superpose sur cette plage de dates.",
+      "createGenericError": "Erreur lors de la création de l’affectation",
+      "updateGenericError": "Erreur lors de la mise à jour de l’affectation",
+      "saveGenericError": "Erreur lors de l’enregistrement de l’affectation",
+      "deleteError": "Impossible de supprimer l’affectation",
+      "createSuccess": "Affectation créée avec succès.",
+      "updateSuccess": "Affectation mise à jour avec succès.",
+      "deleteSuccess": "Affectation supprimée avec succès.",
+      "confirmDelete": "Supprimer l’affectation ?"
     }
   }
 }
