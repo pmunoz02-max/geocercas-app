@@ -324,7 +324,6 @@
   "reportes": {
     "title": "Reportes de costos",
     "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
-
     "filtersTitle": "Filtros",
     "filtersFrom": "Desde",
     "filtersTo": "Hasta",
@@ -334,18 +333,15 @@
     "filtersAll": "Todos",
     "filtersClear": "Limpiar filtros",
     "filtersApply": "Aplicar filtros",
-
     "summaryTotalHoursLabel": "Horas totales",
     "summaryTotalHoursHelp": "Suma de las horas de todas las asignaciones en el rango seleccionado.",
     "summaryTotalCostLabel": "Costo total",
     "summaryTotalCostHelp": "Suma de los costos calculados por persona, actividad y geocerca.",
     "summaryRecordsLabel": "Registros",
     "summaryRecordsHelp": "Cantidad de filas que cumplen con los filtros actuales.",
-
     "tableTitle": "Detalle de costos",
     "tableExportHelp": "Exporta el detalle actual como archivo CSV.",
     "tableExportButton": "Exportar CSV",
-
     "colPersona": "Persona",
     "colGeocerca": "Geocerca",
     "colActividad": "Actividad",
@@ -355,7 +351,6 @@
     "colTarifa": "Tarifa/hora",
     "colCosto": "Costo",
     "colMoneda": "Moneda",
-
     "csvHeaderInicio": "Inicio",
     "csvHeaderFin": "Fin",
     "csvHeaderPersona": "Persona",
@@ -364,12 +359,9 @@
     "csvHeaderHoras": "Horas",
     "csvHeaderTarifa": "Tarifa_hora",
     "csvHeaderTotal": "Costo_total",
-
     "buttonDownloadCsv": "Descargar CSV",
-
     "errorLoad": "Error al cargar los reportes.",
     "errorCsv": "No se pudo generar el archivo CSV.",
-
     "filters": {
       "dateFromLabel": "Desde",
       "dateToLabel": "Hasta",
@@ -415,6 +407,45 @@
       "costByGeofence": "Costo por geocerca",
       "hoursByDay": "Horas por día"
     },
+    "errorLoad": "Error al cargar el dashboard de costos."
+  },
+
+  "dashboardCostos": {
+    "title": "Dashboard de costos",
+    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
+    "refreshButton": "Refrescar datos",
+    "filtersTitle": "Filtros",
+    "filtersFrom": "Desde",
+    "filtersTo": "Hasta",
+    "filtersPerson": "Persona",
+    "filtersActivity": "Actividad",
+    "filtersGeofence": "Geocerca",
+    "filtersAll": "Todos",
+    "filtersClear": "Limpiar filtros",
+    "filtersApply": "Aplicar filtros",
+    "kpiTotalHours": "Horas totales",
+    "kpiTotalCost": "Costo total",
+    "kpiRecords": "Registros",
+    "kpiCurrencies": "Monedas",
+    "chartTitle": "Gráfico de costos",
+    "chartDimension": "Dimensión",
+    "chartMetric": "Métrica",
+    "dimensionPersona": "Persona",
+    "dimensionActividad": "Actividad",
+    "dimensionGeocerca": "Geocerca",
+    "dimensionFecha": "Fecha",
+    "metricCost": "Costo",
+    "metricHours": "Horas",
+    "metricRecords": "Registros",
+    "tableTitle": "Detalle para la dimensión seleccionada",
+    "colPersona": "Persona",
+    "colActividad": "Actividad",
+    "colGeocerca": "Geocerca",
+    "colFecha": "Fecha",
+    "colHoras": "Horas",
+    "colCosto": "Costo",
+    "colMoneda": "Moneda",
+    "tableNoResults": "No hay datos para los filtros actuales.",
     "errorLoad": "Error al cargar el dashboard de costos."
   },
 

@@ -324,7 +324,6 @@
   "reportes": {
     "title": "Cost reports",
     "headerSubtitle": "View and export costs per person, activity and geofence.",
-
     "filtersTitle": "Filters",
     "filtersFrom": "From",
     "filtersTo": "To",
@@ -334,18 +333,15 @@
     "filtersAll": "All",
     "filtersClear": "Clear filters",
     "filtersApply": "Apply filters",
-
     "summaryTotalHoursLabel": "Total hours",
     "summaryTotalHoursHelp": "Sum of hours for all assignments in the selected range.",
     "summaryTotalCostLabel": "Total cost",
     "summaryTotalCostHelp": "Sum of calculated costs per person, activity and geofence.",
     "summaryRecordsLabel": "Records",
     "summaryRecordsHelp": "Number of rows that match the current filters.",
-
     "tableTitle": "Cost details",
     "tableExportHelp": "Export the current detail as a CSV file.",
     "tableExportButton": "Export CSV",
-
     "colPersona": "Person",
     "colGeocerca": "Geofence",
     "colActividad": "Activity",
@@ -355,7 +351,6 @@
     "colTarifa": "Rate/hour",
     "colCosto": "Cost",
     "colMoneda": "Currency",
-
     "csvHeaderInicio": "Start",
     "csvHeaderFin": "End",
     "csvHeaderPersona": "Person",
@@ -364,12 +359,9 @@
     "csvHeaderHoras": "Hours",
     "csvHeaderTarifa": "Rate_hour",
     "csvHeaderTotal": "Total_cost",
-
     "buttonDownloadCsv": "Download CSV",
-
     "errorLoad": "Error loading reports.",
     "errorCsv": "CSV file could not be generated.",
-
     "filters": {
       "dateFromLabel": "From",
       "dateToLabel": "To",
@@ -396,48 +388,66 @@
 
   "dashboard": {
     "title": "Cost dashboard",
-  "subtitle": "View KPIs and charts of costs by person, activity and geofence.",
+    "subtitle": "Visualize aggregated costs by person, activity and geofence.",
+    "cards": {
+      "totalCost": "Total cost",
+      "totalHours": "Total hours",
+      "totalPersons": "Persons",
+      "totalGeofences": "Geofences"
+    },
+    "filters": {
+      "dateFromLabel": "From",
+      "dateToLabel": "To",
+      "apply": "Apply",
+      "clear": "Clear"
+    },
+    "charts": {
+      "costByActivity": "Cost by activity",
+      "costByPerson": "Cost by person",
+      "costByGeofence": "Cost by geofence",
+      "hoursByDay": "Hours per day"
+    },
+    "errorLoad": "Error loading cost dashboard."
+  },
 
-  "refreshButton": "Refresh data",
-
-  "filtersTitle": "Filters",
-  "filtersFrom": "From",
-  "filtersTo": "To",
-  "filtersPerson": "Person",
-  "filtersActivity": "Activity",
-  "filtersGeofence": "Geofence",
-  "filtersAll": "All",
-  "filtersClear": "Clear filters",
-  "filtersApply": "Apply filters",
-
-  "kpiTotalHours": "Total hours",
-  "kpiTotalCost": "Total cost",
-  "kpiRecords": "Records",
-  "kpiCurrencies": "Currencies",
-
-  "chartTitle": "Cost chart",
-  "chartDimension": "Dimension",
-  "chartMetric": "Metric",
-  "dimensionPersona": "Person",
-  "dimensionActividad": "Activity",
-  "dimensionGeocerca": "Geofence",
-  "dimensionFecha": "Date",
-  "metricCost": "Cost",
-  "metricHours": "Hours",
-  "metricRecords": "Records",
-
-  "tableTitle": "Detail for selected dimension",
-  "colPersona": "Person",
-  "colActividad": "Activity",
-  "colGeocerca": "Geofence",
-  "colFecha": "Date",
-  "colHoras": "Hours",
-  "colCosto": "Cost",
-  "colMoneda": "Currency",
-  "tableNoResults": "No data for the current filters.",
-
-  "errorLoad": "Error loading cost dashboard."
-}
+  "dashboardCostos": {
+    "title": "Cost dashboard",
+    "subtitle": "View KPIs and charts of costs by person, activity and geofence.",
+    "refreshButton": "Refresh data",
+    "filtersTitle": "Filters",
+    "filtersFrom": "From",
+    "filtersTo": "To",
+    "filtersPerson": "Person",
+    "filtersActivity": "Activity",
+    "filtersGeofence": "Geofence",
+    "filtersAll": "All",
+    "filtersClear": "Clear filters",
+    "filtersApply": "Apply filters",
+    "kpiTotalHours": "Total hours",
+    "kpiTotalCost": "Total cost",
+    "kpiRecords": "Records",
+    "kpiCurrencies": "Currencies",
+    "chartTitle": "Cost chart",
+    "chartDimension": "Dimension",
+    "chartMetric": "Metric",
+    "dimensionPersona": "Person",
+    "dimensionActividad": "Activity",
+    "dimensionGeocerca": "Geofence",
+    "dimensionFecha": "Date",
+    "metricCost": "Cost",
+    "metricHours": "Hours",
+    "metricRecords": "Records",
+    "tableTitle": "Detail for selected dimension",
+    "colPersona": "Person",
+    "colActividad": "Activity",
+    "colGeocerca": "Geofence",
+    "colFecha": "Date",
+    "colHoras": "Hours",
+    "colCosto": "Cost",
+    "colMoneda": "Currency",
+    "tableNoResults": "No data for the current filters.",
+    "errorLoad": "Error loading cost dashboard."
+  },
 
   "tracker": {
     "title": "GPS Tracker",

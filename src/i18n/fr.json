@@ -324,7 +324,6 @@
   "reportes": {
     "title": "Rapports de coûts",
     "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
-
     "filtersTitle": "Filtres",
     "filtersFrom": "De",
     "filtersTo": "À",
@@ -334,18 +333,15 @@
     "filtersAll": "Tous",
     "filtersClear": "Effacer les filtres",
     "filtersApply": "Appliquer les filtres",
-
     "summaryTotalHoursLabel": "Heures totales",
     "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans la période sélectionnée.",
     "summaryTotalCostLabel": "Coût total",
     "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
     "summaryRecordsLabel": "Enregistrements",
     "summaryRecordsHelp": "Nombre de lignes correspondant aux filtres actuels.",
-
     "tableTitle": "Détail des coûts",
     "tableExportHelp": "Exportez le détail actuel au format CSV.",
     "tableExportButton": "Exporter CSV",
-
     "colPersona": "Personne",
     "colGeocerca": "Géofence",
     "colActividad": "Activité",
@@ -355,7 +351,6 @@
     "colTarifa": "Tarif/heure",
     "colCosto": "Coût",
     "colMoneda": "Devise",
-
     "csvHeaderInicio": "Début",
     "csvHeaderFin": "Fin",
     "csvHeaderPersona": "Personne",
@@ -364,12 +359,9 @@
     "csvHeaderHoras": "Heures",
     "csvHeaderTarifa": "Tarif_heure",
     "csvHeaderTotal": "Coût_total",
-
     "buttonDownloadCsv": "Télécharger CSV",
-
     "errorLoad": "Erreur lors du chargement des rapports.",
     "errorCsv": "Impossible de générer le fichier CSV.",
-
     "filters": {
       "dateFromLabel": "De",
       "dateToLabel": "À",
@@ -396,48 +388,66 @@
 
   "dashboard": {
     "title": "Tableau de coûts",
-  "subtitle": "Visualisez les indicateurs et graphiques de coûts par personne, activité et géofence.",
+    "subtitle": "Visualisez les coûts agrégés par personne, activité et géofence.",
+    "cards": {
+      "totalCost": "Coût total",
+      "totalHours": "Heures totales",
+      "totalPersons": "Personnes",
+      "totalGeofences": "Géofences"
+    },
+    "filters": {
+      "dateFromLabel": "De",
+      "dateToLabel": "À",
+      "apply": "Appliquer",
+      "clear": "Effacer"
+    },
+    "charts": {
+      "costByActivity": "Coût par activité",
+      "costByPerson": "Coût par personne",
+      "costByGeofence": "Coût par géofence",
+      "hoursByDay": "Heures par jour"
+    },
+    "errorLoad": "Erreur lors du chargement du tableau de coûts."
+  },
 
-  "refreshButton": "Rafraîchir les données",
-
-  "filtersTitle": "Filtres",
-  "filtersFrom": "De",
-  "filtersTo": "À",
-  "filtersPerson": "Personne",
-  "filtersActivity": "Activité",
-  "filtersGeofence": "Géofence",
-  "filtersAll": "Tous",
-  "filtersClear": "Effacer les filtres",
-  "filtersApply": "Appliquer les filtres",
-
-  "kpiTotalHours": "Heures totales",
-  "kpiTotalCost": "Coût total",
-  "kpiRecords": "Enregistrements",
-  "kpiCurrencies": "Devises",
-
-  "chartTitle": "Graphique des coûts",
-  "chartDimension": "Dimension",
-  "chartMetric": "Métrique",
-  "dimensionPersona": "Personne",
-  "dimensionActividad": "Activité",
-  "dimensionGeocerca": "Géofence",
-  "dimensionFecha": "Date",
-  "metricCost": "Coût",
-  "metricHours": "Heures",
-  "metricRecords": "Enregistrements",
-
-  "tableTitle": "Détail pour la dimension sélectionnée",
-  "colPersona": "Personne",
-  "colActividad": "Activité",
-  "colGeocerca": "Géofence",
-  "colFecha": "Date",
-  "colHoras": "Heures",
-  "colCosto": "Coût",
-  "colMoneda": "Devise",
-  "tableNoResults": "Aucune donnée pour les filtres actuels.",
-
-  "errorLoad": "Erreur lors du chargement du tableau de coûts."
-}
+  "dashboardCostos": {
+    "title": "Tableau de coûts",
+    "subtitle": "Visualisez les indicateurs et graphiques de coûts par personne, activité et géofence.",
+    "refreshButton": "Rafraîchir les données",
+    "filtersTitle": "Filtres",
+    "filtersFrom": "De",
+    "filtersTo": "À",
+    "filtersPerson": "Personne",
+    "filtersActivity": "Activité",
+    "filtersGeofence": "Géofence",
+    "filtersAll": "Tous",
+    "filtersClear": "Effacer les filtres",
+    "filtersApply": "Appliquer les filtres",
+    "kpiTotalHours": "Heures totales",
+    "kpiTotalCost": "Coût total",
+    "kpiRecords": "Enregistrements",
+    "kpiCurrencies": "Devises",
+    "chartTitle": "Graphique des coûts",
+    "chartDimension": "Dimension",
+    "chartMetric": "Métrique",
+    "dimensionPersona": "Personne",
+    "dimensionActividad": "Activité",
+    "dimensionGeocerca": "Géofence",
+    "dimensionFecha": "Date",
+    "metricCost": "Coût",
+    "metricHours": "Heures",
+    "metricRecords": "Enregistrements",
+    "tableTitle": "Détail pour la dimension sélectionnée",
+    "colPersona": "Personne",
+    "colActividad": "Activité",
+    "colGeocerca": "Géofence",
+    "colFecha": "Date",
+    "colHoras": "Heures",
+    "colCosto": "Coût",
+    "colMoneda": "Devise",
+    "tableNoResults": "Aucune donnée pour les filtres actuels.",
+    "errorLoad": "Erreur lors du chargement du tableau de coûts."
+  },
 
   "tracker": {
     "title": "Tracker GPS",
