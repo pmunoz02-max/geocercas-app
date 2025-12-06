@@ -14,14 +14,13 @@
       "back": "Back"
     }
   },
-
   "app": {
     "title": "App Geocercas",
     "header": {
-      "loggedAs": "Signed in as",
-      "logout": "Logout",
+      "loggedAs": "Logged in as",
+      "logout": "Log out",
       "login": "Log in",
-      "goToPanel": "Go to dashboard",
+      "goToPanel": "Go to panel",
       "roleOwner": "Owner",
       "roleAdmin": "Admin",
       "roleTracker": "Tracker"
@@ -35,130 +34,126 @@
       "asignaciones": "Assignments",
       "reportes": "Reports",
       "dashboard": "Cost dashboard",
+      "dashboardCostos": "Cost dashboard",
       "tracker": "Tracker",
       "invitarTracker": "Invite tracker",
       "admins": "Admin"
     }
   },
-
   "landing": {
     "brandName": "App Geocercas",
-    "brandTagline": "Geofence-based staff control",
+    "brandTagline": "Staff control by geofences",
     "heroBadge": "Smart field control",
-    "heroTitlePrefix": "Control your field teams",
+    "heroTitlePrefix": "Control your staff",
     "heroTitleHighlight": "with smart geofences",
     "heroTitleSuffix": "anywhere in the world",
-    "heroSubtitle": "App Geocercas lets you assign people to zones, log activities and calculate costs in real time.",
+    "heroSubtitle": "App Geocercas lets you assign people to zones, register activities and calculate costs in real time.",
     "ctaLogin": "Go to dashboard",
-    "ctaMagic": "Sign in with magic link",
+    "ctaMagic": "Login with magic link",
     "bulletGeocercasTitle": "Geofences",
-    "bulletGeocercasBody": "Create and manage geofences for your fields, farms, plants or service locations.",
+    "bulletGeocercasBody": "Create and manage geofences for your fields, farms, plants or service points.",
     "bulletPersonalTitle": "Staff",
-    "bulletPersonalBody": "Register your staff and assign them to activities and specific zones.",
+    "bulletPersonalBody": "Register your staff and assign them to specific activities and zones.",
     "bulletCostsTitle": "Costs",
-    "bulletCostsBody": "View Power BI–style dashboards with costs per person, activity and geofence.",
+    "bulletCostsBody": "View BI-style dashboards with costs by person, activity and geofence.",
     "livePanelLabel": "Live panel",
-    "livePanelTitle": "Operations in real time",
+    "livePanelTitle": "Real-time operations",
     "zonesActive": "Active zones",
     "statusOnline": "System online",
     "assistanceControlTitle": "Attendance control",
     "assistanceControlBody": "Check who was inside each geofence, at what time and in which activity.",
-    "multiOrgTitle": "Multi organization",
-    "multiOrgBody": "Manage multiple companies or projects from a single account with separate roles and permissions.",
-    "goToDashboard": "Go to dashboard",
-    "logout": "Logout",
+    "multiOrgTitle": "Multi-organization",
+    "multiOrgBody": "Manage several companies or projects from a single account, with separate roles and permissions.",
+    "goToDashboard": "Go to panel",
+    "logout": "Log out",
     "footerFaq": "FAQ",
     "footerSupport": "Support",
     "footerTerms": "Terms",
     "footerPrivacy": "Privacy",
     "rightsReserved": "All rights reserved"
   },
-
   "login": {
-    "title": "Sign in",
+    "title": "Log in",
     "subtitle": "Access your App Geocercas account",
     "emailLabel": "Email",
     "passwordLabel": "Password",
-    "passwordLoginButton": "Sign in with password",
-    "magicLinkTitle": "Sign in with magic link",
+    "passwordLoginButton": "Log in with password",
+    "magicLinkTitle": "Login with magic link",
     "magicLinkDescription": "We will send a secure link to your email so you can log in without a password.",
     "magicLinkButton": "Send magic link",
-    "magicLinkSent": "We have sent a magic link to your email.",
+    "magicLinkSent": "We sent a magic link to your email.",
     "sessionActive": "You already have an active session.",
-    "goToDashboard": "Go to dashboard",
+    "goToDashboard": "Go to panel",
     "errors": {
-      "invalidEmail": "Please enter a valid email address.",
-      "unknown": "An error occurred while signing in."
+      "invalidEmail": "Enter a valid email address.",
+      "unknown": "An error occurred while logging in."
     }
   },
-
   "inicio": {
     "header": {
       "badge": "Help & resources center",
       "title": "Welcome to your dashboard",
-      "subtitle": "From here you can access instructions, FAQs, support and the latest news about App Geocercas."
+      "subtitle": "Here you can access instructions, FAQs, support and release notes for App Geocercas."
     },
     "cards": {
       "instrucciones": {
         "badge": "Quick guide",
         "title": "Instructions",
-        "body": "Learn step by step how to configure organizations, geofences, staff, activities and trackers.",
+        "body": "Follow step by step how to configure organizations, geofences, staff, activities and trackers.",
         "cta": "View instructions"
       },
       "faq": {
         "badge": "Help",
         "title": "Frequently asked questions",
-        "body": "Find answers to common questions about invitations, roles, costs and tracker usage.",
-        "cta": "View FAQs"
+        "body": "Find answers to common questions about invitations, roles, costs and using the tracker.",
+        "cta": "View FAQ"
       },
       "videoDemo": {
         "badge": "Video",
         "title": "Demo video",
-        "body": "Watch a short demo showing how App Geocercas works in real scenarios.",
-        "cta": "Watch demo video"
+        "body": "Watch a short demonstration of how App Geocercas works in real life.",
+        "cta": "Watch demo"
       },
       "soporte": {
         "badge": "Support",
         "title": "Contact / Support",
-        "body": "Need help? Get in touch for technical support, billing or account questions.",
+        "body": "Need help? Contact us for technical support, billing or account questions.",
         "cta": "Go to support"
       },
       "queEs": {
-        "badge": "Overview",
+        "badge": "Info",
         "title": "What is App Geocercas?",
         "body": "Learn about the vision, use cases and benefits of App Geocercas for your organization.",
         "cta": "Read more"
       },
       "novedades": {
-        "badge": "Updates",
+        "badge": "Changelog",
         "title": "What’s new / Changelog",
-        "body": "Review the history of changes, new features, improvements and fixes in the platform.",
+        "body": "Review the history of changes, new features, improvements and fixes.",
         "cta": "View changelog"
       }
     },
     "userInfo": {
-      "connectedAs": "Connected as",
+      "connectedAs": "Logged in as",
       "withRole": "with role",
       "inOrg": "in organization",
       "userLabel": "User:",
       "orgIdLabel": "Organization ID:"
     }
   },
-
   "geocercas": {
     "titleNew": "New geofence",
     "subtitleNew": "Draw a geofence on the map and assign it to your staff or activities.",
     "panelTitle": "Geofences",
-    "noGeofences": "You don't have any geofences yet.",
+    "noGeofences": "You do not have any geofences yet.",
     "placeholderName": "Geofence name",
-    "buttonDrawByCoords": "Draw by coordinates",
+    "buttonDrawByCoords": "Draw from coordinates",
     "buttonSave": "Save geofence",
     "buttonShowSelected": "Show selected",
     "buttonShowAll": "Show all",
     "buttonDeleteSelected": "Delete selected",
     "buttonClearCanvas": "Clear map"
   },
-
   "personal": {
     "title": "Staff",
     "orgInfoLabel": "Organization:",
@@ -167,16 +162,16 @@
     "pillCanEdit": "Editable",
     "pillReadOnly": "Read only",
     "bannerLoadingSession": "Loading session…",
-    "bannerLoginRequired": "You must be logged in to access this section.",
+    "bannerLoginRequired": "You must log in to access this section.",
     "bannerRefreshedOk": "Data refreshed successfully.",
     "bannerSelected": "Record selected.",
     "bannerNewMode": "Create staff mode.",
     "bannerEditMode": "Edit mode.",
     "bannerCreated": "Staff created successfully.",
-    "bannerUpdated": "Staff updated correctly.",
+    "bannerUpdated": "Staff updated successfully.",
     "bannerDeletedOk": "Record deleted successfully.",
-    "errorMissingUser": "Could not retrieve authenticated user.",
-    "errorNoAuthUser": "No authenticated user.",
+    "errorMissingUser": "Could not get authenticated user.",
+    "errorNoAuthUser": "There is no authenticated user.",
     "errorLoad": "Error loading staff.",
     "errorNoPermissionCreate": "You do not have permission to create staff.",
     "errorNoPermissionEdit": "You do not have permission to edit staff.",
@@ -184,27 +179,27 @@
     "errorNoPermissionSave": "You do not have permission to save changes.",
     "errorMissingName": "Name is required.",
     "errorMissingEmail": "Email is required.",
-    "errorPhonePolicy": "Phone number must start with + (E.164 format).",
+    "errorPhonePolicy": "Phone must start with + (international E.164 format).",
     "errorSaveNoRecord": "No updated record received.",
     "errorSave": "Could not save staff.",
     "errorNoPermissionDelete": "You do not have permission to delete staff.",
     "errorMustSelectForDelete": "You must select a record to delete.",
-    "errorDelete": "Could not delete the record.",
+    "errorDelete": "Could not delete record.",
     "confirmDelete": "Are you sure you want to delete this record? (soft delete)",
     "searchPlaceholder": "Search by name, last name, email or phone…",
     "onlyActive": "Only active",
     "buttonRefresh": "Refresh",
-    "buttonFullList": "Full list",
+    "buttonFullList": "View all",
     "buttonNew": "New",
     "buttonEdit": "Edit",
     "buttonSave": "Save",
     "buttonDelete": "Delete",
-    "fieldName": "First name",
+    "fieldName": "Name",
     "fieldLastName": "Last name",
     "fieldEmail": "Email",
-    "fieldPhonePlaceholder": "Phone (+1…)",
+    "fieldPhonePlaceholder": "Phone (+593…)",
     "fieldActive": "Active",
-    "tableName": "First name",
+    "tableName": "Name",
     "tableLastName": "Last name",
     "tableEmail": "Email",
     "tablePhone": "Phone",
@@ -214,17 +209,16 @@
     "no": "No",
     "processing": "Processing…"
   },
-
   "actividades": {
     "title": "Activities",
     "formTitleNew": "New activity",
     "fieldName": "Activity name",
-    "fieldNamePlaceholder": "e.g. Planting, Irrigation, Harvest",
+    "fieldNamePlaceholder": "E.g. Planting, Irrigation, Harvest",
     "fieldDescription": "Description",
     "fieldDescriptionPlaceholder": "Short description of the activity…",
     "fieldCurrency": "Currency",
     "fieldHourlyRate": "Hourly rate",
-    "fieldHourlyRatePlaceholder": "e.g. 3.50",
+    "fieldHourlyRatePlaceholder": "E.g. 3.50",
     "currencies": {
       "USD": "US Dollar",
       "EUR": "Euro",
@@ -251,13 +245,12 @@
     "bannerUpdated": "Activity updated successfully.",
     "bannerDeleted": "Activity deleted.",
     "errorLoad": "Error loading activities.",
-    "errorSave": "Could not save the activity.",
-    "errorDelete": "Could not delete the activity.",
+    "errorSave": "Could not save activity.",
+    "errorDelete": "Could not delete activity.",
     "errorMissingName": "Activity name is required.",
     "errorMissingCurrency": "Currency is required.",
     "errorMissingRate": "Hourly rate is required."
   },
-
   "asignaciones": {
     "title": "Assignments",
     "filters": {
@@ -313,17 +306,16 @@
       "load": "Error loading assignments.",
       "save": "Could not save assignment.",
       "delete": "Could not delete assignment.",
-      "missingPerson": "A person must be selected.",
-      "missingGeofence": "A geofence must be selected.",
-      "missingActivity": "An activity must be selected.",
-      "missingStart": "Start date/time is required.",
-      "missingEnd": "End date/time is required."
+      "missingPerson": "You must select a person.",
+      "missingGeofence": "You must select a geofence.",
+      "missingActivity": "You must select an activity.",
+      "missingStart": "You must enter a start date/time.",
+      "missingEnd": "You must enter an end date/time."
     }
   },
-
   "reportes": {
     "title": "Cost reports",
-    "headerSubtitle": "View and export costs per person, activity and geofence.",
+    "headerSubtitle": "View and export costs by person, activity and geofence.",
     "filtersTitle": "Filters",
     "filtersFrom": "From",
     "filtersTo": "To",
@@ -336,10 +328,10 @@
     "summaryTotalHoursLabel": "Total hours",
     "summaryTotalHoursHelp": "Sum of hours for all assignments in the selected range.",
     "summaryTotalCostLabel": "Total cost",
-    "summaryTotalCostHelp": "Sum of calculated costs per person, activity and geofence.",
+    "summaryTotalCostHelp": "Sum of costs calculated by person, activity and geofence.",
     "summaryRecordsLabel": "Records",
     "summaryRecordsHelp": "Number of rows that match the current filters.",
-    "tableTitle": "Cost details",
+    "tableTitle": "Cost detail",
     "tableExportHelp": "Export the current detail as a CSV file.",
     "tableExportButton": "Export CSV",
     "colPersona": "Person",
@@ -361,7 +353,7 @@
     "csvHeaderTotal": "Total_cost",
     "buttonDownloadCsv": "Download CSV",
     "errorLoad": "Error loading reports.",
-    "errorCsv": "CSV file could not be generated.",
+    "errorCsv": "Could not generate CSV file.",
     "filters": {
       "dateFromLabel": "From",
       "dateToLabel": "To",
@@ -372,7 +364,7 @@
       "clear": "Clear filters"
     },
     "table": {
-      "title": "Cost details",
+      "title": "Cost detail",
       "person": "Person",
       "activity": "Activity",
       "geofence": "Geofence",
@@ -385,7 +377,6 @@
       "noResults": "No records found for the selected filters."
     }
   },
-
   "dashboard": {
     "title": "Cost dashboard",
     "subtitle": "Visualize aggregated costs by person, activity and geofence.",
@@ -405,11 +396,10 @@
       "costByActivity": "Cost by activity",
       "costByPerson": "Cost by person",
       "costByGeofence": "Cost by geofence",
-      "hoursByDay": "Hours per day"
+      "hoursByDay": "Hours by day"
     },
     "errorLoad": "Error loading cost dashboard."
   },
-
   "dashboardCostos": {
     "title": "Cost dashboard",
     "subtitle": "View KPIs and charts of costs by person, activity and geofence.",
@@ -445,13 +435,12 @@
     "colHoras": "Hours",
     "colCosto": "Cost",
     "colMoneda": "Currency",
-    "tableNoResults": "No data for the current filters.",
+    "tableNoResults": "No data for current filters.",
     "errorLoad": "Error loading cost dashboard."
   },
-
   "tracker": {
     "title": "GPS Tracker",
-    "subtitle": "See tracker locations in real time inside your geofences.",
+    "subtitle": "View in real time the location of trackers inside your geofences.",
     "status": {
       "online": "Tracker online",
       "offline": "No recent data"
@@ -478,20 +467,19 @@
     },
     "errorLoad": "Error loading tracker positions."
   },
-
   "admins": {
-    "title": "Admins",
-    "subtitle": "Manage your organization admins and their roles.",
+    "title": "Administrators",
+    "subtitle": "Manage your organization administrators and their roles.",
     "table": {
       "name": "Name",
       "email": "Email",
       "role": "Role",
       "status": "Status",
       "actions": "Actions",
-      "noResults": "No admins registered."
+      "noResults": "No administrators registered."
     },
     "form": {
-      "inviteTitle": "Invite new admin",
+      "inviteTitle": "Invite new administrator",
       "emailLabel": "Email",
       "roleLabel": "Role",
       "buttonInvite": "Send invitation"
@@ -504,13 +492,42 @@
     "banner": {
       "invitationSent": "Invitation sent successfully.",
       "roleUpdated": "Role updated.",
-      "removed": "Admin removed from organization."
+      "removed": "Administrator removed from organization."
     },
     "error": {
-      "load": "Error loading admin list.",
-      "invite": "Invitation could not be sent.",
-      "updateRole": "Role could not be updated.",
-      "remove": "Admin could not be removed."
+      "load": "Error loading administrators list.",
+      "invite": "Could not send invitation.",
+      "updateRole": "Could not update role.",
+      "remove": "Could not remove administrator."
+    }
+  },
+  "trackerDashboard": {
+    "title": "Real-time tracking dashboard",
+    "subtitle": "Points are updated automatically. The sending frequency is defined by the administrator.",
+    "filters": {
+      "trackerLabel": "Tracker",
+      "timeWindowLabel": "Time window (hours)",
+      "geofenceLabel": "Geofence",
+      "allTrackers": "All trackers",
+      "allGeofences": "All geofences"
+    },
+    "summary": {
+      "title": "Summary",
+      "geofencesActive": "Active geofences",
+      "trackersProfiles": "Trackers (profiles)",
+      "pointsInMap": "Map points (current filter)",
+      "lastPoint": "Last recorded point",
+      "noPoints": "No points for the current filter."
+    },
+    "legend": {
+      "title": "Tracker legend",
+      "points": "pts"
+    },
+    "messages": {
+      "autoRefresh": "Points refresh automatically. You do not need to reload the page.",
+      "loading": "Loading tracking data…",
+      "noData": "No positions found for the selected filters.",
+      "error": "Error loading tracking data."
     }
   }
 }

@@ -479,12 +479,42 @@
     "errorLoad": "Error al cargar las posiciones de tracker."
   },
 
+  "trackerDashboard": {
+    "title": "Dashboard de tracking en tiempo real",
+    "subtitle": "Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador.",
+    "filters": {
+      "trackerLabel": "Tracker",
+      "timeWindowLabel": "Ventana (horas)",
+      "geofenceLabel": "Geocerca",
+      "allTrackers": "Todos los trackers",
+      "allGeofences": "Todas las geocercas"
+    },
+    "summary": {
+      "title": "Resumen",
+      "geofencesActive": "Geocercas activas",
+      "trackersProfiles": "Trackers (perfiles)",
+      "pointsInMap": "Puntos en mapa (filtro actual)",
+      "lastPoint": "Último punto registrado",
+      "noPoints": "Sin puntos para el filtro actual."
+    },
+    "legend": {
+      "title": "Leyenda de trackers",
+      "points": "pts"
+    },
+    "messages": {
+      "autoRefresh": "Los puntos se actualizan automáticamente. No necesitas recargar la página.",
+      "loading": "Cargando datos de tracking…",
+      "noData": "No se encontraron posiciones para los filtros seleccionados.",
+      "error": "Error al cargar los datos de tracking."
+    }
+  },
+
   "admins": {
     "title": "Administradores",
     "subtitle": "Gestiona los administradores de tu organización y sus roles.",
     "table": {
       "name": "Nombre",
-      "email": "Correo",
+      "email": "Correo electrónico",
       "role": "Rol",
       "status": "Estado",
       "actions": "Acciones",
