@@ -323,7 +323,53 @@
 
   "reportes": {
     "title": "Rapports de coûts",
-    "subtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
+    "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
+
+    "filtersTitle": "Filtres",
+    "filtersFrom": "De",
+    "filtersTo": "À",
+    "filtersPerson": "Personne",
+    "filtersActivity": "Activité",
+    "filtersGeofence": "Géofence",
+    "filtersAll": "Tous",
+    "filtersClear": "Effacer les filtres",
+    "filtersApply": "Appliquer les filtres",
+
+    "summaryTotalHoursLabel": "Heures totales",
+    "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans la période sélectionnée.",
+    "summaryTotalCostLabel": "Coût total",
+    "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
+    "summaryRecordsLabel": "Enregistrements",
+    "summaryRecordsHelp": "Nombre de lignes correspondant aux filtres actuels.",
+
+    "tableTitle": "Détail des coûts",
+    "tableExportHelp": "Exportez le détail actuel au format CSV.",
+    "tableExportButton": "Exporter CSV",
+
+    "colPersona": "Personne",
+    "colGeocerca": "Géofence",
+    "colActividad": "Activité",
+    "colInicio": "Début",
+    "colFin": "Fin",
+    "colHoras": "Heures",
+    "colTarifa": "Tarif/heure",
+    "colCosto": "Coût",
+    "colMoneda": "Devise",
+
+    "csvHeaderInicio": "Début",
+    "csvHeaderFin": "Fin",
+    "csvHeaderPersona": "Personne",
+    "csvHeaderActividad": "Activité",
+    "csvHeaderGeocerca": "Géofence",
+    "csvHeaderHoras": "Heures",
+    "csvHeaderTarifa": "Tarif_heure",
+    "csvHeaderTotal": "Coût_total",
+
+    "buttonDownloadCsv": "Télécharger CSV",
+
+    "errorLoad": "Erreur lors du chargement des rapports.",
+    "errorCsv": "Impossible de générer le fichier CSV.",
+
     "filters": {
       "dateFromLabel": "De",
       "dateToLabel": "À",
@@ -345,18 +391,7 @@
       "total": "Coût total",
       "currency": "Devise",
       "noResults": "Aucun enregistrement pour les filtres sélectionnés."
-    },
-    "csvHeaderInicio": "Début",
-    "csvHeaderFin": "Fin",
-    "csvHeaderPersona": "Personne",
-    "csvHeaderActividad": "Activité",
-    "csvHeaderGeocerca": "Géofence",
-    "csvHeaderHoras": "Heures",
-    "csvHeaderTarifa": "Tarif_heure",
-    "csvHeaderTotal": "Coût_total",
-    "buttonDownloadCsv": "Télécharger CSV",
-    "errorLoad": "Erreur lors du chargement des rapports.",
-    "errorCsv": "Impossible de générer le fichier CSV."
+    }
   },
 
   "dashboard": {

@@ -247,7 +247,7 @@
     "actionActivate": "Activar",
     "actionDelete": "Eliminar",
     "tableNoResults": "No hay actividades registradas.",
-    "bannerCreated": "Actividad creado correctamente.",
+    "bannerCreated": "Actividad creada correctamente.",
     "bannerUpdated": "Actividad actualizada correctamente.",
     "bannerDeleted": "Actividad eliminada.",
     "errorLoad": "Error al cargar las actividades.",
@@ -323,7 +323,53 @@
 
   "reportes": {
     "title": "Reportes de costos",
-    "subtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
+    "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
+
+    "filtersTitle": "Filtros",
+    "filtersFrom": "Desde",
+    "filtersTo": "Hasta",
+    "filtersPerson": "Persona",
+    "filtersActivity": "Actividad",
+    "filtersGeofence": "Geocerca",
+    "filtersAll": "Todos",
+    "filtersClear": "Limpiar filtros",
+    "filtersApply": "Aplicar filtros",
+
+    "summaryTotalHoursLabel": "Horas totales",
+    "summaryTotalHoursHelp": "Suma de las horas de todas las asignaciones en el rango seleccionado.",
+    "summaryTotalCostLabel": "Costo total",
+    "summaryTotalCostHelp": "Suma de los costos calculados por persona, actividad y geocerca.",
+    "summaryRecordsLabel": "Registros",
+    "summaryRecordsHelp": "Cantidad de filas que cumplen con los filtros actuales.",
+
+    "tableTitle": "Detalle de costos",
+    "tableExportHelp": "Exporta el detalle actual como archivo CSV.",
+    "tableExportButton": "Exportar CSV",
+
+    "colPersona": "Persona",
+    "colGeocerca": "Geocerca",
+    "colActividad": "Actividad",
+    "colInicio": "Inicio",
+    "colFin": "Fin",
+    "colHoras": "Horas",
+    "colTarifa": "Tarifa/hora",
+    "colCosto": "Costo",
+    "colMoneda": "Moneda",
+
+    "csvHeaderInicio": "Inicio",
+    "csvHeaderFin": "Fin",
+    "csvHeaderPersona": "Persona",
+    "csvHeaderActividad": "Actividad",
+    "csvHeaderGeocerca": "Geocerca",
+    "csvHeaderHoras": "Horas",
+    "csvHeaderTarifa": "Tarifa_hora",
+    "csvHeaderTotal": "Costo_total",
+
+    "buttonDownloadCsv": "Descargar CSV",
+
+    "errorLoad": "Error al cargar los reportes.",
+    "errorCsv": "No se pudo generar el archivo CSV.",
+
     "filters": {
       "dateFromLabel": "Desde",
       "dateToLabel": "Hasta",
@@ -345,18 +391,7 @@
       "total": "Costo total",
       "currency": "Moneda",
       "noResults": "No se encontraron registros para los filtros seleccionados."
-    },
-    "csvHeaderInicio": "Inicio",
-    "csvHeaderFin": "Fin",
-    "csvHeaderPersona": "Persona",
-    "csvHeaderActividad": "Actividad",
-    "csvHeaderGeocerca": "Geocerca",
-    "csvHeaderHoras": "Horas",
-    "csvHeaderTarifa": "Tarifa_hora",
-    "csvHeaderTotal": "Costo_total",
-    "buttonDownloadCsv": "Descargar CSV",
-    "errorLoad": "Error al cargar los reportes.",
-    "errorCsv": "No se pudo generar el archivo CSV."
+    }
   },
 
   "dashboard": {

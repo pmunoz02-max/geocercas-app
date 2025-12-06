@@ -323,7 +323,53 @@
 
   "reportes": {
     "title": "Cost reports",
-    "subtitle": "View and export costs per person, activity and geofence.",
+    "headerSubtitle": "View and export costs per person, activity and geofence.",
+
+    "filtersTitle": "Filters",
+    "filtersFrom": "From",
+    "filtersTo": "To",
+    "filtersPerson": "Person",
+    "filtersActivity": "Activity",
+    "filtersGeofence": "Geofence",
+    "filtersAll": "All",
+    "filtersClear": "Clear filters",
+    "filtersApply": "Apply filters",
+
+    "summaryTotalHoursLabel": "Total hours",
+    "summaryTotalHoursHelp": "Sum of hours for all assignments in the selected range.",
+    "summaryTotalCostLabel": "Total cost",
+    "summaryTotalCostHelp": "Sum of calculated costs per person, activity and geofence.",
+    "summaryRecordsLabel": "Records",
+    "summaryRecordsHelp": "Number of rows that match the current filters.",
+
+    "tableTitle": "Cost details",
+    "tableExportHelp": "Export the current detail as a CSV file.",
+    "tableExportButton": "Export CSV",
+
+    "colPersona": "Person",
+    "colGeocerca": "Geofence",
+    "colActividad": "Activity",
+    "colInicio": "Start",
+    "colFin": "End",
+    "colHoras": "Hours",
+    "colTarifa": "Rate/hour",
+    "colCosto": "Cost",
+    "colMoneda": "Currency",
+
+    "csvHeaderInicio": "Start",
+    "csvHeaderFin": "End",
+    "csvHeaderPersona": "Person",
+    "csvHeaderActividad": "Activity",
+    "csvHeaderGeocerca": "Geofence",
+    "csvHeaderHoras": "Hours",
+    "csvHeaderTarifa": "Rate_hour",
+    "csvHeaderTotal": "Total_cost",
+
+    "buttonDownloadCsv": "Download CSV",
+
+    "errorLoad": "Error loading reports.",
+    "errorCsv": "CSV file could not be generated.",
+
     "filters": {
       "dateFromLabel": "From",
       "dateToLabel": "To",
@@ -345,18 +391,7 @@
       "total": "Total cost",
       "currency": "Currency",
       "noResults": "No records found for the selected filters."
-    },
-    "csvHeaderInicio": "Start",
-    "csvHeaderFin": "End",
-    "csvHeaderPersona": "Person",
-    "csvHeaderActividad": "Activity",
-    "csvHeaderGeocerca": "Geofence",
-    "csvHeaderHoras": "Hours",
-    "csvHeaderTarifa": "Rate_hour",
-    "csvHeaderTotal": "Total_cost",
-    "buttonDownloadCsv": "Download CSV",
-    "errorLoad": "Error loading reports.",
-    "errorCsv": "CSV file could not be generated."
+    }
   },
 
   "dashboard": {
