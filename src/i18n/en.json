@@ -166,7 +166,6 @@
     "roleLabel": "Role:",
     "pillCanEdit": "Editable",
     "pillReadOnly": "Read only",
-
     "bannerLoadingSession": "Loading session…",
     "bannerLoginRequired": "You must be logged in to access this section.",
     "bannerRefreshedOk": "Data refreshed successfully.",
@@ -176,7 +175,6 @@
     "bannerCreated": "Staff created successfully.",
     "bannerUpdated": "Staff updated correctly.",
     "bannerDeletedOk": "Record deleted successfully.",
-
     "errorMissingUser": "Could not retrieve authenticated user.",
     "errorNoAuthUser": "No authenticated user.",
     "errorLoad": "Error loading staff.",
@@ -192,9 +190,7 @@
     "errorNoPermissionDelete": "You do not have permission to delete staff.",
     "errorMustSelectForDelete": "You must select a record to delete.",
     "errorDelete": "Could not delete the record.",
-
     "confirmDelete": "Are you sure you want to delete this record? (soft delete)",
-
     "searchPlaceholder": "Search by name, last name, email or phone…",
     "onlyActive": "Only active",
     "buttonRefresh": "Refresh",
@@ -203,20 +199,17 @@
     "buttonEdit": "Edit",
     "buttonSave": "Save",
     "buttonDelete": "Delete",
-
     "fieldName": "First name",
     "fieldLastName": "Last name",
     "fieldEmail": "Email",
     "fieldPhonePlaceholder": "Phone (+1…)",
     "fieldActive": "Active",
-
     "tableName": "First name",
     "tableLastName": "Last name",
     "tableEmail": "Email",
     "tablePhone": "Phone",
     "tableActive": "Active",
     "tableNoResults": "No results found.",
-
     "yes": "Yes",
     "no": "No",
     "processing": "Processing…"
@@ -225,7 +218,6 @@
   "actividades": {
     "title": "Activities",
     "formTitleNew": "New activity",
-
     "fieldName": "Activity name",
     "fieldNamePlaceholder": "e.g. Planting, Irrigation, Harvest",
     "fieldDescription": "Description",
@@ -233,26 +225,28 @@
     "fieldCurrency": "Currency",
     "fieldHourlyRate": "Hourly rate",
     "fieldHourlyRatePlaceholder": "e.g. 3.50",
-
     "currencies": {
       "USD": "US Dollar",
       "EUR": "Euro",
       "GBP": "British Pound",
       "LOCAL": "Local currency"
     },
-
     "buttonCreate": "Create activity",
     "buttonUpdate": "Update activity",
     "buttonCancel": "Cancel",
-
     "tableTitle": "Activity list",
-    "tableName": "Activity",
-    "tableDescription": "Description",
-    "tableCurrency": "Currency",
-    "tableHourlyRate": "Hourly rate",
-    "tableActive": "Active",
+    "thName": "Activity",
+    "thDescription": "Description",
+    "thCost": "Cost",
+    "thStatus": "Status",
+    "thActions": "Actions",
+    "statusActive": "Active",
+    "statusInactive": "Inactive",
+    "actionEdit": "Edit",
+    "actionDeactivate": "Deactivate",
+    "actionActivate": "Activate",
+    "actionDelete": "Delete",
     "tableNoResults": "No activities registered.",
-
     "bannerCreated": "Activity created successfully.",
     "bannerUpdated": "Activity updated successfully.",
     "bannerDeleted": "Activity deleted.",

@@ -166,7 +166,6 @@
     "roleLabel": "Rôle :",
     "pillCanEdit": "Modifiable",
     "pillReadOnly": "Lecture seule",
-
     "bannerLoadingSession": "Chargement de la session…",
     "bannerLoginRequired": "Vous devez être connecté pour accéder à cette section.",
     "bannerRefreshedOk": "Données mises à jour avec succès.",
@@ -176,7 +175,6 @@
     "bannerCreated": "Personnel créé avec succès.",
     "bannerUpdated": "Personnel mis à jour.",
     "bannerDeletedOk": "Enregistrement supprimé avec succès.",
-
     "errorMissingUser": "Impossible d’obtenir l’utilisateur authentifié.",
     "errorNoAuthUser": "Aucun utilisateur authentifié.",
     "errorLoad": "Erreur lors du chargement du personnel.",
@@ -192,9 +190,7 @@
     "errorNoPermissionDelete": "Vous n'avez pas la permission de supprimer du personnel.",
     "errorMustSelectForDelete": "Vous devez sélectionner un enregistrement à supprimer.",
     "errorDelete": "Impossible de supprimer l’enregistrement.",
-
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (soft delete)",
-
     "searchPlaceholder": "Rechercher par nom, prénom, e-mail ou téléphone…",
     "onlyActive": "Uniquement actifs",
     "buttonRefresh": "Actualiser",
@@ -203,20 +199,17 @@
     "buttonEdit": "Éditer",
     "buttonSave": "Enregistrer",
     "buttonDelete": "Supprimer",
-
     "fieldName": "Nom",
     "fieldLastName": "Prénom",
     "fieldEmail": "E-mail",
     "fieldPhonePlaceholder": "Téléphone (+33…)",
     "fieldActive": "Actif",
-
     "tableName": "Nom",
     "tableLastName": "Prénom",
     "tableEmail": "E-mail",
     "tablePhone": "Téléphone",
     "tableActive": "Actif",
     "tableNoResults": "Aucun résultat.",
-
     "yes": "Oui",
     "no": "Non",
     "processing": "Traitement…"
@@ -225,7 +218,6 @@
   "actividades": {
     "title": "Activités",
     "formTitleNew": "Nouvelle activité",
-
     "fieldName": "Nom de l’activité",
     "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
     "fieldDescription": "Description",
@@ -233,26 +225,28 @@
     "fieldCurrency": "Devise",
     "fieldHourlyRate": "Tarif horaire",
     "fieldHourlyRatePlaceholder": "Ex. 3,50",
-
     "currencies": {
       "USD": "Dollar américain",
       "EUR": "Euro",
       "GBP": "Livre sterling",
       "LOCAL": "Devise locale"
     },
-
     "buttonCreate": "Créer l’activité",
     "buttonUpdate": "Mettre à jour l’activité",
     "buttonCancel": "Annuler",
-
     "tableTitle": "Liste des activités",
-    "tableName": "Activité",
-    "tableDescription": "Description",
-    "tableCurrency": "Devise",
-    "tableHourlyRate": "Tarif horaire",
-    "tableActive": "Active",
+    "thName": "Activité",
+    "thDescription": "Description",
+    "thCost": "Coût",
+    "thStatus": "Statut",
+    "thActions": "Actions",
+    "statusActive": "Active",
+    "statusInactive": "Inactive",
+    "actionEdit": "Éditer",
+    "actionDeactivate": "Désactiver",
+    "actionActivate": "Activer",
+    "actionDelete": "Supprimer",
     "tableNoResults": "Aucune activité enregistrée.",
-
     "bannerCreated": "Activité créée avec succès.",
     "bannerUpdated": "Activité mise à jour avec succès.",
     "bannerDeleted": "Activité supprimée.",

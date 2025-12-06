@@ -166,7 +166,6 @@
     "roleLabel": "Rol:",
     "pillCanEdit": "Editable",
     "pillReadOnly": "Solo lectura",
-
     "bannerLoadingSession": "Cargando sesión…",
     "bannerLoginRequired": "Debes iniciar sesión para acceder a esta sección.",
     "bannerRefreshedOk": "Datos actualizados correctamente.",
@@ -176,7 +175,6 @@
     "bannerCreated": "Personal creado exitosamente.",
     "bannerUpdated": "Personal actualizado correctamente.",
     "bannerDeletedOk": "Registro eliminado correctamente.",
-
     "errorMissingUser": "No se pudo obtener el usuario autenticado.",
     "errorNoAuthUser": "No existe un usuario autenticado.",
     "errorLoad": "Error al cargar el personal.",
@@ -192,9 +190,7 @@
     "errorNoPermissionDelete": "No tienes permisos para eliminar personal.",
     "errorMustSelectForDelete": "Debes seleccionar un registro para eliminarlo.",
     "errorDelete": "No se pudo eliminar el registro.",
-
     "confirmDelete": "¿Está seguro que desea eliminar este registro? (soft delete)",
-
     "searchPlaceholder": "Buscar por nombre, apellido, email o teléfono…",
     "onlyActive": "Solo activos",
     "buttonRefresh": "Actualizar",
@@ -203,20 +199,17 @@
     "buttonEdit": "Editar",
     "buttonSave": "Guardar",
     "buttonDelete": "Eliminar",
-
     "fieldName": "Nombre",
     "fieldLastName": "Apellido",
     "fieldEmail": "Correo",
     "fieldPhonePlaceholder": "Teléfono (+593…)",
     "fieldActive": "Activo",
-
     "tableName": "Nombre",
     "tableLastName": "Apellido",
     "tableEmail": "Correo",
     "tablePhone": "Teléfono",
     "tableActive": "Activo",
     "tableNoResults": "No se encontraron resultados.",
-
     "yes": "Sí",
     "no": "No",
     "processing": "Procesando…"
@@ -225,7 +218,6 @@
   "actividades": {
     "title": "Actividades",
     "formTitleNew": "Nueva actividad",
-
     "fieldName": "Nombre de la actividad",
     "fieldNamePlaceholder": "Ej. Siembra, Riego, Cosecha",
     "fieldDescription": "Descripción",
@@ -233,26 +225,28 @@
     "fieldCurrency": "Moneda",
     "fieldHourlyRate": "Tarifa por hora",
     "fieldHourlyRatePlaceholder": "Ej. 3.50",
-
     "currencies": {
       "USD": "Dólar estadounidense",
       "EUR": "Euro",
       "GBP": "Libra esterlina",
       "LOCAL": "Moneda local"
     },
-
     "buttonCreate": "Crear actividad",
     "buttonUpdate": "Actualizar actividad",
     "buttonCancel": "Cancelar",
-
     "tableTitle": "Listado de actividades",
-    "tableName": "Actividad",
-    "tableDescription": "Descripción",
-    "tableCurrency": "Moneda",
-    "tableHourlyRate": "Tarifa/hora",
-    "tableActive": "Activa",
+    "thName": "Actividad",
+    "thDescription": "Descripción",
+    "thCost": "Costo",
+    "thStatus": "Estado",
+    "thActions": "Acciones",
+    "statusActive": "Activa",
+    "statusInactive": "Inactiva",
+    "actionEdit": "Editar",
+    "actionDeactivate": "Desactivar",
+    "actionActivate": "Activar",
+    "actionDelete": "Eliminar",
     "tableNoResults": "No hay actividades registradas.",
-
     "bannerCreated": "Actividad creada correctamente.",
     "bannerUpdated": "Actividad actualizada correctamente.",
     "bannerDeleted": "Actividad eliminada.",
