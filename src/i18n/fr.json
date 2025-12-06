@@ -524,6 +524,37 @@
     }
   },
 
+  "inviteTracker": {
+    "orgFallback": "votre organisation",
+    "title": "Inviter un tracker",
+    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un e-mail manuellement pour l’inviter comme tracker dans {{orgName}}.",
+    "form": {
+      "selectLabel": "Sélectionner du personnel actuel (optionnel)",
+      "selectPlaceholder": "-- Sélectionner du personnel --",
+      "selectHelp": "Si vous sélectionnez une personne, son e-mail sera rempli automatiquement.",
+      "emailLabel": "E-mail du tracker",
+      "emailPlaceholder": "tracker@exemple.com",
+      "emailHelp": "Une invitation sera envoyée à cet e-mail.",
+      "buttonSending": "Envoi de l’invitation…",
+      "buttonSend": "Envoyer l’invitation"
+    },
+    "errors": {
+      "emailRequired": "Vous devez saisir une adresse e-mail.",
+      "emailInvalid": "Saisissez une adresse e-mail valide."
+    },
+    "messages": {
+      "serverProblem": "Un problème est survenu lors du contact avec le serveur d’invitations.",
+      "notOk": "L’invitation n’a pas pu être complétée. Vérifiez l’e-mail et réessayez.",
+      "invited": "Une invitation a été envoyée à {{email}} pour rejoindre en tant que tracker dans {{orgName}}.",
+      "magiclinkSent": "Un lien magique d’accès a été envoyé à {{email}}.",
+      "linkOnlyWithLink": "L’invitation a été créée. Utilisez ce lien pour partager l’accès : {{link}}.",
+      "linkOnlyNoLink": "L’invitation a été créée, mais aucun lien public n’a été renvoyé.",
+      "createdWithoutEmail": "L’accès du tracker a été créé sans envoi d’e-mail.",
+      "genericProcessed": "L’invitation pour {{email}} a été traitée avec succès.",
+      "unexpectedError": "Erreur inattendue lors du traitement de l’invitation."
+    }
+  },
+
   "admins": {
     "title": "Administrateurs",
     "subtitle": "Gérez les administrateurs de votre organisation et leurs rôles.",

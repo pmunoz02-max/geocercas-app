@@ -2,9 +2,14 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "../supabaseClient";
+import { useTranslation } from "react-i18next";
 
 export default function InvitarTracker() {
   const { currentOrg } = useAuth();
+  const { t } = useTranslation();
+
+  const orgName =
+    currentOrg?.name || t("inviteTracker.orgFallback", "your organization");
 
   // Estados
   const [email, setEmail] = useState("");
@@ -14,8 +19,6 @@ export default function InvitarTracker() {
   // Personal vigente
   const [personalList, setPersonalList] = useState([]);
   const [selectedPersonId, setSelectedPersonId] = useState("");
-
-  const orgName = currentOrg?.name || "tu organización";
 
   // ============================================================
   // Cargar PERSONAL vigente
@@ -77,7 +80,17 @@ export default function InvitarTracker() {
     if (!trimmedEmail) {
       setMessage({
         type: "error",
-        text: "Ingresa un correo electrónico.",
+        text: t("inviteTracker.errors.emailRequired"),
+      });
+      return;
+    }
+
+    // Validación simple de formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.errors.emailInvalid"),
       });
       return;
     }
@@ -95,12 +108,15 @@ export default function InvitarTracker() {
       });
 
       if (error) {
-        console.error("[InvitarTracker] Edge error:", error);
+        console.error("[InvitarTracker] Error al invocar invite-user:", error);
         setMessage({
           type: "error",
           text:
             error.message ||
-            "Hubo un problema al contactar al servidor de invitaciones.",
+            t(
+              "inviteTracker.messages.serverProblem",
+              "There was a problem contacting the invitation server."
+            ),
         });
         return;
       }
@@ -108,7 +124,10 @@ export default function InvitarTracker() {
       if (!data?.ok) {
         const errText =
           data?.error ||
-          "No se pudo completar la invitación. Revisa el correo e intenta nuevamente.";
+          t(
+            "inviteTracker.messages.notOk",
+            "The invitation could not be completed. Check the email and try again."
+          );
         console.warn("[InvitarTracker] respuesta no-ok:", data);
         setMessage({
           type: "error",
@@ -122,66 +141,66 @@ export default function InvitarTracker() {
       if (mode === "invited") {
         setMessage({
           type: "success",
-          text: `Invitación enviada a ${
-            data.email || trimmedEmail
-          } como tracker en ${orgName}.`,
+          text: t("inviteTracker.messages.invited", {
+            email: data.email || trimmedEmail,
+            orgName,
+          }),
         });
       } else if (mode === "magiclink_sent") {
         setMessage({
           type: "success",
-          text: `El usuario ya estaba registrado. Se envió Magic Link de acceso a ${
-            data.email || trimmedEmail
-          }.`,
+          text: t("inviteTracker.messages.magiclinkSent", {
+            email: data.email || trimmedEmail,
+          }),
         });
       } else if (mode === "link_only") {
         const link = data.invite_link;
         setMessage({
           type: "success",
           text: link
-            ? `No se pudo enviar el correo, pero se generó el enlace: ${link}`
-            : `Se generó la invitación, pero no se pudo recuperar el link.`,
+            ? t("inviteTracker.messages.linkOnlyWithLink", { link })
+            : t("inviteTracker.messages.linkOnlyNoLink"),
         });
       } else if (mode === "created_without_email") {
         setMessage({
           type: "success",
-          text:
-            "Se creó el usuario sin enviar correo. Revisa Supabase para completarlo.",
+          text: t("inviteTracker.messages.createdWithoutEmail"),
         });
       } else {
         setMessage({
           type: "success",
-          text: `Invitación procesada para ${
-            data.email || trimmedEmail
-          }.`,
+          text: t("inviteTracker.messages.genericProcessed", {
+            email: data.email || trimmedEmail,
+          }),
         });
       }
 
       setEmail("");
       setSelectedPersonId("");
     } catch (err) {
-      console.error("[InvitarTracker] exception:", err);
+      console.error("[InvitarTracker] Error inesperado:", err);
       setMessage({
         type: "error",
-        text: "Hubo un problema de red. Intenta nuevamente.",
+        text:
+          err.message ||
+          t(
+            "inviteTracker.messages.unexpectedError",
+            "Unexpected error while processing the invitation."
+          ),
       });
     } finally {
       setSending(false);
     }
   }
 
-  // ============================================================
-  // UI
-  // ============================================================
   return (
     <div className="max-w-lg mx-auto">
       <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-3">
-        Invitar tracker
+        {t("inviteTracker.title")}
       </h1>
 
       <p className="text-sm md:text-base text-slate-600 mb-6">
-        Selecciona un miembro de tu personal o ingresa un correo manualmente
-        para invitarlo como <span className="font-semibold">tracker</span> en{" "}
-        <span className="font-semibold">{orgName}</span>.
+        {t("inviteTracker.subtitle", { orgName })}
       </p>
 
       <form
@@ -191,14 +210,16 @@ export default function InvitarTracker() {
         {/* SELECT DE PERSONAL */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
-            Selecciona personal vigente (opcional)
+            {t("inviteTracker.form.selectLabel")}
           </label>
           <select
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             value={selectedPersonId}
             onChange={handleSelectPerson}
           >
-            <option value="">-- Seleccionar personal --</option>
+            <option value="">
+              {t("inviteTracker.form.selectPlaceholder")}
+            </option>
             {personalList.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre} — {p.email}
@@ -206,34 +227,40 @@ export default function InvitarTracker() {
             ))}
           </select>
           <p className="mt-1 text-[11px] text-slate-500">
-            Si seleccionas un personal, su correo se llenará automáticamente.
+            {t("inviteTracker.form.selectHelp")}
           </p>
         </div>
 
         {/* CAMPO EMAIL */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
-            Correo electrónico del tracker
+            {t("inviteTracker.form.emailLabel")}
           </label>
           <input
             type="email"
             required
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder="tracker@ejemplo.com"
+            placeholder={t(
+              "inviteTracker.form.emailPlaceholder",
+              "tracker@example.com"
+            )}
             value={email}
             onChange={handleEmailChange}
           />
           <p className="mt-1 text-[11px] text-slate-500">
-            Se enviará una invitación a este correo.
+            {t("inviteTracker.form.emailHelp")}
           </p>
         </div>
 
+        {/* BOTÓN */}
         <button
           type="submit"
           disabled={sending}
-          className="inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="w-full inline-flex justify-center items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
         >
-          {sending ? "Enviando..." : "Enviar invitación"}
+          {sending
+            ? t("inviteTracker.form.buttonSending")
+            : t("inviteTracker.form.buttonSend")}
         </button>
 
         {message && (

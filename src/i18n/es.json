@@ -37,7 +37,7 @@
       "dashboard": "Dashboard Costos",
       "dashboardCostos": "Dashboard Costos",
       "tracker": "Tracker",
-      "invitarTracker": "Invitar Tracker",
+      "invitarTracker": "Invitar tracker",
       "admins": "Administrador"
     }
   },
@@ -521,6 +521,37 @@
       "noData": "No se encontraron posiciones para los filtros seleccionados.",
       "error": "Error cargando datos de tracking.",
       "checkConsole": "Revisa la consola si persiste."
+    }
+  },
+
+  "inviteTracker": {
+    "orgFallback": "tu organización",
+    "title": "Invitar tracker",
+    "subtitle": "Selecciona un miembro de tu personal o ingresa un correo manualmente para invitarlo como tracker en {{orgName}}.",
+    "form": {
+      "selectLabel": "Selecciona personal vigente (opcional)",
+      "selectPlaceholder": "-- Seleccionar personal --",
+      "selectHelp": "Si seleccionas un personal, su correo se llenará automáticamente.",
+      "emailLabel": "Correo electrónico del tracker",
+      "emailPlaceholder": "tracker@ejemplo.com",
+      "emailHelp": "Se enviará una invitación a este correo.",
+      "buttonSending": "Enviando invitación…",
+      "buttonSend": "Enviar invitación"
+    },
+    "errors": {
+      "emailRequired": "Debes ingresar un correo electrónico.",
+      "emailInvalid": "Ingresa un correo electrónico válido."
+    },
+    "messages": {
+      "serverProblem": "Hubo un problema al contactar al servidor de invitaciones.",
+      "notOk": "No se pudo completar la invitación. Revisa el correo e inténtalo de nuevo.",
+      "invited": "Se ha enviado una invitación a {{email}} para unirse como tracker en {{orgName}}.",
+      "magiclinkSent": "Se envió un link mágico de acceso a {{email}}.",
+      "linkOnlyWithLink": "La invitación fue creada. Usa este enlace para compartir el acceso: {{link}}.",
+      "linkOnlyNoLink": "La invitación fue creada, pero no se recibió un enlace público.",
+      "createdWithoutEmail": "Se creó el acceso del tracker sin enviar correo electrónico.",
+      "genericProcessed": "La invitación para {{email}} se procesó correctamente.",
+      "unexpectedError": "Error inesperado al procesar la invitación."
     }
   },
 

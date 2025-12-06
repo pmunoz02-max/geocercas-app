@@ -435,7 +435,7 @@
     "dimensionActividad": "Activity",
     "dimensionGeocerca": "Geofence",
     "dimensionFecha": "Date",
-    "metricCost": "Costs",
+    "metricCost": "Cost",
     "metricHours": "Hours",
     "metricRecords": "Records",
     "tableTitle": "Detail for selected dimension",
@@ -447,7 +447,7 @@
     "colCosto": "Cost",
     "colMoneda": "Currency",
     "tableNoResults": "No data for current filters.",
-    "errorLoad": "Dashboard data could not be loaded."
+    "errorLoad": "Error loading cost dashboard."
   },
 
   "tracker": {
@@ -521,6 +521,37 @@
       "noData": "No positions found for the selected filters.",
       "error": "Error loading tracking data.",
       "checkConsole": "Check the console if it persists."
+    }
+  },
+
+  "inviteTracker": {
+    "orgFallback": "your organization",
+    "title": "Invite tracker",
+    "subtitle": "Select a member of your staff or enter an email manually to invite them as a tracker in {{orgName}}.",
+    "form": {
+      "selectLabel": "Select current staff (optional)",
+      "selectPlaceholder": "-- Select staff --",
+      "selectHelp": "If you select a staff member, their email will be filled in automatically.",
+      "emailLabel": "Tracker email",
+      "emailPlaceholder": "tracker@example.com",
+      "emailHelp": "An invitation will be sent to this email.",
+      "buttonSending": "Sending invitation…",
+      "buttonSend": "Send invitation"
+    },
+    "errors": {
+      "emailRequired": "You must enter an email address.",
+      "emailInvalid": "Enter a valid email address."
+    },
+    "messages": {
+      "serverProblem": "There was a problem contacting the invitation server.",
+      "notOk": "The invitation could not be completed. Check the email and try again.",
+      "invited": "An invitation has been sent to {{email}} to join as a tracker in {{orgName}}.",
+      "magiclinkSent": "A magic access link was sent to {{email}}.",
+      "linkOnlyWithLink": "The invitation was created. Use this link to share access: {{link}}.",
+      "linkOnlyNoLink": "The invitation was created, but no public link was returned.",
+      "createdWithoutEmail": "Tracker access was created without sending an email.",
+      "genericProcessed": "The invitation for {{email}} was processed successfully.",
+      "unexpectedError": "Unexpected error while processing the invitation."
     }
   },
 
