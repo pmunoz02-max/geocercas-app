@@ -2,14 +2,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { supabase } from "./supabaseClient";
+import { supabase } from "../supabaseClient";
 import {
   getAsignaciones,
   createAsignacion,
   updateAsignacion,
   deleteAsignacion,
-} from "./lib/asignacionesApi";
-import AsignacionesTable from "./components/asignaciones/AsignacionesTable";
+} from "../lib/asignacionesApi";
+import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
 
 // Helper para asegurar que el datetime-local se guarda con zona horaria local
 function localToISOWithTZ(localDateTime) {
@@ -66,6 +66,7 @@ export default function AsignacionesPage() {
   const loadAsignaciones = async () => {
     setLoadingAsignaciones(true);
     setError(null);
+
     const { data, error } = await getAsignaciones();
     if (error) {
       console.error("[AsignacionesPage] Error al cargar asignaciones:", error);
