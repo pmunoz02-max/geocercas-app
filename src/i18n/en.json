@@ -105,5 +105,83 @@
       "costos": "Costs",
       "reportes": "Reports"
     }
+  },
+
+  "inicio": {
+    "header": {
+      "badge": "Control panel · App Geocercas",
+      "title": "Welcome to your dashboard",
+      "subtitle": "Manage geofences, staff, activities, assignments and cost reports in one place."
+    },
+    "cards": {
+      "nueva": {
+        "badge": "Geofences",
+        "title": "New geofence",
+        "body": "Create a new geofence to control field activities.",
+        "cta": "Go to New geofence"
+      },
+      "geocercas": {
+        "badge": "Geofences",
+        "title": "Geofences",
+        "body": "Manage existing geofences and assign staff.",
+        "cta": "Go to Geofences"
+      },
+      "personal": {
+        "badge": "Staff",
+        "title": "Staff",
+        "body": "Register and manage the staff in your organization.",
+        "cta": "Go to Staff"
+      },
+      "actividades": {
+        "badge": "Rates",
+        "title": "Activities",
+        "body": "Configure activities, hourly rates and cost settings.",
+        "cta": "Go to Activities"
+      },
+      "asignaciones": {
+        "badge": "Operations",
+        "title": "Assignments",
+        "body": "Assign staff to geofences and activities on specific dates.",
+        "cta": "Go to Assignments"
+      },
+      "reportes": {
+        "badge": "Costs",
+        "title": "Reports",
+        "body": "View cost reports by person, activity, geofence and date range.",
+        "cta": "Go to Reports"
+      },
+      "dashboardCostos": {
+        "badge": "Costs",
+        "title": "Cost dashboard",
+        "body": "Visualize a Power BI–style dashboard with your operation costs.",
+        "cta": "Go to Dashboard"
+      },
+      "tracker": {
+        "badge": "Tracker",
+        "title": "Tracker",
+        "body": "Review the real-time location dashboard (tracker version).",
+        "cta": "Go to Tracker"
+      },
+      "invitarTracker": {
+        "badge": "Tracker",
+        "title": "Invite tracker",
+        "body": "Send email invitations to new trackers with Magic Link.",
+        "cta": "Invite tracker"
+      },
+      "admins": {
+        "badge": "Admins",
+        "title": "Admins",
+        "body": "Manage additional admins for your organization.",
+        "cta": "Go to Admins"
+      }
+    },
+    "userInfo": {
+      "connectedAs": "You are connected as",
+      "withRole": "with role",
+      "inOrg": "in organization",
+      "userLabel": "User:",
+      "orgIdLabel": "Current Org ID:"
+    }
   }
 }
+

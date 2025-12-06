@@ -105,5 +105,82 @@
       "costos": "Costos",
       "reportes": "Reportes"
     }
+  },
+
+  "inicio": {
+    "header": {
+      "badge": "Panel de control · App Geocercas",
+      "title": "Bienvenido a tu panel",
+      "subtitle": "Gestiona geocercas, personal, actividades, asignaciones y reportes de costos en un solo lugar."
+    },
+    "cards": {
+      "nueva": {
+        "badge": "Geocercas",
+        "title": "Nueva geocerca",
+        "body": "Crea una nueva geocerca para controlar actividades en campo.",
+        "cta": "Ir a Nueva geocerca"
+      },
+      "geocercas": {
+        "badge": "Geocercas",
+        "title": "Geocercas",
+        "body": "Administra las geocercas existentes y asigna personal.",
+        "cta": "Ir a Geocercas"
+      },
+      "personal": {
+        "badge": "Personal",
+        "title": "Personal",
+        "body": "Registra y administra el personal de tu organización.",
+        "cta": "Ir a Personal"
+      },
+      "actividades": {
+        "badge": "Tarifas",
+        "title": "Actividades",
+        "body": "Configura actividades, tarifas y costos horarios.",
+        "cta": "Ir a Actividades"
+      },
+      "asignaciones": {
+        "badge": "Operaciones",
+        "title": "Asignaciones",
+        "body": "Asigna personal a geocercas y actividades en fechas específicas.",
+        "cta": "Ir a Asignaciones"
+      },
+      "reportes": {
+        "badge": "Costos",
+        "title": "Reportes",
+        "body": "Consulta reportes de costos por persona, actividad, geocerca y rango de fechas.",
+        "cta": "Ir a Reportes"
+      },
+      "dashboardCostos": {
+        "badge": "Costos",
+        "title": "Dashboard de costos",
+        "body": "Visualiza un panel gráfico tipo Power BI con los costos de tus operaciones.",
+        "cta": "Ir al Dashboard"
+      },
+      "tracker": {
+        "badge": "Tracker",
+        "title": "Tracker",
+        "body": "Revisa el tablero de ubicaciones en tiempo real (versión tracker).",
+        "cta": "Ir a Tracker"
+      },
+      "invitarTracker": {
+        "badge": "Tracker",
+        "title": "Invitar tracker",
+        "body": "Envía invitaciones por correo a nuevos trackers con Magic Link.",
+        "cta": "Invitar tracker"
+      },
+      "admins": {
+        "badge": "Admins",
+        "title": "Admins",
+        "body": "Gestiona administradores adicionales para tu organización.",
+        "cta": "Ir a Admins"
+      }
+    },
+    "userInfo": {
+      "connectedAs": "Estás conectado como",
+      "withRole": "con rol",
+      "inOrg": "en la organización",
+      "userLabel": "Usuario:",
+      "orgIdLabel": "Org ID actual:"
+    }
   }
 }

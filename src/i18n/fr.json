@@ -105,5 +105,82 @@
       "costos": "Coûts",
       "reportes": "Rapports"
     }
+  },
+
+  "inicio": {
+    "header": {
+      "badge": "Tableau de bord · App Geocercas",
+      "title": "Bienvenue sur votre tableau de bord",
+      "subtitle": "Gérez géofences, personnel, activités, affectations et rapports de coûts en un seul endroit."
+    },
+    "cards": {
+      "nueva": {
+        "badge": "Géofences",
+        "title": "Nouvelle géofence",
+        "body": "Créez une nouvelle géofence pour contrôler les activités sur le terrain.",
+        "cta": "Aller à Nouvelle géofence"
+      },
+      "geocercas": {
+        "badge": "Géofences",
+        "title": "Géofences",
+        "body": "Gérez les géofences existantes et assignez du personnel.",
+        "cta": "Aller à Géofences"
+      },
+      "personal": {
+        "badge": "Personnel",
+        "title": "Personnel",
+        "body": "Enregistrez et gérez le personnel de votre organisation.",
+        "cta": "Aller à Personnel"
+      },
+      "actividades": {
+        "badge": "Tarifs",
+        "title": "Activités",
+        "body": "Configurez activités, tarifs horaires et paramètres de coûts.",
+        "cta": "Aller à Activités"
+      },
+      "asignaciones": {
+        "badge": "Opérations",
+        "title": "Affectations",
+        "body": "Affectez du personnel à des géofences et activités à des dates spécifiques.",
+        "cta": "Aller à Affectations"
+      },
+      "reportes": {
+        "badge": "Coûts",
+        "title": "Rapports",
+        "body": "Consultez des rapports de coûts par personne, activité, géofence et période.",
+        "cta": "Aller à Rapports"
+      },
+      "dashboardCostos": {
+        "badge": "Coûts",
+        "title": "Tableau de bord des coûts",
+        "body": "Visualisez un tableau de bord de style Power BI avec les coûts de vos opérations.",
+        "cta": "Aller au Tableau de bord"
+      },
+      "tracker": {
+        "badge": "Tracker",
+        "title": "Tracker",
+        "body": "Consultez le tableau de bord des localisations en temps réel (version tracker).",
+        "cta": "Aller à Tracker"
+      },
+      "invitarTracker": {
+        "badge": "Tracker",
+        "title": "Inviter un tracker",
+        "body": "Envoyez des invitations par e-mail aux nouveaux trackers avec lien magique.",
+        "cta": "Inviter un tracker"
+      },
+      "admins": {
+        "badge": "Admins",
+        "title": "Admins",
+        "body": "Gérez des administrateurs supplémentaires pour votre organisation.",
+        "cta": "Aller à Admins"
+      }
+    },
+    "userInfo": {
+      "connectedAs": "Vous êtes connecté en tant que",
+      "withRole": "avec le rôle",
+      "inOrg": "dans l’organisation",
+      "userLabel": "Utilisateur :",
+      "orgIdLabel": "ID d’organisation actuel :"
+    }
   }
 }
