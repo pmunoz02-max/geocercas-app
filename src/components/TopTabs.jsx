@@ -1,40 +1,68 @@
-// src/components/TopTabs.jsx
+// src/components/layout/TopTabs.jsx
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-export default function TopTabs({ tabs }) {
+/**
+ * Espera un prop `tabs` con esta forma:
+ *
+ * const tabs = [
+ *   { path: "/app/inicio",        labelKey: "app.tabs.inicio" },
+ *   { path: "/app/geocercas/new", labelKey: "app.tabs.nuevaGeocerca" },
+ *   { path: "/app/personal",      labelKey: "app.tabs.personal" },
+ *   { path: "/app/actividades",   labelKey: "app.tabs.actividades" },
+ *   { path: "/app/asignaciones",  labelKey: "app.tabs.asignaciones" },
+ *   { path: "/app/reportes",      labelKey: "app.tabs.reportes" },
+ *   { path: "/app/dashboard",     labelKey: "app.tabs.dashboard" },
+ *   { path: "/app/tracker",       labelKey: "app.tabs.tracker" },
+ *   { path: "/app/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
+ *   { path: "/app/admins",        labelKey: "app.tabs.admins" }
+ * ];
+ */
+
+function TopTabs({ tabs = [] }) {
   const { t } = useTranslation();
+  const location = useLocation();
+
+  const isActive = (tabPath) => {
+    if (!tabPath) return false;
+    // activa por coincidencia inicial de path
+    return location.pathname === tabPath || location.pathname.startsWith(tabPath + "/");
+  };
 
   return (
-    <nav className="w-full flex justify-center mt-4 mb-4">
-      {/* Contenedor con fondo suave y soporte para scroll horizontal en móvil */}
-      <div className="inline-flex max-w-full items-center overflow-x-auto rounded-full bg-slate-50/80 px-2 py-1 shadow-inner">
-        <div className="flex flex-nowrap gap-2">
-          {tabs.map((tab) => {
-            const label =
-              tab.labelKey ? t(tab.labelKey) : tab.label ?? "";
+    <div className="w-full flex justify-center mt-4">
+      <nav className="flex space-x-2 bg-slate-100 rounded-full px-2 py-1 overflow-x-auto max-w-full">
+        {tabs.map((tab) => {
+          const active = isActive(tab.path);
 
-            return (
-              <NavLink
-                key={tab.path}
-                to={tab.path}
-                className={({ isActive }) =>
-                  [
-                    "px-4 md:px-5 py-1.5 md:py-2 rounded-full text-sm md:text-[15px] font-medium whitespace-nowrap border transition-all duration-150",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-50",
-                    isActive
-                      ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200 scale-[1.03]"
-                      : "bg-white/80 text-slate-700 border-slate-200 hover:border-blue-400 hover:text-blue-700 hover:bg-white",
-                  ].join(" ")
-                }
-              >
-                {label}
-              </NavLink>
-            );
-          })}
-        </div>
-      </div>
-    </nav>
+          // Texto a mostrar:
+          // 1) si hay labelKey -> i18n
+          // 2) si no, usa label “fijo” para compatibilidad
+          const label = tab.labelKey
+            ? t(tab.labelKey)
+            : tab.label || "";
+
+          const baseClasses =
+            "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors border";
+          const activeClasses =
+            "bg-blue-600 text-white border-blue-600 shadow-sm";
+          const inactiveClasses =
+            "bg-white text-slate-800 border-slate-200 hover:bg-slate-50";
+
+          return (
+            <NavLink
+              key={tab.path || label}
+              to={tab.path}
+              className={active ? `${baseClasses} ${activeClasses}` : `${baseClasses} ${inactiveClasses}`}
+            >
+              {label}
+            </NavLink>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
+
+export default TopTabs;
