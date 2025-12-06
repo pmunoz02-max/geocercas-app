@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 const emptyOption = { value: "", label: "Todos" };
 
@@ -81,6 +82,7 @@ function buildDateRange(fromDateStr, toDateStr) {
 
 const CostosPage = () => {
   const { currentOrg, currentRole } = useAuth();
+  const { t } = useTranslation();
 
   // Filtros
   const [fromDate, setFromDate] = useState("");
@@ -108,20 +110,20 @@ const CostosPage = () => {
   // EXPORTAR CSV
   const handleExportCSV = () => {
     if (!rows || rows.length === 0) {
-      alert("No hay datos para exportar.");
+      alert(t("reportes.exportNoData"));
       return;
     }
 
     const header = [
-      "Persona",
-      "Geocerca",
-      "Actividad",
-      "Inicio",
-      "Fin",
-      "Horas",
-      "Tarifa",
-      "Costo",
-      "Moneda",
+      t("reportes.csvHeaderPersona"),
+      t("reportes.csvHeaderGeocerca"),
+      t("reportes.csvHeaderActividad"),
+      t("reportes.csvHeaderInicio"),
+      t("reportes.csvHeaderFin"),
+      t("reportes.csvHeaderHoras"),
+      t("reportes.csvHeaderTarifa"),
+      t("reportes.csvHeaderCosto"),
+      t("reportes.csvHeaderMoneda"),
     ];
 
     const csvRows = [header.join(";")];
@@ -198,16 +200,14 @@ const CostosPage = () => {
         setGeocercas(geoData || []);
       } catch (e) {
         console.error("[CostosPage] Error cargando filtros:", e);
-        setError(
-          "Error al cargar filtros (personas, actividades, geocercas). Revisa la consola."
-        );
+        setError(t("reportes.errorLoadFilters"));
       } finally {
         setLoadingFilters(false);
       }
     };
 
     loadFilters();
-  }, [currentOrg?.id, canView]);
+  }, [currentOrg?.id, canView, t]);
 
   // Cargar reporte principal
   const fetchReport = async () => {
@@ -220,7 +220,7 @@ const CostosPage = () => {
       // Validación sencilla de rango
       if (fromDate && toDate && fromDate > toDate) {
         setRows([]);
-        setError('La fecha "Desde" no puede ser mayor que la fecha "Hasta".');
+        setError(t("reportes.errorRangeInvalid"));
         return;
       }
 
@@ -276,9 +276,7 @@ const CostosPage = () => {
             "[CostosPage] La vista v_costos_detalle no existe aún en Supabase."
           );
           setRows([]);
-          setError(
-            "La vista v_costos_detalle aún no existe en la base de datos. Créala en Supabase para ver datos."
-          );
+          setError(t("reportes.errorViewMissing"));
           return;
         }
         throw dataErr;
@@ -287,11 +285,7 @@ const CostosPage = () => {
       setRows(data || []);
     } catch (e) {
       console.error("[CostosPage] Error cargando reporte:", e);
-      setError(
-        e?.message ||
-          e?.details ||
-          "Error al cargar el reporte de costos. Revisa la consola."
-      );
+      setError(t("reportes.errorLoadReport"));
     } finally {
       setLoading(false);
     }
@@ -325,10 +319,11 @@ const CostosPage = () => {
   if (!canView) {
     return (
       <div className="p-4">
-        <h1 className="text-xl font-semibold mb-2">Reportes de Costos</h1>
+        <h1 className="text-xl font-semibold mb-2">
+          {t("reportes.title")}
+        </h1>
         <p className="text-sm text-gray-600">
-          Solo los usuarios con rol <strong>OWNER</strong> o{" "}
-          <strong>ADMIN</strong> pueden acceder a este módulo.
+          {t("reportes.noAccessBody")}
         </p>
       </div>
     );
@@ -339,15 +334,14 @@ const CostosPage = () => {
       {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Reportes de Costos</h1>
+          <h1 className="text-2xl font-bold">{t("reportes.title")}</h1>
           <p className="text-sm text-gray-600">
-            Analiza horas trabajadas y costos por actividad, persona y geocerca.
-            Incluye tarjetas resumen, tabla detallada y descarga a CSV.
+            {t("reportes.headerSubtitle")}
           </p>
         </div>
         {loading && (
           <div className="text-xs text-gray-500 animate-pulse">
-            Calculando reporte...
+            {t("reportes.loadingReport")}
           </div>
         )}
       </div>
@@ -355,13 +349,13 @@ const CostosPage = () => {
       {/* Filtros */}
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <h2 className="text-sm font-semibold text-gray-700 mb-1">
-          Filtros del reporte
+          {t("reportes.filtersTitle")}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {/* Fecha desde */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
-              Desde
+              {t("reportes.filtersFrom")}
             </label>
             <input
               type="date"
@@ -374,7 +368,7 @@ const CostosPage = () => {
           {/* Fecha hasta */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
-              Hasta
+              {t("reportes.filtersTo")}
             </label>
             <input
               type="date"
@@ -387,7 +381,7 @@ const CostosPage = () => {
           {/* Persona */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
-              Persona
+              {t("reportes.filtersPerson")}
             </label>
             <select
               className="border rounded-lg px-2 py-1 text-sm"
@@ -395,10 +389,12 @@ const CostosPage = () => {
               onChange={(e) => setSelectedPersonaId(e.target.value)}
               disabled={loadingFilters}
             >
-              <option value={emptyOption.value}>{emptyOption.label}</option>
+              <option value={emptyOption.value}>
+                {t("reportes.filtersAll")}
+              </option>
               {personas.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nombre || p.email || "Sin nombre"}
+                  {p.nombre || p.email || t("reportes.personNoName")}
                 </option>
               ))}
             </select>
@@ -407,7 +403,7 @@ const CostosPage = () => {
           {/* Actividad */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
-              Actividad
+              {t("reportes.filtersActivity")}
             </label>
             <select
               className="border rounded-lg px-2 py-1 text-sm"
@@ -415,7 +411,9 @@ const CostosPage = () => {
               onChange={(e) => setSelectedActividadId(e.target.value)}
               disabled={loadingFilters}
             >
-              <option value={emptyOption.value}>{emptyOption.label}</option>
+              <option value={emptyOption.value}>
+                {t("reportes.filtersAll")}
+              </option>
               {actividades.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -427,7 +425,7 @@ const CostosPage = () => {
           {/* Geocerca */}
           <div className="flex flex-col md:col-span-2">
             <label className="text-xs font-medium text-gray-600 mb-1">
-              Geocerca
+              {t("reportes.filtersGeofence")}
             </label>
             <select
               className="border rounded-lg px-2 py-1 text-sm"
@@ -435,7 +433,9 @@ const CostosPage = () => {
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
               disabled={loadingFilters}
             >
-              <option value={emptyOption.value}>{emptyOption.label}</option>
+              <option value={emptyOption.value}>
+                {t("reportes.filtersAll")}
+              </option>
               {geocercas.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre}
@@ -459,7 +459,7 @@ const CostosPage = () => {
             }}
             disabled={loading || loadingFilters}
           >
-            Limpiar filtros
+            {t("reportes.filtersClear")}
           </button>
 
           <button
@@ -468,13 +468,13 @@ const CostosPage = () => {
             onClick={fetchReport}
             disabled={loading || loadingFilters}
           >
-            Aplicar filtros
+            {t("reportes.filtersApply")}
           </button>
         </div>
 
         {error && (
           <div className="text-xs text-red-600 mt-1">
-            <strong>Error: </strong>
+            <strong>{t("reportes.errorLabel")} </strong>
             {error}
           </div>
         )}
@@ -484,35 +484,35 @@ const CostosPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="bg-white rounded-xl shadow p-3 flex flex-col">
           <span className="text-xs text-gray-500 uppercase tracking-wide">
-            Total de horas
+            {t("reportes.summaryTotalHoursLabel")}
           </span>
           <span className="text-xl font-bold">
             {formatNumber(totalGlobal.totalHours, 2)}
           </span>
           <span className="text-[11px] text-gray-500 mt-1">
-            Suma de todas las horas trabajadas en el período filtrado.
+            {t("reportes.summaryTotalHoursHelp")}
           </span>
         </div>
 
         <div className="bg-white rounded-xl shadow p-3 flex flex-col">
           <span className="text-xs text-gray-500 uppercase tracking-wide">
-            Costo total (todas las monedas)
+            {t("reportes.summaryTotalCostLabel")}
           </span>
           <span className="text-xl font-bold">
             {formatNumber(totalGlobal.totalCost, 2)}
           </span>
           <span className="text-[11px] text-gray-500 mt-1">
-            Suma global sin distinguir moneda. Revisa abajo por moneda.
+            {t("reportes.summaryTotalCostHelp")}
           </span>
         </div>
 
         <div className="bg-white rounded-xl shadow p-3 flex flex-col">
           <span className="text-xs text-gray-500 uppercase tracking-wide">
-            Registros
+            {t("reportes.summaryRecordsLabel")}
           </span>
           <span className="text-xl font-bold">{rows.length}</span>
           <span className="text-[11px] text-gray-500 mt-1">
-            Número de filas detalladas que alimentan las tarjetas y la tabla.
+            {t("reportes.summaryRecordsHelp")}
           </span>
         </div>
       </div>
@@ -521,18 +521,18 @@ const CostosPage = () => {
       <div className="bg-white rounded-xl shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700">
-            Detalle de registros
+            {t("reportes.tableTitle")}
           </h2>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-gray-500">
-              Exporta esta tabla a una hoja de cálculo.
+              {t("reportes.tableExportHelp")}
             </span>
             <button
               type="button"
               onClick={handleExportCSV}
               className="px-3 py-1 text-xs rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
             >
-              Descargar CSV
+              {t("reportes.tableExportButton")}
             </button>
           </div>
         </div>
@@ -542,31 +542,31 @@ const CostosPage = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Persona
+                  {t("reportes.colPersona")}
                 </th>
                 <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Geocerca
+                  {t("reportes.colGeocerca")}
                 </th>
                 <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Actividad
+                  {t("reportes.colActividad")}
                 </th>
                 <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Inicio
+                  {t("reportes.colInicio")}
                 </th>
                 <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Fin
+                  {t("reportes.colFin")}
                 </th>
                 <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Horas
+                  {t("reportes.colHoras")}
                 </th>
                 <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Tarifa
+                  {t("reportes.colTarifa")}
                 </th>
                 <th className="px-2 py-1 text-right font-semibold text-gray-600">
-                  Costo
+                  {t("reportes.colCosto")}
                 </th>
                 <th className="px-2 py-1 text-left font-semibold text-gray-600">
-                  Moneda
+                  {t("reportes.colMoneda")}
                 </th>
               </tr>
             </thead>
@@ -577,20 +577,20 @@ const CostosPage = () => {
                     colSpan={9}
                     className="px-2 py-6 text-center text-xs text-gray-500"
                   >
-                    No hay datos para los filtros seleccionados.
+                    {t("reportes.tableEmpty")}
                   </td>
                 </tr>
               )}
               {(rows || []).map((r) => (
                 <tr key={r.id} className="border-t border-gray-100">
                   <td className="px-2 py-1">
-                    {r.personal_nombre || "Sin nombre"}
+                    {r.personal_nombre || t("reportes.personNoName")}
                   </td>
                   <td className="px-2 py-1">
-                    {r.geocerca_nombre || "Sin geocerca"}
+                    {r.geocerca_nombre || t("reportes.geofenceNoName")}
                   </td>
                   <td className="px-2 py-1">
-                    {r.actividad_nombre || "Sin actividad"}
+                    {r.actividad_nombre || t("reportes.activityNoName")}
                   </td>
                   <td className="px-2 py-1">{formatDateTime(r.start_time)}</td>
                   <td className="px-2 py-1">{formatDateTime(r.end_time)}</td>

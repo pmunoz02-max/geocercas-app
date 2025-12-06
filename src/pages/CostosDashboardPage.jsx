@@ -1,8 +1,9 @@
 // src/pages/CostosDashboardPage.jsx
-// VERSION COMPLETA Y CORREGIDA
+// VERSION INTERNACIONALIZADA (ES/EN/FR)
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 // Recharts para gráficos
 import {
@@ -22,8 +23,6 @@ import {
 } from "recharts";
 
 // === Utilidades comunes (alineadas con CostosPage) ===
-
-const emptyOption = { value: "", label: "Todos" };
 
 function summarizeByCurrency(rows) {
   const map = new Map();
@@ -98,28 +97,29 @@ function buildDateRange(fromDateStr, toDateStr) {
 }
 
 // Configuración de dimensiones para análisis
+// Usamos labelKey para que se traduzca con i18n
 const DIMENSIONS = {
   persona: {
     id: "persona",
-    label: "Por persona",
+    labelKey: "dashboardCostos.dimensionPersona",
     groupKey: "personal_id",
     labelField: "personal_nombre",
   },
   actividad: {
     id: "actividad",
-    label: "Por actividad",
+    labelKey: "dashboardCostos.dimensionActividad",
     groupKey: "actividad_id",
     labelField: "actividad_nombre",
   },
   geocerca: {
     id: "geocerca",
-    label: "Por geocerca",
+    labelKey: "dashboardCostos.dimensionGeocerca",
     groupKey: "geocerca_id",
     labelField: "geocerca_nombre",
   },
   moneda: {
     id: "moneda",
-    label: "Por moneda",
+    labelKey: "dashboardCostos.dimensionMoneda",
     groupKey: "currency_code",
     labelField: "currency_code",
   },
@@ -127,15 +127,23 @@ const DIMENSIONS = {
 
 // Tipos de gráficos
 const CHART_TYPES = {
-  bar: { id: "bar", label: "Barras" },
-  line: { id: "line", label: "Líneas" },
-  pie: { id: "pie", label: "Pastel" },
+  bar: { id: "bar", labelKey: "dashboardCostos.chartTypeBar" },
+  line: { id: "line", labelKey: "dashboardCostos.chartTypeLine" },
+  pie: { id: "pie", labelKey: "dashboardCostos.chartTypePie" },
 };
 
 // Tipos de métricas
 const METRICS = {
-  cost: { id: "cost", label: "Costo total", key: "totalCost" },
-  hours: { id: "hours", label: "Horas totales", key: "totalHours" },
+  cost: {
+    id: "cost",
+    labelKey: "dashboardCostos.metricCost",
+    key: "totalCost",
+  },
+  hours: {
+    id: "hours",
+    labelKey: "dashboardCostos.metricHours",
+    key: "totalHours",
+  },
 };
 
 // Paleta de colores
@@ -182,16 +190,17 @@ function aggregateBy(rows, { groupKey, labelField }) {
   );
 }
 
-// === RENDERIZADOR DE GRÁFICOS (MODIFICADO CON COLORES DINÁMICOS EN BARRAS) ===
+// === RENDERIZADOR DE GRÁFICOS ===
 
 function ChartRenderer({ chartType, data, metricKey, valueLabel, maxItems = 15 }) {
+  const { t } = useTranslation();
   const trimmedData = (data || []).slice(0, maxItems);
   const hasData = trimmedData.length > 0;
 
   if (!hasData) {
     return (
       <div className="flex items-center justify-center h-48 text-xs text-gray-500">
-        No hay datos para graficar con los filtros actuales.
+        {t("dashboardCostos.chartNoData")}
       </div>
     );
   }
@@ -248,7 +257,7 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel, maxItems = 15 }
     );
   }
 
-  // === GRÁFICO DE BARRAS (CORREGIDO: COLORES DINÁMICOS) ===
+  // === GRÁFICO DE BARRAS ===
   return (
     <ResponsiveContainer width="100%" height={320}>
       <BarChart data={trimmedData} margin={{ top: 10, right: 20, bottom: 40 }}>
@@ -281,6 +290,7 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel, maxItems = 15 }
 
 const CostosDashboardPage = () => {
   const { currentOrg, currentRole } = useAuth();
+  const { t } = useTranslation();
 
   // Filtros
   const [fromDate, setFromDate] = useState("");
@@ -298,7 +308,6 @@ const CostosDashboardPage = () => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingFilters, setLoadingFilters] = useState(false);
-  const [error, setError] = useState("");
 
   // Controles del gráfico
   const [selectedDimension, setSelectedDimension] = useState("persona");
@@ -347,7 +356,7 @@ const CostosDashboardPage = () => {
     };
 
     loadFilters();
-  }, [currentOrg?.id]);
+  }, [currentOrg?.id, canView]);
 
   // Cargar datos del dashboard
   const fetchReport = async () => {
@@ -382,8 +391,8 @@ const CostosDashboardPage = () => {
 
   // Carga inicial
   useEffect(() => {
-    if (currentOrg?.id) fetchReport();
-  }, [currentOrg?.id]);
+    if (currentOrg?.id && canView) fetchReport();
+  }, [currentOrg?.id, canView]);
 
   const resumenMoneda = useMemo(() => summarizeByCurrency(rows), [rows]);
 
@@ -412,7 +421,7 @@ const CostosDashboardPage = () => {
   if (!canView) {
     return (
       <div className="p-4 text-red-600">
-        No tienes permisos para ver este módulo.
+        {t("dashboardCostos.noAccess")}
       </div>
     );
   }
@@ -422,9 +431,11 @@ const CostosDashboardPage = () => {
       {/* TITULO */}
       <div className="flex flex-col md:flex-row justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard de Costos</h1>
+          <h1 className="text-2xl font-bold">
+            {t("dashboardCostos.title")}
+          </h1>
           <p className="text-sm text-gray-600">
-            Análisis visual por persona, actividad, geocerca y moneda.
+            {t("dashboardCostos.subtitle")}
           </p>
         </div>
 
@@ -432,17 +443,21 @@ const CostosDashboardPage = () => {
           onClick={fetchReport}
           className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
         >
-          Refrescar datos
+          {t("dashboardCostos.refreshButton")}
         </button>
       </div>
 
       {/* FILTROS */}
       <div className="bg-white shadow rounded-xl p-4 space-y-3">
-        <h2 className="text-sm font-semibold">Filtros del dataset</h2>
+        <h2 className="text-sm font-semibold">
+          {t("dashboardCostos.filtersTitle")}
+        </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
-            <label className="text-xs">Desde</label>
+            <label className="text-xs">
+              {t("dashboardCostos.filtersFrom")}
+            </label>
             <input
               type="date"
               value={fromDate}
@@ -452,7 +467,9 @@ const CostosDashboardPage = () => {
           </div>
 
           <div>
-            <label className="text-xs">Hasta</label>
+            <label className="text-xs">
+              {t("dashboardCostos.filtersTo")}
+            </label>
             <input
               type="date"
               value={toDate}
@@ -462,13 +479,17 @@ const CostosDashboardPage = () => {
           </div>
 
           <div>
-            <label className="text-xs">Persona</label>
+            <label className="text-xs">
+              {t("dashboardCostos.filtersPerson")}
+            </label>
             <select
               value={selectedPersonaId}
               onChange={(e) => setSelectedPersonaId(e.target.value)}
               className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value="">Todos</option>
+              <option value="">
+                {t("dashboardCostos.filtersAll")}
+              </option>
               {personas.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre || p.email}
@@ -478,13 +499,17 @@ const CostosDashboardPage = () => {
           </div>
 
           <div>
-            <label className="text-xs">Actividad</label>
+            <label className="text-xs">
+              {t("dashboardCostos.filtersActivity")}
+            </label>
             <select
               value={selectedActividadId}
               onChange={(e) => setSelectedActividadId(e.target.value)}
               className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value="">Todos</option>
+              <option value="">
+                {t("dashboardCostos.filtersAll")}
+              </option>
               {actividades.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -494,13 +519,17 @@ const CostosDashboardPage = () => {
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-xs">Geocerca</label>
+            <label className="text-xs">
+              {t("dashboardCostos.filtersGeofence")}
+            </label>
             <select
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
               className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value="">Todos</option>
+              <option value="">
+                {t("dashboardCostos.filtersAll")}
+              </option>
               {geocercas.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre}
@@ -521,14 +550,14 @@ const CostosDashboardPage = () => {
               setSelectedGeocercaId("");
             }}
           >
-            Limpiar filtros
+            {t("dashboardCostos.filtersClear")}
           </button>
 
           <button
             className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm"
             onClick={fetchReport}
           >
-            Aplicar filtros
+            {t("dashboardCostos.filtersApply")}
           </button>
         </div>
       </div>
@@ -536,37 +565,49 @@ const CostosDashboardPage = () => {
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl p-3 shadow">
-          <p className="text-xs text-gray-500">Total de horas</p>
+          <p className="text-xs text-gray-500">
+            {t("dashboardCostos.kpiTotalHours")}
+          </p>
           <p className="text-xl font-bold">
             {formatNumber(totalGlobal.totalHours)}
           </p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow">
-          <p className="text-xs text-gray-500">Costo total</p>
+          <p className="text-xs text-gray-500">
+            {t("dashboardCostos.kpiTotalCost")}
+          </p>
           <p className="text-xl font-bold">
             {formatNumber(totalGlobal.totalCost)}
           </p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow">
-          <p className="text-xs text-gray-500">Registros</p>
+          <p className="text-xs text-gray-500">
+            {t("dashboardCostos.kpiRecords")}
+          </p>
           <p className="text-xl font-bold">{rows.length}</p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow">
-          <p className="text-xs text-gray-500">Monedas detectadas</p>
+          <p className="text-xs text-gray-500">
+            {t("dashboardCostos.kpiCurrencies")}
+          </p>
           <p className="text-xl font-bold">{resumenMoneda.length}</p>
         </div>
       </div>
 
       {/* Controles del gráfico principal */}
       <div className="bg-white rounded-xl p-4 shadow space-y-3">
-        <h2 className="text-sm font-semibold">Gráfico principal</h2>
+        <h2 className="text-sm font-semibold">
+          {t("dashboardCostos.chartTitle")}
+        </h2>
 
         <div className="flex flex-wrap gap-3 text-xs">
           <div>
-            <label className="text-[11px]">Dimensión</label>
+            <label className="text-[11px]">
+              {t("dashboardCostos.chartDimension")}
+            </label>
             <select
               value={selectedDimension}
               onChange={(e) => setSelectedDimension(e.target.value)}
@@ -574,14 +615,16 @@ const CostosDashboardPage = () => {
             >
               {Object.values(DIMENSIONS).map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.label}
+                  {t(d.labelKey)}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-[11px]">Métrica</label>
+            <label className="text-[11px]">
+              {t("dashboardCostos.chartMetric")}
+            </label>
             <select
               value={selectedMetric}
               onChange={(e) => setSelectedMetric(e.target.value)}
@@ -589,22 +632,24 @@ const CostosDashboardPage = () => {
             >
               {Object.values(METRICS).map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.label}
+                  {t(m.labelKey)}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-[11px]">Tipo de gráfico</label>
+            <label className="text-[11px]">
+              {t("dashboardCostos.chartType")}
+            </label>
             <select
               value={selectedChartType}
               onChange={(e) => setSelectedChartType(e.target.value)}
               className="border rounded-lg px-2 py-1"
             >
-              {Object.values(CHART_TYPES).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
+              {Object.values(CHART_TYPES).map((ct) => (
+                <option key={ct.id} value={ct.id}>
+                  {t(ct.labelKey)}
                 </option>
               ))}
             </select>
@@ -615,24 +660,32 @@ const CostosDashboardPage = () => {
           chartType={selectedChartType}
           data={aggregatedData}
           metricKey={metricConfig.key}
-          valueLabel={metricConfig.label}
+          valueLabel={t(metricConfig.labelKey)}
         />
       </div>
 
       {/* Tabla resumen */}
       <div className="bg-white p-4 shadow rounded-xl">
         <h2 className="text-sm font-semibold mb-2">
-          Top categorías según filtro
+          {t("dashboardCostos.tableTitle")}
         </h2>
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-2 py-1 text-left">Categoría</th>
-                <th className="px-2 py-1 text-right">Horas</th>
-                <th className="px-2 py-1 text-right">Costo</th>
-                <th className="px-2 py-1 text-right">Registros</th>
+                <th className="px-2 py-1 text-left">
+                  {t("dashboardCostos.colCategoria")}
+                </th>
+                <th className="px-2 py-1 text-right">
+                  {t("dashboardCostos.colHoras")}
+                </th>
+                <th className="px-2 py-1 text-right">
+                  {t("dashboardCostos.colCosto")}
+                </th>
+                <th className="px-2 py-1 text-right">
+                  {t("dashboardCostos.colRegistros")}
+                </th>
               </tr>
             </thead>
 
@@ -656,7 +709,7 @@ const CostosDashboardPage = () => {
                     colSpan="4"
                     className="px-2 py-4 text-center text-gray-500"
                   >
-                    No hay datos para mostrar
+                    {t("dashboardCostos.tableEmpty")}
                   </td>
                 </tr>
               )}
