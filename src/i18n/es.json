@@ -1,0 +1,109 @@
+{
+  "common": {
+    "language": "Idioma",
+    "spanish": "Español",
+    "english": "Inglés",
+    "french": "Francés"
+  },
+
+  "login": {
+    "title": "Inicia sesión en tu cuenta",
+    "subtitle": "Administra tu personal y geocercas desde un solo lugar.",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "tu@correo.com",
+    "passwordLabel": "Contraseña",
+    "passwordPlaceholder": "Tu contraseña",
+    "submit": "Entrar",
+    "or": "o",
+    "magicLinkTitle": "Accede con un link mágico",
+    "magicLinkDescription": "Te enviaremos un enlace de acceso a tu correo.",
+    "magicLinkButton": "Enviarme link mágico",
+    "languageLabel": "Idioma",
+
+    "errorMissingCredentials": "Por favor ingresa correo y contraseña.",
+    "errorInvalidCredentials": "Credenciales inválidas.",
+    "errorUnexpected": "Ocurrió un error inesperado. Intenta nuevamente.",
+    "errorMissingEmail": "Por favor ingresa tu correo electrónico.",
+    "errorMagicLink": "No se pudo enviar el Magic Link.",
+    "errorMagicLinkUnexpected": "Error inesperado al enviar el Magic Link.",
+    "infoMagicLinkSent": "Te enviamos un link de acceso. Revisa tu bandeja de entrada (y spam).",
+
+    "loadingSession": "Cargando tu sesión…",
+    "alreadyLoggedInTitle": "Ya tienes una sesión activa",
+    "alreadyLoggedInBody": "Puedes ir directamente a tu panel o cerrar sesión si quieres entrar con otra cuenta.",
+    "goToDashboard": "Ir al panel",
+    "logout": "Cerrar sesión",
+
+    "modePassword": "Email + contraseña",
+    "modeMagic": "Magic Link por correo",
+    "submitting": "Ingresando...",
+    "magicSubmitting": "Enviando link...",
+    "magicButton": "Enviar Magic Link",
+    "magicDescription": "Te enviaremos un correo con un link de acceso. Al hacer clic, se abrirá la app y te llevaremos a tu panel."
+  },
+
+  "landing": {
+    "brandName": "App Geocercas",
+    "brandTagline": "Control de personal por geocercas",
+    "loginButton": "Iniciar sesión",
+    "goToDashboard": "Ir al panel",
+    "logout": "Cerrar sesión",
+
+    "heroBadge": "SaaS para operaciones agrícolas y de campo",
+
+    "heroTitlePrefix": "Controla tu personal",
+    "heroTitleHighlight": "por geocercas",
+    "heroTitleSuffix": "en tiempo real.",
+    "heroSubtitle": "App Geocercas te ayuda a organizar geocercas, personal, actividades y reportes de costos en una sola plataforma.",
+
+    "ctaLogin": "Iniciar sesión",
+    "ctaMagic": "Recibir link mágico por correo",
+
+    "bulletGeocercasTitle": "Geocercas",
+    "bulletGeocercasBody": "Dibuja zonas de trabajo y controla quién entra, sale y cuánto tiempo permanece.",
+
+    "bulletPersonalTitle": "Personal & Actividades",
+    "bulletPersonalBody": "Asigna personas a actividades, turnos y geocercas según tu planificación diaria.",
+
+    "bulletCostsTitle": "Reportes de costos",
+    "bulletCostsBody": "Obtén reportes por persona, actividad, geocerca y rango de fechas para tomar decisiones.",
+
+    "livePanelLabel": "Panel en vivo",
+    "livePanelTitle": "Geocercas & Tracker",
+    "zonesActive": "Zonas activas",
+    "statusOnline": "Online",
+
+    "assistanceControlTitle": "Control de asistencia",
+    "assistanceControlBody": "Desde el campo hasta el reporte de costos.",
+
+    "multiOrgTitle": "Multi-organización",
+    "multiOrgBody": "Maneja varias fincas, lotes o unidades de negocio.",
+
+    "rightsReserved": "Todos los derechos reservados.",
+    "footerFaq": "FAQ",
+    "footerSupport": "Soporte",
+    "footerTerms": "Términos",
+    "footerPrivacy": "Privacidad"
+  },
+
+  "app": {
+    "header": {
+      "login": "Iniciar sesión",
+      "loginMagic": "Entrar con Magic Link",
+      "logout": "Salir",
+      "admins": "Admins",
+      "roleOwner": "Owner",
+      "roleAdmin": "Admin",
+      "roleTracker": "Tracker"
+    },
+    "tabs": {
+      "inicio": "Inicio",
+      "personal": "Personal",
+      "geocercas": "Geocercas",
+      "asignaciones": "Asignaciones",
+      "actividades": "Actividades",
+      "costos": "Costos",
+      "reportes": "Reportes"
+    }
+  }
+}

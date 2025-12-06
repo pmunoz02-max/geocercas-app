@@ -1,0 +1,109 @@
+{
+  "common": {
+    "language": "Language",
+    "spanish": "Spanish",
+    "english": "English",
+    "french": "French"
+  },
+
+  "login": {
+    "title": "Sign in to your account",
+    "subtitle": "Manage your staff and geofences from a single place.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@email.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Your password",
+    "submit": "Sign in",
+    "or": "or",
+    "magicLinkTitle": "Access with a magic link",
+    "magicLinkDescription": "We will send you a sign-in link to your email.",
+    "magicLinkButton": "Send me a magic link",
+    "languageLabel": "Language",
+
+    "errorMissingCredentials": "Please enter email and password.",
+    "errorInvalidCredentials": "Invalid credentials.",
+    "errorUnexpected": "Unexpected error. Please try again.",
+    "errorMissingEmail": "Please enter your email.",
+    "errorMagicLink": "Magic link could not be sent.",
+    "errorMagicLinkUnexpected": "Unexpected error sending magic link.",
+    "infoMagicLinkSent": "A magic link has been sent to your email. Check your inbox (and spam).",
+
+    "loadingSession": "Loading your session…",
+    "alreadyLoggedInTitle": "You already have an active session",
+    "alreadyLoggedInBody": "You can go directly to your dashboard or sign out to use another account.",
+    "goToDashboard": "Go to dashboard",
+    "logout": "Sign out",
+
+    "modePassword": "Email + password",
+    "modeMagic": "Magic Link",
+    "submitting": "Signing in...",
+    "magicSubmitting": "Sending link...",
+    "magicButton": "Send Magic Link",
+    "magicDescription": "We will send you a magic access link. When you click it, the app will open and take you to your dashboard."
+  },
+
+  "landing": {
+    "brandName": "App Geocercas",
+    "brandTagline": "Geofence-based personnel control",
+    "loginButton": "Sign in",
+    "goToDashboard": "Go to dashboard",
+    "logout": "Sign out",
+
+    "heroBadge": "SaaS for agricultural and field operations",
+
+    "heroTitlePrefix": "Control your staff",
+    "heroTitleHighlight": "with geofences",
+    "heroTitleSuffix": "in real time.",
+    "heroSubtitle": "App Geocercas helps you organize geofences, staff, activities, and cost reports in a single platform.",
+
+    "ctaLogin": "Sign in",
+    "ctaMagic": "Receive a magic link by email",
+
+    "bulletGeocercasTitle": "Geofences",
+    "bulletGeocercasBody": "Draw work zones and track who enters, leaves, and how long they stay.",
+
+    "bulletPersonalTitle": "Staff & Activities",
+    "bulletPersonalBody": "Assign people to activities, shifts, and geofences according to your daily planning.",
+
+    "bulletCostsTitle": "Cost reports",
+    "bulletCostsBody": "Get reports per person, activity, geofence, or date range.",
+
+    "livePanelLabel": "Live panel",
+    "livePanelTitle": "Geofences & Tracker",
+    "zonesActive": "Active zones",
+    "statusOnline": "Online",
+
+    "assistanceControlTitle": "Attendance control",
+    "assistanceControlBody": "From the field to your cost reports.",
+
+    "multiOrgTitle": "Multi-organization",
+    "multiOrgBody": "Manage multiple farms, lots, or business units.",
+
+    "rightsReserved": "All rights reserved.",
+    "footerFaq": "FAQ",
+    "footerSupport": "Support",
+    "footerTerms": "Terms",
+    "footerPrivacy": "Privacy"
+  },
+
+  "app": {
+    "header": {
+      "login": "Sign in",
+      "loginMagic": "Sign in with Magic Link",
+      "logout": "Sign out",
+      "admins": "Admins",
+      "roleOwner": "Owner",
+      "roleAdmin": "Admin",
+      "roleTracker": "Tracker"
+    },
+    "tabs": {
+      "inicio": "Home",
+      "personal": "Staff",
+      "geocercas": "Geofences",
+      "asignaciones": "Assignments",
+      "actividades": "Activities",
+      "costos": "Costs",
+      "reportes": "Reports"
+    }
+  }
+}

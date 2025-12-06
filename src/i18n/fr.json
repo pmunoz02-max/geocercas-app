@@ -1,0 +1,109 @@
+{
+  "common": {
+    "language": "Langue",
+    "spanish": "Espagnol",
+    "english": "Anglais",
+    "french": "Français"
+  },
+
+  "login": {
+    "title": "Connectez-vous à votre compte",
+    "subtitle": "Gérez votre personnel et vos géofences depuis un seul endroit.",
+    "emailLabel": "E-mail",
+    "emailPlaceholder": "vous@email.com",
+    "passwordLabel": "Mot de passe",
+    "passwordPlaceholder": "Votre mot de passe",
+    "submit": "Se connecter",
+    "or": "ou",
+    "magicLinkTitle": "Accéder avec un lien magique",
+    "magicLinkDescription": "Nous vous enverrons un lien de connexion à votre e-mail.",
+    "magicLinkButton": "M'envoyer un lien magique",
+    "languageLabel": "Langue",
+
+    "errorMissingCredentials": "Veuillez saisir votre e-mail et votre mot de passe.",
+    "errorInvalidCredentials": "Identifiants invalides.",
+    "errorUnexpected": "Erreur inattendue. Veuillez réessayer.",
+    "errorMissingEmail": "Veuillez saisir votre e-mail.",
+    "errorMagicLink": "Le lien magique n'a pas pu être envoyé.",
+    "errorMagicLinkUnexpected": "Erreur inattendue lors de l’envoi du lien magique.",
+    "infoMagicLinkSent": "Un lien magique a été envoyé à votre e-mail. Vérifiez votre boîte de réception (et spam).",
+
+    "loadingSession": "Chargement de votre session…",
+    "alreadyLoggedInTitle": "Vous êtes déjà connecté",
+    "alreadyLoggedInBody": "Accédez à votre tableau de bord ou déconnectez-vous pour utiliser un autre compte.",
+    "goToDashboard": "Aller au tableau de bord",
+    "logout": "Se déconnecter",
+
+    "modePassword": "Email + mot de passe",
+    "modeMagic": "Lien magique",
+    "submitting": "Connexion...",
+    "magicSubmitting": "Envoi du lien...",
+    "magicButton": "Envoyer le lien magique",
+    "magicDescription": "Nous vous enverrons un lien d’accès. En cliquant dessus, l'application s’ouvrira et vous mènera à votre tableau de bord."
+  },
+
+  "landing": {
+    "brandName": "App Geocercas",
+    "brandTagline": "Contrôle du personnel par géofences",
+    "loginButton": "Se connecter",
+    "goToDashboard": "Aller au tableau de bord",
+    "logout": "Se déconnecter",
+
+    "heroBadge": "SaaS pour opérations agricoles et de terrain",
+
+    "heroTitlePrefix": "Contrôlez votre personnel",
+    "heroTitleHighlight": "avec des géofences",
+    "heroTitleSuffix": "en temps réel.",
+    "heroSubtitle": "App Geocercas vous aide à organiser géofences, personnel, activités et rapports de coûts dans une seule plateforme.",
+
+    "ctaLogin": "Se connecter",
+    "ctaMagic": "Recevoir un lien magique par e-mail",
+
+    "bulletGeocercasTitle": "Géofences",
+    "bulletGeocercasBody": "Dessinez des zones de travail et voyez qui entre, sort et combien de temps ils restent.",
+
+    "bulletPersonalTitle": "Personnel & Activités",
+    "bulletPersonalBody": "Assignez des personnes à des activités, des équipes et des zones selon votre planification quotidienne.",
+
+    "bulletCostsTitle": "Rapports de coûts",
+    "bulletCostsBody": "Obtenez des rapports par personne, activité, géofence ou période.",
+
+    "livePanelLabel": "Panel en direct",
+    "livePanelTitle": "Géofences & Tracker",
+    "zonesActive": "Zones actives",
+    "statusOnline": "En ligne",
+
+    "assistanceControlTitle": "Contrôle d’assiduité",
+    "assistanceControlBody": "Du terrain jusqu’aux rapports de coûts.",
+
+    "multiOrgTitle": "Multi-organisation",
+    "multiOrgBody": "Gérez plusieurs exploitations, lots ou unités commerciales.",
+
+    "rightsReserved": "Tous droits réservés.",
+    "footerFaq": "FAQ",
+    "footerSupport": "Support",
+    "footerTerms": "Conditions",
+    "footerPrivacy": "Confidentialité"
+  },
+
+  "app": {
+    "header": {
+      "login": "Se connecter",
+      "loginMagic": "Se connecter avec lien magique",
+      "logout": "Se déconnecter",
+      "admins": "Admins",
+      "roleOwner": "Owner",
+      "roleAdmin": "Admin",
+      "roleTracker": "Tracker"
+    },
+    "tabs": {
+      "inicio": "Accueil",
+      "personal": "Personnel",
+      "geocercas": "Géofences",
+      "asignaciones": "Affectations",
+      "actividades": "Activités",
+      "costos": "Coûts",
+      "reportes": "Rapports"
+    }
+  }
+}
