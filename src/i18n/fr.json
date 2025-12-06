@@ -98,12 +98,17 @@
     },
     "tabs": {
       "inicio": "Accueil",
+      "nuevaGeocerca": "Nouvelle géofence",
       "personal": "Personnel",
       "geocercas": "Géofences",
-      "asignaciones": "Affectations",
       "actividades": "Activités",
+      "asignaciones": "Affectations",
       "costos": "Coûts",
-      "reportes": "Rapports"
+      "reportes": "Rapports",
+      "dashboard": "Tableau de bord",
+      "tracker": "Tracker",
+      "invitarTracker": "Inviter un tracker",
+      "admins": "Admins"
     }
   },
 

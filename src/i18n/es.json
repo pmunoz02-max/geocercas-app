@@ -98,12 +98,17 @@
     },
     "tabs": {
       "inicio": "Inicio",
+      "nuevaGeocerca": "Nueva geocerca",
       "personal": "Personal",
       "geocercas": "Geocercas",
-      "asignaciones": "Asignaciones",
       "actividades": "Actividades",
+      "asignaciones": "Asignaciones",
       "costos": "Costos",
-      "reportes": "Reportes"
+      "reportes": "Reportes",
+      "dashboard": "Dashboard",
+      "tracker": "Tracker",
+      "invitarTracker": "Invitar tracker",
+      "admins": "Admins"
     }
   },
 

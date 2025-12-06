@@ -98,12 +98,17 @@
     },
     "tabs": {
       "inicio": "Home",
+      "nuevaGeocerca": "New geofence",
       "personal": "Staff",
       "geocercas": "Geofences",
-      "asignaciones": "Assignments",
       "actividades": "Activities",
+      "asignaciones": "Assignments",
       "costos": "Costs",
-      "reportes": "Reports"
+      "reportes": "Reports",
+      "dashboard": "Dashboard",
+      "tracker": "Tracker",
+      "invitarTracker": "Invite tracker",
+      "admins": "Admins"
     }
   },
 
@@ -223,4 +228,3 @@
     "errorCoordsInvalid": "Invalid coordinates."
   }
 }
-
