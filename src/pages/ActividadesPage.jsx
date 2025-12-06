@@ -9,23 +9,26 @@ import {
 } from "../lib/actividadesApi";
 
 import { useAuth } from "../context/AuthContext.jsx";
+import { useTranslation } from "react-i18next";
 
-// 🔹 Lista estática de monedas ISO 4217 (las más usadas; puedes ampliarla luego)
+// 🔹 Lista de monedas, nombres vía i18n (actividades.currencies.*)
 const CURRENCIES = [
-  { code: "USD", name: "Dólar estadounidense" },
-  { code: "EUR", name: "Euro" },
-  { code: "MXN", name: "Peso mexicano" },
-  { code: "COP", name: "Peso colombiano" },
-  { code: "PEN", name: "Sol peruano" },
-  { code: "CLP", name: "Peso chileno" },
-  { code: "ARS", name: "Peso argentino" },
-  { code: "BRL", name: "Real brasileño" },
-  { code: "CAD", name: "Dólar canadiense" },
-  { code: "GBP", name: "Libra esterlina" },
+  { code: "USD", labelKey: "actividades.currencies.USD" },
+  { code: "EUR", labelKey: "actividades.currencies.EUR" },
+  { code: "MXN", labelKey: "actividades.currencies.MXN" },
+  { code: "COP", labelKey: "actividades.currencies.COP" },
+  { code: "PEN", labelKey: "actividades.currencies.PEN" },
+  { code: "CLP", labelKey: "actividades.currencies.CLP" },
+  { code: "ARS", labelKey: "actividades.currencies.ARS" },
+  { code: "BRL", labelKey: "actividades.currencies.BRL" },
+  { code: "CAD", labelKey: "actividades.currencies.CAD" },
+  { code: "GBP", labelKey: "actividades.currencies.GBP" },
 ];
 
 export default function ActividadesPage() {
-  const { profile, role } = useAuth(); // Aquí viene tenant_id/org_id y el rol
+  const { profile, role } = useAuth(); // tenant_id/org_id + rol
+  const { t } = useTranslation();
+
   const [actividades, setActividades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -36,7 +39,6 @@ export default function ActividadesPage() {
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
 
-  // 🔹 Campos nuevos
   const [currency, setCurrency] = useState("USD");
   const [hourlyRate, setHourlyRate] = useState("");
 
@@ -48,7 +50,7 @@ export default function ActividadesPage() {
 
     if (error) {
       console.error(error);
-      setErrorMsg(error.message || "Error cargando actividades");
+      setErrorMsg(error.message || t("actividades.errorLoad"));
     } else {
       setActividades(data || []);
     }
@@ -58,6 +60,7 @@ export default function ActividadesPage() {
 
   useEffect(() => {
     loadActividades();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function resetForm() {
@@ -74,12 +77,12 @@ export default function ActividadesPage() {
     setErrorMsg("");
 
     if (!nombre.trim()) {
-      setErrorMsg("El nombre de la actividad es obligatorio");
+      setErrorMsg(t("actividades.errorNameRequired"));
       return;
     }
 
     if (!hourlyRate || Number(hourlyRate) <= 0) {
-      setErrorMsg("La tarifa por hora debe ser un número mayor que 0");
+      setErrorMsg(t("actividades.errorRatePositive"));
       return;
     }
 
@@ -87,7 +90,7 @@ export default function ActividadesPage() {
       if (formMode === "create") {
         const tenantId = profile?.tenant_id || profile?.org_id;
         if (!tenantId) {
-          setErrorMsg("No se encontró tenant_id/org_id en el perfil del usuario");
+          setErrorMsg(t("actividades.errorMissingTenant"));
           return;
         }
 
@@ -116,7 +119,7 @@ export default function ActividadesPage() {
       await loadActividades();
     } catch (err) {
       console.error(err);
-      setErrorMsg(err.message || "Error guardando actividad");
+      setErrorMsg(err.message || t("actividades.errorSave"));
     }
   }
 
@@ -137,19 +140,21 @@ export default function ActividadesPage() {
       await loadActividades();
     } catch (err) {
       console.error(err);
-      setErrorMsg(err.message || "Error actualizando estado");
+      setErrorMsg(err.message || t("actividades.errorToggle"));
     }
   }
 
   async function handleDelete(act) {
-    if (!window.confirm(`¿Eliminar la actividad "${act.name}"?`)) return;
+    if (!window.confirm(t("actividades.confirmDelete", { name: act.name }))) {
+      return;
+    }
     try {
       const { error } = await deleteActividad(act.id);
       if (error) throw error;
       await loadActividades();
     } catch (err) {
       console.error(err);
-      setErrorMsg(err.message || "Error eliminando actividad");
+      setErrorMsg(err.message || t("actividades.errorDelete"));
     }
   }
 
@@ -158,7 +163,9 @@ export default function ActividadesPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Actividades</h1>
+      <h1 className="text-2xl font-semibold mb-4">
+        {t("actividades.title")}
+      </h1>
 
       {errorMsg && (
         <div className="mb-4 rounded-md bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">
@@ -170,42 +177,44 @@ export default function ActividadesPage() {
       {canEdit ? (
         <div className="mb-8 bg-white shadow-sm rounded-lg p-4 border border-gray-100">
           <h2 className="text-lg font-medium mb-3">
-            {formMode === "create" ? "Nueva actividad" : "Editar actividad"}
+            {formMode === "create"
+              ? t("actividades.formTitleNew")
+              : t("actividades.formTitleEdit")}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             {/* Nombre */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre
+                {t("actividades.fieldName")}
               </label>
               <input
                 type="text"
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ej. Inspección de campo"
+                placeholder={t("actividades.fieldNamePlaceholder")}
               />
             </div>
 
             {/* Descripción */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción
+                {t("actividades.fieldDescription")}
               </label>
               <textarea
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 rows={2}
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
-                placeholder="Descripción breve (opcional)"
+                placeholder={t("actividades.fieldDescriptionPlaceholder")}
               />
             </div>
 
             {/* Moneda */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Moneda
+                {t("actividades.fieldCurrency")}
               </label>
               <select
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -214,7 +223,7 @@ export default function ActividadesPage() {
               >
                 {CURRENCIES.map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.code} — {c.name}
+                    {c.code} — {t(c.labelKey)}
                   </option>
                 ))}
               </select>
@@ -223,7 +232,7 @@ export default function ActividadesPage() {
             {/* Tarifa por hora */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tarifa por hora
+                {t("actividades.fieldHourlyRate")}
               </label>
               <input
                 type="number"
@@ -232,7 +241,7 @@ export default function ActividadesPage() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 value={hourlyRate}
                 onChange={(e) => setHourlyRate(e.target.value)}
-                placeholder="Ej. 5.00"
+                placeholder={t("actividades.fieldHourlyRatePlaceholder")}
               />
             </div>
 
@@ -241,7 +250,9 @@ export default function ActividadesPage() {
                 type="submit"
                 className="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
               >
-                {formMode === "create" ? "Crear actividad" : "Guardar cambios"}
+                {formMode === "create"
+                  ? t("actividades.buttonCreate")
+                  : t("actividades.buttonSave")}
               </button>
 
               {formMode === "edit" && (
@@ -250,7 +261,7 @@ export default function ActividadesPage() {
                   className="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
                   onClick={resetForm}
                 >
-                  Cancelar
+                  {t("actividades.buttonCancel")}
                 </button>
               )}
             </div>
@@ -258,7 +269,7 @@ export default function ActividadesPage() {
         </div>
       ) : (
         <div className="mb-6 text-sm text-gray-600">
-          (Modo lectura — los trackers no pueden modificar actividades)
+          {t("actividades.readOnlyNote")}
         </div>
       )}
 
@@ -266,15 +277,17 @@ export default function ActividadesPage() {
       <div className="bg-white shadow-sm rounded-lg border border-gray-100">
         <div className="px-4 py-3 border-b border-gray-100">
           <h2 className="text-sm font-medium text-gray-700">
-            Listado de actividades
+            {t("actividades.tableTitle")}
           </h2>
         </div>
 
         {loading ? (
-          <div className="p-4 text-sm text-gray-500">Cargando actividades…</div>
+          <div className="p-4 text-sm text-gray-500">
+            {t("actividades.loading")}
+          </div>
         ) : actividades.length === 0 ? (
           <div className="p-4 text-sm text-gray-500">
-            No hay actividades registradas.
+            {t("actividades.empty")}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -282,19 +295,19 @@ export default function ActividadesPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Nombre
+                    {t("actividades.thName")}
                   </th>
                   <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Descripción
+                    {t("actividades.thDescription")}
                   </th>
                   <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Costo/h
+                    {t("actividades.thCost")}
                   </th>
                   <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Estado
+                    {t("actividades.thStatus")}
                   </th>
                   <th className="px-4 py-2 text-right font-medium text-gray-700">
-                    Acciones
+                    {t("actividades.thActions")}
                   </th>
                 </tr>
               </thead>
@@ -330,7 +343,9 @@ export default function ActividadesPage() {
                             : "bg-gray-50 text-gray-500 border border-gray-200"
                         }`}
                       >
-                        {act.active ? "Activa" : "Inactiva"}
+                        {act.active
+                          ? t("actividades.statusActive")
+                          : t("actividades.statusInactive")}
                       </span>
                     </td>
 
@@ -343,7 +358,7 @@ export default function ActividadesPage() {
                             className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700"
                             onClick={() => handleEdit(act)}
                           >
-                            Editar
+                            {t("actividades.actionEdit")}
                           </button>
 
                           <button
@@ -351,7 +366,9 @@ export default function ActividadesPage() {
                             className="inline-flex items-center rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-600"
                             onClick={() => handleToggle(act)}
                           >
-                            {act.active ? "Desactivar" : "Activar"}
+                            {act.active
+                              ? t("actividades.actionDeactivate")
+                              : t("actividades.actionActivate")}
                           </button>
 
                           <button
@@ -359,7 +376,7 @@ export default function ActividadesPage() {
                             className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
                             onClick={() => handleDelete(act)}
                           >
-                            Eliminar
+                            {t("actividades.actionDelete")}
                           </button>
                         </>
                       )}
