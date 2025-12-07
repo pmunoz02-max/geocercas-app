@@ -16,6 +16,7 @@ export default function TrackerGpsPage() {
   const watchIdRef = useRef(null);
   const intervalRef = useRef(null);
   const lastCoordsRef = useRef(null);
+  const lowAccuracyTriedRef = useRef(false);
 
   // ---------------------------------------------------
   // 1) Obtener sesión (para saber si el tracker está logueado)
@@ -36,7 +37,9 @@ export default function TrackerGpsPage() {
       if (!data?.session) {
         console.warn("[TrackerGpsPage] NO hay sesión activa");
         if (!cancelled) {
-          setStatus("No hay sesión activa. Abre el tracker desde el enlace de invitación.");
+          setStatus(
+            "No hay sesión activa. Abre el tracker desde el enlace de invitación."
+          );
           setLastError("Sesión nula: el usuario no está autenticado");
         }
       } else {
@@ -61,45 +64,108 @@ export default function TrackerGpsPage() {
 
   // ---------------------------------------------------
   // 2) Iniciar geolocalización del navegador
+  //    - Primer intento: alta precisión
+  //    - Si hay TIMEOUT: reintenta con menor precisión
   // ---------------------------------------------------
   useEffect(() => {
     if (!("geolocation" in navigator)) {
       setStatus("Este dispositivo no soporta geolocalización.");
+      setLastError("navigator.geolocation no está disponible en este navegador.");
       return;
     }
 
+    let cancelled = false;
+
+    const handleSuccess = (pos) => {
+      if (cancelled) return;
+
+      const { latitude, longitude, accuracy } = pos.coords;
+      const c = {
+        lat: latitude,
+        lng: longitude,
+        accuracy: accuracy ?? null,
+      };
+
+      console.log("[TrackerGpsPage] fix recibido:", c);
+
+      lastCoordsRef.current = c;
+      setCoords(c);
+      setStatus("Tracker activo. Ubicación obtenida.");
+    };
+
+    const handleError = (err) => {
+      if (cancelled) return;
+
+      console.error("[TrackerGpsPage] error geolocalización:", err);
+
+      // err.code:
+      // 1: PERMISSION_DENIED
+      // 2: POSITION_UNAVAILABLE
+      // 3: TIMEOUT
+      if (err.code === 3 && !lowAccuracyTriedRef.current) {
+        // Reintento con menor precisión para ver si al menos logramos algo
+        lowAccuracyTriedRef.current = true;
+        setStatus(
+          "Tiempo de espera agotado. Reintentando con menor precisión…"
+        );
+
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          (err2) => {
+            console.error(
+              "[TrackerGpsPage] segundo intento (baja precisión) también falló:",
+              err2
+            );
+            setStatus("No se pudo obtener la ubicación.");
+            setLastError(
+              `${err2.message || String(err2)} (code ${err2.code ?? "?"})`
+            );
+          },
+          {
+            enableHighAccuracy: false,
+            maximumAge: 60_000,
+            timeout: 60_000,
+          }
+        );
+
+        return;
+      }
+
+      setStatus("No se pudo obtener la ubicación.");
+      setLastError(`${err.message || String(err)} (code ${err.code ?? "?"})`);
+    };
+
     setStatus("Solicitando permiso de ubicación…");
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        const c = {
-          lat: latitude,
-          lng: longitude,
-          accuracy: accuracy ?? null,
-        };
-        lastCoordsRef.current = c;
-        setCoords(c);
-        setStatus("Tracker activo. Ubicación obtenida.");
-        // No enviamos aquí directamente, dejamos que lo haga el intervalo.
-      },
-      (err) => {
-        console.error("[TrackerGpsPage] error geolocalización:", err);
-        setStatus("No se pudo obtener la ubicación.");
-        setLastError(err.message || String(err));
-      },
+    // Primer intento: obtener un fix inicial
+    navigator.geolocation.getCurrentPosition(
+      handleSuccess,
+      handleError,
       {
         enableHighAccuracy: true,
-        maximumAge: 5_000,
-        timeout: 20_000,
+        maximumAge: 10_000,
+        timeout: 40_000,
+      }
+    );
+
+    // Además dejamos un watchPosition activo para ir actualizando
+    const watchId = navigator.geolocation.watchPosition(
+      handleSuccess,
+      handleError,
+      {
+        enableHighAccuracy: true,
+        maximumAge: 30_000,
+        timeout: 60_000,
       }
     );
 
     watchIdRef.current = watchId;
 
     return () => {
+      cancelled = true;
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
       }
     };
   }, []);
@@ -112,6 +178,9 @@ export default function TrackerGpsPage() {
       const c = lastCoordsRef.current;
       if (!c) {
         // Aún no hay coordenadas
+        console.log(
+          "[TrackerGpsPage] sendPositionOnce: todavía no hay coords, no se envía."
+        );
         return;
       }
 
@@ -126,7 +195,10 @@ export default function TrackerGpsPage() {
         source: "tracker-gps-page",
       };
 
-      console.log("[TrackerGpsPage] enviando posición → send_position:", payload);
+      console.log(
+        "[TrackerGpsPage] enviando posición → send_position:",
+        payload
+      );
 
       try {
         const { data, error } = await supabase.functions.invoke(
@@ -186,12 +258,14 @@ export default function TrackerGpsPage() {
         minHeight: "100vh",
         margin: 0,
         padding: "16px",
-        background: "radial-gradient(circle at top, #243b53 0, #111827 55%, #020617 100%)",
+        background:
+          "radial-gradient(circle at top, #243b53 0, #111827 55%, #020617 100%)",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
         color: "#e5e7eb",
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        fontFamily:
+          "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       }}
     >
       <div
@@ -225,9 +299,10 @@ export default function TrackerGpsPage() {
             marginBottom: 18,
           }}
         >
-          Mantén esta pantalla abierta. Tu ubicación se enviará automáticamente mientras te mueves.
-          El sistema registra todos los puntos para el dashboard, y usa especialmente los que están
-          dentro de las geocercas asignadas a tu usuario.
+          Mantén esta pantalla abierta. Tu ubicación se enviará automáticamente
+          mientras te mueves. El sistema registra todos los puntos para el
+          dashboard, y usa especialmente los que están dentro de las geocercas
+          asignadas a tu usuario.
         </p>
 
         <div
@@ -271,8 +346,9 @@ export default function TrackerGpsPage() {
               marginTop: 12,
             }}
           >
-            Puedes bloquear la pantalla; mientras esta página esté abierta en segundo plano y el GPS
-            siga activo, seguiremos recibiendo tus posiciones (según cobertura y batería).
+            Puedes bloquear la pantalla; mientras esta página esté abierta en
+            segundo plano y el GPS siga activo, seguiremos recibiendo tus
+            posiciones (según cobertura y batería).
           </p>
         </div>
 
