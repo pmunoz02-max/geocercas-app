@@ -111,8 +111,17 @@ export default function App() {
         {/* Landing pública */}
         <Route path="/" element={<Landing />} />
 
-        {/* Página independiente para trackers nativos */}
-        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+        {/* Página de tracker web protegida */}
+        <Route
+          path="/tracker-gps"
+          element={
+            <AuthGuard>
+              <Shell>
+                <TrackerGpsPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
 
         {/* Reset de contraseña */}
         <Route path="/reset-password" element={<ResetPassword />} />
