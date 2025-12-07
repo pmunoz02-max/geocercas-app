@@ -10,40 +10,54 @@ export default function TrackerGpsPage() {
   const [lastSend, setLastSend] = useState(null);
   const [lastError, setLastError] = useState(null);
   const [isSending, setIsSending] = useState(false);
+  const [debugLines, setDebugLines] = useState<string[]>([]);
 
-  const watchIdRef = useRef(null);
-  const intervalRef = useRef(null);
-  const lastCoordsRef = useRef(null);
+  const watchIdRef = useRef<number | null>(null);
+  const intervalRef = useRef<number | null>(null);
+  const lastCoordsRef = useRef<any>(null);
+
+  // Helper para log
+  const log = (msg: string) => {
+    const line = `${new Date().toISOString().slice(11, 19)} - ${msg}`;
+    console.log("[TrackerGpsPage]", line);
+    setDebugLines((prev) => {
+      const next = [...prev, line];
+      if (next.length > 20) next.shift(); // solo últimos 20
+      return next;
+    });
+  };
 
   // ---------------------------------------------------
-  // 1) Comprobar sesión (para que solo funcione logueado)
+  // 1) Comprobar sesión
   // ---------------------------------------------------
   useEffect(() => {
     let cancelled = false;
+    log("useEffect[session] start");
 
     async function checkSession() {
+      log("checkSession → supabase.auth.getSession()");
       const { data, error } = await supabase.auth.getSession();
-      if (cancelled) return;
+      if (cancelled) {
+        log("checkSession cancelled");
+        return;
+      }
 
       if (error) {
-        console.error("[TrackerGpsPage] getSession error:", error);
+        log(`checkSession error: ${error.message || String(error)}`);
         setStatus("Error obteniendo sesión.");
         setLastError(error.message || String(error));
         return;
       }
 
       if (!data?.session) {
-        console.warn("[TrackerGpsPage] sin sesión activa");
+        log("checkSession: SIN sesión");
         setStatus(
           "No hay sesión activa. Abre el tracker desde tu enlace de invitación."
         );
         setLastError("Sesión no encontrada.");
       } else {
-        console.log(
-          "[TrackerGpsPage] sesión OK, user_id:",
-          data.session.user.id,
-          "email:",
-          data.session.user.email
+        log(
+          `checkSession: sesión OK, user_id=${data.session.user.id}, email=${data.session.user.email}`
         );
         setStatus("Sesión OK. Iniciando geolocalización…");
       }
@@ -53,23 +67,49 @@ export default function TrackerGpsPage() {
 
     return () => {
       cancelled = true;
+      log("useEffect[session] cleanup");
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------------------------------------------
-  // 2) Geolocalización con watchPosition (sin timeouts agresivos)
+  // 2) Geolocalización con watchPosition
   // ---------------------------------------------------
   useEffect(() => {
+    log("useEffect[geo] start");
+
     if (!("geolocation" in navigator)) {
+      log("navigator.geolocation NO disponible");
       setStatus("Este dispositivo no soporta geolocalización.");
       setLastError("navigator.geolocation no está disponible en este navegador.");
       return;
     }
 
+    // Intentar leer el estado de permisos (si el navegador lo soporta)
+    if (navigator.permissions && (navigator.permissions as any).query) {
+      try {
+        (navigator.permissions as any)
+          .query({ name: "geolocation" })
+          .then((result: any) => {
+            log(`Permissions API: geolocation state='${result.state}'`);
+          })
+          .catch((e: any) => {
+            log(`Permissions API error: ${e?.message || String(e)}`);
+          });
+      } catch (e: any) {
+        log(`Permissions API exception: ${e?.message || String(e)}`);
+      }
+    } else {
+      log("Permissions API no disponible");
+    }
+
     let cancelled = false;
 
-    const handleSuccess = (pos) => {
-      if (cancelled) return;
+    const handleSuccess = (pos: GeolocationPosition) => {
+      if (cancelled) {
+        log("handleSuccess llamado pero efecto cancelado");
+        return;
+      }
 
       const { latitude, longitude, accuracy } = pos.coords;
       const c = {
@@ -83,13 +123,24 @@ export default function TrackerGpsPage() {
       setStatus("Tracker activo. Ubicación actualizada.");
       setLastError(null);
 
-      console.log("[TrackerGpsPage] posición recibida:", c);
+      log(
+        `handleSuccess: lat=${c.lat.toFixed(6)}, lng=${c.lng.toFixed(
+          6
+        )}, acc=${c.accuracy}`
+      );
     };
 
-    const handleError = (err) => {
-      if (cancelled) return;
+    const handleError = (err: GeolocationPositionError) => {
+      if (cancelled) {
+        log("handleError llamado pero efecto cancelado");
+        return;
+      }
 
-      console.error("[TrackerGpsPage] error geolocalización:", err);
+      log(
+        `handleError: code=${err.code}, message='${err.message || String(
+          err
+        )}'`
+      );
 
       let friendly = "";
       if (err.code === 1) {
@@ -111,40 +162,50 @@ export default function TrackerGpsPage() {
     };
 
     setStatus("Solicitando permiso de ubicación…");
+    log("Antes de watchPosition");
 
-    const watchId = navigator.geolocation.watchPosition(
-      handleSuccess,
-      handleError,
-      {
-        enableHighAccuracy: true,
-        // OJO: no ponemos timeout para no provocar "Timeout expired" desde nuestro código.
-        // maximumAge: 0 fuerza a pedir una posición fresca cada vez que el SO pueda.
-        maximumAge: 0,
-      }
-    );
-
-    watchIdRef.current = watchId;
+    let watchId: number;
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        handleSuccess,
+        handleError,
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+        }
+      ) as unknown as number;
+      watchIdRef.current = watchId;
+      log(`watchPosition iniciado, watchId=${watchId}`);
+    } catch (e: any) {
+      log(`Exception al llamar watchPosition: ${e?.message || String(e)}`);
+      setStatus("Error al iniciar la geolocalización.");
+      setLastError(e?.message || String(e));
+    }
 
     return () => {
       cancelled = true;
+      log("useEffect[geo] cleanup");
       if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
+        log(`clearWatch(${watchIdRef.current})`);
+        navigator.geolocation.clearWatch(
+          watchIdRef.current as unknown as number
+        );
         watchIdRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------------------------------------------
-  // 3) Envío periódico de coordenadas a send_position
+  // 3) Envío periódico a send_position
   // ---------------------------------------------------
   useEffect(() => {
+    log("useEffect[send] start");
+
     async function sendPositionOnce() {
       const c = lastCoordsRef.current;
       if (!c) {
-        // Aún no hay coordenadas; no hacemos nada.
-        console.log(
-          "[TrackerGpsPage] sendPositionOnce: aún no hay coords, se espera…"
-        );
+        log("sendPositionOnce: aún no hay coords, se espera…");
         return;
       }
 
@@ -158,7 +219,9 @@ export default function TrackerGpsPage() {
         source: "tracker-gps-web",
       };
 
-      console.log("[TrackerGpsPage] enviando → send_position:", payload);
+      log(
+        `sendPositionOnce: enviando lat=${c.lat}, lng=${c.lng}, acc=${c.accuracy}`
+      );
 
       try {
         const { data, error } = await supabase.functions.invoke(
@@ -169,32 +232,36 @@ export default function TrackerGpsPage() {
         );
 
         if (error) {
-          console.error("[TrackerGpsPage] error send_position:", error);
+          log(`send_position error: ${error.message || String(error)}`);
           setStatus("Error al enviar la posición al servidor.");
           setLastError(error.message || String(error));
         } else {
-          console.log("[TrackerGpsPage] respuesta send_position:", data);
+          log(`send_position OK: ${JSON.stringify(data)}`);
           setStatus("Posición enviada correctamente.");
           setLastSend(new Date());
           setLastError(null);
         }
-      } catch (e) {
-        console.error("[TrackerGpsPage] excepción send_position:", e);
+      } catch (e: any) {
+        log(`send_position excepción: ${e?.message || String(e)}`);
         setStatus("Error de red al enviar la posición.");
-        setLastError(e.message || String(e));
+        setLastError(e?.message || String(e));
       } finally {
         setIsSending(false);
       }
     }
 
-    const id = setInterval(sendPositionOnce, CLIENT_SEND_INTERVAL_MS);
+    const id = window.setInterval(sendPositionOnce, CLIENT_SEND_INTERVAL_MS);
     intervalRef.current = id;
+    log(`Intervalo de envío creado, id=${id}`);
 
     return () => {
+      log("useEffect[send] cleanup");
       if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
+        log(`clearInterval(${intervalRef.current})`);
+        window.clearInterval(intervalRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------------------------------------------
@@ -336,6 +403,39 @@ export default function TrackerGpsPage() {
             <strong>Error:</strong> {lastError}
           </div>
         )}
+
+        {/* Bloque de debug, solo para desarrollo */}
+        <div
+          style={{
+            marginTop: 16,
+            paddingTop: 8,
+            borderTop: "1px dashed rgba(148,163,184,0.35)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              color: "#9ca3af",
+              marginBottom: 4,
+            }}
+          >
+            Debug (solo pruebas):
+          </div>
+          <pre
+            style={{
+              maxHeight: 140,
+              overflowY: "auto",
+              fontSize: 10,
+              background: "rgba(15,23,42,0.7)",
+              borderRadius: 8,
+              padding: 8,
+              border: "1px solid rgba(51,65,85,0.8)",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {debugLines.join("\n") || "Sin registros todavía…"}
+          </pre>
+        </div>
       </div>
     </div>
   );
