@@ -1,11 +1,9 @@
 // src/screens/TrackerScreen.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Button, Alert, Platform } from "react-native";
+import { View, Text, StyleSheet, Button, Alert } from "react-native";
 import * as Location from "expo-location";
-import * as TaskManager from "expo-task-manager";
 import { sendPosition } from "../lib/sendPosition";
-
-const LOCATION_TASK_NAME = "background-location-task-v2";
+import { LOCATION_TASK } from "../tasks/location-task";
 
 type LastLocation = {
   latitude: number;
@@ -14,245 +12,176 @@ type LastLocation = {
   timestamp: number;
 };
 
-// =====================
-// TAREA DE BACKGROUND
-// =====================
-
-if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
-  TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
-    if (error) {
-      console.error("[LOCATION_TASK] Error en tarea de background:", error);
-      return;
-    }
-
-    const { locations } = (data || {}) as {
-      locations?: Location.LocationObject[];
-    };
-
-    if (!locations || !locations.length) return;
-
-    for (const loc of locations) {
-      const {
-        coords: { latitude, longitude, accuracy },
-        timestamp,
-      } = loc;
-
-      console.log("📡 [BG] Posición recibida:", {
-        latitude,
-        longitude,
-        accuracy,
-        timestamp,
-      });
-
-      // Envío a Supabase mediante Edge Function
-      await sendPosition({
-        lat: latitude,
-        lng: longitude,
-        accuracy: accuracy ?? null,
-        timestamp: timestamp ?? Date.now(),
-        source: "mobile-native-bg-v2",
-      });
-    }
-  });
-}
-
-// =====================
-// COMPONENTE PRINCIPAL
-// =====================
-
 export default function TrackerScreen() {
   const [tracking, setTracking] = useState(false);
-  const [backgroundActive, setBackgroundActive] = useState(false);
-
-  const [fgPermission, setFgPermission] =
+  const [permissionStatus, setPermissionStatus] =
     useState<Location.PermissionStatus | null>(null);
-  const [bgPermission, setBgPermission] =
-    useState<Location.PermissionStatus | null>(null);
-
   const [lastLocation, setLastLocation] = useState<LastLocation | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [backgroundActive, setBackgroundActive] = useState(false);
 
-  // watcher de primer plano
-  const foregroundSub = useRef<Location.LocationSubscription | null>(null);
+  const locationSubscription = useRef<Location.LocationSubscription | null>(
+    null
+  );
 
-  // =====================
-  // Efecto inicial
-  // =====================
-
+  // ======================
+  // Permisos iniciales
+  // ======================
   useEffect(() => {
     (async () => {
-      // 1) Permiso foreground
-      const fg = await Location.requestForegroundPermissionsAsync();
-      setFgPermission(fg.status);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setPermissionStatus(status);
 
-      if (fg.status !== "granted") {
+      if (status !== "granted") {
         setErrorMsg(
-          "No se concedió permiso de ubicación en primer plano. Actívalo en los ajustes del sistema."
+          "No se concedió permiso de ubicación. Actívalo en los ajustes del sistema."
         );
-      }
-
-      // 2) Estado permisos background (sin pedir aún)
-      const bg = await Location.getBackgroundPermissionsAsync();
-      setBgPermission(bg.status);
-
-      // 3) Ver si ya hay tarea corriendo (tras reinicio / recarga)
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(
-        LOCATION_TASK_NAME
-      );
-      setBackgroundActive(hasStarted);
-      if (hasStarted) {
-        setTracking(true);
       }
     })();
 
     return () => {
-      if (foregroundSub.current) {
-        foregroundSub.current.remove();
-        foregroundSub.current = null;
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+        locationSubscription.current = null;
       }
     };
   }, []);
 
-  // =====================
+  // ======================
   // Helpers
-  // =====================
-
+  // ======================
   const formatTime = (timestamp: number | undefined) => {
     if (!timestamp) return "-";
     return new Date(timestamp).toLocaleTimeString();
   };
 
-  const startForegroundWatcher = useCallback(async () => {
-    if (foregroundSub.current) {
-      foregroundSub.current.remove();
-      foregroundSub.current = null;
-    }
-
-    const sub = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 5000, // aprox cada 5 s
-        distanceInterval: 5, // o cada ~5 m
-      },
-      async (location) => {
-        const {
-          coords: { latitude, longitude, accuracy },
-          timestamp,
-        } = location;
-
-        const ts = timestamp ?? Date.now();
-
-        setLastLocation({
-          latitude,
-          longitude,
-          accuracy: accuracy ?? null,
-          timestamp: ts,
-        });
-
-        console.log("📍 [FG] Nueva posición:", {
-          latitude,
-          longitude,
-          accuracy,
-          timestamp: ts,
-        });
-
-        // Envío foreground
-        await sendPosition({
-          lat: latitude,
-          lng: longitude,
-          accuracy: accuracy ?? null,
-          timestamp: ts,
-          source: "mobile-native-fg-v2",
-        });
-      }
-    );
-
-    foregroundSub.current = sub;
-  }, []);
-
-  // =====================
-  // Handlers de botones
-  // =====================
-
+  // ======================
+  // Iniciar tracking
+  // ======================
   const startTracking = useCallback(async () => {
-    setErrorMsg(null);
-
-    // 1) Asegurar permiso foreground
-    let currentFg = fgPermission;
-    if (currentFg !== "granted") {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      currentFg = status;
-      setFgPermission(status);
-    }
-
-    if (currentFg !== "granted") {
+    if (permissionStatus !== "granted") {
       Alert.alert(
         "Permiso requerido",
-        "Debes conceder permiso de ubicación en primer plano para iniciar el tracker."
+        "Debes conceder permiso de ubicación para iniciar el tracker."
       );
       return;
     }
 
     try {
-      // 2) Iniciar watcher foreground
-      await startForegroundWatcher();
-      setTracking(true);
+      setErrorMsg(null);
 
-      // 3) Pedir permiso background (solo Android / iOS físico)
-      if (Platform.OS === "android" || Platform.OS === "ios") {
-        const bgReq = await Location.requestBackgroundPermissionsAsync();
-        setBgPermission(bgReq.status);
-
-        if (bgReq.status === "granted") {
-          await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 15000, // 15 s en background (ajustable)
-            distanceInterval: 10, // 10 m en background
-            pausesUpdatesAutomatically: true,
-            showsBackgroundLocationIndicator: true,
-          });
-          setBackgroundActive(true);
-        } else {
-          setBackgroundActive(false);
-        }
+      // Permiso de segundo plano
+      const bgPerm = await Location.requestBackgroundPermissionsAsync();
+      if (bgPerm.status !== "granted") {
+        Alert.alert(
+          "Permiso en segundo plano requerido",
+          "Para que el tracker funcione con la pantalla apagada, concede permiso de ubicación en segundo plano en los ajustes del sistema."
+        );
       }
+
+      // Limpiar watcher previo
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+        locationSubscription.current = null;
+      }
+
+      // Foreground watcher (esta parte YA funcionaba antes)
+      const subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 3000, // ~3s
+          distanceInterval: 0, // cualquier cambio pequeño
+        },
+        async (location) => {
+          const {
+            coords: { latitude, longitude, accuracy },
+            timestamp,
+          } = location;
+
+          const fix = {
+            latitude,
+            longitude,
+            accuracy: accuracy ?? null,
+            timestamp: timestamp ?? Date.now(),
+          };
+
+          setLastLocation(fix);
+
+          console.log("📍 Foreground position:", fix);
+
+          // Enviar a Supabase (usa el sendPosition nuevo)
+          await sendPosition({
+            lat: latitude,
+            lng: longitude,
+            accuracy: accuracy ?? null,
+            timestamp: fix.timestamp,
+            source: "mobile-native-fg-v2",
+          });
+        }
+      );
+
+      locationSubscription.current = subscription;
+
+      // Background updates usando la tarea LOCATION_TASK
+      const alreadyStarted = await Location.hasStartedLocationUpdatesAsync(
+        LOCATION_TASK
+      );
+
+      if (!alreadyStarted && bgPerm.status === "granted") {
+        await Location.startLocationUpdatesAsync(LOCATION_TASK, {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 15000,
+          distanceInterval: 5,
+          pausesUpdatesAutomatically: false,
+          foregroundService: {
+            notificationTitle: "Tracker activo",
+            notificationBody: "Enviando tu ubicación a tu organización.",
+          },
+        });
+        setBackgroundActive(true);
+      } else if (alreadyStarted) {
+        setBackgroundActive(true);
+      }
+
+      setTracking(true);
     } catch (error: any) {
       console.error("Error iniciando tracking:", error);
       setErrorMsg(error?.message ?? "Error iniciando el tracker.");
     }
-  }, [fgPermission, startForegroundWatcher]);
+  }, [permissionStatus]);
 
+  // ======================
+  // Detener tracking
+  // ======================
   const stopTracking = useCallback(async () => {
     try {
-      if (foregroundSub.current) {
-        foregroundSub.current.remove();
-        foregroundSub.current = null;
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+        locationSubscription.current = null;
       }
 
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(
-        LOCATION_TASK_NAME
+      const started = await Location.hasStartedLocationUpdatesAsync(
+        LOCATION_TASK
       );
-      if (hasStarted) {
-        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      if (started) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK);
       }
 
-      setTracking(false);
       setBackgroundActive(false);
+      setTracking(false);
     } catch (error: any) {
       console.error("Error deteniendo tracking:", error);
       setErrorMsg(error?.message ?? "Error deteniendo el tracker.");
     }
   }, []);
 
-  // =====================
-  // Render
-  // =====================
-
+  // ======================
+  // UI
+  // ======================
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
         <Text style={styles.title}>Tracker NATIVO v2 (prueba)</Text>
-
         <Text style={styles.description}>
           Al iniciar el tracker, la app enviará tu posición a Supabase en primer
           plano y, si los permisos lo permiten, también en segundo plano
@@ -288,31 +217,27 @@ export default function TrackerScreen() {
           </Text>
         </View>
 
-        {/* Estado permisos */}
         {errorMsg ? (
           <Text style={styles.error}>⚠ {errorMsg}</Text>
-        ) : fgPermission === "granted" ? (
+        ) : permissionStatus === "granted" ? (
           <Text style={styles.statusOk}>
             Permiso de ubicación en primer plano concedido.
           </Text>
         ) : (
           <Text style={styles.statusWarn}>
-            Aún no se ha concedido el permiso de ubicación en primer plano.
+            Aún no se ha concedido el permiso de ubicación.
           </Text>
         )}
 
-        {/* Estado background */}
-        <Text
-          style={
-            backgroundActive ? styles.statusBgActive : styles.statusBgInactive
-          }
-        >
-          {backgroundActive
-            ? "Tracking en segundo plano: ACTIVADO."
-            : "Tracking en segundo plano: no activo (sin permiso o no iniciado)."}
-        </Text>
+        {tracking && (
+          <Text style={styles.statusInfo}>
+            {backgroundActive
+              ? "Tracking en segundo plano: ACTIVADO."
+              : "Tracking solo en primer plano (sin permiso de background)."}
+          </Text>
+        )}
 
-        <View style={styles.buttonsRow}>
+        <View className="mt-2 mb-1" style={styles.buttonsRow}>
           <Button
             title={tracking ? "TRACKER ACTIVO" : "INICIAR TRACKER"}
             onPress={startTracking}
@@ -400,15 +325,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: "center",
   },
-  statusBgActive: {
-    color: "#22c55e",
-    fontSize: 13,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  statusBgInactive: {
-    color: "#e5e7eb",
-    fontSize: 13,
+  statusInfo: {
+    color: "#38bdf8",
+    fontSize: 12,
     marginBottom: 8,
     textAlign: "center",
   },

@@ -15,53 +15,63 @@ export type SendPositionInput = {
   source?: string;
 };
 
-const SUPABASE_FUNCTION_URL =
-  "https://wpaixkvokdkudymgjoua.supabase.co/functions/v1/send_position";
+const FUNCTION_NAME = "send_position";
 
-export async function sendPosition(input: SendPositionInput) {
+export async function sendPosition(input: SendPositionInput): Promise<void> {
   try {
-    const { data: sessionData } = await supabaseMobile.auth.getSession();
-    const session = sessionData.session;
+    console.log("[sendPosition] llamado con:", input);
 
-    if (!session) {
-      console.warn("[sendPosition] No hay sesión activa, no envío posición.");
+    // 1) Obtener sesión actual
+    const { data: sessionData, error: sessionError } =
+      await supabaseMobile.auth.getSession();
+
+    if (sessionError) {
+      console.error("[sendPosition] Error obteniendo sesión:", sessionError);
       return;
     }
 
+    const session = sessionData.session;
+    console.log(
+      "[sendPosition] session:",
+      session ? session.user.id : "SIN SESIÓN"
+    );
+
+    if (!session) {
+      console.warn(
+        "[sendPosition] No hay sesión activa, NO envío posición (modo prueba)."
+      );
+      return;
+    }
+
+    // 2) Armar payload
     const payload = {
       lat: input.lat,
       lng: input.lng,
       accuracy: input.accuracy ?? null,
       timestamp: input.timestamp ?? Date.now(),
       user_id: session.user.id,
-      // si no mandas nada, por defecto marca origen móvil v2
-      source: input.source ?? "mobile-native-v2",
+      source: input.source ?? "mobile-native-fg-v2",
     };
 
-    const res = await fetch(SUPABASE_FUNCTION_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-        // @ts-ignore - propiedad interna del cliente
-        apikey: (supabaseMobile as any).supabaseKey ?? "",
-      },
-      body: JSON.stringify(payload),
-    });
+    console.log("[sendPosition] payload a enviar:", payload);
 
-    if (!res.ok) {
-      const text = await res.text();
+    // 3) Invocar función edge
+    const { data, error } = await supabaseMobile.functions.invoke(
+      FUNCTION_NAME,
+      {
+        body: payload,
+      }
+    );
+
+    if (error) {
       console.error(
-        "[sendPosition] Error HTTP:",
-        res.status,
-        res.statusText,
-        text
+        "[sendPosition] Error al invocar send_position:",
+        error
       );
       return;
     }
 
-    const data = await res.json().catch(() => null);
-    console.log("[sendPosition] OK:", data);
+    console.log("[sendPosition] OK, respuesta función:", data);
   } catch (err) {
     console.error("[sendPosition] Error general:", err);
   }
