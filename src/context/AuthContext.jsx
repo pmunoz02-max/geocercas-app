@@ -23,14 +23,9 @@ function loadStoredOrgId() {
 function storeOrgId(orgId) {
   if (typeof window === "undefined") return;
   try {
-    if (orgId) {
-      window.localStorage.setItem(LS_CURRENT_ORG_ID_KEY, orgId);
-    } else {
-      window.localStorage.removeItem(LS_CURRENT_ORG_ID_KEY);
-    }
-  } catch {
-    // ignore
-  }
+    if (orgId) window.localStorage.setItem(LS_CURRENT_ORG_ID_KEY, orgId);
+    else window.localStorage.removeItem(LS_CURRENT_ORG_ID_KEY);
+  } catch {}
 }
 
 async function acceptInviteIfAny(user) {
@@ -46,29 +41,28 @@ async function acceptInviteIfAny(user) {
       .limit(1);
 
     if (invitesErr) {
-      console.error("[AuthContext] org_invites select error:", invitesErr);
+      console.error("[AuthContext] org_invites error:", invitesErr);
       return;
     }
 
-    const invite = invites && invites[0];
+    const invite = invites?.[0];
     if (!invite) return;
 
-    const roleUpper = (invite.role || "admin").toUpperCase();
+    const roleUpper = String(invite.role || "admin").toUpperCase();
 
-    const { data: existingRows, error: existErr } = await supabase
+    const { data: exists, error: existErr } = await supabase
       .from("user_organizations")
-      .select("org_id, user_id")
+      .select("org_id")
       .eq("org_id", invite.org_id)
       .eq("user_id", user.id)
       .limit(1);
 
     if (existErr) {
-      console.error("[AuthContext] user_organizations select error:", existErr);
+      console.error("[AuthContext] user_organizations check error:", existErr);
       return;
     }
 
-    const alreadyMember =
-      Array.isArray(existingRows) && existingRows.length > 0;
+    const alreadyMember = exists?.length > 0;
 
     if (!alreadyMember) {
       const { error: insErr } = await supabase
@@ -78,24 +72,16 @@ async function acceptInviteIfAny(user) {
           user_id: user.id,
           role: roleUpper,
         });
-
       if (insErr) {
-        console.error("[AuthContext] user_organizations insert error:", insErr);
+        console.error("[AuthContext] insert user_organizations error:", insErr);
         return;
       }
     }
 
-    const { error: updErr } = await supabase
+    await supabase
       .from("org_invites")
-      .update({
-        status: "accepted",
-        accepted_at: new Date().toISOString(),
-      })
+      .update({ status: "accepted", accepted_at: new Date().toISOString() })
       .eq("id", invite.id);
-
-    if (updErr) {
-      console.error("[AuthContext] org_invites update error:", updErr);
-    }
   } catch (e) {
     console.error("[AuthContext] acceptInviteIfAny exception:", e);
   }
@@ -111,20 +97,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // --------------------------
-  // Inicializar sesión
+  // INIT SESSION
   // --------------------------
   useEffect(() => {
     let isMounted = true;
 
-    async function initSession() {
+    async function init() {
       try {
         const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error("[AuthContext] getSession error:", error);
-        }
         if (!isMounted) return;
         setSession(data?.session ?? null);
         setUser(data?.session?.user ?? null);
+        if (error) console.error("[AuthContext] getSession error:", error);
       } catch (e) {
         console.error("[AuthContext] getSession exception:", e);
       } finally {
@@ -132,7 +116,7 @@ export function AuthProvider({ children }) {
       }
     }
 
-    initSession();
+    init();
 
     const {
       data: { subscription },
@@ -155,7 +139,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // --------------------------
-  // Cargar datos de usuario
+  // LOAD USER DATA
   // --------------------------
   useEffect(() => {
     if (!user) {
@@ -167,160 +151,105 @@ export function AuthProvider({ children }) {
 
     let cancelled = false;
 
-    async function loadUserData() {
+    async function load() {
       setLoading(true);
       try {
-        // 1) Aceptar invitación de org (AdminsPage) si existe
-        try {
-          await acceptInviteIfAny(user);
-        } catch (e) {
-          console.error(
-            "[AuthContext] acceptInviteIfAny exception (outer):",
-            e
-          );
-        }
+        await acceptInviteIfAny(user);
 
-        // 2) Perfil mínimo
-        try {
-          const { data: profiles, error: profErr } = await supabase
-            .from("v_app_profiles")
-            .select("*")
-            .eq("email", user.email);
+        // PERFIL
+        const { data: profiles } = await supabase
+          .from("v_app_profiles")
+          .select("*")
+          .eq("email", user.email);
 
-          if (profErr) {
-            console.error("[AuthContext] v_app_profiles error:", profErr);
-          }
-          const profileRow = Array.isArray(profiles) ? profiles[0] : null;
-          if (!cancelled) setProfile(profileRow || null);
-        } catch (e) {
-          console.error("[AuthContext] v_app_profiles exception:", e);
-          if (!cancelled) setProfile(null);
-        }
+        if (!cancelled) setProfile(profiles?.[0] || null);
 
-        // 3) user_organizations (organizaciones del usuario)
+        // ORGANIZATIONS
         let orgLinks = [];
-        try {
-          const { data: links, error: linksErr } = await supabase
-            .from("user_organizations")
-            .select("org_id, role, created_at")
-            .eq("user_id", user.id);
+        const { data: links } = await supabase
+          .from("user_organizations")
+          .select("org_id, role")
+          .eq("user_id", user.id);
 
-          if (linksErr) {
-            console.error("[AuthContext] user_organizations error:", linksErr);
-          } else {
-            orgLinks = links || [];
-          }
-        } catch (e) {
-          console.error("[AuthContext] user_organizations exception:", e);
-        }
+        orgLinks = links || [];
 
-        // 3.b) Si NO tiene ninguna organización, crearle una propia (OWNER)
+        // SI NO TIENE ORGANIZACIÓN → crear una para el usuario
         if (orgLinks.length === 0) {
-          try {
-            const { data: newOrgId, error: ownerOrgErr } =
-              await supabase.rpc("ensure_owner_org_for_user", {
-                p_user_id: user.id,
-                p_email: user.email,
-              });
-
-            if (ownerOrgErr) {
-              console.error(
-                "[AuthContext] ensure_owner_org_for_user error:",
-                ownerOrgErr
-              );
-            } else if (newOrgId) {
-              // Volvemos a leer user_organizations después de crear la org
-              const { data: linksAfter, error: linksAfterErr } = await supabase
-                .from("user_organizations")
-                .select("org_id, role, created_at")
-                .eq("user_id", user.id);
-
-              if (linksAfterErr) {
-                console.error(
-                  "[AuthContext] user_organizations re-fetch error:",
-                  linksAfterErr
-                );
-              } else {
-                orgLinks = linksAfter || [];
-              }
+          const { data: newOrgId } = await supabase.rpc(
+            "ensure_owner_org_for_user",
+            {
+              p_user_id: user.id,
+              p_email: user.email,
             }
-          } catch (e) {
-            console.error(
-              "[AuthContext] ensure_owner_org_for_user exception:",
-              e
-            );
+          );
+
+          if (newOrgId) {
+            const { data: links2 } = await supabase
+              .from("user_organizations")
+              .select("org_id, role")
+              .eq("user_id", user.id);
+            orgLinks = links2 || [];
           }
         }
 
-        // 4) Cargar organizaciones a partir de orgLinks
+        // CARGAR ORGANIZATIONS
         let orgs = [];
         if (orgLinks.length > 0) {
-          const orgIds = orgLinks.map((l) => l.org_id);
-          try {
-            const { data: orgRows, error: orgErr } = await supabase
-              .from("organizations")
-              .select("id, name, slug")
-              .in("id", orgIds);
+          const ids = orgLinks.map((l) => l.org_id);
 
-            if (orgErr) {
-              console.error("[AuthContext] organizations error:", orgErr);
-            } else {
-              orgs =
-                orgRows?.map((org) => {
-                  const link = orgLinks.find((l) => l.org_id === org.id);
-                  return {
-                    ...org,
-                    role: link?.role || null,
-                  };
-                }) || [];
-            }
-          } catch (e) {
-            console.error("[AuthContext] organizations exception:", e);
-          }
+          const { data: orgRows } = await supabase
+            .from("organizations")
+            .select("id, name, slug")
+            .in("id", ids);
+
+          orgs =
+            orgRows?.map((o) => {
+              const link = orgLinks.find((l) => l.org_id === o.id);
+              return {
+                ...o,
+                role: link?.role?.toLowerCase() || null, // 🔥 NORMALIZAMOS AQUÍ
+              };
+            }) || [];
         }
 
-        // 5) Seleccionar organización actual
         if (!cancelled) {
           setOrganizations(orgs);
 
-          const storedOrgId = loadStoredOrgId();
-          let initialOrg = null;
+          const storedId = loadStoredOrgId();
 
-          if (storedOrgId && orgs.length > 0) {
-            initialOrg = orgs.find((o) => o.id === storedOrgId) || null;
+          let initial = null;
+
+          if (storedId) {
+            initial = orgs.find((o) => o.id === storedId) || null;
           }
 
-          if (!initialOrg && orgs.length > 0) {
-            initialOrg =
-              orgs.find((o) => o.role === "OWNER") ||
-              orgs.find((o) => o.role === "ADMIN") ||
+          // 🔥 SELECCIÓN CORREGIDA CON ROLES NORMALIZADOS
+          if (!initial && orgs.length > 0) {
+            initial =
+              orgs.find((o) => o.role === "owner") ||
+              orgs.find((o) => o.role === "admin") ||
               orgs[0];
           }
 
-          setCurrentOrgState(initialOrg);
-          storeOrgId(initialOrg?.id || null);
+          setCurrentOrgState(initial);
+          storeOrgId(initial?.id || null);
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    loadUserData();
-
-    return () => {
-      cancelled = true;
-    };
+    load();
+    return () => (cancelled = true);
   }, [user]);
 
   // --------------------------
-  // Rol normalizado
+  // ROLE NORMALIZADO
   // --------------------------
-  let normalizedRole = null;
-  if (currentOrg?.role) {
-    normalizedRole = String(currentOrg.role).toLowerCase();
-  } else if (profile?.role) {
-    normalizedRole = String(profile.role).toLowerCase();
-  }
+  const normalizedRole =
+    currentOrg?.role?.toLowerCase() ||
+    profile?.role?.toLowerCase() ||
+    null;
 
   const isOwner = normalizedRole === "owner";
   const isAdmin = normalizedRole === "admin" || isOwner;
@@ -331,25 +260,27 @@ export function AuthProvider({ children }) {
     storeOrgId(org?.id || null);
   };
 
-  const value = {
-    session,
-    user,
-    loading,
-
-    profile,
-    organizations,
-    currentOrg,
-    setCurrentOrg,
-
-    role: normalizedRole,
-    currentRole: normalizedRole,
-    isOwner,
-    isAdmin,
-    isTracker,
-  };
-
   return (
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+    <AuthContext.Provider
+      value={{
+        session,
+        user,
+        loading,
+
+        profile,
+        organizations,
+        currentOrg,
+        setCurrentOrg,
+
+        role: normalizedRole,
+        currentRole: normalizedRole,
+        isOwner,
+        isAdmin,
+        isTracker,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
   );
 }
 
