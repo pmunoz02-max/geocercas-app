@@ -2,46 +2,42 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 
-// Intervalo de envío desde el cliente.
-// Debe ser >= MIN_INTERVAL_MS de la función (10s) para evitar 429.
-const CLIENT_SEND_INTERVAL_MS = 12_000;
+const CLIENT_SEND_INTERVAL_MS = 12_000; // >= 10s (límite de la Edge Function)
 
 export default function TrackerGpsPage() {
   const [status, setStatus] = useState("Iniciando tracker…");
   const [coords, setCoords] = useState(null); // { lat, lng, accuracy }
-  const [lastSend, setLastSend] = useState(null); // fecha/hora último envío ok
+  const [lastSend, setLastSend] = useState(null);
   const [lastError, setLastError] = useState(null);
   const [isSending, setIsSending] = useState(false);
 
   const watchIdRef = useRef(null);
   const intervalRef = useRef(null);
   const lastCoordsRef = useRef(null);
-  const lowAccuracyTriedRef = useRef(false);
 
   // ---------------------------------------------------
-  // 1) Obtener sesión (para saber si el tracker está logueado)
+  // 1) Comprobar sesión (para que solo funcione logueado)
   // ---------------------------------------------------
   useEffect(() => {
     let cancelled = false;
 
     async function checkSession() {
       const { data, error } = await supabase.auth.getSession();
+      if (cancelled) return;
+
       if (error) {
-        console.error("[TrackerGpsPage] error getSession:", error);
-        if (!cancelled) {
-          setStatus("Error obteniendo sesión");
-          setLastError(error.message || String(error));
-        }
+        console.error("[TrackerGpsPage] getSession error:", error);
+        setStatus("Error obteniendo sesión.");
+        setLastError(error.message || String(error));
         return;
       }
+
       if (!data?.session) {
-        console.warn("[TrackerGpsPage] NO hay sesión activa");
-        if (!cancelled) {
-          setStatus(
-            "No hay sesión activa. Abre el tracker desde el enlace de invitación."
-          );
-          setLastError("Sesión nula: el usuario no está autenticado");
-        }
+        console.warn("[TrackerGpsPage] sin sesión activa");
+        setStatus(
+          "No hay sesión activa. Abre el tracker desde tu enlace de invitación."
+        );
+        setLastError("Sesión no encontrada.");
       } else {
         console.log(
           "[TrackerGpsPage] sesión OK, user_id:",
@@ -49,9 +45,7 @@ export default function TrackerGpsPage() {
           "email:",
           data.session.user.email
         );
-        if (!cancelled) {
-          setStatus("Sesión OK. Iniciando geolocalización…");
-        }
+        setStatus("Sesión OK. Iniciando geolocalización…");
       }
     }
 
@@ -63,9 +57,7 @@ export default function TrackerGpsPage() {
   }, []);
 
   // ---------------------------------------------------
-  // 2) Iniciar geolocalización del navegador
-  //    - Primer intento: alta precisión
-  //    - Si hay TIMEOUT: reintenta con menor precisión
+  // 2) Geolocalización con watchPosition (sin timeouts agresivos)
   // ---------------------------------------------------
   useEffect(() => {
     if (!("geolocation" in navigator)) {
@@ -86,11 +78,12 @@ export default function TrackerGpsPage() {
         accuracy: accuracy ?? null,
       };
 
-      console.log("[TrackerGpsPage] fix recibido:", c);
-
       lastCoordsRef.current = c;
       setCoords(c);
-      setStatus("Tracker activo. Ubicación obtenida.");
+      setStatus("Tracker activo. Ubicación actualizada.");
+      setLastError(null);
+
+      console.log("[TrackerGpsPage] posición recibida:", c);
     };
 
     const handleError = (err) => {
@@ -98,64 +91,35 @@ export default function TrackerGpsPage() {
 
       console.error("[TrackerGpsPage] error geolocalización:", err);
 
-      // err.code:
-      // 1: PERMISSION_DENIED
-      // 2: POSITION_UNAVAILABLE
-      // 3: TIMEOUT
-      if (err.code === 3 && !lowAccuracyTriedRef.current) {
-        // Reintento con menor precisión para ver si al menos logramos algo
-        lowAccuracyTriedRef.current = true;
-        setStatus(
-          "Tiempo de espera agotado. Reintentando con menor precisión…"
-        );
-
-        navigator.geolocation.getCurrentPosition(
-          handleSuccess,
-          (err2) => {
-            console.error(
-              "[TrackerGpsPage] segundo intento (baja precisión) también falló:",
-              err2
-            );
-            setStatus("No se pudo obtener la ubicación.");
-            setLastError(
-              `${err2.message || String(err2)} (code ${err2.code ?? "?"})`
-            );
-          },
-          {
-            enableHighAccuracy: false,
-            maximumAge: 60_000,
-            timeout: 60_000,
-          }
-        );
-
-        return;
+      let friendly = "";
+      if (err.code === 1) {
+        friendly =
+          "Tu teléfono está bloqueando la ubicación para este sitio. Activa la ubicación en Ajustes > Aplicaciones > Navegador > Permisos > Ubicación.";
+      } else if (err.code === 2) {
+        friendly =
+          "No se pudo obtener la ubicación. Revisa que el GPS esté encendido y que tengas señal.";
+      } else if (err.code === 3) {
+        friendly =
+          "La ubicación tardó demasiado en actualizarse. Si continúa, revisa permisos de GPS.";
       }
 
       setStatus("No se pudo obtener la ubicación.");
-      setLastError(`${err.message || String(err)} (code ${err.code ?? "?"})`);
+      setLastError(
+        friendly ||
+          `${err.message || String(err)} (código ${err.code ?? "?"})`
+      );
     };
 
     setStatus("Solicitando permiso de ubicación…");
 
-    // Primer intento: obtener un fix inicial
-    navigator.geolocation.getCurrentPosition(
-      handleSuccess,
-      handleError,
-      {
-        enableHighAccuracy: true,
-        maximumAge: 10_000,
-        timeout: 40_000,
-      }
-    );
-
-    // Además dejamos un watchPosition activo para ir actualizando
     const watchId = navigator.geolocation.watchPosition(
       handleSuccess,
       handleError,
       {
         enableHighAccuracy: true,
-        maximumAge: 30_000,
-        timeout: 60_000,
+        // OJO: no ponemos timeout para no provocar "Timeout expired" desde nuestro código.
+        // maximumAge: 0 fuerza a pedir una posición fresca cada vez que el SO pueda.
+        maximumAge: 0,
       }
     );
 
@@ -171,34 +135,30 @@ export default function TrackerGpsPage() {
   }, []);
 
   // ---------------------------------------------------
-  // 3) Enviar posición periódicamente a la Edge Function
+  // 3) Envío periódico de coordenadas a send_position
   // ---------------------------------------------------
   useEffect(() => {
     async function sendPositionOnce() {
       const c = lastCoordsRef.current;
       if (!c) {
-        // Aún no hay coordenadas
+        // Aún no hay coordenadas; no hacemos nada.
         console.log(
-          "[TrackerGpsPage] sendPositionOnce: todavía no hay coords, no se envía."
+          "[TrackerGpsPage] sendPositionOnce: aún no hay coords, se espera…"
         );
         return;
       }
 
       setIsSending(true);
-      setLastError(null);
 
       const payload = {
         lat: c.lat,
         lng: c.lng,
         accuracy: c.accuracy,
         at: new Date().toISOString(),
-        source: "tracker-gps-page",
+        source: "tracker-gps-web",
       };
 
-      console.log(
-        "[TrackerGpsPage] enviando posición → send_position:",
-        payload
-      );
+      console.log("[TrackerGpsPage] enviando → send_position:", payload);
 
       try {
         const { data, error } = await supabase.functions.invoke(
@@ -209,24 +169,24 @@ export default function TrackerGpsPage() {
         );
 
         if (error) {
-          console.error("[TrackerGpsPage] error invoke send_position:", error);
+          console.error("[TrackerGpsPage] error send_position:", error);
+          setStatus("Error al enviar la posición al servidor.");
           setLastError(error.message || String(error));
-          setStatus("Error al enviar posición al servidor.");
         } else {
           console.log("[TrackerGpsPage] respuesta send_position:", data);
           setStatus("Posición enviada correctamente.");
           setLastSend(new Date());
+          setLastError(null);
         }
       } catch (e) {
-        console.error("[TrackerGpsPage] excepción invoke send_position:", e);
+        console.error("[TrackerGpsPage] excepción send_position:", e);
+        setStatus("Error de red al enviar la posición.");
         setLastError(e.message || String(e));
-        setStatus("Error de red al enviar posición.");
       } finally {
         setIsSending(false);
       }
     }
 
-    // Intervalo periódico
     const id = setInterval(sendPositionOnce, CLIENT_SEND_INTERVAL_MS);
     intervalRef.current = id;
 
@@ -240,7 +200,6 @@ export default function TrackerGpsPage() {
   // ---------------------------------------------------
   // Render UI
   // ---------------------------------------------------
-
   const formattedLastSend = lastSend
     ? lastSend.toLocaleTimeString()
     : "—";
@@ -301,7 +260,7 @@ export default function TrackerGpsPage() {
         >
           Mantén esta pantalla abierta. Tu ubicación se enviará automáticamente
           mientras te mueves. El sistema registra todos los puntos para el
-          dashboard, y usa especialmente los que están dentro de las geocercas
+          dashboard y usa especialmente los que están dentro de las geocercas
           asignadas a tu usuario.
         </p>
 
@@ -346,9 +305,9 @@ export default function TrackerGpsPage() {
               marginTop: 12,
             }}
           >
-            Puedes bloquear la pantalla; mientras esta página esté abierta en
-            segundo plano y el GPS siga activo, seguiremos recibiendo tus
-            posiciones (según cobertura y batería).
+            Puedes bloquear la pantalla; mientras esta página esté abierta y el
+            GPS siga activo, seguiremos recibiendo tus posiciones (según
+            cobertura y batería).
           </p>
         </div>
 
