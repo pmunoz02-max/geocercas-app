@@ -1,77 +1,89 @@
 // src/lib/sendPosition.ts
-import { supabaseMobile } from "./supabaseMobile";
+// Envia la posición actual a la Edge Function `send_position` de Supabase
 
-export type SendPositionInput = {
+import { supabase } from "./supabase";
+
+type SendPositionInput = {
   lat: number;
   lng: number;
   accuracy?: number | null;
   timestamp?: number | null;
-  /**
-   * Para identificar el origen en tracker_logs.source
-   * Ejemplos:
-   *  - "mobile-native-fg-v2"
-   *  - "mobile-native-bg-v2"
-   */
-  source?: string;
 };
 
-const FUNCTION_NAME = "send_position";
+// ✅ URL fija de tu Edge Function en Supabase
+const SUPABASE_FUNCTION_URL =
+  "https://wpaixkvokdkudymgjoua.supabase.co/functions/v1/send_position";
 
-export async function sendPosition(input: SendPositionInput): Promise<void> {
+export async function sendPosition(input: SendPositionInput) {
   try {
-    console.log("[sendPosition] llamado con:", input);
-
-    // 1) Obtener sesión actual
+    // 1) Recuperar la sesión actual del usuario en la app nativa
     const { data: sessionData, error: sessionError } =
-      await supabaseMobile.auth.getSession();
+      await supabase.auth.getSession();
 
     if (sessionError) {
       console.error("[sendPosition] Error obteniendo sesión:", sessionError);
       return;
     }
 
-    const session = sessionData.session;
-    console.log(
-      "[sendPosition] session:",
-      session ? session.user.id : "SIN SESIÓN"
-    );
-
-    if (!session) {
+    const session = sessionData?.session;
+    if (!session?.access_token) {
       console.warn(
-        "[sendPosition] No hay sesión activa, NO envío posición (modo prueba)."
+        "[sendPosition] No hay sesión de usuario: debes estar logueado para enviar posiciones."
       );
       return;
     }
 
-    // 2) Armar payload
+    const accessToken = session.access_token;
+
+    // 2) Preparar payload para la Edge Function
+    const nowIso = new Date().toISOString();
+
     const payload = {
       lat: input.lat,
       lng: input.lng,
-      accuracy: input.accuracy ?? null,
-      timestamp: input.timestamp ?? Date.now(),
-      user_id: session.user.id,
-      source: input.source ?? "mobile-native-fg-v2",
+      accuracy:
+        typeof input.accuracy === "number" ? input.accuracy : undefined,
+      at: input.timestamp
+        ? new Date(input.timestamp).toISOString()
+        : nowIso,
+      source: "mobile-native-fg-v2",
     };
 
-    console.log("[sendPosition] payload a enviar:", payload);
+    console.log("[sendPosition] Enviando posición:", payload);
 
-    // 3) Invocar función edge
-    const { data, error } = await supabaseMobile.functions.invoke(
-      FUNCTION_NAME,
-      {
-        body: payload,
-      }
-    );
+    // 3) Llamar a la Edge Function con fetch
+    const res = await fetch(SUPABASE_FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // 👇 IMPORTANTE: token de USUARIO, NO la anon key
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
-    if (error) {
+    const text = await res.text(); // leemos siempre el cuerpo como texto
+
+    if (!res.ok) {
       console.error(
-        "[sendPosition] Error al invocar send_position:",
-        error
+        "[sendPosition] Error HTTP:",
+        res.status,
+        res.statusText,
+        text
       );
       return;
     }
 
-    console.log("[sendPosition] OK, respuesta función:", data);
+    // Intentamos parsear JSON (si la función devuelve JSON)
+    let data: any = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Si no es JSON, no pasa nada, mostramos el texto bruto
+      data = text;
+    }
+
+    console.log("[sendPosition] OK:", data);
   } catch (err) {
     console.error("[sendPosition] Error general:", err);
   }

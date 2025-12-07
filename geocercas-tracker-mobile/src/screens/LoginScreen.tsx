@@ -10,17 +10,16 @@ import {
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
-import { supabaseMobile } from "../lib/supabaseMobile";
+import { supabase } from "../lib/supabase";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Login">;
 
 export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState(""); // para login con password
+  const [password, setPassword] = useState("");
   const [loadingMagic, setLoadingMagic] = useState(false);
   const [loadingPassword, setLoadingPassword] = useState(false);
 
-  // Deep link para Magic Link (app móvil)
   const redirectTo = "geocercas://tracker";
 
   const handleMagicLink = async () => {
@@ -31,7 +30,7 @@ export default function LoginScreen({ navigation }: Props) {
 
     setLoadingMagic(true);
 
-    const { error } = await supabaseMobile.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirectTo },
     });
@@ -54,7 +53,6 @@ export default function LoginScreen({ navigation }: Props) {
       Alert.alert("Correo inválido", "Ingresa un correo válido.");
       return;
     }
-
     if (!password) {
       Alert.alert("Contraseña requerida", "Ingresa una contraseña.");
       return;
@@ -62,7 +60,7 @@ export default function LoginScreen({ navigation }: Props) {
 
     setLoadingPassword(true);
 
-    const { data, error } = await supabaseMobile.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -93,10 +91,9 @@ export default function LoginScreen({ navigation }: Props) {
         onChangeText={setEmail}
       />
 
-      {/* Campo de contraseña (para login con password) */}
       <TextInput
         style={styles.input}
-        placeholder="Contraseña (solo pruebas)"
+        placeholder="Contraseña"
         secureTextEntry
         autoCapitalize="none"
         value={password}
@@ -129,7 +126,7 @@ export default function LoginScreen({ navigation }: Props) {
       <Text style={styles.hint}>
         • Magic Link usa geocercas://tracker como deep link hacia la app.{"\n"}
         • Login con password garantiza sesión activa dentro de Expo Go.{"\n"}
-        • Modo prueba no envía posiciones a Supabase (solo muestra la UI).
+        • Modo prueba NO crea sesión (solo muestra la UI).
       </Text>
     </View>
   );

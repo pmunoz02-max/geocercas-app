@@ -1,13 +1,7 @@
 // src/lib/supabaseMobile.ts
-import { createClient } from "@supabase/supabase-js";
+// Alias para mantener compatibilidad con código antiguo.
+// TODA la app usará internamente el mismo cliente que src/lib/supabase.ts
 
-const SUPABASE_URL = "https://wpaixkvokdkudymgjoua.supabase.co";
-// ⚠️ IMPORTANTE: reemplaza este placeholder por tu ANON KEY real de Supabase
-const SUPABASE_ANON_KEY = "PON_AQUI_TU_SUPABASE_ANON_KEY";
+import { supabase } from "./supabase";
 
-export const supabaseMobile = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+export const supabaseMobile = supabase;
