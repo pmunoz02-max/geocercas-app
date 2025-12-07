@@ -178,7 +178,7 @@ export function AuthProvider({ children }) {
       setLoading(true);
 
       try {
-        // 2.a) Aceptar invitaciones pendientes
+        // 2.a) Aceptar invitaciones pendientes (si existen)
         await acceptInviteIfAny(user);
 
         // 2.b) Perfil
@@ -215,44 +215,10 @@ export function AuthProvider({ children }) {
           console.error("[AuthContext] user_organizations exception:", e);
         }
 
-        // 3.b) Si NO tiene ninguna organización, crear una propia (OWNER)
-        if (orgLinks.length === 0) {
-          try {
-            const { data: newOrgId, error: ownerOrgErr } =
-              await supabase.rpc("ensure_owner_org_for_user", {
-                p_user_id: user.id,
-                p_email: user.email,
-              });
-
-            if (ownerOrgErr) {
-              console.error(
-                "[AuthContext] ensure_owner_org_for_user error:",
-                ownerOrgErr
-              );
-            } else if (newOrgId) {
-              // Volvemos a leer user_organizations después de crear la org
-              const { data: linksAfter, error: linksAfterErr } =
-                await supabase
-                  .from("user_organizations")
-                  .select("org_id, role, created_at")
-                  .eq("user_id", user.id);
-
-              if (linksAfterErr) {
-                console.error(
-                  "[AuthContext] user_organizations re-fetch error:",
-                  linksAfterErr
-                );
-              } else {
-                orgLinks = linksAfter || [];
-              }
-            }
-          } catch (e) {
-            console.error(
-              "[AuthContext] ensure_owner_org_for_user exception:",
-              e
-            );
-          }
-        }
+        // 🔴 IMPORTANTE:
+        // AQUÍ ANTES LLAMÁBAMOS ensure_owner_org_for_user CUANDO orgLinks.length === 0
+        // LO QUITAMOS PARA EVITAR ERRORES 400 Y NO TOCAR NADA DE BACKEND.
+        // Los nuevos tenants se pueden crear manualmente desde la consola.
 
         // 4) Cargar organizaciones asociadas
         let orgs = [];
@@ -273,7 +239,6 @@ export function AuthProvider({ children }) {
                   const link = orgLinks.find((l) => l.org_id === org.id);
                   return {
                     ...org,
-                    // 🔥 normalizamos rol AQUÍ
                     role: link?.role
                       ? String(link.role).toLowerCase()
                       : null,
@@ -322,7 +287,7 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // --------------------------
-  // 6) Rol normalizado + fallback
+  // 3) Rol normalizado + fallback
   // --------------------------
   let normalizedRole = null;
 
@@ -331,8 +296,6 @@ export function AuthProvider({ children }) {
   } else if (profile?.role) {
     normalizedRole = String(profile.role).toLowerCase();
   } else if (organizations && organizations.length > 0) {
-    // Fallback: si por alguna razón currentOrg es null,
-    // inferimos rol del usuario a partir de sus organizaciones
     const ownerOrg = organizations.find(
       (o) => String(o.role || "").toLowerCase() === "owner"
     );
