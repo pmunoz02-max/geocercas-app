@@ -34,41 +34,15 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
-// ✅ correos que SIEMPRE deben comportarse como OWNER
-const SUPER_OWNERS = [
-  "fenice.ecuador@gmail.com",
-  "pmunoz02@gmail.com",
-];
-
 // ---------------------
 // Layout interno (aplicación)
 // ---------------------
 function Shell({ children }) {
-  const { currentRole, loading, organizations, user } = useAuth();
+  const { currentRole, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // 1) rol normalizado desde el contexto
-  let normalizedRole = (currentRole || "").toLowerCase();
-
-  // 2) fallback por organizaciones (por si currentRole viene vacío)
-  if (!normalizedRole && Array.isArray(organizations) && organizations.length > 0) {
-    const ownerOrg = organizations.find(
-      (o) => String(o.role || "").toLowerCase() === "owner"
-    );
-    const adminOrg = organizations.find(
-      (o) => String(o.role || "").toLowerCase() === "admin"
-    );
-    if (ownerOrg) normalizedRole = "owner";
-    else if (adminOrg) normalizedRole = "admin";
-  }
-
-  // 3) fallback FINAL: super-owners por email (tú)
-  const userEmail = (user?.email || "").toLowerCase();
-  if (!normalizedRole && SUPER_OWNERS.includes(userEmail)) {
-    normalizedRole = "owner";
-  }
-
+  const normalizedRole = (currentRole || "").toLowerCase();
   const treatAsTracker = normalizedRole === "tracker";
 
   if (loading) {
@@ -102,21 +76,11 @@ function Shell({ children }) {
     { path: "/costos", labelKey: "app.tabs.reportes" },
     { path: "/costos-dashboard", labelKey: "app.tabs.dashboard" },
     { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
-  ];
 
-  // Pestañas solo para owner / admin
-  if (normalizedRole === "owner" || normalizedRole === "admin") {
-    tabs.push({
-      path: "/invitar-tracker",
-      labelKey: "app.tabs.invitarTracker",
-    });
-  }
-  if (normalizedRole === "owner") {
-    tabs.push({
-      path: "/admins",
-      labelKey: "app.tabs.admins",
-    });
-  }
+    // 🔥 SIEMPRE mostramos estas dos pestañas en el shell
+    { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
+    { path: "/admins", labelKey: "app.tabs.admins" },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
