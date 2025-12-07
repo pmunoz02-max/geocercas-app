@@ -2,29 +2,57 @@
   "expo": {
     "name": "geocercas-tracker-mobile",
     "slug": "geocercas-tracker-mobile",
+    "scheme": "geocercas",
     "version": "1.0.0",
     "orientation": "portrait",
+
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "ios": {
-      "supportsTablet": true
+
+    "updates": {
+      "fallbackToCacheTimeout": 0
     },
+
+    "assetBundlePatterns": ["**/*"],
+
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tugeocercas.tracker",
+
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "App Geocercas necesita tu ubicación para registrar tus recorridos.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "App Geocercas usa tu ubicación en segundo plano incluso con la app cerrada o pantalla apagada.",
+        "UIBackgroundModes": ["location"]
+      }
+    },
+
     "android": {
+      "package": "com.tugeocercas.tracker",
+
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#FFFFFF"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+
+    "plugins": []
   }
 }
