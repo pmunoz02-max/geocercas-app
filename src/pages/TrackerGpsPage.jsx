@@ -10,14 +10,14 @@ export default function TrackerGpsPage() {
   const [lastSend, setLastSend] = useState(null);
   const [lastError, setLastError] = useState(null);
   const [isSending, setIsSending] = useState(false);
-  const [debugLines, setDebugLines] = useState<string[]>([]);
+  const [debugLines, setDebugLines] = useState([]);
 
-  const watchIdRef = useRef<number | null>(null);
-  const intervalRef = useRef<number | null>(null);
-  const lastCoordsRef = useRef<any>(null);
+  const watchIdRef = useRef(null);
+  const intervalRef = useRef(null);
+  const lastCoordsRef = useRef(null);
 
   // Helper para log
-  const log = (msg: string) => {
+  const log = (msg) => {
     const line = `${new Date().toISOString().slice(11, 19)} - ${msg}`;
     console.log("[TrackerGpsPage]", line);
     setDebugLines((prev) => {
@@ -86,17 +86,17 @@ export default function TrackerGpsPage() {
     }
 
     // Intentar leer el estado de permisos (si el navegador lo soporta)
-    if (navigator.permissions && (navigator.permissions as any).query) {
+    if (navigator.permissions && navigator.permissions.query) {
       try {
-        (navigator.permissions as any)
+        navigator.permissions
           .query({ name: "geolocation" })
-          .then((result: any) => {
+          .then((result) => {
             log(`Permissions API: geolocation state='${result.state}'`);
           })
-          .catch((e: any) => {
+          .catch((e) => {
             log(`Permissions API error: ${e?.message || String(e)}`);
           });
-      } catch (e: any) {
+      } catch (e) {
         log(`Permissions API exception: ${e?.message || String(e)}`);
       }
     } else {
@@ -105,7 +105,7 @@ export default function TrackerGpsPage() {
 
     let cancelled = false;
 
-    const handleSuccess = (pos: GeolocationPosition) => {
+    const handleSuccess = (pos) => {
       if (cancelled) {
         log("handleSuccess llamado pero efecto cancelado");
         return;
@@ -130,7 +130,7 @@ export default function TrackerGpsPage() {
       );
     };
 
-    const handleError = (err: GeolocationPositionError) => {
+    const handleError = (err) => {
       if (cancelled) {
         log("handleError llamado pero efecto cancelado");
         return;
@@ -164,7 +164,7 @@ export default function TrackerGpsPage() {
     setStatus("Solicitando permiso de ubicación…");
     log("Antes de watchPosition");
 
-    let watchId: number;
+    let watchId;
     try {
       watchId = navigator.geolocation.watchPosition(
         handleSuccess,
@@ -173,10 +173,10 @@ export default function TrackerGpsPage() {
           enableHighAccuracy: true,
           maximumAge: 0,
         }
-      ) as unknown as number;
+      );
       watchIdRef.current = watchId;
       log(`watchPosition iniciado, watchId=${watchId}`);
-    } catch (e: any) {
+    } catch (e) {
       log(`Exception al llamar watchPosition: ${e?.message || String(e)}`);
       setStatus("Error al iniciar la geolocalización.");
       setLastError(e?.message || String(e));
@@ -187,9 +187,7 @@ export default function TrackerGpsPage() {
       log("useEffect[geo] cleanup");
       if (watchIdRef.current !== null) {
         log(`clearWatch(${watchIdRef.current})`);
-        navigator.geolocation.clearWatch(
-          watchIdRef.current as unknown as number
-        );
+        navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
     };
@@ -241,7 +239,7 @@ export default function TrackerGpsPage() {
           setLastSend(new Date());
           setLastError(null);
         }
-      } catch (e: any) {
+      } catch (e) {
         log(`send_position excepción: ${e?.message || String(e)}`);
         setStatus("Error de red al enviar la posición.");
         setLastError(e?.message || String(e));
