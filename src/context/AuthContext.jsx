@@ -9,6 +9,7 @@ import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
+// Clave para recordar la organización actual en localStorage
 const LS_CURRENT_ORG_ID_KEY = "app_geocercas_current_org_id";
 
 function loadStoredOrgId() {
@@ -25,9 +26,15 @@ function storeOrgId(orgId) {
   try {
     if (orgId) window.localStorage.setItem(LS_CURRENT_ORG_ID_KEY, orgId);
     else window.localStorage.removeItem(LS_CURRENT_ORG_ID_KEY);
-  } catch {}
+  } catch {
+    // ignorar errores de storage
+  }
 }
 
+/**
+ * Acepta automáticamente la invitación más reciente (si existe)
+ * para el usuario actual.
+ */
 async function acceptInviteIfAny(user) {
   if (!user?.email || !user.id) return;
 
@@ -50,6 +57,7 @@ async function acceptInviteIfAny(user) {
 
     const roleUpper = String(invite.role || "admin").toUpperCase();
 
+    // ¿Ya es miembro?
     const { data: exists, error: existErr } = await supabase
       .from("user_organizations")
       .select("org_id")
@@ -72,16 +80,27 @@ async function acceptInviteIfAny(user) {
           user_id: user.id,
           role: roleUpper,
         });
+
       if (insErr) {
-        console.error("[AuthContext] insert user_organizations error:", insErr);
+        console.error(
+          "[AuthContext] insert user_organizations error:",
+          insErr
+        );
         return;
       }
     }
 
-    await supabase
+    const { error: updErr } = await supabase
       .from("org_invites")
-      .update({ status: "accepted", accepted_at: new Date().toISOString() })
+      .update({
+        status: "accepted",
+        accepted_at: new Date().toISOString(),
+      })
       .eq("id", invite.id);
+
+    if (updErr) {
+      console.error("[AuthContext] org_invites update error:", updErr);
+    }
   } catch (e) {
     console.error("[AuthContext] acceptInviteIfAny exception:", e);
   }
@@ -97,18 +116,22 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // --------------------------
-  // INIT SESSION
+  // 1) Inicializar sesión
   // --------------------------
   useEffect(() => {
     let isMounted = true;
 
-    async function init() {
+    async function initSession() {
       try {
         const { data, error } = await supabase.auth.getSession();
         if (!isMounted) return;
+
+        if (error) {
+          console.error("[AuthContext] getSession error:", error);
+        }
+
         setSession(data?.session ?? null);
         setUser(data?.session?.user ?? null);
-        if (error) console.error("[AuthContext] getSession error:", error);
       } catch (e) {
         console.error("[AuthContext] getSession exception:", e);
       } finally {
@@ -116,7 +139,7 @@ export function AuthProvider({ children }) {
       }
     }
 
-    init();
+    initSession();
 
     const {
       data: { subscription },
@@ -139,7 +162,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // --------------------------
-  // LOAD USER DATA
+  // 2) Cargar datos del usuario
   // --------------------------
   useEffect(() => {
     if (!user) {
@@ -151,105 +174,178 @@ export function AuthProvider({ children }) {
 
     let cancelled = false;
 
-    async function load() {
+    async function loadUserData() {
       setLoading(true);
+
       try {
+        // 2.a) Aceptar invitaciones pendientes
         await acceptInviteIfAny(user);
 
-        // PERFIL
-        const { data: profiles } = await supabase
+        // 2.b) Perfil
+        const { data: profiles, error: profErr } = await supabase
           .from("v_app_profiles")
           .select("*")
-          .eq("email", user.email);
-
-        if (!cancelled) setProfile(profiles?.[0] || null);
-
-        // ORGANIZATIONS
-        let orgLinks = [];
-        const { data: links } = await supabase
-          .from("user_organizations")
-          .select("org_id, role")
           .eq("user_id", user.id);
 
-        orgLinks = links || [];
+        if (profErr) {
+          console.error("[AuthContext] v_app_profiles error:", profErr);
+        }
 
-        // SI NO TIENE ORGANIZACIÓN → crear una para el usuario
+        if (!cancelled) {
+          setProfile(profiles?.[0] || null);
+        }
+
+        // 3) Leer memberships (user_organizations)
+        let orgLinks = [];
+        try {
+          const { data: links, error: linksErr } = await supabase
+            .from("user_organizations")
+            .select("org_id, role, created_at")
+            .eq("user_id", user.id);
+
+          if (linksErr) {
+            console.error(
+              "[AuthContext] user_organizations error:",
+              linksErr
+            );
+          } else {
+            orgLinks = links || [];
+          }
+        } catch (e) {
+          console.error("[AuthContext] user_organizations exception:", e);
+        }
+
+        // 3.b) Si NO tiene ninguna organización, crear una propia (OWNER)
         if (orgLinks.length === 0) {
-          const { data: newOrgId } = await supabase.rpc(
-            "ensure_owner_org_for_user",
-            {
-              p_user_id: user.id,
-              p_email: user.email,
-            }
-          );
+          try {
+            const { data: newOrgId, error: ownerOrgErr } =
+              await supabase.rpc("ensure_owner_org_for_user", {
+                p_user_id: user.id,
+                p_email: user.email,
+              });
 
-          if (newOrgId) {
-            const { data: links2 } = await supabase
-              .from("user_organizations")
-              .select("org_id, role")
-              .eq("user_id", user.id);
-            orgLinks = links2 || [];
+            if (ownerOrgErr) {
+              console.error(
+                "[AuthContext] ensure_owner_org_for_user error:",
+                ownerOrgErr
+              );
+            } else if (newOrgId) {
+              // Volvemos a leer user_organizations después de crear la org
+              const { data: linksAfter, error: linksAfterErr } =
+                await supabase
+                  .from("user_organizations")
+                  .select("org_id, role, created_at")
+                  .eq("user_id", user.id);
+
+              if (linksAfterErr) {
+                console.error(
+                  "[AuthContext] user_organizations re-fetch error:",
+                  linksAfterErr
+                );
+              } else {
+                orgLinks = linksAfter || [];
+              }
+            }
+          } catch (e) {
+            console.error(
+              "[AuthContext] ensure_owner_org_for_user exception:",
+              e
+            );
           }
         }
 
-        // CARGAR ORGANIZATIONS
+        // 4) Cargar organizaciones asociadas
         let orgs = [];
         if (orgLinks.length > 0) {
           const ids = orgLinks.map((l) => l.org_id);
 
-          const { data: orgRows } = await supabase
-            .from("organizations")
-            .select("id, name, slug")
-            .in("id", ids);
+          try {
+            const { data: orgRows, error: orgErr } = await supabase
+              .from("organizations")
+              .select("id, name, slug")
+              .in("id", ids);
 
-          orgs =
-            orgRows?.map((o) => {
-              const link = orgLinks.find((l) => l.org_id === o.id);
-              return {
-                ...o,
-                role: link?.role?.toLowerCase() || null, // 🔥 NORMALIZAMOS AQUÍ
-              };
-            }) || [];
+            if (orgErr) {
+              console.error("[AuthContext] organizations error:", orgErr);
+            } else {
+              orgs =
+                orgRows?.map((org) => {
+                  const link = orgLinks.find((l) => l.org_id === org.id);
+                  return {
+                    ...org,
+                    // 🔥 normalizamos rol AQUÍ
+                    role: link?.role
+                      ? String(link.role).toLowerCase()
+                      : null,
+                  };
+                }) || [];
+            }
+          } catch (e) {
+            console.error("[AuthContext] organizations exception:", e);
+          }
         }
 
+        // 5) Seleccionar organización actual
         if (!cancelled) {
           setOrganizations(orgs);
 
-          const storedId = loadStoredOrgId();
+          const storedOrgId = loadStoredOrgId();
+          let initialOrg = null;
 
-          let initial = null;
-
-          if (storedId) {
-            initial = orgs.find((o) => o.id === storedId) || null;
+          if (storedOrgId && orgs.length > 0) {
+            initialOrg = orgs.find((o) => o.id === storedOrgId) || null;
           }
 
-          // 🔥 SELECCIÓN CORREGIDA CON ROLES NORMALIZADOS
-          if (!initial && orgs.length > 0) {
-            initial =
+          if (!initialOrg && orgs.length > 0) {
+            // Preferimos OWNER → luego ADMIN → luego la primera
+            initialOrg =
               orgs.find((o) => o.role === "owner") ||
               orgs.find((o) => o.role === "admin") ||
               orgs[0];
           }
 
-          setCurrentOrgState(initial);
-          storeOrgId(initial?.id || null);
+          setCurrentOrgState(initialOrg);
+          storeOrgId(initialOrg?.id || null);
         }
+      } catch (e) {
+        console.error("[AuthContext] loadUserData exception:", e);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    load();
-    return () => (cancelled = true);
+    loadUserData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   // --------------------------
-  // ROLE NORMALIZADO
+  // 6) Rol normalizado + fallback
   // --------------------------
-  const normalizedRole =
-    currentOrg?.role?.toLowerCase() ||
-    profile?.role?.toLowerCase() ||
-    null;
+  let normalizedRole = null;
+
+  if (currentOrg?.role) {
+    normalizedRole = String(currentOrg.role).toLowerCase();
+  } else if (profile?.role) {
+    normalizedRole = String(profile.role).toLowerCase();
+  } else if (organizations && organizations.length > 0) {
+    // Fallback: si por alguna razón currentOrg es null,
+    // inferimos rol del usuario a partir de sus organizaciones
+    const ownerOrg = organizations.find(
+      (o) => String(o.role || "").toLowerCase() === "owner"
+    );
+    const adminOrg = organizations.find(
+      (o) => String(o.role || "").toLowerCase() === "admin"
+    );
+
+    if (ownerOrg) {
+      normalizedRole = "owner";
+    } else if (adminOrg) {
+      normalizedRole = "admin";
+    }
+  }
 
   const isOwner = normalizedRole === "owner";
   const isAdmin = normalizedRole === "admin" || isOwner;
@@ -260,27 +356,25 @@ export function AuthProvider({ children }) {
     storeOrgId(org?.id || null);
   };
 
+  const value = {
+    session,
+    user,
+    loading,
+
+    profile,
+    organizations,
+    currentOrg,
+    setCurrentOrg,
+
+    role: normalizedRole,
+    currentRole: normalizedRole,
+    isOwner,
+    isAdmin,
+    isTracker,
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        session,
-        user,
-        loading,
-
-        profile,
-        organizations,
-        currentOrg,
-        setCurrentOrg,
-
-        role: normalizedRole,
-        currentRole: normalizedRole,
-        isOwner,
-        isAdmin,
-        isTracker,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
   );
 }
 
