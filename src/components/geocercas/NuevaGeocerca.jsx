@@ -517,13 +517,21 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
           created_by = data?.user?.id || null;
         } catch {}
 
+        if (!currentOrg?.id) {
+          throw new Error("Organización actual no encontrada para la geocerca");
+        }
+
         const fc = { type: "FeatureCollection", features: [feature] };
+
+        // 💡 multi-tenant: asociar SIEMPRE la geocerca a la org del usuario
         const payload = {
           nombre: name,
           geojson: fc,
           ...(created_by ? { created_by } : {}),
-          ...(currentOrg?.id ? { org_id: currentOrg.id } : {}),
+          org_id: currentOrg.id,
+          tenant_id: currentOrg.id,
         };
+
         const { data, error } = await supabaseClient
           .from(SUPABASE_GEOFENCES_TABLE)
           .insert(payload)
@@ -542,9 +550,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         const key = `geocerca_${name}`;
         const existing = localStorage.getItem(key);
         if (existing) {
-          throw new Error(
-            t("geocercas.errorDuplicateName")
-          );
+          throw new Error(t("geocercas.errorDuplicateName"));
         }
         const fc = { type: "FeatureCollection", features: [feature] };
         const payload = {
@@ -576,6 +582,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         await refreshGeofenceList();
       }
     } catch (e) {
+      console.error("Error en handleSave geocerca:", e);
       alert(
         t("geocercas.errorSave", { error: e?.message || String(e) })
       );
