@@ -34,6 +34,11 @@ function storeOrgId(orgId) {
 /**
  * Acepta automáticamente la invitación más reciente (si existe)
  * para el usuario actual.
+ *
+ * LÓGICA:
+ * - TRACKER: se une a la organización del que invita (org_invites.org_id)
+ * - ADMIN: se crea automáticamente una organización propia (tenants)
+ *          y se lo registra como OWNER en user_organizations
  */
 async function acceptInviteIfAny(user) {
   if (!user?.email || !user.id) return;
@@ -57,50 +62,109 @@ async function acceptInviteIfAny(user) {
 
     const roleUpper = String(invite.role || "admin").toUpperCase();
 
-    // ¿Ya es miembro?
-    const { data: exists, error: existErr } = await supabase
-      .from("user_organizations")
-      .select("org_id")
-      .eq("org_id", invite.org_id)
-      .eq("user_id", user.id)
-      .limit(1);
+    // ============================================================
+    // 🔵 1. SI ES TRACKER → SE AGREGA USANDO LA ORG DEL INVITADOR
+    // ============================================================
+    if (roleUpper === "TRACKER") {
+      const { data: exists, error: existErr } = await supabase
+        .from("user_organizations")
+        .select("org_id")
+        .eq("org_id", invite.org_id)
+        .eq("user_id", user.id)
+        .limit(1);
 
-    if (existErr) {
-      console.error("[AuthContext] user_organizations check error:", existErr);
+      if (existErr) {
+        console.error("[AuthContext] user_organizations check error:", existErr);
+        return;
+      }
+
+      const alreadyMember = exists?.length > 0;
+
+      if (!alreadyMember) {
+        const { error: insErr } = await supabase
+          .from("user_organizations")
+          .insert({
+            org_id: invite.org_id,
+            user_id: user.id,
+            role: "TRACKER",
+          });
+
+        if (insErr) {
+          console.error("[AuthContext] insert tracker error:", insErr);
+          return;
+        }
+      }
+
+      const { error: updErr } = await supabase
+        .from("org_invites")
+        .update({
+          status: "accepted",
+          accepted_at: new Date().toISOString(),
+        })
+        .eq("id", invite.id);
+
+      if (updErr) {
+        console.error("[AuthContext] org_invites update error:", updErr);
+      }
+
       return;
     }
 
-    const alreadyMember = exists?.length > 0;
+    // ============================================================
+    // 🔴 2. SI ES ADMIN → CREAR ORGANIZACIÓN PROPIA AUTOMÁTICAMENTE
+    // ============================================================
+    if (roleUpper === "ADMIN") {
+      const orgName = `Organización ${user.email}`;
 
-    if (!alreadyMember) {
+      // A) Crear tenant propio para este admin
+      const { data: newTenant, error: tenantErr } = await supabase
+        .from("tenants")
+        .insert({
+          name: orgName,
+          owner_user_id: user.id,
+          plan: "free",
+        })
+        .select("id")
+        .single();
+
+      if (tenantErr) {
+        console.error("[AuthContext] tenant creation error:", tenantErr);
+        return;
+      }
+
+      const newOrgId = newTenant.id;
+
+      // B) Registrar su membresía como OWNER en esa nueva organización
       const { error: insErr } = await supabase
         .from("user_organizations")
         .insert({
-          org_id: invite.org_id,
+          org_id: newOrgId,
           user_id: user.id,
-          role: roleUpper,
+          role: "OWNER",
         });
 
       if (insErr) {
-        console.error(
-          "[AuthContext] insert user_organizations error:",
-          insErr
-        );
+        console.error("[AuthContext] insert owner membership error:", insErr);
         return;
       }
+
+      // C) Marcar invitación como aceptada
+      const { error: updErr } = await supabase
+        .from("org_invites")
+        .update({
+          status: "accepted",
+          accepted_at: new Date().toISOString(),
+        })
+        .eq("id", invite.id);
+
+      if (updErr) {
+        console.error("[AuthContext] org_invites update error:", updErr);
+      }
+
+      return;
     }
 
-    const { error: updErr } = await supabase
-      .from("org_invites")
-      .update({
-        status: "accepted",
-        accepted_at: new Date().toISOString(),
-      })
-      .eq("id", invite.id);
-
-    if (updErr) {
-      console.error("[AuthContext] org_invites update error:", updErr);
-    }
+    // Si aparece algún otro rol raro, por ahora no hacemos nada especial.
   } catch (e) {
     console.error("[AuthContext] acceptInviteIfAny exception:", e);
   }
@@ -218,7 +282,7 @@ export function AuthProvider({ children }) {
         // 🔴 IMPORTANTE:
         // AQUÍ ANTES LLAMÁBAMOS ensure_owner_org_for_user CUANDO orgLinks.length === 0
         // LO QUITAMOS PARA EVITAR ERRORES 400 Y NO TOCAR NADA DE BACKEND.
-        // Los nuevos tenants se pueden crear manualmente desde la consola.
+        // Los nuevos tenants se crean ahora vía invitaciones ADMIN.
 
         // 4) Cargar organizaciones asociadas
         let orgs = [];
