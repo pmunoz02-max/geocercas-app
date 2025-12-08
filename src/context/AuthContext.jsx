@@ -24,8 +24,11 @@ function loadStoredOrgId() {
 function storeOrgId(orgId) {
   if (typeof window === "undefined") return;
   try {
-    if (orgId) window.localStorage.setItem(LS_CURRENT_ORG_ID_KEY, orgId);
-    else window.localStorage.removeItem(LS_CURRENT_ORG_ID_KEY);
+    if (orgId) {
+      window.localStorage.setItem(LS_CURRENT_ORG_ID_KEY, orgId);
+    } else {
+      window.localStorage.removeItem(LS_CURRENT_ORG_ID_KEY);
+    }
   } catch {
     // ignorar errores de storage
   }
@@ -37,8 +40,8 @@ function storeOrgId(orgId) {
  *
  * LÓGICA:
  * - TRACKER: se une a la organización del que invita (org_invites.org_id)
- * - ADMIN: se crea automáticamente una organización propia (tenants)
- *          y se lo registra como OWNER en user_organizations
+ * - ADMIN: ignora org_id y crea SIEMPRE una organización propia (tenants),
+ *          registrándolo como OWNER en user_organizations.
  */
 async function acceptInviteIfAny(user) {
   if (!user?.email || !user.id) return;
@@ -116,7 +119,7 @@ async function acceptInviteIfAny(user) {
     if (roleUpper === "ADMIN") {
       const orgName = `Organización ${user.email}`;
 
-      // A) Crear tenant propio para este admin
+      // A) Crear tenant propio para este admin (ignoramos invite.org_id)
       const { data: newTenant, error: tenantErr } = await supabase
         .from("tenants")
         .insert({
@@ -164,7 +167,7 @@ async function acceptInviteIfAny(user) {
       return;
     }
 
-    // Si aparece algún otro rol raro, por ahora no hacemos nada especial.
+    // Si apareciera algún otro rol, por ahora no hacemos nada especial.
   } catch (e) {
     console.error("[AuthContext] acceptInviteIfAny exception:", e);
   }
@@ -280,9 +283,8 @@ export function AuthProvider({ children }) {
         }
 
         // 🔴 IMPORTANTE:
-        // AQUÍ ANTES LLAMÁBAMOS ensure_owner_org_for_user CUANDO orgLinks.length === 0
-        // LO QUITAMOS PARA EVITAR ERRORES 400 Y NO TOCAR NADA DE BACKEND.
-        // Los nuevos tenants se crean ahora vía invitaciones ADMIN.
+        // Aquí ya no llamamos ensure_owner_org_for_user.
+        // Los nuevos tenants para admins se crean vía invitaciones ADMIN.
 
         // 4) Cargar organizaciones asociadas
         let orgs = [];
