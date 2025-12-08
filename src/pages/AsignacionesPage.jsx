@@ -10,7 +10,7 @@ import {
   deleteAsignacion,
 } from "../lib/asignacionesApi";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../context/AuthContext"; // 👈 CORREGIDO: 'context' (singular)
 
 // Helper para asegurar que el datetime-local se guarda con zona horaria local
 function localToISOWithTZ(localDateTime) {
@@ -175,8 +175,9 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     if (!currentOrg?.id) {
-      // Mensaje directo para no depender de traducción nueva
-      setError("No hay organización seleccionada. Cierre sesión y vuelva a entrar.");
+      setError(
+        "No hay organización seleccionada. Cierre sesión y vuelva a entrar."
+      );
       return;
     }
 
@@ -209,7 +210,7 @@ export default function AsignacionesPage() {
       end_time: localToISOWithTZ(endTime),
       frecuencia_envio_sec: freqSec,
       status,
-      org_id: currentOrg.id, // <-- clave para multi-tenant
+      org_id: currentOrg.id, // clave multi-tenant
     };
 
     try {
@@ -488,7 +489,7 @@ export default function AsignacionesPage() {
 
           {/* Estado */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
+            <label className="mb-1 font-medium text.sm">
               {t("asignaciones.form.statusLabel")}
             </label>
             <select
