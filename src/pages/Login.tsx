@@ -1,10 +1,12 @@
 // src/pages/Login.tsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "./supabaseClient";
-import { useAuth } from "./context/AuthContext.jsx";
+
+// 👇 Rutas corregidas (estás dentro de src/pages)
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "./components/LanguageSwitcher";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 type Mode = "password" | "magic";
 
@@ -22,22 +24,18 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // 🔹 Al abrir /login: limpiar email, password y mensajes
+  // 🔹 Al abrir /login limpiamos siempre email y password
   useEffect(() => {
     setEmail("");
     setPassword("");
-    setErrorMsg(null);
-    setInfoMsg(null);
   }, []);
 
-  // 🔹 Leer ?mode=magic de la URL
+  // Leer ?mode=magic de la URL
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlMode = params.get("mode");
     if (urlMode === "magic") {
       setMode("magic");
-    } else if (urlMode === "password") {
-      setMode("password");
     }
   }, [location.search]);
 
