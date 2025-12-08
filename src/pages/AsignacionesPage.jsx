@@ -10,6 +10,7 @@ import {
   deleteAsignacion,
 } from "../lib/asignacionesApi";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
+import { useAuth } from "../contexts/AuthContext";
 
 // Helper para asegurar que el datetime-local se guarda con zona horaria local
 function localToISOWithTZ(localDateTime) {
@@ -31,6 +32,7 @@ const ESTADOS = ["todos", "activa", "inactiva"];
 
 export default function AsignacionesPage() {
   const { t } = useTranslation();
+  const { currentOrg } = useAuth();
 
   // ---------------------------------------------
   // Estado general
@@ -172,6 +174,12 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccessMessage(null);
 
+    if (!currentOrg?.id) {
+      // Mensaje directo para no depender de traducción nueva
+      setError("No hay organización seleccionada. Cierre sesión y vuelva a entrar.");
+      return;
+    }
+
     if (!selectedPersonalId || !selectedGeocercaId) {
       setError(t("asignaciones.messages.selectPersonAndFence"));
       return;
@@ -201,6 +209,7 @@ export default function AsignacionesPage() {
       end_time: localToISOWithTZ(endTime),
       frecuencia_envio_sec: freqSec,
       status,
+      org_id: currentOrg.id, // <-- clave para multi-tenant
     };
 
     try {

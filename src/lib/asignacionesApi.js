@@ -110,6 +110,14 @@ export async function getAsignaciones() {
 export async function createAsignacion(payload) {
   const { user_id, ...cleanPayload } = payload || {};
 
+  if (!cleanPayload.org_id) {
+    const error = new Error(
+      "[createAsignacion] org_id es obligatorio para crear asignaciones"
+    );
+    console.error(error.message);
+    return { data: null, error };
+  }
+
   const { data, error } = await supabase
     .from("asignaciones")
     .insert(cleanPayload)
