@@ -1,8 +1,6 @@
 // src/pages/Login.tsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-// 👇 Rutas corregidas (estás dentro de src/pages)
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
@@ -24,11 +22,13 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // 🔹 Al abrir /login limpiamos siempre email y password
+  // 🔹 Cada vez que navegamos a /login (location.key cambia) limpiamos email y password
   useEffect(() => {
     setEmail("");
     setPassword("");
-  }, []);
+    setErrorMsg(null);
+    setInfoMsg(null);
+  }, [location.key]);
 
   // Leer ?mode=magic de la URL
   useEffect(() => {
@@ -36,6 +36,8 @@ const Login: React.FC = () => {
     const urlMode = params.get("mode");
     if (urlMode === "magic") {
       setMode("magic");
+    } else if (urlMode === "password") {
+      setMode("password");
     }
   }, [location.search]);
 
@@ -234,7 +236,8 @@ const Login: React.FC = () => {
               </label>
               <input
                 type="email"
-                autoComplete="email"
+                autoComplete="off"
+                name="login-email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder={t("login.emailPlaceholder")}
                 value={email}
@@ -248,7 +251,8 @@ const Login: React.FC = () => {
               </label>
               <input
                 type="password"
-                autoComplete="current-password"
+                autoComplete="off"
+                name="login-password"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder={t("login.passwordPlaceholder")}
                 value={password}
@@ -275,7 +279,8 @@ const Login: React.FC = () => {
               </label>
               <input
                 type="email"
-                autoComplete="email"
+                autoComplete="off"
+                name="login-magic-email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder={t("login.emailPlaceholder")}
                 value={email}
