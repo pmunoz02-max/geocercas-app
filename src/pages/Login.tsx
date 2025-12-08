@@ -90,7 +90,7 @@ const Login: React.FC = () => {
     }
   };
 
-  // Magic Link clásico (owner/admin)
+  // Magic Link clásico (owner/admin) – versión "invite-only"
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -112,7 +112,29 @@ const Login: React.FC = () => {
 
       if (error) {
         console.error("[Login] signInWithOtp error:", error);
-        setErrorMsg(error.message || t("login.errorMagicLink"));
+
+        // 🔐 Modo invite-only:
+        // cuando los signups están desactivados y el email no existe,
+        // Supabase devuelve un error. Lo interpretamos como "no invitado".
+        const msg = error.message?.toLowerCase() ?? "";
+        if (
+          msg.includes("signup") ||
+          msg.includes("sign up") ||
+          msg.includes("new user") ||
+          msg.includes("not found")
+        ) {
+          setErrorMsg(
+            t("login.userNotAuthorized") ||
+              "Este correo no está autorizado. Solicita una invitación al administrador."
+          );
+        } else {
+          setErrorMsg(
+            error.message ||
+              t("login.errorMagicLink") ||
+              "No se pudo enviar el Magic Link."
+          );
+        }
+
         return;
       }
 
@@ -306,5 +328,8 @@ const Login: React.FC = () => {
     </div>
   );
 };
+
+export default Login;
+
 
 export default Login;

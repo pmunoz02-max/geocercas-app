@@ -38,6 +38,23 @@ export default function LoginScreen({ navigation }: Props) {
     setLoadingMagic(false);
 
     if (error) {
+      console.log("signInWithOtp error:", error);
+
+      // 🔐 Modo invite-only también en móvil
+      const msg = error.message?.toLowerCase() ?? "";
+      if (
+        msg.includes("signup") ||
+        msg.includes("sign up") ||
+        msg.includes("new user") ||
+        msg.includes("not found")
+      ) {
+        Alert.alert(
+          "Usuario no autorizado",
+          "Este correo no tiene acceso. Solicita invitación a un administrador."
+        );
+        return;
+      }
+
       Alert.alert("Error enviando Magic Link", error.message);
       return;
     }
@@ -109,7 +126,11 @@ export default function LoginScreen({ navigation }: Props) {
       <View style={{ height: 12 }} />
 
       <Button
-        title={loadingPassword ? "Iniciando sesión..." : "Login con password (debug)"}
+        title={
+          loadingPassword
+            ? "Iniciando sesión..."
+            : "Login con password (debug)"
+        }
         onPress={handlePasswordLogin}
         disabled={loadingMagic || loadingPassword}
         color="#16a34a"
