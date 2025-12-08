@@ -1,10 +1,10 @@
 // src/pages/Login.tsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext.jsx";
+import { supabase } from "./supabaseClient";
+import { useAuth } from "./context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "../components/LanguageSwitcher";
+import LanguageSwitcher from "./components/LanguageSwitcher";
 
 type Mode = "password" | "magic";
 
@@ -22,22 +22,24 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // Leer ?mode=magic de la URL
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const urlMode = params.get("mode");
-    if (urlMode === "magic") {
-      setMode("magic");
-    }
-  }, [location.search]);
-
-  // 🔹 Al entrar a /login limpiamos SIEMPRE el correo (y la contraseña)
+  // 🔹 Al abrir /login: limpiar email, password y mensajes
   useEffect(() => {
     setEmail("");
     setPassword("");
     setErrorMsg(null);
     setInfoMsg(null);
   }, []);
+
+  // 🔹 Leer ?mode=magic de la URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const urlMode = params.get("mode");
+    if (urlMode === "magic") {
+      setMode("magic");
+    } else if (urlMode === "password") {
+      setMode("password");
+    }
+  }, [location.search]);
 
   const isPasswordMode = mode === "password";
 
@@ -234,7 +236,7 @@ const Login: React.FC = () => {
               </label>
               <input
                 type="email"
-                autoComplete="off"
+                autoComplete="email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder={t("login.emailPlaceholder")}
                 value={email}
@@ -275,7 +277,7 @@ const Login: React.FC = () => {
               </label>
               <input
                 type="email"
-                autoComplete="off"
+                autoComplete="email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder={t("login.emailPlaceholder")}
                 value={email}
@@ -289,7 +291,7 @@ const Login: React.FC = () => {
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loadingAction
-                ? t("login.magicSubmitting")}
+                ? t("login.magicSubmitting")
                 : t("login.magicButton")}
             </button>
             <p className="text-[11px] text-slate-500">
