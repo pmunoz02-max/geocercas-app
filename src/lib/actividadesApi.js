@@ -1,162 +1,136 @@
 // src/lib/actividadesApi.js
-// API para manejar el catálogo de actividades
-// Usa la tabla public.activities:
-//   id, tenant_id, name, description, active,
-//   hourly_rate (numeric), currency_code (text)
-
 import { supabase } from "../supabaseClient";
 
-/**
- * Lista actividades visibles para el usuario actual.
- * RLS se encarga de filtrar por tenant_id.
- *
- * @param {Object} options
- * @param {boolean} options.includeInactive - Si true, incluye inactivas.
- */
-export async function listActividades({ includeInactive = false } = {}) {
-  let query = supabase
-    .from("activities")
-    .select(
-      `
-      id,
-      tenant_id,
-      name,
-      description,
-      active,
-      hourly_rate,
-      currency_code
-    `
-    )
-    .order("name", { ascending: true });
+// Obtiene un tenantId válido.
+// Si no se pasa, llama a la función de Postgres que auto-crea la organización.
+async function ensureTenant(tenantId) {
+  if (tenantId) return tenantId;
 
-  if (!includeInactive) {
-    query = query.eq("active", true);
+  const { data, error } = await supabase.rpc(
+    "ensure_default_org_for_current_user"
+  );
+
+  if (error) {
+    console.error(
+      "[actividadesApi] ensure_default_org_for_current_user error:",
+      error
+    );
+    throw error;
   }
 
-  const { data, error } = await query;
-  return { data, error };
+  return data; // uuid de la org
 }
 
-/**
- * Obtiene una actividad por id.
- */
-export async function getActividadById(id) {
-  const { data, error } = await supabase
-    .from("activities")
-    .select(
-      `
-      id,
-      tenant_id,
-      name,
-      description,
-      active,
-      hourly_rate,
-      currency_code
-    `
-    )
-    .eq("id", id)
-    .single();
+// 🔹 Listar actividades
+export async function listActividades({
+  includeInactive = false,
+  tenantId = null,
+} = {}) {
+  try {
+    const effectiveTenantId = await ensureTenant(tenantId);
 
-  return { data, error };
+    let query = supabase
+      .from("activities")
+      .select("*")
+      .eq("tenant_id", effectiveTenantId)
+      .order("name", { ascending: true });
+
+    if (!includeInactive) {
+      query = query.eq("active", true);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("[actividadesApi] listActividades error:", error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error("[actividadesApi] listActividades exception:", err);
+    return { data: null, error: err };
+  }
 }
 
-/**
- * Crea una actividad nueva.
- *
- * payload mínimo:
- *  {
- *    tenant_id: uuid,
- *    name: string,
- *    description?: string | null,
- *    active?: boolean,
- *    hourly_rate?: number | null,
- *    currency_code?: string | null
- *  }
- */
-export async function createActividad(payload) {
-  const { data, error } = await supabase
-    .from("activities")
-    .insert([payload])
-    .select(
-      `
-      id,
-      tenant_id,
-      name,
-      description,
-      active,
-      hourly_rate,
-      currency_code
-    `
-    )
-    .single();
+// 🔹 Crear actividad
+export async function createActividad(payload = {}, opts = {}) {
+  try {
+    const effectiveTenantId = await ensureTenant(
+      opts.tenantId ?? payload.tenant_id ?? null
+    );
 
-  return { data, error };
+    const body = {
+      tenant_id: effectiveTenantId,
+      name: payload.name,
+      description: payload.description ?? null,
+      active: payload.active ?? true,
+      currency_code: payload.currency_code,
+      hourly_rate: payload.hourly_rate,
+    };
+
+    const { data, error } = await supabase
+      .from("activities")
+      .insert(body)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("[actividadesApi] createActividad error:", error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error("[actividadesApi] createActividad exception:", err);
+    return { data: null, error: err };
+  }
 }
 
-/**
- * Actualiza una actividad existente.
- *
- * fields puede contener:
- *  {
- *    name?: string,
- *    description?: string | null,
- *    active?: boolean,
- *    hourly_rate?: number | null,
- *    currency_code?: string | null
- *  }
- */
-export async function updateActividad(id, fields) {
+// 🔹 Actualizar actividad
+export async function updateActividad(id, updates = {}) {
   const { data, error } = await supabase
     .from("activities")
     .update({
-      ...fields,
+      name: updates.name,
+      description: updates.description ?? null,
+      currency_code: updates.currency_code,
+      hourly_rate: updates.hourly_rate,
     })
     .eq("id", id)
-    .select(
-      `
-      id,
-      tenant_id,
-      name,
-      description,
-      active,
-      hourly_rate,
-      currency_code
-    `
-    )
+    .select("*")
     .single();
+
+  if (error) {
+    console.error("[actividadesApi] updateActividad error:", error);
+  }
 
   return { data, error };
 }
 
-/**
- * Cambia solo el estado active (activar / desactivar).
- */
-export async function toggleActividadActiva(id, active) {
+// 🔹 Activar / desactivar
+export async function toggleActividadActiva(id, newActive) {
   const { data, error } = await supabase
     .from("activities")
-    .update({ active })
+    .update({ active: newActive })
     .eq("id", id)
-    .select(
-      `
-      id,
-      tenant_id,
-      name,
-      description,
-      active,
-      hourly_rate,
-      currency_code
-    `
-    )
+    .select("*")
     .single();
+
+  if (error) {
+    console.error("[actividadesApi] toggleActividadActiva error:", error);
+  }
 
   return { data, error };
 }
 
-/**
- * Elimina una actividad por id.
- */
+// 🔹 Eliminar (soft o hard, según tu tabla)
 export async function deleteActividad(id) {
   const { error } = await supabase.from("activities").delete().eq("id", id);
+
+  if (error) {
+    console.error("[actividadesApi] deleteActividad error:", error);
+  }
 
   return { error };
 }
