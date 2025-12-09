@@ -3,10 +3,11 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   listAdmins,
-  inviteAdmin,
+  // inviteAdmin,   // ← ya no se usa, la invitación se hace vía Edge Function invite_admin
   updateAdmin,
   deleteAdmin,
 } from "../lib/adminsApi";
+import { supabase } from "../supabaseClient";
 
 export default function AdminsPage() {
   const { currentOrg, isOwner, user } = useAuth();
@@ -75,7 +76,6 @@ export default function AdminsPage() {
 
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
-    if (!currentOrg?.id) return;
 
     const email = inviteEmail.trim();
 
@@ -87,39 +87,53 @@ export default function AdminsPage() {
       return;
     }
 
+    if (!email.includes("@")) {
+      setError("Ingresa un correo electrónico válido.");
+      return;
+    }
+
+    if (inviteRole !== "admin") {
+      // Por ahora solo invitamos administradores con organización propia
+      setError("Por ahora solo se pueden invitar administradores.");
+      return;
+    }
+
     setLoadingAction(true);
 
-    const { data, error: apiError } = await inviteAdmin(currentOrg.id, {
-      email,
-      role: inviteRole,
-      full_name: null,
-      invitedBy: user?.id,
-    });
-
-    if (apiError) {
-      console.error("[AdminsPage] inviteAdmin error:", apiError);
-      setError(
-        apiError.message ||
-          "Error al enviar la invitación. Revisa la configuración del servidor."
+    try {
+      // 🔑 NUEVO: usar SIEMPRE la Edge Function invite_admin (no el flujo viejo)
+      const { data, error: fnError } = await supabase.functions.invoke(
+        "invite_admin",
+        {
+          body: { email },
+        }
       );
-      setLoadingAction(false);
-      return;
-    }
 
-    if (!data || data.ok === false) {
-      console.error("[AdminsPage] inviteAdmin business error:", data);
-      const detail =
-        data?.error ||
-        data?.detail ||
-        "No se pudo enviar la invitación (respuesta del servidor).";
-      setError(detail);
-      setLoadingAction(false);
-      return;
-    }
+      if (fnError) {
+        console.error("[AdminsPage] invite_admin error:", fnError);
+        setError(
+          fnError.message ||
+            "Error al enviar la invitación. Revisa la configuración del servidor."
+        );
+        setLoadingAction(false);
+        return;
+      }
 
-    setInviteEmail("");
-    setSuccessMessage(`La invitación fue enviada al correo ${email}.`);
-    setLoadingAction(false);
+      console.log("[AdminsPage] invite_admin response:", data);
+
+      setInviteEmail("");
+      setSuccessMessage(`La invitación fue enviada al correo ${email}.`);
+
+      // Nota: el nuevo admin tendrá su propia organización.
+      // Esta lista muestra solo propietarios y admins de la organización actual.
+    } catch (err) {
+      console.error("[AdminsPage] excepción en handleInviteSubmit:", err);
+      setError(
+        "Error inesperado al enviar la invitación. Intenta nuevamente más tarde."
+      );
+    } finally {
+      setLoadingAction(false);
+    }
   };
 
   const handleDelete = async (admin) => {
@@ -151,7 +165,10 @@ export default function AdminsPage() {
   };
 
   const handleEdit = async (admin) => {
-    console.log("[AdminsPage] editar admin (pendiente de implementación)", admin);
+    console.log(
+      "[AdminsPage] editar admin (pendiente de implementación)",
+      admin
+    );
     setError(
       "Edición de administradores aún en construcción. Solo lectura por ahora."
     );
@@ -195,9 +212,11 @@ export default function AdminsPage() {
         </h2>
         <p className="text-xs text-slate-500 mb-3">
           Ingresa el correo electrónico de la persona a la que quieres invitar
-          como administradora de esta organización. Se enviará una invitación
-          real por correo utilizando Supabase Auth a través de la función
-          <span className="font-mono"> invite-user</span>.
+          como administradora. Se enviará una invitación real por correo
+          utilizando Supabase Auth a través de la función
+          <span className="font-mono"> invite_admin</span>. Cada nuevo
+          administrador tendrá una organización propia, separada de la
+          organización actual.
         </p>
 
         <form
@@ -240,9 +259,10 @@ export default function AdminsPage() {
         </form>
 
         <p className="mt-2 text-xs text-amber-600">
-          Cuando el nuevo administrador reciba el correo y haga login con su
-          enlace, se creará/asegurará su rol en la organización. Luego de eso,
-          al pulsar el botón <strong>Refrescar</strong> aparecerá en la lista.
+          Esta lista muestra solo propietarios y administradores de la
+          organización actual. Los nuevos administradores invitados mediante
+          <span className="font-mono"> invite_admin</span> tendrán su propia
+          organización y no aparecerán aquí.
         </p>
       </section>
 
@@ -375,4 +395,3 @@ export default function AdminsPage() {
     </div>
   );
 }
-
