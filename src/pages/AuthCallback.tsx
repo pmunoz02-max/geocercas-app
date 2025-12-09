@@ -12,7 +12,6 @@ export default function AuthCallback() {
 
     const run = async () => {
       try {
-        // 1) Intercambiar el código del Magic Link por una sesión
         const { data, error: exError } =
           await supabase.auth.exchangeCodeForSession(window.location.href);
 
@@ -26,7 +25,6 @@ export default function AuthCallback() {
           return;
         }
 
-        // 2) Obtener el usuario de la sesión
         let user = data?.session?.user ?? null;
 
         if (!user) {
@@ -54,7 +52,6 @@ export default function AuthCallback() {
           .toString()
           .toLowerCase();
 
-        // 3) Leer roles de user_organizations para este usuario
         const { data: orgs, error: orgErr } = await supabase
           .from("user_organizations")
           .select("role")
@@ -84,8 +81,8 @@ export default function AuthCallback() {
         if (!alive) return;
 
         if (isTracker) {
-          console.log("[AuthCallback] Redirigiendo TRACKER a /tracker");
-          navigate("/tracker", { replace: true });
+          console.log("[AuthCallback] Redirigiendo TRACKER a /tracker-gps");
+          navigate("/tracker-gps", { replace: true });
         } else {
           console.log("[AuthCallback] Redirigiendo a /inicio");
           navigate("/inicio", { replace: true });

@@ -1,31 +1,86 @@
 // src/lib/inviteApi.js
-import { supabase } from '../supabaseClient';
+import { supabase } from "../supabaseClient";
 
-/**
- * Envía un Magic Link por email para que el usuario se autentique.
- * El enlace redirige al móvil a /tracker/auto con el tenant preseleccionado.
- *
- * @param {string} email - email del tracker
- * @param {string} tenantId - org/tenant UUID
- * @param {string} [redirectOrigin] - (opcional) origen absoluto, por defecto window.location.origin
- * @returns {Promise<void>}
- */
-export async function sendMagicLinkToTracker(email, tenantId, redirectOrigin) {
-  if (!email) throw new Error('Email requerido');
-  if (!tenantId) throw new Error('Tenant/Org ID requerido');
+// Obtiene la org actual del usuario autenticado desde la RPC
+async function getCurrentOrgId() {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
+  if (userError) {
+    console.error("[inviteApi] Error obteniendo usuario actual", userError);
+    throw new Error("No se pudo obtener el usuario actual");
+  }
+
+  if (!user) {
+    throw new Error("No hay sesión activa");
+  }
+
+  const { data, error } = await supabase.rpc("get_current_org_id");
+
+  if (error) {
+    console.error("[inviteApi] Error obteniendo organización actual", error);
+    throw new Error("No se pudo determinar la organización actual");
+  }
+
+  if (!data) {
+    throw new Error("El usuario no tiene organización asignada");
+  }
+
+  return data; // uuid org_id
+}
+
+// Invitar TRACKER
+export async function sendMagicLinkToTracker(email, redirectOrigin) {
+  if (!email) throw new Error("Email requerido");
+
+  const tenantId = await getCurrentOrgId();
   const origin = redirectOrigin || window.location.origin;
-  // Al autenticarse, Supabase redirige aquí:
-  const emailRedirectTo = `${origin}/tracker/auto?tenant=${encodeURIComponent(tenantId)}`;
+
+  // El callback decide /tracker-gps vs /inicio
+  const emailRedirectTo = `${origin}/auth/callback`;
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
       emailRedirectTo,
-      shouldCreateUser: true, // crea el usuario si no existe
-      data: { invited_as: 'tracker', tenant_id: tenantId }, // metadatos opcionales
+      shouldCreateUser: true,
+      data: {
+        invited_as: "tracker",
+        tenant_id: tenantId,
+      },
     },
   });
 
-  if (error) throw error;
+  if (error) {
+    console.error("[inviteApi] Error enviando magic link a tracker", error);
+    throw error;
+  }
+}
+
+// Invitar ADMIN
+export async function sendMagicLinkToAdmin(email, redirectOrigin) {
+  if (!email) throw new Error("Email requerido");
+
+  const tenantId = await getCurrentOrgId();
+  const origin = redirectOrigin || window.location.origin;
+  const emailRedirectTo = `${origin}/auth/callback`;
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo,
+      shouldCreateUser: true,
+      data: {
+        invited_as: "admin",
+        tenant_id: tenantId,
+      },
+    },
+  });
+
+  if (error) {
+    console.error("[inviteApi] Error enviando magic link a admin", error);
+    throw error;
+  }
 }

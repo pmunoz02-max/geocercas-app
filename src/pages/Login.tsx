@@ -23,9 +23,8 @@ const Login: React.FC = () => {
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
   // ------------------------------------------------------------
-  // Redirección universal después de login
-  // Lee roles de user_organizations:
-  //  - Si encuentra "tracker" → /tracker
+  // Redirección universal después de login:
+  //  - Si tiene rol TRACKER → /tracker-gps
   //  - Si no → /inicio
   // ------------------------------------------------------------
   const redirectAfterLogin = useCallback(
@@ -60,8 +59,8 @@ const Login: React.FC = () => {
           roles.includes("tracker") || invitedAs === "tracker";
 
         if (isTracker) {
-          console.log("[Login] Redirigiendo TRACKER a /tracker");
-          navigate("/tracker", { replace: true });
+          console.log("[Login] Redirigiendo TRACKER a /tracker-gps");
+          navigate("/tracker-gps", { replace: true });
         } else {
           console.log("[Login] Redirigiendo a /inicio (no es tracker)");
           navigate("/inicio", { replace: true });
@@ -74,9 +73,7 @@ const Login: React.FC = () => {
     [navigate]
   );
 
-  // ------------------------------------------------------------
-  // Limpiar campos al navegar
-  // ------------------------------------------------------------
+  // Limpiar campos al cambiar de ruta
   useEffect(() => {
     setEmail("");
     setPassword("");
@@ -107,18 +104,14 @@ const Login: React.FC = () => {
     }
   };
 
-  // ------------------------------------------------------------
   // Si ya hay sesión y abren /login, decidir destino según rol
-  // ------------------------------------------------------------
   useEffect(() => {
     if (session?.user) {
       redirectAfterLogin(session.user.id, session.user.user_metadata);
     }
   }, [session, redirectAfterLogin]);
 
-  // ------------------------------------------------------------
-  // LOGIN PASSWORD — usa redirectAfterLogin
-  // ------------------------------------------------------------
+  // LOGIN con contraseña
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -157,9 +150,7 @@ const Login: React.FC = () => {
     }
   };
 
-  // ------------------------------------------------------------
-  // MAGIC LINK — envía el mail; el flujo lo resuelve AuthCallback
-  // ------------------------------------------------------------
+  // MAGIC LINK → redirige a /auth/callback, que decide /tracker-gps vs /inicio
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -213,9 +204,7 @@ const Login: React.FC = () => {
     }
   };
 
-  // ------------------------------------------------------------
   // Mientras AuthContext resuelve la sesión
-  // ------------------------------------------------------------
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
@@ -226,13 +215,11 @@ const Login: React.FC = () => {
     );
   }
 
-  // ------------------------------------------------------------
-  // FORMULARIO NORMAL (sin sesión activa)
-  // ------------------------------------------------------------
+  // Formulario normal (sin sesión)
   return (
     <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-5">
-        {/* Encabezado + selector idioma */}
+        {/* Encabezado + idioma */}
         <div className="flex items-center justify-between mb-2">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold text-slate-900">
