@@ -24,13 +24,19 @@ const Login: React.FC = () => {
 
   // ------------------------------------------------------------
   // REGLA UNIVERSAL DE REDIRECCIÓN POST-LOGIN
-  //  - Si CUALQUIER registro en user_organizations tiene rol "tracker"
-  //    → /tracker
-  //  - En caso contrario → /inicio
+  //  - Mira TODOS los roles en user_organizations
+  //  - Mira también user_metadata.invited_as
+  //  - Si encuentra "tracker" en uno de ellos → /tracker
+  //  - Si no → /inicio
   // ------------------------------------------------------------
   const redirectAfterLogin = useCallback(
-    async (userId: string) => {
+    async (userId: string, userMetadata?: any) => {
       try {
+        const invitedAs =
+          (userMetadata?.invited_as || userMetadata?.invited_As || "")
+            .toString()
+            .toLowerCase();
+
         const { data: orgs, error: orgErr } = await supabase
           .from("user_organizations")
           .select("role")
@@ -38,19 +44,27 @@ const Login: React.FC = () => {
 
         if (orgErr) {
           console.error("[Login] Error leyendo user_organizations:", orgErr);
-          navigate("/inicio", { replace: true });
-          return;
         }
 
-        const roles =
-          orgs?.map((o: any) => (o.role ? String(o.role).toLowerCase() : "")) ||
-          [];
+        const roles: string[] =
+          orgs?.map((o: any) =>
+            o.role ? String(o.role).toLowerCase() : ""
+          ) || [];
 
-        console.log("[Login] redirectAfterLogin roles:", roles);
+        console.log("[Login] redirectAfterLogin →", {
+          userId,
+          invitedAs,
+          roles,
+        });
 
-        if (roles.includes("tracker")) {
+        const hasTrackerRole =
+          roles.includes("tracker") || invitedAs === "tracker";
+
+        if (hasTrackerRole) {
+          console.log("[Login] Redirigiendo como TRACKER a /tracker");
           navigate("/tracker", { replace: true });
         } else {
+          console.log("[Login] Redirigiendo a /inicio (no es tracker)");
           navigate("/inicio", { replace: true });
         }
       } catch (e) {
@@ -99,8 +113,8 @@ const Login: React.FC = () => {
   // aplicamos redirectAfterLogin automáticamente
   // ------------------------------------------------------------
   useEffect(() => {
-    if (session?.user?.id) {
-      redirectAfterLogin(session.user.id);
+    if (session?.user) {
+      redirectAfterLogin(session.user.id, session.user.user_metadata);
     }
   }, [session, redirectAfterLogin]);
 
@@ -133,7 +147,7 @@ const Login: React.FC = () => {
 
       const user = data.user;
       if (user) {
-        await redirectAfterLogin(user.id);
+        await redirectAfterLogin(user.id, user.user_metadata);
       } else {
         navigate("/inicio", { replace: true });
       }
@@ -146,8 +160,7 @@ const Login: React.FC = () => {
   };
 
   // ------------------------------------------------------------
-  // MAGIC LINK — envía el mail; el callback debería aplicar
-  // la misma lógica de redirectAfterLogin (lo vemos luego).
+  // MAGIC LINK — envía el mail; el callback usará la misma lógica
   // ------------------------------------------------------------
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
