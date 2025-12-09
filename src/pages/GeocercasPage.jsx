@@ -1,8 +1,11 @@
 // src/pages/GeocercasPage.jsx
 import React from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function GeocercasPage() {
+  const { currentOrg, user } = useAuth();
+
   return (
     <div className="max-w-5xl mx-auto">
       <header className="mb-6">
@@ -13,6 +16,17 @@ export default function GeocercasPage() {
           Administra las geocercas de tu organización. Desde aquí puedes crear
           nuevas geocercas y revisar las existentes.
         </p>
+
+        <div className="mt-3 text-xs text-slate-500 space-y-1">
+          <p>
+            <span className="font-semibold">Organización actual:</span>{" "}
+            {currentOrg?.name || "— (no hay organización seleccionada)"}
+          </p>
+          <p>
+            <span className="font-semibold">Usuario:</span>{" "}
+            <span className="font-mono">{user?.email || "—"}</span>
+          </p>
+        </div>
       </header>
 
       <section className="grid gap-4 md:grid-cols-2">
@@ -37,7 +51,7 @@ export default function GeocercasPage() {
           </div>
         </article>
 
-        {/* Placeholder de listado (lo construiremos luego si hace falta) */}
+        {/* Placeholder de listado */}
         <article className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 mb-1">

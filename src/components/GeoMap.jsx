@@ -11,6 +11,7 @@ import {
   updateGeocerca,
   deleteGeocerca,
 } from "@/services/geocercas";
+import { useAuth } from "../context/AuthContext.jsx";
 
 /**
  * safeParseJSON "blindado":
@@ -217,16 +218,31 @@ function drawGeocercaOnGroup(fg, row, canEdit) {
 
 export default function GeoMap({
   canEdit,
-  orgId,
+  orgId: orgIdProp,
   geocercas = [],
   getNewFeatureMeta,
 }) {
+  const { currentOrg } = useAuth() || {};
+
+  // prioridad: prop > contexto > null
+  const orgId = orgIdProp ?? currentOrg?.id ?? null;
+
   const mapRef = useRef(null);
   const groupRef = useRef(null);
   const controlsAddedRef = useRef(false);
 
   const center = useMemo(() => [-1.8312, -78.1834], []); // Ecuador
   const zoom = 6;
+
+  // Exponer debug en window para que puedas ver el estado real
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.__debug_currentOrg = currentOrg || null;
+      window.__debug_orgId = orgId || null;
+      // eslint-disable-next-line no-console
+      console.log("[GeoMap] debug currentOrg/orgId:", currentOrg, orgId);
+    }
+  }, [currentOrg, orgId]);
 
   // Redibujar cada vez que cambian las geocercas
   useEffect(() => {
@@ -303,7 +319,7 @@ export default function GeoMap({
 
       try {
         const layer = e.layer;
-        const gj = layer.toGeoJSON(); // Feature completo (C)
+        const gj = layer.toGeoJSON(); // Feature completo
 
         // Derivar polygon legacy como [{lat,lng}, ...] para compatibilidad
         let polygon = null;
@@ -423,7 +439,10 @@ export default function GeoMap({
     <div className="space-y-1">
       <div className="text-xs text-slate-500">
         <span className="font-semibold">[GeoMap] Geocercas recibidas:</span>{" "}
-        {geocercas.length}
+        {geocercas.length}{" "}
+        <span className="ml-2">
+          (orgId: <span className="font-mono">{orgId || "null"}</span>)
+        </span>
       </div>
       <MapContainer
         center={center}
