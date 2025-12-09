@@ -216,9 +216,11 @@
     "processing": "Procesando…"
   },
 
-  "actividades": {
+    "actividades": {
     "title": "Actividades",
     "formTitleNew": "Nueva actividad",
+    "formTitleEdit": "Editar actividad",
+
     "fieldName": "Nombre de la actividad",
     "fieldNamePlaceholder": "Ej. Siembra, Riego, Cosecha",
     "fieldDescription": "Descripción",
@@ -226,15 +228,26 @@
     "fieldCurrency": "Moneda",
     "fieldHourlyRate": "Tarifa por hora",
     "fieldHourlyRatePlaceholder": "Ej. 3.50",
+
     "currencies": {
       "USD": "Dólar estadounidense",
       "EUR": "Euro",
+      "MXN": "Peso mexicano",
+      "COP": "Peso colombiano",
+      "PEN": "Sol peruano",
+      "CLP": "Peso chileno",
+      "ARS": "Peso argentino",
+      "BRL": "Real brasileño",
+      "CAD": "Dólar canadiense",
       "GBP": "Libra esterlina",
       "LOCAL": "Moneda local"
     },
+
     "buttonCreate": "Crear actividad",
+    "buttonSave": "Guardar cambios",
     "buttonUpdate": "Actualizar actividad",
     "buttonCancel": "Cancelar",
+
     "tableTitle": "Listado de actividades",
     "thName": "Actividad",
     "thDescription": "Descripción",
@@ -248,16 +261,29 @@
     "actionActivate": "Activar",
     "actionDelete": "Eliminar",
     "tableNoResults": "No hay actividades registradas.",
+
+    "loading": "Cargando actividades…",
+    "empty": "No hay actividades registradas.",
+    "readOnlyNote": "Solo el propietario y los administradores pueden crear o editar actividades.",
+
     "bannerCreated": "Actividad creada correctamente.",
     "bannerUpdated": "Actividad actualizada correctamente.",
     "bannerDeleted": "Actividad eliminada.",
+
     "errorLoad": "Error al cargar las actividades.",
     "errorSave": "No se pudo guardar la actividad.",
     "errorDelete": "No se pudo eliminar la actividad.",
     "errorMissingName": "El nombre de la actividad es obligatorio.",
     "errorMissingCurrency": "La moneda es obligatoria.",
-    "errorMissingRate": "La tarifa por hora es obligatoria."
+    "errorMissingRate": "La tarifa por hora es obligatoria.",
+    "errorNameRequired": "El nombre de la actividad es obligatorio.",
+    "errorRatePositive": "La tarifa por hora debe ser mayor que 0.",
+    "errorMissingTenant": "No se encontró la organización del usuario (tenant_id/org_id).",
+    "errorToggle": "No se pudo cambiar el estado de la actividad.",
+
+    "confirmDelete": "¿Seguro que deseas eliminar la actividad \"{{name}}\"?"
   },
+
 
   "asignaciones": {
     "title": "Asignaciones",

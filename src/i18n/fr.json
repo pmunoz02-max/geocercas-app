@@ -216,9 +216,11 @@
     "processing": "Traitement…"
   },
 
-  "actividades": {
+    "actividades": {
     "title": "Activités",
     "formTitleNew": "Nouvelle activité",
+    "formTitleEdit": "Modifier l’activité",
+
     "fieldName": "Nom de l’activité",
     "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
     "fieldDescription": "Description",
@@ -226,15 +228,26 @@
     "fieldCurrency": "Devise",
     "fieldHourlyRate": "Tarif horaire",
     "fieldHourlyRatePlaceholder": "Ex. 3.50",
+
     "currencies": {
       "USD": "Dollar américain",
       "EUR": "Euro",
+      "MXN": "Peso mexicain",
+      "COP": "Peso colombien",
+      "PEN": "Sol péruvien",
+      "CLP": "Peso chilien",
+      "ARS": "Peso argentin",
+      "BRL": "Réal brésilien",
+      "CAD": "Dollar canadien",
       "GBP": "Livre sterling",
       "LOCAL": "Devise locale"
     },
+
     "buttonCreate": "Créer l’activité",
+    "buttonSave": "Enregistrer les modifications",
     "buttonUpdate": "Mettre à jour l’activité",
     "buttonCancel": "Annuler",
+
     "tableTitle": "Liste des activités",
     "thName": "Activité",
     "thDescription": "Description",
@@ -248,79 +261,29 @@
     "actionActivate": "Activer",
     "actionDelete": "Supprimer",
     "tableNoResults": "Aucune activité enregistrée.",
+
+    "loading": "Chargement des activités…",
+    "empty": "Aucune activité enregistrée.",
+    "readOnlyNote": "Seul le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
+
     "bannerCreated": "Activité créée avec succès.",
     "bannerUpdated": "Activité mise à jour avec succès.",
     "bannerDeleted": "Activité supprimée.",
+
     "errorLoad": "Erreur lors du chargement des activités.",
     "errorSave": "Impossible d’enregistrer l’activité.",
     "errorDelete": "Impossible de supprimer l’activité.",
     "errorMissingName": "Le nom de l’activité est obligatoire.",
     "errorMissingCurrency": "La devise est obligatoire.",
-    "errorMissingRate": "Le tarif horaire est obligatoire."
+    "errorMissingRate": "Le tarif horaire est obligatoire.",
+    "errorNameRequired": "Le nom de l’activité est obligatoire.",
+    "errorRatePositive": "Le tarif horaire doit être supérieur à 0.",
+    "errorMissingTenant": "Impossible de trouver l’organisation de l’utilisateur (tenant_id/org_id).",
+    "errorToggle": "Impossible de modifier le statut de l’activité.",
+
+    "confirmDelete": "Voulez-vous vraiment supprimer l’activité « {{name}} » ?"
   },
 
-  "asignaciones": {
-    "title": "Affectations",
-    "filters": {
-      "statusLabel": "Statut",
-      "status": {
-        "todos": "Tous",
-        "activo": "Actives",
-        "inactivo": "Inactives"
-      },
-      "refresh": "Rafraîchir"
-    },
-    "form": {
-      "newTitle": "Nouvelle affectation",
-      "personLabel": "Personne",
-      "personPlaceholder": "Sélectionnez une personne",
-      "activityLabel": "Activité",
-      "activityPlaceholder": "Sélectionnez une activité",
-      "geofenceLabel": "Géofence",
-      "geofencePlaceholder": "Sélectionnez une géofence",
-      "startLabel": "Date/heure de début",
-      "endLabel": "Date/heure de fin",
-      "statusLabel": "Statut",
-      "statusActive": "Active",
-      "statusInactive": "Inactive",
-      "frequencyLabel": "Fréquence (min)",
-      "buttonCreate": "Créer l’affectation",
-      "buttonUpdate": "Mettre à jour l’affectation",
-      "buttonCancel": "Annuler"
-    },
-    "table": {
-      "title": "Liste des affectations",
-      "person": "Personne",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "start": "Début",
-      "end": "Fin",
-      "status": "Statut",
-      "actions": "Actions",
-      "noResults": "Aucune affectation enregistrée."
-    },
-    "actions": {
-      "edit": "Modifier",
-      "delete": "Supprimer",
-      "activate": "Activer",
-      "deactivate": "Désactiver"
-    },
-    "banner": {
-      "created": "Affectation créée avec succès.",
-      "updated": "Affectation mise à jour.",
-      "deleted": "Affectation supprimée."
-    },
-    "error": {
-      "load": "Erreur lors du chargement des affectations.",
-      "save": "Impossible d’enregistrer l’affectation.",
-      "delete": "Impossible de supprimer l’affectation.",
-      "missingPerson": "Vous devez sélectionner une personne.",
-      "missingGeofence": "Vous devez sélectionner une géofence.",
-      "missingActivity": "Vous devez sélectionner une activité.",
-      "missingStart": "Vous devez saisir la date/heure de début.",
-      "missingEnd": "Vous devez saisir la date/heure de fin."
-    }
-  },
 
   "reportes": {
     "title": "Rapports de coûts",
