@@ -12,9 +12,9 @@ export default function AuthCallback() {
 
     const run = async () => {
       try {
-        const { error: exError } = await supabase.auth.exchangeCodeForSession(
-          window.location.href
-        );
+        // 1) Intercambiar el código del Magic Link por una sesión
+        const { data, error: exError } =
+          await supabase.auth.exchangeCodeForSession(window.location.href);
 
         if (!alive) return;
 
@@ -26,8 +26,70 @@ export default function AuthCallback() {
           return;
         }
 
-        // Sesión creada correctamente → deja que AuthContext se actualice
-        navigate("/inicio", { replace: true });
+        // 2) Obtener el usuario de la sesión
+        let user = data?.session?.user ?? null;
+
+        if (!user) {
+          const { data: sessData, error: sessErr } =
+            await supabase.auth.getSession();
+
+          if (sessErr) {
+            console.error("[AuthCallback] getSession error:", sessErr);
+          }
+          user = sessData?.session?.user ?? null;
+        }
+
+        if (!user) {
+          console.log(
+            "[AuthCallback] Sin usuario después de exchangeCodeForSession, redirigiendo a /login"
+          );
+          if (!alive) return;
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        const userId = user.id;
+        const metadata = user.user_metadata || {};
+        const invitedAs = (metadata.invited_as || "")
+          .toString()
+          .toLowerCase();
+
+        // 3) Leer roles de user_organizations para este usuario
+        const { data: orgs, error: orgErr } = await supabase
+          .from("user_organizations")
+          .select("role")
+          .eq("user_id", userId);
+
+        if (orgErr) {
+          console.error(
+            "[AuthCallback] Error leyendo user_organizations:",
+            orgErr
+          );
+        }
+
+        const roles: string[] =
+          orgs?.map((o: any) =>
+            o.role ? String(o.role).toLowerCase() : ""
+          ) || [];
+
+        console.log("[AuthCallback] Post-login roles/metadata:", {
+          userId,
+          invitedAs,
+          roles,
+        });
+
+        const isTracker =
+          roles.includes("tracker") || invitedAs === "tracker";
+
+        if (!alive) return;
+
+        if (isTracker) {
+          console.log("[AuthCallback] Redirigiendo TRACKER a /tracker");
+          navigate("/tracker", { replace: true });
+        } else {
+          console.log("[AuthCallback] Redirigiendo a /inicio");
+          navigate("/inicio", { replace: true });
+        }
       } catch (e) {
         console.error("[AuthCallback] excepción:", e);
         if (!alive) return;
