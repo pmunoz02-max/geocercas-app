@@ -109,17 +109,18 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
   throw new Error("DATA_SOURCE no reconocido");
 }
 
-/* ----------------- Utils geocercas multi-tenant ----------------- */
+/* ----------------- Utils geocercas (sin orgId explícito) ----------------- */
 
-async function listGeofences({ supabaseClient = null, orgId = null }) {
+async function listGeofences({ supabaseClient = null }) {
   const list = [];
 
-  if (supabaseClient && orgId) {
+  if (supabaseClient) {
+    // Confiamos en RLS para que solo devuelva las geocercas de la organización del usuario
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("id, nombre")
-      .eq("org_id", orgId)
       .order("nombre", { ascending: true });
+
     if (!error && data) {
       data.forEach((r) =>
         list.push({ id: r.id, nombre: r.nombre, source: "supabase" })
@@ -160,16 +161,16 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
   return unique;
 }
 
-async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
+async function deleteGeofences({ items, supabaseClient = null }) {
   let deleted = 0;
 
   const supaTargets = items.filter((x) => x.source === "supabase");
-  if (supabaseClient && supaTargets.length && orgId) {
+  if (supabaseClient && supaTargets.length) {
     const nombres = supaTargets.map((x) => x.nombre);
+    // RLS se encarga de que solo borre las de la org del usuario
     const { error, count } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .delete({ count: "exact" })
-      .eq("org_id", orgId)
       .in("nombre", nombres);
     if (error) throw error;
     deleted += count || 0;
@@ -189,16 +190,11 @@ async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   return deleted;
 }
 
-async function loadGeofenceGeometryByName({
-  name,
-  supabaseClient = null,
-  orgId = null,
-}) {
-  if (supabaseClient && orgId) {
+async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
+  if (supabaseClient) {
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("geojson")
-      .eq("org_id", orgId)
       .eq("nombre", name)
       .maybeSingle();
     if (error) throw error;
@@ -330,44 +326,6 @@ function CursorPos({ setCursorLatLng }) {
   return null;
 }
 
-/**
- * UNIVERSAL:
- *  - Si currentOrg.id existe → lo usa.
- *  - Si no, llama al RPC ensure_org_for_current_user()
- *    que crea (si hace falta) una organización y app_user_roles(owner).
- */
-async function resolveOrgId({ supabaseClient, currentOrg }) {
-  if (currentOrg?.id) return currentOrg.id;
-
-  if (!supabaseClient) {
-    console.warn("[NuevaGeocerca] Supabase no disponible para resolver orgId");
-    return null;
-  }
-
-  try {
-    const { data, error } = await supabaseClient.rpc(
-      "ensure_org_for_current_user"
-    );
-    if (error) {
-      console.warn(
-        "[NuevaGeocerca] error en rpc ensure_org_for_current_user:",
-        error
-      );
-      return null;
-    }
-    if (!data) {
-      console.warn(
-        "[NuevaGeocerca] rpc ensure_org_for_current_user devolvió null"
-      );
-      return null;
-    }
-    return data;
-  } catch (e) {
-    console.warn("[NuevaGeocerca] excepción en resolveOrgId/rpc:", e);
-    return null;
-  }
-}
-
 /* ----------------- Componente principal ----------------- */
 
 function NuevaGeocerca({ supabaseClient = supabase }) {
@@ -426,17 +384,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   /* ---- Listado de geocercas ---- */
   const refreshGeofenceList = useCallback(async () => {
     try {
-      const orgId = await resolveOrgId({ supabaseClient, currentOrg });
-      const list = await listGeofences({
-        supabaseClient,
-        orgId: orgId || null,
-      });
+      const list = await listGeofences({ supabaseClient });
       setGeofenceList(list);
     } catch (err) {
       console.warn("[NuevaGeocerca] error al refrescar geofences:", err);
       setGeofenceList([]);
     }
-  }, [supabaseClient, currentOrg]);
+  }, [supabaseClient]);
 
   useEffect(() => {
     refreshGeofenceList();
@@ -474,18 +428,12 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         .map((g) => g.nombre);
 
       const doDraw = async () => {
-        let orgId = null;
-        if (supabaseClient) {
-          orgId = await resolveOrgId({ supabaseClient, currentOrg });
-        }
-
-        if (supaNames.length && supabaseClient && orgId) {
+        if (supaNames.length && supabaseClient) {
           for (const name of supaNames) {
             try {
               const geojson = await loadGeofenceGeometryByName({
                 name,
                 supabaseClient,
-                orgId,
               });
               const feature = primaryFeatureFromGeoJSON(geojson);
               if (feature)
@@ -530,7 +478,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       doDraw();
       return shown;
     },
-    [geofenceList, supabaseClient, currentOrg]
+    [geofenceList, supabaseClient]
   );
 
   const saveGeofenceCollection = useCallback(
@@ -565,21 +513,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
           created_by = data?.user?.id || null;
         } catch {}
 
-        const orgId = await resolveOrgId({ supabaseClient, currentOrg });
-        if (!orgId) {
-          throw new Error(
-            "No se pudo obtener/crear una organización para este usuario."
-          );
-        }
-
         const fc = { type: "FeatureCollection", features: [feature] };
 
         const payload = {
           nombre: name,
           geojson: fc,
           ...(created_by ? { created_by } : {}),
-          org_id: orgId,
-          tenant_id: orgId,
+          // org_id y tenant_id los pondrá el trigger en la BD
         };
 
         const { data, error } = await supabaseClient
@@ -614,7 +554,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
       return { ok: false };
     },
-    [geofenceList, supabaseClient, currentOrg, t]
+    [geofenceList, supabaseClient, t]
   );
 
   /* ---- Handlers UI ---- */
@@ -725,14 +665,9 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     if (!window.confirm(t("geocercas.deleteConfirm"))) return;
     const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
     try {
-      let orgId = null;
-      if (supabaseClient) {
-        orgId = await resolveOrgId({ supabaseClient, currentOrg });
-      }
       const deletedCount = await deleteGeofences({
         items,
         supabaseClient,
-        orgId: orgId || null,
       });
       alert(t("geocercas.deletedCount", { count: deletedCount }));
       setSelectedNames(new Set());
@@ -741,15 +676,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     } catch (e) {
       alert(t("geocercas.errorDelete", { error: e?.message || String(e) }));
     }
-  }, [
-    selectedNames,
-    geofenceList,
-    supabaseClient,
-    refreshGeofenceList,
-    clearCanvas,
-    currentOrg,
-    t,
-  ]);
+  }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
 
   const pointStyle = useMemo(
     () => ({
