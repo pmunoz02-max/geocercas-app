@@ -11,7 +11,6 @@ import {
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
-// 🔹 Lista de monedas, nombres vía i18n (actividades.currencies.*)
 const CURRENCIES = [
   { code: "USD", labelKey: "actividades.currencies.USD" },
   { code: "EUR", labelKey: "actividades.currencies.EUR" },
@@ -26,8 +25,12 @@ const CURRENCIES = [
 ];
 
 export default function ActividadesPage() {
-  const { profile, role } = useAuth(); // profile incluye default_org_id / tenant_id / org_id
+  const { profile, role } = useAuth();
   const { t } = useTranslation();
+
+  // 🔐 Tenant universal: primero default_org_id, luego tenant_id / org_id
+  const tenantId =
+    profile?.default_org_id || profile?.tenant_id || profile?.org_id || null;
 
   const [actividades, setActividades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +41,6 @@ export default function ActividadesPage() {
 
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
-
   const [currency, setCurrency] = useState("USD");
   const [hourlyRate, setHourlyRate] = useState("");
 
@@ -46,11 +48,28 @@ export default function ActividadesPage() {
     setLoading(true);
     setErrorMsg("");
 
-    const { data, error } = await listActividades({ includeInactive: true });
+    console.log("[ActividadesPage] tenantId:", tenantId);
+
+    if (!tenantId) {
+      // Si de verdad no hay tenant para este perfil, mostramos el mensaje
+      setActividades([]);
+      setLoading(false);
+      setErrorMsg(t("actividades.errorMissingTenant"));
+      return;
+    }
+
+    const { data, error } = await listActividades({
+      includeInactive: true,
+      tenantId,              // 👈 AHORA SÍ se lo pasamos a la API
+    });
 
     if (error) {
-      console.error(error);
-      setErrorMsg(error.message || t("actividades.errorLoad"));
+      console.error("[ActividadesPage] listActividades error:", error);
+      if (error.message === "actividades.errorMissingTenant") {
+        setErrorMsg(t("actividades.errorMissingTenant"));
+      } else {
+        setErrorMsg(error.message || t("actividades.errorLoad"));
+      }
     } else {
       setActividades(data || []);
     }
@@ -59,9 +78,11 @@ export default function ActividadesPage() {
   }
 
   useEffect(() => {
+    // Esperamos a tener profile (y tenantId calculado) antes de cargar
+    if (!profile) return;
     loadActividades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [profile?.id, tenantId]);
 
   function resetForm() {
     setFormMode("create");
@@ -86,17 +107,13 @@ export default function ActividadesPage() {
       return;
     }
 
+    if (!tenantId) {
+      setErrorMsg(t("actividades.errorMissingTenant"));
+      return;
+    }
+
     try {
       if (formMode === "create") {
-        // ✅ Tenant universal: primero default_org_id, luego tenant_id / org_id
-        const tenantId =
-          profile?.default_org_id || profile?.tenant_id || profile?.org_id;
-
-        if (!tenantId) {
-          setErrorMsg(t("actividades.errorMissingTenant"));
-          return;
-        }
-
         const payload = {
           tenant_id: tenantId,
           name: nombre.trim(),
@@ -121,8 +138,12 @@ export default function ActividadesPage() {
       resetForm();
       await loadActividades();
     } catch (err) {
-      console.error(err);
-      setErrorMsg(err.message || t("actividades.errorSave"));
+      console.error("[ActividadesPage] handleSubmit error:", err);
+      if (err.message === "actividades.errorMissingTenant") {
+        setErrorMsg(t("actividades.errorMissingTenant"));
+      } else {
+        setErrorMsg(err.message || t("actividades.errorSave"));
+      }
     }
   }
 
@@ -133,7 +154,11 @@ export default function ActividadesPage() {
     setNombre(act.name || "");
     setDescripcion(act.description || "");
     setCurrency(act.currency_code || "USD");
-    setHourlyRate(act.hourly_rate || "");
+    setHourlyRate(
+      act.hourly_rate !== null && act.hourly_rate !== undefined
+        ? String(act.hourly_rate)
+        : ""
+    );
   }
 
   async function handleToggle(act) {
@@ -142,7 +167,7 @@ export default function ActividadesPage() {
       if (error) throw error;
       await loadActividades();
     } catch (err) {
-      console.error(err);
+      console.error("[ActividadesPage] handleToggle error:", err);
       setErrorMsg(err.message || t("actividades.errorToggle"));
     }
   }
@@ -156,12 +181,11 @@ export default function ActividadesPage() {
       if (error) throw error;
       await loadActividades();
     } catch (err) {
-      console.error(err);
+      console.error("[ActividadesPage] handleDelete error:", err);
       setErrorMsg(err.message || t("actividades.errorDelete"));
     }
   }
 
-  // 🔒 Trackers no pueden crear ni editar actividades
   const canEdit = role === "owner" || role === "admin";
 
   return (
@@ -186,7 +210,6 @@ export default function ActividadesPage() {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            {/* Nombre */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {t("actividades.fieldName")}
@@ -200,7 +223,6 @@ export default function ActividadesPage() {
               />
             </div>
 
-            {/* Descripción */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {t("actividades.fieldDescription")}
@@ -214,7 +236,6 @@ export default function ActividadesPage() {
               />
             </div>
 
-            {/* Moneda */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {t("actividades.fieldCurrency")}
@@ -232,7 +253,6 @@ export default function ActividadesPage() {
               </select>
             </div>
 
-            {/* Tarifa por hora */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {t("actividades.fieldHourlyRate")}
@@ -314,30 +334,22 @@ export default function ActividadesPage() {
                   </th>
                 </tr>
               </thead>
-
               <tbody>
                 {actividades.map((act) => (
                   <tr key={act.id} className="border-t border-gray-100">
-                    {/* Nombre */}
                     <td className="px-4 py-2 align-top">
                       <div className="font-medium text-gray-900">
                         {act.name}
                       </div>
                     </td>
-
-                    {/* Descripción */}
                     <td className="px-4 py-2 align-top">
                       {act.description || "—"}
                     </td>
-
-                    {/* Tarifa */}
                     <td className="px-4 py-2 align-top">
                       {act.hourly_rate
                         ? `${act.currency_code} ${act.hourly_rate.toFixed(2)}`
                         : "—"}
                     </td>
-
-                    {/* Estado */}
                     <td className="px-4 py-2 align-top">
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -351,8 +363,6 @@ export default function ActividadesPage() {
                           : t("actividades.statusInactive")}
                       </span>
                     </td>
-
-                    {/* Acciones */}
                     <td className="px-4 py-2 align-top text-right space-x-2">
                       {canEdit && (
                         <>
@@ -363,7 +373,6 @@ export default function ActividadesPage() {
                           >
                             {t("actividades.actionEdit")}
                           </button>
-
                           <button
                             type="button"
                             className="inline-flex items-center rounded-md bg-slate-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-600"
@@ -373,7 +382,6 @@ export default function ActividadesPage() {
                               ? t("actividades.actionDeactivate")
                               : t("actividades.actionActivate")}
                           </button>
-
                           <button
                             type="button"
                             className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700"

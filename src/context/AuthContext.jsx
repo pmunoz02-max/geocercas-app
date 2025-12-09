@@ -128,6 +128,7 @@ export function AuthProvider({ children }) {
           }
 
           if (!cancelled) {
+            // Ojo: v_app_profiles debe exponer default_org_id / tenant_id / org_id si los quieres usar
             setProfile(profiles?.[0] || null);
           }
         } catch (e) {
@@ -216,7 +217,7 @@ export function AuthProvider({ children }) {
 
         setOrganizations(orgs);
 
-        // 2.e) Seleccionar organización actual (prefiriendo la de la RPC)
+        // 2.e) Seleccionar organización actual (prefiriendo la de la RPC y la almacenada)
         let initialOrg = null;
 
         const storedOrgId = loadStoredOrgIdForUser(user.id);
@@ -281,6 +282,16 @@ export function AuthProvider({ children }) {
   const isAdmin = normalizedRole === "admin" || isOwner;
   const isTracker = normalizedRole === "tracker";
 
+  // --------------------------
+  // 4) TenantId universal
+  // --------------------------
+  const tenantId =
+    currentOrg?.id ||
+    profile?.default_org_id || // si lo expone v_app_profiles
+    profile?.tenant_id ||
+    profile?.org_id ||
+    null;
+
   const setCurrentOrg = (org) => {
     setCurrentOrgState(org);
     if (user?.id) {
@@ -298,11 +309,15 @@ export function AuthProvider({ children }) {
     currentOrg,
     setCurrentOrg,
 
+    // Rol
     role: normalizedRole,
     currentRole: normalizedRole,
     isOwner,
     isAdmin,
     isTracker,
+
+    // 👇 tenant universal para todas las páginas
+    tenantId,
   };
 
   return (
