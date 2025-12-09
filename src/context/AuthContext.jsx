@@ -9,167 +9,38 @@ import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
-// Clave para recordar la organización actual en localStorage
-const LS_CURRENT_ORG_ID_KEY = "app_geocercas_current_org_id";
+// Prefijo para recordar la organización actual POR USUARIO en localStorage
+const ORG_STORAGE_PREFIX = "app_geocercas_current_org_";
 
-function loadStoredOrgId() {
+function getOrgStorageKey(userId) {
   if (typeof window === "undefined") return null;
+  if (!userId) return null;
+  return `${ORG_STORAGE_PREFIX}${userId}`;
+}
+
+function loadStoredOrgIdForUser(userId) {
+  if (typeof window === "undefined") return null;
+  const key = getOrgStorageKey(userId);
+  if (!key) return null;
   try {
-    return window.localStorage.getItem(LS_CURRENT_ORG_ID_KEY);
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function storeOrgId(orgId) {
+function storeOrgIdForUser(userId, orgId) {
   if (typeof window === "undefined") return;
+  const key = getOrgStorageKey(userId);
+  if (!key) return;
   try {
     if (orgId) {
-      window.localStorage.setItem(LS_CURRENT_ORG_ID_KEY, orgId);
+      window.localStorage.setItem(key, orgId);
     } else {
-      window.localStorage.removeItem(LS_CURRENT_ORG_ID_KEY);
+      window.localStorage.removeItem(key);
     }
   } catch {
     // ignorar errores de storage
-  }
-}
-
-/**
- * Acepta automáticamente la invitación más reciente (si existe)
- * para el usuario actual.
- *
- * LÓGICA:
- * - TRACKER: se une a la organización del que invita (org_invites.org_id)
- * - ADMIN: ignora org_id y crea SIEMPRE una organización propia (tenants),
- *          registrándolo como OWNER en user_organizations.
- */
-async function acceptInviteIfAny(user) {
-  if (!user?.email || !user.id) return;
-
-  try {
-    const { data: invites, error: invitesErr } = await supabase
-      .from("org_invites")
-      .select("*")
-      .eq("status", "pending")
-      .ilike("email", user.email)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (invitesErr) {
-      console.error("[AuthContext] org_invites error:", invitesErr);
-      return;
-    }
-
-    const invite = invites?.[0];
-    if (!invite) return;
-
-    const roleUpper = String(invite.role || "admin").toUpperCase();
-
-    // ============================================================
-    // 🔵 1. SI ES TRACKER → SE AGREGA USANDO LA ORG DEL INVITADOR
-    // ============================================================
-    if (roleUpper === "TRACKER") {
-      const { data: exists, error: existErr } = await supabase
-        .from("user_organizations")
-        .select("org_id")
-        .eq("org_id", invite.org_id)
-        .eq("user_id", user.id)
-        .limit(1);
-
-      if (existErr) {
-        console.error("[AuthContext] user_organizations check error:", existErr);
-        return;
-      }
-
-      const alreadyMember = exists?.length > 0;
-
-      if (!alreadyMember) {
-        const { error: insErr } = await supabase
-          .from("user_organizations")
-          .insert({
-            org_id: invite.org_id,
-            user_id: user.id,
-            role: "TRACKER",
-          });
-
-        if (insErr) {
-          console.error("[AuthContext] insert tracker error:", insErr);
-          return;
-        }
-      }
-
-      const { error: updErr } = await supabase
-        .from("org_invites")
-        .update({
-          status: "accepted",
-          accepted_at: new Date().toISOString(),
-        })
-        .eq("id", invite.id);
-
-      if (updErr) {
-        console.error("[AuthContext] org_invites update error:", updErr);
-      }
-
-      return;
-    }
-
-    // ============================================================
-    // 🔴 2. SI ES ADMIN → CREAR ORGANIZACIÓN PROPIA AUTOMÁTICAMENTE
-    // ============================================================
-    if (roleUpper === "ADMIN") {
-      const orgName = `Organización ${user.email}`;
-
-      // A) Crear tenant propio para este admin (ignoramos invite.org_id)
-      const { data: newTenant, error: tenantErr } = await supabase
-        .from("tenants")
-        .insert({
-          name: orgName,
-          owner_user_id: user.id,
-          plan: "free",
-        })
-        .select("id")
-        .single();
-
-      if (tenantErr) {
-        console.error("[AuthContext] tenant creation error:", tenantErr);
-        return;
-      }
-
-      const newOrgId = newTenant.id;
-
-      // B) Registrar su membresía como OWNER en esa nueva organización
-      const { error: insErr } = await supabase
-        .from("user_organizations")
-        .insert({
-          org_id: newOrgId,
-          user_id: user.id,
-          role: "OWNER",
-        });
-
-      if (insErr) {
-        console.error("[AuthContext] insert owner membership error:", insErr);
-        return;
-      }
-
-      // C) Marcar invitación como aceptada
-      const { error: updErr } = await supabase
-        .from("org_invites")
-        .update({
-          status: "accepted",
-          accepted_at: new Date().toISOString(),
-        })
-        .eq("id", invite.id);
-
-      if (updErr) {
-        console.error("[AuthContext] org_invites update error:", updErr);
-      }
-
-      return;
-    }
-
-    // Si apareciera algún otro rol, por ahora no hacemos nada especial.
-  } catch (e) {
-    console.error("[AuthContext] acceptInviteIfAny exception:", e);
   }
 }
 
@@ -215,10 +86,10 @@ export function AuthProvider({ children }) {
       setUser(newSession?.user ?? null);
 
       if (!newSession) {
+        // Logout: limpiamos estado en memoria.
         setProfile(null);
         setOrganizations([]);
         setCurrentOrgState(null);
-        storeOrgId(null);
       }
     });
 
@@ -229,7 +100,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // --------------------------
-  // 2) Cargar datos del usuario
+  // 2) Cargar datos del usuario (perfil + organizaciones)
   // --------------------------
   useEffect(() => {
     if (!user) {
@@ -245,99 +116,129 @@ export function AuthProvider({ children }) {
       setLoading(true);
 
       try {
-        // 2.a) Aceptar invitaciones pendientes (si existen)
-        await acceptInviteIfAny(user);
+        // 2.a) Perfil desde v_app_profiles (solo lectura)
+        try {
+          const { data: profiles, error: profErr } = await supabase
+            .from("v_app_profiles")
+            .select("*")
+            .eq("user_id", user.id);
 
-        // 2.b) Perfil
-        const { data: profiles, error: profErr } = await supabase
-          .from("v_app_profiles")
-          .select("*")
-          .eq("user_id", user.id);
+          if (profErr) {
+            console.error("[AuthContext] v_app_profiles error:", profErr);
+          }
 
-        if (profErr) {
-          console.error("[AuthContext] v_app_profiles error:", profErr);
+          if (!cancelled) {
+            setProfile(profiles?.[0] || null);
+          }
+        } catch (e) {
+          console.error("[AuthContext] v_app_profiles exception:", e);
         }
 
-        if (!cancelled) {
-          setProfile(profiles?.[0] || null);
+        // 2.b) Preguntar al backend cuál es la org/rol "oficial"
+        //     (esta RPC se encarga de crear una org nueva si no existe ninguna)
+        let rpcOrg = null;
+        try {
+          const { data: rpcRows, error: rpcErr } = await supabase.rpc(
+            "get_current_user_org_and_role"
+          );
+
+          if (rpcErr) {
+            console.error(
+              "[AuthContext] get_current_user_org_and_role error:",
+              rpcErr
+            );
+          } else if (rpcRows && rpcRows.length > 0) {
+            rpcOrg = rpcRows[0]; // { org_id, org_name, role }
+          }
+        } catch (e) {
+          console.error(
+            "[AuthContext] get_current_user_org_and_role exception:",
+            e
+          );
         }
 
-        // 3) Leer memberships (user_organizations)
-        let orgLinks = [];
+        // 2.c) Leer los roles reales desde app_user_roles
+        let roleLinks = [];
         try {
           const { data: links, error: linksErr } = await supabase
-            .from("user_organizations")
+            .from("app_user_roles")
             .select("org_id, role, created_at")
             .eq("user_id", user.id);
 
           if (linksErr) {
-            console.error(
-              "[AuthContext] user_organizations error:",
-              linksErr
-            );
+            console.error("[AuthContext] app_user_roles error:", linksErr);
           } else {
-            orgLinks = links || [];
+            roleLinks = links || [];
           }
         } catch (e) {
-          console.error("[AuthContext] user_organizations exception:", e);
+          console.error("[AuthContext] app_user_roles exception:", e);
         }
 
-        // 🔴 IMPORTANTE:
-        // Aquí ya no llamamos ensure_owner_org_for_user.
-        // Los nuevos tenants para admins se crean vía invitaciones ADMIN.
-
-        // 4) Cargar organizaciones asociadas
+        // 2.d) Cargar organizaciones asociadas a partir de app_user_roles
         let orgs = [];
-        if (orgLinks.length > 0) {
-          const ids = orgLinks.map((l) => l.org_id);
+        if (roleLinks.length > 0) {
+          const ids = Array.from(
+            new Set(
+              roleLinks
+                .map((l) => l.org_id)
+                .filter((id) => !!id)
+            )
+          );
 
-          try {
-            const { data: orgRows, error: orgErr } = await supabase
-              .from("organizations")
-              .select("id, name, slug")
-              .in("id", ids);
+          if (ids.length > 0) {
+            try {
+              const { data: orgRows, error: orgErr } = await supabase
+                .from("organizations")
+                .select("id, name, slug")
+                .in("id", ids);
 
-            if (orgErr) {
-              console.error("[AuthContext] organizations error:", orgErr);
-            } else {
-              orgs =
-                orgRows?.map((org) => {
-                  const link = orgLinks.find((l) => l.org_id === org.id);
-                  return {
-                    ...org,
-                    role: link?.role
-                      ? String(link.role).toLowerCase()
-                      : null,
-                  };
-                }) || [];
+              if (orgErr) {
+                console.error("[AuthContext] organizations error:", orgErr);
+              } else {
+                orgs =
+                  orgRows?.map((org) => {
+                    const link = roleLinks.find((l) => l.org_id === org.id);
+                    return {
+                      ...org,
+                      role: link?.role
+                        ? String(link.role).toLowerCase()
+                        : null,
+                    };
+                  }) || [];
+              }
+            } catch (e) {
+              console.error("[AuthContext] organizations exception:", e);
             }
-          } catch (e) {
-            console.error("[AuthContext] organizations exception:", e);
           }
         }
 
-        // 5) Seleccionar organización actual
-        if (!cancelled) {
-          setOrganizations(orgs);
+        if (cancelled) return;
 
-          const storedOrgId = loadStoredOrgId();
-          let initialOrg = null;
+        setOrganizations(orgs);
 
-          if (storedOrgId && orgs.length > 0) {
-            initialOrg = orgs.find((o) => o.id === storedOrgId) || null;
-          }
+        // 2.e) Seleccionar organización actual (prefiriendo la de la RPC)
+        let initialOrg = null;
 
-          if (!initialOrg && orgs.length > 0) {
-            // Preferimos OWNER → luego ADMIN → luego la primera
-            initialOrg =
-              orgs.find((o) => o.role === "owner") ||
-              orgs.find((o) => o.role === "admin") ||
-              orgs[0];
-          }
+        const storedOrgId = loadStoredOrgIdForUser(user.id);
 
-          setCurrentOrgState(initialOrg);
-          storeOrgId(initialOrg?.id || null);
+        if (storedOrgId && orgs.length > 0) {
+          initialOrg = orgs.find((o) => o.id === storedOrgId) || null;
         }
+
+        if (!initialOrg && rpcOrg && orgs.length > 0) {
+          initialOrg = orgs.find((o) => o.id === rpcOrg.org_id) || null;
+        }
+
+        if (!initialOrg && orgs.length > 0) {
+          // Preferimos OWNER → luego ADMIN → luego la primera
+          initialOrg =
+            orgs.find((o) => o.role === "owner") ||
+            orgs.find((o) => o.role === "admin") ||
+            orgs[0];
+        }
+
+        setCurrentOrgState(initialOrg);
+        storeOrgIdForUser(user.id, initialOrg?.id || null);
       } catch (e) {
         console.error("[AuthContext] loadUserData exception:", e);
       } finally {
@@ -353,7 +254,7 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // --------------------------
-  // 3) Rol normalizado + fallback
+  // 3) Rol normalizado + flags
   // --------------------------
   let normalizedRole = null;
 
@@ -382,7 +283,9 @@ export function AuthProvider({ children }) {
 
   const setCurrentOrg = (org) => {
     setCurrentOrgState(org);
-    storeOrgId(org?.id || null);
+    if (user?.id) {
+      storeOrgIdForUser(user.id, org?.id || null);
+    }
   };
 
   const value = {
