@@ -101,36 +101,79 @@ export default function AdminsPage() {
     setLoadingAction(true);
 
     try {
-      // 🔑 NUEVO: usar SIEMPRE la Edge Function invite_admin (no el flujo viejo)
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "invite_admin",
-        {
-          body: { email },
-        }
-      );
+      // 🔑 usar SIEMPRE la Edge Function invite_admin
+      const response = await supabase.functions.invoke("invite_admin", {
+        body: { email },
+      });
 
+      const { data, error: fnError } = response || {};
+
+      // 1) Error a nivel supabase-js (no por HTTP 500 duro)
       if (fnError) {
-        console.error("[AdminsPage] invite_admin error:", fnError);
+        console.error("[AdminsPage] invite_admin fnError:", fnError);
         setError(
           fnError.message ||
             "Error al enviar la invitación. Revisa la configuración del servidor."
         );
-        setLoadingAction(false);
         return;
       }
 
-      console.log("[AdminsPage] invite_admin response:", data);
+      console.log("[AdminsPage] invite_admin raw response:", response);
 
+      // 2) La función devolvió un JSON de error controlado
+      if (data && typeof data === "object") {
+        // Convención: { ok: boolean, error?: string }
+        if (data.ok === false) {
+          console.error("[AdminsPage] invite_admin server error:", data);
+          setError(
+            data.error ||
+              "La función invite_admin devolvió un error. Revisa los logs del servidor."
+          );
+          return;
+        }
+      }
+
+      // Si llegamos aquí asumimos éxito
       setInviteEmail("");
       setSuccessMessage(`La invitación fue enviada al correo ${email}.`);
 
       // Nota: el nuevo admin tendrá su propia organización.
       // Esta lista muestra solo propietarios y admins de la organización actual.
     } catch (err) {
+      // Aquí caemos cuando la Edge Function devuelve un HTTP non-2xx (p.ej. 500)
       console.error("[AdminsPage] excepción en handleInviteSubmit:", err);
-      setError(
-        "Error inesperado al enviar la invitación. Intenta nuevamente más tarde."
-      );
+
+      let friendlyMessage =
+        "Error inesperado al enviar la invitación. Intenta nuevamente más tarde.";
+
+      // Supabase v2: FunctionsHttpError incluye 'context' con la Response
+      const ctx = err?.context;
+      if (ctx && typeof ctx === "object") {
+        try {
+          // En muchos casos context es un Response con .json()
+          const maybeJson =
+            typeof ctx.json === "function" ? await ctx.json() : ctx;
+          console.error(
+            "[AdminsPage] invite_admin error context JSON:",
+            maybeJson
+          );
+
+          if (
+            maybeJson &&
+            typeof maybeJson === "object" &&
+            typeof maybeJson.error === "string"
+          ) {
+            friendlyMessage = maybeJson.error;
+          }
+        } catch (parseErr) {
+          console.error(
+            "[AdminsPage] error leyendo error.context de invite_admin:",
+            parseErr
+          );
+        }
+      }
+
+      setError(friendlyMessage);
     } finally {
       setLoadingAction(false);
     }
