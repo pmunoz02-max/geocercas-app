@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import React, {
   createContext,
   useContext,
@@ -9,7 +8,6 @@ import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
-// Prefijo para recordar la organización actual POR USUARIO en localStorage
 const ORG_STORAGE_PREFIX = "app_geocercas_current_org_";
 
 function getOrgStorageKey(userId) {
@@ -39,9 +37,7 @@ function storeOrgIdForUser(userId, orgId) {
     } else {
       window.localStorage.removeItem(key);
     }
-  } catch {
-    // ignorar errores de storage
-  }
+  } catch {}
 }
 
 export function AuthProvider({ children }) {
@@ -53,9 +49,9 @@ export function AuthProvider({ children }) {
   const [currentOrg, setCurrentOrgState] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // --------------------------
+  // --------------------------------------------------------
   // 1) Inicializar sesión
-  // --------------------------
+  // --------------------------------------------------------
   useEffect(() => {
     let isMounted = true;
 
@@ -64,9 +60,7 @@ export function AuthProvider({ children }) {
         const { data, error } = await supabase.auth.getSession();
         if (!isMounted) return;
 
-        if (error) {
-          console.error("[AuthContext] getSession error:", error);
-        }
+        if (error) console.error("[AuthContext] getSession error:", error);
 
         setSession(data?.session ?? null);
         setUser(data?.session?.user ?? null);
@@ -86,7 +80,6 @@ export function AuthProvider({ children }) {
       setUser(newSession?.user ?? null);
 
       if (!newSession) {
-        // Logout: limpiamos estado en memoria.
         setProfile(null);
         setOrganizations([]);
         setCurrentOrgState(null);
@@ -99,9 +92,9 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // --------------------------
-  // 2) Cargar datos del usuario (perfil + organizaciones)
-  // --------------------------
+  // --------------------------------------------------------
+  // 2) Cargar perfil + organizaciones + seleccionar org
+  // --------------------------------------------------------
   useEffect(() => {
     if (!user) {
       setProfile(null);
@@ -116,97 +109,47 @@ export function AuthProvider({ children }) {
       setLoading(true);
 
       try {
-        // 2.a) Perfil desde v_app_profiles (solo lectura)
+        // 2.a) Perfíl
         try {
-          const { data: profiles, error: profErr } = await supabase
+          const { data: profiles } = await supabase
             .from("v_app_profiles")
             .select("*")
             .eq("user_id", user.id);
-
-          if (profErr) {
-            console.error("[AuthContext] v_app_profiles error:", profErr);
-          }
-
-          if (!cancelled) {
-            // Ojo: v_app_profiles debe exponer default_org_id / tenant_id / org_id si los quieres usar
-            setProfile(profiles?.[0] || null);
-          }
+          if (!cancelled) setProfile(profiles?.[0] || null);
         } catch (e) {
           console.error("[AuthContext] v_app_profiles exception:", e);
         }
 
-        // 2.b) Preguntar al backend cuál es la org/rol "oficial"
-        //     (esta RPC se encarga de crear una org nueva si no existe ninguna)
-        let rpcOrg = null;
-        try {
-          const { data: rpcRows, error: rpcErr } = await supabase.rpc(
-            "get_current_user_org_and_role"
-          );
-
-          if (rpcErr) {
-            console.error(
-              "[AuthContext] get_current_user_org_and_role error:",
-              rpcErr
-            );
-          } else if (rpcRows && rpcRows.length > 0) {
-            rpcOrg = rpcRows[0]; // { org_id, org_name, role }
-          }
-        } catch (e) {
-          console.error(
-            "[AuthContext] get_current_user_org_and_role exception:",
-            e
-          );
-        }
-
-        // 2.c) Leer los roles reales desde app_user_roles
+        // 2.b) Roles reales desde app_user_roles
         let roleLinks = [];
         try {
-          const { data: links, error: linksErr } = await supabase
+          const { data: links } = await supabase
             .from("app_user_roles")
             .select("org_id, role, created_at")
             .eq("user_id", user.id);
-
-          if (linksErr) {
-            console.error("[AuthContext] app_user_roles error:", linksErr);
-          } else {
-            roleLinks = links || [];
-          }
+          roleLinks = links || [];
         } catch (e) {
           console.error("[AuthContext] app_user_roles exception:", e);
         }
 
-        // 2.d) Cargar organizaciones asociadas a partir de app_user_roles
+        // 2.c) Cargar organizaciones
         let orgs = [];
         if (roleLinks.length > 0) {
           const ids = Array.from(
-            new Set(
-              roleLinks
-                .map((l) => l.org_id)
-                .filter((id) => !!id)
-            )
+            new Set(roleLinks.map((l) => l.org_id).filter(Boolean))
           );
-
           if (ids.length > 0) {
             try {
-              const { data: orgRows, error: orgErr } = await supabase
+              const { data: orgRows } = await supabase
                 .from("organizations")
                 .select("id, name, slug")
                 .in("id", ids);
 
-              if (orgErr) {
-                console.error("[AuthContext] organizations error:", orgErr);
-              } else {
-                orgs =
-                  orgRows?.map((org) => {
-                    const link = roleLinks.find((l) => l.org_id === org.id);
-                    return {
-                      ...org,
-                      role: link?.role
-                        ? String(link.role).toLowerCase()
-                        : null,
-                    };
-                  }) || [];
-              }
+              orgs =
+                orgRows?.map((o) => {
+                  const link = roleLinks.find((l) => l.org_id === o.id);
+                  return { ...o, role: link?.role?.toLowerCase() || null };
+                }) || [];
             } catch (e) {
               console.error("[AuthContext] organizations exception:", e);
             }
@@ -217,26 +160,30 @@ export function AuthProvider({ children }) {
 
         setOrganizations(orgs);
 
-        // 2.e) Seleccionar organización actual (prefiriendo la de la RPC y la almacenada)
-        let initialOrg = null;
+        // --------------------------------------------------------
+        // 🚀 2.d) Selección UNIVERSAL de organización (FIX DEFINITIVO)
+        // --------------------------------------------------------
 
         const storedOrgId = loadStoredOrgIdForUser(user.id);
 
-        if (storedOrgId && orgs.length > 0) {
-          initialOrg = orgs.find((o) => o.id === storedOrgId) || null;
-        }
+        // 1) Tracker tiene prioridad absoluta
+        const trackerOrg = orgs.find((o) => o.role === "tracker");
 
-        if (!initialOrg && rpcOrg && orgs.length > 0) {
-          initialOrg = orgs.find((o) => o.id === rpcOrg.org_id) || null;
-        }
+        // 2) Stored (solo si coincide con un rol válido)
+        const storedOrg =
+          storedOrgId && orgs.find((o) => o.id === storedOrgId);
 
-        if (!initialOrg && orgs.length > 0) {
-          // Preferimos OWNER → luego ADMIN → luego la primera
-          initialOrg =
-            orgs.find((o) => o.role === "owner") ||
-            orgs.find((o) => o.role === "admin") ||
-            orgs[0];
-        }
+        // 3) Owner → Admin → primera
+        const ownerOrg = orgs.find((o) => o.role === "owner");
+        const adminOrg = orgs.find((o) => o.role === "admin");
+
+        let initialOrg =
+          trackerOrg ||
+          storedOrg ||
+          ownerOrg ||
+          adminOrg ||
+          orgs[0] ||
+          null;
 
         setCurrentOrgState(initialOrg);
         storeOrgIdForUser(user.id, initialOrg?.id || null);
@@ -254,70 +201,33 @@ export function AuthProvider({ children }) {
     };
   }, [user]);
 
-  // --------------------------
-  // 3) Rol normalizado + flags
-  // --------------------------
+  // --------------------------------------------------------
+  // 3) Normalizar rol actual
+  // --------------------------------------------------------
   let normalizedRole = null;
 
   if (currentOrg?.role) {
-    normalizedRole = String(currentOrg.role).toLowerCase();
-  } else if (profile?.role) {
-    normalizedRole = String(profile.role).toLowerCase();
-  } else if (organizations && organizations.length > 0) {
-    const ownerOrg = organizations.find(
-      (o) => String(o.role || "").toLowerCase() === "owner"
-    );
-    const adminOrg = organizations.find(
-      (o) => String(o.role || "").toLowerCase() === "admin"
-    );
-
-    if (ownerOrg) {
-      normalizedRole = "owner";
-    } else if (adminOrg) {
-      normalizedRole = "admin";
-    }
+    normalizedRole = currentOrg.role.toLowerCase();
   }
-
-  const isOwner = normalizedRole === "owner";
-  const isAdmin = normalizedRole === "admin" || isOwner;
-  const isTracker = normalizedRole === "tracker";
-
-  // --------------------------
-  // 4) TenantId universal
-  // --------------------------
-  const tenantId =
-    currentOrg?.id ||
-    profile?.default_org_id || // si lo expone v_app_profiles
-    profile?.tenant_id ||
-    profile?.org_id ||
-    null;
-
-  const setCurrentOrg = (org) => {
-    setCurrentOrgState(org);
-    if (user?.id) {
-      storeOrgIdForUser(user.id, org?.id || null);
-    }
-  };
 
   const value = {
     session,
     user,
     loading,
-
     profile,
     organizations,
     currentOrg,
-    setCurrentOrg,
+    setCurrentOrg: (org) => {
+      setCurrentOrgState(org);
+      if (user?.id) storeOrgIdForUser(user.id, org?.id || null);
+    },
 
-    // Rol
     role: normalizedRole,
-    currentRole: normalizedRole,
-    isOwner,
-    isAdmin,
-    isTracker,
+    isTracker: normalizedRole === "tracker",
+    isAdmin: ["admin", "owner"].includes(normalizedRole),
+    isOwner: normalizedRole === "owner",
 
-    // 👇 tenant universal para todas las páginas
-    tenantId,
+    tenantId: currentOrg?.id || null,
   };
 
   return (
@@ -327,8 +237,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth debe usarse dentro de un AuthProvider");
-  }
+  if (!ctx) throw new Error("useAuth debe usarse dentro de un AuthProvider");
   return ctx;
 }
