@@ -26,11 +26,8 @@ const CURRENCIES = [
 ];
 
 export default function ActividadesPage() {
-  const { profile, role } = useAuth(); // tenant_id/org_id + rol
+  const { profile, role } = useAuth(); // profile incluye default_org_id / tenant_id / org_id
   const { t } = useTranslation();
-
-  // 🔐 Tenant actual (multi-tenant)
-  const tenantId = profile?.tenant_id || profile?.org_id || null;
 
   const [actividades, setActividades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,28 +46,11 @@ export default function ActividadesPage() {
     setLoading(true);
     setErrorMsg("");
 
-    console.log("[ActividadesPage] tenantId:", tenantId);
-
-    // Si no hay tenant, no llamamos a la API
-    if (!tenantId) {
-      setActividades([]);
-      setLoading(false);
-      setErrorMsg(t("actividades.errorMissingTenant"));
-      return;
-    }
-
-    const { data, error } = await listActividades({
-      includeInactive: true,
-      tenantId,
-    });
+    const { data, error } = await listActividades({ includeInactive: true });
 
     if (error) {
-      console.error("[ActividadesPage] listActividades error:", error);
-      const msg =
-        error.message === "actividades.errorMissingTenant"
-          ? t("actividades.errorMissingTenant")
-          : error.message || t("actividades.errorLoad");
-      setErrorMsg(msg);
+      console.error(error);
+      setErrorMsg(error.message || t("actividades.errorLoad"));
     } else {
       setActividades(data || []);
     }
@@ -79,11 +59,9 @@ export default function ActividadesPage() {
   }
 
   useEffect(() => {
-    // Esperar a que cargue el perfil
-    if (!profile) return;
     loadActividades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, tenantId]);
+  }, []);
 
   function resetForm() {
     setFormMode("create");
@@ -108,13 +86,17 @@ export default function ActividadesPage() {
       return;
     }
 
-    if (!tenantId) {
-      setErrorMsg(t("actividades.errorMissingTenant"));
-      return;
-    }
-
     try {
       if (formMode === "create") {
+        // ✅ Tenant universal: primero default_org_id, luego tenant_id / org_id
+        const tenantId =
+          profile?.default_org_id || profile?.tenant_id || profile?.org_id;
+
+        if (!tenantId) {
+          setErrorMsg(t("actividades.errorMissingTenant"));
+          return;
+        }
+
         const payload = {
           tenant_id: tenantId,
           name: nombre.trim(),
@@ -139,12 +121,8 @@ export default function ActividadesPage() {
       resetForm();
       await loadActividades();
     } catch (err) {
-      console.error("[ActividadesPage] handleSubmit error:", err);
-      const msg =
-        err.message === "actividades.errorMissingTenant"
-          ? t("actividades.errorMissingTenant")
-          : err.message || t("actividades.errorSave");
-      setErrorMsg(msg);
+      console.error(err);
+      setErrorMsg(err.message || t("actividades.errorSave"));
     }
   }
 
@@ -155,11 +133,7 @@ export default function ActividadesPage() {
     setNombre(act.name || "");
     setDescripcion(act.description || "");
     setCurrency(act.currency_code || "USD");
-    setHourlyRate(
-      act.hourly_rate !== null && act.hourly_rate !== undefined
-        ? String(act.hourly_rate)
-        : ""
-    );
+    setHourlyRate(act.hourly_rate || "");
   }
 
   async function handleToggle(act) {
@@ -168,7 +142,7 @@ export default function ActividadesPage() {
       if (error) throw error;
       await loadActividades();
     } catch (err) {
-      console.error("[ActividadesPage] handleToggle error:", err);
+      console.error(err);
       setErrorMsg(err.message || t("actividades.errorToggle"));
     }
   }
@@ -182,7 +156,7 @@ export default function ActividadesPage() {
       if (error) throw error;
       await loadActividades();
     } catch (err) {
-      console.error("[ActividadesPage] handleDelete error:", err);
+      console.error(err);
       setErrorMsg(err.message || t("actividades.errorDelete"));
     }
   }
