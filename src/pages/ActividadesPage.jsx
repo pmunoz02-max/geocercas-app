@@ -29,6 +29,9 @@ export default function ActividadesPage() {
   const { profile, role } = useAuth(); // tenant_id/org_id + rol
   const { t } = useTranslation();
 
+  // 🔐 Tenant actual (multi-tenant)
+  const tenantId = profile?.tenant_id || profile?.org_id || null;
+
   const [actividades, setActividades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -46,11 +49,32 @@ export default function ActividadesPage() {
     setLoading(true);
     setErrorMsg("");
 
-    const { data, error } = await listActividades({ includeInactive: true });
+    console.log("[ActividadesPage] tenantId activo:", tenantId);
+
+    // Si no hay tenant, no intentamos llamar a la API
+    if (!tenantId) {
+      console.warn(
+        "[ActividadesPage] No hay tenantId activo, no se cargan actividades."
+      );
+      setActividades([]);
+      setLoading(false);
+      setErrorMsg(t("actividades.errorMissingTenant"));
+      return;
+    }
+
+    const { data, error } = await listActividades({
+      includeInactive: true,
+      tenantId,
+    });
 
     if (error) {
-      console.error(error);
-      setErrorMsg(error.message || t("actividades.errorLoad"));
+      console.error("[ActividadesPage] Error listActividades:", error);
+      // Si desde la API viene el mensaje 'actividades.errorMissingTenant', lo traducimos:
+      if (error.message === "actividades.errorMissingTenant") {
+        setErrorMsg(t("actividades.errorMissingTenant"));
+      } else {
+        setErrorMsg(error.message || t("actividades.errorLoad"));
+      }
     } else {
       setActividades(data || []);
     }
@@ -59,9 +83,11 @@ export default function ActividadesPage() {
   }
 
   useEffect(() => {
+    // Esperamos a tener perfil/tenant antes de cargar
+    if (!profile) return;
     loadActividades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [profile]);
 
   function resetForm() {
     setFormMode("create");
@@ -86,14 +112,13 @@ export default function ActividadesPage() {
       return;
     }
 
+    if (!tenantId) {
+      setErrorMsg(t("actividades.errorMissingTenant"));
+      return;
+    }
+
     try {
       if (formMode === "create") {
-        const tenantId = profile?.tenant_id || profile?.org_id;
-        if (!tenantId) {
-          setErrorMsg(t("actividades.errorMissingTenant"));
-          return;
-        }
-
         const payload = {
           tenant_id: tenantId,
           name: nombre.trim(),
@@ -118,8 +143,12 @@ export default function ActividadesPage() {
       resetForm();
       await loadActividades();
     } catch (err) {
-      console.error(err);
-      setErrorMsg(err.message || t("actividades.errorSave"));
+      console.error("[ActividadesPage] Error handleSubmit:", err);
+      if (err.message === "actividades.errorMissingTenant") {
+        setErrorMsg(t("actividades.errorMissingTenant"));
+      } else {
+        setErrorMsg(err.message || t("actividades.errorSave"));
+      }
     }
   }
 
@@ -130,7 +159,11 @@ export default function ActividadesPage() {
     setNombre(act.name || "");
     setDescripcion(act.description || "");
     setCurrency(act.currency_code || "USD");
-    setHourlyRate(act.hourly_rate || "");
+    setHourlyRate(
+      act.hourly_rate !== null && act.hourly_rate !== undefined
+        ? String(act.hourly_rate)
+        : ""
+    );
   }
 
   async function handleToggle(act) {
@@ -139,7 +172,7 @@ export default function ActividadesPage() {
       if (error) throw error;
       await loadActividades();
     } catch (err) {
-      console.error(err);
+      console.error("[ActividadesPage] Error handleToggle:", err);
       setErrorMsg(err.message || t("actividades.errorToggle"));
     }
   }
@@ -153,7 +186,7 @@ export default function ActividadesPage() {
       if (error) throw error;
       await loadActividades();
     } catch (err) {
-      console.error(err);
+      console.error("[ActividadesPage] Error handleDelete:", err);
       setErrorMsg(err.message || t("actividades.errorDelete"));
     }
   }
