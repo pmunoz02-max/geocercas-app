@@ -333,39 +333,55 @@ function CursorPos({ setCursorLatLng }) {
 /**
  * Resuelve el orgId a usar:
  *  - Si currentOrg.id existe → lo usa.
- *  - Si no, consulta app_user_roles para el usuario actual y toma la primera org (owner/admin).
+ *  - Si no, intenta buscar en app_user_roles.
+ *  - Si no encuentra nada → solo loguea y devuelve null (NO lanza error).
  */
 async function resolveOrgId({ supabaseClient, currentOrg }) {
   if (currentOrg?.id) return currentOrg.id;
 
   if (!supabaseClient) {
-    throw new Error("Supabase no disponible para resolver organización.");
+    console.warn("[NuevaGeocerca] Supabase no disponible para resolver orgId");
+    return null;
   }
 
-  const { data: userData, error: userError } =
-    await supabaseClient.auth.getUser();
-  if (userError) throw userError;
-  const userId = userData?.user?.id;
-  if (!userId) {
-    throw new Error("Usuario no autenticado para resolver organización.");
+  try {
+    const { data: userData, error: userError } =
+      await supabaseClient.auth.getUser();
+    if (userError) {
+      console.warn("[NuevaGeocerca] error en getUser:", userError);
+      return null;
+    }
+    const userId = userData?.user?.id;
+    if (!userId) {
+      console.warn("[NuevaGeocerca] usuario no autenticado para orgId");
+      return null;
+    }
+
+    const { data, error } = await supabaseClient
+      .from("app_user_roles")
+      .select("org_id, role")
+      .eq("user_id", userId)
+      .in("role", ["owner", "admin"])
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.warn("[NuevaGeocerca] error consultando app_user_roles:", error);
+      return null;
+    }
+
+    const first = data?.[0];
+    if (!first?.org_id) {
+      console.warn(
+        "[NuevaGeocerca] no se encontró organización asociada al usuario en app_user_roles"
+      );
+      return null;
+    }
+
+    return first.org_id;
+  } catch (e) {
+    console.warn("[NuevaGeocerca] excepción en resolveOrgId:", e);
+    return null;
   }
-
-  const { data, error } = await supabaseClient
-    .from("app_user_roles")
-    .select("org_id, role")
-    .eq("user_id", userId)
-    .in("role", ["owner", "admin"])
-    .order("created_at", { ascending: true });
-
-  if (error) throw error;
-  const first = data?.[0];
-  if (!first?.org_id) {
-    throw new Error(
-      "No se encontró organización asociada al usuario para guardar la geocerca."
-    );
-  }
-
-  return first.org_id;
 }
 
 /* ----------------- Componente principal ----------------- */
@@ -427,10 +443,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const refreshGeofenceList = useCallback(async () => {
     try {
       const orgId = await resolveOrgId({ supabaseClient, currentOrg });
-      const list = await listGeofences({ supabaseClient, orgId });
+      const list = await listGeofences({
+        supabaseClient,
+        orgId: orgId || null,
+      });
       setGeofenceList(list);
     } catch (err) {
-      console.warn("[NuevaGeocerca] No se pudo resolver orgId:", err);
+      console.warn("[NuevaGeocerca] error al refrescar geofences:", err);
       setGeofenceList([]);
     }
   }, [supabaseClient, currentOrg]);
@@ -473,14 +492,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       const doDraw = async () => {
         let orgId = null;
         if (supabaseClient) {
-          try {
-            orgId = await resolveOrgId({ supabaseClient, currentOrg });
-          } catch (e) {
-            console.warn(
-              "[NuevaGeocerca] No se pudo resolver orgId para dibujar:",
-              e
-            );
-          }
+          orgId = await resolveOrgId({ supabaseClient, currentOrg });
         }
 
         if (supaNames.length && supabaseClient && orgId) {
@@ -569,7 +581,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
           created_by = data?.user?.id || null;
         } catch {}
 
-        // 🔑 Resolver orgId aunque currentOrg esté vacío
         const orgId = await resolveOrgId({ supabaseClient, currentOrg });
 
         const fc = { type: "FeatureCollection", features: [feature] };
@@ -578,9 +589,12 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
           nombre: name,
           geojson: fc,
           ...(created_by ? { created_by } : {}),
-          org_id: orgId,
-          tenant_id: orgId,
         };
+
+        if (orgId) {
+          payload.org_id = orgId;
+          payload.tenant_id = orgId;
+        }
 
         const { data, error } = await supabaseClient
           .from(SUPABASE_GEOFENCES_TABLE)
@@ -633,7 +647,14 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       }
     } catch (e) {
       console.error("Error en handleSave geocerca:", e);
-      alert(t("geocercas.errorSave", { error: e?.message || String(e) }));
+      const rawMsg = e?.message || String(e);
+      const translated = t("geocercas.errorSave", { error: rawMsg });
+      // Si no hay traducción y nos devuelve la key, mostramos el mensaje real del error
+      alert(
+        translated === "geocercas.errorSave"
+          ? rawMsg
+          : translated
+      );
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
 
