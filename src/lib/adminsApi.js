@@ -1,12 +1,26 @@
 // src/lib/adminsApi.js
-// API para gestionar administradores de la organización actual.
+// API para gestionar administradores de la organización actual
+// y para manejar invitaciones de nuevos owners independientes.
 //
-// listAdmins:
-//   - Lee la tabla app_user_roles, filtrando por org_id y rol OWNER / ADMIN.
-// inviteAdmin:
-//   - Llama a la Edge Function 'invite-user'.
-// updateAdmin / deleteAdmin:
-//   - Placeholders por ahora.
+// Escenarios:
+//
+// 1) listAdmins(orgId)
+//    - Lee la tabla app_user_roles para una org existente.
+//    - Roles considerados: OWNER / ADMIN.
+//
+// 2) inviteAdmin(orgId, payload)
+//    - Invita a un ADMIN (o OWNER adicional) a la organización ACTUAL.
+//    - Llama a la Edge Function 'invite-user' con org_id != null.
+//
+// 3) inviteIndependentOwner(payload)
+//    - Invita a un NUEVO OWNER independiente, con su propia organización.
+//    - Llama a 'invite-user' con role_name = "OWNER" y org_id = null.
+//    - En el backend, 'invite-user' debe insertar en app_user_roles
+//      un registro con role = 'owner' y org_id = null, para que el
+//      trigger SQL `ensure_org_for_owner_role()` cree la organización.
+//
+// 4) updateAdmin / deleteAdmin
+//    - Placeholders por ahora.
 
 import { supabase } from "../supabaseClient";
 
@@ -50,8 +64,13 @@ export async function listAdmins(orgId) {
 }
 
 /**
- * Crea una invitación para un nuevo administrador usando la Edge Function
- * `invite-user`.
+ * Invita a un administrador (o owner adicional) a la ORGANIZACIÓN ACTUAL.
+ *
+ * Este flujo es para:
+ *  - Agregar admins secundarios a la misma empresa.
+ *  - Agregar otro owner a la misma empresa.
+ *
+ * NO crea organizaciones nuevas; usa el orgId existente.
  *
  * @param {string} orgId
  * @param {{ email: string, role: string, full_name?: string, invitedBy?: string }} payload
@@ -78,7 +97,45 @@ export async function inviteAdmin(orgId, payload) {
       email,
       full_name: full_name ?? null,
       role_name,
-      org_id: orgId,
+      org_id: orgId, //← aquí SIEMPRE usamos la org actual
+    },
+  });
+
+  return { data, error };
+}
+
+/**
+ * Invita a un NUEVO OWNER independiente, con su propia organización.
+ *
+ * Este flujo es para “nuevo cliente/empresa” que será dueño de su propia org.
+ *
+ * IMPORTANTE (backend):
+ *   - La Edge Function 'invite-user' debe:
+ *       1) Aceptar org_id = null y role_name = "OWNER".
+ *       2) Insertar en app_user_roles:
+ *            { user_id, role: 'owner', org_id: null }
+ *       3) El trigger `ensure_org_for_owner_role()` creará la org y
+ *          actualizará org_id automáticamente.
+ *
+ * @param {{ email: string, full_name?: string }} payload
+ * @returns {Promise<{data: any | null, error: any}>}
+ */
+export async function inviteIndependentOwner(payload) {
+  const { email, full_name } = payload || {};
+
+  if (!email) {
+    return {
+      data: null,
+      error: new Error("Email requerido para invitar owner independiente"),
+    };
+  }
+
+  const { data, error } = await supabase.functions.invoke("invite-user", {
+    body: {
+      email,
+      full_name: full_name ?? null,
+      role_name: "OWNER",
+      org_id: null, // ← clave: dejar NULL para que actúe el trigger
     },
   });
 

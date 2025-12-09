@@ -3,7 +3,8 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   listAdmins,
-  // inviteAdmin,   // ← ya no se usa, la invitación se hace vía Edge Function invite_admin
+  inviteAdmin,
+  inviteIndependentOwner,
   updateAdmin,
   deleteAdmin,
 } from "../lib/adminsApi";
@@ -21,6 +22,9 @@ export default function AdminsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin");
 
+  // ===========================================================
+  // Cargar administradores ACTUALES de la org en sesión
+  // ===========================================================
   useEffect(() => {
     if (!isOwner) {
       setLoading(false);
@@ -37,8 +41,7 @@ export default function AdminsPage() {
       setError(null);
       setSuccessMessage(null);
 
-      const orgId = currentOrg.id;
-      const { data, error: fetchError } = await listAdmins(orgId);
+      const { data, error: fetchError } = await listAdmins(currentOrg.id);
 
       if (fetchError) {
         console.error("[AdminsPage] listAdmins error:", fetchError);
@@ -55,6 +58,9 @@ export default function AdminsPage() {
     fetchAdmins();
   }, [currentOrg?.id, isOwner]);
 
+  // ===========================================================
+  // Refresh manual
+  // ===========================================================
   const handleRefresh = async () => {
     if (!currentOrg?.id || !isOwner) return;
     setLoading(true);
@@ -74,11 +80,13 @@ export default function AdminsPage() {
     setLoading(false);
   };
 
+  // ===========================================================
+  // INVITAR NUEVO ADMINISTRADOR
+  // ===========================================================
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
 
     const email = inviteEmail.trim();
-
     setError(null);
     setSuccessMessage(null);
 
@@ -92,25 +100,31 @@ export default function AdminsPage() {
       return;
     }
 
-    if (inviteRole !== "admin") {
-      // Por ahora solo invitamos administradores con organización propia
-      setError("Por ahora solo se pueden invitar administradores.");
-      return;
-    }
-
     setLoadingAction(true);
 
     try {
-      // 🔑 usar SIEMPRE la Edge Function invite_admin
-      const response = await supabase.functions.invoke("invite_admin", {
-        body: { email },
-      });
+      let response;
 
-      const { data, error: fnError } = response || {};
+      // --- CASO 1: ADMIN dentro de la organización actual ---
+      if (inviteRole === "admin") {
+        response = await inviteAdmin(currentOrg.id, {
+          email,
+          role: "ADMIN",
+        });
+      }
 
-      // 1) Error a nivel supabase-js (no por HTTP 500 duro)
+      // --- CASO 2: OWNER con organización propia ---
+      if (inviteRole === "owner") {
+        response = await inviteIndependentOwner({
+          email,
+          full_name: null,
+        });
+      }
+
+      const { error: fnError, data } = response || {};
+
       if (fnError) {
-        console.error("[AdminsPage] invite_admin fnError:", fnError);
+        console.error("[AdminsPage] invite fnError:", fnError);
         setError(
           fnError.message ||
             "Error al enviar la invitación. Revisa la configuración del servidor."
@@ -118,106 +132,70 @@ export default function AdminsPage() {
         return;
       }
 
-      console.log("[AdminsPage] invite_admin raw response:", response);
-
-      // 2) La función devolvió un JSON de error controlado
-      if (data && typeof data === "object") {
-        // Convención: { ok: boolean, error?: string }
-        if (data.ok === false) {
-          console.error("[AdminsPage] invite_admin server error:", data);
-          setError(
-            data.error ||
-              "La función invite_admin devolvió un error. Revisa los logs del servidor."
-          );
-          return;
-        }
+      if (data && data.ok === false) {
+        setError(data.error ?? "La invitación no pudo ser enviada.");
+        return;
       }
 
-      // Si llegamos aquí asumimos éxito
       setInviteEmail("");
       setSuccessMessage(`La invitación fue enviada al correo ${email}.`);
-
-      // Nota: el nuevo admin tendrá su propia organización.
-      // Esta lista muestra solo propietarios y admins de la organización actual.
     } catch (err) {
-      // Aquí caemos cuando la Edge Function devuelve un HTTP non-2xx (p.ej. 500)
       console.error("[AdminsPage] excepción en handleInviteSubmit:", err);
 
-      let friendlyMessage =
-        "Error inesperado al enviar la invitación. Intenta nuevamente más tarde.";
+      let friendly = "Error inesperado al enviar la invitación.";
 
-      // Supabase v2: FunctionsHttpError incluye 'context' con la Response
       const ctx = err?.context;
       if (ctx && typeof ctx === "object") {
         try {
-          // En muchos casos context es un Response con .json()
           const maybeJson =
             typeof ctx.json === "function" ? await ctx.json() : ctx;
-          console.error(
-            "[AdminsPage] invite_admin error context JSON:",
-            maybeJson
-          );
 
           if (
             maybeJson &&
             typeof maybeJson === "object" &&
             typeof maybeJson.error === "string"
           ) {
-            friendlyMessage = maybeJson.error;
+            friendly = maybeJson.error;
           }
-        } catch (parseErr) {
-          console.error(
-            "[AdminsPage] error leyendo error.context de invite_admin:",
-            parseErr
-          );
-        }
+        } catch {}
       }
 
-      setError(friendlyMessage);
+      setError(friendly);
     } finally {
       setLoadingAction(false);
     }
   };
 
-  const handleDelete = async (admin) => {
+  // ===========================================================
+  // DELETE / EDIT placeholders
+  // ===========================================================
+  const handleDelete = async (adm) => {
     if (!currentOrg?.id) return;
-    if (!window.confirm("¿Eliminar este administrador de la organización?")) {
-      return;
-    }
+
+    if (!window.confirm("¿Eliminar este administrador?")) return;
 
     setLoadingAction(true);
     setError(null);
     setSuccessMessage(null);
 
-    const { error: deleteError } = await deleteAdmin(
-      currentOrg.id,
-      admin.user_id
-    );
-
-    if (deleteError) {
-      console.error("[AdminsPage] deleteAdmin error:", deleteError);
-      setError(
-        deleteError.message ||
-          "No se pudo eliminar al administrador (función en construcción)."
-      );
+    const { error: delErr } = await deleteAdmin(currentOrg.id, adm.user_id);
+    if (delErr) {
+      setError(delErr.message || "No se pudo eliminar al administrador.");
     } else {
-      setAdmins((prev) => prev.filter((a) => a.user_id !== admin.user_id));
+      setAdmins((prev) => prev.filter((a) => a.user_id !== adm.user_id));
     }
 
     setLoadingAction(false);
   };
 
-  const handleEdit = async (admin) => {
-    console.log(
-      "[AdminsPage] editar admin (pendiente de implementación)",
-      admin
-    );
-    setError(
-      "Edición de administradores aún en construcción. Solo lectura por ahora."
-    );
+  const handleEdit = (adm) => {
+    setError("Edición aún en construcción.");
     setSuccessMessage(null);
   };
 
+  // ===========================================================
+  // UI
+  // ===========================================================
   if (!isOwner) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -239,193 +217,133 @@ export default function AdminsPage() {
         </h1>
         <p className="text-sm text-slate-600 mt-1">
           Organización:{" "}
-          <span className="font-medium">
-            {currentOrg?.name || "Sin nombre"}
-          </span>
-          . Este módulo es exclusivo para el owner.
+          <span className="font-medium">{currentOrg?.name}</span>.
         </p>
         <p className="text-xs text-slate-500 mt-1">
           Usuario actual: <span className="font-mono">{user?.email}</span>
         </p>
       </header>
 
+      {/* INVITAR NUEVO ADMIN */}
       <section className="mb-8 border border-slate-200 rounded-xl p-4 bg-white">
         <h2 className="text-sm font-semibold text-slate-900 mb-2">
           Invitar nuevo administrador
         </h2>
+
         <p className="text-xs text-slate-500 mb-3">
-          Ingresa el correo electrónico de la persona a la que quieres invitar
-          como administradora. Se enviará una invitación real por correo
-          utilizando Supabase Auth a través de la función
-          <span className="font-mono"> invite_admin</span>. Cada nuevo
-          administrador tendrá una organización propia, separada de la
-          organización actual.
+          Elige si este usuario será un <b>ADMIN de esta organización</b> o un{" "}
+          <b>OWNER independiente con su propia organización</b>.
         </p>
 
         <form
           onSubmit={handleInviteSubmit}
           className="flex flex-col md:flex-row gap-3 items-start md:items-end"
         >
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+          <div className="flex-1">
+            <label className="block text-xs font-medium mb-1">
               Correo electrónico
             </label>
             <input
               type="email"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="admin@ejemplo.com"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
+              className="w-full rounded-md border px-3 py-2 text-sm"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              Rol
-            </label>
+            <label className="block text-xs font-medium mb-1">Rol</label>
             <select
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value)}
+              className="rounded-md border px-3 py-2 text-sm"
             >
-              <option value="admin">Admin</option>
+              <option value="admin">Admin (misma organización)</option>
+              <option value="owner">Owner (nueva organización)</option>
             </select>
           </div>
 
           <button
             type="submit"
             disabled={loadingAction}
-            className="inline-flex items-center justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm"
           >
             {loadingAction ? "Procesando..." : "Enviar invitación"}
           </button>
         </form>
-
-        <p className="mt-2 text-xs text-amber-600">
-          Esta lista muestra solo propietarios y administradores de la
-          organización actual. Los nuevos administradores invitados mediante
-          <span className="font-mono"> invite_admin</span> tendrán su propia
-          organización y no aparecerán aquí.
-        </p>
       </section>
 
       {error && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div className="border border-red-300 bg-red-50 py-2 px-3 text-xs text-red-700 rounded mb-4">
           {error}
         </div>
       )}
+
       {successMessage && (
-        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+        <div className="border border-emerald-300 bg-emerald-50 py-2 px-3 text-xs text-emerald-700 rounded mb-4">
           {successMessage}
         </div>
       )}
 
+      {/* LISTA ADMINISTRADORES */}
       <section className="border border-slate-200 rounded-xl bg-white">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Lista de propietarios y administradores
-          </h2>
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h2 className="text-sm font-semibold">Propietarios y administradores</h2>
           <button
-            type="button"
             onClick={handleRefresh}
             disabled={loading}
-            className="inline-flex items-center rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="border rounded px-3 py-1.5 text-xs"
           >
             {loading ? "Actualizando..." : "Refrescar"}
           </button>
         </div>
 
         {loading ? (
-          <div className="px-4 py-8 text-center text-sm text-slate-500">
+          <div className="p-6 text-center text-slate-500 text-sm">
             Cargando administradores...
           </div>
         ) : admins.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-slate-500">
-            No se encontraron administradores para esta organización.
+          <div className="p-6 text-center text-slate-500 text-sm">
+            No hay administradores en esta organización.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-xs md:text-sm">
+            <table className="min-w-full text-xs">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">
-                    Rol
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">
-                    Usuario
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">
-                    Email
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">
-                    Nombre
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">
-                    Creado
-                  </th>
-                  <th className="px-3 py-2 text-right font-medium text-slate-500">
-                    Acciones
-                  </th>
+                  <th className="px-3 py-2 text-left">Rol</th>
+                  <th className="px-3 py-2 text-left">User ID</th>
+                  <th className="px-3 py-2 text-left">Email</th>
+                  <th className="px-3 py-2 text-left">Creado</th>
+                  <th className="px-3 py-2 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {admins.map((adm) => {
-                  const roleRaw = adm.role || adm.role_name || "";
-                  const roleNorm = String(roleRaw).toUpperCase();
-
-                  const roleLabel =
-                    roleNorm === "OWNER"
-                      ? "Owner"
-                      : roleNorm === "ADMIN"
-                      ? "Admin"
-                      : roleRaw || "—";
-
+                  const r = adm.role?.toUpperCase() ?? "—";
                   return (
-                    <tr key={adm.user_id}>
-                      <td className="px-3 py-2 align-middle">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            roleNorm === "OWNER"
-                              ? "bg-purple-50 text-purple-700"
-                              : roleNorm === "ADMIN"
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {roleLabel}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 align-middle font-mono text-[11px] md:text-xs text-slate-700">
-                        {adm.user_id}
-                      </td>
-                      <td className="px-3 py-2 align-middle text-slate-700">
-                        {adm.email || "—"}
-                      </td>
-                      <td className="px-3 py-2 align-middle text-slate-700">
-                        {adm.full_name || "—"}
-                      </td>
-                      <td className="px-3 py-2 align-middle text-slate-500">
+                    <tr key={adm.user_id} className="border-t">
+                      <td className="px-3 py-2">{r}</td>
+                      <td className="px-3 py-2 font-mono">{adm.user_id}</td>
+                      <td className="px-3 py-2">{adm.email ?? "—"}</td>
+                      <td className="px-3 py-2">
                         {adm.created_at
                           ? new Date(adm.created_at).toLocaleString()
                           : "—"}
                       </td>
-                      <td className="px-3 py-2 align-middle text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(adm)}
-                            className="inline-flex items-center rounded-md border border-slate-300 px-2 py-1 text-[11px] md:text-xs text-slate-700 hover:bg-slate-50"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(adm)}
-                            className="inline-flex items-center rounded-md border border-red-500 px-2 py-1 text-[11px] md:text-xs text-red-600 hover:bg-red-50"
-                          >
-                            Eliminar
-                          </button>
-                        </div>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => handleEdit(adm)}
+                          className="text-xs border px-2 py-1 rounded mr-2"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(adm)}
+                          className="text-xs border border-red-500 text-red-600 px-2 py-1 rounded"
+                        >
+                          Eliminar
+                        </button>
                       </td>
                     </tr>
                   );
