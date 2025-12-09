@@ -1,11 +1,5 @@
-// ------------------------------------------------------------
-//  Login.tsx  (VERSIÓN COMPLETA Y CORREGIDA)
-//  Incluye redirect automático por rol:
-//     - tracker → /tracker
-//     - owner/admin → /inicio
-// ------------------------------------------------------------
-
-import React, { useEffect, useState } from "react";
+// src/pages/Login.tsx
+import React, { useEffect, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -30,32 +24,42 @@ const Login: React.FC = () => {
 
   // ------------------------------------------------------------
   // REGLA UNIVERSAL DE REDIRECCIÓN POST-LOGIN
+  //  - Si CUALQUIER registro en user_organizations tiene rol "tracker"
+  //    → /tracker
+  //  - En caso contrario → /inicio
   // ------------------------------------------------------------
-  async function redirectAfterLogin(userId: string) {
-    try {
-      const { data: orgs, error: orgErr } = await supabase
-        .from("user_organizations")
-        .select("role")
-        .eq("user_id", userId);
+  const redirectAfterLogin = useCallback(
+    async (userId: string) => {
+      try {
+        const { data: orgs, error: orgErr } = await supabase
+          .from("user_organizations")
+          .select("role")
+          .eq("user_id", userId);
 
-      if (orgErr) {
-        console.error("[Login] Error leyendo user_organizations:", orgErr);
+        if (orgErr) {
+          console.error("[Login] Error leyendo user_organizations:", orgErr);
+          navigate("/inicio", { replace: true });
+          return;
+        }
+
+        const roles =
+          orgs?.map((o: any) => (o.role ? String(o.role).toLowerCase() : "")) ||
+          [];
+
+        console.log("[Login] redirectAfterLogin roles:", roles);
+
+        if (roles.includes("tracker")) {
+          navigate("/tracker", { replace: true });
+        } else {
+          navigate("/inicio", { replace: true });
+        }
+      } catch (e) {
+        console.error("[Login] Exception redirectAfterLogin:", e);
         navigate("/inicio", { replace: true });
-        return;
       }
-
-      const rol = orgs?.[0]?.role?.toLowerCase() ?? "";
-
-      if (rol === "tracker") {
-        navigate("/tracker", { replace: true });
-      } else {
-        navigate("/inicio", { replace: true });
-      }
-    } catch (e) {
-      console.error("[Login] Exception redirectAfterLogin:", e);
-      navigate("/inicio", { replace: true });
-    }
-  }
+    },
+    [navigate]
+  );
 
   // ------------------------------------------------------------
   // Limpiar campos al navegar
@@ -91,7 +95,17 @@ const Login: React.FC = () => {
   };
 
   // ------------------------------------------------------------
-  // LOGIN PASSWORD — CORREGIDO CON redirectAfterLogin
+  // Si ya hay sesión (por ejemplo, recargan en /login) →
+  // aplicamos redirectAfterLogin automáticamente
+  // ------------------------------------------------------------
+  useEffect(() => {
+    if (session?.user?.id) {
+      redirectAfterLogin(session.user.id);
+    }
+  }, [session, redirectAfterLogin]);
+
+  // ------------------------------------------------------------
+  // LOGIN PASSWORD — usa redirectAfterLogin
   // ------------------------------------------------------------
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +146,8 @@ const Login: React.FC = () => {
   };
 
   // ------------------------------------------------------------
-  // MAGIC LINK — no redirige aquí; el callback usará redirectAfterLogin
+  // MAGIC LINK — envía el mail; el callback debería aplicar
+  // la misma lógica de redirectAfterLogin (lo vemos luego).
   // ------------------------------------------------------------
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,7 +203,7 @@ const Login: React.FC = () => {
   };
 
   // ------------------------------------------------------------
-  // AuthContext todavía cargando
+  // Mientras AuthContext resuelve la sesión
   // ------------------------------------------------------------
   if (loading) {
     return (
@@ -201,16 +216,7 @@ const Login: React.FC = () => {
   }
 
   // ------------------------------------------------------------
-  // Ya hay sesión activa y entran manualmente a /login
-  // → aplicar redirectAfterLogin automáticamente
-  // ------------------------------------------------------------
-  if (session) {
-    redirectAfterLogin(session.user.id);
-    return null;
-  }
-
-  // ------------------------------------------------------------
-  // FORMULARIO NORMAL
+  // FORMULARIO NORMAL (sin sesión)
   // ------------------------------------------------------------
   return (
     <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
