@@ -23,10 +23,9 @@ const Login: React.FC = () => {
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
   // ------------------------------------------------------------
-  // REGLA UNIVERSAL DE REDIRECCIÓN POST-LOGIN
-  //  - Mira TODOS los roles en user_organizations
-  //  - Mira también user_metadata.invited_as
-  //  - Si encuentra "tracker" en uno de ellos → /tracker
+  // Redirección universal después de login
+  // Lee roles de user_organizations:
+  //  - Si encuentra "tracker" → /tracker
   //  - Si no → /inicio
   // ------------------------------------------------------------
   const redirectAfterLogin = useCallback(
@@ -57,11 +56,11 @@ const Login: React.FC = () => {
           roles,
         });
 
-        const hasTrackerRole =
+        const isTracker =
           roles.includes("tracker") || invitedAs === "tracker";
 
-        if (hasTrackerRole) {
-          console.log("[Login] Redirigiendo como TRACKER a /tracker");
+        if (isTracker) {
+          console.log("[Login] Redirigiendo TRACKER a /tracker");
           navigate("/tracker", { replace: true });
         } else {
           console.log("[Login] Redirigiendo a /inicio (no es tracker)");
@@ -109,8 +108,7 @@ const Login: React.FC = () => {
   };
 
   // ------------------------------------------------------------
-  // Si ya hay sesión (por ejemplo, recargan en /login) →
-  // aplicamos redirectAfterLogin automáticamente
+  // Si ya hay sesión y abren /login, decidir destino según rol
   // ------------------------------------------------------------
   useEffect(() => {
     if (session?.user) {
@@ -160,7 +158,7 @@ const Login: React.FC = () => {
   };
 
   // ------------------------------------------------------------
-  // MAGIC LINK — envía el mail; el callback usará la misma lógica
+  // MAGIC LINK — envía el mail; el flujo lo resuelve AuthCallback
   // ------------------------------------------------------------
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,7 +227,7 @@ const Login: React.FC = () => {
   }
 
   // ------------------------------------------------------------
-  // FORMULARIO NORMAL (sin sesión)
+  // FORMULARIO NORMAL (sin sesión activa)
   // ------------------------------------------------------------
   return (
     <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
