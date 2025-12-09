@@ -1,4 +1,10 @@
-// src/pages/Login.tsx
+// ------------------------------------------------------------
+//  Login.tsx  (VERSIÓN COMPLETA Y CORREGIDA)
+//  Incluye redirect automático por rol:
+//     - tracker → /tracker
+//     - owner/admin → /inicio
+// ------------------------------------------------------------
+
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -22,7 +28,38 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // 🔹 Cada vez que navegamos a /login (location.key cambia) limpiamos email y password
+  // ------------------------------------------------------------
+  // REGLA UNIVERSAL DE REDIRECCIÓN POST-LOGIN
+  // ------------------------------------------------------------
+  async function redirectAfterLogin(userId: string) {
+    try {
+      const { data: orgs, error: orgErr } = await supabase
+        .from("user_organizations")
+        .select("role")
+        .eq("user_id", userId);
+
+      if (orgErr) {
+        console.error("[Login] Error leyendo user_organizations:", orgErr);
+        navigate("/inicio", { replace: true });
+        return;
+      }
+
+      const rol = orgs?.[0]?.role?.toLowerCase() ?? "";
+
+      if (rol === "tracker") {
+        navigate("/tracker", { replace: true });
+      } else {
+        navigate("/inicio", { replace: true });
+      }
+    } catch (e) {
+      console.error("[Login] Exception redirectAfterLogin:", e);
+      navigate("/inicio", { replace: true });
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Limpiar campos al navegar
+  // ------------------------------------------------------------
   useEffect(() => {
     setEmail("");
     setPassword("");
@@ -43,10 +80,6 @@ const Login: React.FC = () => {
 
   const isPasswordMode = mode === "password";
 
-  const handleGoToDashboard = () => {
-    navigate("/inicio", { replace: true });
-  };
-
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -57,7 +90,9 @@ const Login: React.FC = () => {
     }
   };
 
-  // Login con email + contraseña
+  // ------------------------------------------------------------
+  // LOGIN PASSWORD — CORREGIDO CON redirectAfterLogin
+  // ------------------------------------------------------------
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -70,7 +105,8 @@ const Login: React.FC = () => {
 
     try {
       setLoadingAction(true);
-      const { error } = await supabase.auth.signInWithPassword({
+
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -81,7 +117,12 @@ const Login: React.FC = () => {
         return;
       }
 
-      navigate("/inicio", { replace: true });
+      const user = data.user;
+      if (user) {
+        await redirectAfterLogin(user.id);
+      } else {
+        navigate("/inicio", { replace: true });
+      }
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);
       setErrorMsg(t("login.errorUnexpected"));
@@ -90,7 +131,9 @@ const Login: React.FC = () => {
     }
   };
 
-  // Magic Link clásico (owner/admin) – versión "invite-only"
+  // ------------------------------------------------------------
+  // MAGIC LINK — no redirige aquí; el callback usará redirectAfterLogin
+  // ------------------------------------------------------------
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -113,9 +156,6 @@ const Login: React.FC = () => {
       if (error) {
         console.error("[Login] signInWithOtp error:", error);
 
-        // 🔐 Modo invite-only:
-        // cuando los signups están desactivados y el email no existe,
-        // Supabase devuelve un error. Lo interpretamos como "no invitado".
         const msg = error.message?.toLowerCase() ?? "";
         if (
           msg.includes("signup") ||
@@ -147,7 +187,9 @@ const Login: React.FC = () => {
     }
   };
 
-  // Mientras AuthContext resuelve la sesión
+  // ------------------------------------------------------------
+  // AuthContext todavía cargando
+  // ------------------------------------------------------------
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
@@ -158,45 +200,18 @@ const Login: React.FC = () => {
     );
   }
 
-  // Si ya hay sesión activa y entran manualmente a /login
+  // ------------------------------------------------------------
+  // Ya hay sesión activa y entran manualmente a /login
+  // → aplicar redirectAfterLogin automáticamente
+  // ------------------------------------------------------------
   if (session) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h1 className="text-xl font-semibold text-slate-900">
-                {t("login.alreadyLoggedInTitle")}
-              </h1>
-              <p className="text-sm text-slate-600">
-                {t("login.alreadyLoggedInBody")}
-              </p>
-            </div>
-            <LanguageSwitcher />
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={handleGoToDashboard}
-              className="flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
-            >
-              {t("login.goToDashboard")}
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
-            >
-              {t("login.logout")}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    redirectAfterLogin(session.user.id);
+    return null;
   }
 
-  // Formulario normal sin sesión
+  // ------------------------------------------------------------
+  // FORMULARIO NORMAL
+  // ------------------------------------------------------------
   return (
     <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-5">
