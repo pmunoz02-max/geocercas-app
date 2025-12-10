@@ -1,12 +1,12 @@
 // src/pages/TrackerDashboard.jsx
 // Dashboard de tracking en tiempo real
 //
-// NOTA IMPORTANTE:
-// - Este componente obtiene el `orgId` desde el AuthProvider (useAuth):
-//     const { currentOrg } = useAuth();
-//     const orgId = currentOrg; // id de la organización activa
-// - No hace filtrados raros: dibuja lo que venga de
-//   `v_positions_with_activity` y aplica solo filtros visuales.
+// Este componente obtiene el `orgId` desde el AuthProvider (useAuth):
+//   const { currentOrg } = useAuth();
+//   const orgId = currentOrg;
+//
+// No hace filtrados raros: dibuja lo que venga de
+// `v_positions_with_activity` y aplica solo filtros visuales.
 
 import React, {
   useEffect,
@@ -22,7 +22,10 @@ import {
   Tooltip,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { supabase } from "../lib/supabaseClient";
+
+// 👇 Ruta corregida, igual que en AuthProvider
+import { supabase } from "../supabaseClient";
+
 import { useAuth } from "@/context/AuthProvider";
 
 const TIME_WINDOWS = [
@@ -262,8 +265,8 @@ export default function TrackerDashboard() {
           Dashboard de Tracking
         </h1>
         <p className="text-red-600">
-          Error de configuración: no se pudo resolver la organización
-          activa (<code>orgId</code>).
+          Error de configuración: no se pudo resolver la
+          organización activa (<code>orgId</code>).
         </p>
       </div>
     );
@@ -277,8 +280,8 @@ export default function TrackerDashboard() {
             Dashboard de Tracking en tiempo real
           </h1>
           <p className="text-sm text-slate-500">
-            Los puntos se actualizan automáticamente. La frecuencia de envío
-            la define el administrador y los trackers.
+            Los puntos se actualizan automáticamente. La frecuencia de
+            envío la define el administrador y los trackers.
           </p>
         </div>
 
@@ -355,7 +358,9 @@ export default function TrackerDashboard() {
         {/* MAPA */}
         <div className="rounded-lg border bg-white overflow-hidden">
           <div className="border-b px-3 py-2 flex items-center justify-between">
-            <span className="text-sm font-medium">Mapa de posiciones</span>
+            <span className="text-sm font-medium">
+              Mapa de posiciones
+            </span>
             <span className="text-xs text-slate-500">
               Puntos en ventana seleccionada:{" "}
               <span className="font-semibold">{totalPoints}</span>
@@ -471,7 +476,9 @@ export default function TrackerDashboard() {
                 <dd>{totalPoints}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">Último punto registrado:</dt>
+                <dt className="font-medium">
+                  Último punto registrado:
+                </dt>
                 <dd>
                   {lastPointTime
                     ? formatDateTime(lastPointTime)
@@ -488,7 +495,9 @@ export default function TrackerDashboard() {
           </div>
 
           <div className="rounded-lg border bg-white px-4 py-3 text-sm">
-            <h3 className="font-semibold mb-2">Leyenda de trackers</h3>
+            <h3 className="font-semibold mb-2">
+              Leyenda de trackers
+            </h3>
             {trackers.length === 0 && (
               <p className="text-slate-500 text-sm">
                 No hay perfiles de tracker configurados en esta
@@ -518,14 +527,15 @@ export default function TrackerDashboard() {
 
           <div className="rounded-lg border bg-white px-4 py-3 text-xs text-slate-500 space-y-1">
             <div>
-              <strong>Tip:</strong> Si ves que el tracker está enviando
-              (Pantalla de tracker activa) pero aquí no aparecen puntos:
+              <strong>Tip:</strong> Si ves que el tracker está
+              enviando (Pantalla de tracker activa) pero aquí no
+              aparecen puntos:
             </div>
             <ul className="list-disc pl-5 space-y-1">
               <li>Revisa la ventana de tiempo (1h / 6h / 24h).</li>
               <li>
-                Verifica que el filtro de tracker no esté en un perfil
-                distinto.
+                Verifica que el filtro de tracker no esté en un
+                perfil distinto.
               </li>
               <li>
                 Si filtraste por geocerca, prueba con “Todas las
