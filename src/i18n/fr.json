@@ -23,7 +23,7 @@
       "login": "Se connecter",
       "goToPanel": "Aller au tableau de bord",
       "roleOwner": "Propriétaire",
-      "roleAdmin": "Admin",
+      "roleAdmin": "Administrateur",
       "roleTracker": "Tracker"
     },
     "tabs": {
@@ -38,7 +38,7 @@
       "dashboardCostos": "Tableau des coûts",
       "tracker": "Tracker",
       "invitarTracker": "Inviter un tracker",
-      "admins": "Admin"
+      "admins": "Administrateurs"
     }
   },
 
@@ -51,7 +51,7 @@
     "heroTitleSuffix": "partout dans le monde",
     "heroSubtitle": "App Geocercas vous permet d’affecter des personnes à des zones, d’enregistrer des activités et de calculer les coûts en temps réel.",
     "ctaLogin": "Aller au tableau de bord",
-    "ctaMagic": "Entrer avec lien magique",
+    "ctaMagic": "Entrer avec un lien magique",
     "bulletGeocercasTitle": "Géofences",
     "bulletGeocercasBody": "Créez et gérez des géofences pour vos champs, exploitations, usines ou points de service.",
     "bulletPersonalTitle": "Personnel",
@@ -65,10 +65,10 @@
     "assistanceControlTitle": "Contrôle de présence",
     "assistanceControlBody": "Vérifiez qui était dans chaque géofence, à quelle heure et dans quelle activité.",
     "multiOrgTitle": "Multi-organisation",
-    "multiOrgBody": "Gérez plusieurs entreprises ou projets depuis un seul compte, avec des rôles et permissions séparés.",
+    "multiOrgBody": "Gérez plusieurs entreprises ou projets depuis un seul compte, avec des rôles et des permissions distincts.",
     "goToDashboard": "Aller au tableau de bord",
     "logout": "Se déconnecter",
-    "footerFaq": "FAQ",
+    "footerFaq": "Questions fréquentes",
     "footerSupport": "Support",
     "footerTerms": "Conditions",
     "footerPrivacy": "Confidentialité",
@@ -76,19 +76,19 @@
   },
 
   "login": {
-    "title": "Connexion",
+    "title": "Se connecter",
     "subtitle": "Accédez à votre compte App Geocercas",
     "emailLabel": "E-mail",
     "passwordLabel": "Mot de passe",
-    "passwordLoginButton": "Se connecter avec mot de passe",
+    "passwordLoginButton": "Entrer avec mot de passe",
     "magicLinkTitle": "Entrer avec lien magique",
-    "magicLinkDescription": "Nous vous enverrons un lien sécurisé à votre e-mail pour vous connecter sans mot de passe.",
+    "magicLinkDescription": "Nous vous enverrons un lien sécurisé à votre e-mail pour entrer sans mot de passe.",
     "magicLinkButton": "Envoyer le lien magique",
-    "magicLinkSent": "Un lien magique a été envoyé à votre e-mail.",
+    "magicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
     "sessionActive": "Vous avez déjà une session active.",
     "goToDashboard": "Aller au tableau de bord",
     "errors": {
-      "invalidEmail": "Entrez une adresse e-mail valide.",
+      "invalidEmail": "Saisissez une adresse e-mail valide.",
       "unknown": "Une erreur s’est produite lors de la connexion."
     }
   },
@@ -103,38 +103,38 @@
       "instrucciones": {
         "badge": "Guide rapide",
         "title": "Instructions",
-        "body": "Suivez pas à pas comment configurer les organisations, géofences, personnel, activités et trackers.",
-        "cta": "Voir les instructions"
+        "body": "Suivez pas à pas la configuration des organisations, géofences, personnel, activités et trackers.",
+        "cta": "Voir instructions"
       },
       "faq": {
         "badge": "Aide",
         "title": "Questions fréquentes",
-        "body": "Trouvez des réponses aux questions courantes sur les invitations, rôles, coûts et utilisation du tracker.",
-        "cta": "Voir la FAQ"
+        "body": "Trouvez des réponses aux questions les plus courantes sur les invitations, rôles, coûts et usage du tracker.",
+        "cta": "Voir FAQ"
       },
       "videoDemo": {
         "badge": "Vidéo",
-        "title": "Vidéo de démonstration",
-        "body": "Regardez une courte démonstration du fonctionnement d’App Geocercas sur le terrain.",
-        "cta": "Voir la démo"
+        "title": "Vidéo démo",
+        "body": "Regardez une courte démonstration d’App Geocercas en situation réelle.",
+        "cta": "Voir la vidéo"
       },
       "soporte": {
         "badge": "Support",
         "title": "Contact / Support",
-        "body": "Besoin d’aide ? Contactez-nous pour le support technique, la facturation ou les questions sur votre compte.",
-        "cta": "Aller au support"
+        "body": "Besoin d’aide ? Contactez-nous pour du support technique, facturation ou questions sur votre compte.",
+        "cta": "Accéder au support"
       },
       "queEs": {
         "badge": "Info",
         "title": "Qu’est-ce qu’App Geocercas ?",
-        "body": "Découvrez la vision, les cas d’usage et les avantages d’App Geocercas pour votre organisation.",
+        "body": "Découvrez la vision, les cas d’usage et les bénéfices d’App Geocercas pour votre organisation.",
         "cta": "En savoir plus"
       },
       "novedades": {
-        "badge": "Journal",
+        "badge": "Nouveautés",
         "title": "Nouveautés / Changelog",
         "body": "Consultez l’historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
-        "cta": "Voir le changelog"
+        "cta": "Voir changelog"
       }
     },
     "userInfo": {
@@ -148,22 +148,22 @@
 
   "geocercas": {
     "titleNew": "Nouvelle géofence",
-    "subtitleNew": "Dessinez une géofence sur la carte et affectez-la à votre personnel ou à vos activités.",
+    "subtitleNew": "Dessinez une géofence sur la carte et affectez-la à votre personnel ou vos activités.",
     "panelTitle": "Géofences",
-    "noGeofences": "Vous n’avez pas encore de géofences.",
+    "noGeofences": "Vous n’avez pas encore créé de géofences.",
     "placeholderName": "Nom de la géofence",
-    "buttonDrawByCoords": "Dessiner à partir de coordonnées",
+    "buttonDrawByCoords": "Dessiner par coordonnées",
     "buttonSave": "Enregistrer la géofence",
-    "buttonShowSelected": "Afficher la sélection",
-    "buttonShowAll": "Afficher tout",
-    "buttonDeleteSelected": "Supprimer la sélection",
-    "buttonClearCanvas": "Effacer la carte"
+    "buttonShowSelected": "Afficher sélectionnées",
+    "buttonShowAll": "Afficher toutes",
+    "buttonDeleteSelected": "Supprimer sélectionnées",
+    "buttonClearCanvas": "Nettoyer la carte"
   },
 
   "personal": {
     "title": "Personnel",
     "orgInfoLabel": "Organisation :",
-    "orgFallback": "Aucune organisation",
+    "orgFallback": "Sans organisation",
     "roleLabel": "Rôle :",
     "pillCanEdit": "Modifiable",
     "pillReadOnly": "Lecture seule",
@@ -173,29 +173,29 @@
     "bannerSelected": "Enregistrement sélectionné.",
     "bannerNewMode": "Mode création de personnel.",
     "bannerEditMode": "Mode édition.",
-    "bannerCreated": "Personne créée avec succès.",
-    "bannerUpdated": "Personne mise à jour avec succès.",
-    "bannerDeletedOk": "Enregistrement supprimé avec succès.",
+    "bannerCreated": "Personnel créé avec succès.",
+    "bannerUpdated": "Personnel mis à jour correctement.",
+    "bannerDeletedOk": "Enregistrement supprimé correctement.",
     "errorMissingUser": "Impossible d’obtenir l’utilisateur authentifié.",
     "errorNoAuthUser": "Aucun utilisateur authentifié.",
     "errorLoad": "Erreur lors du chargement du personnel.",
-    "errorNoPermissionCreate": "Vous n’avez pas l’autorisation de créer du personnel.",
-    "errorNoPermissionEdit": "Vous n’avez pas l’autorisation de modifier le personnel.",
+    "errorNoPermissionCreate": "Vous n’avez pas les permissions pour créer du personnel.",
+    "errorNoPermissionEdit": "Vous n’avez pas les permissions pour modifier du personnel.",
     "errorMustSelectForEdit": "Vous devez sélectionner un enregistrement à modifier.",
-    "errorNoPermissionSave": "Vous n’avez pas l’autorisation d’enregistrer des modifications.",
-    "errorMissingName": "Le nom est obligatoire.",
-    "errorMissingEmail": "L’e-mail est obligatoire.",
+    "errorNoPermissionSave": "Vous n’avez pas les permissions pour enregistrer les modifications.",
+    "errorMissingName": "Le nom est requis.",
+    "errorMissingEmail": "L’e-mail est requis.",
     "errorPhonePolicy": "Le téléphone doit commencer par + (format international E.164).",
     "errorSaveNoRecord": "Aucun enregistrement mis à jour reçu.",
     "errorSave": "Impossible d’enregistrer le personnel.",
-    "errorNoPermissionDelete": "Vous n’avez pas l’autorisation de supprimer du personnel.",
+    "errorNoPermissionDelete": "Vous n’avez pas les permissions pour supprimer du personnel.",
     "errorMustSelectForDelete": "Vous devez sélectionner un enregistrement à supprimer.",
     "errorDelete": "Impossible de supprimer l’enregistrement.",
-    "confirmDelete": "Voulez-vous vraiment supprimer cet enregistrement ? (soft delete)",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (soft delete)",
     "searchPlaceholder": "Rechercher par nom, prénom, e-mail ou téléphone…",
-    "onlyActive": "Uniquement actifs",
-    "buttonRefresh": "Rafraîchir",
-    "buttonFullList": "Voir tout",
+    "onlyActive": "Unicamente actifs",
+    "buttonRefresh": "Actualiser",
+    "buttonFullList": "Tout voir",
     "buttonNew": "Nouveau",
     "buttonEdit": "Modifier",
     "buttonSave": "Enregistrer",
@@ -203,24 +203,23 @@
     "fieldName": "Nom",
     "fieldLastName": "Prénom",
     "fieldEmail": "E-mail",
-    "fieldPhonePlaceholder": "Téléphone (+593…)",
+    "fieldPhonePlaceholder": "Téléphone (+33…)",
     "fieldActive": "Actif",
     "tableName": "Nom",
     "tableLastName": "Prénom",
     "tableEmail": "E-mail",
     "tablePhone": "Téléphone",
     "tableActive": "Actif",
-    "tableNoResults": "Aucun résultat.",
+    "tableNoResults": "Aucun résultat trouvé.",
     "yes": "Oui",
     "no": "Non",
     "processing": "Traitement…"
   },
 
-    "actividades": {
+  "actividades": {
     "title": "Activités",
     "formTitleNew": "Nouvelle activité",
     "formTitleEdit": "Modifier l’activité",
-
     "fieldName": "Nom de l’activité",
     "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
     "fieldDescription": "Description",
@@ -228,7 +227,6 @@
     "fieldCurrency": "Devise",
     "fieldHourlyRate": "Tarif horaire",
     "fieldHourlyRatePlaceholder": "Ex. 3.50",
-
     "currencies": {
       "USD": "Dollar américain",
       "EUR": "Euro",
@@ -242,12 +240,10 @@
       "GBP": "Livre sterling",
       "LOCAL": "Devise locale"
     },
-
     "buttonCreate": "Créer l’activité",
     "buttonSave": "Enregistrer les modifications",
     "buttonUpdate": "Mettre à jour l’activité",
     "buttonCancel": "Annuler",
-
     "tableTitle": "Liste des activités",
     "thName": "Activité",
     "thDescription": "Description",
@@ -261,15 +257,12 @@
     "actionActivate": "Activer",
     "actionDelete": "Supprimer",
     "tableNoResults": "Aucune activité enregistrée.",
-
     "loading": "Chargement des activités…",
     "empty": "Aucune activité enregistrée.",
-    "readOnlyNote": "Seul le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
-
+    "readOnlyNote": "Seuls le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
     "bannerCreated": "Activité créée avec succès.",
     "bannerUpdated": "Activité mise à jour avec succès.",
     "bannerDeleted": "Activité supprimée.",
-
     "errorLoad": "Erreur lors du chargement des activités.",
     "errorSave": "Impossible d’enregistrer l’activité.",
     "errorDelete": "Impossible de supprimer l’activité.",
@@ -280,101 +273,150 @@
     "errorRatePositive": "Le tarif horaire doit être supérieur à 0.",
     "errorMissingTenant": "Impossible de trouver l’organisation de l’utilisateur (tenant_id/org_id).",
     "errorToggle": "Impossible de modifier le statut de l’activité.",
-
     "confirmDelete": "Voulez-vous vraiment supprimer l’activité « {{name}} » ?"
   },
 
+  "asignaciones": {
+    "title": "Affectations",
+    "filters": {
+      "statusLabel": "Statut",
+      "status": {
+        "todos": "Tous",
+        "activo": "Actifs",
+        "inactivo": "Inactifs"
+      },
+      "refresh": "Actualiser"
+    },
+    "form": {
+      "newTitle": "Nouvelle affectation",
+      "personLabel": "Personne",
+      "personPlaceholder": "Sélectionnez une personne",
+      "activityLabel": "Activité",
+      "activityPlaceholder": "Sélectionnez une activité",
+      "geofenceLabel": "Géofence",
+      "geofencePlaceholder": "Sélectionnez une géofence",
+      "startLabel": "Date/heure de début",
+      "endLabel": "Date/heure de fin",
+      "statusLabel": "Statut",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+      "frequencyLabel": "Fréquence (min)",
+      "buttonCreate": "Créer l’affectation",
+      "buttonUpdate": "Mettre à jour l’affectation",
+      "buttonCancel": "Annuler"
+    },
+    "table": {
+      "title": "Liste des affectations",
+      "person": "Personne",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "start": "Début",
+      "end": "Fin",
+      "status": "Statut",
+      "actions": "Actions",
+      "noResults": "Aucune affectation enregistrée."
+    },
+    "actions": {
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "activate": "Activer",
+      "deactivate": "Désactiver"
+    },
+    "banner": {
+      "created": "Affectation créée correctement.",
+      "updated": "Affectation mise à jour.",
+      "deleted": "Affectation supprimée."
+    },
+    "error": {
+      "load": "Erreur lors du chargement des affectations.",
+      "save": "Impossible d’enregistrer l’affectation.",
+      "delete": "Impossible de supprimer l’affectation.",
+      "missingPerson": "Vous devez sélectionner une personne.",
+      "missingGeofence": "Vous devez sélectionner une géofence.",
+      "missingActivity": "Vous devez sélectionner une activité.",
+      "missingStart": "Vous devez saisir la date/heure de début.",
+      "missingEnd": "Vous devez saisir la date/heure de fin."
+    }
+  },
 
   "reportes": {
-  "title": "Rapports de coûts",
-  "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
-
-  "noAccessBody": "Vous n'avez pas l'autorisation d'accéder aux rapports de coûts. Ce module est réservé aux propriétaires et administrateurs.",
-
-  "loadingReport": "Chargement du rapport…",
-
-  "filtersTitle": "Filtres",
-  "filtersFrom": "Du",
-  "filtersTo": "Au",
-  "filtersPerson": "Personne",
-  "filtersActivity": "Activité",
-  "filtersGeofence": "Géofence",
-  "filtersAll": "Tous",
-  "filtersClear": "Effacer les filtres",
-  "filtersApply": "Appliquer les filtres",
-
-  "errorLabel": "Erreur :",
-  "errorLoadFilters": "Erreur lors du chargement des filtres (personnes, activités, géofences).",
-  "errorRangeInvalid": "La date « Du » ne peut pas être postérieure à la date « Au ».",
-  "errorViewMissing": "La vue v_costos_detalle n'est pas encore créée dans Supabase.",
-  "errorLoadReport": "Erreur lors du chargement du rapport de coûts.",
-  "errorLoad": "Erreur lors du chargement des rapports.",
-  "errorCsv": "Impossible de générer le fichier CSV.",
-
-  "summaryTotalHoursLabel": "Heures totales",
-  "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans la période sélectionnée.",
-  "summaryTotalCostLabel": "Coût total",
-  "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
-  "summaryRecordsLabel": "Enregistrements",
-  "summaryRecordsHelp": "Nombre de lignes correspondant aux filtres actuels.",
-
-  "tableTitle": "Détail des coûts",
-  "tableExportHelp": "Exportez le détail actuel au format CSV.",
-  "tableExportButton": "Exporter CSV",
-  "tableEmpty": "Aucun enregistrement pour les filtres sélectionnés.",
-
-  "colPersona": "Personne",
-  "colGeocerca": "Géofence",
-  "colActividad": "Activité",
-  "colInicio": "Début",
-  "colFin": "Fin",
-  "colHoras": "Heures",
-  "colTarifa": "Tarif/heure",
-  "colCosto": "Coût",
-  "colMoneda": "Devise",
-
-  "personNoName": "Personne sans nom",
-  "geofenceNoName": "Géofence sans nom",
-  "activityNoName": "Activité sans nom",
-
-  "exportNoData": "Aucune donnée à exporter.",
-
-  "csvHeaderInicio": "Début",
-  "csvHeaderFin": "Fin",
-  "csvHeaderPersona": "Personne",
-  "csvHeaderActividad": "Activité",
-  "csvHeaderGeocerca": "Géofence",
-  "csvHeaderHoras": "Heures",
-  "csvHeaderTarifa": "Tarif_heure",
-  "csvHeaderTotal": "Coût_total",
-  "csvHeaderCosto": "Coût_total",
-  "csvHeaderMoneda": "Devise",
-
-  "buttonDownloadCsv": "Télécharger CSV",
-
-  "filters": {
-    "dateFromLabel": "Du",
-    "dateToLabel": "Au",
-    "personLabel": "Personne",
-    "activityLabel": "Activité",
-    "geofenceLabel": "Géofence",
-    "apply": "Appliquer les filtres",
-    "clear": "Effacer les filtres"
+    "title": "Rapports de coûts",
+    "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
+    "noAccessBody": "Vous n’avez pas l’autorisation d’accéder aux rapports de coûts. Ce module est réservé aux propriétaires et administrateurs.",
+    "loadingReport": "Chargement du rapport…",
+    "filtersTitle": "Filtres",
+    "filtersFrom": "Du",
+    "filtersTo": "Au",
+    "filtersPerson": "Personne",
+    "filtersActivity": "Activité",
+    "filtersGeofence": "Géofence",
+    "filtersAll": "Tous",
+    "filtersClear": "Effacer les filtres",
+    "filtersApply": "Appliquer les filtres",
+    "summaryTotalHoursLabel": "Heures totales",
+    "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans la période sélectionnée.",
+    "summaryTotalCostLabel": "Coût total",
+    "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
+    "summaryRecordsLabel": "Enregistrements",
+    "summaryRecordsHelp": "Nombre de lignes correspondant aux filtres actuels.",
+    "tableTitle": "Détail des coûts",
+    "tableExportHelp": "Exportez le détail actuel au format CSV.",
+    "tableExportButton": "Exporter CSV",
+    "colPersona": "Personne",
+    "colGeocerca": "Géofence",
+    "colActividad": "Activité",
+    "colInicio": "Début",
+    "colFin": "Fin",
+    "colHoras": "Heures",
+    "colTarifa": "Tarif/heure",
+    "colCosto": "Coût",
+    "colMoneda": "Devise",
+    "csvHeaderInicio": "Début",
+    "csvHeaderFin": "Fin",
+    "csvHeaderPersona": "Personne",
+    "csvHeaderActividad": "Activité",
+    "csvHeaderGeocerca": "Géofence",
+    "csvHeaderHoras": "Heures",
+    "csvHeaderTarifa": "Tarif_heure",
+    "csvHeaderTotal": "Coût_total",
+    "csvHeaderCosto": "Coût_total",
+    "csvHeaderMoneda": "Devise",
+    "buttonDownloadCsv": "Télécharger CSV",
+    "errorLoad": "Erreur lors du chargement des rapports.",
+    "errorCsv": "Impossible de générer le fichier CSV.",
+    "errorLoadFilters": "Erreur lors du chargement des filtres (personnes, activités, géofences).",
+    "errorRangeInvalid": "La date « Du » ne peut pas être postérieure à la date « Au ».",
+    "errorViewMissing": "La vue v_costos_detalle n’est pas encore créée dans Supabase.",
+    "errorLoadReport": "Erreur lors du chargement du rapport de coûts.",
+    "errorLabel": "Erreur :",
+    "exportNoData": "Aucune donnée à exporter.",
+    "tableEmpty": "Aucun enregistrement pour les filtres sélectionnés.",
+    "personNoName": "Personne sans nom",
+    "geofenceNoName": "Géofence sans nom",
+    "activityNoName": "Activité sans nom",
+    "filters": {
+      "dateFromLabel": "Du",
+      "dateToLabel": "Au",
+      "personLabel": "Personne",
+      "activityLabel": "Activité",
+      "geofenceLabel": "Géofence",
+      "apply": "Appliquer les filtres",
+      "clear": "Effacer les filtres"
+    },
+    "table": {
+      "title": "Détail des coûts",
+      "person": "Personne",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "start": "Début",
+      "end": "Fin",
+      "hours": "Heures",
+      "rate": "Tarif/heure",
+      "total": "Coût total",
+      "currency": "Devise",
+      "noResults": "Aucun enregistrement trouvé pour les filtres sélectionnés."
+    }
   },
-  "table": {
-    "title": "Détail des coûts",
-    "person": "Personne",
-    "activity": "Activité",
-    "geofence": "Géofence",
-    "start": "Début",
-    "end": "Fin",
-    "hours": "Heures",
-    "rate": "Tarif/heure",
-    "total": "Coût total",
-    "currency": "Devise",
-    "noResults": "Aucun enregistrement trouvé pour les filtres sélectionnés."
-  }
-}
 
   "dashboard": {
     "title": "Tableau des coûts",
@@ -441,19 +483,19 @@
 
   "tracker": {
     "title": "Tracker GPS",
-    "subtitle": "Visualisez en temps réel la position des trackers dans vos géofences.",
+    "subtitle": "Visualisez en temps réel la position des trackers à l’intérieur de vos géofences.",
     "status": {
       "online": "Tracker en ligne",
-      "offline": "Aucune donnée récente"
+      "offline": "Sans données récentes"
     },
     "controls": {
       "centerOnUser": "Centrer sur ma position",
       "refresh": "Rafraîchir les positions",
       "showAll": "Afficher tous",
-      "showInside": "Uniquement dans les géofences"
+      "showInside": "Uniquement à l’intérieur des géofences"
     },
     "legend": {
-      "insideFence": "Dans la géofence",
+      "insideFence": "À l’intérieur de la géofence",
       "outsideFence": "Hors géofence",
       "geofence": "Géofence"
     },
@@ -471,7 +513,7 @@
 
   "trackerDashboard": {
     "title": "Tableau de tracking en temps réel",
-    "subtitle": "Les points sont mis à jour automatiquement. La fréquence d’envoi est définie par l’administrateur.",
+    "subtitle": "Les points se mettent à jour automatiquement. La fréquence d’envoi est définie par l’administrateur.",
     "filters": {
       "trackerLabel": "Tracker",
       "timeWindowLabel": "Fenêtre",
@@ -499,28 +541,28 @@
       "countHere": "Enregistrements à cette position",
       "activity": "Activité",
       "geofence": "Géofence",
-      "inside": "Dans la géofence",
+      "inside": "À l’intérieur de la géofence",
       "yes": "Oui",
       "no": "Non"
     },
     "messages": {
       "noOrg": "Vous devez sélectionner une organisation.",
-      "autoRefresh": "Les points sont actualisés automatiquement. Vous n’avez pas besoin de recharger la page.",
+      "autoRefresh": "Les points se mettent à jour automatiquement. Vous n’avez pas besoin de recharger la page.",
       "loading": "Chargement des données de tracking…",
       "noData": "Aucune position trouvée pour les filtres sélectionnés.",
       "error": "Erreur lors du chargement des données de tracking.",
-      "checkConsole": "Consultez la console si le problème persiste."
+      "checkConsole": "Vérifiez la console si le problème persiste."
     }
   },
 
   "inviteTracker": {
     "orgFallback": "votre organisation",
     "title": "Inviter un tracker",
-    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un e-mail manuellement pour l’inviter comme tracker dans {{orgName}}.",
+    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un e-mail pour l’inviter comme tracker dans {{orgName}}.",
     "form": {
-      "selectLabel": "Sélectionner du personnel actuel (optionnel)",
+      "selectLabel": "Sélectionner un personnel actif (optionnel)",
       "selectPlaceholder": "-- Sélectionner du personnel --",
-      "selectHelp": "Si vous sélectionnez une personne, son e-mail sera rempli automatiquement.",
+      "selectHelp": "Si vous sélectionnez un personnel, son e-mail sera rempli automatiquement.",
       "emailLabel": "E-mail du tracker",
       "emailPlaceholder": "tracker@exemple.com",
       "emailHelp": "Une invitation sera envoyée à cet e-mail.",
