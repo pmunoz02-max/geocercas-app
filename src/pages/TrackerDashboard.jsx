@@ -3,7 +3,7 @@
 //
 // Este componente obtiene el `orgId` desde el AuthContext (useAuth):
 //   const { currentOrg } = useAuth();
-//   const orgId = currentOrg;
+//   Deriva orgId a partir de currentOrg (string u objeto).
 //
 // No hace filtrados raros: dibuja lo que venga de
 // `v_positions_with_activity` y aplica solo filtros visuales.
@@ -65,7 +65,12 @@ function formatTime(dtString) {
 export default function TrackerDashboard() {
   // Organización activa desde AuthContext
   const { currentOrg } = useAuth();
-  const orgId = currentOrg || null;
+
+  // currentOrg puede ser string o un objeto
+  const orgId =
+    typeof currentOrg === "string"
+      ? currentOrg
+      : currentOrg?.id || currentOrg?.org_id || null;
 
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
