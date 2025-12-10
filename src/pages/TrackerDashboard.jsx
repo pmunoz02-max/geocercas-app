@@ -1,14 +1,13 @@
 // src/pages/TrackerDashboard.jsx
 // Dashboard de tracking en tiempo real
 //
-// Este componente obtiene el `orgId` desde el AuthProvider (useAuth):
+// Este componente obtiene el `orgId` desde el AuthContext (useAuth):
 //   const { currentOrg } = useAuth();
 //   const orgId = currentOrg;
 //
 // No hace filtrados raros: dibuja lo que venga de
 // `v_positions_with_activity` y aplica solo filtros visuales.
-import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext.jsx";
+
 import React, {
   useEffect,
   useMemo,
@@ -24,10 +23,8 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-// 👇 Ruta corregida, igual que en AuthProvider
 import { supabase } from "../supabaseClient";
-
-import { useAuth } from "@/context/AuthProvider";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const TIME_WINDOWS = [
   { id: "1h", label: "1 hora", ms: 1 * 60 * 60 * 1000 },
@@ -66,7 +63,7 @@ function formatTime(dtString) {
 }
 
 export default function TrackerDashboard() {
-  // 🔹 Organización activa desde AuthProvider
+  // Organización activa desde AuthContext
   const { currentOrg } = useAuth();
   const orgId = currentOrg || null;
 
