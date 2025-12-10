@@ -34,6 +34,9 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
+import ProtectedRoute from "./auth/ProtectedRoute.jsx";
+import { MODULE_KEYS, canAccessModule } from "./lib/permissions";
+
 // ---------------------
 // Layout interno (aplicación)
 // ---------------------
@@ -66,21 +69,66 @@ function Shell({ children }) {
     return null;
   }
 
-  // Tabs de navegación principales (con claves i18n)
-  const tabs = [
-    { path: "/inicio", labelKey: "app.tabs.inicio" },
-    { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
-    { path: "/personal", labelKey: "app.tabs.personal" },
-    { path: "/actividades", labelKey: "app.tabs.actividades" },
-    { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
-    { path: "/costos", labelKey: "app.tabs.reportes" },
-    { path: "/costos-dashboard", labelKey: "app.tabs.dashboard" },
-    { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
+  const role = normalizedRole;
 
-    // 🔥 SIEMPRE mostramos estas dos pestañas en el shell
-    { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
-    { path: "/admins", labelKey: "app.tabs.admins" },
+  // Config de pestañas con módulo asociado
+  const tabsConfig = [
+    {
+      path: "/inicio",
+      labelKey: "app.tabs.inicio",
+      moduleKey: MODULE_KEYS.INICIO,
+    },
+    {
+      path: "/nueva-geocerca",
+      labelKey: "app.tabs.nuevaGeocerca",
+      moduleKey: MODULE_KEYS.GEOCERCAS,
+    },
+    {
+      path: "/personal",
+      labelKey: "app.tabs.personal",
+      moduleKey: MODULE_KEYS.PERSONAL,
+    },
+    {
+      path: "/actividades",
+      labelKey: "app.tabs.actividades",
+      moduleKey: MODULE_KEYS.ACTIVIDADES,
+    },
+    {
+      path: "/asignaciones",
+      labelKey: "app.tabs.asignaciones",
+      moduleKey: MODULE_KEYS.ASIGNACIONES,
+    },
+    {
+      path: "/costos",
+      labelKey: "app.tabs.reportes",
+      moduleKey: MODULE_KEYS.REPORTES_COSTOS,
+    },
+    {
+      path: "/costos-dashboard",
+      labelKey: "app.tabs.dashboard",
+      moduleKey: MODULE_KEYS.DASHBOARD_COSTOS,
+    },
+    {
+      path: "/tracker-dashboard",
+      labelKey: "app.tabs.tracker",
+      moduleKey: MODULE_KEYS.TRACKER,
+    },
+    {
+      path: "/invitar-tracker",
+      labelKey: "app.tabs.invitarTracker",
+      moduleKey: MODULE_KEYS.INVITAR_TRACKER,
+    },
+    {
+      path: "/admins",
+      labelKey: "app.tabs.admins",
+      moduleKey: MODULE_KEYS.ADMINS,
+    },
   ];
+
+  // SOLO mostramos las pestañas que el rol actual puede ver
+  const tabs = tabsConfig.filter((tab) =>
+    canAccessModule(role, tab.moduleKey)
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -116,9 +164,11 @@ export default function App() {
           path="/tracker-gps"
           element={
             <AuthGuard>
-              <Shell>
-                <TrackerGpsPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.TRACKER}>
+                <Shell>
+                  <TrackerGpsPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -126,15 +176,16 @@ export default function App() {
         {/* Reset de contraseña */}
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Rutas protegidas por AuthGuard + Shell */}
+        {/* Rutas protegidas por AuthGuard + Shell + permisos por módulo */}
         <Route
           path="/inicio"
-          element={
-            <AuthGuard>
+          element<
+            AuthGuard>
+            <ProtectedRoute moduleKey={MODULE_KEYS.INICIO}>
               <Shell>
                 <Inicio />
               </Shell>
-            </AuthGuard>
+            </ProtectedRoute>
           }
         />
 
@@ -142,9 +193,11 @@ export default function App() {
           path="/nueva-geocerca"
           element={
             <AuthGuard>
-              <Shell>
-                <NuevaGeocerca />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.GEOCERCAS}>
+                <Shell>
+                  <NuevaGeocerca />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -153,9 +206,11 @@ export default function App() {
           path="/geocercas"
           element={
             <AuthGuard>
-              <Shell>
-                <GeocercasPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.GEOCERCAS}>
+                <Shell>
+                  <GeocercasPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -164,9 +219,11 @@ export default function App() {
           path="/personal"
           element={
             <AuthGuard>
-              <Shell>
-                <PersonalPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.PERSONAL}>
+                <Shell>
+                  <PersonalPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -175,9 +232,11 @@ export default function App() {
           path="/actividades"
           element={
             <AuthGuard>
-              <Shell>
-                <ActividadesPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.ACTIVIDADES}>
+                <Shell>
+                  <ActividadesPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -186,9 +245,11 @@ export default function App() {
           path="/asignaciones"
           element={
             <AuthGuard>
-              <Shell>
-                <AsignacionesPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.ASIGNACIONES}>
+                <Shell>
+                  <AsignacionesPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -197,9 +258,11 @@ export default function App() {
           path="/costos"
           element={
             <AuthGuard>
-              <Shell>
-                <CostosPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.REPORTES_COSTOS}>
+                <Shell>
+                  <CostosPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -208,9 +271,11 @@ export default function App() {
           path="/costos-dashboard"
           element={
             <AuthGuard>
-              <Shell>
-                <CostosDashboardPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.DASHBOARD_COSTOS}>
+                <Shell>
+                  <CostosDashboardPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -219,9 +284,11 @@ export default function App() {
           path="/tracker-dashboard"
           element={
             <AuthGuard>
-              <Shell>
-                <TrackerDashboard />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.TRACKER}>
+                <Shell>
+                  <TrackerDashboard />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -230,9 +297,11 @@ export default function App() {
           path="/invitar-tracker"
           element={
             <AuthGuard>
-              <Shell>
-                <InvitarTracker />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.INVITAR_TRACKER}>
+                <Shell>
+                  <InvitarTracker />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />
@@ -241,9 +310,11 @@ export default function App() {
           path="/admins"
           element={
             <AuthGuard>
-              <Shell>
-                <AdminsPage />
-              </Shell>
+              <ProtectedRoute moduleKey={MODULE_KEYS.ADMINS}>
+                <Shell>
+                  <AdminsPage />
+                </Shell>
+              </ProtectedRoute>
             </AuthGuard>
           }
         />

@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
+import { useModuleAccess } from "../hooks/useModuleAccess";
+import { MODULE_KEYS } from "../lib/permissions";
 
 const emptyOption = { value: "", label: "Todos" };
 
@@ -81,8 +83,11 @@ function buildDateRange(fromDateStr, toDateStr) {
 }
 
 const CostosPage = () => {
-  const { currentOrg, currentRole } = useAuth();
+  const { currentOrg } = useAuth();
   const { t } = useTranslation();
+
+  // Acceso universalizado: usa matriz de permisos central
+  const { role, canView } = useModuleAccess(MODULE_KEYS.REPORTES_COSTOS);
 
   // Filtros
   const [fromDate, setFromDate] = useState("");
@@ -102,10 +107,6 @@ const CostosPage = () => {
   const [loading, setLoading] = useState(false);
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [error, setError] = useState("");
-
-  // Solo owner/admin pueden ver Costos/Reportes
-  const role = (currentRole || "").toLowerCase();
-  const canView = role === "owner" || role === "admin";
 
   // EXPORTAR CSV
   const handleExportCSV = () => {
@@ -324,6 +325,10 @@ const CostosPage = () => {
         </h1>
         <p className="text-sm text-gray-600">
           {t("reportes.noAccessBody")}
+        </p>
+        {/* Opcional: pequeño texto de debug, puedes quitarlo en producción */}
+        <p className="mt-2 text-xs text-gray-400">
+          (Rol actual: {role || "sin rol"})
         </p>
       </div>
     );
