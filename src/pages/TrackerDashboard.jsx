@@ -4,7 +4,7 @@
 // - Obtiene la organización activa desde AuthContext (useAuth).
 // - Deriva orgId desde currentOrg (puede ser string u objeto).
 // - Trackers: tabla personal (org_id)
-// - Geocercas: vista v_geocercas_resumen_ui (RLS, columna name)
+// - Geocercas: vista v_geocercas_resumen_ui (RLS, select "*")
 // - Posiciones: vista v_positions_with_activity (org_id)
 
 import React, {
@@ -83,7 +83,9 @@ export default function TrackerDashboard() {
   const [trackers, setTrackers] = useState([]);
   const [geofences, setGeofences] = useState([]);
 
-  // --------- Helpers para fetch -----------------------------------------
+  // -----------------------------------------------------------------------
+  // FETCH HELPERS
+  // -----------------------------------------------------------------------
 
   // 🔹 TRACKERS: tabla personal, filtrada por org_id
   const fetchTrackers = useCallback(async (currentOrgId) => {
@@ -112,24 +114,33 @@ export default function TrackerDashboard() {
     setTrackers(activos);
   }, []);
 
-  // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui, RLS se encarga del org
-  // IMPORTANTE: la columna se llama name, NO nombre
+  // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui
+  //   - select("*") para no romper por columnas
+  //   - ordenamos por name si existe, si no, por id
   const fetchGeofences = useCallback(async () => {
     const { data, error } = await supabase
       .from("v_geocercas_resumen_ui")
-      .select("id, name, activa")
-      .order("name", { ascending: true });
+      .select("*");
 
     if (error) {
       console.error("[TrackerDashboard] error fetching geocercas", error);
-      setErrorMsg("No se pudieron cargar las geocercas (vista).");
+      setErrorMsg(
+        "No se pudieron cargar las geocercas desde v_geocercas_resumen_ui."
+      );
       setGeofences([]);
       return;
     }
 
-    // Solo geocercas activas
-    const activas = (data ?? []).filter((g) => g.activa !== false);
-    setGeofences(activas);
+    const arr = Array.isArray(data) ? data : [];
+
+    // Ordenar en memoria por name / nombre / id
+    arr.sort((a, b) => {
+      const labelA = (a.name || a.nombre || a.id || "").toString().toLowerCase();
+      const labelB = (b.name || b.nombre || b.id || "").toString().toLowerCase();
+      return labelA.localeCompare(labelB);
+    });
+
+    setGeofences(arr);
   }, []);
 
   // 🔹 POSICIONES: vista v_positions_with_activity, filtrada por org_id
@@ -195,7 +206,9 @@ export default function TrackerDashboard() {
     [fetchGeofences, fetchTrackers, fetchPositions]
   );
 
-  // --------- Efectos: carga inicial + auto-refresh -----------------------
+  // -----------------------------------------------------------------------
+  // EFECTOS
+  // -----------------------------------------------------------------------
 
   useEffect(() => {
     if (!orgId) return;
@@ -215,7 +228,9 @@ export default function TrackerDashboard() {
     fetchPositions(orgId);
   }, [orgId, timeWindowId, selectedTrackerId, fetchPositions]);
 
-  // --------- Derived data para filtros y resumen ------------------------
+  // -----------------------------------------------------------------------
+  // DERIVED DATA
+  // -----------------------------------------------------------------------
 
   const filteredPositions = useMemo(() => {
     let pts = positions ?? [];
@@ -255,7 +270,9 @@ export default function TrackerDashboard() {
     return [-0.19, -78.48];
   }, [lastPoint]);
 
-  // --------- Render -----------------------------------------------------
+  // -----------------------------------------------------------------------
+  // RENDER
+  // -----------------------------------------------------------------------
 
   if (!orgId) {
     return (
