@@ -4,7 +4,7 @@
 // - Obtiene la organización activa desde AuthContext (useAuth).
 // - Deriva orgId desde currentOrg (puede ser string u objeto).
 // - Trackers: tabla personal (org_id)
-// - Geocercas: vista v_geocercas_resumen_ui (RLS, sin filtro explícito de org)
+// - Geocercas: vista v_geocercas_resumen_ui (RLS, columna name)
 // - Posiciones: vista v_positions_with_activity (org_id)
 
 import React, {
@@ -113,11 +113,12 @@ export default function TrackerDashboard() {
   }, []);
 
   // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui, RLS se encarga del org
+  // IMPORTANTE: la columna se llama name, NO nombre
   const fetchGeofences = useCallback(async () => {
     const { data, error } = await supabase
       .from("v_geocercas_resumen_ui")
-      .select("id, nombre, activa")
-      .order("nombre", { ascending: true });
+      .select("id, name, activa")
+      .order("name", { ascending: true });
 
     if (error) {
       console.error("[TrackerDashboard] error fetching geocercas", error);
@@ -328,7 +329,7 @@ export default function TrackerDashboard() {
               <option value="all">Todas las geocercas</option>
               {geofences.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.nombre || g.id}
+                  {g.name || g.nombre || g.id}
                 </option>
               ))}
             </select>
@@ -457,21 +458,21 @@ export default function TrackerDashboard() {
             <h2 className="text-lg font-semibold mb-3">Resumen</h2>
 
             <dl className="space-y-1 text-sm">
-              <div className="flex justify_between gap-4">
+              <div className="flex justify-between gap-4">
                 <dt className="font-medium">Geocercas activas:</dt>
                 <dd>{totalGeofences}</dd>
               </div>
-              <div className="flex justify_between gap-4">
+              <div className="flex justify-between gap-4">
                 <dt className="font-medium">Trackers (perfiles):</dt>
                 <dd>{totalTrackers}</dd>
               </div>
-              <div className="flex justify_between gap-4">
+              <div className="flex justify-between gap-4">
                 <dt className="font-medium">
                   Puntos en mapa (filtro actual):
                 </dt>
                 <dd>{totalPoints}</dd>
               </div>
-              <div className="flex justify_between gap-4">
+              <div className="flex justify-between gap-4">
                 <dt className="font-medium">
                   Último punto registrado:
                 </dt>
