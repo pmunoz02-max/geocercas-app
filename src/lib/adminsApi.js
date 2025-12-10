@@ -6,9 +6,9 @@ import { supabase } from "../supabaseClient";
 
 /**
  * Lista administradores y propietarios de una organización.
- * - Lee la tabla memberships (la estructura real)
+ * - Lee la tabla memberships
  * - Incluye roles: owner, admin
- * - Trae email desde auth.users
+ * - Trae email desde auth.users vía relación "users"
  */
 export async function listAdmins(orgId) {
   if (!orgId) {
@@ -18,7 +18,6 @@ export async function listAdmins(orgId) {
     };
   }
 
-  // Hacemos un JOIN con auth.users para obtener email.
   const { data, error } = await supabase
     .from("memberships")
     .select(
@@ -27,11 +26,11 @@ export async function listAdmins(orgId) {
       org_id,
       role,
       created_at,
-      users:auth.users(email, raw_user_meta_data)
+      users(email, raw_user_meta_data)
     `
     )
     .eq("org_id", orgId)
-    .in("role", ["owner", "admin"]); // roles válidos en tu enum role_type
+    .in("role", ["owner", "admin"]);
 
   if (error) {
     return { data: null, error };
@@ -42,7 +41,7 @@ export async function listAdmins(orgId) {
     (data || []).map((row) => ({
       user_id: row.user_id,
       org_id: row.org_id,
-      role: row.role?.toUpperCase() ?? "—",     // OWNER / ADMIN
+      role: row.role?.toUpperCase() ?? "—", // OWNER / ADMIN
       email: row.users?.email ?? null,
       full_name: row.users?.raw_user_meta_data?.full_name ?? null,
       created_at: row.created_at,
@@ -113,7 +112,7 @@ export async function deleteAdmin(orgId, userId) {
     .delete()
     .eq("org_id", orgId)
     .eq("user_id", userId)
-    .in("role", ["admin"]); // nunca permitir borrar owner accidentalmente
+    .in("role", ["admin"]); // no borrar owners
 
   return { error };
 }
