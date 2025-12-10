@@ -26,7 +26,7 @@ const Login: React.FC = () => {
   // Redirección universal después de login:
   //  - Si tiene rol TRACKER → /tracker-gps
   //  - Si no → /inicio
-  //  Además: NO vuelve a navegar si ya está en ese path
+  //  Además: NO navega si ya está en ese path (para evitar bucles)
   // ------------------------------------------------------------
   const redirectAfterLogin = useCallback(
     async (userId: string, userMetadata?: any) => {
@@ -54,20 +54,18 @@ const Login: React.FC = () => {
           roles.includes("tracker") || invitedAs === "tracker";
 
         let targetPath = "/inicio";
-
-        if (isTracker) {
-          targetPath = "/tracker-gps";
-        }
+        if (isTracker) targetPath = "/tracker-gps";
 
         console.log("[Login] redirectAfterLogin →", {
           userId,
           invitedAs,
           roles,
+          isTracker,
           targetPath,
           currentPath: location.pathname,
         });
 
-        // ❗ Evitar bucles: solo navegamos si el destino es DIFERENTE
+        // Evitar bucles de navegación
         if (location.pathname !== targetPath) {
           console.log(
             `[Login] Redirigiendo a ${targetPath} (isTracker=${isTracker})`
@@ -82,7 +80,6 @@ const Login: React.FC = () => {
         }
       } catch (e) {
         console.error("[Login] Exception redirectAfterLogin:", e);
-        // fallback seguro
         if (location.pathname !== "/inicio") {
           navigate("/inicio", { replace: true });
         }
@@ -124,7 +121,7 @@ const Login: React.FC = () => {
 
   // Si ya hay sesión y abren /login, decidir destino según rol
   useEffect(() => {
-    // Mientras el AuthContext sigue cargando, NO hacemos nada
+    // Mientras el AuthContext sigue cargando, no hacemos nada
     if (loading) return;
 
     if (session?.user) {
@@ -139,7 +136,7 @@ const Login: React.FC = () => {
     setInfoMsg(null);
 
     if (!email || !password) {
-      setErrorMsg(t("login.errorMissingCredentials"));
+      setErrorMsg(t("login.errorMissingCredentials") || "Faltan usuario o contraseña.");
       return;
     }
 
@@ -153,7 +150,11 @@ const Login: React.FC = () => {
 
       if (error) {
         console.error("[Login] signInWithPassword error:", error);
-        setErrorMsg(error.message || t("login.errorInvalidCredentials"));
+        setErrorMsg(
+          error.message ||
+            t("login.errorInvalidCredentials") ||
+            "Credenciales inválidas."
+        );
         return;
       }
 
@@ -167,20 +168,20 @@ const Login: React.FC = () => {
       }
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);
-      setErrorMsg(t("login.errorUnexpected"));
+      setErrorMsg(t("login.errorUnexpected") || "Error inesperado al iniciar sesión.");
     } finally {
       setLoadingAction(false);
     }
   };
 
-  // MAGIC LINK → redirige a /auth/callback, que decide /tracker-gps vs /inicio
+  // MAGIC LINK → redirige a /auth/callback, que decide después
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
 
     if (!email) {
-      setErrorMsg(t("login.errorMissingEmail"));
+      setErrorMsg(t("login.errorMissingEmail") || "Debes ingresar un correo.");
       return;
     }
 
@@ -211,34 +212,40 @@ const Login: React.FC = () => {
           setErrorMsg(
             error.message ||
               t("login.errorMagicLink") ||
-              "No se pudo enviar el Magic Link."
+              "No se pudo enviar el enlace mágico."
           );
         }
 
         return;
       }
 
-      setInfoMsg(t("login.infoMagicLinkSent"));
+      setInfoMsg(
+        t("login.infoMagicLinkSent") ||
+          "Hemos enviado un enlace mágico a tu correo."
+      );
     } catch (err: any) {
       console.error("[Login] signInWithOtp exception:", err);
-      setErrorMsg(t("login.errorMagicLinkUnexpected"));
+      setErrorMsg(
+        t("login.errorMagicLinkUnexpected") ||
+          "Error inesperado al enviar el enlace mágico."
+      );
     } finally {
       setLoadingAction(false);
     }
   };
 
-  // Mientras AuthContext resuelve la sesión
+  // Mientras AuthContext resuelve la sesión inicial
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
         <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          {t("login.loadingSession")}
+          {t("login.loadingSession") || "Cargando tu sesión…"}
         </div>
       </div>
     );
   }
 
-  // Formulario normal (sin sesión)
+  // Formulario normal (sin sesión activa)
   return (
     <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-5">
@@ -246,9 +253,11 @@ const Login: React.FC = () => {
         <div className="flex items-center justify-between mb-2">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold text-slate-900">
-              {t("login.title")}
+              {t("login.title") || "Iniciar sesión"}
             </h1>
-            <p className="text-sm text-slate-600">{t("login.subtitle")}</p>
+            <p className="text-sm text-slate-600">
+              {t("login.subtitle") || "Accede a tu cuenta de App Geocercas."}
+            </p>
           </div>
           <LanguageSwitcher />
         </div>
@@ -264,7 +273,7 @@ const Login: React.FC = () => {
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            {t("login.modePassword")}
+            {t("login.modePassword") || "Contraseña"}
           </button>
           <button
             type="button"
@@ -275,7 +284,7 @@ const Login: React.FC = () => {
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            {t("login.modeMagic")}
+            {t("login.modeMagic") || "Enlace mágico"}
           </button>
         </div>
 
@@ -296,14 +305,16 @@ const Login: React.FC = () => {
           <form onSubmit={handleSubmitPassword} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
-                {t("login.emailLabel")}
+                {t("login.emailLabel") || "Correo electrónico"}
               </label>
               <input
                 type="email"
                 autoComplete="off"
                 name="login-email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder={t("login.emailPlaceholder")}
+                placeholder={
+                  t("login.emailPlaceholder") || "tucorreo@ejemplo.com"
+                }
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
@@ -311,14 +322,16 @@ const Login: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
-                {t("login.passwordLabel")}
+                {t("login.passwordLabel") || "Contraseña"}
               </label>
               <input
                 type="password"
                 autoComplete="off"
                 name="login-password"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder={t("login.passwordPlaceholder")}
+                placeholder={
+                  t("login.passwordPlaceholder") || "Ingresa tu contraseña"
+                }
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loadingAction}
@@ -329,7 +342,9 @@ const Login: React.FC = () => {
               disabled={loadingAction}
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loadingAction ? t("login.submitting") : t("login.submit")}
+              {loadingAction
+                ? t("login.submitting") || "Ingresando…"
+                : t("login.submit") || "Entrar"}
             </button>
           </form>
         )}
@@ -339,14 +354,16 @@ const Login: React.FC = () => {
           <form onSubmit={handleSubmitMagic} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
-                {t("login.emailLabel")}
+                {t("login.emailLabel") || "Correo electrónico"}
               </label>
               <input
                 type="email"
                 autoComplete="off"
                 name="login-magic-email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder={t("login.emailPlaceholder")}
+                placeholder={
+                  t("login.emailPlaceholder") || "tucorreo@ejemplo.com"
+                }
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
@@ -358,11 +375,12 @@ const Login: React.FC = () => {
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loadingAction
-                ? t("login.magicSubmitting")
-                : t("login.magicButton")}
+                ? t("login.magicSubmitting") || "Enviando enlace…"
+                : t("login.magicButton") || "Enviar enlace mágico"}
             </button>
             <p className="text-[11px] text-slate-500">
-              {t("login.magicDescription")}
+              {t("login.magicDescription") ||
+                "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña."}
             </p>
           </form>
         )}
