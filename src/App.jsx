@@ -178,16 +178,17 @@ export default function App() {
 
         {/* Rutas protegidas por AuthGuard + Shell + permisos por módulo */}
         <Route
-          path="/inicio"
-          element<
-            AuthGuard>
-            <ProtectedRoute moduleKey={MODULE_KEYS.INICIO}>
-              <Shell>
-                <Inicio />
-              </Shell>
-            </ProtectedRoute>
-          }
-        />
+  path="/inicio"
+  element={
+    <AuthGuard>
+      <ProtectedRoute moduleKey={MODULE_KEYS.INICIO}>
+        <Shell>
+          <Inicio />
+        </Shell>
+      </ProtectedRoute>
+    </AuthGuard>
+  }
+/>
 
         <Route
           path="/nueva-geocerca"
