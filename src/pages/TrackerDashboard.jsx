@@ -3,7 +3,7 @@
 //
 // - Obtiene la organización activa desde AuthContext (useAuth).
 // - Trackers: tabla personal (org_id)
-// - Geocercas: vista v_geocercas_resumen_ui (RLS, select "*")
+// - Geocercas: vista v_geocercas_tracker_ui (RLS, select "*", filtrada por org_id)
 // - Posiciones: vista v_positions_with_activity (RLS; SIN filtrar por org_id aquí)
 
 import React, {
@@ -19,6 +19,7 @@ import {
   CircleMarker,
   Circle,
   Tooltip,
+  GeoJSON,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -114,18 +115,22 @@ export default function TrackerDashboard() {
     setTrackers(activos);
   }, []);
 
-  // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui
+  // 🔹 GEOCERCAS: vista v_geocercas_tracker_ui
   //   - select("*") para no romper por columnas
+  //   - filtrada por org_id
   //   - ordenamos por name / nombre / id
-  const fetchGeofences = useCallback(async () => {
+  const fetchGeofences = useCallback(async (currentOrgId) => {
+    if (!currentOrgId) return;
+
     const { data, error } = await supabase
-      .from("v_geocercas_resumen_ui")
-      .select("*");
+      .from("v_geocercas_tracker_ui")
+      .select("*")
+      .eq("org_id", currentOrgId);
 
     if (error) {
       console.error("[TrackerDashboard] error fetching geocercas", error);
       setErrorMsg(
-        "No se pudieron cargar las geocercas desde v_geocercas_resumen_ui."
+        "No se pudieron cargar las geocercas desde v_geocercas_tracker_ui."
       );
       setGeofences([]);
       return;
@@ -201,7 +206,7 @@ export default function TrackerDashboard() {
       try {
         await Promise.all([
           fetchTrackers(currentOrgId),
-          fetchGeofences(),
+          fetchGeofences(currentOrgId),
           fetchPositions(currentOrgId, { showSpinner: false }),
         ]);
       } finally {
@@ -269,9 +274,10 @@ export default function TrackerDashboard() {
   const lastPointTime = lastPoint?.recorded_at ?? null;
 
   const mapCenter = useMemo(() => {
-    if (lastPoint) {
-      return [lastPoint.lat || -0.19, lastPoint.lng || -78.48];
+    if (lastPoint && typeof lastPoint.lat === "number" && typeof lastPoint.lng === "number") {
+      return [lastPoint.lat, lastPoint.lng];
     }
+    // Centro por defecto (Quito aprox.)
     return [-0.19, -78.48];
   }, [lastPoint]);
 
@@ -400,8 +406,10 @@ export default function TrackerDashboard() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
-              {/* GEOCERCAS COMO CÍRCULOS */}
+              {/* GEOCERCAS COMO POLÍGONOS (GeoJSON) + FALLBACK A CÍRCULOS */}
               {geofences.map((g) => {
+                const label = g.name || g.nombre || g.id;
+
                 const lat =
                   typeof g.lat === "number"
                     ? g.lat
@@ -415,8 +423,6 @@ export default function TrackerDashboard() {
                     ? g.center_lng
                     : null;
 
-                if (!lat || !lng) return null;
-
                 const radius =
                   typeof g.radius_m === "number"
                     ? g.radius_m
@@ -424,38 +430,63 @@ export default function TrackerDashboard() {
                     ? g.radius
                     : 0;
 
-                if (!radius) {
-                  // Si no hay radio, al menos marcamos el centro
-                  return (
-                    <CircleMarker
-                      key={`geo-${g.id}`}
-                      center={[lat, lng]}
-                      radius={6}
-                      pathOptions={{
+                const shape =
+                  g.geojson || g.geometry || g.geom || g.polygon || null;
+
+                const layers = [];
+
+                if (shape) {
+                  layers.push(
+                    <GeoJSON
+                      key={`geo-shape-${g.id}`}
+                      data={shape}
+                      style={() => ({
                         color: "#22c55e",
-                        fillColor: "#22c55e",
-                        fillOpacity: 0.9,
-                      }}
+                        weight: 2,
+                        fillOpacity: 0.15,
+                      })}
                     >
-                      <Tooltip>{g.name || g.nombre || g.id}</Tooltip>
-                    </CircleMarker>
+                      <Tooltip sticky>{label}</Tooltip>
+                    </GeoJSON>
                   );
                 }
 
-                return (
-                  <Circle
-                    key={`geo-${g.id}`}
-                    center={[lat, lng]}
-                    radius={radius}
-                    pathOptions={{
-                      color: "#22c55e",
-                      fillColor: "#22c55e",
-                      fillOpacity: 0.15,
-                    }}
-                  >
-                    <Tooltip>{g.name || g.nombre || g.id}</Tooltip>
-                  </Circle>
-                );
+                // Si hay centro definido, dibujamos círculo o marcador
+                if (lat != null && lng != null) {
+                  if (radius) {
+                    layers.push(
+                      <Circle
+                        key={`geo-circle-${g.id}`}
+                        center={[lat, lng]}
+                        radius={radius}
+                        pathOptions={{
+                          color: "#22c55e",
+                          fillColor: "#22c55e",
+                          fillOpacity: 0.08,
+                        }}
+                      >
+                        <Tooltip>{label}</Tooltip>
+                      </Circle>
+                    );
+                  } else {
+                    layers.push(
+                      <CircleMarker
+                        key={`geo-center-${g.id}`}
+                        center={[lat, lng]}
+                        radius={6}
+                        pathOptions={{
+                          color: "#22c55e",
+                          fillColor: "#22c55e",
+                          fillOpacity: 0.9,
+                        }}
+                      >
+                        <Tooltip>{label}</Tooltip>
+                      </CircleMarker>
+                    );
+                  }
+                }
+
+                return layers;
               })}
 
               {/* POSICIONES / TRACKS */}
