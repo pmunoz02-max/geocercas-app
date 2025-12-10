@@ -1,36 +1,35 @@
-// src/components/Layout.jsx
+import React from "react";
 import { Outlet } from "react-router-dom";
-import MainNav from "@/components/MainNav";
-import { useAuth } from "@/auth/AuthProvider";
+import TopTabs from "@/components/TopTabs";
+import { useAuth } from "@/context/AuthContext";
 
-export default function Layout() {
-  const { session, profile } = useAuth();
+export default function AppLayout() {
+  const { session } = useAuth();
+
+  // ⚠️ IMPORTANTE:
+  // Tabs solo cuando hay sesión
+  if (!session) {
+    return <Outlet />;
+  }
+
+  const tabs = [
+    { path: "/inicio", labelKey: "app.tabs.inicio", icon: "🏠" },
+    { path: "/geocercas", labelKey: "app.tabs.geocercas", icon: "📍" },
+    { path: "/personal", labelKey: "app.tabs.personal", icon: "👥" },
+    { path: "/actividades", labelKey: "app.tabs.actividades", icon: "🗂️" },
+    { path: "/asignaciones", labelKey: "app.tabs.asignaciones", icon: "📌" },
+    { path: "/reportes", labelKey: "app.tabs.reportes", icon: "📊" },
+    { path: "/costos", labelKey: "app.tabs.dashboard", icon: "💰" },
+    { path: "/tracker", labelKey: "app.tabs.tracker", icon: "📡" },
+    { path: "/admin", labelKey: "app.tabs.admin", icon: "⚙️" }
+  ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* NAVBAR SUPERIOR */}
-      <header className="border-b bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="font-semibold text-lg">🛰️ App Geocercas</div>
-          {session && profile ? (
-            <MainNav role={profile.role} />
-          ) : (
-            <div className="text-sm opacity-70">No autenticado</div>
-          )}
-        </div>
-      </header>
-
-      {/* CONTENIDO */}
-      <main className="flex-1">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <Outlet />
-        </div>
+    <div className="min-h-screen bg-slate-50">
+      <TopTabs tabs={tabs} />
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <Outlet />
       </main>
-
-      {/* FOOTER */}
-      <footer className="border-t text-xs opacity-70 text-center py-3">
-        © {new Date().getFullYear()} App Geocercas — Todos los derechos reservados.
-      </footer>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 // src/App.jsx
+import React from "react";
 import {
   BrowserRouter,
   Routes,
@@ -8,6 +9,7 @@ import {
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
+import TopTabs from "./components/TopTabs.jsx";
 
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
@@ -29,9 +31,10 @@ import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
-import TopTabs from "./components/TopTabs.jsx";
 
-// Layout general de la app después de login
+// ---------------------
+// Layout interno (aplicación protegida)
+// ---------------------
 function Shell({ children }) {
   const { loading } = useAuth();
 
@@ -45,11 +48,26 @@ function Shell({ children }) {
     );
   }
 
+  // Tabs principales de navegación
+  const tabs = [
+    { path: "/inicio", labelKey: "app.tabs.inicio" },
+    { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
+    { path: "/geocercas", labelKey: "app.tabs.geocercas" },
+    { path: "/personal", labelKey: "app.tabs.personal" },
+    { path: "/actividades", labelKey: "app.tabs.actividades" },
+    { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
+    { path: "/costos", labelKey: "app.tabs.reportes" },
+    { path: "/costos-dashboard", labelKey: "app.tabs.dashboard" },
+    { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
+    { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
+    { path: "/admins", labelKey: "app.tabs.admins" },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <AppHeader />
       <div className="border-b border-slate-200 bg-white">
-        <TopTabs />
+        <TopTabs tabs={tabs} />
       </div>
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
         {children}
@@ -74,7 +92,7 @@ export default function App() {
         {/* Landing pública */}
         <Route path="/" element={<Landing />} />
 
-        {/* Página de tracker web protegida (solo sesión, rol ya se maneja en Login) */}
+        {/* Página de tracker web protegida */}
         <Route
           path="/tracker-gps"
           element={
@@ -89,7 +107,7 @@ export default function App() {
         {/* Reset de contraseña */}
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Rutas protegidas por sesión (AuthGuard) */}
+        {/* Rutas protegidas por sesión (AuthGuard + Shell) */}
         <Route
           path="/inicio"
           element={
@@ -211,7 +229,7 @@ export default function App() {
           }
         />
 
-        {/* Auth callback y login (sin AuthGuard) */}
+        {/* Auth callback y login */}
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/login" element={<LoginShell />} />
 
