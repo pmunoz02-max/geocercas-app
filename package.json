@@ -16,6 +16,7 @@
     "@supabase/supabase-js": "^2.45.0",
     "date-fns": "^2.30.0",
     "date-fns-tz": "^2.0.0",
+    "html2canvas": "^1.4.1",
     "i18next": "^25.7.1",
     "leaflet": "^1.9.4",
     "qrcode": "^1.5.3",
