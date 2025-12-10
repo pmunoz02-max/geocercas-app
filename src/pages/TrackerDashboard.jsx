@@ -2,16 +2,28 @@
 // Dashboard de tracking en tiempo real
 //
 // NOTA IMPORTANTE:
-// - Este componente asume que le pasas el `orgId` de la organización actual.
-//   Ejemplo de uso: <TrackerDashboard orgId={currentOrg.id} />
-// - Ajusta el import de `supabase` a la ruta real de tu proyecto.
-// - El componente NO hace ningún filtrado raro: dibuja lo que venga de
+// - Este componente obtiene el `orgId` desde el AuthProvider (useAuth):
+//     const { currentOrg } = useAuth();
+//     const orgId = currentOrg; // id de la organización activa
+// - No hace filtrados raros: dibuja lo que venga de
 //   `v_positions_with_activity` y aplica solo filtros visuales.
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip } from "react-leaflet";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  CircleMarker,
+  Tooltip,
+} from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { supabase } from "../supabaseClient"; // ⬅️ ajusta ruta si es necesario
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "@/context/AuthProvider";
 
 const TIME_WINDOWS = [
   { id: "1h", label: "1 hora", ms: 1 * 60 * 60 * 1000 },
@@ -49,7 +61,11 @@ function formatTime(dtString) {
   }
 }
 
-export default function TrackerDashboard({ orgId }) {
+export default function TrackerDashboard() {
+  // 🔹 Organización activa desde AuthProvider
+  const { currentOrg } = useAuth();
+  const orgId = currentOrg || null;
+
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -64,57 +80,51 @@ export default function TrackerDashboard({ orgId }) {
 
   // --------- Helpers para fetch -----------------------------------------
 
-  const fetchTrackers = useCallback(
-    async (currentOrgId) => {
-      if (!currentOrgId) return;
+  const fetchTrackers = useCallback(async (currentOrgId) => {
+    if (!currentOrgId) return;
 
-      const { data, error } = await supabase
-        .from("personal")
-        .select("id, nombre, email, activo_bool, vigente, is_deleted")
-        .eq("org_id", currentOrgId)
-        .order("nombre", { ascending: true });
+    const { data, error } = await supabase
+      .from("personal")
+      .select("id, nombre, email, activo_bool, vigente, is_deleted")
+      .eq("org_id", currentOrgId)
+      .order("nombre", { ascending: true });
 
-      if (error) {
-        console.error("[TrackerDashboard] error fetching trackers", error);
-        setErrorMsg("Error al cargar trackers (personal)");
-        return;
-      }
+    if (error) {
+      console.error("[TrackerDashboard] error fetching trackers", error);
+      setErrorMsg("Error al cargar trackers (personal)");
+      return;
+    }
 
-      // Solo trackers activos / vigentes / no borrados
-      const activos =
-        data?.filter(
-          (p) =>
-            (p.activo_bool ?? true) === true &&
-            (p.vigente ?? true) === true &&
-            (p.is_deleted ?? false) === false
-        ) ?? [];
+    // Solo trackers activos / vigentes / no borrados
+    const activos =
+      data?.filter(
+        (p) =>
+          (p.activo_bool ?? true) === true &&
+          (p.vigente ?? true) === true &&
+          (p.is_deleted ?? false) === false
+      ) ?? [];
 
-      setTrackers(activos);
-    },
-    []
-  );
+    setTrackers(activos);
+  }, []);
 
-  const fetchGeofences = useCallback(
-    async (currentOrgId) => {
-      if (!currentOrgId) return;
+  const fetchGeofences = useCallback(async (currentOrgId) => {
+    if (!currentOrgId) return;
 
-      const { data, error } = await supabase
-        .from("geocercas")
-        .select("id, nombre, deleted_at")
-        .eq("org_id", currentOrgId)
-        .is("deleted_at", null)
-        .order("nombre", { ascending: true });
+    const { data, error } = await supabase
+      .from("geocercas")
+      .select("id, nombre, deleted_at")
+      .eq("org_id", currentOrgId)
+      .is("deleted_at", null)
+      .order("nombre", { ascending: true });
 
-      if (error) {
-        console.error("[TrackerDashboard] error fetching geocercas", error);
-        setErrorMsg("Error al cargar geocercas");
-        return;
-      }
+    if (error) {
+      console.error("[TrackerDashboard] error fetching geocercas", error);
+      setErrorMsg("Error al cargar geocercas");
+      return;
+    }
 
-      setGeofences(data ?? []);
-    },
-    []
-  );
+    setGeofences(data ?? []);
+  }, []);
 
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
@@ -126,19 +136,22 @@ export default function TrackerDashboard({ orgId }) {
         setErrorMsg("");
 
         const windowConfig =
-          TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1]; // 6h default
+          TIME_WINDOWS.find((w) => w.id === timeWindowId) ??
+          TIME_WINDOWS[1]; // 6h default
         const fromMs = Date.now() - windowConfig.ms;
         const fromIso = new Date(fromMs).toISOString();
 
         let query = supabase
           .from("v_positions_with_activity")
-          .select("id, org_id, tenant_id, user_id, lat, lng, accuracy, recorded_at, meta")
+          .select(
+            "id, org_id, tenant_id, user_id, lat, lng, accuracy, recorded_at, meta"
+          )
           .eq("org_id", currentOrgId)
           .gte("recorded_at", fromIso)
           .order("recorded_at", { ascending: false })
           .limit(1000);
 
-        // Filtro por tracker (por user_id). El dashboard ya sabe qué user_id
+        // Filtro por tracker (por user_id)
         if (selectedTrackerId !== "all") {
           query = query.eq("user_id", selectedTrackerId);
         }
@@ -230,7 +243,6 @@ export default function TrackerDashboard({ orgId }) {
   const totalGeofences = geofences.length;
   const totalPoints = filteredPositions.length;
   const lastPoint = filteredPositions[0] ?? null;
-
   const lastPointTime = lastPoint?.recorded_at ?? null;
 
   // Centro del mapa: Quito por defecto; si hay puntos, usamos el último
@@ -246,9 +258,12 @@ export default function TrackerDashboard({ orgId }) {
   if (!orgId) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-4">Dashboard de Tracking</h1>
+        <h1 className="text-2xl font-semibold mb-4">
+          Dashboard de Tracking
+        </h1>
         <p className="text-red-600">
-          Error de configuración: este componente necesita un <code>orgId</code> válido.
+          Error de configuración: no se pudo resolver la organización
+          activa (<code>orgId</code>).
         </p>
       </div>
     );
@@ -258,10 +273,12 @@ export default function TrackerDashboard({ orgId }) {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard de Tracking en tiempo real</h1>
+          <h1 className="text-2xl font-semibold">
+            Dashboard de Tracking en tiempo real
+          </h1>
           <p className="text-sm text-slate-500">
-            Los puntos se actualizan automáticamente. La frecuencia de envío la define el
-            administrador y los trackers.
+            Los puntos se actualizan automáticamente. La frecuencia de envío
+            la define el administrador y los trackers.
           </p>
         </div>
 
@@ -358,52 +375,68 @@ export default function TrackerDashboard({ orgId }) {
               />
 
               {/* Polilíneas y puntos por tracker */}
-              {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
-                if (!pts.length) return null;
-                const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
-                const positionsLatLng = pts
-                  .map((p) =>
-                    typeof p.lat === "number" && typeof p.lng === "number"
-                      ? [p.lat, p.lng]
-                      : null
-                  )
-                  .filter(Boolean);
+              {Array.from(pointsByTracker.entries()).map(
+                ([trackerId, pts], idx) => {
+                  if (!pts.length) return null;
+                  const color =
+                    TRACKER_COLORS[idx % TRACKER_COLORS.length];
+                  const positionsLatLng = pts
+                    .map((p) =>
+                      typeof p.lat === "number" &&
+                      typeof p.lng === "number"
+                        ? [p.lat, p.lng]
+                        : null
+                    )
+                    .filter(Boolean);
 
-                const latest = pts[0];
+                  const latest = pts[0];
 
-                return (
-                  <React.Fragment key={trackerId}>
-                    {positionsLatLng.length > 1 && (
-                      <Polyline positions={positionsLatLng} pathOptions={{ color, weight: 3 }} />
-                    )}
+                  return (
+                    <React.Fragment key={trackerId}>
+                      {positionsLatLng.length > 1 && (
+                        <Polyline
+                          positions={positionsLatLng}
+                          pathOptions={{ color, weight: 3 }}
+                        />
+                      )}
 
-                    {latest && typeof latest.lat === "number" && typeof latest.lng === "number" && (
-                      <CircleMarker
-                        center={[latest.lat, latest.lng]}
-                        radius={6}
-                        pathOptions={{ color, fillColor: color, fillOpacity: 0.9 }}
-                      >
-                        <Tooltip direction="top">
-                          <div className="text-xs">
-                            <div>
-                              <strong>Tracker:</strong> {trackerId}
-                            </div>
-                            <div>
-                              <strong>Hora:</strong> {formatTime(latest.recorded_at)}
-                            </div>
-                            <div>
-                              <strong>Lat:</strong> {latest.lat.toFixed(6)}
-                            </div>
-                            <div>
-                              <strong>Lng:</strong> {latest.lng.toFixed(6)}
-                            </div>
-                          </div>
-                        </Tooltip>
-                      </CircleMarker>
-                    )}
-                  </React.Fragment>
-                );
-              })}
+                      {latest &&
+                        typeof latest.lat === "number" &&
+                        typeof latest.lng === "number" && (
+                          <CircleMarker
+                            center={[latest.lat, latest.lng]}
+                            radius={6}
+                            pathOptions={{
+                              color,
+                              fillColor: color,
+                              fillOpacity: 0.9,
+                            }}
+                          >
+                            <Tooltip direction="top">
+                              <div className="text-xs">
+                                <div>
+                                  <strong>Tracker:</strong> {trackerId}
+                                </div>
+                                <div>
+                                  <strong>Hora:</strong>{" "}
+                                  {formatTime(latest.recorded_at)}
+                                </div>
+                                <div>
+                                  <strong>Lat:</strong>{" "}
+                                  {latest.lat.toFixed(6)}
+                                </div>
+                                <div>
+                                  <strong>Lng:</strong>{" "}
+                                  {latest.lng.toFixed(6)}
+                                </div>
+                              </div>
+                            </Tooltip>
+                          </CircleMarker>
+                        )}
+                    </React.Fragment>
+                  );
+                }
+              )}
 
               {/* Mensaje si no hay puntos */}
               {!totalPoints && (
@@ -432,12 +465,18 @@ export default function TrackerDashboard({ orgId }) {
                 <dd>{totalTrackers}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">Puntos en mapa (filtro actual):</dt>
+                <dt className="font-medium">
+                  Puntos en mapa (filtro actual):
+                </dt>
                 <dd>{totalPoints}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="font-medium">Último punto registrado:</dt>
-                <dd>{lastPointTime ? formatDateTime(lastPointTime) : "-"}</dd>
+                <dd>
+                  {lastPointTime
+                    ? formatDateTime(lastPointTime)
+                    : "-"}
+                </dd>
               </div>
             </dl>
 
@@ -452,14 +491,16 @@ export default function TrackerDashboard({ orgId }) {
             <h3 className="font-semibold mb-2">Leyenda de trackers</h3>
             {trackers.length === 0 && (
               <p className="text-slate-500 text-sm">
-                No hay perfiles de tracker configurados en esta organización.
+                No hay perfiles de tracker configurados en esta
+                organización.
               </p>
             )}
 
             {trackers.length > 0 && (
               <ul className="space-y-1">
                 {trackers.map((t, idx) => {
-                  const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
+                  const color =
+                    TRACKER_COLORS[idx % TRACKER_COLORS.length];
                   const label = t.nombre || t.email || t.id;
                   return (
                     <li key={t.id} className="flex items-center gap-2">
@@ -477,13 +518,19 @@ export default function TrackerDashboard({ orgId }) {
 
           <div className="rounded-lg border bg-white px-4 py-3 text-xs text-slate-500 space-y-1">
             <div>
-              <strong>Tip:</strong> Si ves que el tracker está enviando (Pantalla de tracker
-              activa) pero aquí no aparecen puntos:
+              <strong>Tip:</strong> Si ves que el tracker está enviando
+              (Pantalla de tracker activa) pero aquí no aparecen puntos:
             </div>
             <ul className="list-disc pl-5 space-y-1">
               <li>Revisa la ventana de tiempo (1h / 6h / 24h).</li>
-              <li>Verifica que el filtro de tracker no esté en un perfil distinto.</li>
-              <li>Si filtraste por geocerca, prueba con “Todas las geocercas”.</li>
+              <li>
+                Verifica que el filtro de tracker no esté en un perfil
+                distinto.
+              </li>
+              <li>
+                Si filtraste por geocerca, prueba con “Todas las
+                geocercas”.
+              </li>
             </ul>
           </div>
         </div>
