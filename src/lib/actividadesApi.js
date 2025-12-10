@@ -2,7 +2,8 @@
 import { supabase } from "../supabaseClient";
 
 // Obtiene un tenantId válido.
-// Si no se pasa, llama a la función de Postgres que auto-crea la organización.
+// Si no se pasa, llama a la función de Postgres que devuelve
+// la organización "por defecto" del usuario actual.
 async function ensureTenant(tenantId) {
   if (tenantId) return tenantId;
 
@@ -18,7 +19,18 @@ async function ensureTenant(tenantId) {
     throw error;
   }
 
-  return data; // uuid de la org
+  // data viene como array de filas [{ org_id, org_name, role, is_owner }]
+  const org = Array.isArray(data) ? data[0] : null;
+
+  if (!org || !org.org_id) {
+    console.warn(
+      "[actividadesApi] ensureTenant: RPC no devolvió organización válida",
+      data
+    );
+    throw new Error("No hay organización asignada para el usuario actual");
+  }
+
+  return org.org_id; // 👈 devolvemos el UUID de la org
 }
 
 // 🔹 Listar actividades
