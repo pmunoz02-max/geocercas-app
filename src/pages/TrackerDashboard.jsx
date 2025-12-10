@@ -90,9 +90,10 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
 
     const { data, error } = await supabase
-      .from("personal")
-      .select("id, nombre, email, activo_bool, vigente, is_deleted")
-      .eq("org_id", currentOrgId)
+      .from("geocercas")
+      .select("id, nombre, deleted_at")
+      .eq("tenant_id", currentOrgId)
+      .is("deleted_at", null)
       .order("nombre", { ascending: true });
 
     if (error) {
