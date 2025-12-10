@@ -26,6 +26,7 @@ const Login: React.FC = () => {
   // Redirección universal después de login:
   //  - Si tiene rol TRACKER → /tracker-gps
   //  - Si no → /inicio
+  //  Además: NO vuelve a navegar si ya está en ese path
   // ------------------------------------------------------------
   const redirectAfterLogin = useCallback(
     async (userId: string, userMetadata?: any) => {
@@ -49,28 +50,45 @@ const Login: React.FC = () => {
             o.role ? String(o.role).toLowerCase() : ""
           ) || [];
 
+        const isTracker =
+          roles.includes("tracker") || invitedAs === "tracker";
+
+        let targetPath = "/inicio";
+
+        if (isTracker) {
+          targetPath = "/tracker-gps";
+        }
+
         console.log("[Login] redirectAfterLogin →", {
           userId,
           invitedAs,
           roles,
+          targetPath,
+          currentPath: location.pathname,
         });
 
-        const isTracker =
-          roles.includes("tracker") || invitedAs === "tracker";
-
-        if (isTracker) {
-          console.log("[Login] Redirigiendo TRACKER a /tracker-gps");
-          navigate("/tracker-gps", { replace: true });
+        // ❗ Evitar bucles: solo navegamos si el destino es DIFERENTE
+        if (location.pathname !== targetPath) {
+          console.log(
+            `[Login] Redirigiendo a ${targetPath} (isTracker=${isTracker})`
+          );
+          navigate(targetPath, { replace: true });
         } else {
-          console.log("[Login] Redirigiendo a /inicio (no es tracker)");
-          navigate("/inicio", { replace: true });
+          console.log(
+            "[Login] Ya estamos en",
+            targetPath,
+            "no se navega de nuevo"
+          );
         }
       } catch (e) {
         console.error("[Login] Exception redirectAfterLogin:", e);
-        navigate("/inicio", { replace: true });
+        // fallback seguro
+        if (location.pathname !== "/inicio") {
+          navigate("/inicio", { replace: true });
+        }
       }
     },
-    [navigate]
+    [navigate, location.pathname]
   );
 
   // Limpiar campos al cambiar de ruta
@@ -106,10 +124,13 @@ const Login: React.FC = () => {
 
   // Si ya hay sesión y abren /login, decidir destino según rol
   useEffect(() => {
+    // Mientras el AuthContext sigue cargando, NO hacemos nada
+    if (loading) return;
+
     if (session?.user) {
       redirectAfterLogin(session.user.id, session.user.user_metadata);
     }
-  }, [session, redirectAfterLogin]);
+  }, [session, loading, redirectAfterLogin]);
 
   // LOGIN con contraseña
   const handleSubmitPassword = async (e: React.FormEvent) => {
@@ -140,7 +161,9 @@ const Login: React.FC = () => {
       if (user) {
         await redirectAfterLogin(user.id, user.user_metadata);
       } else {
-        navigate("/inicio", { replace: true });
+        if (location.pathname !== "/inicio") {
+          navigate("/inicio", { replace: true });
+        }
       }
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);

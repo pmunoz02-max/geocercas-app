@@ -1,23 +1,33 @@
 // src/components/AuthGuard.jsx
-import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function AuthGuard({ children }) {
   const { session, loading } = useAuth();
+  const location = useLocation();
 
-  // Mientras se resuelve la sesión, no hacemos nada
+  // 1) Mientras no sepamos si hay sesión, NO redirigimos
   if (loading) {
-    return null;
-    // Opcional: luego podemos meter un spinner centrado aquí
-    // return <div className="p-4 text-center text-slate-500 text-sm">Cargando...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+          Cargando tu sesión…
+        </div>
+      </div>
+    );
   }
 
-  // Si no hay sesión, siempre redirigimos a la Landing
+  // 2) Si definitivamente no hay sesión → a /login
   if (!session) {
-    return <Navigate to="/" replace />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location.pathname }}
+      />
+    );
   }
 
-  // Si hay sesión, dejamos pasar al contenido protegido
-  return <>{children}</>;
+  // 3) Si hay sesión → render normal
+  return children;
 }
