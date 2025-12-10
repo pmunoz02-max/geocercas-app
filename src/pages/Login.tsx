@@ -56,27 +56,9 @@ const Login: React.FC = () => {
         let targetPath = "/inicio";
         if (isTracker) targetPath = "/tracker-gps";
 
-        console.log("[Login] redirectAfterLogin →", {
-          userId,
-          invitedAs,
-          roles,
-          isTracker,
-          targetPath,
-          currentPath: location.pathname,
-        });
-
         // Evitar bucles de navegación
         if (location.pathname !== targetPath) {
-          console.log(
-            `[Login] Redirigiendo a ${targetPath} (isTracker=${isTracker})`
-          );
           navigate(targetPath, { replace: true });
-        } else {
-          console.log(
-            "[Login] Ya estamos en",
-            targetPath,
-            "no se navega de nuevo"
-          );
         }
       } catch (e) {
         console.error("[Login] Exception redirectAfterLogin:", e);
@@ -136,7 +118,9 @@ const Login: React.FC = () => {
     setInfoMsg(null);
 
     if (!email || !password) {
-      setErrorMsg(t("login.errorMissingCredentials") || "Faltan usuario o contraseña.");
+      setErrorMsg(
+        t("login.errorMissingCredentials") || "Faltan usuario o contraseña."
+      );
       return;
     }
 
@@ -152,7 +136,7 @@ const Login: React.FC = () => {
         console.error("[Login] signInWithPassword error:", error);
         setErrorMsg(
           error.message ||
-            t("login.errorInvalidCredentials") ||
+            (t("login.errorInvalidCredentials") as string) ||
             "Credenciales inválidas."
         );
         return;
@@ -168,7 +152,9 @@ const Login: React.FC = () => {
       }
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);
-      setErrorMsg(t("login.errorUnexpected") || "Error inesperado al iniciar sesión.");
+      setErrorMsg(
+        t("login.errorUnexpected") || "Error inesperado al iniciar sesión."
+      );
     } finally {
       setLoadingAction(false);
     }
@@ -181,7 +167,9 @@ const Login: React.FC = () => {
     setInfoMsg(null);
 
     if (!email) {
-      setErrorMsg(t("login.errorMissingEmail") || "Debes ingresar un correo.");
+      setErrorMsg(
+        t("login.errorMissingEmail") || "Debes ingresar un correo."
+      );
       return;
     }
 
@@ -211,7 +199,7 @@ const Login: React.FC = () => {
         } else {
           setErrorMsg(
             error.message ||
-              t("login.errorMagicLink") ||
+              (t("login.errorMagicLink") as string) ||
               "No se pudo enviar el enlace mágico."
           );
         }
@@ -256,7 +244,8 @@ const Login: React.FC = () => {
               {t("login.title") || "Iniciar sesión"}
             </h1>
             <p className="text-sm text-slate-600">
-              {t("login.subtitle") || "Accede a tu cuenta de App Geocercas."}
+              {t("login.subtitle") ||
+                "Accede a tu cuenta de App Geocercas."}
             </p>
           </div>
           <LanguageSwitcher />
@@ -296,7 +285,7 @@ const Login: React.FC = () => {
         )}
         {infoMsg && (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-            {infoMsg}
+          {infoMsg}
           </div>
         )}
 

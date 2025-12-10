@@ -6,12 +6,6 @@ export default function AuthGuard({ children }) {
   const { session, loading } = useAuth();
   const location = useLocation();
 
-  // 👀 Solo para debug mientras arreglamos todo
-  console.log("[AuthGuard] path =", location.pathname, {
-    loading,
-    hasSession: !!session,
-  });
-
   // 1) Mientras AuthContext todavía está resolviendo la sesión,
   //    NO redirigimos a ningún lado: mostramos un loader.
   if (loading) {
@@ -26,7 +20,6 @@ export default function AuthGuard({ children }) {
 
   // 2) Cuando sabemos que NO hay sesión → mandamos a /login
   if (!session) {
-    // Guardamos de dónde venía para poder volver después del login
     return (
       <Navigate
         to="/login"
