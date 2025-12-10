@@ -2,10 +2,9 @@
 // Dashboard de tracking en tiempo real
 //
 // - Obtiene la organización activa desde AuthContext (useAuth).
-// - Deriva orgId desde currentOrg (puede ser string u objeto).
 // - Trackers: tabla personal (org_id)
 // - Geocercas: vista v_geocercas_resumen_ui (RLS, select "*")
-// - Posiciones: vista v_positions_with_activity (org_id)
+// - Posiciones: vista v_positions_with_activity (RLS; SIN filtrar por org_id aquí)
 
 import React, {
   useEffect,
@@ -18,6 +17,7 @@ import {
   TileLayer,
   Polyline,
   CircleMarker,
+  Circle,
   Tooltip,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -116,7 +116,7 @@ export default function TrackerDashboard() {
 
   // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui
   //   - select("*") para no romper por columnas
-  //   - ordenamos por name si existe, si no, por id
+  //   - ordenamos por name / nombre / id
   const fetchGeofences = useCallback(async () => {
     const { data, error } = await supabase
       .from("v_geocercas_resumen_ui")
@@ -135,15 +135,20 @@ export default function TrackerDashboard() {
 
     // Ordenar en memoria por name / nombre / id
     arr.sort((a, b) => {
-      const labelA = (a.name || a.nombre || a.id || "").toString().toLowerCase();
-      const labelB = (b.name || b.nombre || b.id || "").toString().toLowerCase();
+      const labelA = (a.name || a.nombre || a.id || "")
+        .toString()
+        .toLowerCase();
+      const labelB = (b.name || b.nombre || b.id || "")
+        .toString()
+        .toLowerCase();
       return labelA.localeCompare(labelB);
     });
 
     setGeofences(arr);
   }, []);
 
-  // 🔹 POSICIONES: vista v_positions_with_activity, filtrada por org_id
+  // 🔹 POSICIONES: vista v_positions_with_activity (sin filtro org_id aquí;
+  //   dejamos que RLS haga su trabajo)
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
@@ -164,11 +169,11 @@ export default function TrackerDashboard() {
           .select(
             "id, org_id, tenant_id, user_id, lat, lng, accuracy, recorded_at, meta"
           )
-          .eq("org_id", currentOrgId)
           .gte("recorded_at", fromIso)
           .order("recorded_at", { ascending: false })
           .limit(1000);
 
+        // Filtramos por tracker si está seleccionado
         if (selectedTrackerId !== "all") {
           query = query.eq("user_id", selectedTrackerId);
         }
@@ -281,8 +286,8 @@ export default function TrackerDashboard() {
           Dashboard de Tracking
         </h1>
         <p className="text-red-600">
-          Error de configuración: no se pudo resolver la
-          organización activa (<code>orgId</code>).
+          Error de configuración: no se pudo resolver la organización
+          activa (<code>orgId</code>).
         </p>
       </div>
     );
@@ -395,6 +400,65 @@ export default function TrackerDashboard() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
+              {/* GEOCERCAS COMO CÍRCULOS */}
+              {geofences.map((g) => {
+                const lat =
+                  typeof g.lat === "number"
+                    ? g.lat
+                    : typeof g.center_lat === "number"
+                    ? g.center_lat
+                    : null;
+                const lng =
+                  typeof g.lng === "number"
+                    ? g.lng
+                    : typeof g.center_lng === "number"
+                    ? g.center_lng
+                    : null;
+
+                if (!lat || !lng) return null;
+
+                const radius =
+                  typeof g.radius_m === "number"
+                    ? g.radius_m
+                    : typeof g.radius === "number"
+                    ? g.radius
+                    : 0;
+
+                if (!radius) {
+                  // Si no hay radio, al menos marcamos el centro
+                  return (
+                    <CircleMarker
+                      key={`geo-${g.id}`}
+                      center={[lat, lng]}
+                      radius={6}
+                      pathOptions={{
+                        color: "#22c55e",
+                        fillColor: "#22c55e",
+                        fillOpacity: 0.9,
+                      }}
+                    >
+                      <Tooltip>{g.name || g.nombre || g.id}</Tooltip>
+                    </CircleMarker>
+                  );
+                }
+
+                return (
+                  <Circle
+                    key={`geo-${g.id}`}
+                    center={[lat, lng]}
+                    radius={radius}
+                    pathOptions={{
+                      color: "#22c55e",
+                      fillColor: "#22c55e",
+                      fillOpacity: 0.15,
+                    }}
+                  >
+                    <Tooltip>{g.name || g.nombre || g.id}</Tooltip>
+                  </Circle>
+                );
+              })}
+
+              {/* POSICIONES / TRACKS */}
               {Array.from(pointsByTracker.entries()).map(
                 ([trackerId, pts], idx) => {
                   if (!pts.length) return null;
