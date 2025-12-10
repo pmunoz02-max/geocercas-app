@@ -12,7 +12,7 @@ import { useAuth } from "../context/AuthContext";
 import { useModuleAccess } from "../hooks/useModuleAccess";
 import { MODULE_KEYS } from "../lib/permissions";
 import { useTranslation } from "react-i18next";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas/dist/html2canvas.esm.js";
 
 // Recharts
 import {
@@ -135,12 +135,12 @@ const METRICS = {
   },
   avgRate: {
     id: "avgRate",
-    labelKey: "dashboardCostos.metricAvgRate", // nueva key i18n
+    labelKey: "dashboardCostos.metricAvgRate",
     key: "avgRate",
   },
   records: {
     id: "records",
-    labelKey: "dashboardCostos.metricRecords", // nueva key i18n
+    labelKey: "dashboardCostos.metricRecords",
     key: "registros",
   },
 };
@@ -191,13 +191,11 @@ function aggregateBy(rows, { groupKey, labelField }) {
 
   const result = Array.from(map.values());
 
-  // calcular tarifa promedio por categoría
   for (const item of result) {
     item.avgRate =
       item.totalHours > 0 ? item.totalCost / item.totalHours : 0;
   }
 
-  // ordenar por costo descendente
   result.sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0));
 
   return result;
@@ -219,7 +217,6 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel }) {
     );
   }
 
-  // PIE
   if (chartType === "pie") {
     return (
       <ResponsiveContainer width="100%" height={320}>
@@ -249,7 +246,6 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel }) {
     );
   }
 
-  // LINE
   if (chartType === "line") {
     return (
       <ResponsiveContainer width="100%" height={320}>
@@ -279,7 +275,6 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel }) {
     );
   }
 
-  // BAR
   return (
     <ResponsiveContainer width="100%" height={320}>
       <BarChart
@@ -324,40 +319,29 @@ const CostosDashboardPage = () => {
     MODULE_KEYS.DASHBOARD_COSTOS
   );
   const { t } = useTranslation();
-
-  // ref para exportar la gráfica como PNG
   const chartRef = useRef(null);
 
-  // Filtros
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedPersonaId, setSelectedPersonaId] = useState("");
   const [selectedActividadId, setSelectedActividadId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
 
-  // Combos
   const [personas, setPersonas] = useState([]);
   const [actividades, setActividades] = useState([]);
   const [geocercas, setGeocercas] = useState([]);
 
-  // Datos base
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Controles del gráfico
   const [selectedDimension, setSelectedDimension] = useState("persona");
   const [selectedChartType, setSelectedChartType] = useState("bar");
   const [selectedMetric, setSelectedMetric] = useState("cost");
 
-  /* ---------------------------
-     PERMISOS
-  --------------------------- */
-
   if (loadingAccess) {
     return (
       <div className="p-4 text-sm text-gray-600">
-        {t("dashboardCostos.loadingPermissions") ||
-          "Cargando permisos…"}
+        {t("dashboardCostos.loadingPermissions") || "Cargando permisos…"}
       </div>
     );
   }
@@ -372,10 +356,6 @@ const CostosDashboardPage = () => {
       </div>
     );
   }
-
-  /* ---------------------------
-     CARGA DE COMBOS
-  --------------------------- */
 
   useEffect(() => {
     if (!currentOrg?.id) return;
@@ -413,10 +393,6 @@ const CostosDashboardPage = () => {
     loadFilters();
   }, [currentOrg?.id]);
 
-  /* ---------------------------
-     CARGA DEL REPORTE
-  --------------------------- */
-
   const fetchReport = async () => {
     if (!currentOrg?.id) return;
     setLoading(true);
@@ -450,15 +426,10 @@ const CostosDashboardPage = () => {
     }
   };
 
-  // Carga inicial
   useEffect(() => {
     if (currentOrg?.id) fetchReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id]);
-
-  /* ---------------------------
-     MÉTRICAS
-  --------------------------- */
 
   const resumenMoneda = useMemo(
     () => summarizeByCurrency(rows),
@@ -490,13 +461,11 @@ const CostosDashboardPage = () => {
 
   const metricConfig = METRICS[selectedMetric];
 
-  /* ---------------------------
-     EXPORTACIONES
-  --------------------------- */
-
   const handleExportDataCSV = () => {
     if (!aggregatedData.length) {
-      alert(t("dashboardCostos.exportNoData") || "Sin datos que exportar.");
+      alert(
+        t("dashboardCostos.exportNoData") || "Sin datos que exportar."
+      );
       return;
     }
 
@@ -564,10 +533,6 @@ const CostosDashboardPage = () => {
       );
     }
   };
-
-  /* ---------------------------
-     RENDER
-  --------------------------- */
 
   return (
     <div className="p-4 space-y-4">
@@ -801,7 +766,7 @@ const CostosDashboardPage = () => {
         </div>
       </div>
 
-      {/* Controles del gráfico + gráfica principal */}
+      {/* Gráfico principal */}
       <div className="bg-white rounded-xl p-4 shadow space-y-3">
         <div className="flex flex-wrap items-end gap-3 justify-between">
           <h2 className="text-sm font-semibold text-gray-700">
