@@ -87,7 +87,10 @@ const CostosPage = () => {
   const { t } = useTranslation();
 
   // Acceso universalizado: usa matriz de permisos central
-  const { role, canView } = useModuleAccess(MODULE_KEYS.REPORTES_COSTOS);
+  // loadingAccess es opcional: si el hook no lo expone, será undefined
+  const { role, canView, loading: loadingAccess } = useModuleAccess(
+    MODULE_KEYS.REPORTES_COSTOS
+  );
 
   // Filtros
   const [fromDate, setFromDate] = useState("");
@@ -317,6 +320,21 @@ const CostosPage = () => {
     return { totalCost, totalHours };
   }, [rows]);
 
+  // Si el hook aún está resolviendo el rol, mostramos un estado de carga
+  if (loadingAccess) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-semibold mb-2">
+          {t("reportes.title")}
+        </h1>
+        <p className="text-sm text-gray-600">
+          {t("reportes.loadingPermissions") || "Cargando permisos…"}
+        </p>
+      </div>
+    );
+  }
+
+  // Sin permisos (una vez que ya sabemos el rol)
   if (!canView) {
     return (
       <div className="p-4">
@@ -326,7 +344,7 @@ const CostosPage = () => {
         <p className="text-sm text-gray-600">
           {t("reportes.noAccessBody")}
         </p>
-        {/* Opcional: pequeño texto de debug, puedes quitarlo en producción */}
+        {/* Texto de debug: puedes quitarlo en producción */}
         <p className="mt-2 text-xs text-gray-400">
           (Rol actual: {role || "sin rol"})
         </p>
@@ -597,8 +615,12 @@ const CostosPage = () => {
                   <td className="px-2 py-1">
                     {r.actividad_nombre || t("reportes.activityNoName")}
                   </td>
-                  <td className="px-2 py-1">{formatDateTime(r.start_time)}</td>
-                  <td className="px-2 py-1">{formatDateTime(r.end_time)}</td>
+                  <td className="px-2 py-1">
+                    {formatDateTime(r.start_time)}
+                  </td>
+                  <td className="px-2 py-1">
+                    {formatDateTime(r.end_time)}
+                  </td>
                   <td className="px-2 py-1 text-right">
                     {formatNumber(r.horas, 2)}
                   </td>
@@ -614,6 +636,24 @@ const CostosPage = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Si alguna vez quieres usar resumen por moneda:
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {resumenMoneda.map((r) => (
+            <div key={r.currency} className="bg-gray-50 rounded-lg p-2 text-xs">
+              <div className="font-semibold">{r.currency}</div>
+              <div>
+                {t("reportes.summaryCurrencyHours")}:{" "}
+                {formatNumber(r.totalHours, 2)}
+              </div>
+              <div>
+                {t("reportes.summaryCurrencyCost")}:{" "}
+                {formatNumber(r.totalCost, 2)}
+              </div>
+            </div>
+          ))}
+        </div>
+        */}
       </div>
     </div>
   );
