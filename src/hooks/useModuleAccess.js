@@ -3,9 +3,13 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { canAccessModule, normalizeRole } from "../lib/permissions";
 
 export function useModuleAccess(moduleKey) {
-  const { currentRole, loading } = useAuth();
-  const role = normalizeRole(currentRole);
+  // AUTH CONTEXT SOLO EXPONE "role", NO "currentRole"
+  const { role: rawRole, loading } = useAuth();
 
+  // Normalizamos a minúsculas
+  const role = normalizeRole(rawRole);
+
+  // Si no se envía módulo → acceso universal
   const canView = !moduleKey
     ? true
     : canAccessModule(role, moduleKey);
