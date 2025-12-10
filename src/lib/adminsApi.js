@@ -41,7 +41,10 @@ export async function listAdmins(orgId) {
 }
 
 /**
- * Invita a un nuevo admin dentro de la misma organización
+ * Invita a un administrador (o owner adicional) a la ORGANIZACIÓN ACTUAL.
+ *
+ * @param {string} orgId
+ * @param {{ email: string, role: string, full_name?: string, invitedBy?: string }} payload
  */
 export async function inviteAdmin(orgId, payload) {
   const { email, role, full_name } = payload || {};
@@ -50,6 +53,7 @@ export async function inviteAdmin(orgId, payload) {
   if (!email) return { data: null, error: new Error("Email requerido") };
   if (!role) return { data: null, error: new Error("Rol requerido") };
 
+  // La Edge Function espera role_name en MAYÚSCULAS
   const role_name = String(role).toUpperCase(); // ADMIN, OWNER
 
   const { data, error } = await supabase.functions.invoke("invite-user", {
@@ -57,7 +61,7 @@ export async function inviteAdmin(orgId, payload) {
       email,
       full_name: full_name ?? null,
       role_name,
-      org_id: orgId,
+      org_id: orgId, // siempre usamos la org actual
     },
   });
 
@@ -65,16 +69,19 @@ export async function inviteAdmin(orgId, payload) {
 }
 
 /**
- * Invita a un nuevo owner independiente (crea nueva organización)
+ * Invita a un NUEVO OWNER independiente, con su propia organización.
+ *
+ * @param {{ email: string, full_name?: string }} payload
  */
 export async function inviteIndependentOwner(payload) {
   const { email, full_name } = payload || {};
 
-  if (!email)
+  if (!email) {
     return {
       data: null,
       error: new Error("Email requerido para invitar owner independiente"),
     };
+  }
 
   const { data, error } = await supabase.functions.invoke("invite-user", {
     body: {
@@ -89,26 +96,40 @@ export async function inviteIndependentOwner(payload) {
 }
 
 /**
- * Eliminar administrador de la organización
+ * Elimina un administrador de la organización y delega la lógica
+ * de borrado completo a la Edge Function "delete-admin".
+ *
+ * La Edge Function debe:
+ *  - Verificar que el usuario no sea OWNER.
+ *  - Borrar memberships / user_organizations de esa org.
+ *  - Borrar el usuario en auth.users.
  */
 export async function deleteAdmin(orgId, userId) {
-  if (!orgId || !userId)
+  if (!orgId || !userId) {
     return {
       error: new Error("OrgId y userId requeridos para eliminar admin"),
     };
+  }
 
-  const { error } = await supabase
-    .from("memberships")
-    .delete()
-    .eq("org_id", orgId)
-    .eq("user_id", userId)
-    .in("role", ["admin"]); // protegemos a los owner
+  const { data, error } = await supabase.functions.invoke("delete-admin", {
+    body: { org_id: orgId, user_id: userId },
+  });
 
-  return { error };
+  if (error) {
+    return { error };
+  }
+
+  if (data && data.ok === false) {
+    return {
+      error: new Error(data.error || "No se pudo eliminar al administrador."),
+    };
+  }
+
+  return { error: null };
 }
 
 /**
- * Actualizar rol de admin (por ahora pendiente)
+ * Actualizar rol de admin (pendiente de implementar).
  */
 export async function updateAdmin(_orgId, _userId, _fields) {
   return {
