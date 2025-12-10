@@ -7,7 +7,8 @@
 //
 // No hace filtrados raros: dibuja lo que venga de
 // `v_positions_with_activity` y aplica solo filtros visuales.
-
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 import React, {
   useEffect,
   useMemo,

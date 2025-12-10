@@ -1,4 +1,4 @@
-// src/context/AuthProvider.jsx
+// src/auth/AuthProvider.jsx
 import {
   createContext,
   useContext,

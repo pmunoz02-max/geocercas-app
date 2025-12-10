@@ -1,15 +1,35 @@
+// src/components/Layout.jsx
 import { Outlet } from "react-router-dom";
-import Navbar from "../components/Navbar.jsx";
+import MainNav from "@/components/MainNav";
+import { useAuth } from "@/auth/AuthProvider";
 
-export default function AppLayout() {
+export default function Layout() {
+  const { session, profile } = useAuth();
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar />
-      <main className="flex-1 p-4">
-        <Outlet />
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      {/* NAVBAR SUPERIOR */}
+      <header className="border-b bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="font-semibold text-lg">🛰️ App Geocercas</div>
+          {session && profile ? (
+            <MainNav role={profile.role} />
+          ) : (
+            <div className="text-sm opacity-70">No autenticado</div>
+          )}
+        </div>
+      </header>
+
+      {/* CONTENIDO */}
+      <main className="flex-1">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <Outlet />
+        </div>
       </main>
-      <footer className="p-4 text-center text-sm text-gray-500">
-        App Geocercas · v1
+
+      {/* FOOTER */}
+      <footer className="border-t text-xs opacity-70 text-center py-3">
+        © {new Date().getFullYear()} App Geocercas — Todos los derechos reservados.
       </footer>
     </div>
   );
