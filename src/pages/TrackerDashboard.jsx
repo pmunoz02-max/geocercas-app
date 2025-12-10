@@ -108,10 +108,10 @@ function TrackerDashboard() {
 
         // 2) Perfiles de trackers (id es el user_id real)
         const { data: profilesData, error: profilesErr } = await supabase
-          .from("profiles")
-          .select("id, full_name, email, org_id, tenant_id")
-          .or(`org_id.eq.${currentOrg.id},tenant_id.eq.${currentOrg.id}`)
-          .order("full_name", { ascending: true });
+  .from("v_tracker_profiles")
+  .select("id, full_name, email, org_id, tenant_id")
+  .or(`org_id.eq.${currentOrg.id},tenant_id.eq.${currentOrg.id}`)
+  .order("full_name", { ascending: true });
 
         if (profilesErr) throw profilesErr;
 
