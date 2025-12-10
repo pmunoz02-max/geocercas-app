@@ -4,7 +4,7 @@
 // - Obtiene la organización activa desde AuthContext (useAuth).
 // - Deriva orgId desde currentOrg (puede ser string u objeto).
 // - Trackers: tabla personal (org_id)
-// - Geocercas: vista v_geocercas_resumen_ui (org_id)
+// - Geocercas: vista v_geocercas_resumen_ui (RLS, sin filtro explícito de org)
 // - Posiciones: vista v_positions_with_activity (org_id)
 
 import React, {
@@ -112,20 +112,16 @@ export default function TrackerDashboard() {
     setTrackers(activos);
   }, []);
 
-  // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui, filtrada por org_id
-  const fetchGeofences = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
-
+  // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui, RLS se encarga del org
+  const fetchGeofences = useCallback(async () => {
     const { data, error } = await supabase
       .from("v_geocercas_resumen_ui")
       .select("id, nombre, activa")
-      .eq("org_id", currentOrgId)
       .order("nombre", { ascending: true });
 
     if (error) {
       console.error("[TrackerDashboard] error fetching geocercas", error);
-      // No queremos bloquear el dashboard solo por geocercas:
-      setErrorMsg("No se pudieron cargar las geocercas (usando vista).");
+      setErrorMsg("No se pudieron cargar las geocercas (vista).");
       setGeofences([]);
       return;
     }
@@ -188,7 +184,7 @@ export default function TrackerDashboard() {
       try {
         await Promise.all([
           fetchTrackers(currentOrgId),
-          fetchGeofences(currentOrgId),
+          fetchGeofences(),
           fetchPositions(currentOrgId, { showSpinner: false }),
         ]);
       } finally {
@@ -287,7 +283,7 @@ export default function TrackerDashboard() {
           </p>
         </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Ventana de tiempo */}
           <label className="text-sm flex items-center gap-2">
             <span className="font-medium">Ventana:</span>
@@ -461,21 +457,21 @@ export default function TrackerDashboard() {
             <h2 className="text-lg font-semibold mb-3">Resumen</h2>
 
             <dl className="space-y-1 text-sm">
-              <div className="flex justify-between gap-4">
+              <div className="flex justify_between gap-4">
                 <dt className="font-medium">Geocercas activas:</dt>
                 <dd>{totalGeofences}</dd>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex justify_between gap-4">
                 <dt className="font-medium">Trackers (perfiles):</dt>
                 <dd>{totalTrackers}</dd>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex justify_between gap-4">
                 <dt className="font-medium">
                   Puntos en mapa (filtro actual):
                 </dt>
                 <dd>{totalPoints}</dd>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex justify_between gap-4">
                 <dt className="font-medium">
                   Último punto registrado:
                 </dt>
