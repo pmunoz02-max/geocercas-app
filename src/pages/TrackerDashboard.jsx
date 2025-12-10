@@ -1,12 +1,11 @@
 // src/pages/TrackerDashboard.jsx
 // Dashboard de tracking en tiempo real
 //
-// Este componente obtiene el `orgId` desde el AuthContext (useAuth):
-//   const { currentOrg } = useAuth();
-//   Deriva orgId a partir de currentOrg (string u objeto).
-//
-// No hace filtrados raros: dibuja lo que venga de
-// `v_positions_with_activity` y aplica solo filtros visuales.
+// - Obtiene la organización activa desde AuthContext (useAuth).
+// - Deriva orgId desde currentOrg (puede ser string u objeto).
+// - Trackers: tabla personal (org_id)
+// - Geocercas: tabla geocercas (tenant_id)
+// - Posiciones: vista v_positions_with_activity (org_id)
 
 import React, {
   useEffect,
@@ -66,7 +65,7 @@ export default function TrackerDashboard() {
   // Organización activa desde AuthContext
   const { currentOrg } = useAuth();
 
-  // currentOrg puede ser string o un objeto
+  // currentOrg puede ser string o un objeto con id / org_id
   const orgId =
     typeof currentOrg === "string"
       ? currentOrg
@@ -86,14 +85,14 @@ export default function TrackerDashboard() {
 
   // --------- Helpers para fetch -----------------------------------------
 
+  // 🔹 TRACKERS: tabla personal, filtrada por org_id
   const fetchTrackers = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
     const { data, error } = await supabase
-      .from("geocercas")
-      .select("id, nombre, deleted_at")
-      .eq("tenant_id", currentOrgId)
-      .is("deleted_at", null)
+      .from("personal")
+      .select("id, nombre, email, activo_bool, vigente, is_deleted")
+      .eq("org_id", currentOrgId)
       .order("nombre", { ascending: true });
 
     if (error) {
@@ -102,7 +101,6 @@ export default function TrackerDashboard() {
       return;
     }
 
-    // Solo trackers activos / vigentes / no borrados
     const activos =
       data?.filter(
         (p) =>
@@ -114,13 +112,14 @@ export default function TrackerDashboard() {
     setTrackers(activos);
   }, []);
 
+  // 🔹 GEOCERCAS: tabla geocercas, filtrada por tenant_id (no org_id)
   const fetchGeofences = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
     const { data, error } = await supabase
       .from("geocercas")
       .select("id, nombre, deleted_at")
-      .eq("org_id", currentOrgId)
+      .eq("tenant_id", currentOrgId)
       .is("deleted_at", null)
       .order("nombre", { ascending: true });
 
@@ -133,6 +132,7 @@ export default function TrackerDashboard() {
     setGeofences(data ?? []);
   }, []);
 
+  // 🔹 POSICIONES: vista v_positions_with_activity, filtrada por org_id
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
@@ -158,7 +158,6 @@ export default function TrackerDashboard() {
           .order("recorded_at", { ascending: false })
           .limit(1000);
 
-        // Filtro por tracker (por user_id)
         if (selectedTrackerId !== "all") {
           query = query.eq("user_id", selectedTrackerId);
         }
@@ -203,7 +202,6 @@ export default function TrackerDashboard() {
     fetchAllSummary(orgId);
   }, [orgId, fetchAllSummary]);
 
-  // Auto-refresh cada 30 segundos solo de posiciones
   useEffect(() => {
     if (!orgId) return;
     const id = setInterval(() => {
@@ -212,7 +210,6 @@ export default function TrackerDashboard() {
     return () => clearInterval(id);
   }, [orgId, fetchPositions]);
 
-  // Re-cargar posiciones cuando cambia ventana o filtro de tracker
   useEffect(() => {
     if (!orgId) return;
     fetchPositions(orgId);
@@ -223,7 +220,6 @@ export default function TrackerDashboard() {
   const filteredPositions = useMemo(() => {
     let pts = positions ?? [];
 
-    // Filtro por geocerca usando meta.geocercas_match (si existe)
     if (selectedGeofenceId !== "all") {
       pts = pts.filter((p) => {
         const matches = p?.meta?.geocercas_match;
@@ -252,7 +248,6 @@ export default function TrackerDashboard() {
   const lastPoint = filteredPositions[0] ?? null;
   const lastPointTime = lastPoint?.recorded_at ?? null;
 
-  // Centro del mapa: Quito por defecto; si hay puntos, usamos el último
   const mapCenter = useMemo(() => {
     if (lastPoint) {
       return [lastPoint.lat || -0.19, lastPoint.lng || -78.48];
@@ -383,7 +378,6 @@ export default function TrackerDashboard() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
-              {/* Polilíneas y puntos por tracker */}
               {Array.from(pointsByTracker.entries()).map(
                 ([trackerId, pts], idx) => {
                   if (!pts.length) return null;
@@ -447,7 +441,6 @@ export default function TrackerDashboard() {
                 }
               )}
 
-              {/* Mensaje si no hay puntos */}
               {!totalPoints && (
                 <div className="leaflet-bottom leaflet-left mb-2 ml-2">
                   <div className="bg-white/90 text-xs px-2 py-1 rounded shadow">
