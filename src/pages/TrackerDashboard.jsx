@@ -4,7 +4,7 @@
 // - Obtiene la organización activa desde AuthContext (useAuth).
 // - Deriva orgId desde currentOrg (puede ser string u objeto).
 // - Trackers: tabla personal (org_id)
-// - Geocercas: tabla geocercas (tenant_id)
+// - Geocercas: vista v_geocercas_resumen_ui (org_id)
 // - Posiciones: vista v_positions_with_activity (org_id)
 
 import React, {
@@ -112,24 +112,27 @@ export default function TrackerDashboard() {
     setTrackers(activos);
   }, []);
 
-  // 🔹 GEOCERCAS: tabla geocercas, filtrada por tenant_id (no org_id)
+  // 🔹 GEOCERCAS: vista v_geocercas_resumen_ui, filtrada por org_id
   const fetchGeofences = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
     const { data, error } = await supabase
-      .from("geocercas")
-      .select("id, nombre, deleted_at")
-      .eq("tenant_id", currentOrgId)
-      .is("deleted_at", null)
+      .from("v_geocercas_resumen_ui")
+      .select("id, nombre, activa")
+      .eq("org_id", currentOrgId)
       .order("nombre", { ascending: true });
 
     if (error) {
       console.error("[TrackerDashboard] error fetching geocercas", error);
-      setErrorMsg("Error al cargar geocercas");
+      // No queremos bloquear el dashboard solo por geocercas:
+      setErrorMsg("No se pudieron cargar las geocercas (usando vista).");
+      setGeofences([]);
       return;
     }
 
-    setGeofences(data ?? []);
+    // Solo geocercas activas
+    const activas = (data ?? []).filter((g) => g.activa !== false);
+    setGeofences(activas);
   }, []);
 
   // 🔹 POSICIONES: vista v_positions_with_activity, filtrada por org_id
@@ -284,7 +287,7 @@ export default function TrackerDashboard() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
           {/* Ventana de tiempo */}
           <label className="text-sm flex items-center gap-2">
             <span className="font-medium">Ventana:</span>
@@ -348,7 +351,7 @@ export default function TrackerDashboard() {
       </div>
 
       {errorMsg && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded text-sm">
           {errorMsg}
         </div>
       )}
