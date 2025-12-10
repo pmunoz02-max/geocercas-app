@@ -1,6 +1,6 @@
 // src/lib/adminsApi.js
-// API corregida para gestionar administrators usando la tabla REAL "memberships"
-// y roles del enum role_type: admin / owner / tracker / viewer.
+// API para gestionar administradores usando la tabla "memberships"
+// y el enum role_type: owner / admin / tracker / viewer.
 
 import { supabase } from "../supabaseClient";
 
@@ -8,7 +8,6 @@ import { supabase } from "../supabaseClient";
  * Lista administradores y propietarios de una organización.
  * - Lee la tabla memberships
  * - Incluye roles: owner, admin
- * - Trae email desde auth.users vía relación "users"
  */
 export async function listAdmins(orgId) {
   if (!orgId) {
@@ -20,15 +19,7 @@ export async function listAdmins(orgId) {
 
   const { data, error } = await supabase
     .from("memberships")
-    .select(
-      `
-      user_id,
-      org_id,
-      role,
-      created_at,
-      users(email, raw_user_meta_data)
-    `
-    )
+    .select("user_id, org_id, role, created_at")
     .eq("org_id", orgId)
     .in("role", ["owner", "admin"]);
 
@@ -36,14 +27,13 @@ export async function listAdmins(orgId) {
     return { data: null, error };
   }
 
-  // Normalizamos para la UI
   const normalized =
     (data || []).map((row) => ({
       user_id: row.user_id,
       org_id: row.org_id,
       role: row.role?.toUpperCase() ?? "—", // OWNER / ADMIN
-      email: row.users?.email ?? null,
-      full_name: row.users?.raw_user_meta_data?.full_name ?? null,
+      email: null, // por ahora no tenemos email directo
+      full_name: null,
       created_at: row.created_at,
     })) || [];
 
@@ -112,7 +102,7 @@ export async function deleteAdmin(orgId, userId) {
     .delete()
     .eq("org_id", orgId)
     .eq("user_id", userId)
-    .in("role", ["admin"]); // no borrar owners
+    .in("role", ["admin"]); // protegemos a los owner
 
   return { error };
 }
