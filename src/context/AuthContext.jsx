@@ -127,7 +127,7 @@ export function AuthProvider({ children }) {
           const { data: profiles, error: pErr } = await supabase
             .from("v_app_profiles")
             .select("*")
-            .eq("user_id", user.id);
+            .eq("user_id", profile?.id);
 
           if (pErr) {
             console.error("[AuthContext] v_app_profiles error:", pErr);
@@ -143,10 +143,11 @@ export function AuthProvider({ children }) {
         // 2.b) Memberships: roles por organización (modelo nuevo y universal)
         let memberships = [];
         try {
-          const { data: mRows, error: mErr } = await supabase
-            .from("memberships")
-            .select("org_id, role, created_at, is_default")
-            .eq("user_id", user.id);
+          const profileId = profile?.id || user?.id; // fallback viejo
+const { data: mRows, error: mErr } = await supabase
+  .from("memberships")
+  .select("org_id, role, created_at, is_default")
+  .eq("user_id", profileId);
 
           if (mErr) {
             console.error("[AuthContext] memberships error:", mErr);
