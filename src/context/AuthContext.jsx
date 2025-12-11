@@ -1,18 +1,37 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext();
 
+function roleRank(r) {
+  const v = String(r || "").toLowerCase();
+  if (v === "owner") return 3;
+  if (v === "admin") return 2;
+  if (v === "tracker") return 1;
+  return 0;
+}
+
+function pickHighestRole(memberships = []) {
+  let best = "tracker";
+  for (const m of memberships) {
+    const r = m?.role || "tracker";
+    if (roleRank(r) > roleRank(best)) best = r;
+  }
+  return best;
+}
+
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
+
   const [profile, setProfile] = useState(null);
   const [memberships, setMemberships] = useState([]);
   const [organizations, setOrganizations] = useState([]);
+
   const [currentOrg, setCurrentOrg] = useState(null);
   const [tenantId, setTenantId] = useState(null);
 
-  // 🔐 CANÓNICO
+  // ✅ CANÓNICO
   const [role, setRole] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -50,12 +69,20 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const loadAll = async () => {
       try {
+        setLoading(true);
+
         if (!user) {
+          setProfile(null);
+          setMemberships([]);
+          setOrganizations([]);
+          setCurrentOrg(null);
+          setTenantId(null);
+          setRole(null);
           setLoading(false);
           return;
         }
 
-        // 1) PROFILE
+        // 1) PROFILE (por email)
         const { data: prof, error: pErr } = await supabase
           .from("profiles")
           .select("*")
@@ -70,24 +97,37 @@ export const AuthProvider = ({ children }) => {
 
         setProfile(prof);
 
-        const profileUserId = prof.id;
-
-        // 2) MEMBERSHIPS (FUENTE PRINCIPAL DE ROL)
-        const { data: mRows, error: mErr } = await supabase
+        // 2) MEMBERSHIPS (por profiles.id)
+        const { data: mRowsRaw, error: mErr } = await supabase
           .from("memberships")
-          .select("org_id, role, is_default")
-          .eq("user_id", profileUserId);
+          .select("org_id, role, created_at, is_default")
+          .eq("user_id", prof.id);
 
-        if (mErr) {
-          console.error("Error loading memberships:", mErr);
-        }
+        if (mErr) console.error("Error loading memberships:", mErr);
 
-        setMemberships(mRows || []);
+        const mRows = (mRowsRaw || []).slice();
+
+        // Orden estable: default primero, luego rol más alto, luego created_at
+        mRows.sort((a, b) => {
+          const ad = a?.is_default ? 1 : 0;
+          const bd = b?.is_default ? 1 : 0;
+          if (ad !== bd) return bd - ad;
+
+          const ar = roleRank(a?.role);
+          const br = roleRank(b?.role);
+          if (ar !== br) return br - ar;
+
+          const at = new Date(a?.created_at || 0).getTime();
+          const bt = new Date(b?.created_at || 0).getTime();
+          return bt - at;
+        });
+
+        setMemberships(mRows);
 
         // 3) ORGANIZATIONS
         let orgs = [];
 
-        if (mRows?.length > 0) {
+        if (mRows.length > 0) {
           const orgIds = mRows.map((m) => m.org_id);
 
           const { data: orgRows, error: oErr } = await supabase
@@ -96,7 +136,7 @@ export const AuthProvider = ({ children }) => {
             .in("id", orgIds);
 
           if (oErr) {
-            console.error("Error loading organizations:", oErr);
+            console.error("Error loading organizations", oErr);
             setLoading(false);
             return;
           }
@@ -106,10 +146,10 @@ export const AuthProvider = ({ children }) => {
 
         setOrganizations(orgs);
 
-        // 4) CURRENT ORG
+        // 4) CURRENT ORG (default si existe, si no la primera disponible)
         let activeOrg = null;
 
-        if (mRows?.length > 0 && orgs.length > 0) {
+        if (mRows.length > 0 && orgs.length > 0) {
           const defaultMembership = mRows.find((m) => m.is_default);
           activeOrg =
             orgs.find((o) => o.id === defaultMembership?.org_id) || orgs[0];
@@ -118,13 +158,15 @@ export const AuthProvider = ({ children }) => {
         setCurrentOrg(activeOrg);
         setTenantId(activeOrg?.id ?? null);
 
-        // 5) ROLE (CANÓNICO)
-        let resolvedRole = "tracker";
+        // 5) ROLE CANÓNICO (rol de la org activa; si no hay org activa, rol más alto)
+        let resolvedRole = null;
 
-        if (mRows?.length > 0 && mRows[0].role) {
-          resolvedRole = mRows[0].role;
-        } else if (prof.role) {
-          resolvedRole = prof.role;
+        if (activeOrg?.id) {
+          const mActive = mRows.find((m) => m.org_id === activeOrg.id);
+          resolvedRole =
+            mActive?.role || pickHighestRole(mRows) || prof.role || "tracker";
+        } else {
+          resolvedRole = pickHighestRole(mRows) || prof.role || "tracker";
         }
 
         setRole(resolvedRole);
@@ -138,25 +180,48 @@ export const AuthProvider = ({ children }) => {
     loadAll();
   }, [user]);
 
-  // -------------------------------------------------
-  // VALORES EXPUESTOS (CONTRATO ÚNICO)
-  // -------------------------------------------------
-  const value = {
-    session,
-    user,
-    profile,
-    memberships,
-    organizations,
-    currentOrg,
-    tenantId,
+  // Helpers
+  const isOwner = role === "owner";
+  const isAdmin = role === "admin" || role === "owner";
 
-    // 👇 ESTO ES LO QUE FALTABA
-    role,
-    isOwner: role === "owner",
-    isAdmin: role === "admin" || role === "owner",
+  // Compatibilidad: algunos componentes viejos usan currentRole
+  const currentRole = role;
 
-    loading,
-  };
+  const value = useMemo(
+    () => ({
+      session,
+      user,
+      profile,
+      organizations,
+      memberships,
+      currentOrg,
+      tenantId,
+
+      // ✅ contrato único
+      role,
+      isOwner,
+      isAdmin,
+
+      // compatibilidad
+      currentRole,
+
+      loading,
+    }),
+    [
+      session,
+      user,
+      profile,
+      organizations,
+      memberships,
+      currentOrg,
+      tenantId,
+      role,
+      isOwner,
+      isAdmin,
+      currentRole,
+      loading,
+    ]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
