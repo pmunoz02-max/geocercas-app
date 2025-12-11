@@ -24,6 +24,7 @@
       "notFound": "Resource not found."
     }
   },
+
   "app": {
     "title": "App Geocercas",
     "subtitle": "Personnel control by geofences",
@@ -68,6 +69,7 @@
       "admins": "Admins"
     }
   },
+
   "landing": {
     "hero": {
       "title": "Geofenced personnel control",
@@ -78,46 +80,47 @@
     "features": {
       "title": "Main features",
       "geofencesTitle": "Geofences",
-      "geofencesDesc": "Define work areas and control the presence of your staff.",
+      "geofencesDesc": "Define work areas and control staff presence.",
       "activitiesTitle": "Activities and costs",
       "activitiesDesc": "Associate activities and costs to each assignment.",
       "reportsTitle": "Reports and dashboards",
-      "reportsDesc": "Visualize performance and costs in a clear and simple way.",
+      "reportsDesc": "Visualize performance and costs clearly.",
       "trackerTitle": "Tracker app",
-      "trackerDesc": "Mobile app for field staff with offline recording."
+      "trackerDesc": "Mobile app for field staff with offline logging."
     },
     "howItWorks": {
       "title": "How it works",
       "step1Title": "Create your organization",
-      "step1Desc": "Register your company and configure your work sites.",
+      "step1Desc": "Register your company and configure sites.",
       "step2Title": "Invite staff and define roles",
-      "step2Desc": "Invite administrators and trackers, assign permissions.",
+      "step2Desc": "Invite admins and trackers.",
       "step3Title": "Create geofences and activities",
-      "step3Desc": "Define geofences and activities with hourly costs.",
+      "step3Desc": "Define geofences with hourly cost activities.",
       "step4Title": "Start tracking",
       "step4Desc": "Track presence and activities in real time."
     },
     "plans": {
       "title": "Plans",
-      "subtitle": "Choose the plan that best suits your operation",
+      "subtitle": "Choose the plan that fits your needs",
       "basicTitle": "Basic",
-      "basicDesc": "Ideal for small teams just starting to digitize their operations.",
+      "basicDesc": "For small teams starting digitalization.",
       "proTitle": "Pro",
-      "proDesc": "For companies that require dashboards and advanced reporting.",
+      "proDesc": "Advanced dashboards and reports.",
       "enterpriseTitle": "Enterprise",
-      "enterpriseDesc": "Custom plan with integrations and dedicated support.",
+      "enterpriseDesc": "Custom plan with integrations.",
       "contactUs": "Contact us"
     },
     "faq": {
       "title": "Frequently asked questions",
       "q1": "Do I need internet in the field?",
-      "a1": "The tracker app can work offline and syncs data when it recovers connection.",
-      "q2": "Can I export the reports?",
-      "a2": "Yes, you can export data to CSV/Excel for custom analysis.",
-      "q3": "Can I use multiple currencies?",
-      "a3": "Yes, you can configure activities with different currencies if needed."
+      "a1": "The tracker app works offline and syncs automatically.",
+      "q2": "Can I export reports?",
+      "a2": "Yes, export to CSV/Excel.",
+      "q3": "Are multiple currencies supported?",
+      "a3": "Yes, activities can use different currencies."
     }
   },
+
   "login": {
     "title": "Welcome to App Geocercas",
     "subtitle": "Sign in to access your organization",
@@ -129,61 +132,56 @@
     "errorInvalidCredentials": "Incorrect email or password.",
     "errorGeneric": "Could not log in. Please try again."
   },
+
   "inicio": {
     "title": "Home",
     "welcome": "Welcome to App Geocercas",
-    "description": "From this panel you can manage geofences, personnel and assignments.",
+    "description": "Manage geofences, personnel and assignments.",
     "header": {
       "badge": "Help and resources center",
       "title": "Welcome to your panel",
-      "subtitle": "From here you can access instructions, FAQs, support and news about App Geocercas."
+      "subtitle": "Access instructions, FAQs, support and news."
     },
     "cards": {
       "instrucciones": {
         "badge": "Quick guide",
         "title": "Instructions",
-        "body": "Follow step by step how to configure organizations, geofences, personnel, activities and trackers.",
+        "body": "Learn how to configure organizations, geofences, personnel, activities and trackers.",
         "cta": "View instructions"
       },
       "faq": {
         "badge": "Help",
         "title": "Frequently asked questions",
-        "body": "Find answers to the most common questions about invitations, roles, costs and how to use the tracker.",
+        "body": "Find answers about invitations, roles, costs and the tracker.",
         "cta": "View FAQs"
       },
       "videoDemo": {
         "badge": "Video",
         "title": "Demo video",
-        "body": "Watch a short demonstration of how App Geocercas works in real life.",
-        "cta": "Watch demo video"
+        "body": "Watch a short demonstration.",
+        "cta": "Watch video"
       },
       "soporte": {
         "badge": "Support",
-        "title": "Contact / Support",
-        "body": "Need help? Contact us for technical support, billing or questions about your account.",
-        "cta": "Go to support"
+        "title": "Support",
+        "body": "Get help for tech or billing issues.",
+        "cta": "Contact support"
       },
       "queEs": {
-        "badge": "Information",
+        "badge": "Info",
         "title": "What is App Geocercas?",
-        "body": "Learn about the vision, use cases and benefits of App Geocercas for your organization.",
+        "body": "Learn about the platform vision.",
         "cta": "Read more"
       },
       "novedades": {
         "badge": "News",
-        "title": "News / Changelog",
-        "body": "Review the history of changes, new features, improvements and fixes to the platform.",
+        "title": "Updates / Changelog",
+        "body": "Track new features and fixes.",
         "cta": "View changelog"
       }
-    },
-    "userInfo": {
-      "connectedAs": "Connected as",
-      "withRole": "with the role",
-      "inOrg": "in the organization",
-      "userLabel": "User:",
-      "orgIdLabel": "Organization ID:"
     }
   },
+
   "geocercas": {
     "title": "Geofences",
     "new": "New geofence",
@@ -197,12 +195,12 @@
     "update": "Update geofence",
     "cancel": "Cancel",
     "delete": "Delete geofence",
-    "confirmDelete": "Are you sure you want to delete the geofence \"{{name}}\"?",
+    "confirmDelete": "Are you sure you want to delete geofence \"{{name}}\"?",
     "errorLoad": "Error loading geofences.",
     "errorSave": "Could not save the geofence.",
     "errorDelete": "Could not delete the geofence.",
     "empty": "No geofences created yet.",
-    "mapInstructions": "Draw the geofence on the map and then save.",
+    "mapInstructions": "Draw the geofence on the map, then save.",
     "listTitle": "Geofence list",
     "thName": "Name",
     "thDescription": "Description",
@@ -210,6 +208,7 @@
     "thStatus": "Status",
     "thActions": "Actions"
   },
+
   "personal": {
     "title": "Personnel",
     "new": "New person",
@@ -218,7 +217,7 @@
     "email": "Email",
     "phone": "Phone",
     "document": "Document / ID",
-    "role": "Role in the field",
+    "role": "Field role",
     "active": "Active",
     "inactive": "Inactive",
     "buttonCreate": "Create person",
@@ -241,17 +240,17 @@
     "errorLoad": "Error loading personnel.",
     "errorSave": "Could not save the person.",
     "errorDelete": "Could not delete the person.",
-    "errorMissingTenant": "Could not find the organization for the current user (tenant_id/org_id).",
     "confirmDelete": "Are you sure you want to delete \"{{name}}\"?"
   },
+
   "actividades": {
     "title": "Activities",
     "formTitleNew": "New activity",
     "formTitleEdit": "Edit activity",
     "fieldName": "Activity name",
-    "fieldNamePlaceholder": "E.g. Planting, Irrigation, Harvest",
+    "fieldNamePlaceholder": "E.g. Planting, Irrigation",
     "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "Short description of the activity…",
+    "fieldDescriptionPlaceholder": "Short description…",
     "fieldCurrency": "Currency",
     "fieldHourlyRate": "Hourly rate",
     "fieldHourlyRatePlaceholder": "E.g. 3.50",
@@ -284,10 +283,8 @@
     "actionDeactivate": "Deactivate",
     "actionActivate": "Activate",
     "actionDelete": "Delete",
-    "tableNoResults": "No activities registered.",
-    "loading": "Loading activities…",
     "empty": "No activities registered.",
-    "readOnlyNote": "Only the owner and admins can create or edit activities.",
+    "loading": "Loading activities…",
     "bannerCreated": "Activity created successfully.",
     "bannerUpdated": "Activity updated successfully.",
     "bannerDeleted": "Activity deleted.",
@@ -297,51 +294,114 @@
     "errorMissingName": "Activity name is required.",
     "errorMissingCurrency": "Currency is required.",
     "errorMissingRate": "Hourly rate is required.",
-    "errorNameRequired": "Activity name is required.",
-    "errorRatePositive": "Hourly rate must be greater than 0.",
-    "errorMissingTenant": "Could not find the organization for the current user (tenant_id/org_id).",
-    "errorToggle": "Could not change activity status.",
-    "confirmDelete": "Are you sure you want to delete the activity \"{{name}}\"?"
+    "confirmDelete": "Are you sure you want to delete the activity “{{name}}”?"
   },
+
   "asignaciones": {
     "title": "Assignments",
-    "new": "New assignment",
-    "edit": "Edit assignment",
-    "person": "Person",
-    "geofence": "Geofence",
-    "activity": "Activity",
-    "startDate": "Start date",
-    "endDate": "End date",
-    "hourlyRate": "Hourly rate",
-    "currency": "Currency",
-    "active": "Active",
-    "inactive": "Inactive",
-    "buttonCreate": "Create assignment",
-    "buttonUpdate": "Update assignment",
-    "buttonCancel": "Cancel",
-    "tableTitle": "Assignment list",
-    "thPerson": "Person",
-    "thGeofence": "Geofence",
-    "thActivity": "Activity",
-    "thDates": "Dates",
-    "thStatus": "Status",
-    "thActions": "Actions",
-    "statusActive": "Active",
-    "statusInactive": "Inactive",
-    "actionEdit": "Edit",
-    "actionDeactivate": "Deactivate",
-    "actionActivate": "Activate",
-    "actionDelete": "Delete",
-    "empty": "No assignments registered.",
-    "errorLoad": "Error loading assignments.",
-    "errorSave": "Could not save the assignment.",
-    "errorDelete": "Could not delete the assignment.",
-    "confirmDelete": "Are you sure you want to delete this assignment?"
+
+    "filters": {
+      "statusLabel": "Status",
+      "status": {
+        "todos": "All",
+        "activo": "Active",
+        "inactivo": "Inactive"
+      },
+      "refresh": "Refresh",
+      "refreshLoading": "Updating…"
+    },
+
+    "form": {
+      "newTitle": "New assignment",
+      "editTitle": "Edit assignment",
+
+      "personLabel": "Person",
+      "personPlaceholder": "Select a person",
+
+      "activityLabel": "Activity",
+      "activityPlaceholder": "Select an activity",
+
+      "geofenceLabel": "Geofence",
+      "geofencePlaceholder": "Select a geofence",
+
+      "startLabel": "Start date/time",
+      "endLabel": "End date/time",
+
+      "statusLabel": "Status",
+      "statusActive": "Active",
+      "statusInactive": "Inactive",
+
+      "frequencyLabel": "Frequency (min)",
+
+      "saveButton": "Save assignment",
+      "updateButton": "Update assignment",
+      "cancelEditButton": "Cancel editing",
+
+      "buttonCreate": "Create assignment",
+      "buttonUpdate": "Update assignment",
+      "buttonCancel": "Cancel"
+    },
+
+    "table": {
+      "title": "Assignment list",
+      "person": "Person",
+      "activity": "Activity",
+      "geofence": "Geofence",
+      "start": "Start",
+      "end": "End",
+      "status": "Status",
+      "actions": "Actions",
+      "noResults": "No assignments recorded."
+    },
+
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "activate": "Activate",
+      "deactivate": "Deactivate"
+    },
+
+    "banner": {
+      "created": "Assignment successfully created.",
+      "updated": "Assignment updated.",
+      "deleted": "Assignment deleted."
+    },
+
+    "messages": {
+      "loadError": "Error loading assignments.",
+      "catalogError": "Error loading catalogs (personnel, geofences, activities).",
+      "loadingData": "Loading assignment data…",
+      "overlapError": "This person already has an assignment that overlaps this date range.",
+      "selectPersonAndFence": "Select a person and a geofence.",
+      "selectDates": "Select a start and end date/time.",
+      "frequencyTooLow": "Minimum frequency is 5 minutes.",
+      "frequencyInvalidRange": "Frequency must be between 5 minutes and 12 hours.",
+      "saveGenericError": "Error saving the assignment.",
+      "createGenericError": "Could not create assignment.",
+      "createSuccess": "Assignment created successfully.",
+      "updateGenericError": "Could not update assignment.",
+      "updateSuccess": "Assignment updated successfully.",
+      "deleteError": "Could not delete assignment.",
+      "deleteSuccess": "Assignment deleted successfully.",
+      "confirmDelete": "Are you sure you want to delete this assignment?"
+    },
+
+    "error": {
+      "load": "Error loading assignments.",
+      "save": "Could not save assignment.",
+      "delete": "Could not delete assignment.",
+      "missingPerson": "A person must be selected.",
+      "missingGeofence": "A geofence must be selected.",
+      "missingActivity": "An activity must be selected.",
+      "missingStart": "Start date/time is required.",
+      "missingEnd": "End date/time is required."
+    }
   },
+
   "reportes": {
     "title": "Cost reports",
     "headerSubtitle": "View and export costs by person, activity and geofence.",
-    "noAccessBody": "You do not have permission to view the cost reports. This module is only available for owners and administrators.",
+    "noAccessBody": "You do not have permission to view cost reports.",
     "loadingReport": "Loading report…",
     "filtersTitle": "Filters",
     "filtersFrom": "From",
@@ -353,13 +413,9 @@
     "filtersClear": "Clear filters",
     "filtersApply": "Apply filters",
     "summaryTotalHoursLabel": "Total hours",
-    "summaryTotalHoursHelp": "Sum of the hours of all assignments in the selected period.",
     "summaryTotalCostLabel": "Total cost",
-    "summaryTotalCostHelp": "Sum of costs calculated by person, activity and geofence.",
     "summaryRecordsLabel": "Records",
-    "summaryRecordsHelp": "Number of rows that match the current filters.",
     "tableTitle": "Cost detail",
-    "tableExportHelp": "Export the current detail as a CSV file.",
     "tableExportButton": "Export CSV",
     "colPersona": "Person",
     "colGeocerca": "Geofence",
@@ -370,63 +426,21 @@
     "colTarifa": "Rate/hour",
     "colCosto": "Cost",
     "colMoneda": "Currency",
-    "csvHeaderInicio": "Start",
-    "csvHeaderFin": "End",
-    "csvHeaderPersona": "Person",
-    "csvHeaderActividad": "Activity",
-    "csvHeaderGeocerca": "Geofence",
-    "csvHeaderHoras": "Hours",
-    "csvHeaderTarifa": "Rate_hour",
-    "csvHeaderCosto": "Total_cost",
-    "csvHeaderMoneda": "Currency",
     "buttonDownloadCsv": "Download CSV",
     "errorLoad": "Error loading reports.",
-    "errorCsv": "Could not generate the CSV file.",
-    "errorLoadFilters": "Error loading filters (people, activities, geofences).",
-    "errorRangeInvalid": "The \"From\" date cannot be greater than the \"To\" date.",
-    "errorViewMissing": "The view v_costos_detalle has not been created yet in Supabase.",
-    "errorLoadReport": "Error loading the cost report.",
-    "errorLabel": "Error:",
-    "exportNoData": "There is no data to export.",
-    "tableEmpty": "There are no records for the selected filters.",
-    "personNoName": "Person without name",
-    "geofenceNoName": "Geofence without name",
-    "activityNoName": "Activity without name",
-    "filters": {
-      "dateFromLabel": "From",
-      "dateToLabel": "To",
-      "personLabel": "Person",
-      "activityLabel": "Activity",
-      "geofenceLabel": "Geofence",
-      "apply": "Apply filters",
-      "clear": "Clear filters"
-    },
-    "table": {
-      "title": "Cost detail",
-      "person": "Person",
-      "activity": "Activity",
-      "geofence": "Geofence",
-      "start": "Start",
-      "end": "End",
-      "hours": "Hours",
-      "rate": "Rate/hour",
-      "total": "Total cost",
-      "currency": "Currency",
-      "noResults": "No records found for the selected filters."
-    }
+    "errorCsv": "Could not generate CSV file.",
+    "exportNoData": "No data to export.",
+    "tableEmpty": "No records found."
   },
+
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "General overview of activity in geofences",
     "cards": {
       "totalHoursTitle": "Total hours",
-      "totalHoursDesc": "Hours recorded in the selected period.",
       "totalCostTitle": "Total cost",
-      "totalCostDesc": "Estimated labor cost.",
       "activeAssignmentsTitle": "Active assignments",
-      "activeAssignmentsDesc": "Assignments currently in progress.",
-      "activeTrackersTitle": "Active trackers",
-      "activeTrackersDesc": "Trackers that sent data in the last 24 hours."
+      "activeTrackersTitle": "Active trackers"
     },
     "charts": {
       "hoursByPerson": "Hours by person",
@@ -435,35 +449,18 @@
       "costByGeofence": "Cost by geofence"
     }
   },
+
   "dashboardCostos": {
     "title": "Cost dashboard",
     "subtitle": "Detailed analysis of labor costs",
-    "filters": {
-      "title": "Filters",
-      "dateFrom": "From",
-      "dateTo": "To",
-      "person": "Person",
-      "geofence": "Geofence",
-      "activity": "Activity",
-      "buttonApply": "Apply filters",
-      "buttonClear": "Clear filters"
-    },
-    "cards": {
-      "totalCostTitle": "Total cost",
-      "totalCostDesc": "Sum of all recorded costs.",
-      "avgCostHourTitle": "Average cost/hour",
-      "avgCostHourDesc": "Weighted average cost per hour.",
-      "maxCostGeofenceTitle": "Most expensive geofence",
-      "maxCostGeofenceDesc": "Geofence with the highest total cost.",
-      "maxCostPersonTitle": "Most expensive person",
-      "maxCostPersonDesc": "Person with the highest total cost."
-    },
-    "charts": {
-      "costByGeofence": "Cost by geofence",
-      "costByPerson": "Cost by person",
-      "costByActivity": "Cost by activity",
-      "hoursVsCost": "Hours vs. cost"
-    },
+    "filtersTitle": "Filters",
+    "filtersFrom": "From",
+    "filtersTo": "To",
+    "filtersPerson": "Person",
+    "filtersActivity": "Activity",
+    "filtersGeofence": "Geofence",
+    "filtersClear": "Clear filters",
+    "filtersApply": "Apply filters",
     "tableTitle": "Cost detail",
     "thDate": "Date",
     "thPerson": "Person",
@@ -472,9 +469,10 @@
     "thHours": "Hours",
     "thRate": "Rate",
     "thCost": "Cost",
-    "empty": "No cost data for the selected period.",
+    "empty": "No data for the selected period.",
     "export": "Export to CSV"
   },
+
   "tracker": {
     "title": "Tracker",
     "subtitle": "Last positions of the field staff",
@@ -494,33 +492,58 @@
     "thLongitude": "Longitude",
     "thAccuracy": "Accuracy",
     "thBattery": "Battery",
-    "empty": "No positions recorded for the selected filters.",
+    "empty": "No positions recorded.",
     "mapTitle": "Map with last positions"
   },
+
   "trackerDashboard": {
     "title": "Tracker dashboard",
     "subtitle": "Operational status of field trackers",
-    "cards": {
-      "totalTrackersTitle": "Total trackers",
-      "onlineTrackersTitle": "Online trackers",
-      "offlineTrackersTitle": "Offline trackers",
-      "noDataTrackersTitle": "Without recent data"
+    "filters": {
+      "trackerLabel": "Tracker",
+      "timeWindowLabel": "Window",
+      "timeWindowSuffix": "hours",
+      "geofenceLabel": "Geofence",
+      "allTrackers": "All trackers",
+      "allGeofences": "All geofences"
     },
-    "tableTitle": "Tracker status",
-    "thPerson": "Person",
-    "thLastPosition": "Last position",
-    "thLastSync": "Last sync",
-    "thBattery": "Battery",
-    "thStatus": "Status",
-    "statusOnline": "Online",
-    "statusOffline": "Offline",
-    "statusNoData": "No data"
+    "summary": {
+      "title": "Summary",
+      "geofencesActive": "Active geofences",
+      "trackersProfiles": "Trackers (profiles)",
+      "pointsInMap": "Points in map",
+      "lastPoint": "Last recorded point",
+      "noPoints": "No points for these filters."
+    },
+    "legend": {
+      "title": "Legend",
+      "points": "pts"
+    },
+    "popup": {
+      "tracker": "Tracker",
+      "time": "Time",
+      "accuracy": "Accuracy",
+      "countHere": "Records in this location",
+      "activity": "Activity",
+      "geofence": "Geofence",
+      "inside": "Inside geofence",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "messages": {
+      "noOrg": "You must select an organization.",
+      "autoRefresh": "Points refresh automatically.",
+      "loading": "Loading tracking data…",
+      "noData": "No positions for these filters.",
+      "error": "Error loading tracking data."
+    }
   },
+
   "inviteTracker": {
     "title": "Invite tracker",
     "subtitle": "Invite field staff to use the tracker app",
     "email": "Email of the tracker",
-    "name": "Name of the tracker",
+    "name": "Tracker name",
     "buttonSend": "Send invitation",
     "tableTitle": "Tracker invitations",
     "thName": "Name",
@@ -538,6 +561,7 @@
     "errorSend": "Could not send the invitation.",
     "errorLoad": "Error loading invitations."
   },
+
   "admins": {
     "title": "Administrators",
     "subtitle": "Manage administrators of your organization",
@@ -560,13 +584,6 @@
     "bannerResent": "Invitation resent.",
     "errorInvite": "Could not send the invitation.",
     "errorLoad": "Error loading administrators.",
-    "confirmRemove": "Are you sure you want to remove administrator \"{{name}}\"?",
-    "header": {
-      "admins": "Admins",
-      "logout": "Logout",
-      "roleOwner": "Owner",
-      "roleAdmin": "Admin",
-      "goToPanel": "Go to panel"
-    }
+    "confirmRemove": "Are you sure you want to remove administrator \"{{name}}\"?"
   }
 }

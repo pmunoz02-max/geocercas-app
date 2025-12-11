@@ -285,10 +285,12 @@
         "activo": "Actifs",
         "inactivo": "Inactifs"
       },
-      "refresh": "Actualiser"
+      "refresh": "Actualiser",
+      "refreshLoading": "Actualisation…"
     },
     "form": {
       "newTitle": "Nouvelle affectation",
+      "editTitle": "Modifier l’affectation",
       "personLabel": "Personne",
       "personPlaceholder": "Sélectionnez une personne",
       "activityLabel": "Activité",
@@ -301,6 +303,9 @@
       "statusActive": "Active",
       "statusInactive": "Inactive",
       "frequencyLabel": "Fréquence (min)",
+      "saveButton": "Enregistrer l’affectation",
+      "updateButton": "Mettre à jour l’affectation",
+      "cancelEditButton": "Annuler la modification",
       "buttonCreate": "Créer l’affectation",
       "buttonUpdate": "Mettre à jour l’affectation",
       "buttonCancel": "Annuler"
@@ -326,6 +331,24 @@
       "created": "Affectation créée correctement.",
       "updated": "Affectation mise à jour.",
       "deleted": "Affectation supprimée."
+    },
+    "messages": {
+      "loadError": "Erreur lors du chargement des affectations.",
+      "catalogError": "Erreur lors du chargement des catalogues (personnel, géofences, activités).",
+      "loadingData": "Chargement des données d’affectations…",
+      "overlapError": "Cette personne a déjà une affectation qui se chevauche sur cette plage de dates.",
+      "selectPersonAndFence": "Vous devez sélectionner une personne et une géofence.",
+      "selectDates": "Vous devez saisir la date/heure de début et de fin.",
+      "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
+      "frequencyInvalidRange": "La fréquence doit être comprise entre 5 minutes et 12 heures.",
+      "saveGenericError": "Une erreur s’est produite lors de l’enregistrement de l’affectation.",
+      "createGenericError": "Impossible de créer l’affectation.",
+      "createSuccess": "Affectation créée correctement.",
+      "updateGenericError": "Impossible de mettre à jour l’affectation.",
+      "updateSuccess": "Affectation mise à jour correctement.",
+      "deleteError": "Impossible de supprimer l’affectation.",
+      "deleteSuccess": "Affectation supprimée correctement.",
+      "confirmDelete": "Voulez-vous vraiment supprimer cette affectation ?"
     },
     "error": {
       "load": "Erreur lors du chargement des affectations.",

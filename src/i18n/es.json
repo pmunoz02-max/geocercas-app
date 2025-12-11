@@ -285,10 +285,12 @@
         "activo": "Activos",
         "inactivo": "Inactivos"
       },
-      "refresh": "Refrescar"
+      "refresh": "Refrescar",
+      "refreshLoading": "Actualizando…"
     },
     "form": {
       "newTitle": "Nueva asignación",
+      "editTitle": "Editar asignación",
       "personLabel": "Persona",
       "personPlaceholder": "Selecciona una persona",
       "activityLabel": "Actividad",
@@ -301,6 +303,9 @@
       "statusActive": "Activa",
       "statusInactive": "Inactiva",
       "frequencyLabel": "Frecuencia (min)",
+      "saveButton": "Guardar asignación",
+      "updateButton": "Actualizar asignación",
+      "cancelEditButton": "Cancelar edición",
       "buttonCreate": "Crear asignación",
       "buttonUpdate": "Actualizar asignación",
       "buttonCancel": "Cancelar"
@@ -327,6 +332,24 @@
       "updated": "Asignación actualizada.",
       "deleted": "Asignación eliminada."
     },
+    "messages": {
+      "loadError": "Error al cargar las asignaciones.",
+      "catalogError": "Error al cargar catálogos (personal, geocercas, actividades).",
+      "loadingData": "Cargando datos de asignaciones…",
+      "overlapError": "La persona ya tiene una asignación activa que se solapa en ese rango de fechas.",
+      "selectPersonAndFence": "Debes seleccionar una persona y una geocerca.",
+      "selectDates": "Debes ingresar fecha y hora de inicio y de fin.",
+      "frequencyTooLow": "La frecuencia mínima permitida es de 5 minutos.",
+      "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
+      "saveGenericError": "Ocurrió un error al guardar la asignación.",
+      "createGenericError": "No se pudo crear la asignación.",
+      "createSuccess": "Asignación creada correctamente.",
+      "updateGenericError": "No se pudo actualizar la asignación.",
+      "updateSuccess": "Asignación actualizada correctamente.",
+      "deleteError": "No se pudo eliminar la asignación.",
+      "deleteSuccess": "Asignación eliminada correctamente.",
+      "confirmDelete": "¿Seguro que deseas eliminar esta asignación?"
+    },
     "error": {
       "load": "Error al cargar las asignaciones.",
       "save": "No se pudo guardar la asignación.",
@@ -342,10 +365,8 @@
   "reportes": {
     "title": "Reportes de costos",
     "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
-
     "noAccessBody": "No tienes permisos para visualizar los reportes de costos. Este módulo está disponible solo para propietarios y administradores.",
     "loadingReport": "Cargando reporte…",
-
     "filtersTitle": "Filtros",
     "filtersFrom": "Desde",
     "filtersTo": "Hasta",
@@ -355,18 +376,15 @@
     "filtersAll": "Todos",
     "filtersClear": "Limpiar filtros",
     "filtersApply": "Aplicar filtros",
-
     "summaryTotalHoursLabel": "Horas totales",
     "summaryTotalHoursHelp": "Suma de las horas de todas las asignaciones en el rango seleccionado.",
     "summaryTotalCostLabel": "Costo total",
     "summaryTotalCostHelp": "Suma de los costos calculados por persona, actividad y geocerca.",
     "summaryRecordsLabel": "Registros",
     "summaryRecordsHelp": "Cantidad de filas que cumplen con los filtros actuales.",
-
     "tableTitle": "Detalle de costos",
     "tableExportHelp": "Exporta el detalle actual como archivo CSV.",
     "tableExportButton": "Exportar CSV",
-
     "colPersona": "Persona",
     "colGeocerca": "Geocerca",
     "colActividad": "Actividad",
@@ -376,7 +394,6 @@
     "colTarifa": "Tarifa/hora",
     "colCosto": "Costo",
     "colMoneda": "Moneda",
-
     "csvHeaderInicio": "Inicio",
     "csvHeaderFin": "Fin",
     "csvHeaderPersona": "Persona",
@@ -387,9 +404,7 @@
     "csvHeaderTotal": "Costo_total",
     "csvHeaderCosto": "Costo_total",
     "csvHeaderMoneda": "Moneda",
-
     "buttonDownloadCsv": "Descargar CSV",
-
     "errorLoad": "Error al cargar los reportes.",
     "errorCsv": "No se pudo generar el archivo CSV.",
     "errorLoadFilters": "Error al cargar filtros (personas, actividades, geocercas).",
@@ -397,13 +412,11 @@
     "errorViewMissing": "La vista v_costos_detalle aún no está creada en Supabase.",
     "errorLoadReport": "Error al cargar el reporte de costos.",
     "errorLabel": "Error:",
-
     "exportNoData": "No hay datos para exportar.",
     "tableEmpty": "No hay registros para los filtros seleccionados.",
     "personNoName": "Persona sin nombre",
     "geofenceNoName": "Geocerca sin nombre",
     "activityNoName": "Actividad sin nombre",
-
     "filters": {
       "dateFromLabel": "Desde",
       "dateToLabel": "Hasta",
