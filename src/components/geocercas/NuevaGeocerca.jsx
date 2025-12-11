@@ -111,14 +111,16 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
 
 /* ----------------- Utils geocercas ----------------- */
 
-async function listGeofences({ supabaseClient = null }) {
+async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
 
-  if (supabaseClient) {
-    // Confiamos en RLS para que solo devuelva las geocercas de la organización del usuario
+  // 🔒 Si no hay organización, no cargamos nada de Supabase
+  if (supabaseClient && orgId) {
+    // Confiamos en RLS + filtro explícito por org_id
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .select("id, nombre")
+      .eq("org_id", orgId)
       .order("nombre", { ascending: true });
 
     if (!error && data) {
@@ -384,13 +386,21 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   /* ---- Listado de geocercas ---- */
   const refreshGeofenceList = useCallback(async () => {
     try {
-      const list = await listGeofences({ supabaseClient });
+      // Si el usuario aún no tiene organización activa, lista vacía
+      if (!currentOrg?.id) {
+        setGeofenceList([]);
+        return;
+      }
+      const list = await listGeofences({
+        supabaseClient,
+        orgId: currentOrg.id,
+      });
       setGeofenceList(list);
     } catch (err) {
       console.warn("[NuevaGeocerca] error al refrescar geofences:", err);
       setGeofenceList([]);
     }
-  }, [supabaseClient]);
+  }, [supabaseClient, currentOrg]);
 
   useEffect(() => {
     refreshGeofenceList();
