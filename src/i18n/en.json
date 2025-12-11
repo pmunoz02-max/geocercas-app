@@ -39,7 +39,12 @@
       "myAccount": "My account",
       "help": "Help",
       "support": "Support",
-      "adminPanel": "Admin panel"
+      "adminPanel": "Admin panel",
+      "loggedAs": "Logged in as",
+      "goToPanel": "Go to panel",
+      "roleOwner": "Owner",
+      "roleAdmin": "Admin",
+      "roleTracker": "Tracker"
     },
     "footer": {
       "rights": "All rights reserved.",
@@ -47,6 +52,20 @@
       "terms": "Terms and conditions",
       "contact": "Contact",
       "poweredBy": "Powered by Fenice Ecuador S.A.S."
+    },
+    "tabs": {
+      "inicio": "Home",
+      "geocercas": "Geofences",
+      "nuevaGeocerca": "Geofence",
+      "personal": "Personnel",
+      "actividades": "Activities",
+      "asignaciones": "Assignments",
+      "reportes": "Reports",
+      "dashboard": "Costs dashboard",
+      "dashboardCostos": "Costs dashboard",
+      "tracker": "Tracker",
+      "invitarTracker": "Invite tracker",
+      "admins": "Admins"
     }
   },
   "landing": {
@@ -114,21 +133,55 @@
     "title": "Home",
     "welcome": "Welcome to App Geocercas",
     "description": "From this panel you can manage geofences, personnel and assignments.",
+    "header": {
+      "badge": "Help and resources center",
+      "title": "Welcome to your panel",
+      "subtitle": "From here you can access instructions, FAQs, support and news about App Geocercas."
+    },
     "cards": {
-      "geocercasTitle": "Geofences",
-      "geocercasDesc": "Create and manage your work areas.",
-      "personalTitle": "Personnel",
-      "personalDesc": "Register and manage your staff.",
-      "asignacionesTitle": "Assignments",
-      "asignacionesDesc": "Assign personnel to geofences and activities.",
-      "actividadesTitle": "Activities",
-      "actividadesDesc": "Define paid activities and hourly rates.",
-      "reportesTitle": "Reports",
-      "reportesDesc": "View activity and cost reports.",
-      "dashboardCostosTitle": "Cost dashboard",
-      "dashboardCostosDesc": "Analyze labor costs in detail.",
-      "trackerTitle": "Tracker app",
-      "trackerDesc": "View last positions and tracker status."
+      "instrucciones": {
+        "badge": "Quick guide",
+        "title": "Instructions",
+        "body": "Follow step by step how to configure organizations, geofences, personnel, activities and trackers.",
+        "cta": "View instructions"
+      },
+      "faq": {
+        "badge": "Help",
+        "title": "Frequently asked questions",
+        "body": "Find answers to the most common questions about invitations, roles, costs and how to use the tracker.",
+        "cta": "View FAQs"
+      },
+      "videoDemo": {
+        "badge": "Video",
+        "title": "Demo video",
+        "body": "Watch a short demonstration of how App Geocercas works in real life.",
+        "cta": "Watch demo video"
+      },
+      "soporte": {
+        "badge": "Support",
+        "title": "Contact / Support",
+        "body": "Need help? Contact us for technical support, billing or questions about your account.",
+        "cta": "Go to support"
+      },
+      "queEs": {
+        "badge": "Information",
+        "title": "What is App Geocercas?",
+        "body": "Learn about the vision, use cases and benefits of App Geocercas for your organization.",
+        "cta": "Read more"
+      },
+      "novedades": {
+        "badge": "News",
+        "title": "News / Changelog",
+        "body": "Review the history of changes, new features, improvements and fixes to the platform.",
+        "cta": "View changelog"
+      }
+    },
+    "userInfo": {
+      "connectedAs": "Connected as",
+      "withRole": "with the role",
+      "inOrg": "in the organization",
+      "userLabel": "User:",
+      "orgIdLabel": "Organization ID:"
     }
   },
   "geocercas": {
