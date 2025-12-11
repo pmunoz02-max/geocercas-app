@@ -11,14 +11,17 @@ export const AuthProvider = ({ children }) => {
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
   const [tenantId, setTenantId] = useState(null);
-  const [currentRole, setCurrentRole] = useState(null);
+
+  // 🔐 CANÓNICO
+  const [role, setRole] = useState(null);
+
   const [loading, setLoading] = useState(true);
 
-  //---------------------------------------------
-  // LOAD SESSION
-  //---------------------------------------------
+  // -------------------------------------------------
+  // SESSION
+  // -------------------------------------------------
   useEffect(() => {
-    const getSession = async () => {
+    const init = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -27,10 +30,10 @@ export const AuthProvider = ({ children }) => {
       setUser(session?.user ?? null);
     };
 
-    getSession();
+    init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
       }
@@ -41,9 +44,9 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  //---------------------------------------------
-  // LOAD PROFILE + MEMBERSHIPS + ORGS
-  //---------------------------------------------
+  // -------------------------------------------------
+  // LOAD PROFILE + MEMBERSHIPS + ORGS + ROLE
+  // -------------------------------------------------
   useEffect(() => {
     const loadAll = async () => {
       try {
@@ -52,14 +55,14 @@ export const AuthProvider = ({ children }) => {
           return;
         }
 
-        // 1) LOAD PROFILE FROM REAL TABLE
+        // 1) PROFILE
         const { data: prof, error: pErr } = await supabase
           .from("profiles")
           .select("*")
           .eq("email", user.email)
           .single();
 
-        if (pErr) {
+        if (pErr || !prof) {
           console.error("Error loading profile:", pErr);
           setLoading(false);
           return;
@@ -67,21 +70,13 @@ export const AuthProvider = ({ children }) => {
 
         setProfile(prof);
 
-        // ⚠️ FIX PRINCIPAL:
-        // ESTE ES EL user_id REAL PARA MEMBERSHIPS
-        const profileUserId = prof?.id;
+        const profileUserId = prof.id;
 
-        if (!profileUserId) {
-          console.warn("Profile has no ID, cannot load memberships.");
-          setLoading(false);
-          return;
-        }
-
-        // 2) LOAD MEMBERSHIPS using profiles.id
+        // 2) MEMBERSHIPS (FUENTE PRINCIPAL DE ROL)
         const { data: mRows, error: mErr } = await supabase
           .from("memberships")
-          .select("org_id, role, created_at, is_default")
-          .eq("user_id", profileUserId); // <--- ARREGLADO
+          .select("org_id, role, is_default")
+          .eq("user_id", profileUserId);
 
         if (mErr) {
           console.error("Error loading memberships:", mErr);
@@ -89,9 +84,7 @@ export const AuthProvider = ({ children }) => {
 
         setMemberships(mRows || []);
 
-        //---------------------------------------------
-        // 3) LOAD ORGANIZATIONS
-        //---------------------------------------------
+        // 3) ORGANIZATIONS
         let orgs = [];
 
         if (mRows?.length > 0) {
@@ -103,7 +96,7 @@ export const AuthProvider = ({ children }) => {
             .in("id", orgIds);
 
           if (oErr) {
-            console.error("Error loading organizations", oErr);
+            console.error("Error loading organizations:", oErr);
             setLoading(false);
             return;
           }
@@ -113,39 +106,28 @@ export const AuthProvider = ({ children }) => {
 
         setOrganizations(orgs);
 
-        //---------------------------------------------
-        // 4) DECIDE CURRENT ORGANIZATION
-        //---------------------------------------------
+        // 4) CURRENT ORG
         let activeOrg = null;
 
-        if (mRows?.length > 0 && orgs?.length > 0) {
-          // Preferir default org si existe
+        if (mRows?.length > 0 && orgs.length > 0) {
           const defaultMembership = mRows.find((m) => m.is_default);
-
-          if (defaultMembership) {
-            activeOrg = orgs.find((o) => o.id === defaultMembership.org_id);
-          }
-
-          if (!activeOrg) {
-            activeOrg = orgs[0];
-          }
+          activeOrg =
+            orgs.find((o) => o.id === defaultMembership?.org_id) || orgs[0];
         }
 
         setCurrentOrg(activeOrg);
         setTenantId(activeOrg?.id ?? null);
 
-        //---------------------------------------------
-        // 5) ROLE
-        //---------------------------------------------
-        let role = "tracker";
+        // 5) ROLE (CANÓNICO)
+        let resolvedRole = "tracker";
 
-        if (mRows?.length > 0) {
-          role = mRows[0].role || "tracker";
-        } else if (prof?.role) {
-          role = prof.role;
+        if (mRows?.length > 0 && mRows[0].role) {
+          resolvedRole = mRows[0].role;
+        } else if (prof.role) {
+          resolvedRole = prof.role;
         }
 
-        setCurrentRole(role);
+        setRole(resolvedRole);
       } catch (err) {
         console.error("AuthContext fatal error:", err);
       } finally {
@@ -156,15 +138,23 @@ export const AuthProvider = ({ children }) => {
     loadAll();
   }, [user]);
 
+  // -------------------------------------------------
+  // VALORES EXPUESTOS (CONTRATO ÚNICO)
+  // -------------------------------------------------
   const value = {
     session,
     user,
     profile,
-    organizations,
     memberships,
+    organizations,
     currentOrg,
     tenantId,
-    currentRole,
+
+    // 👇 ESTO ES LO QUE FALTABA
+    role,
+    isOwner: role === "owner",
+    isAdmin: role === "admin" || role === "owner",
+
     loading,
   };
 
