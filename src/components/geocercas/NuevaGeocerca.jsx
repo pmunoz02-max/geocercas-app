@@ -109,7 +109,7 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
   throw new Error("DATA_SOURCE no reconocido");
 }
 
-/* ----------------- Utils geocercas (sin orgId explícito) ----------------- */
+/* ----------------- Utils geocercas ----------------- */
 
 async function listGeofences({ supabaseClient = null }) {
   const list = [];
@@ -518,8 +518,8 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         const payload = {
           nombre: name,
           geojson: fc,
-          ...(created_by ? { created_by } : {}),
-          // org_id y tenant_id los pondrá el trigger en la BD
+          org_id: currentOrg?.id ?? null, // 👈 clave para RLS + multi-org
+          created_by: created_by ?? null,
         };
 
         const { data, error } = await supabaseClient
@@ -554,7 +554,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
       return { ok: false };
     },
-    [geofenceList, supabaseClient, t]
+    [geofenceList, supabaseClient, t, currentOrg]
   );
 
   /* ---- Handlers UI ---- */
@@ -657,26 +657,29 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     drawGeofences({ names, append: false, zoom: true });
   }, [geofenceList, drawGeofences]);
 
-  const handleDeleteSelected = useCallback(async () => {
-    if (!selectedNames.size) {
-      alert(t("geocercas.errorSelectAtLeastOne"));
-      return;
-    }
-    if (!window.confirm(t("geocercas.deleteConfirm"))) return;
-    const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
-    try {
-      const deletedCount = await deleteGeofences({
-        items,
-        supabaseClient,
-      });
-      alert(t("geocercas.deletedCount", { count: deletedCount }));
-      setSelectedNames(new Set());
-      await refreshGeofenceList();
-      clearCanvas();
-    } catch (e) {
-      alert(t("geocercas.errorDelete", { error: e?.message || String(e) }));
-    }
-  }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
+  const handleDeleteSelected = useCallback(
+    async () => {
+      if (!selectedNames.size) {
+        alert(t("geocercas.errorSelectAtLeastOne"));
+        return;
+      }
+      if (!window.confirm(t("geocercas.deleteConfirm"))) return;
+      const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
+      try {
+        const deletedCount = await deleteGeofences({
+          items,
+          supabaseClient,
+        });
+        alert(t("geocercas.deletedCount", { count: deletedCount }));
+        setSelectedNames(new Set());
+        await refreshGeofenceList();
+        clearCanvas();
+      } catch (e) {
+        alert(t("geocercas.errorDelete", { error: e?.message || String(e) }));
+      }
+    },
+    [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]
+  );
 
   const pointStyle = useMemo(
     () => ({
