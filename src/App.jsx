@@ -30,6 +30,9 @@ import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
+// 👉 NUEVO: Guía rápida / Instrucciones
+import InstructionsPage from "./pages/help/InstructionsPage.jsx";
+
 import { useAuth } from "./context/AuthContext.jsx";
 
 // ---------------------
@@ -107,7 +110,10 @@ export default function App() {
         {/* Reset de contraseña */}
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Rutas protegidas por sesión (AuthGuard + Shell) */}
+        {/* ============================= */}
+        {/* RUTAS PROTEGIDAS (APP INTERNA) */}
+        {/* ============================= */}
+
         <Route
           path="/inicio"
           element={
@@ -224,6 +230,21 @@ export default function App() {
             <AuthGuard>
               <Shell>
                 <AdminsPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
+
+        {/* ============================= */}
+        {/* AYUDA / DOCUMENTACIÓN */}
+        {/* ============================= */}
+
+        <Route
+          path="/help/instructions"
+          element={
+            <AuthGuard>
+              <Shell>
+                <InstructionsPage />
               </Shell>
             </AuthGuard>
           }
