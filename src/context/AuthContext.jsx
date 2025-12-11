@@ -105,7 +105,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // --------------------------------------------------------
-  // 2) Cargar perfil + organizaciones + seleccionar org
+  // 2) Cargar perfil + memberships + organizaciones
   // --------------------------------------------------------
   useEffect(() => {
     if (!user) {
@@ -140,66 +140,112 @@ export function AuthProvider({ children }) {
           console.error("[AuthContext] v_app_profiles exception:", e);
         }
 
-        // 2.b) Roles reales desde app_user_roles
-        let roleLinks = [];
+        // 2.b) Memberships: roles por organización (modelo nuevo y universal)
+        let memberships = [];
         try {
-          const { data: links, error: rErr } = await supabase
-            .from("app_user_roles")
-            .select("org_id, role, created_at")
+          const { data: mRows, error: mErr } = await supabase
+            .from("memberships")
+            .select("org_id, role, created_at, is_default")
             .eq("user_id", user.id);
 
-          if (rErr) {
-            console.error("[AuthContext] app_user_roles error:", rErr);
+          if (mErr) {
+            console.error("[AuthContext] memberships error:", mErr);
           }
-
-          roleLinks = links || [];
+          memberships = mRows || [];
         } catch (e) {
-          console.error("[AuthContext] app_user_roles exception:", e);
+          console.error("[AuthContext] memberships exception:", e);
         }
 
-        // 2.c) Cargar organizaciones donde el usuario tiene algún rol
-        let orgs = [];
-        if (roleLinks.length > 0) {
-          const ids = Array.from(
-            new Set(roleLinks.map((l) => l.org_id).filter(Boolean))
-          );
+        const membershipMap = new Map();
+        const membershipOrgIds = [];
+        for (const m of memberships) {
+          if (!m?.org_id) continue;
+          membershipMap.set(m.org_id, m);
+          membershipOrgIds.push(m.org_id);
+        }
 
-          if (ids.length > 0) {
-            try {
-              const { data: orgRows, error: oErr } = await supabase
-                .from("organizations")
-                .select("id, name, slug")
-                .in("id", ids);
+        // 2.c) Cargar organizaciones donde el usuario tiene membership
+        let orgRows = [];
+        if (membershipOrgIds.length > 0) {
+          try {
+            const { data: o1, error: oErr1 } = await supabase
+              .from("organizations")
+              .select("id, name, slug, owner_id, plan, active")
+              .in("id", membershipOrgIds);
 
-              if (oErr) {
-                console.error("[AuthContext] organizations error:", oErr);
+            if (oErr1) {
+              console.error("[AuthContext] organizations (by memberships) error:", oErr1);
+            }
+            orgRows = o1 || [];
+          } catch (e) {
+            console.error(
+              "[AuthContext] organizations (by memberships) exception:",
+              e
+            );
+          }
+        }
+
+        // 2.d) Agregar también organizaciones donde el usuario es owner,
+        //      aunque no tenga fila en memberships (seguridad universal)
+        try {
+          const { data: ownerRows, error: oErr2 } = await supabase
+            .from("organizations")
+            .select("id, name, slug, owner_id, plan, active")
+            .eq("owner_id", user.id);
+
+          if (oErr2) {
+            console.error("[AuthContext] organizations (owner) error:", oErr2);
+          }
+
+          if (ownerRows && ownerRows.length > 0) {
+            const existingIds = new Set(orgRows.map((o) => o.id));
+            for (const o of ownerRows) {
+              if (!existingIds.has(o.id)) {
+                orgRows.push(o);
               }
-
-              orgs =
-                orgRows?.map((o) => {
-                  const link = roleLinks.find((l) => l.org_id === o.id);
-                  return {
-                    ...o,
-                    role: link?.role
-                      ? link.role.toLowerCase()
-                      : null,
-                  };
-                }) || [];
-            } catch (e) {
-              console.error("[AuthContext] organizations exception:", e);
             }
           }
+        } catch (e) {
+          console.error("[AuthContext] organizations (owner) exception:", e);
         }
 
         if (cancelled) return;
 
+        // 2.e) Normalizar organizaciones con rol efectivo
+        const orgs = (orgRows || []).map((o) => {
+          const membership = membershipMap.get(o.id) || null;
+          const membershipRole = membership?.role
+            ? String(membership.role).toLowerCase()
+            : null;
+
+          // Regla universal:
+          // - Si es owner → rol "owner"
+          // - Si no, usar el rol de memberships (admin/tracker/viewer/...)
+          const isOwner = o.owner_id === user.id;
+          const effectiveRole = isOwner
+            ? "owner"
+            : membershipRole || null;
+
+          return {
+            id: o.id,
+            name: o.name,
+            slug: o.slug,
+            owner_id: o.owner_id,
+            plan: o.plan ?? null,
+            active: o.active ?? true,
+            role: effectiveRole,
+            membershipRole,
+            isOwner,
+          };
+        });
+
         setOrganizations(orgs);
 
         // --------------------------------------------------------
-        // 2.d) Selección UNIVERSAL de organización
+        // 2.f) Selección UNIVERSAL de organización
+        //     Prioridad: almacenada → owner → admin → tracker → viewer → primera
         // --------------------------------------------------------
         if (!orgs || orgs.length === 0) {
-          // No hay organizaciones con rol → limpiar selección y storage
           setCurrentOrgState(null);
           storeOrgIdForUser(user.id, null);
           return;
@@ -207,25 +253,21 @@ export function AuthProvider({ children }) {
 
         const storedOrgId = loadStoredOrgIdForUser(user.id);
 
-        // 1) Tracker tiene prioridad absoluta (para app tracker pura)
-        const trackerOrg = orgs.find((o) => o.role === "tracker");
-
-        // 2) Stored solo si sigue siendo válida y tiene rol
         const storedOrg =
           storedOrgId &&
-          orgs.find(
-            (o) => o.id === storedOrgId && typeof o.role === "string"
-          );
+          orgs.find((o) => o.id === storedOrgId && typeof o.role === "string");
 
-        // 3) Owner → Admin → primera
-        const ownerOrg = orgs.find((o) => o.role === "owner");
+        const ownerOrg = orgs.find((o) => o.role === "owner" || o.isOwner);
         const adminOrg = orgs.find((o) => o.role === "admin");
+        const trackerOrg = orgs.find((o) => o.role === "tracker");
+        const viewerOrg = orgs.find((o) => o.role === "viewer");
 
         const initialOrg =
-          trackerOrg ||
           storedOrg ||
           ownerOrg ||
           adminOrg ||
+          trackerOrg ||
+          viewerOrg ||
           orgs[0] ||
           null;
 
@@ -252,11 +294,13 @@ export function AuthProvider({ children }) {
 
   if (currentOrg?.role) {
     // rol real por organización (fuente principal)
-    normalizedRole = currentOrg.role.toLowerCase();
+    normalizedRole = String(currentOrg.role).toLowerCase();
   } else if (profile?.rol) {
-    // fallback visual: rol del perfil general (puede venir de sistema viejo)
+    // fallback visual: rol del perfil general (sistema viejo)
     normalizedRole = String(profile.rol).toLowerCase();
   }
+
+  const currentRole = normalizedRole;
 
   // --------------------------------------------------------
   // 4) Valor expuesto por el contexto
@@ -277,8 +321,12 @@ export function AuthProvider({ children }) {
       }
     },
 
-    // Rol actual y flags derivados
+    // Rol actual (para compatibilidad con componentes existentes)
     role: normalizedRole,
+    currentRole,
+    currentOrgRole: normalizedRole,
+
+    // Flags derivados
     isTracker: normalizedRole === "tracker",
     isAdmin: ["admin", "owner"].includes(normalizedRole),
     isOwner: normalizedRole === "owner",
