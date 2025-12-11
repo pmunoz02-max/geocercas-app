@@ -1,4 +1,6 @@
 // src/pages/ActividadesPage.jsx
+// Gestión de catálogo de actividades (con costos) por organización
+
 import { useEffect, useState } from "react";
 import {
   listActividades,
@@ -26,8 +28,20 @@ const CURRENCIES = [
 ];
 
 export default function ActividadesPage() {
-  const { role } = useAuth(); // solo usamos el rol para permisos
+  const {
+    loading: authLoading,
+    tenantId,
+    currentOrg,
+    role,
+    currentRole,
+  } = useAuth();
+
   const { t } = useTranslation();
+
+  // Rol efectivo del usuario en la organización actual
+  const effectiveRole = (currentRole || role || "").toLowerCase();
+  // Trackers no pueden editar
+  const canEdit = effectiveRole === "owner" || effectiveRole === "admin";
 
   const [actividades, setActividades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,14 +56,22 @@ export default function ActividadesPage() {
   const [currency, setCurrency] = useState("USD");
   const [hourlyRate, setHourlyRate] = useState("");
 
-  // Trackers no pueden editar
-  const canEdit = role === "owner" || role === "admin";
-
+  // ------------------------------
+  // Carga de actividades por tenant
+  // ------------------------------
   async function loadActividades() {
+    if (!tenantId) {
+      setActividades([]);
+      return;
+    }
+
     setLoading(true);
     setErrorMsg("");
 
-    const { data, error } = await listActividades({ includeInactive: true });
+    const { data, error } = await listActividades({
+      includeInactive: true,
+      tenantId, // 👈 clave: pasamos el tenantId al API
+    });
 
     if (error) {
       console.error("[ActividadesPage] listActividades error:", error);
@@ -62,10 +84,16 @@ export default function ActividadesPage() {
   }
 
   useEffect(() => {
-    loadActividades();
+    // Esperamos a que AuthContext termine y haya tenantId
+    if (!authLoading && tenantId) {
+      loadActividades();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, tenantId]);
 
+  // ------------------------------
+  // Helpers de formulario
+  // ------------------------------
   function resetForm() {
     setFormMode("create");
     setEditingId(null);
@@ -73,6 +101,7 @@ export default function ActividadesPage() {
     setDescripcion("");
     setCurrency("USD");
     setHourlyRate("");
+    setErrorMsg("");
   }
 
   async function handleSubmit(e) {
@@ -99,7 +128,7 @@ export default function ActividadesPage() {
           hourly_rate: Number(hourlyRate),
         };
 
-        const { error } = await createActividad(payload);
+        const { error } = await createActividad(payload, { tenantId }); // 👈 tenantId aquí
         if (error) throw error;
       } else if (formMode === "edit" && editingId) {
         const { error } = await updateActividad(editingId, {
@@ -158,11 +187,52 @@ export default function ActividadesPage() {
     }
   }
 
+  // ------------------------------
+  // Estados especiales de Auth / Org
+  // ------------------------------
+  if (authLoading) {
+    return (
+      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          {t(
+            "actividades.loadingAuth",
+            "Cargando tu sesión y organización actual…"
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!tenantId || !currentOrg) {
+    // Si alguna vez esto ocurre, es un problema de memberships/orgs
+    return (
+      <div className="p-4 md:p-6 max-w-3xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {t(
+            "actividades.noOrgAssigned",
+            "No hay organización asignada para el usuario actual. Cierra sesión y vuelve a entrar o contacta con el administrador."
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ------------------------------
+  // Render normal
+  // ------------------------------
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">
-        {t("actividades.title")}
-      </h1>
+      <div className="flex flex-col gap-1 mb-4">
+        <h1 className="text-2xl font-semibold">
+          {t("actividades.title")}
+        </h1>
+        <p className="text-xs text-gray-500">
+          {t("actividades.currentOrgLabel", "Organización actual")}:{" "}
+          <span className="font-medium">
+            {currentOrg?.name || "—"}
+          </span>
+        </p>
+      </div>
 
       {errorMsg && (
         <div className="mb-4 rounded-md bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">
@@ -326,8 +396,11 @@ export default function ActividadesPage() {
 
                     {/* Tarifa */}
                     <td className="px-4 py-2 align-top">
-                      {act.hourly_rate
-                        ? `${act.currency_code} ${act.hourly_rate.toFixed(2)}`
+                      {act.hourly_rate !== null &&
+                      act.hourly_rate !== undefined
+                        ? `${act.currency_code} ${Number(
+                            act.hourly_rate
+                          ).toFixed(2)}`
                         : "—"}
                     </td>
 

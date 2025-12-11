@@ -1,50 +1,32 @@
 // src/lib/actividadesApi.js
+// API de Actividades multi-tenant (usa tenant_id = organización actual)
+
 import { supabase } from "../supabaseClient";
 
-// Obtiene un tenantId válido.
-// Si no se pasa, llama a la función de Postgres que devuelve
-// la organización "por defecto" del usuario actual.
-async function ensureTenant(tenantId) {
-  if (tenantId) return tenantId;
+// ✅ Todas las funciones requieren tenantId explícito desde AuthContext.
+// ✅ NO usamos RPCs antiguas (ensure_default_org_for_current_user).
 
-  const { data, error } = await supabase.rpc(
-    "ensure_default_org_for_current_user"
-  );
-
-  if (error) {
-    console.error(
-      "[actividadesApi] ensure_default_org_for_current_user error:",
-      error
-    );
-    throw error;
-  }
-
-  // data viene como array de filas [{ org_id, org_name, role, is_owner }]
-  const org = Array.isArray(data) ? data[0] : null;
-
-  if (!org || !org.org_id) {
-    console.warn(
-      "[actividadesApi] ensureTenant: RPC no devolvió organización válida",
-      data
-    );
-    throw new Error("No hay organización asignada para el usuario actual");
-  }
-
-  return org.org_id; // 👈 devolvemos el UUID de la org
-}
-
-// 🔹 Listar actividades
+// ---------------------------------------------------------------------------
+// Listar actividades
+// ---------------------------------------------------------------------------
 export async function listActividades({
   includeInactive = false,
   tenantId = null,
 } = {}) {
-  try {
-    const effectiveTenantId = await ensureTenant(tenantId);
+  if (!tenantId) {
+    // Esto solo debería pasar si AuthContext falló antes.
+    const error = new Error(
+      "Falta tenantId para listar actividades (revisa AuthContext)"
+    );
+    console.error("[actividadesApi] listActividades sin tenantId:", error);
+    return { data: null, error };
+  }
 
+  try {
     let query = supabase
       .from("activities")
       .select("*")
-      .eq("tenant_id", effectiveTenantId)
+      .eq("tenant_id", tenantId)
       .order("name", { ascending: true });
 
     if (!includeInactive) {
@@ -58,22 +40,30 @@ export async function listActividades({
       return { data: null, error };
     }
 
-    return { data, error: null };
+    return { data: data || [], error: null };
   } catch (err) {
     console.error("[actividadesApi] listActividades exception:", err);
     return { data: null, error: err };
   }
 }
 
-// 🔹 Crear actividad
+// ---------------------------------------------------------------------------
+// Crear actividad
+// ---------------------------------------------------------------------------
 export async function createActividad(payload = {}, opts = {}) {
-  try {
-    const effectiveTenantId = await ensureTenant(
-      opts.tenantId ?? payload.tenant_id ?? null
-    );
+  const tenantId = opts.tenantId ?? payload.tenant_id ?? null;
 
+  if (!tenantId) {
+    const error = new Error(
+      "Falta tenantId para crear actividad (revisa AuthContext)"
+    );
+    console.error("[actividadesApi] createActividad sin tenantId:", error);
+    return { data: null, error };
+  }
+
+  try {
     const body = {
-      tenant_id: effectiveTenantId,
+      tenant_id: tenantId,
       name: payload.name,
       description: payload.description ?? null,
       active: payload.active ?? true,
@@ -99,16 +89,26 @@ export async function createActividad(payload = {}, opts = {}) {
   }
 }
 
-// 🔹 Actualizar actividad
+// ---------------------------------------------------------------------------
+// Actualizar actividad
+// ---------------------------------------------------------------------------
 export async function updateActividad(id, updates = {}) {
+  if (!id) {
+    const error = new Error("updateActividad requiere id");
+    console.error("[actividadesApi] updateActividad sin id:", error);
+    return { data: null, error };
+  }
+
+  const patch = {
+    name: updates.name,
+    description: updates.description ?? null,
+    currency_code: updates.currency_code,
+    hourly_rate: updates.hourly_rate,
+  };
+
   const { data, error } = await supabase
     .from("activities")
-    .update({
-      name: updates.name,
-      description: updates.description ?? null,
-      currency_code: updates.currency_code,
-      hourly_rate: updates.hourly_rate,
-    })
+    .update(patch)
     .eq("id", id)
     .select("*")
     .single();
@@ -120,8 +120,16 @@ export async function updateActividad(id, updates = {}) {
   return { data, error };
 }
 
-// 🔹 Activar / desactivar
+// ---------------------------------------------------------------------------
+// Activar / desactivar
+// ---------------------------------------------------------------------------
 export async function toggleActividadActiva(id, newActive) {
+  if (!id) {
+    const error = new Error("toggleActividadActiva requiere id");
+    console.error("[actividadesApi] toggleActividadActiva sin id:", error);
+    return { data: null, error };
+  }
+
   const { data, error } = await supabase
     .from("activities")
     .update({ active: newActive })
@@ -136,8 +144,16 @@ export async function toggleActividadActiva(id, newActive) {
   return { data, error };
 }
 
-// 🔹 Eliminar (soft o hard, según tu tabla)
+// ---------------------------------------------------------------------------
+// Eliminar (soft o hard, según tu tabla)
+// ---------------------------------------------------------------------------
 export async function deleteActividad(id) {
+  if (!id) {
+    const error = new Error("deleteActividad requiere id");
+    console.error("[actividadesApi] deleteActividad sin id:", error);
+    return { error };
+  }
+
   const { error } = await supabase.from("activities").delete().eq("id", id);
 
   if (error) {
