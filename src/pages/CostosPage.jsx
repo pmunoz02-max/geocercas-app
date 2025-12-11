@@ -83,14 +83,26 @@ function buildDateRange(fromDateStr, toDateStr) {
 }
 
 const CostosPage = () => {
-  const { currentOrg } = useAuth();
+  const { currentOrg, role: authRole } = useAuth();
   const { t } = useTranslation();
 
-  // Acceso universalizado: usa matriz de permisos central
-  // loadingAccess es opcional: si el hook no lo expone, será undefined
-  const { role, canView, loading: loadingAccess } = useModuleAccess(
-    MODULE_KEYS.REPORTES_COSTOS
-  );
+  /**
+   * ✅ FIX PERMANENTE
+   * La fuente canónica del rol es AuthContext (lo mismo que el header).
+   * useModuleAccess queda como "fallback" por compatibilidad,
+   * pero nunca debe bloquear a un owner/admin si AuthContext ya lo sabe.
+   */
+  const {
+    role: moduleRole,
+    canView: moduleCanView,
+    loading: loadingAccess,
+  } = useModuleAccess(MODULE_KEYS.REPORTES_COSTOS);
+
+  const effectiveRole = authRole || moduleRole || null;
+  const canView =
+    effectiveRole === "owner" || effectiveRole === "admin"
+      ? true
+      : Boolean(moduleCanView);
 
   // Filtros
   const [fromDate, setFromDate] = useState("");
@@ -303,10 +315,7 @@ const CostosPage = () => {
   }, [currentOrg?.id, canView]);
 
   // === RESÚMENES NUMÉRICOS ===
-  const resumenMoneda = useMemo(
-    () => summarizeByCurrency(rows || []),
-    [rows]
-  );
+  const resumenMoneda = useMemo(() => summarizeByCurrency(rows || []), [rows]);
 
   const totalGlobal = useMemo(() => {
     let totalCost = 0;
@@ -320,13 +329,15 @@ const CostosPage = () => {
     return { totalCost, totalHours };
   }, [rows]);
 
-  // Si el hook aún está resolviendo el rol, mostramos un estado de carga
-  if (loadingAccess) {
+  // Si el hook aún está resolviendo el rol (fallback), mostramos un estado de carga
+  // OJO: si AuthContext ya trae role owner/admin, NO esperamos este loading.
+  const shouldShowLoadingPermissions =
+    Boolean(loadingAccess) && !authRole && !moduleRole;
+
+  if (shouldShowLoadingPermissions) {
     return (
       <div className="p-4">
-        <h1 className="text-xl font-semibold mb-2">
-          {t("reportes.title")}
-        </h1>
+        <h1 className="text-xl font-semibold mb-2">{t("reportes.title")}</h1>
         <p className="text-sm text-gray-600">
           {t("reportes.loadingPermissions") || "Cargando permisos…"}
         </p>
@@ -334,19 +345,14 @@ const CostosPage = () => {
     );
   }
 
-  // Sin permisos (una vez que ya sabemos el rol)
+  // Sin permisos (una vez que ya sabemos el rol efectivo)
   if (!canView) {
     return (
       <div className="p-4">
-        <h1 className="text-xl font-semibold mb-2">
-          {t("reportes.title")}
-        </h1>
-        <p className="text-sm text-gray-600">
-          {t("reportes.noAccessBody")}
-        </p>
-        {/* Texto de debug: puedes quitarlo en producción */}
+        <h1 className="text-xl font-semibold mb-2">{t("reportes.title")}</h1>
+        <p className="text-sm text-gray-600">{t("reportes.noAccessBody")}</p>
         <p className="mt-2 text-xs text-gray-400">
-          (Rol actual: {role || "sin rol"})
+          (Rol actual: {effectiveRole || "sin rol"})
         </p>
       </div>
     );
@@ -358,9 +364,7 @@ const CostosPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("reportes.title")}</h1>
-          <p className="text-sm text-gray-600">
-            {t("reportes.headerSubtitle")}
-          </p>
+          <p className="text-sm text-gray-600">{t("reportes.headerSubtitle")}</p>
         </div>
         {loading && (
           <div className="text-xs text-gray-500 animate-pulse">
@@ -412,9 +416,7 @@ const CostosPage = () => {
               onChange={(e) => setSelectedPersonaId(e.target.value)}
               disabled={loadingFilters}
             >
-              <option value={emptyOption.value}>
-                {t("reportes.filtersAll")}
-              </option>
+              <option value={emptyOption.value}>{t("reportes.filtersAll")}</option>
               {personas.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre || p.email || t("reportes.personNoName")}
@@ -434,9 +436,7 @@ const CostosPage = () => {
               onChange={(e) => setSelectedActividadId(e.target.value)}
               disabled={loadingFilters}
             >
-              <option value={emptyOption.value}>
-                {t("reportes.filtersAll")}
-              </option>
+              <option value={emptyOption.value}>{t("reportes.filtersAll")}</option>
               {actividades.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -456,9 +456,7 @@ const CostosPage = () => {
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
               disabled={loadingFilters}
             >
-              <option value={emptyOption.value}>
-                {t("reportes.filtersAll")}
-              </option>
+              <option value={emptyOption.value}>{t("reportes.filtersAll")}</option>
               {geocercas.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre}
@@ -615,12 +613,8 @@ const CostosPage = () => {
                   <td className="px-2 py-1">
                     {r.actividad_nombre || t("reportes.activityNoName")}
                   </td>
-                  <td className="px-2 py-1">
-                    {formatDateTime(r.start_time)}
-                  </td>
-                  <td className="px-2 py-1">
-                    {formatDateTime(r.end_time)}
-                  </td>
+                  <td className="px-2 py-1">{formatDateTime(r.start_time)}</td>
+                  <td className="px-2 py-1">{formatDateTime(r.end_time)}</td>
                   <td className="px-2 py-1 text-right">
                     {formatNumber(r.horas, 2)}
                   </td>
