@@ -8,10 +8,11 @@ import {
   updateAdmin,
   deleteAdmin,
 } from "../lib/adminsApi";
-import { supabase } from "../supabaseClient";
 
 export default function AdminsPage() {
-  const { currentOrg, isOwner, user } = useAuth();
+  const { currentOrg, currentRole, user } = useAuth();
+
+  const isOwner = currentRole === "owner";
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,13 +24,14 @@ export default function AdminsPage() {
   const [inviteRole, setInviteRole] = useState("admin");
 
   // ===========================================================
-  // Cargar administradores ACTUALES de la org en sesión
+  // Cargar administradores de la organización actual
   // ===========================================================
   useEffect(() => {
     if (!isOwner) {
       setLoading(false);
       return;
     }
+
     if (!currentOrg?.id) {
       setError("No se encontró la organización actual.");
       setLoading(false);
@@ -63,13 +65,14 @@ export default function AdminsPage() {
   // ===========================================================
   const handleRefresh = async () => {
     if (!currentOrg?.id || !isOwner) return;
+
     setLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     const { data, error: fetchError } = await listAdmins(currentOrg.id);
+
     if (fetchError) {
-      console.error("[AdminsPage] listAdmins error:", fetchError);
       setError(
         fetchError.message ||
           "No se pudo actualizar la lista de administradores."
@@ -90,12 +93,7 @@ export default function AdminsPage() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!email) {
-      setError("Ingresa un correo electrónico para invitar.");
-      return;
-    }
-
-    if (!email.includes("@")) {
+    if (!email || !email.includes("@")) {
       setError("Ingresa un correo electrónico válido.");
       return;
     }
@@ -105,7 +103,6 @@ export default function AdminsPage() {
     try {
       let response;
 
-      // --- CASO 1: ADMIN dentro de la organización actual ---
       if (inviteRole === "admin") {
         response = await inviteAdmin(currentOrg.id, {
           email,
@@ -113,7 +110,6 @@ export default function AdminsPage() {
         });
       }
 
-      // --- CASO 2: OWNER con organización propia ---
       if (inviteRole === "owner") {
         response = await inviteIndependentOwner({
           email,
@@ -124,11 +120,7 @@ export default function AdminsPage() {
       const { error: fnError, data } = response || {};
 
       if (fnError) {
-        console.error("[AdminsPage] invite fnError:", fnError);
-        setError(
-          fnError.message ||
-            "Error al enviar la invitación. Revisa la configuración del servidor."
-        );
+        setError(fnError.message || "Error al enviar la invitación.");
         return;
       }
 
@@ -138,40 +130,20 @@ export default function AdminsPage() {
       }
 
       setInviteEmail("");
-      setSuccessMessage(`La invitación fue enviada al correo ${email}.`);
+      setSuccessMessage(`La invitación fue enviada a ${email}.`);
     } catch (err) {
-      console.error("[AdminsPage] excepción en handleInviteSubmit:", err);
-
-      let friendly = "Error inesperado al enviar la invitación.";
-
-      const ctx = err?.context;
-      if (ctx && typeof ctx === "object") {
-        try {
-          const maybeJson =
-            typeof ctx.json === "function" ? await ctx.json() : ctx;
-
-          if (
-            maybeJson &&
-            typeof maybeJson === "object" &&
-            typeof maybeJson.error === "string"
-          ) {
-            friendly = maybeJson.error;
-          }
-        } catch {}
-      }
-
-      setError(friendly);
+      console.error("[AdminsPage] excepción:", err);
+      setError("Error inesperado al enviar la invitación.");
     } finally {
       setLoadingAction(false);
     }
   };
 
   // ===========================================================
-  // DELETE / EDIT placeholders
+  // DELETE / EDIT
   // ===========================================================
   const handleDelete = async (adm) => {
     if (!currentOrg?.id) return;
-
     if (!window.confirm("¿Eliminar este administrador?")) return;
 
     setLoadingAction(true);
@@ -179,6 +151,7 @@ export default function AdminsPage() {
     setSuccessMessage(null);
 
     const { error: delErr } = await deleteAdmin(currentOrg.id, adm.user_id);
+
     if (delErr) {
       setError(delErr.message || "No se pudo eliminar al administrador.");
     } else {
@@ -188,13 +161,12 @@ export default function AdminsPage() {
     setLoadingAction(false);
   };
 
-  const handleEdit = (adm) => {
+  const handleEdit = () => {
     setError("Edición aún en construcción.");
-    setSuccessMessage(null);
   };
 
   // ===========================================================
-  // UI
+  // UI – BLOQUEO CORRECTO
   // ===========================================================
   if (!isOwner) {
     return (
@@ -216,141 +188,107 @@ export default function AdminsPage() {
           Administradores actuales
         </h1>
         <p className="text-sm text-slate-600 mt-1">
-          Organización:{" "}
-          <span className="font-medium">{currentOrg?.name}</span>.
+          Organización: <b>{currentOrg?.name}</b>
         </p>
         <p className="text-xs text-slate-500 mt-1">
-          Usuario actual: <span className="font-mono">{user?.email}</span>
+          Usuario: <span className="font-mono">{user?.email}</span>
         </p>
       </header>
 
-      {/* INVITAR NUEVO ADMIN */}
-      <section className="mb-8 border border-slate-200 rounded-xl p-4 bg-white">
-        <h2 className="text-sm font-semibold text-slate-900 mb-2">
+      {/* INVITAR */}
+      <section className="mb-8 border rounded-xl p-4 bg-white">
+        <h2 className="text-sm font-semibold mb-2">
           Invitar nuevo administrador
         </h2>
 
-        <p className="text-xs text-slate-500 mb-3">
-          Elige si este usuario será un <b>ADMIN de esta organización</b> o un{" "}
-          <b>OWNER independiente con su propia organización</b>.
-        </p>
-
         <form
           onSubmit={handleInviteSubmit}
-          className="flex flex-col md:flex-row gap-3 items-start md:items-end"
+          className="flex flex-col md:flex-row gap-3"
         >
-          <div className="flex-1">
-            <label className="block text-xs font-medium mb-1">
-              Correo electrónico
-            </label>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
+          <input
+            type="email"
+            placeholder="correo@ejemplo.com"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            className="border rounded px-3 py-2 text-sm flex-1"
+          />
 
-          <div>
-            <label className="block text-xs font-medium mb-1">Rol</label>
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
-            >
-              <option value="admin">Admin (misma organización)</option>
-              <option value="owner">Owner (nueva organización)</option>
-            </select>
-          </div>
+          <select
+            value={inviteRole}
+            onChange={(e) => setInviteRole(e.target.value)}
+            className="border rounded px-3 py-2 text-sm"
+          >
+            <option value="admin">Admin (misma org)</option>
+            <option value="owner">Owner (nueva org)</option>
+          </select>
 
           <button
             type="submit"
             disabled={loadingAction}
-            className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm"
+            className="bg-blue-600 text-white rounded px-4 py-2 text-sm"
           >
-            {loadingAction ? "Procesando..." : "Enviar invitación"}
+            {loadingAction ? "Procesando..." : "Invitar"}
           </button>
         </form>
       </section>
 
       {error && (
-        <div className="border border-red-300 bg-red-50 py-2 px-3 text-xs text-red-700 rounded mb-4">
+        <div className="bg-red-50 border border-red-300 text-red-700 p-2 rounded text-xs mb-3">
           {error}
         </div>
       )}
 
       {successMessage && (
-        <div className="border border-emerald-300 bg-emerald-50 py-2 px-3 text-xs text-emerald-700 rounded mb-4">
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-700 p-2 rounded text-xs mb-3">
           {successMessage}
         </div>
       )}
 
-      {/* LISTA ADMINISTRADORES */}
-      <section className="border border-slate-200 rounded-xl bg-white">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="text-sm font-semibold">Propietarios y administradores</h2>
+      {/* LISTA */}
+      <section className="border rounded-xl bg-white">
+        <div className="flex justify-between items-center px-4 py-3 border-b">
+          <h2 className="text-sm font-semibold">Administradores</h2>
           <button
             onClick={handleRefresh}
             disabled={loading}
             className="border rounded px-3 py-1.5 text-xs"
           >
-            {loading ? "Actualizando..." : "Refrescar"}
+            Refrescar
           </button>
         </div>
 
         {loading ? (
-          <div className="p-6 text-center text-slate-500 text-sm">
-            Cargando administradores...
-          </div>
+          <p className="p-4 text-sm text-slate-500">Cargando…</p>
         ) : admins.length === 0 ? (
-          <div className="p-6 text-center text-slate-500 text-sm">
-            No hay administradores en esta organización.
-          </div>
+          <p className="p-4 text-sm text-slate-500">
+            No hay administradores.
+          </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-2 text-left">Rol</th>
-                  <th className="px-3 py-2 text-left">User ID</th>
-                  <th className="px-3 py-2 text-left">Email</th>
-                  <th className="px-3 py-2 text-left">Creado</th>
-                  <th className="px-3 py-2 text-right">Acciones</th>
+          <table className="w-full text-xs">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-3 py-2 text-left">Rol</th>
+                <th className="px-3 py-2 text-left">Email</th>
+                <th className="px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {admins.map((adm) => (
+                <tr key={adm.user_id} className="border-t">
+                  <td className="px-3 py-2">{adm.role}</td>
+                  <td className="px-3 py-2">{adm.email}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => handleDelete(adm)}
+                      className="text-red-600 border border-red-500 rounded px-2 py-1 text-xs"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {admins.map((adm) => {
-                  const r = adm.role?.toUpperCase() ?? "—";
-                  return (
-                    <tr key={adm.user_id} className="border-t">
-                      <td className="px-3 py-2">{r}</td>
-                      <td className="px-3 py-2 font-mono">{adm.user_id}</td>
-                      <td className="px-3 py-2">{adm.email ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        {adm.created_at
-                          ? new Date(adm.created_at).toLocaleString()
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          onClick={() => handleEdit(adm)}
-                          className="text-xs border px-2 py-1 rounded mr-2"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleDelete(adm)}
-                          className="text-xs border border-red-500 text-red-600 px-2 py-1 rounded"
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
       </section>
     </div>
