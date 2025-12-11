@@ -1,11 +1,5 @@
 import React, { useMemo } from "react";
 
-/**
- * InstructionsPage
- * - Página de guía rápida para onboarding (SaaS)
- * - Sin dependencias externas (solo clases tipo Tailwind)
- * - Lista para conectar a una ruta: /help/instructions (o la que uses)
- */
 export default function InstructionsPage() {
   const steps = useMemo(
     () => [
@@ -72,7 +66,6 @@ export default function InstructionsPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto w-full max-w-6xl px-4 py-6">
-        {/* Header */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
             GUÍA RÁPIDA
@@ -106,9 +99,7 @@ export default function InstructionsPage() {
           </div>
         </div>
 
-        {/* Contenido */}
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Índice */}
           <div className="lg:col-span-1">
             <div className="sticky top-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-base font-bold text-slate-900">Contenido</h2>
@@ -149,7 +140,6 @@ export default function InstructionsPage() {
             </div>
           </div>
 
-          {/* Pasos */}
           <div className="lg:col-span-2">
             <div
               id="pasos"
@@ -188,7 +178,6 @@ export default function InstructionsPage() {
               </div>
             </div>
 
-            {/* Buenas prácticas */}
             <div
               id="tips"
               className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
@@ -240,7 +229,6 @@ export default function InstructionsPage() {
               </div>
             </div>
 
-            {/* Resultado final */}
             <div
               id="resultado"
               className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
@@ -258,46 +246,6 @@ export default function InstructionsPage() {
                 <li>Reportes confiables por persona, actividad y geocerca.</li>
                 <li>Base sólida para auditoría, control y toma de decisiones.</li>
               </ul>
-
-              <div className="mt-5 rounded-2xl bg-emerald-50 p-5">
-                <div className="text-sm font-bold text-emerald-900">
-                  Siguiente paso sugerido
-                </div>
-                <div className="mt-1 text-sm text-emerald-900/80">
-                  Mira el “Video demo” y revisa “Preguntas frecuentes” para
-                  acelerar el onboarding del equipo.
-                </div>
-              </div>
-            </div>
-
-            {/* Footer actions */}
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <a
-                href="/"
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
-              >
-                Volver al panel
-              </a>
-
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <a
-                  href="/help/faq"
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
-                >
-                  Ir a FAQ
-                </a>
-                <a
-                  href="/help/support"
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-                >
-                  Contactar soporte
-                </a>
-              </div>
-            </div>
-
-            <div className="mt-6 text-xs text-slate-500">
-              Nota: En el siguiente paso conectaremos esta página al botón “Ver
-              instrucciones” y a tu router real.
             </div>
           </div>
         </div>
