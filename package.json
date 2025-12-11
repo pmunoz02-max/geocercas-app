@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
-    "@supabase/supabase-js": "^2.45.0",
+    "@supabase/supabase-js": "^2.87.1",
     "date-fns": "^2.30.0",
     "date-fns-tz": "^2.0.0",
     "html2canvas": "^1.4.1",
