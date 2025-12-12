@@ -11,19 +11,10 @@ function roleRank(r) {
   return 0;
 }
 
-function pickHighestRole(memberships = []) {
-  let best = "tracker";
-  for (const m of memberships) {
-    const r = (m?.role || "tracker").toLowerCase();
-    if (roleRank(r) > roleRank(best)) best = r;
-  }
-  return best;
-}
-
 function normalizeOrgRow(o) {
   if (!o) return null;
   return {
-    id: o.id ?? o.org_id ?? o.tenant_id ?? null,
+    id: o.id ?? o.org_id ?? null,
     name: o.name ?? o.org_name ?? "Organización",
     ...o,
   };
@@ -34,7 +25,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
   const [profile, setProfile] = useState(null);
-  const [memberships, setMemberships] = useState([]);
   const [organizations, setOrganizations] = useState([]);
 
   const [currentOrg, setCurrentOrg] = useState(null);
@@ -64,7 +54,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // -----------------------------
-  // LOAD ALL (FIXED)
+  // LOAD ALL (UNIFICADO)
   // -----------------------------
   const loadAll = useCallback(async () => {
     try {
@@ -72,7 +62,6 @@ export const AuthProvider = ({ children }) => {
 
       if (!user) {
         setProfile(null);
-        setMemberships([]);
         setOrganizations([]);
         setCurrentOrg(null);
         setTenantId(null);
@@ -90,22 +79,15 @@ export const AuthProvider = ({ children }) => {
 
       setProfile(prof ?? null);
 
-      // 2) Memberships
-      const { data: mRows = [] } = await supabase
-        .from("org_members")
-        .select("org_id, role, created_at");
+      // 2) ROLES (FUENTE ÚNICA)
+      const { data: roleRows = [] } = await supabase
+        .from("app_user_roles")
+        .select("org_id, role");
 
-      // Orden: OWNER primero, luego más reciente
-      mRows.sort((a, b) => {
-        const ar = roleRank(a?.role);
-        const br = roleRank(b?.role);
-        if (ar !== br) return br - ar;
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
+      // Orden: OWNER > ADMIN > TRACKER
+      roleRows.sort((a, b) => roleRank(b.role) - roleRank(a.role));
 
-      setMemberships(mRows);
-
-      const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
+      const orgIds = roleRows.map(r => r.org_id).filter(Boolean);
 
       // 3) Organizations
       let orgs = [];
@@ -119,20 +101,20 @@ export const AuthProvider = ({ children }) => {
 
       setOrganizations(orgs);
 
-      // 4) ORG ACTIVA — REGLA SaaS CORRECTA
+      // 4) ORG ACTIVA (regla SaaS)
       let activeOrg = null;
 
-      // 4.1 Org donde es OWNER (la más reciente)
-      const ownerMembership = mRows.find((m) => m.role === "owner");
-      if (ownerMembership) {
-        activeOrg = orgs.find((o) => o.id === ownerMembership.org_id);
+      // 4.1 Donde es OWNER
+      const ownerRow = roleRows.find(r => r.role === "owner");
+      if (ownerRow) {
+        activeOrg = orgs.find(o => o.id === ownerRow.org_id);
       }
 
-      // 4.2 localStorage (solo si sigue siendo miembro)
+      // 4.2 localStorage
       if (!activeOrg) {
-        const storedOrgId = localStorage.getItem("current_org_id");
-        if (storedOrgId) {
-          activeOrg = orgs.find((o) => o.id === storedOrgId) ?? null;
+        const stored = localStorage.getItem("current_org_id");
+        if (stored) {
+          activeOrg = orgs.find(o => o.id === stored) ?? null;
         }
       }
 
@@ -152,15 +134,13 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem("current_org_id");
       }
 
-      // 5) Role efectivo
-      const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
-      const resolvedRole =
-        activeMembership?.role ??
-        pickHighestRole(mRows) ??
-        prof?.role ??
+      // 5) ROLE EFECTIVO (solo app_user_roles)
+      const activeRole =
+        roleRows.find(r => r.org_id === activeOrg?.id)?.role ??
+        roleRows[0]?.role ??
         "tracker";
 
-      setRole(resolvedRole.toLowerCase());
+      setRole(activeRole.toLowerCase());
     } catch (err) {
       console.error("[AuthContext] fatal error:", err);
     } finally {
@@ -174,7 +154,7 @@ export const AuthProvider = ({ children }) => {
 
   const selectOrg = useCallback(
     (orgId) => {
-      const o = organizations.find((x) => x.id === orgId);
+      const o = organizations.find(x => x.id === orgId);
       const active = normalizeOrgRow(o) ?? null;
       setCurrentOrg(active);
       setTenantId(active?.id ?? null);
@@ -190,7 +170,6 @@ export const AuthProvider = ({ children }) => {
       user,
       profile,
       organizations,
-      memberships,
       currentOrg,
       tenantId,
       role,
@@ -200,19 +179,7 @@ export const AuthProvider = ({ children }) => {
       reloadAuth: loadAll,
       selectOrg,
     }),
-    [
-      session,
-      user,
-      profile,
-      organizations,
-      memberships,
-      currentOrg,
-      tenantId,
-      role,
-      loading,
-      loadAll,
-      selectOrg,
-    ]
+    [session, user, profile, organizations, currentOrg, tenantId, role, loading, loadAll, selectOrg]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
