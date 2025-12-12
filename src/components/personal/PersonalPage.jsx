@@ -79,7 +79,7 @@ export default function PersonalPage() {
       let query = supabase
         .from("personal")
         .select("*")
-        .eq("owner_id", authUser.id)
+        .eq("org_id", currentOrg.id)
         .eq("is_deleted", false)
         .order("nombre", { ascending: true });
 
@@ -243,7 +243,7 @@ export default function PersonalPage() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", form.id)
-          .eq("owner_id", authUser.id)
+         .eq("org_id", currentOrg.id)
           .eq("is_deleted", false)
           .select("*")
           .maybeSingle();
@@ -251,13 +251,13 @@ export default function PersonalPage() {
         const now = new Date().toISOString();
         query = supabase
           .from("personal")
-          .insert({
-            ...payload,
-            owner_id: authUser.id,
-            org_id: currentOrg?.id || null,
-            created_at: now,
-            updated_at: now,
-          })
+        .insert({
+  ...payload,
+  org_id: currentOrg.id,
+}).insert({
+  ...payload,
+  org_id: currentOrg.id,
+})
           .select("*")
           .maybeSingle();
       }

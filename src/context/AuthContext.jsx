@@ -20,6 +20,16 @@ function pickHighestRole(memberships = []) {
   return best;
 }
 
+async function safeSelect(table, queryFn) {
+  try {
+    const res = await queryFn(supabase.from(table));
+    if (res?.error) return { ok: false, error: res.error, data: null };
+    return { ok: true, error: null, data: res?.data ?? null };
+  } catch (e) {
+    return { ok: false, error: e, data: null };
+  }
+}
+
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -31,9 +41,7 @@ export const AuthProvider = ({ children }) => {
   const [currentOrg, setCurrentOrg] = useState(null);
   const [tenantId, setTenantId] = useState(null);
 
-  // ✅ CANÓNICO
   const [role, setRole] = useState(null);
-
   const [loading, setLoading] = useState(true);
 
   // -------------------------------------------------
@@ -41,12 +49,9 @@ export const AuthProvider = ({ children }) => {
   // -------------------------------------------------
   useEffect(() => {
     const init = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      setSession(session);
-      setUser(session?.user ?? null);
+      const { data } = await supabase.auth.getSession();
+      setSession(data?.session ?? null);
+      setUser(data?.session?.user ?? null);
     };
 
     init();
@@ -58,13 +63,11 @@ export const AuthProvider = ({ children }) => {
       }
     );
 
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   // -------------------------------------------------
-  // LOAD PROFILE + MEMBERSHIPS + ORGS + ROLE
+  // LOAD PROFILE + MEMBERSHIPS + ORGS + ROLE (UNIVERSAL)
   // -------------------------------------------------
   useEffect(() => {
     const loadAll = async () => {
@@ -78,7 +81,6 @@ export const AuthProvider = ({ children }) => {
           setCurrentOrg(null);
           setTenantId(null);
           setRole(null);
-          setLoading(false);
           return;
         }
 
@@ -90,77 +92,116 @@ export const AuthProvider = ({ children }) => {
           .single();
 
         if (pErr || !prof) {
-          console.error("Error loading profile:", pErr);
-          setLoading(false);
+          console.error("[AuthContext] Error loading profile:", pErr);
           return;
         }
-
         setProfile(prof);
 
-        // 2) MEMBERSHIPS (por profiles.id)
-        const { data: mRowsRaw, error: mErr } = await supabase
-          .from("memberships")
-          .select("org_id, role, created_at, is_default")
-          .eq("user_id", prof.id);
+        // 2) Intentar membership "canónica" desde view v_current_membership (si existe)
+        //    Esperamos: { org_id, role, org_name? }
+        const vCurrent = await safeSelect("v_current_membership", (q) =>
+          q.select("*").maybeSingle()
+        );
 
-        if (mErr) console.error("Error loading memberships:", mErr);
-
-        const mRows = (mRowsRaw || []).slice();
-
-        // Orden estable: default primero, luego rol más alto, luego created_at
-        mRows.sort((a, b) => {
-          const ad = a?.is_default ? 1 : 0;
-          const bd = b?.is_default ? 1 : 0;
-          if (ad !== bd) return bd - ad;
-
-          const ar = roleRank(a?.role);
-          const br = roleRank(b?.role);
-          if (ar !== br) return br - ar;
-
-          const at = new Date(a?.created_at || 0).getTime();
-          const bt = new Date(b?.created_at || 0).getTime();
-          return bt - at;
-        });
-
-        setMemberships(mRows);
-
-        // 3) ORGANIZATIONS
-        let orgs = [];
-
-        if (mRows.length > 0) {
-          const orgIds = mRows.map((m) => m.org_id);
-
-          const { data: orgRows, error: oErr } = await supabase
-            .from("organizations")
-            .select("*")
-            .in("id", orgIds);
-
-          if (oErr) {
-            console.error("Error loading organizations", oErr);
-            setLoading(false);
-            return;
-          }
-
-          orgs = orgRows || [];
-        }
-
-        setOrganizations(orgs);
-
-        // 4) CURRENT ORG (default si existe, si no la primera disponible)
+        let mRows = [];
         let activeOrg = null;
 
-        if (mRows.length > 0 && orgs.length > 0) {
-          const defaultMembership = mRows.find((m) => m.is_default);
-          activeOrg =
-            orgs.find((o) => o.id === defaultMembership?.org_id) || orgs[0];
+        if (vCurrent.ok && vCurrent.data?.org_id) {
+          const row = vCurrent.data;
+          const resolvedRole = row.role || prof.role || "tracker";
+
+          mRows = [
+            {
+              org_id: row.org_id,
+              role: resolvedRole,
+              is_default: true,
+              created_at: row.created_at || null,
+            },
+          ];
+
+          activeOrg = {
+            id: row.org_id,
+            name: row.org_name || row.name || "Organización",
+          };
+        } else {
+          // 3) Fallback clásico: memberships (por profiles.id)
+          const mRes = await supabase
+            .from("memberships")
+            .select("org_id, role, created_at, is_default")
+            .eq("user_id", prof.id);
+
+          if (mRes.error) console.error("[AuthContext] Error loading memberships:", mRes.error);
+
+          mRows = (mRes.data || []).slice();
+
+          // Orden estable: default primero, luego rol más alto, luego created_at
+          mRows.sort((a, b) => {
+            const ad = a?.is_default ? 1 : 0;
+            const bd = b?.is_default ? 1 : 0;
+            if (ad !== bd) return bd - ad;
+
+            const ar = roleRank(a?.role);
+            const br = roleRank(b?.role);
+            if (ar !== br) return br - ar;
+
+            const at = new Date(a?.created_at || 0).getTime();
+            const bt = new Date(b?.created_at || 0).getTime();
+            return bt - at;
+          });
+
+          // 4) Cargar organizaciones de forma robusta:
+          //    - Preferir my_org_ids (view) si existe.
+          //    - Luego organizations_readable si existe.
+          //    - Luego organizations (fallback).
+          let orgIds = mRows.map((m) => m.org_id).filter(Boolean);
+
+          // Si no hay orgIds por memberships, intentar my_org_ids (universal)
+          if (orgIds.length === 0) {
+            const myOrgIds = await safeSelect("my_org_ids", (q) => q.select("*"));
+            if (myOrgIds.ok && Array.isArray(myOrgIds.data) && myOrgIds.data.length > 0) {
+              orgIds = myOrgIds.data
+                .map((r) => r.org_id ?? r.id ?? r.tenant_id)
+                .filter(Boolean);
+            }
+          }
+
+          let orgs = [];
+
+          if (orgIds.length > 0) {
+            // organizations_readable primero
+            const orgReadable = await safeSelect("organizations_readable", (q) =>
+              q.select("*").in("id", orgIds)
+            );
+
+            if (orgReadable.ok) {
+              orgs = orgReadable.data || [];
+            } else {
+              // fallback organizations
+              const orgClassic = await safeSelect("organizations", (q) =>
+                q.select("*").in("id", orgIds)
+              );
+              if (orgClassic.ok) orgs = orgClassic.data || [];
+            }
+          }
+
+          // Current org: default membership si existe, si no primera org
+          if (mRows.length > 0 && orgs.length > 0) {
+            const def = mRows.find((m) => m.is_default);
+            activeOrg = orgs.find((o) => o.id === def?.org_id) || orgs[0];
+          } else {
+            activeOrg = null;
+          }
+
+          setOrganizations(orgs);
         }
+
+        setMemberships(mRows);
 
         setCurrentOrg(activeOrg);
         setTenantId(activeOrg?.id ?? null);
 
-        // 5) ROLE CANÓNICO (rol de la org activa; si no hay org activa, rol más alto)
+        // 5) ROLE canónico
         let resolvedRole = null;
-
         if (activeOrg?.id) {
           const mActive = mRows.find((m) => m.org_id === activeOrg.id);
           resolvedRole =
@@ -168,10 +209,9 @@ export const AuthProvider = ({ children }) => {
         } else {
           resolvedRole = pickHighestRole(mRows) || prof.role || "tracker";
         }
-
         setRole(resolvedRole);
       } catch (err) {
-        console.error("AuthContext fatal error:", err);
+        console.error("[AuthContext] fatal error:", err);
       } finally {
         setLoading(false);
       }
@@ -180,12 +220,9 @@ export const AuthProvider = ({ children }) => {
     loadAll();
   }, [user]);
 
-  // Helpers
   const isOwner = role === "owner";
   const isAdmin = role === "admin" || role === "owner";
-
-  // Compatibilidad: algunos componentes viejos usan currentRole
-  const currentRole = role;
+  const currentRole = role; // compat
 
   const value = useMemo(
     () => ({
@@ -197,14 +234,11 @@ export const AuthProvider = ({ children }) => {
       currentOrg,
       tenantId,
 
-      // ✅ contrato único
       role,
       isOwner,
       isAdmin,
 
-      // compatibilidad
       currentRole,
-
       loading,
     }),
     [
