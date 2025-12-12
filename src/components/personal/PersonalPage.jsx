@@ -1,4 +1,4 @@
-// src/components/personal/PersonalPage.jsx
+// src/components/persona/PersonalPage.jsx
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -243,7 +243,7 @@ export default function PersonalPage() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", form.id)
-         .eq("org_id", currentOrg.id)
+          .eq("org_id", currentOrg.id)
           .eq("is_deleted", false)
           .select("*")
           .maybeSingle();
@@ -251,13 +251,10 @@ export default function PersonalPage() {
         const now = new Date().toISOString();
         query = supabase
           .from("personal")
-        .insert({
-  ...payload,
-  org_id: currentOrg.id,
-}).insert({
-  ...payload,
-  org_id: currentOrg.id,
-})
+          .insert({
+            ...payload,
+            org_id: currentOrg.id,
+          })
           .select("*")
           .maybeSingle();
       }
@@ -339,7 +336,7 @@ export default function PersonalPage() {
           updated_at: now,
         })
         .eq("id", selectedId)
-        .eq("owner_id", authUser.id)
+        .eq("org_id", currentOrg.id)
         .eq("is_deleted", false)
         .select("*")
         .maybeSingle();
