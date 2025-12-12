@@ -2,12 +2,19 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1"
     />
+
     <meta name="color-scheme" content="light dark" />
+
     <title>App Geocercas</title>
+
+    <!-- PWA / Google Play -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#10b981" />
 
     <!-- Leaflet / Geoman CSS -->
     <link
@@ -20,8 +27,15 @@
     />
 
     <style>
-      html, body, #root { height: 100%; margin: 0; }
-      body { background: #0b1220; }
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: #0b1220;
+      }
     </style>
 
     <!-- Shim crítico: disponible ANTES del bundle -->
@@ -32,8 +46,10 @@
       })();
     </script>
   </head>
+
   <body>
     <div id="root"></div>
+
     <!-- Vite entry -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
