@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+// src/context/AuthContext.jsx
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext();
@@ -14,7 +22,7 @@ function roleRank(r) {
 function pickHighestRole(memberships = []) {
   let best = "tracker";
   for (const m of memberships) {
-    const r = (m?.role || "tracker").toLowerCase();
+    const r = String(m?.role || "tracker").toLowerCase();
     if (roleRank(r) > roleRank(best)) best = r;
   }
   return best;
@@ -64,7 +72,8 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // -----------------------------
-  // LOAD ALL (FIXED)
+  // LOAD ALL (UNIVERSAL + PERMANENT)
+  // Fuente de roles: app_user_roles (NO org_members)
   // -----------------------------
   const loadAll = useCallback(async () => {
     try {
@@ -81,21 +90,27 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // 1) Profile
-      const { data: prof } = await supabase
+      // 1) Profile (si tu app depende de esto)
+      const { data: prof, error: profErr } = await supabase
         .from("profiles")
         .select("*")
         .eq("email", user.email)
-        .single();
+        .maybeSingle();
 
+      if (profErr) console.warn("[AuthContext] profiles error:", profErr);
       setProfile(prof ?? null);
 
-      // 2) Memberships
-      const { data: mRows = [] } = await supabase
-        .from("org_members")
-        .select("org_id, role, created_at");
+      // 2) Memberships: app_user_roles (fuente real)
+      const { data: mRowsRaw, error: mErr } = await supabase
+        .from("app_user_roles")
+        .select("org_id, role, created_at")
+        .eq("user_id", user.id);
 
-      // Orden: OWNER primero, luego más reciente
+      if (mErr) console.error("[AuthContext] app_user_roles error:", mErr);
+
+      const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
+
+      // Orden: rol más alto primero, luego más reciente
       mRows.sort((a, b) => {
         const ar = roleRank(a?.role);
         const br = roleRank(b?.role);
@@ -110,25 +125,29 @@ export const AuthProvider = ({ children }) => {
       // 3) Organizations
       let orgs = [];
       if (orgIds.length) {
-        const { data } = await supabase
+        const { data, error: orgErr } = await supabase
           .from("organizations")
           .select("*")
           .in("id", orgIds);
+
+        if (orgErr) console.error("[AuthContext] organizations error:", orgErr);
         orgs = data ?? [];
       }
 
       setOrganizations(orgs);
 
-      // 4) ORG ACTIVA — REGLA SaaS CORRECTA
+      // 4) ORG ACTIVA — regla SaaS correcta
       let activeOrg = null;
 
-      // 4.1 Org donde es OWNER (la más reciente)
-      const ownerMembership = mRows.find((m) => m.role === "owner");
+      // 4.1 Org donde es OWNER (la más “prioritaria” según sort)
+      const ownerMembership = mRows.find(
+        (m) => String(m.role || "").toLowerCase() === "owner"
+      );
       if (ownerMembership) {
-        activeOrg = orgs.find((o) => o.id === ownerMembership.org_id);
+        activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
       }
 
-      // 4.2 localStorage (solo si sigue siendo miembro)
+      // 4.2 localStorage (solo si sigue existiendo en orgs permitidas)
       if (!activeOrg) {
         const storedOrgId = localStorage.getItem("current_org_id");
         if (storedOrgId) {
@@ -146,21 +165,19 @@ export const AuthProvider = ({ children }) => {
       setCurrentOrg(activeOrg);
       setTenantId(activeOrg?.id ?? null);
 
-      if (activeOrg?.id) {
-        localStorage.setItem("current_org_id", activeOrg.id);
-      } else {
-        localStorage.removeItem("current_org_id");
-      }
+      if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
+      else localStorage.removeItem("current_org_id");
 
-      // 5) Role efectivo
+      // 5) Role efectivo para la org activa (y fallback si algo raro pasa)
       const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
-      const resolvedRole =
+      const resolvedRole = String(
         activeMembership?.role ??
-        pickHighestRole(mRows) ??
-        prof?.role ??
-        "tracker";
+          pickHighestRole(mRows) ??
+          prof?.role ??
+          "tracker"
+      ).toLowerCase();
 
-      setRole(resolvedRole.toLowerCase());
+      setRole(resolvedRole);
     } catch (err) {
       console.error("[AuthContext] fatal error:", err);
     } finally {
@@ -172,16 +189,27 @@ export const AuthProvider = ({ children }) => {
     loadAll();
   }, [loadAll]);
 
+  // -----------------------------
+  // SELECT ORG (actualiza también role)
+  // -----------------------------
   const selectOrg = useCallback(
     (orgId) => {
       const o = organizations.find((x) => x.id === orgId);
       const active = normalizeOrgRow(o) ?? null;
+
       setCurrentOrg(active);
       setTenantId(active?.id ?? null);
+
       if (active?.id) localStorage.setItem("current_org_id", active.id);
       else localStorage.removeItem("current_org_id");
+
+      // actualizar role según membership de esa org (si existe)
+      const m = memberships.find((x) => x.org_id === active?.id);
+      if (m?.role) setRole(String(m.role).toLowerCase());
+      // si no hay membership, mantenemos el role actual (o tracker si null)
+      else if (!role) setRole("tracker");
     },
-    [organizations]
+    [organizations, memberships, role]
   );
 
   const value = useMemo(
@@ -189,16 +217,23 @@ export const AuthProvider = ({ children }) => {
       session,
       user,
       profile,
+
       organizations,
       memberships,
+
       currentOrg,
       tenantId,
+
       role,
       currentRole: role,
-      currentOrgId: currentOrg?.org_id || currentOrg?.id || null,
+
+      currentOrgId: currentOrg?.id ?? null,
+
       isOwner: role === "owner",
       isAdmin: role === "admin" || role === "owner",
+
       loading,
+
       reloadAuth: loadAll,
       selectOrg,
     }),

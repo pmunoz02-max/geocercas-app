@@ -32,9 +32,13 @@ import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
+import { useModuleAccess } from "./hooks/useModuleAccess.js";
 
+/* ======================================================
+   SHELL (UI + TABS)
+====================================================== */
 function Shell({ children }) {
-  const { loading } = useAuth();
+  const { loading, role } = useAuth();
 
   if (loading) {
     return (
@@ -57,8 +61,12 @@ function Shell({ children }) {
     { path: "/costos-dashboard", labelKey: "app.tabs.dashboard" },
     { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
-    { path: "/admins", labelKey: "app.tabs.admins" },
   ];
+
+  // ADMINISTRADOR solo visible para OWNER
+  if (role === "owner") {
+    tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -71,6 +79,18 @@ function Shell({ children }) {
   );
 }
 
+/* ======================================================
+   GUARD DE MÓDULO (OWNER)
+====================================================== */
+function OwnerRoute({ children }) {
+  const { canView, loading } = useModuleAccess("admins");
+
+  if (loading) return null;
+  if (!canView) return <Navigate to="/inicio" replace />;
+
+  return children;
+}
+
 function LoginShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -79,6 +99,9 @@ function LoginShell() {
   );
 }
 
+/* ======================================================
+   APP
+====================================================== */
 export default function App() {
   return (
     <BrowserRouter>
@@ -100,7 +123,19 @@ export default function App() {
           }
         />
 
-        {/* resto de módulos igual */}
+        {/* ADMINISTRADOR – GUARD REAL */}
+        <Route
+          path="/admins"
+          element={
+            <AuthGuard>
+              <OwnerRoute>
+                <Shell>
+                  <AdminsPage />
+                </Shell>
+              </OwnerRoute>
+            </AuthGuard>
+          }
+        />
 
         {/* Centro de Ayuda */}
         <Route
