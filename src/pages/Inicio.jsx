@@ -1,3 +1,4 @@
+// src/pages/Inicio.jsx
 import React from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
@@ -63,12 +64,12 @@ export default function Inicio() {
     return currentRole || "—";
   })();
 
-  // Rutas de ayuda (ACTIVAS: instrucciones + FAQ + video)
+  // Rutas de ayuda (ACTIVAS: instrucciones + FAQ + soporte)
   const helpRoutes = {
     instructions: "/help/instructions",
     faq: "/help/faq",
-    video: "/help/video", // ✅ ACTIVO
-    soporte: null, // "/help/support"
+    video: null, // oculto por ahora
+    soporte: "/help/support",
     queEs: null, // "/help/what-is"
     novedades: null, // "/help/changelog"
   };
@@ -146,18 +147,7 @@ export default function Inicio() {
             disabled={!helpRoutes.faq}
           />
 
-          {/* Video demo (ACTIVO) */}
-          <StarterCard
-            badge={t("inicio.cards.videoDemo.badge")}
-            title={t("inicio.cards.videoDemo.title")}
-            body={t("inicio.cards.videoDemo.body")}
-            cta={t("inicio.cards.videoDemo.cta")}
-            onCta={() => helpRoutes.video && navigate(helpRoutes.video)}
-            disabled={!helpRoutes.video}
-            disabledText={t("inicio.cards.common.soon") || "Próximamente"}
-          />
-
-          {/* Soporte (PRÓXIMAMENTE) */}
+          {/* Soporte (ACTIVO) */}
           <StarterCard
             badge={t("inicio.cards.soporte.badge")}
             title={t("inicio.cards.soporte.title")}

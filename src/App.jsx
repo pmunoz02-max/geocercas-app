@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -24,10 +25,10 @@ import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Ayuda
+// Ayuda (todo en src/pages/help)
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
-import VideoDemoPage from "./pages/help/VideoDemoPage.jsx";
+import SupportPage from "./pages/help/SupportPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
@@ -241,11 +242,11 @@ export default function App() {
         />
 
         <Route
-          path="/help/video"
+          path="/help/support"
           element={
             <AuthGuard>
               <Shell>
-                <VideoDemoPage />
+                <SupportPage />
               </Shell>
             </AuthGuard>
           }
