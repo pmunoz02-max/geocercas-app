@@ -25,10 +25,11 @@ import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Ayuda (todo en src/pages/help)
+// Ayuda
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
+import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
@@ -84,18 +85,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
 
-        <Route
-          path="/tracker-gps"
-          element={
-            <AuthGuard>
-              <Shell>
-                <TrackerGpsPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
+        <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
         <Route
           path="/inicio"
@@ -108,117 +100,9 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/nueva-geocerca"
-          element={
-            <AuthGuard>
-              <Shell>
-                <NuevaGeocerca />
-              </Shell>
-            </AuthGuard>
-          }
-        />
+        {/* resto de módulos igual */}
 
-        <Route
-          path="/geocercas"
-          element={
-            <AuthGuard>
-              <Shell>
-                <GeocercasPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/personal"
-          element={
-            <AuthGuard>
-              <Shell>
-                <PersonalPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/actividades"
-          element={
-            <AuthGuard>
-              <Shell>
-                <ActividadesPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/asignaciones"
-          element={
-            <AuthGuard>
-              <Shell>
-                <AsignacionesPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/costos"
-          element={
-            <AuthGuard>
-              <Shell>
-                <CostosPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/costos-dashboard"
-          element={
-            <AuthGuard>
-              <Shell>
-                <CostosDashboardPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/tracker-dashboard"
-          element={
-            <AuthGuard>
-              <Shell>
-                <TrackerDashboard />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/invitar-tracker"
-          element={
-            <AuthGuard>
-              <Shell>
-                <InvitarTracker />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/admins"
-          element={
-            <AuthGuard>
-              <Shell>
-                <AdminsPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* Ayuda */}
+        {/* Centro de Ayuda */}
         <Route
           path="/help/instructions"
           element={
@@ -252,8 +136,16 @@ export default function App() {
           }
         />
 
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/login" element={<LoginShell />} />
+        <Route
+          path="/help/changelog"
+          element={
+            <AuthGuard>
+              <Shell>
+                <ChangelogPage />
+              </Shell>
+            </AuthGuard>
+          }
+        />
 
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>

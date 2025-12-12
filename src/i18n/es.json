@@ -1,4 +1,12 @@
 {
+  "inicio": {
+  "cards": {
+    "common": {
+      "soon": "Próximamente"
+    }
+  }
+}
+
   "common": {
     "language": {
       "es": "Español",

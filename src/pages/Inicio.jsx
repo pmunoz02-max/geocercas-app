@@ -36,14 +36,14 @@ function StarterCard({ badge, title, body, cta, onCta, disabled, disabledText })
           }
           onClick={disabled ? undefined : onCta}
           aria-disabled={disabled ? "true" : "false"}
-          title={disabled ? (disabledText || "Próximamente") : undefined}
+          title={disabled ? disabledText : undefined}
         >
           {cta}
         </button>
 
         {disabled ? (
           <span className="text-[11px] text-slate-400">
-            {disabledText || "Próximamente"}
+            {disabledText}
           </span>
         ) : null}
       </div>
@@ -58,20 +58,18 @@ export default function Inicio() {
 
   const roleLabel = (() => {
     const r = (currentRole || "").toLowerCase();
-    if (r === "owner") return t("app.header.roleOwner") || "Propietario";
-    if (r === "admin") return t("app.header.roleAdmin") || "Administrador";
-    if (r === "tracker") return t("app.header.roleTracker") || "Tracker";
+    if (r === "owner") return t("app.header.roleOwner");
+    if (r === "admin") return t("app.header.roleAdmin");
+    if (r === "tracker") return t("app.header.roleTracker");
     return currentRole || "—";
   })();
 
-  // Rutas de ayuda (ACTIVAS: instrucciones + FAQ + soporte)
+  // Rutas de ayuda (YA ACTIVAS)
   const helpRoutes = {
     instructions: "/help/instructions",
     faq: "/help/faq",
-    video: null, // oculto por ahora
     soporte: "/help/support",
-    queEs: null, // "/help/what-is"
-    novedades: null, // "/help/changelog"
+    novedades: "/help/changelog",
   };
 
   return (
@@ -91,12 +89,12 @@ export default function Inicio() {
             </p>
           </div>
 
-          {/* Info de usuario / organización */}
+          {/* Info usuario */}
           <div className="bg-slate-50 rounded-xl border border-slate-200 px-3 py-2 text-[11px] text-slate-600 max-w-xs">
             <div className="font-semibold mb-1">
               {t("inicio.userInfo.connectedAs")}{" "}
               <span className="text-slate-900">
-                {user?.email || user?.id || "—"}
+                {user?.email || user?.id}
               </span>
             </div>
             <div className="mb-1">
@@ -106,78 +104,54 @@ export default function Inicio() {
             <div className="mb-1">
               {t("inicio.userInfo.inOrg")}{" "}
               <span className="font-semibold text-slate-900">
-                {currentOrg?.nombre || currentOrg?.name || "—"}
+                {currentOrg?.nombre || currentOrg?.name}
               </span>
             </div>
             <div className="mt-1 flex flex-wrap gap-y-1">
-              <InfoPill label={t("inicio.userInfo.userLabel")} value={user?.id} />
-              <InfoPill
-                label={t("inicio.userInfo.orgIdLabel")}
-                value={currentOrg?.id}
-              />
+              <InfoPill label="User" value={user?.id} />
+              <InfoPill label="Org" value={currentOrg?.id} />
             </div>
           </div>
         </div>
       </section>
 
-      {/* Tarjetas de recursos / ayuda */}
+      {/* Centro de ayuda */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-800">
           {t("inicio.header.badge")}
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Instrucciones (ACTIVO) */}
           <StarterCard
             badge={t("inicio.cards.instrucciones.badge")}
             title={t("inicio.cards.instrucciones.title")}
             body={t("inicio.cards.instrucciones.body")}
             cta={t("inicio.cards.instrucciones.cta")}
             onCta={() => navigate(helpRoutes.instructions)}
-            disabled={!helpRoutes.instructions}
           />
 
-          {/* FAQ (ACTIVO) */}
           <StarterCard
             badge={t("inicio.cards.faq.badge")}
             title={t("inicio.cards.faq.title")}
             body={t("inicio.cards.faq.body")}
             cta={t("inicio.cards.faq.cta")}
             onCta={() => navigate(helpRoutes.faq)}
-            disabled={!helpRoutes.faq}
           />
 
-          {/* Soporte (ACTIVO) */}
           <StarterCard
             badge={t("inicio.cards.soporte.badge")}
             title={t("inicio.cards.soporte.title")}
             body={t("inicio.cards.soporte.body")}
             cta={t("inicio.cards.soporte.cta")}
-            onCta={() => helpRoutes.soporte && navigate(helpRoutes.soporte)}
-            disabled={!helpRoutes.soporte}
-            disabledText={t("inicio.cards.common.soon") || "Próximamente"}
+            onCta={() => navigate(helpRoutes.soporte)}
           />
 
-          {/* ¿Qué es? (PRÓXIMAMENTE) */}
-          <StarterCard
-            badge={t("inicio.cards.queEs.badge")}
-            title={t("inicio.cards.queEs.title")}
-            body={t("inicio.cards.queEs.body")}
-            cta={t("inicio.cards.queEs.cta")}
-            onCta={() => helpRoutes.queEs && navigate(helpRoutes.queEs)}
-            disabled={!helpRoutes.queEs}
-            disabledText={t("inicio.cards.common.soon") || "Próximamente"}
-          />
-
-          {/* Novedades (PRÓXIMAMENTE) */}
           <StarterCard
             badge={t("inicio.cards.novedades.badge")}
             title={t("inicio.cards.novedades.title")}
             body={t("inicio.cards.novedades.body")}
             cta={t("inicio.cards.novedades.cta")}
-            onCta={() => helpRoutes.novedades && navigate(helpRoutes.novedades)}
-            disabled={!helpRoutes.novedades}
-            disabledText={t("inicio.cards.common.soon") || "Próximamente"}
+            onCta={() => navigate(helpRoutes.novedades)}
           />
         </div>
       </section>
