@@ -2,57 +2,86 @@
 import { supabase } from "../supabaseClient";
 
 /**
- * Helper para convertir fechas de inputs type="date" a rango timestamptz ISO.
+ * Convierte fechas de inputs type="date" (YYYY-MM-DD) a un rango ISO (timestamptz).
  *
- * @param {string} fromDateStr  "YYYY-MM-DD" o ""
- * @param {string} toDateStr    "YYYY-MM-DD" o ""
- * @returns {{ from: string|null, to: string|null }}
- *
- * Se interpreta como:
- *   start_time >= from
- *   start_time  < to
- *
- * Es decir, el día "Hasta" se incluye completo.
+ * Retorna:
+ *  - fromIso:        ISO inclusive  (>=)
+ *  - toIsoExclusive: ISO exclusivo  (<)  -> incluye completo el día "Hasta"
  */
-export function buildDateRangeForCostos(fromDateStr, toDateStr) {
-  let from = null;
-  let to = null;
+export function buildDateRangeIso(fromDateStr, toDateStr) {
+  let fromIso = null;
+  let toIsoExclusive = null;
 
   if (fromDateStr) {
     const d = new Date(fromDateStr + "T00:00:00");
-    if (!Number.isNaN(d.getTime())) {
-      from = d.toISOString();
-    }
+    if (!Number.isNaN(d.getTime())) fromIso = d.toISOString();
   }
 
   if (toDateStr) {
     const d = new Date(toDateStr + "T00:00:00");
     if (!Number.isNaN(d.getTime())) {
-      d.setDate(d.getDate() + 1);
-      to = d.toISOString(); // día siguiente a las 00:00
+      d.setDate(d.getDate() + 1); // día siguiente a las 00:00
+      toIsoExclusive = d.toISOString();
     }
   }
 
-  return { from, to };
+  return { fromIso, toIsoExclusive };
 }
 
 /**
- * Obtiene el detalle de costos de asignaciones para un rango de fechas.
+ * Obtiene el detalle de costos por asignación (filtrado SIEMPRE por org).
  *
  * @param {Object} params
- * @param {string|null} params.from  ISO string (timestamptz) inicio rango, o null
- * @param {string|null} params.to    ISO string (timestamptz) fin rango exclusivo, o null
- * @param {string}      params.orgId UUID de la organización
+ * @param {string|null} params.from   ISO timestamptz inclusive (>=). Ej: "2025-12-01T05:00:00.000Z"
+ * @param {string|null} params.to     ISO timestamptz exclusivo (<). Ej: "2025-12-31T05:00:00.000Z"
+ * @param {string}      params.orgId  UUID de la organización activa (org_id).
  */
-export async function getCostosAsignaciones({ from, to, orgId }) {
-  const { data, error } = await supabase.rpc("get_costos_asignaciones", {
-    p_from: from,
-    p_to: to,
-    p_org_id: orgId,
-  });
+export async function getCostosAsignaciones({ from = null, to = null, orgId }) {
+  if (!orgId) {
+    const error = new Error("orgId is required in getCostosAsignaciones()");
+    console.error("[costosApi] Missing orgId:", { from, to, orgId });
+    return { data: [], error };
+  }
+
+  // RPC V2: blindado por org_id + validación de membresía en backend.
+  // Si por cualquier razón la V2 no existiera aún, hacemos fallback al RPC antiguo.
+  const tryV2 = async () =>
+    supabase.rpc("get_costos_asignaciones_v2", {
+      p_org_id: orgId,
+      p_from: from,
+      p_to: to,
+    });
+
+  const tryV1 = async () =>
+    supabase.rpc("get_costos_asignaciones", {
+      p_org_id: orgId,
+      p_from: from,
+      p_to: to,
+    });
+
+  let res = await tryV2();
+
+  // Si la función no existe (PGRST202) o 42883 (undefined_function), cae a V1.
+  if (res?.error) {
+    const msg = String(res.error?.message || "");
+    const code = String(res.error?.code || "");
+    const isMissingFn =
+      code === "42883" ||
+      msg.toLowerCase().includes("does not exist") ||
+      msg.toLowerCase().includes("undefined function") ||
+      msg.toLowerCase().includes("could not find the function") ||
+      msg.toLowerCase().includes("pgrst202");
+
+    if (isMissingFn) {
+      console.warn("[costosApi] RPC V2 not found, falling back to V1:", res.error);
+      res = await tryV1();
+    }
+  }
+
+  const { data, error } = res || { data: null, error: null };
 
   if (error) {
-    console.error("[costosApi] get_costos_asignaciones RPC error:", error);
+    console.error("[costosApi] RPC error:", error);
   }
 
   return { data: data || [], error };
