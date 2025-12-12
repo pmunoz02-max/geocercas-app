@@ -1,10 +1,5 @@
 import React from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
@@ -37,9 +32,10 @@ import OnboardingCreateOrgPage from "./pages/OnboardingCreateOrgPage.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 
 // ---------------------
-// Layout interno
+// Layout interno (SIEMPRE con Header + Tabs)
+// Se usa como Route layout con <Outlet /> para evitar duplicación y garantizar consistencia.
 // ---------------------
-function Shell({ children }) {
+function ShellLayout() {
   const { loading } = useAuth();
 
   if (loading) {
@@ -72,8 +68,9 @@ function Shell({ children }) {
       <div className="border-b bg-white">
         <TopTabs tabs={tabs} />
       </div>
+
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
-        {children}
+        <Outlet />
       </main>
     </div>
   );
@@ -84,6 +81,16 @@ function LoginShell() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <Login />
     </div>
+  );
+}
+
+function ProtectedShell() {
+  return (
+    <AuthGuard>
+      <RequireOrg>
+        <ShellLayout />
+      </RequireOrg>
+    </AuthGuard>
   );
 }
 
@@ -99,7 +106,7 @@ export default function App() {
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Onboarding obligatorio */}
+        {/* Onboarding obligatorio (requiere sesión, pero NO requiere org todavía) */}
         <Route
           path="/onboarding/create-org"
           element={
@@ -109,48 +116,26 @@ export default function App() {
           }
         />
 
-        {/* App protegida + requiere organización */}
-        <Route
-          path="/inicio"
-          element={
-            <AuthGuard>
-              <RequireOrg>
-                <Shell>
-                  <Inicio />
-                </Shell>
-              </RequireOrg>
-            </AuthGuard>
-          }
-        />
+        {/* App protegida + requiere organización (Header + Tabs garantizados para TODAS las rutas hijas) */}
+        <Route element={<ProtectedShell />}>
+          <Route path="/inicio" element={<Inicio />} />
+          <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
+          <Route path="/geocercas" element={<GeocercasPage />} />
+          <Route path="/personal" element={<PersonalPage />} />
+          <Route path="/actividades" element={<ActividadesPage />} />
+          <Route path="/asignaciones" element={<AsignacionesPage />} />
+          <Route path="/costos" element={<CostosPage />} />
+          <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
+          <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
+          <Route path="/invitar-tracker" element={<InvitarTracker />} />
+          <Route path="/admins" element={<AdminsPage />} />
+          <Route path="/help/instructions" element={<InstructionsPage />} />
 
-        {/* Repetimos el patrón para todos los módulos */}
-        {[
-          ["/nueva-geocerca", <NuevaGeocerca />],
-          ["/geocercas", <GeocercasPage />],
-          ["/personal", <PersonalPage />],
-          ["/actividades", <ActividadesPage />],
-          ["/asignaciones", <AsignacionesPage />],
-          ["/costos", <CostosPage />],
-          ["/costos-dashboard", <CostosDashboardPage />],
-          ["/tracker-dashboard", <TrackerDashboard />],
-          ["/invitar-tracker", <InvitarTracker />],
-          ["/admins", <AdminsPage />],
-          ["/help/instructions", <InstructionsPage />],
-          ["/tracker-gps", <TrackerGpsPage />],
-        ].map(([path, component]) => (
-          <Route
-            key={path}
-            path={path}
-            element={
-              <AuthGuard>
-                <RequireOrg>
-                  <Shell>{component}</Shell>
-                </RequireOrg>
-              </AuthGuard>
-            }
-          />
-        ))}
+          {/* Tracker GPS (si quieres que el tracker NO vea Tabs, lo movemos a otro layout luego) */}
+          <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+        </Route>
 
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
