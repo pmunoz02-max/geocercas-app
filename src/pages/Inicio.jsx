@@ -64,11 +64,11 @@ export default function Inicio() {
     return currentRole || "—";
   })();
 
-  // Rutas de ayuda (por ahora solo existe Instructions)
+  // Rutas de ayuda (ACTIVAS: instrucciones + FAQ)
   const helpRoutes = {
     instructions: "/help/instructions",
-    faq: null, // "/help/faq" cuando la creemos
-    video: null, // "/help/video-demo"
+    faq: "/help/faq",
+    video: null, // "/help/video-demo" cuando la creemos
     soporte: null, // "/help/support"
     queEs: null, // "/help/what-is"
     novedades: null, // "/help/changelog"
@@ -127,7 +127,7 @@ export default function Inicio() {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* ✅ Instrucciones (ACTIVO) */}
+          {/* Instrucciones (ACTIVO) */}
           <StarterCard
             badge={t("inicio.cards.instrucciones.badge")}
             title={t("inicio.cards.instrucciones.title")}
@@ -137,15 +137,14 @@ export default function Inicio() {
             disabled={!helpRoutes.instructions}
           />
 
-          {/* FAQ (PRÓXIMAMENTE) */}
+          {/* FAQ (ACTIVO) */}
           <StarterCard
             badge={t("inicio.cards.faq.badge")}
             title={t("inicio.cards.faq.title")}
             body={t("inicio.cards.faq.body")}
             cta={t("inicio.cards.faq.cta")}
-            onCta={() => helpRoutes.faq && navigate(helpRoutes.faq)}
+            onCta={() => navigate(helpRoutes.faq)}
             disabled={!helpRoutes.faq}
-            disabledText={t("inicio.cards.common.soon") || "Próximamente"}
           />
 
           {/* Video demo (PRÓXIMAMENTE) */}
