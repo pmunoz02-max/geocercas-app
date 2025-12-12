@@ -493,7 +493,9 @@
     "colCosto": "Costo",
     "colMoneda": "Moneda",
     "tableNoResults": "No hay datos para los filtros actuales.",
-    "errorLoad": "Error al cargar el dashboard de costos."
+    "errorLoad": "Error al cargar el dashboard de costos.",
+    "exportDataButton": "Exportar datos",
+    "exportChartButton": "Exportar gráfico"
   },
   "tracker": {
     "title": "Tracker GPS",
@@ -629,6 +631,215 @@
       "invite": "No se pudo enviar la invitación.",
       "updateRole": "No se pudo actualizar el rol.",
       "remove": "No se pudo eliminar al administrador."
+    }
+  },
+  "help": {
+    "common": {
+      "badge": "AYUDA",
+      "quickGuideBadge": "GUÍA RÁPIDA",
+      "breadcrumb": "Centro de Ayuda",
+      "back": "Volver",
+      "goHome": "Ir a Inicio",
+      "viewQuickGuide": "Ver guía rápida",
+      "viewFaq": "Ver preguntas frecuentes"
+    },
+    "support": {
+      "title": "Soporte",
+      "subtitle": "Contacta al equipo o revisa soluciones rápidas en la FAQ.",
+      "emailLabel": "Email",
+      "notConfigured": "Contacto no configurado"
+    },
+    "instructions": {
+      "title": "Instrucciones",
+      "subtitle": "Configura App Geocercas desde cero hasta obtener control real del personal, actividades y costos mediante geocercas.",
+      "tocTitle": "Contenido",
+      "tocSubtitle": "Navega por los pasos y aplica la guía en tu organización.",
+      "tocSteps": "Pasos de configuración",
+      "tocTips": "Buenas prácticas",
+      "tocResult": "Resultado final",
+      "jumpToSteps": "Ir a pasos",
+      "viewResult": "Ver resultado",
+      "stepsTitle": "Pasos de configuración",
+      "stepsSubtitle": "Sigue el orden sugerido para obtener resultados rápidos.",
+      "tipsTitle": "Buenas prácticas",
+      "recommendationTitle": "Recomendación",
+      "recommendationBody": "Completa los pasos 1 a 5 primero. Después conecta el Tracker y revisa reportes.",
+      "bestPractice1Title": "Nombres consistentes",
+      "bestPractice1Body": "Usa nombres claros y repetibles para geocercas, personal y actividades. Esto mejora reportes y evita confusiones.",
+      "bestPractice2Title": "Geocercas bien dibujadas",
+      "bestPractice2Body": "Evita polígonos enormes. Un área precisa genera entradas/salidas más confiables.",
+      "bestPractice3Title": "Actividades con costo",
+      "bestPractice3Body": "Define costo por hora y moneda desde el inicio para que el dashboard de costos tenga sentido.",
+      "bestPractice4Title": "Tracker con permisos correctos",
+      "bestPractice4Body": "Asegura permisos de ubicación adecuados para evitar registros incompletos.",
+      "resultTitle": "Resultado final",
+      "resultIntro": "Después de completar la guía, tendrás:",
+      "resultBullets": [
+        "Control automático del personal por geocercas.",
+        "Horas y costos calculados sin reportes manuales.",
+        "Reportes confiables por persona, actividad y geocerca.",
+        "Base sólida para auditoría, control y toma de decisiones."
+      ],
+      "steps": [
+        {
+          "title": "Paso 1: Crear tu organización",
+          "bullets": [
+            "La organización es el contenedor principal de toda tu información.",
+            "Define quién es Propietario (control total) y quiénes serán Administradores.",
+            "Todo lo que crees (geocercas, personal, reportes) queda dentro de la organización."
+          ]
+        },
+        {
+          "title": "Paso 2: Crear geocercas",
+          "bullets": [
+            "Crea zonas reales de trabajo: parcelas, frentes de obra, áreas de seguridad, etc.",
+            "Recomendación: polígonos ajustados al área real (evita geocercas gigantes).",
+            "Pon nombres claros: “Lote 3 - Cosecha”, “Bodega”, “Entrada principal”…"
+          ]
+        },
+        {
+          "title": "Paso 3: Registrar personal",
+          "bullets": [
+            "Administrativos: gestionan datos, ven reportes y costos.",
+            "Trackers: usan el móvil para registrar ubicación (no ven módulos administrativos).",
+            "Mantén nombres consistentes para reportes (ej: Apellido + Nombre)."
+          ]
+        },
+        {
+          "title": "Paso 4: Crear actividades",
+          "bullets": [
+            "Las actividades representan el tipo de trabajo: Cosecha, Riego, Mantenimiento, Seguridad…",
+            "Configura costo por hora y moneda para cálculo automático.",
+            "Describe la actividad para que el equipo la entienda igual."
+          ]
+        },
+        {
+          "title": "Paso 5: Crear asignaciones",
+          "bullets": [
+            "Una asignación une: Persona + Actividad + Geocerca.",
+            "Cuando el tracker entra/sale de una geocerca, se registra el tiempo y se calcula duración.",
+            "Esto elimina reportes manuales y reduce errores."
+          ]
+        },
+        {
+          "title": "Paso 6: Usar el Tracker (móvil)",
+          "bullets": [
+            "Permite ubicación (idealmente en segundo plano) para registros consistentes.",
+            "Funciona sin internet: guarda y luego sincroniza cuando vuelve la señal.",
+            "Optimiza consumo: usa intervalos razonables y evita apps que maten procesos."
+          ]
+        },
+        {
+          "title": "Paso 7: Ver reportes y costos",
+          "bullets": [
+            "Consulta reportes por persona, actividad, geocerca y rango de fechas.",
+            "Verifica horas y costos calculados automáticamente.",
+            "Exporta/usa reportes para control interno, auditoría o facturación."
+          ]
+        }
+      ]
+    },
+    "faq": {
+      "title": "Preguntas frecuentes",
+      "subtitle": "Respuestas rápidas sobre organizaciones, geocercas, tracker, costos y permisos.",
+      "seeQuickGuide": "Ver guía rápida",
+      "backToPanel": "Volver al panel",
+      "sections": [
+        {
+          "title": "Cuenta, organizaciones y roles",
+          "items": [
+            {
+              "q": "¿Qué es una organización?",
+              "a": "Es el contenedor principal de datos en App Geocercas. Dentro de una organización se guardan geocercas, personal, actividades, asignaciones, reportes y costos. Cada organización está aislada (multi-tenant)."
+            },
+            {
+              "q": "¿Cuál es la diferencia entre Propietario (owner), Admin y Tracker?",
+              "a": "Owner: control total de la organización, puede administrar todo e invitar usuarios. Admin: gestiona módulos administrativos según permisos. Tracker: usa la app para enviar ubicación; no gestiona datos administrativos."
+            },
+            {
+              "q": "¿Puedo tener más de una organización con el mismo usuario?",
+              "a": "Sí. El sistema está preparado para multi-organización. Tu organización activa define qué datos ves y qué permisos aplican en ese momento."
+            }
+          ]
+        },
+        {
+          "title": "Geocercas",
+          "items": [
+            {
+              "q": "¿Qué tipos de geocercas puedo usar?",
+              "a": "Puedes trabajar con zonas tipo polígono (recomendado para áreas reales) y zonas por radio/centro (útil para puntos específicos)."
+            },
+            {
+              "q": "¿Por qué mi geocerca no marca entradas/salidas como espero?",
+              "a": "Las causas más comunes son: geocerca demasiado grande, GPS con baja precisión, intervalos de registro muy largos o permisos de ubicación limitados. Ajusta el polígono y revisa permisos del tracker."
+            },
+            {
+              "q": "¿Cuántas geocercas puedo crear?",
+              "a": "Depende del plan. En el plan gratuito se recomienda limitar la cantidad para mantener rendimiento. En planes PRO se habilitan más geocercas y herramientas avanzadas."
+            }
+          ]
+        },
+        {
+          "title": "Tracker (GPS) y modo offline",
+          "items": [
+            {
+              "q": "¿Funciona sin internet?",
+              "a": "Sí. El tracker puede guardar registros localmente cuando no hay señal y sincronizar cuando la conexión vuelve. Esto evita pérdida de datos en campo."
+            },
+            {
+              "q": "¿Consume mucha batería?",
+              "a": "Depende de la frecuencia de lectura y del dispositivo. Recomendación: usar intervalos razonables, permitir ubicación en segundo plano y desactivar optimizaciones agresivas de batería para la app."
+            },
+            {
+              "q": "¿Qué permisos debo activar en el móvil?",
+              "a": "Ubicación precisa y, de ser posible, ubicación en segundo plano. Sin esos permisos, los registros pueden ser incompletos o intermitentes."
+            }
+          ]
+        },
+        {
+          "title": "Asignaciones, horas y costos",
+          "items": [
+            {
+              "q": "¿Cómo se calcula el tiempo trabajado?",
+              "a": "En base a los registros del tracker (entradas/salidas o permanencias en geocercas) y las asignaciones activas: Persona + Actividad + Geocerca."
+            },
+            {
+              "q": "¿Cómo se calcula el costo?",
+              "a": "Cada actividad puede tener tarifa por hora y moneda. El sistema multiplica horas registradas por tarifa y genera reportes y dashboards."
+            },
+            {
+              "q": "¿Puedo manejar múltiples monedas?",
+              "a": "Sí. Puedes definir actividades con moneda y ver resúmenes por moneda en reportes/dashboard (según la configuración del módulo)."
+            }
+          ]
+        },
+        {
+          "title": "Seguridad y privacidad",
+          "items": [
+            {
+              "q": "¿Quién puede ver la ubicación de un tracker?",
+              "a": "Solo usuarios con permisos dentro de la misma organización (owner/admin) según el módulo correspondiente. Los datos están aislados por organización."
+            },
+            {
+              "q": "¿Los trackers ven información administrativa?",
+              "a": "No. El rol tracker está pensado para operación en campo y no debe acceder a reportes/costos/administración."
+            }
+          ]
+        },
+        {
+          "title": "Planes y soporte",
+          "items": [
+            {
+              "q": "¿Habrá plan PRO?",
+              "a": "Sí. La idea del plan PRO es habilitar más geocercas, más reportes, automatizaciones, soporte prioritario y funciones avanzadas (alertas, exportaciones, auditoría)."
+            },
+            {
+              "q": "¿Cómo contacto soporte?",
+              "a": "Desde el Centro de ayuda (tarjeta Soporte). También puedes registrar incidencias indicando: organización, módulo, pasos para reproducir y captura de pantalla."
+            }
+          ]
+        }
+      ]
     }
   }
 }
