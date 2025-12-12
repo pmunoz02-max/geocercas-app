@@ -563,5 +563,41 @@
     "errorInvite": "Could not send the invitation.",
     "errorLoad": "Error loading administrators.",
     "confirmRemove": "Are you sure you want to remove administrator \"{{name}}\"?"
+  },
+  "help": {
+    "common": {
+      "breadcrumb": "Help Center",
+      "back": "Back",
+      "goHome": "Go to Home",
+      "viewFaq": "View FAQ"
+    },
+    "changelog": {
+      "breadcrumb": "Changelog",
+      "title": "Changelog",
+      "subtitle": "Review the history of changes, new features, improvements, and fixes.",
+      "latest": "Latest updates",
+      "dateLabel": "Date",
+      "badges": {
+        "feature": "New feature",
+        "fix": "Fix",
+        "perf": "Performance",
+        "update": "Update"
+      },
+      "items": {
+        "0": {
+          "title": "Help Center: new pages",
+          "details": {
+            "0": "Added Instructions, FAQ, Support, and Changelog pages.",
+            "1": "Improved SPA navigation and consistent layout."
+          }
+        },
+        "1": {
+          "title": "Translation improvements",
+          "details": {
+            "0": "Fixed missing labels in Costs Dashboard and Home cards."
+          }
+        }
+      }
+    }
   }
 }

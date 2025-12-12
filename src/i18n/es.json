@@ -635,5 +635,41 @@
       "updateRole": "No se pudo actualizar el rol.",
       "remove": "No se pudo eliminar al administrador."
     }
+  },
+  "help": {
+    "common": {
+      "breadcrumb": "Centro de Ayuda",
+      "back": "Volver",
+      "goHome": "Ir a Inicio",
+      "viewFaq": "Ver FAQ"
+    },
+    "changelog": {
+      "breadcrumb": "Novedades",
+      "title": "Novedades / Changelog",
+      "subtitle": "Revisa el historial de cambios, nuevas funciones, mejoras y correcciones de la plataforma.",
+      "latest": "Últimas actualizaciones",
+      "dateLabel": "Fecha",
+      "badges": {
+        "feature": "Nueva función",
+        "fix": "Corrección",
+        "perf": "Rendimiento",
+        "update": "Actualización"
+      },
+      "items": {
+        "0": {
+          "title": "Centro de Ayuda: nuevas páginas",
+          "details": {
+            "0": "Se añadieron Instrucciones, FAQ, Soporte y Novedades (Changelog).",
+            "1": "Mejoras de navegación SPA y consistencia visual."
+          }
+        },
+        "1": {
+          "title": "Mejoras de traducciones",
+          "details": {
+            "0": "Se corrigieron etiquetas faltantes en Dashboard de Costos y tarjetas de Inicio."
+          }
+        }
+      }
+    }
   }
 }

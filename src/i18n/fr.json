@@ -635,5 +635,41 @@
       "updateRole": "Impossible de mettre à jour le rôle.",
       "remove": "Impossible de retirer l’administrateur."
     }
+  },
+  "help": {
+    "common": {
+      "breadcrumb": "Centre d’aide",
+      "back": "Retour",
+      "goHome": "Aller à l’accueil",
+      "viewFaq": "Voir la FAQ"
+    },
+    "changelog": {
+      "breadcrumb": "Nouveautés",
+      "title": "Nouveautés / Journal des changements",
+      "subtitle": "Consultez l’historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
+      "latest": "Dernières mises à jour",
+      "dateLabel": "Date",
+      "badges": {
+        "feature": "Nouvelle fonctionnalité",
+        "fix": "Correction",
+        "perf": "Performance",
+        "update": "Mise à jour"
+      },
+      "items": {
+        "0": {
+          "title": "Centre d’aide : nouvelles pages",
+          "details": {
+            "0": "Ajout des pages Instructions, FAQ, Support et Nouveautés (Changelog).",
+            "1": "Amélioration de la navigation SPA et cohérence de l’interface."
+          }
+        },
+        "1": {
+          "title": "Améliorations des traductions",
+          "details": {
+            "0": "Correction des libellés manquants dans le tableau de bord des coûts et les cartes d’accueil."
+          }
+        }
+      }
+    }
   }
 }
