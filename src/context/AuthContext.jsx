@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 
 const AuthContext = createContext();
@@ -14,7 +14,7 @@ function roleRank(r) {
 function pickHighestRole(memberships = []) {
   let best = "tracker";
   for (const m of memberships) {
-    const r = m?.role || "tracker";
+    const r = (m?.role || "tracker").toLowerCase();
     if (roleRank(r) > roleRank(best)) best = r;
   }
   return best;
@@ -28,6 +28,15 @@ async function safeSelect(table, queryFn) {
   } catch (e) {
     return { ok: false, error: e, data: null };
   }
+}
+
+function normalizeOrgRow(o) {
+  if (!o) return null;
+  return {
+    id: o.id ?? o.org_id ?? o.tenant_id ?? null,
+    name: o.name ?? o.org_name ?? "Organización",
+    ...o,
+  };
 }
 
 export const AuthProvider = ({ children }) => {
@@ -44,9 +53,9 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // -------------------------------------------------
+  // -----------------------------
   // SESSION
-  // -------------------------------------------------
+  // -----------------------------
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getSession();
@@ -56,190 +65,184 @@ export const AuthProvider = ({ children }) => {
 
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-      }
-    );
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+    });
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // -------------------------------------------------
-  // LOAD PROFILE + MEMBERSHIPS + ORGS + ROLE (UNIVERSAL)
-  // -------------------------------------------------
-  useEffect(() => {
-    const loadAll = async () => {
-      try {
-        setLoading(true);
+  // -----------------------------
+  // LOAD ALL (universal)
+  // - profile (por email)
+  // - memberships: org_members (por auth.uid)
+  // - organizations: organizations (por ids)
+  // -----------------------------
+  const loadAll = useCallback(async () => {
+    try {
+      setLoading(true);
 
-        if (!user) {
-          setProfile(null);
-          setMemberships([]);
-          setOrganizations([]);
-          setCurrentOrg(null);
-          setTenantId(null);
-          setRole(null);
-          return;
-        }
-
-        // 1) PROFILE (por email)
-        const { data: prof, error: pErr } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("email", user.email)
-          .single();
-
-        if (pErr || !prof) {
-          console.error("[AuthContext] Error loading profile:", pErr);
-          return;
-        }
-        setProfile(prof);
-
-        // 2) Intentar membership "canónica" desde view v_current_membership (si existe)
-        //    Esperamos: { org_id, role, org_name? }
-        const vCurrent = await safeSelect("v_current_membership", (q) =>
-          q.select("*").maybeSingle()
-        );
-
-        let mRows = [];
-        let activeOrg = null;
-
-        if (vCurrent.ok && vCurrent.data?.org_id) {
-          const row = vCurrent.data;
-          const resolvedRole = row.role || prof.role || "tracker";
-
-          mRows = [
-            {
-              org_id: row.org_id,
-              role: resolvedRole,
-              is_default: true,
-              created_at: row.created_at || null,
-            },
-          ];
-
-          activeOrg = {
-            id: row.org_id,
-            name: row.org_name || row.name || "Organización",
-          };
-        } else {
-          // 3) Fallback clásico: memberships (por profiles.id)
-          const mRes = await supabase
-            .from("memberships")
-            .select("org_id, role, created_at, is_default")
-            .eq("user_id", prof.id);
-
-          if (mRes.error) console.error("[AuthContext] Error loading memberships:", mRes.error);
-
-          mRows = (mRes.data || []).slice();
-
-          // Orden estable: default primero, luego rol más alto, luego created_at
-          mRows.sort((a, b) => {
-            const ad = a?.is_default ? 1 : 0;
-            const bd = b?.is_default ? 1 : 0;
-            if (ad !== bd) return bd - ad;
-
-            const ar = roleRank(a?.role);
-            const br = roleRank(b?.role);
-            if (ar !== br) return br - ar;
-
-            const at = new Date(a?.created_at || 0).getTime();
-            const bt = new Date(b?.created_at || 0).getTime();
-            return bt - at;
-          });
-
-          // 4) Cargar organizaciones de forma robusta:
-          //    - Preferir my_org_ids (view) si existe.
-          //    - Luego organizations_readable si existe.
-          //    - Luego organizations (fallback).
-          let orgIds = mRows.map((m) => m.org_id).filter(Boolean);
-
-          // Si no hay orgIds por memberships, intentar my_org_ids (universal)
-          if (orgIds.length === 0) {
-            const myOrgIds = await safeSelect("my_org_ids", (q) => q.select("*"));
-            if (myOrgIds.ok && Array.isArray(myOrgIds.data) && myOrgIds.data.length > 0) {
-              orgIds = myOrgIds.data
-                .map((r) => r.org_id ?? r.id ?? r.tenant_id)
-                .filter(Boolean);
-            }
-          }
-
-          let orgs = [];
-
-          if (orgIds.length > 0) {
-            // organizations_readable primero
-            const orgReadable = await safeSelect("organizations_readable", (q) =>
-              q.select("*").in("id", orgIds)
-            );
-
-            if (orgReadable.ok) {
-              orgs = orgReadable.data || [];
-            } else {
-              // fallback organizations
-              const orgClassic = await safeSelect("organizations", (q) =>
-                q.select("*").in("id", orgIds)
-              );
-              if (orgClassic.ok) orgs = orgClassic.data || [];
-            }
-          }
-
-          // Current org: default membership si existe, si no primera org
-          if (mRows.length > 0 && orgs.length > 0) {
-            const def = mRows.find((m) => m.is_default);
-            activeOrg = orgs.find((o) => o.id === def?.org_id) || orgs[0];
-          } else {
-            activeOrg = null;
-          }
-
-          setOrganizations(orgs);
-        }
-
-        setMemberships(mRows);
-
-        setCurrentOrg(activeOrg);
-        setTenantId(activeOrg?.id ?? null);
-
-        // 5) ROLE canónico
-        let resolvedRole = null;
-        if (activeOrg?.id) {
-          const mActive = mRows.find((m) => m.org_id === activeOrg.id);
-          resolvedRole =
-            mActive?.role || pickHighestRole(mRows) || prof.role || "tracker";
-        } else {
-          resolvedRole = pickHighestRole(mRows) || prof.role || "tracker";
-        }
-        setRole(resolvedRole);
-      } catch (err) {
-        console.error("[AuthContext] fatal error:", err);
-      } finally {
-        setLoading(false);
+      if (!user) {
+        setProfile(null);
+        setMemberships([]);
+        setOrganizations([]);
+        setCurrentOrg(null);
+        setTenantId(null);
+        setRole(null);
+        return;
       }
-    };
 
-    loadAll();
+      // 1) PROFILE (por email)
+      const { data: prof, error: pErr } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("email", user.email)
+        .single();
+
+      if (pErr || !prof) {
+        console.error("[AuthContext] Error loading profile:", pErr);
+        // Aun sin profile, mantenemos user/sesión.
+        setProfile(null);
+      } else {
+        setProfile(prof);
+      }
+
+      // 2) Memberships canónicas desde org_members (auth.uid())
+      //    Columnas esperadas: org_id, role, is_active/active (opcional)
+      const mRes = await safeSelect("org_members", (q) =>
+        q.select("org_id, role, is_active, active, created_at")
+      );
+
+      let mRows = Array.isArray(mRes.data) ? mRes.data : [];
+      // Filtrar solo activas si la col existe
+      mRows = mRows.filter((m) => {
+        const a = m?.is_active;
+        const b = m?.active;
+        // si no hay columna active, se considera activa
+        if (typeof a === "boolean") return a === true;
+        if (typeof b === "boolean") return b === true;
+        return true;
+      });
+
+      // Orden: rol más alto primero, luego más reciente
+      mRows.sort((a, b) => {
+        const ar = roleRank(a?.role);
+        const br = roleRank(b?.role);
+        if (ar !== br) return br - ar;
+        const at = new Date(a?.created_at || 0).getTime();
+        const bt = new Date(b?.created_at || 0).getTime();
+        return bt - at;
+      });
+
+      setMemberships(mRows);
+
+      const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
+
+      // 3) Organizations por ids (si hay)
+      let orgs = [];
+      if (orgIds.length > 0) {
+        const oRes = await safeSelect("organizations", (q) =>
+          q.select("*").in("id", orgIds)
+        );
+        orgs = Array.isArray(oRes.data) ? oRes.data : [];
+      }
+      setOrganizations(orgs);
+
+      // 4) currentOrg:
+      //    - si hay uno guardado en localStorage y el usuario pertenece, preferirlo
+      //    - si no, usar la primera org disponible (por rol/recencia)
+      const storedOrgId = localStorage.getItem("current_org_id");
+      let activeOrg = null;
+
+      if (storedOrgId && orgs.length > 0) {
+        activeOrg = orgs.find((o) => o.id === storedOrgId) ?? null;
+      }
+      if (!activeOrg && orgs.length > 0) {
+        activeOrg = orgs[0];
+      }
+
+      activeOrg = normalizeOrgRow(activeOrg);
+
+      setCurrentOrg(activeOrg);
+      setTenantId(activeOrg?.id ?? null);
+
+      // 5) role para org activa
+      let resolvedRole = null;
+      if (activeOrg?.id) {
+        const mActive = mRows.find((m) => m.org_id === activeOrg.id);
+        resolvedRole =
+          (mActive?.role || "").toLowerCase() ||
+          pickHighestRole(mRows) ||
+          (prof?.role || "").toLowerCase() ||
+          "tracker";
+      } else {
+        resolvedRole =
+          pickHighestRole(mRows) ||
+          (prof?.role || "").toLowerCase() ||
+          "tracker";
+      }
+      setRole(resolvedRole);
+
+      // Persistir selección
+      if (activeOrg?.id) {
+        localStorage.setItem("current_org_id", activeOrg.id);
+      } else {
+        localStorage.removeItem("current_org_id");
+      }
+    } catch (err) {
+      console.error("[AuthContext] fatal error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  // Selector universal (para UI futura: dropdown orgs)
+  const selectOrg = useCallback(
+    (orgId) => {
+      const o = organizations.find((x) => x.id === orgId);
+      const active = normalizeOrgRow(o) ?? null;
+      setCurrentOrg(active);
+      setTenantId(active?.id ?? null);
+      if (active?.id) localStorage.setItem("current_org_id", active.id);
+      else localStorage.removeItem("current_org_id");
+    },
+    [organizations]
+  );
 
   const isOwner = role === "owner";
   const isAdmin = role === "admin" || role === "owner";
-  const currentRole = role; // compat
+  const currentRole = role;
 
   const value = useMemo(
     () => ({
       session,
       user,
       profile,
+
       organizations,
       memberships,
+
       currentOrg,
       tenantId,
 
       role,
       isOwner,
       isAdmin,
-
       currentRole,
+
       loading,
+
+      // NUEVO (universal): permite que Onboarding refresque tras crear org
+      reloadAuth: loadAll,
+
+      // NUEVO: para selector de org (futuro)
+      setCurrentOrg,
+      selectOrg,
     }),
     [
       session,
@@ -254,6 +257,8 @@ export const AuthProvider = ({ children }) => {
       isAdmin,
       currentRole,
       loading,
+      loadAll,
+      selectOrg,
     ]
   );
 

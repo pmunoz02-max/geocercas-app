@@ -1,4 +1,3 @@
-// src/App.jsx
 import React from "react";
 import {
   BrowserRouter,
@@ -8,6 +7,8 @@ import {
 } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
+import RequireOrg from "./components/RequireOrg.jsx";
+
 import AppHeader from "./components/AppHeader.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
@@ -30,13 +31,13 @@ import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// 👉 NUEVO: Guía rápida / Instrucciones
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
+import OnboardingCreateOrgPage from "./pages/OnboardingCreateOrgPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
 // ---------------------
-// Layout interno (aplicación protegida)
+// Layout interno
 // ---------------------
 function Shell({ children }) {
   const { loading } = useAuth();
@@ -44,14 +45,13 @@ function Shell({ children }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+        <div className="px-4 py-3 rounded-xl bg-white border shadow-sm">
           Cargando tu sesión…
         </div>
       </div>
     );
   }
 
-  // Tabs principales de navegación
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
     { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
@@ -69,7 +69,7 @@ function Shell({ children }) {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <AppHeader />
-      <div className="border-b border-slate-200 bg-white">
+      <div className="border-b bg-white">
         <TopTabs tabs={tabs} />
       </div>
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
@@ -79,7 +79,6 @@ function Shell({ children }) {
   );
 }
 
-// Layout simple para la página de login
 function LoginShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -92,169 +91,66 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing pública */}
+        {/* Landing */}
         <Route path="/" element={<Landing />} />
 
-        {/* Página de tracker web protegida */}
+        {/* Auth */}
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/login" element={<LoginShell />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* Onboarding obligatorio */}
         <Route
-          path="/tracker-gps"
+          path="/onboarding/create-org"
           element={
             <AuthGuard>
-              <Shell>
-                <TrackerGpsPage />
-              </Shell>
+              <OnboardingCreateOrgPage />
             </AuthGuard>
           }
         />
 
-        {/* Reset de contraseña */}
-        <Route path="/reset-password" element={<ResetPassword />} />
-
-        {/* ============================= */}
-        {/* RUTAS PROTEGIDAS (APP INTERNA) */}
-        {/* ============================= */}
-
+        {/* App protegida + requiere organización */}
         <Route
           path="/inicio"
           element={
             <AuthGuard>
-              <Shell>
-                <Inicio />
-              </Shell>
+              <RequireOrg>
+                <Shell>
+                  <Inicio />
+                </Shell>
+              </RequireOrg>
             </AuthGuard>
           }
         />
 
-        <Route
-          path="/nueva-geocerca"
-          element={
-            <AuthGuard>
-              <Shell>
-                <NuevaGeocerca />
-              </Shell>
-            </AuthGuard>
-          }
-        />
+        {/* Repetimos el patrón para todos los módulos */}
+        {[
+          ["/nueva-geocerca", <NuevaGeocerca />],
+          ["/geocercas", <GeocercasPage />],
+          ["/personal", <PersonalPage />],
+          ["/actividades", <ActividadesPage />],
+          ["/asignaciones", <AsignacionesPage />],
+          ["/costos", <CostosPage />],
+          ["/costos-dashboard", <CostosDashboardPage />],
+          ["/tracker-dashboard", <TrackerDashboard />],
+          ["/invitar-tracker", <InvitarTracker />],
+          ["/admins", <AdminsPage />],
+          ["/help/instructions", <InstructionsPage />],
+          ["/tracker-gps", <TrackerGpsPage />],
+        ].map(([path, component]) => (
+          <Route
+            key={path}
+            path={path}
+            element={
+              <AuthGuard>
+                <RequireOrg>
+                  <Shell>{component}</Shell>
+                </RequireOrg>
+              </AuthGuard>
+            }
+          />
+        ))}
 
-        <Route
-          path="/geocercas"
-          element={
-            <AuthGuard>
-              <Shell>
-                <GeocercasPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/personal"
-          element={
-            <AuthGuard>
-              <Shell>
-                <PersonalPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/actividades"
-          element={
-            <AuthGuard>
-              <Shell>
-                <ActividadesPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/asignaciones"
-          element={
-            <AuthGuard>
-              <Shell>
-                <AsignacionesPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/costos"
-          element={
-            <AuthGuard>
-              <Shell>
-                <CostosPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/costos-dashboard"
-          element={
-            <AuthGuard>
-              <Shell>
-                <CostosDashboardPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/tracker-dashboard"
-          element={
-            <AuthGuard>
-              <Shell>
-                <TrackerDashboard />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/invitar-tracker"
-          element={
-            <AuthGuard>
-              <Shell>
-                <InvitarTracker />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/admins"
-          element={
-            <AuthGuard>
-              <Shell>
-                <AdminsPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* ============================= */}
-        {/* AYUDA / DOCUMENTACIÓN */}
-        {/* ============================= */}
-
-        <Route
-          path="/help/instructions"
-          element={
-            <AuthGuard>
-              <Shell>
-                <InstructionsPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        {/* Auth callback y login */}
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/login" element={<LoginShell />} />
-
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
