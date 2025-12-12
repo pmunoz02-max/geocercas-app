@@ -4,27 +4,33 @@ import { useNavigate } from "react-router-dom";
 export default function SupportPage() {
   const navigate = useNavigate();
 
-  const support = useMemo(() => {
-    const rawEnv = import.meta.env || {};
-    const email = (rawEnv.VITE_SUPPORT_EMAIL || "").trim();
-    const whatsapp = (rawEnv.VITE_SUPPORT_WHATSAPP || "").trim();
-    const calendly = (rawEnv.VITE_SUPPORT_CALENDLY || "").trim();
+  const diag = useMemo(() => {
+    const env = import.meta.env || {};
+    const keys = Object.keys(env || {});
+    const supportKeys = keys.filter((k) => k.startsWith("VITE_SUPPORT"));
+    const hasEmailKey = supportKeys.includes("VITE_SUPPORT_EMAIL");
+
+    const email = (env.VITE_SUPPORT_EMAIL || "").trim();
+    const whatsapp = (env.VITE_SUPPORT_WHATSAPP || "").trim();
+    const calendly = (env.VITE_SUPPORT_CALENDLY || "").trim();
 
     return {
       email,
       whatsapp,
       calendly,
       __debug: {
-        hasEnv: !!rawEnv,
+        mode: env.MODE,
+        prod: env.PROD,
+        baseUrl: env.BASE_URL,
+        supportKeys,
+        hasEmailKey,
         emailLength: email.length,
-        rawEmail: rawEnv.VITE_SUPPORT_EMAIL,
       },
     };
   }, []);
 
   return (
     <div className="mx-auto w-full max-w-6xl p-4 md:p-6">
-      {/* Header */}
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-xs text-slate-500">Centro de Ayuda / Soporte</div>
@@ -36,42 +42,42 @@ export default function SupportPage() {
 
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="rounded-xl border px-3 py-2 text-sm"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
           >
             Volver
           </button>
           <button
+            type="button"
             onClick={() => navigate("/inicio")}
-            className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white"
+            className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
           >
             Ir a Inicio
           </button>
         </div>
       </div>
 
-      {/* Soporte estándar */}
-      <div className="rounded-2xl border bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900 mb-2">Email</h2>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <div className="text-xs text-slate-500 mb-1">Email</div>
 
-        {support.email ? (
+        {diag.email ? (
           <a
-            href={`mailto:${support.email}`}
-            className="text-sm font-medium text-slate-900 underline"
+            className="text-sm font-medium text-slate-900 underline underline-offset-2"
+            href={`mailto:${diag.email}`}
           >
-            {support.email}
+            {diag.email}
           </a>
         ) : (
           <div className="text-sm text-red-600">
-            ❌ No llega VITE_SUPPORT_EMAIL
+            ❌ No llega <span className="font-mono">VITE_SUPPORT_EMAIL</span>
           </div>
         )}
 
-        {/* 🔍 Diagnóstico visible (temporal) */}
-        <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-          <div className="font-semibold mb-1">Diagnóstico</div>
+        <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
+          <div className="font-semibold mb-2">Diagnóstico</div>
           <pre className="whitespace-pre-wrap">
-{JSON.stringify(support.__debug, null, 2)}
+{JSON.stringify(diag.__debug, null, 2)}
           </pre>
         </div>
       </div>
