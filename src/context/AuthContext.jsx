@@ -109,21 +109,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       // 2) Memberships canónicas desde org_members (auth.uid())
-      //    Columnas esperadas: org_id, role, is_active/active (opcional)
+      //    IMPORTANTE: NO pedir columnas opcionales (is_active/active)
+      //    porque si no existen en la tabla, PostgREST responde 400.
+      //    La activación se controla vía RLS/DB (o se agrega is_active en DB).
       const mRes = await safeSelect("org_members", (q) =>
-        q.select("org_id, role, is_active, active, created_at")
+        q.select("org_id, role, created_at")
       );
 
       let mRows = Array.isArray(mRes.data) ? mRes.data : [];
-      // Filtrar solo activas si la col existe
-      mRows = mRows.filter((m) => {
-        const a = m?.is_active;
-        const b = m?.active;
-        // si no hay columna active, se considera activa
-        if (typeof a === "boolean") return a === true;
-        if (typeof b === "boolean") return b === true;
-        return true;
-      });
 
       // Orden: rol más alto primero, luego más reciente
       mRows.sort((a, b) => {
