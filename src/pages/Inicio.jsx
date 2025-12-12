@@ -1,4 +1,3 @@
-// src/pages/Inicio.jsx
 import React from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
@@ -64,11 +63,11 @@ export default function Inicio() {
     return currentRole || "—";
   })();
 
-  // Rutas de ayuda (ACTIVAS: instrucciones + FAQ)
+  // Rutas de ayuda (ACTIVAS: instrucciones + FAQ + video)
   const helpRoutes = {
     instructions: "/help/instructions",
     faq: "/help/faq",
-    video: null, // "/help/video-demo" cuando la creemos
+    video: "/help/video", // ✅ ACTIVO
     soporte: null, // "/help/support"
     queEs: null, // "/help/what-is"
     novedades: null, // "/help/changelog"
@@ -147,7 +146,7 @@ export default function Inicio() {
             disabled={!helpRoutes.faq}
           />
 
-          {/* Video demo (PRÓXIMAMENTE) */}
+          {/* Video demo (ACTIVO) */}
           <StarterCard
             badge={t("inicio.cards.videoDemo.badge")}
             title={t("inicio.cards.videoDemo.title")}
