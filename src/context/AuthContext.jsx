@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import {
   createContext,
   useContext,
@@ -33,6 +32,8 @@ function normalizeOrgRow(o) {
   return {
     id: o.id ?? o.org_id ?? o.tenant_id ?? null,
     name: o.name ?? o.org_name ?? "Organización",
+    suspended: Boolean(o.suspended),
+    active: o.active !== false,
     ...o,
   };
 }
@@ -49,6 +50,7 @@ export const AuthProvider = ({ children }) => {
   const [tenantId, setTenantId] = useState(null);
   const [role, setRole] = useState(null);
 
+  const [isSuspended, setIsSuspended] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // -----------------------------
@@ -72,8 +74,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // -----------------------------
-  // LOAD ALL (UNIVERSAL + PERMANENT)
-  // Fuente de roles: app_user_roles (NO org_members)
+  // LOAD ALL (UNIVERSAL + SAAS READY)
   // -----------------------------
   const loadAll = useCallback(async () => {
     try {
@@ -86,31 +87,28 @@ export const AuthProvider = ({ children }) => {
         setCurrentOrg(null);
         setTenantId(null);
         setRole(null);
+        setIsSuspended(false);
         localStorage.removeItem("current_org_id");
         return;
       }
 
-      // 1) Profile (si tu app depende de esto)
-      const { data: prof, error: profErr } = await supabase
+      // 1) Profile
+      const { data: prof } = await supabase
         .from("profiles")
         .select("*")
         .eq("email", user.email)
         .maybeSingle();
 
-      if (profErr) console.warn("[AuthContext] profiles error:", profErr);
       setProfile(prof ?? null);
 
-      // 2) Memberships: app_user_roles (fuente real)
-      const { data: mRowsRaw, error: mErr } = await supabase
+      // 2) Roles reales
+      const { data: mRowsRaw } = await supabase
         .from("app_user_roles")
         .select("org_id, role, created_at")
         .eq("user_id", user.id);
 
-      if (mErr) console.error("[AuthContext] app_user_roles error:", mErr);
-
       const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
 
-      // Orden: rol más alto primero, luego más reciente
       mRows.sort((a, b) => {
         const ar = roleRank(a?.role);
         const br = roleRank(b?.role);
@@ -122,32 +120,29 @@ export const AuthProvider = ({ children }) => {
 
       const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
 
-      // 3) Organizations
+      // 3) Organizations (incluye suspended)
       let orgs = [];
       if (orgIds.length) {
-        const { data, error: orgErr } = await supabase
+        const { data } = await supabase
           .from("organizations")
           .select("*")
           .in("id", orgIds);
 
-        if (orgErr) console.error("[AuthContext] organizations error:", orgErr);
         orgs = data ?? [];
       }
 
       setOrganizations(orgs);
 
-      // 4) ORG ACTIVA — regla SaaS correcta
+      // 4) Selección de organización activa
       let activeOrg = null;
 
-      // 4.1 Org donde es OWNER (la más “prioritaria” según sort)
       const ownerMembership = mRows.find(
-        (m) => String(m.role || "").toLowerCase() === "owner"
+        (m) => String(m.role).toLowerCase() === "owner"
       );
       if (ownerMembership) {
         activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
       }
 
-      // 4.2 localStorage (solo si sigue existiendo en orgs permitidas)
       if (!activeOrg) {
         const storedOrgId = localStorage.getItem("current_org_id");
         if (storedOrgId) {
@@ -155,21 +150,23 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // 4.3 fallback
-      if (!activeOrg && orgs.length) {
-        activeOrg = orgs[0];
-      }
+      if (!activeOrg && orgs.length) activeOrg = orgs[0];
 
       activeOrg = normalizeOrgRow(activeOrg);
 
       setCurrentOrg(activeOrg);
       setTenantId(activeOrg?.id ?? null);
+      setIsSuspended(Boolean(activeOrg?.suspended));
 
-      if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
+      if (activeOrg?.id)
+        localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
-      // 5) Role efectivo para la org activa (y fallback si algo raro pasa)
-      const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
+      // 5) Rol efectivo
+      const activeMembership = mRows.find(
+        (m) => m.org_id === activeOrg?.id
+      );
+
       const resolvedRole = String(
         activeMembership?.role ??
           pickHighestRole(mRows) ??
@@ -190,7 +187,7 @@ export const AuthProvider = ({ children }) => {
   }, [loadAll]);
 
   // -----------------------------
-  // SELECT ORG (actualiza también role)
+  // SELECT ORG
   // -----------------------------
   const selectOrg = useCallback(
     (orgId) => {
@@ -199,14 +196,14 @@ export const AuthProvider = ({ children }) => {
 
       setCurrentOrg(active);
       setTenantId(active?.id ?? null);
+      setIsSuspended(Boolean(active?.suspended));
 
-      if (active?.id) localStorage.setItem("current_org_id", active.id);
+      if (active?.id)
+        localStorage.setItem("current_org_id", active.id);
       else localStorage.removeItem("current_org_id");
 
-      // actualizar role según membership de esa org (si existe)
       const m = memberships.find((x) => x.org_id === active?.id);
       if (m?.role) setRole(String(m.role).toLowerCase());
-      // si no hay membership, mantenemos el role actual (o tracker si null)
       else if (!role) setRole("tracker");
     },
     [organizations, memberships, role]
@@ -223,14 +220,15 @@ export const AuthProvider = ({ children }) => {
 
       currentOrg,
       tenantId,
+      currentOrgId: currentOrg?.id ?? null,
 
       role,
       currentRole: role,
 
-      currentOrgId: currentOrg?.id ?? null,
-
       isOwner: role === "owner",
       isAdmin: role === "admin" || role === "owner",
+
+      isSuspended, // 🚫 CLAVE SAAS
 
       loading,
 
@@ -246,6 +244,7 @@ export const AuthProvider = ({ children }) => {
       currentOrg,
       tenantId,
       role,
+      isSuspended,
       loading,
       loadAll,
       selectOrg,
