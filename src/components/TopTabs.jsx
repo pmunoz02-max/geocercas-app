@@ -1,7 +1,7 @@
-// src/components/layout/TopTabs.jsx
 import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import OrgSelector from "./OrgSelector";
 
 /**
  * tabs = [
@@ -33,9 +33,15 @@ export default function TopTabs({ tabs = [] }) {
   return (
     <div className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-3 sm:px-4">
+        {/* Fila superior: selector de organización (solo Admin/Owner) */}
+        <div className="flex justify-end py-2">
+          <OrgSelector />
+        </div>
+
+        {/* Tabs */}
         <nav
           className="
-            flex gap-2 sm:gap-3 py-3
+            flex gap-2 sm:gap-3 pb-3
             overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300
             justify-start sm:justify-center
           "

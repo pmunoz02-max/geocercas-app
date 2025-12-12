@@ -14,7 +14,6 @@
       "back": "Volver"
     }
   },
-
   "app": {
     "title": "App Geocercas",
     "header": {
@@ -24,7 +23,10 @@
       "goToPanel": "Ir al panel",
       "roleOwner": "Propietario",
       "roleAdmin": "Administrador",
-      "roleTracker": "Tracker"
+      "roleTracker": "Tracker",
+      "organizationLabel": "Organización",
+      "organizationAriaLabel": "Seleccionar organización",
+      "organizationNone": "Sin organización"
     },
     "tabs": {
       "inicio": "Inicio",
@@ -41,7 +43,6 @@
       "admins": "Administrador"
     }
   },
-
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Control de personal por geocercas",
@@ -74,7 +75,6 @@
     "footerPrivacy": "Privacidad",
     "rightsReserved": "Todos los derechos reservados"
   },
-
   "login": {
     "title": "Iniciar sesión",
     "subtitle": "Accede a tu cuenta de App Geocercas",
@@ -92,7 +92,6 @@
       "unknown": "Ocurrió un error al iniciar sesión."
     }
   },
-
   "inicio": {
     "header": {
       "badge": "Centro de ayuda y recursos",
@@ -145,7 +144,6 @@
       "orgIdLabel": "ID de organización:"
     }
   },
-
   "geocercas": {
     "titleNew": "Nueva geocerca",
     "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
@@ -159,7 +157,6 @@
     "buttonDeleteSelected": "Eliminar seleccionadas",
     "buttonClearCanvas": "Limpiar mapa"
   },
-
   "personal": {
     "title": "Personal",
     "orgInfoLabel": "Organización:",
@@ -215,7 +212,6 @@
     "no": "No",
     "processing": "Procesando…"
   },
-
   "actividades": {
     "title": "Actividades",
     "formTitleNew": "Nueva actividad",
@@ -275,7 +271,6 @@
     "errorToggle": "No se pudo cambiar el estado de la actividad.",
     "confirmDelete": "¿Seguro que deseas eliminar la actividad \"{{name}}\"?"
   },
-
   "asignaciones": {
     "title": "Asignaciones",
     "filters": {
@@ -361,7 +356,6 @@
       "missingEnd": "Debe ingresar fecha/hora de fin."
     }
   },
-
   "reportes": {
     "title": "Reportes de costos",
     "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
@@ -440,7 +434,6 @@
       "noResults": "No se encontraron registros para los filtros seleccionados."
     }
   },
-
   "dashboard": {
     "title": "Dashboard de costos",
     "subtitle": "Visualiza los costos agregados por persona, actividad y geocerca.",
@@ -464,7 +457,6 @@
     },
     "errorLoad": "Error al cargar el dashboard de costos."
   },
-
   "dashboardCostos": {
     "title": "Dashboard de costos",
     "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
@@ -503,7 +495,6 @@
     "tableNoResults": "No hay datos para los filtros actuales.",
     "errorLoad": "Error al cargar el dashboard de costos."
   },
-
   "tracker": {
     "title": "Tracker GPS",
     "subtitle": "Visualiza en tiempo real la ubicación de los trackers dentro de tus geocercas.",
@@ -533,7 +524,6 @@
     },
     "errorLoad": "Error al cargar las posiciones de tracker."
   },
-
   "trackerDashboard": {
     "title": "Dashboard de Tracking en tiempo real",
     "subtitle": "Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador.",
@@ -577,7 +567,6 @@
       "checkConsole": "Revisa la consola si persiste."
     }
   },
-
   "inviteTracker": {
     "orgFallback": "tu organización",
     "title": "Invitar tracker",
@@ -608,7 +597,6 @@
       "unexpectedError": "Error inesperado al procesar la invitación."
     }
   },
-
   "admins": {
     "title": "Administradores",
     "subtitle": "Gestiona los administradores de tu organización y sus roles.",

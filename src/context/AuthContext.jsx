@@ -20,16 +20,6 @@ function pickHighestRole(memberships = []) {
   return best;
 }
 
-async function safeSelect(table, queryFn) {
-  try {
-    const res = await queryFn(supabase.from(table));
-    if (res?.error) return { ok: false, error: res.error, data: null };
-    return { ok: true, error: null, data: res?.data ?? null };
-  } catch (e) {
-    return { ok: false, error: e, data: null };
-  }
-}
-
 function normalizeOrgRow(o) {
   if (!o) return null;
   return {
@@ -49,8 +39,8 @@ export const AuthProvider = ({ children }) => {
 
   const [currentOrg, setCurrentOrg] = useState(null);
   const [tenantId, setTenantId] = useState(null);
-
   const [role, setRole] = useState(null);
+
   const [loading, setLoading] = useState(true);
 
   // -----------------------------
@@ -74,10 +64,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // -----------------------------
-  // LOAD ALL (universal)
-  // - profile (por email)
-  // - memberships: org_members (por auth.uid)
-  // - organizations: organizations (por ids)
+  // LOAD ALL (FIXED)
   // -----------------------------
   const loadAll = useCallback(async () => {
     try {
@@ -90,68 +77,67 @@ export const AuthProvider = ({ children }) => {
         setCurrentOrg(null);
         setTenantId(null);
         setRole(null);
+        localStorage.removeItem("current_org_id");
         return;
       }
 
-      // 1) PROFILE (por email)
-      const { data: prof, error: pErr } = await supabase
+      // 1) Profile
+      const { data: prof } = await supabase
         .from("profiles")
         .select("*")
         .eq("email", user.email)
         .single();
 
-      if (pErr || !prof) {
-        console.error("[AuthContext] Error loading profile:", pErr);
-        // Aun sin profile, mantenemos user/sesión.
-        setProfile(null);
-      } else {
-        setProfile(prof);
-      }
+      setProfile(prof ?? null);
 
-      // 2) Memberships canónicas desde org_members (auth.uid())
-      //    IMPORTANTE: NO pedir columnas opcionales (is_active/active)
-      //    porque si no existen en la tabla, PostgREST responde 400.
-      //    La activación se controla vía RLS/DB (o se agrega is_active en DB).
-      const mRes = await safeSelect("org_members", (q) =>
-        q.select("org_id, role, created_at")
-      );
+      // 2) Memberships
+      const { data: mRows = [] } = await supabase
+        .from("org_members")
+        .select("org_id, role, created_at");
 
-      let mRows = Array.isArray(mRes.data) ? mRes.data : [];
-
-      // Orden: rol más alto primero, luego más reciente
+      // Orden: OWNER primero, luego más reciente
       mRows.sort((a, b) => {
         const ar = roleRank(a?.role);
         const br = roleRank(b?.role);
         if (ar !== br) return br - ar;
-        const at = new Date(a?.created_at || 0).getTime();
-        const bt = new Date(b?.created_at || 0).getTime();
-        return bt - at;
+        return new Date(b.created_at) - new Date(a.created_at);
       });
 
       setMemberships(mRows);
 
       const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
 
-      // 3) Organizations por ids (si hay)
+      // 3) Organizations
       let orgs = [];
-      if (orgIds.length > 0) {
-        const oRes = await safeSelect("organizations", (q) =>
-          q.select("*").in("id", orgIds)
-        );
-        orgs = Array.isArray(oRes.data) ? oRes.data : [];
+      if (orgIds.length) {
+        const { data } = await supabase
+          .from("organizations")
+          .select("*")
+          .in("id", orgIds);
+        orgs = data ?? [];
       }
+
       setOrganizations(orgs);
 
-      // 4) currentOrg:
-      //    - si hay uno guardado en localStorage y el usuario pertenece, preferirlo
-      //    - si no, usar la primera org disponible (por rol/recencia)
-      const storedOrgId = localStorage.getItem("current_org_id");
+      // 4) ORG ACTIVA — REGLA SaaS CORRECTA
       let activeOrg = null;
 
-      if (storedOrgId && orgs.length > 0) {
-        activeOrg = orgs.find((o) => o.id === storedOrgId) ?? null;
+      // 4.1 Org donde es OWNER (la más reciente)
+      const ownerMembership = mRows.find((m) => m.role === "owner");
+      if (ownerMembership) {
+        activeOrg = orgs.find((o) => o.id === ownerMembership.org_id);
       }
-      if (!activeOrg && orgs.length > 0) {
+
+      // 4.2 localStorage (solo si sigue siendo miembro)
+      if (!activeOrg) {
+        const storedOrgId = localStorage.getItem("current_org_id");
+        if (storedOrgId) {
+          activeOrg = orgs.find((o) => o.id === storedOrgId) ?? null;
+        }
+      }
+
+      // 4.3 fallback
+      if (!activeOrg && orgs.length) {
         activeOrg = orgs[0];
       }
 
@@ -160,29 +146,21 @@ export const AuthProvider = ({ children }) => {
       setCurrentOrg(activeOrg);
       setTenantId(activeOrg?.id ?? null);
 
-      // 5) role para org activa
-      let resolvedRole = null;
-      if (activeOrg?.id) {
-        const mActive = mRows.find((m) => m.org_id === activeOrg.id);
-        resolvedRole =
-          (mActive?.role || "").toLowerCase() ||
-          pickHighestRole(mRows) ||
-          (prof?.role || "").toLowerCase() ||
-          "tracker";
-      } else {
-        resolvedRole =
-          pickHighestRole(mRows) ||
-          (prof?.role || "").toLowerCase() ||
-          "tracker";
-      }
-      setRole(resolvedRole);
-
-      // Persistir selección
       if (activeOrg?.id) {
         localStorage.setItem("current_org_id", activeOrg.id);
       } else {
         localStorage.removeItem("current_org_id");
       }
+
+      // 5) Role efectivo
+      const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
+      const resolvedRole =
+        activeMembership?.role ??
+        pickHighestRole(mRows) ??
+        prof?.role ??
+        "tracker";
+
+      setRole(resolvedRole.toLowerCase());
     } catch (err) {
       console.error("[AuthContext] fatal error:", err);
     } finally {
@@ -194,7 +172,6 @@ export const AuthProvider = ({ children }) => {
     loadAll();
   }, [loadAll]);
 
-  // Selector universal (para UI futura: dropdown orgs)
   const selectOrg = useCallback(
     (orgId) => {
       const o = organizations.find((x) => x.id === orgId);
@@ -207,34 +184,20 @@ export const AuthProvider = ({ children }) => {
     [organizations]
   );
 
-  const isOwner = role === "owner";
-  const isAdmin = role === "admin" || role === "owner";
-  const currentRole = role;
-
   const value = useMemo(
     () => ({
       session,
       user,
       profile,
-
       organizations,
       memberships,
-
       currentOrg,
       tenantId,
-
       role,
-      isOwner,
-      isAdmin,
-      currentRole,
-
+      isOwner: role === "owner",
+      isAdmin: role === "admin" || role === "owner",
       loading,
-
-      // NUEVO (universal): permite que Onboarding refresque tras crear org
       reloadAuth: loadAll,
-
-      // NUEVO: para selector de org (futuro)
-      setCurrentOrg,
       selectOrg,
     }),
     [
@@ -246,9 +209,6 @@ export const AuthProvider = ({ children }) => {
       currentOrg,
       tenantId,
       role,
-      isOwner,
-      isAdmin,
-      currentRole,
       loading,
       loadAll,
       selectOrg,

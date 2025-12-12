@@ -1,56 +1,54 @@
-// src/components/OrgSelector.jsx
-// Selector simple de organización en el header.
-// Reglas importantes:
-//  - Si NO hay usuario (user === null) → NO renderiza nada.
-//    Esto evita que en /login aparezca el mensaje de organización.
-//  - Si hay usuario pero no currentOrg → muestra un botón para seleccionar.
-//  - Si hay usuario y currentOrg → muestra el nombre y permite cambiarla.
+import React, { useMemo } from "react";
+import { useAuth } from "../context/AuthContext";
 
-import React from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
+/**
+ * Selector de organización (solo Admin/Owner)
+ * - Usa organizations/currentOrg/selectOrg del AuthContext
+ * - No se muestra si el usuario no es admin
+ * - Si hay 0 o 1 organización, no muestra selector (no aporta)
+ */
+export default function OrgSelector({ className = "" }) {
+  const { organizations, currentOrg, selectOrg, isAdmin, loading } = useAuth();
 
-export default function OrgSelector() {
-  const { user, currentOrg, loading } = useAuth();
-  const navigate = useNavigate();
+  const orgOptions = useMemo(() => {
+    const arr = Array.isArray(organizations) ? organizations : [];
+    // Orden estable por name; si no hay name, al final
+    return [...arr].sort((a, b) => {
+      const an = String(a?.name || "").toLowerCase();
+      const bn = String(b?.name || "").toLowerCase();
+      if (!an && bn) return 1;
+      if (an && !bn) return -1;
+      return an.localeCompare(bn);
+    });
+  }, [organizations]);
 
-  // Mientras carga el contexto, no mostramos nada.
-  // El layout puede enseñar su propio "skeleton" si quiere.
-  if (loading) {
-    return null;
-  }
+  // Solo admins/owners
+  if (!isAdmin) return null;
 
-  // ⬇⬇⬇ CLAVE:
-  // Si NO hay usuario (por ejemplo en /login),
-  // NO se renderiza nada del selector de organización.
-  if (!user) {
-    return null;
-  }
+  // Si está cargando o no hay organizaciones, no mostrar
+  if (loading) return null;
 
-  const orgName =
-    currentOrg?.name ||
-    currentOrg?.org_name ||
-    "Seleccionar organización";
+  // Si solo hay 1 org, no mostrar selector
+  if (!orgOptions || orgOptions.length <= 1) return null;
 
-  const hasOrg = Boolean(currentOrg);
-
-  const handleClick = () => {
-    // Enviamos siempre a la pantalla dedicada para elegir organización.
-    navigate("/seleccionar-organizacion");
-  };
+  const value = currentOrg?.id || "";
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs md:text-sm text-slate-700 hover:bg-slate-50 hover:border-emerald-500 transition"
-    >
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-semibold">
-        {orgName.charAt(0).toUpperCase()}
-      </span>
-      <span className="max-w-[160px] truncate">
-        {hasOrg ? orgName : "Seleccionar organización"}
-      </span>
-    </button>
+    <div className={`flex items-center gap-2 ${className}`}>
+      <span className="text-xs text-gray-500 hidden sm:inline">Org</span>
+
+      <select
+        className="h-9 max-w-[220px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        value={value}
+        onChange={(e) => selectOrg(e.target.value)}
+        aria-label="Seleccionar organización"
+      >
+        {orgOptions.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name || "Organización"}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

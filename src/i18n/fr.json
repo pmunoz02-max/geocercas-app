@@ -14,7 +14,6 @@
       "back": "Retour"
     }
   },
-
   "app": {
     "title": "App Geocercas",
     "header": {
@@ -24,7 +23,10 @@
       "goToPanel": "Aller au tableau de bord",
       "roleOwner": "Propriétaire",
       "roleAdmin": "Administrateur",
-      "roleTracker": "Tracker"
+      "roleTracker": "Tracker",
+      "organizationLabel": "Organisation",
+      "organizationAriaLabel": "Sélectionner une organisation",
+      "organizationNone": "Aucune organisation"
     },
     "tabs": {
       "inicio": "Accueil",
@@ -41,7 +43,6 @@
       "admins": "Administrateurs"
     }
   },
-
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Contrôle du personnel par géofences",
@@ -74,7 +75,6 @@
     "footerPrivacy": "Confidentialité",
     "rightsReserved": "Tous droits réservés"
   },
-
   "login": {
     "title": "Se connecter",
     "subtitle": "Accédez à votre compte App Geocercas",
@@ -92,7 +92,6 @@
       "unknown": "Une erreur s’est produite lors de la connexion."
     }
   },
-
   "inicio": {
     "header": {
       "badge": "Centre d’aide et de ressources",
@@ -145,7 +144,6 @@
       "orgIdLabel": "ID d’organisation :"
     }
   },
-
   "geocercas": {
     "titleNew": "Nouvelle géofence",
     "subtitleNew": "Dessinez une géofence sur la carte et affectez-la à votre personnel ou vos activités.",
@@ -159,7 +157,6 @@
     "buttonDeleteSelected": "Supprimer sélectionnées",
     "buttonClearCanvas": "Nettoyer la carte"
   },
-
   "personal": {
     "title": "Personnel",
     "orgInfoLabel": "Organisation :",
@@ -215,7 +212,6 @@
     "no": "Non",
     "processing": "Traitement…"
   },
-
   "actividades": {
     "title": "Activités",
     "formTitleNew": "Nouvelle activité",
@@ -275,7 +271,6 @@
     "errorToggle": "Impossible de modifier le statut de l’activité.",
     "confirmDelete": "Voulez-vous vraiment supprimer l’activité « {{name}} » ?"
   },
-
   "asignaciones": {
     "title": "Affectations",
     "filters": {
@@ -361,7 +356,6 @@
       "missingEnd": "Vous devez saisir la date/heure de fin."
     }
   },
-
   "reportes": {
     "title": "Rapports de coûts",
     "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
@@ -440,7 +434,6 @@
       "noResults": "Aucun enregistrement trouvé pour les filtres sélectionnés."
     }
   },
-
   "dashboard": {
     "title": "Tableau des coûts",
     "subtitle": "Visualisez les coûts agrégés par personne, activité et géofence.",
@@ -464,7 +457,6 @@
     },
     "errorLoad": "Erreur lors du chargement du tableau des coûts."
   },
-
   "dashboardCostos": {
     "title": "Tableau des coûts",
     "subtitle": "Visualisez des KPI et graphiques de coûts par personne, activité et géofence.",
@@ -503,7 +495,6 @@
     "tableNoResults": "Aucune donnée pour les filtres actuels.",
     "errorLoad": "Erreur lors du chargement du tableau des coûts."
   },
-
   "tracker": {
     "title": "Tracker GPS",
     "subtitle": "Visualisez en temps réel la position des trackers à l’intérieur de vos géofences.",
@@ -533,7 +524,6 @@
     },
     "errorLoad": "Erreur lors du chargement des positions du tracker."
   },
-
   "trackerDashboard": {
     "title": "Tableau de tracking en temps réel",
     "subtitle": "Les points se mettent à jour automatiquement. La fréquence d’envoi est définie par l’administrateur.",
@@ -577,7 +567,6 @@
       "checkConsole": "Vérifiez la console si le problème persiste."
     }
   },
-
   "inviteTracker": {
     "orgFallback": "votre organisation",
     "title": "Inviter un tracker",
@@ -608,7 +597,6 @@
       "unexpectedError": "Erreur inattendue lors du traitement de l’invitation."
     }
   },
-
   "admins": {
     "title": "Administrateurs",
     "subtitle": "Gérez les administrateurs de votre organisation et leurs rôles.",
