@@ -5,8 +5,6 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 /**
- * console.log("PersonalPage VERSION = 2025-12-11 A (no-returning)");
-
  * PersonalPage (universal multi-tenant, RLS-friendly)
  *
  * Objetivo:
@@ -220,8 +218,6 @@ export default function PersonalPage() {
       if (!nombre) throw new Error(t("personal.errorMissingName"));
       if (!email) throw new Error(t("personal.errorMissingEmail"));
 
-      const now = new Date().toISOString();
-
       const payload = {
         nombre,
         apellido,
@@ -230,55 +226,37 @@ export default function PersonalPage() {
         vigente: !!form.vigente,
       };
 
-      let query;
+      // CLAVE (RLS-friendly):
+      // - NO pedimos returning (sin .select()) para evitar 403 por RLS en el response.
+      // - NO enviamos columnas de control (owner_id, created_at, updated_at, is_deleted).
+      let result;
       if (form.id) {
-        query = supabase
+        result = await supabase
           .from("personal")
-          .update({
-            ...payload,
-            updated_at: now,
-          })
+          .update(payload)
           .eq("id", form.id)
           .eq("org_id", orgId)
-          .eq("is_deleted", false)
-          .select("*")
-          .maybeSingle();
+          .eq("is_deleted", false);
       } else {
-        query = supabase
-          .from("personal")
-          .insert({
-            ...payload,
-            org_id: orgId,
-            owner_id: authUser.id, // si tu trigger lo ignora, no pasa nada; si lo requiere, ayuda.
-            created_at: now,
-            updated_at: now,
-            is_deleted: false,
-          })
-          .select("*")
-          .maybeSingle();
+        result = await supabase.from("personal").insert({
+          ...payload,
+          org_id: orgId,
+        });
       }
 
-      const { data, error } = await query;
+      const { error } = result;
 
-      console.log("[PersonalPage] Resultado upsert:", { data, error });
+      console.log("[PersonalPage] Resultado guardar (no-returning):", { error });
 
       if (error) throw error;
-      if (!data) throw new Error(t("personal.errorSaveNoRecord"));
 
       setBanner({
         type: "ok",
         msg: form.id ? t("personal.bannerUpdated") : t("personal.bannerCreated"),
       });
 
-      setSelectedId(data.id);
-      setForm({
-        id: data.id,
-        nombre: data.nombre || "",
-        apellido: data.apellido || "",
-        email: data.email || "",
-        telefono: data.telefono || "",
-        vigente: !!data.vigente,
-      });
+      setSelectedId(null);
+      setForm(emptyForm());
 
       await loadPersonal();
     } catch (err) {
