@@ -25,15 +25,12 @@ import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Ayuda
-import InstructionsPage from "./help/InstructionsPage.jsx";
+// Ayuda (ahora todo en src/pages/help)
+import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-// ---------------------
-// Layout interno (aplicación protegida)
-// ---------------------
 function Shell({ children }) {
   const { loading } = useAuth();
 
@@ -47,7 +44,6 @@ function Shell({ children }) {
     );
   }
 
-  // Tabs principales de navegación
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
     { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
@@ -73,7 +69,6 @@ function Shell({ children }) {
   );
 }
 
-// Layout simple para la página de login
 function LoginShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -86,10 +81,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing pública */}
         <Route path="/" element={<Landing />} />
 
-        {/* Página de tracker web protegida */}
         <Route
           path="/tracker-gps"
           element={
@@ -101,10 +94,8 @@ export default function App() {
           }
         />
 
-        {/* Reset de contraseña */}
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Rutas protegidas por sesión (AuthGuard + Shell) */}
         <Route
           path="/inicio"
           element={
@@ -249,11 +240,9 @@ export default function App() {
           }
         />
 
-        {/* Auth callback y login */}
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/login" element={<LoginShell />} />
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
