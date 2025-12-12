@@ -5,6 +5,8 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 /**
+ * console.log("PersonalPage VERSION = 2025-12-11 A (no-returning)");
+
  * PersonalPage (universal multi-tenant, RLS-friendly)
  *
  * Objetivo:
