@@ -24,9 +24,8 @@ const Login: React.FC = () => {
 
   // ------------------------------------------------------------
   // Redirección universal después de login:
-  //  - Si tiene rol TRACKER → /tracker-gps
-  //  - Si no → /inicio
-  //  Además: NO navega si ya está en ese path (para evitar bucles)
+  //  - TRACKER → /tracker-gps
+  //  - resto → /inicio
   // ------------------------------------------------------------
   const redirectAfterLogin = useCallback(
     async (userId: string, userMetadata?: any) => {
@@ -41,37 +40,27 @@ const Login: React.FC = () => {
           .select("role")
           .eq("user_id", userId);
 
-        if (orgErr) {
-          console.error("[Login] Error leyendo user_organizations:", orgErr);
-        }
+        if (orgErr) console.error("[Login] Error leyendo user_organizations:", orgErr);
 
         const roles: string[] =
-          orgs?.map((o: any) => (o.role ? String(o.role).toLowerCase() : "")) ||
-          [];
+          orgs?.map((o: any) => (o.role ? String(o.role).toLowerCase() : "")) || [];
 
         const isTracker = roles.includes("tracker") || invitedAs === "tracker";
+        const targetPath = isTracker ? "/tracker-gps" : "/inicio";
 
-        let targetPath = "/inicio";
-        if (isTracker) targetPath = "/tracker-gps";
-
-        // Evitar bucles de navegación
         if (location.pathname !== targetPath) {
           navigate(targetPath, { replace: true });
         }
       } catch (e) {
         console.error("[Login] Exception redirectAfterLogin:", e);
-        if (location.pathname !== "/inicio") {
-          navigate("/inicio", { replace: true });
-        }
+        if (location.pathname !== "/inicio") navigate("/inicio", { replace: true });
       }
     },
     [navigate, location.pathname]
   );
 
-  // Limpiar campos al cambiar de ruta
+  // Limpieza base al cambiar de ruta (no limpia hashes de error porque lo manejamos abajo)
   useEffect(() => {
-    setEmail("");
-    setPassword("");
     setErrorMsg(null);
     setInfoMsg(null);
   }, [location.key]);
@@ -80,29 +69,55 @@ const Login: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlMode = params.get("mode");
-    if (urlMode === "magic") {
-      setMode("magic");
-    } else if (urlMode === "password") {
-      setMode("password");
-    }
+    if (urlMode === "magic") setMode("magic");
+    else if (urlMode === "password") setMode("password");
   }, [location.search]);
 
-  const isPasswordMode = mode === "password";
+  // ✅ Mostrar errores que vienen en el hash (#error=...&error_code=otp_expired...)
+  useEffect(() => {
+    // Ejemplo: /login#error=access_denied&error_code=otp_expired&error_description=...
+    const hash = location.hash || "";
+    if (!hash.startsWith("#")) return;
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.error("[Login] signOut error:", e);
-    } finally {
-      navigate("/login", { replace: true });
+    const raw = hash.slice(1);
+    const params = new URLSearchParams(raw);
+    const error = params.get("error");
+    const errorCode = params.get("error_code");
+    const errorDesc = params.get("error_description");
+
+    if (!error && !errorCode && !errorDesc) return;
+
+    let friendly =
+      t("login.errorMagicLink") || "No se pudo procesar el enlace mágico.";
+
+    // Mensajes más claros para casos típicos
+    if ((errorCode || "").toLowerCase().includes("otp_expired")) {
+      friendly =
+        t("login.magicExpired") ||
+        "El enlace mágico expiró o ya fue usado. Solicita uno nuevo e inténtalo de inmediato.";
+    } else if ((errorCode || "").toLowerCase().includes("access_denied")) {
+      friendly =
+        t("login.magicDenied") ||
+        "Acceso denegado al procesar el enlace. Solicita un nuevo enlace mágico.";
     }
-  };
+
+    // Si viene descripción, la dejamos como contexto (sin hacerlo técnico)
+    if (errorDesc) {
+      friendly += `\n${decodeURIComponent(errorDesc)}`;
+    }
+
+    setErrorMsg(friendly);
+
+    // Opcional: pasar a modo magic para que el usuario reenvíe rápido
+    setMode("magic");
+    // Nota: no limpiamos el hash aquí para no romper navegación, pero si quieres lo hacemos luego.
+  }, [location.hash, t]);
+
+  const isPasswordMode = mode === "password";
 
   // Si ya hay sesión y abren /login, decidir destino según rol
   useEffect(() => {
     if (loading) return;
-
     if (session?.user) {
       redirectAfterLogin(session.user.id, session.user.user_metadata);
     }
@@ -115,49 +130,32 @@ const Login: React.FC = () => {
     setInfoMsg(null);
 
     if (!email || !password) {
-      setErrorMsg(
-        t("login.errorMissingCredentials") || "Faltan usuario o contraseña."
-      );
+      setErrorMsg(t("login.errorMissingCredentials") || "Faltan usuario o contraseña.");
       return;
     }
 
     try {
       setLoadingAction(true);
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         console.error("[Login] signInWithPassword error:", error);
-        setErrorMsg(
-          error.message ||
-            (t("login.errorInvalidCredentials") as string) ||
-            "Credenciales inválidas."
-        );
+        setErrorMsg(error.message || t("login.errorInvalidCredentials") || "Credenciales inválidas.");
         return;
       }
 
       const user = data.user;
-      if (user) {
-        await redirectAfterLogin(user.id, user.user_metadata);
-      } else {
-        if (location.pathname !== "/inicio") {
-          navigate("/inicio", { replace: true });
-        }
-      }
+      if (user) await redirectAfterLogin(user.id, user.user_metadata);
+      else navigate("/inicio", { replace: true });
     } catch (err: any) {
       console.error("[Login] signInWithPassword exception:", err);
-      setErrorMsg(
-        t("login.errorUnexpected") || "Error inesperado al iniciar sesión."
-      );
+      setErrorMsg(t("login.errorUnexpected") || "Error inesperado al iniciar sesión.");
     } finally {
       setLoadingAction(false);
     }
   };
 
-  // MAGIC LINK → redirige a /auth/callback, que decide después
+  // MAGIC LINK → /auth/callback
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -179,44 +177,29 @@ const Login: React.FC = () => {
 
       if (error) {
         console.error("[Login] signInWithOtp error:", error);
+        const msg = (error.message || "").toLowerCase();
 
-        const msg = error.message?.toLowerCase() ?? "";
-        if (
-          msg.includes("signup") ||
-          msg.includes("sign up") ||
-          msg.includes("new user") ||
-          msg.includes("not found")
-        ) {
+        if (msg.includes("signup") || msg.includes("sign up") || msg.includes("new user") || msg.includes("not found")) {
           setErrorMsg(
             t("login.userNotAuthorized") ||
               "Este correo no está autorizado. Solicita una invitación al administrador."
           );
         } else {
-          setErrorMsg(
-            error.message ||
-              (t("login.errorMagicLink") as string) ||
-              "No se pudo enviar el enlace mágico."
-          );
+          setErrorMsg(error.message || t("login.errorMagicLink") || "No se pudo enviar el enlace mágico.");
         }
-
         return;
       }
 
-      setInfoMsg(
-        t("login.infoMagicLinkSent") || "Hemos enviado un enlace mágico a tu correo."
-      );
+      setInfoMsg(t("login.infoMagicLinkSent") || "Hemos enviado un enlace mágico a tu correo.");
     } catch (err: any) {
       console.error("[Login] signInWithOtp exception:", err);
-      setErrorMsg(
-        t("login.errorMagicLinkUnexpected") ||
-          "Error inesperado al enviar el enlace mágico."
-      );
+      setErrorMsg(t("login.errorMagicLinkUnexpected") || "Error inesperado al enviar el enlace mágico.");
     } finally {
       setLoadingAction(false);
     }
   };
 
-  // ✅ RESET PASSWORD (envía correo)
+  // RESET PASSWORD (envía correo)
   const handleForgotPassword = async () => {
     setErrorMsg(null);
     setInfoMsg(null);
@@ -228,22 +211,13 @@ const Login: React.FC = () => {
 
     try {
       setLoadingAction(true);
-
-      // A dónde vuelve el usuario después de abrir el link de recuperación
-      // (en el próximo paso creamos esta página)
       const redirectTo = `${window.location.origin}/reset-password`;
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
       if (error) {
         console.error("[Login] resetPasswordForEmail error:", error);
-        setErrorMsg(
-          error.message ||
-            (t("login.errorResetPassword") as string) ||
-            "No se pudo enviar el correo de recuperación."
-        );
+        setErrorMsg(error.message || t("login.errorResetPassword") || "No se pudo enviar el correo de recuperación.");
         return;
       }
 
@@ -262,7 +236,6 @@ const Login: React.FC = () => {
     }
   };
 
-  // Mientras AuthContext resuelve la sesión inicial
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
@@ -273,32 +246,27 @@ const Login: React.FC = () => {
     );
   }
 
-  // Formulario normal (sin sesión activa)
   return (
     <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-5">
-        {/* Encabezado + idioma */}
         <div className="flex items-center justify-between mb-2">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold text-slate-900">
               {t("login.title") || "Iniciar sesión"}
             </h1>
             <p className="text-sm text-slate-600">
-              {t("login.subtitle") || "Accede a tu cuenta de App Geocercas."}
+              {t("login.subtitle") || "Accede a tu cuenta de App Geocercas"}
             </p>
           </div>
           <LanguageSwitcher />
         </div>
 
-        {/* Toggle Password / Magic */}
         <div className="inline-flex items-center rounded-full bg-slate-100 p-1 text-xs font-medium">
           <button
             type="button"
             onClick={() => setMode("password")}
             className={`flex-1 px-3 py-1.5 rounded-full transition-colors ${
-              isPasswordMode
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
+              isPasswordMode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {t("login.modePassword") || "Contraseña"}
@@ -307,28 +275,24 @@ const Login: React.FC = () => {
             type="button"
             onClick={() => setMode("magic")}
             className={`flex-1 px-3 py-1.5 rounded-full transition-colors ${
-              !isPasswordMode
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
+              !isPasswordMode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            {t("login.modeMagic") || "Enlace mágico"}
+            {t("login.modeMagic") || "Link mágico"}
           </button>
         </div>
 
-        {/* Mensajes */}
         {errorMsg && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-line">
             {errorMsg}
           </div>
         )}
         {infoMsg && (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 whitespace-pre-line">
             {infoMsg}
           </div>
         )}
 
-        {/* Formulario password */}
         {isPasswordMode && (
           <form onSubmit={handleSubmitPassword} className="space-y-3">
             <div>
@@ -362,26 +326,20 @@ const Login: React.FC = () => {
                 disabled={loadingAction}
               />
 
-              {/* ✅ Botón para recuperar contraseña */}
-              <div className="mt-2 flex items-center justify-between">
+              {/* ✅ Reset password como LINK claro (mejor visibilidad/lectura) */}
+              <div className="mt-2">
                 <button
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={loadingAction}
-                  className="text-xs text-emerald-700 hover:text-emerald-800 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
                 >
+                  <span className="text-base leading-none">↻</span>
                   {t("login.forgotPassword") || "¿Olvidaste tu contraseña?"}
                 </button>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="text-[11px] text-slate-400 hover:text-slate-600"
-                  style={{ display: "none" }}
-                >
-                  {/* (Se deja oculto: útil si luego quieres un botón de “cerrar sesión” aquí) */}
-                  Logout
-                </button>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {t("login.resetHint") || "Te enviaremos un correo con el enlace para crear una nueva contraseña."}
+                </p>
               </div>
             </div>
 
@@ -395,7 +353,6 @@ const Login: React.FC = () => {
           </form>
         )}
 
-        {/* Formulario Magic Link */}
         {!isPasswordMode && (
           <form onSubmit={handleSubmitMagic} className="space-y-3">
             <div>
@@ -419,17 +376,13 @@ const Login: React.FC = () => {
               disabled={loadingAction}
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loadingAction
-                ? t("login.magicSubmitting") || "Enviando enlace…"
-                : t("login.magicButton") || "Enviar enlace mágico"}
+              {loadingAction ? t("login.magicSubmitting") || "Enviando enlace…" : t("login.magicButton") || "Enviar link mágico"}
             </button>
 
             <p className="text-[11px] text-slate-500">
-              {t("login.magicDescription") ||
-                "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña."}
+              {t("login.magicDescription") || "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña."}
             </p>
 
-            {/* También útil en modo magic: “olvidé contraseña” para quien intenta entrar */}
             <button
               type="button"
               onClick={handleForgotPassword}
