@@ -1,5 +1,5 @@
 // src/App.jsx
-import React from "react";
+import React, { useMemo } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
@@ -24,26 +24,52 @@ import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Ayuda
+// Ayuda (si aplica)
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
-import { useModuleAccess } from "./hooks/useModuleAccess.js";
 
 /* ======================================================
-   SHELL (UI + TABS)  ✅ AHORA ES LAYOUT CON <Outlet />
+   HELPERS: Rol activo por organización (UNIVERSAL)
+====================================================== */
+function normalizeRole(r) {
+  const v = String(r || "").toLowerCase();
+  if (v === "owner") return "owner";
+  if (v === "admin") return "admin";
+  if (v === "tracker") return "tracker";
+  if (v === "viewer") return "viewer";
+  return v || "tracker";
+}
+
+function getActiveRole(memberships, orgId) {
+  if (!orgId) return "tracker";
+  const row = Array.isArray(memberships)
+    ? memberships.find((m) => m?.org_id === orgId)
+    : null;
+  return normalizeRole(row?.role);
+}
+
+/* ======================================================
+   SHELL (Layout persistente con tabs + <Outlet />)
+   ✅ Admin tab SOLO si activeRole === "owner"
 ====================================================== */
 function Shell() {
-  const { loading, role } = useAuth();
+  const { loading, memberships, currentOrg } = useAuth();
+
+  const activeOrgId = currentOrg?.id ?? null;
+
+  const activeRole = useMemo(() => {
+    return getActiveRole(memberships, activeOrgId);
+  }, [memberships, activeOrgId]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          Cargando tu sesión…
+          Cargando organización y permisos…
         </div>
       </div>
     );
@@ -62,8 +88,8 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  // ADMINISTRADOR solo visible para OWNER
-  if (role === "owner") {
+  // ✅ UNIVERSAL: Admin tab SOLO si es OWNER EN LA ORG ACTIVA
+  if (activeRole === "owner") {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
 
@@ -82,13 +108,17 @@ function Shell() {
 }
 
 /* ======================================================
-   GUARD DE MÓDULO (OWNER)
+   GUARD: /admins SOLO si activeRole === "owner"
+   ✅ NO depende de correo, ni de rol global
 ====================================================== */
 function OwnerRoute({ children }) {
-  const { canView, loading } = useModuleAccess("admins");
+  const { loading, memberships, currentOrg } = useAuth();
+
+  const activeOrgId = currentOrg?.id ?? null;
+  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [memberships, activeOrgId]);
 
   if (loading) return null;
-  if (!canView) return <Navigate to="/inicio" replace />;
+  if (activeRole !== "owner") return <Navigate to="/inicio" replace />;
 
   return children;
 }
@@ -102,7 +132,7 @@ function LoginShell() {
 }
 
 /* ======================================================
-   APP
+   APP ROUTES
 ====================================================== */
 export default function App() {
   return (
@@ -114,7 +144,7 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* PRIVATE APP (TODO lo del panel vive aquí) */}
+        {/* PRIVATE (panel) */}
         <Route
           element={
             <AuthGuard>
@@ -135,10 +165,10 @@ export default function App() {
           <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
           <Route path="/invitar-tracker" element={<InvitarTracker />} />
 
-          {/* Ruta real para trackers (tu redirect apunta aquí) */}
+          {/* Tracker */}
           <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
-          {/* ADMIN (solo owner) */}
+          {/* ✅ Admin solo owner en org activa */}
           <Route
             path="/admins"
             element={
@@ -148,7 +178,7 @@ export default function App() {
             }
           />
 
-          {/* HELP (si quieres que sea privada, se queda aquí) */}
+          {/* Help */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
