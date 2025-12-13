@@ -1,6 +1,6 @@
 // src/App.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
@@ -19,7 +19,6 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback";
-
 import Inicio from "./pages/Inicio.jsx";
 import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
@@ -35,9 +34,9 @@ import { useAuth } from "./context/AuthContext.jsx";
 import { useModuleAccess } from "./hooks/useModuleAccess.js";
 
 /* ======================================================
-   SHELL (UI + TABS)
+   SHELL (UI + TABS)  ✅ AHORA ES LAYOUT CON <Outlet />
 ====================================================== */
-function Shell({ children }) {
+function Shell() {
   const { loading, role } = useAuth();
 
   if (loading) {
@@ -74,7 +73,10 @@ function Shell({ children }) {
       <div className="border-b border-slate-200 bg-white">
         <TopTabs tabs={tabs} />
       </div>
-      <main className="flex-1 p-4 max-w-6xl mx-auto w-full">{children}</main>
+
+      <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
+        <Outlet />
+      </main>
     </div>
   );
 }
@@ -106,82 +108,54 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
-
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
+        {/* PRIVATE APP (TODO lo del panel vive aquí) */}
         <Route
-          path="/inicio"
           element={
             <AuthGuard>
-              <Shell>
-                <Inicio />
-              </Shell>
+              <Shell />
             </AuthGuard>
           }
-        />
+        >
+          <Route path="/inicio" element={<Inicio />} />
 
-        {/* ADMINISTRADOR – GUARD REAL */}
-        <Route
-          path="/admins"
-          element={
-            <AuthGuard>
+          {/* Tabs */}
+          <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
+          <Route path="/geocercas" element={<GeocercasPage />} />
+          <Route path="/personal" element={<PersonalPage />} />
+          <Route path="/actividades" element={<ActividadesPage />} />
+          <Route path="/asignaciones" element={<AsignacionesPage />} />
+          <Route path="/costos" element={<CostosPage />} />
+          <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
+          <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
+          <Route path="/invitar-tracker" element={<InvitarTracker />} />
+
+          {/* Ruta real para trackers (tu redirect apunta aquí) */}
+          <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+
+          {/* ADMIN (solo owner) */}
+          <Route
+            path="/admins"
+            element={
               <OwnerRoute>
-                <Shell>
-                  <AdminsPage />
-                </Shell>
+                <AdminsPage />
               </OwnerRoute>
-            </AuthGuard>
-          }
-        />
+            }
+          />
 
-        {/* Centro de Ayuda */}
-        <Route
-          path="/help/instructions"
-          element={
-            <AuthGuard>
-              <Shell>
-                <InstructionsPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
+          {/* HELP (si quieres que sea privada, se queda aquí) */}
+          <Route path="/help/instructions" element={<InstructionsPage />} />
+          <Route path="/help/faq" element={<FaqPage />} />
+          <Route path="/help/support" element={<SupportPage />} />
+          <Route path="/help/changelog" element={<ChangelogPage />} />
+        </Route>
 
-        <Route
-          path="/help/faq"
-          element={
-            <AuthGuard>
-              <Shell>
-                <FaqPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/help/support"
-          element={
-            <AuthGuard>
-              <Shell>
-                <SupportPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          path="/help/changelog"
-          element={
-            <AuthGuard>
-              <Shell>
-                <ChangelogPage />
-              </Shell>
-            </AuthGuard>
-          }
-        />
-
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
