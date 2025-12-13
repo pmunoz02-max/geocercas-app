@@ -73,7 +73,13 @@
     "footerSupport": "Soporte",
     "footerTerms": "Términos",
     "footerPrivacy": "Privacidad",
-    "rightsReserved": "Todos los derechos reservados"
+    "rightsReserved": "Todos los derechos reservados",
+    "loginButton": "Entrar",
+    "accessTitle": "Acceso con cuenta autorizada",
+    "accessBody": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
+    "accessHint": "Consejo: usa “Link mágico” si tu administrador te invitó con correo.",
+    "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
+    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."
   },
   "login": {
     "title": "Iniciar sesión",
@@ -90,7 +96,30 @@
     "errors": {
       "invalidEmail": "Ingresa un correo electrónico válido.",
       "unknown": "Ocurrió un error al iniciar sesión."
-    }
+    },
+    "modePassword": "Contraseña",
+    "modeMagic": "Link mágico",
+    "submit": "Entrar",
+    "submitting": "Ingresando…",
+    "magicButton": "Enviar link mágico",
+    "magicSubmitting": "Enviando enlace…",
+    "magicDescription": "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña.",
+    "emailPlaceholder": "tucorreo@ejemplo.com",
+    "passwordPlaceholder": "Ingresa tu contraseña",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgotPasswordAlt": "¿Prefieres restablecer tu contraseña? (enviar correo)",
+    "loadingSession": "Cargando tu sesión…",
+    "errorMissingCredentials": "Faltan usuario o contraseña.",
+    "errorMissingEmail": "Debes ingresar un correo.",
+    "errorInvalidCredentials": "Credenciales inválidas.",
+    "errorUnexpected": "Error inesperado al iniciar sesión.",
+    "userNotAuthorized": "Este correo no está autorizado. Solicita una invitación al administrador.",
+    "errorMagicLink": "No se pudo enviar el link mágico.",
+    "infoMagicLinkSent": "Hemos enviado un link mágico a tu correo.",
+    "errorMagicLinkUnexpected": "Error inesperado al enviar el link mágico.",
+    "errorResetPassword": "No se pudo enviar el correo de recuperación.",
+    "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.",
+    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación."
   },
   "inicio": {
     "header": {
@@ -671,5 +700,28 @@
         }
       }
     }
+  },
+  "resetPassword": {
+    "title": "Restablecer contraseña",
+    "subtitle": "Crea una nueva contraseña para tu cuenta.",
+    "loading": "Preparando enlace de recuperación…",
+    "invalidOrExpired": "El enlace de recuperación es inválido o expiró. Solicita uno nuevo.",
+    "noSession": "No hay una sesión válida para restablecer la contraseña. Vuelve a solicitar el enlace.",
+    "noticeType": "Sesión detectada. Si este enlace no era de recuperación, vuelve a iniciar sesión normalmente.",
+    "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
+    "newPassword": "Nueva contraseña",
+    "newPasswordPlaceholder": "Mínimo 8 caracteres",
+    "confirmPassword": "Confirmar contraseña",
+    "confirmPlaceholder": "Repite",
+    "passwordMin": "La contraseña debe tener al menos 8 caracteres.",
+    "passwordMismatch": "Las contraseñas no coinciden.",
+    "saveButton": "Guardar nueva contraseña",
+    "saving": "Guardando…",
+    "updateFailed": "No se pudo actualizar la contraseña. Intenta nuevamente.",
+    "updateUnexpected": "Error inesperado al actualizar la contraseña.",
+    "success": "Contraseña actualizada correctamente. Ahora puedes iniciar sesión.",
+    "backToLogin": "Volver a iniciar sesión",
+    "backHome": "Ir a la landing",
+    "tip": "Tip: vuelve a /login, escribe tu correo y usa “¿Olvidaste tu contraseña?” para generar un nuevo enlace."
   }
 }

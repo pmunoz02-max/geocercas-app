@@ -129,7 +129,7 @@
     "heroSubtitle": "App Geocercas lets you assign people to zones, log activities, and calculate costs in real time.",
     "ctaLogin": "Go to the control panel",
     "ctaMagic": "Sign in with magic link",
-    "loginButton": "Login",
+    "loginButton": "Sign in",
     "bulletGeocercasTitle": "Geofences",
     "bulletGeocercasBody": "Create and manage geofences for your fields, farms, plants, or service points.",
     "bulletPersonalTitle": "Personnel",
@@ -150,7 +150,12 @@
     "footerSupport": "Support",
     "footerTerms": "Terms",
     "footerPrivacy": "Privacy",
-    "rightsReserved": "All rights reserved."
+    "rightsReserved": "All rights reserved.",
+    "accessTitle": "Authorized account required",
+    "accessBody": "This app requires an account invited by an administrator. If you don’t have access, request an invitation from your organization.",
+    "accessHint": "Tip: use “Magic link” if your admin invited you by email.",
+    "reviewNote": "Note: If you are reviewing the app (Google Play), use the credentials provided in Play Console (App access).",
+    "privacyMiniNote": "Privacy: location is used only for geofence/tracking features based on the permissions you grant."
   },
   "login": {
     "title": "Welcome to App Geocercas",
@@ -160,8 +165,29 @@
     "buttonLogin": "Login",
     "buttonRegister": "Create account",
     "forgotPassword": "Forgot your password?",
-    "errorInvalidCredentials": "Incorrect email or password.",
-    "errorGeneric": "Could not log in. Please try again."
+    "errorInvalidCredentials": "Invalid credentials.",
+    "errorGeneric": "Could not log in. Please try again.",
+    "modePassword": "Password",
+    "modeMagic": "Magic link",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "magicButton": "Send magic link",
+    "magicSubmitting": "Sending link…",
+    "magicDescription": "We’ll email you a secure link to sign in without a password.",
+    "emailPlaceholder": "you@example.com",
+    "passwordPlaceholder": "Enter your password",
+    "forgotPasswordAlt": "Prefer to reset your password? (send email)",
+    "loadingSession": "Loading your session…",
+    "errorMissingCredentials": "Email and password are required.",
+    "errorMissingEmail": "Please enter an email.",
+    "errorUnexpected": "Unexpected error while signing in.",
+    "userNotAuthorized": "This email is not authorized. Ask an admin for an invitation.",
+    "errorMagicLink": "Could not send the magic link.",
+    "infoMagicLinkSent": "We sent a magic link to your email.",
+    "errorMagicLinkUnexpected": "Unexpected error sending the magic link.",
+    "errorResetPassword": "Could not send the recovery email.",
+    "infoResetPasswordSent": "We sent you an email to reset your password. Check your inbox.",
+    "errorResetPasswordUnexpected": "Unexpected error sending the recovery email."
   },
   "inicio": {
     "title": "Home",
@@ -630,5 +656,27 @@
         }
       }
     }
+  },
+  "resetPassword": {
+    "title": "Reset password",
+    "subtitle": "Create a new password for your account.",
+    "loading": "Preparing recovery link…",
+    "invalidOrExpired": "The recovery link is invalid or expired. Please request a new one.",
+    "noSession": "No valid session to reset your password. Please request the link again.",
+    "noticeType": "Session detected. If this link was not for recovery, sign in normally.",
+    "unexpected": "An error occurred while preparing password reset.",
+    "newPassword": "New password",
+    "newPasswordPlaceholder": "At least 8 characters",
+    "confirmPassword": "Confirm password",
+    "confirmPlaceholder": "Repeat it",
+    "passwordMin": "Password must be at least 8 characters.",
+    "passwordMismatch": "Passwords do not match.",
+    "saveButton": "Save new password",
+    "saving": "Saving…",
+    "updateFailed": "Could not update the password. Please try again.",
+    "updateUnexpected": "Unexpected error updating the password.",
+    "success": "Password updated successfully. You can sign in now.",
+    "backToLogin": "Back to login",
+    "backHome": "Go to landing",
+    "tip": "Tip: go back to /login, enter your email and use “Forgot your password?” to generate a new link."
   }
-}

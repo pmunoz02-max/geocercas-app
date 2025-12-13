@@ -46,12 +46,10 @@ const Login: React.FC = () => {
         }
 
         const roles: string[] =
-          orgs?.map((o: any) =>
-            o.role ? String(o.role).toLowerCase() : ""
-          ) || [];
+          orgs?.map((o: any) => (o.role ? String(o.role).toLowerCase() : "")) ||
+          [];
 
-        const isTracker =
-          roles.includes("tracker") || invitedAs === "tracker";
+        const isTracker = roles.includes("tracker") || invitedAs === "tracker";
 
         let targetPath = "/inicio";
         if (isTracker) targetPath = "/tracker-gps";
@@ -103,7 +101,6 @@ const Login: React.FC = () => {
 
   // Si ya hay sesión y abren /login, decidir destino según rol
   useEffect(() => {
-    // Mientras el AuthContext sigue cargando, no hacemos nada
     if (loading) return;
 
     if (session?.user) {
@@ -167,9 +164,7 @@ const Login: React.FC = () => {
     setInfoMsg(null);
 
     if (!email) {
-      setErrorMsg(
-        t("login.errorMissingEmail") || "Debes ingresar un correo."
-      );
+      setErrorMsg(t("login.errorMissingEmail") || "Debes ingresar un correo.");
       return;
     }
 
@@ -208,14 +203,59 @@ const Login: React.FC = () => {
       }
 
       setInfoMsg(
-        t("login.infoMagicLinkSent") ||
-          "Hemos enviado un enlace mágico a tu correo."
+        t("login.infoMagicLinkSent") || "Hemos enviado un enlace mágico a tu correo."
       );
     } catch (err: any) {
       console.error("[Login] signInWithOtp exception:", err);
       setErrorMsg(
         t("login.errorMagicLinkUnexpected") ||
           "Error inesperado al enviar el enlace mágico."
+      );
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  // ✅ RESET PASSWORD (envía correo)
+  const handleForgotPassword = async () => {
+    setErrorMsg(null);
+    setInfoMsg(null);
+
+    if (!email) {
+      setErrorMsg(t("login.errorMissingEmail") || "Debes ingresar un correo.");
+      return;
+    }
+
+    try {
+      setLoadingAction(true);
+
+      // A dónde vuelve el usuario después de abrir el link de recuperación
+      // (en el próximo paso creamos esta página)
+      const redirectTo = `${window.location.origin}/reset-password`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+
+      if (error) {
+        console.error("[Login] resetPasswordForEmail error:", error);
+        setErrorMsg(
+          error.message ||
+            (t("login.errorResetPassword") as string) ||
+            "No se pudo enviar el correo de recuperación."
+        );
+        return;
+      }
+
+      setInfoMsg(
+        t("login.infoResetPasswordSent") ||
+          "Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada."
+      );
+    } catch (err: any) {
+      console.error("[Login] resetPasswordForEmail exception:", err);
+      setErrorMsg(
+        t("login.errorResetPasswordUnexpected") ||
+          "Error inesperado al enviar el correo de recuperación."
       );
     } finally {
       setLoadingAction(false);
@@ -244,8 +284,7 @@ const Login: React.FC = () => {
               {t("login.title") || "Iniciar sesión"}
             </h1>
             <p className="text-sm text-slate-600">
-              {t("login.subtitle") ||
-                "Accede a tu cuenta de App Geocercas."}
+              {t("login.subtitle") || "Accede a tu cuenta de App Geocercas."}
             </p>
           </div>
           <LanguageSwitcher />
@@ -285,7 +324,7 @@ const Login: React.FC = () => {
         )}
         {infoMsg && (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          {infoMsg}
+            {infoMsg}
           </div>
         )}
 
@@ -301,14 +340,13 @@ const Login: React.FC = () => {
                 autoComplete="off"
                 name="login-email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder={
-                  t("login.emailPlaceholder") || "tucorreo@ejemplo.com"
-                }
+                placeholder={t("login.emailPlaceholder") || "tucorreo@ejemplo.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
               />
             </div>
+
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
                 {t("login.passwordLabel") || "Contraseña"}
@@ -318,22 +356,41 @@ const Login: React.FC = () => {
                 autoComplete="off"
                 name="login-password"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder={
-                  t("login.passwordPlaceholder") || "Ingresa tu contraseña"
-                }
+                placeholder={t("login.passwordPlaceholder") || "Ingresa tu contraseña"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loadingAction}
               />
+
+              {/* ✅ Botón para recuperar contraseña */}
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={loadingAction}
+                  className="text-xs text-emerald-700 hover:text-emerald-800 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {t("login.forgotPassword") || "¿Olvidaste tu contraseña?"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="text-[11px] text-slate-400 hover:text-slate-600"
+                  style={{ display: "none" }}
+                >
+                  {/* (Se deja oculto: útil si luego quieres un botón de “cerrar sesión” aquí) */}
+                  Logout
+                </button>
+              </div>
             </div>
+
             <button
               type="submit"
               disabled={loadingAction}
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loadingAction
-                ? t("login.submitting") || "Ingresando…"
-                : t("login.submit") || "Entrar"}
+              {loadingAction ? t("login.submitting") || "Ingresando…" : t("login.submit") || "Entrar"}
             </button>
           </form>
         )}
@@ -350,14 +407,13 @@ const Login: React.FC = () => {
                 autoComplete="off"
                 name="login-magic-email"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder={
-                  t("login.emailPlaceholder") || "tucorreo@ejemplo.com"
-                }
+                placeholder={t("login.emailPlaceholder") || "tucorreo@ejemplo.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
               />
             </div>
+
             <button
               type="submit"
               disabled={loadingAction}
@@ -367,10 +423,21 @@ const Login: React.FC = () => {
                 ? t("login.magicSubmitting") || "Enviando enlace…"
                 : t("login.magicButton") || "Enviar enlace mágico"}
             </button>
+
             <p className="text-[11px] text-slate-500">
               {t("login.magicDescription") ||
                 "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña."}
             </p>
+
+            {/* También útil en modo magic: “olvidé contraseña” para quien intenta entrar */}
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={loadingAction}
+              className="text-xs text-slate-600 hover:text-slate-800 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {t("login.forgotPasswordAlt") || "¿Prefieres restablecer tu contraseña? (enviar correo)"}
+            </button>
           </form>
         )}
       </div>

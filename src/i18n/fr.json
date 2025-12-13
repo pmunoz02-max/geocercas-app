@@ -73,7 +73,13 @@
     "footerSupport": "Support",
     "footerTerms": "Conditions",
     "footerPrivacy": "Confidentialité",
-    "rightsReserved": "Tous droits réservés"
+    "rightsReserved": "Tous droits réservés",
+    "loginButton": "Se connecter",
+    "accessTitle": "Compte autorisé requis",
+    "accessBody": "Cette application nécessite un compte invité par un administrateur. Si vous n’avez pas accès, demandez une invitation à votre organisation.",
+    "accessHint": "Astuce : utilisez « Lien magique » si votre admin vous a invité par e-mail.",
+    "reviewNote": "Note : Si vous évaluez l’app (Google Play), utilisez les identifiants fournis dans Play Console (App access).",
+    "privacyMiniNote": "Confidentialité : la localisation est utilisée uniquement pour les fonctions de géofence/suivi selon les autorisations accordées."
   },
   "login": {
     "title": "Se connecter",
@@ -90,7 +96,30 @@
     "errors": {
       "invalidEmail": "Saisissez une adresse e-mail valide.",
       "unknown": "Une erreur s’est produite lors de la connexion."
-    }
+    },
+    "modePassword": "Mot de passe",
+    "modeMagic": "Lien magique",
+    "submit": "Se connecter",
+    "submitting": "Connexion…",
+    "magicButton": "Envoyer le lien magique",
+    "magicSubmitting": "Envoi du lien…",
+    "magicDescription": "Nous vous enverrons un lien sécurisé par e-mail pour vous connecter sans mot de passe.",
+    "emailPlaceholder": "vous@exemple.com",
+    "passwordPlaceholder": "Saisissez votre mot de passe",
+    "forgotPassword": "Mot de passe oublié ?",
+    "forgotPasswordAlt": "Préférez réinitialiser votre mot de passe ? (envoyer e-mail)",
+    "loadingSession": "Chargement de votre session…",
+    "errorMissingCredentials": "E-mail et mot de passe requis.",
+    "errorMissingEmail": "Veuillez saisir un e-mail.",
+    "errorInvalidCredentials": "Identifiants invalides.",
+    "errorUnexpected": "Erreur inattendue lors de la connexion.",
+    "userNotAuthorized": "Cet e-mail n’est pas autorisé. Demandez une invitation à un admin.",
+    "errorMagicLink": "Impossible d’envoyer le lien magique.",
+    "infoMagicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
+    "errorMagicLinkUnexpected": "Erreur inattendue lors de l’envoi du lien magique.",
+    "errorResetPassword": "Impossible d’envoyer l’e-mail de récupération.",
+    "infoResetPasswordSent": "Nous vous avons envoyé un e-mail pour réinitialiser votre mot de passe. Vérifiez votre boîte de réception.",
+    "errorResetPasswordUnexpected": "Erreur inattendue lors de l’envoi de l’e-mail de récupération."
   },
   "inicio": {
     "header": {
@@ -671,5 +700,28 @@
         }
       }
     }
+  },
+  "resetPassword": {
+    "title": "Réinitialiser le mot de passe",
+    "subtitle": "Créez un nouveau mot de passe pour votre compte.",
+    "loading": "Préparation du lien de récupération…",
+    "invalidOrExpired": "Le lien de récupération est invalide ou expiré. Veuillez en demander un nouveau.",
+    "noSession": "Aucune session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
+    "noticeType": "Session détectée. Si ce lien n’était pas pour une récupération, connectez-vous normalement.",
+    "unexpected": "Une erreur s’est produite lors de la préparation de la réinitialisation.",
+    "newPassword": "Nouveau mot de passe",
+    "newPasswordPlaceholder": "Au moins 8 caractères",
+    "confirmPassword": "Confirmer le mot de passe",
+    "confirmPlaceholder": "Répétez",
+    "passwordMin": "Le mot de passe doit contenir au moins 8 caractères.",
+    "passwordMismatch": "Les mots de passe ne correspondent pas.",
+    "saveButton": "Enregistrer le nouveau mot de passe",
+    "saving": "Enregistrement…",
+    "updateFailed": "Impossible de mettre à jour le mot de passe. Réessayez.",
+    "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
+    "success": "Mot de passe mis à jour avec succès. Vous pouvez vous connecter maintenant.",
+    "backToLogin": "Retour à la connexion",
+    "backHome": "Aller à la landing",
+    "tip": "Astuce : retournez à /login, saisissez votre e-mail et utilisez « Mot de passe oublié ? » pour générer un nouveau lien."
   }
 }
