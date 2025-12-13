@@ -152,8 +152,8 @@
     "footerPrivacy": "Privacy",
     "rightsReserved": "All rights reserved.",
     "accessTitle": "Authorized account required",
-    "accessBody": "This app requires an account invited by an administrator. If you don’t have access, request an invitation from your organization.",
-    "accessHint": "Tip: use “Magic link” if your admin invited you by email.",
+    "accessBody": "This app requires an account invited by an administrator. If you don't have access, request an invitation from your organization.",
+    "accessHint": "Tip: use \"Magic link\" if your admin invited you by email.",
     "reviewNote": "Note: If you are reviewing the app (Google Play), use the credentials provided in Play Console (App access).",
     "privacyMiniNote": "Privacy: location is used only for geofence/tracking features based on the permissions you grant."
   },
@@ -173,7 +173,7 @@
     "submitting": "Signing in…",
     "magicButton": "Send magic link",
     "magicSubmitting": "Sending link…",
-    "magicDescription": "We’ll email you a secure link to sign in without a password.",
+    "magicDescription": "We'll email you a secure link to sign in without a password.",
     "emailPlaceholder": "you@example.com",
     "passwordPlaceholder": "Enter your password",
     "forgotPasswordAlt": "Prefer to reset your password? (send email)",
@@ -350,7 +350,7 @@
     "errorMissingName": "Activity name is required.",
     "errorMissingCurrency": "Currency is required.",
     "errorMissingRate": "Hourly rate is required.",
-    "confirmDelete": "Are you sure you want to delete the activity “{{name}}”?"
+    "confirmDelete": "Are you sure you want to delete the activity \"{{name}}\"?"
   },
   "asignaciones": {
     "title": "Assignments",
@@ -678,5 +678,6 @@
     "success": "Password updated successfully. You can sign in now.",
     "backToLogin": "Back to login",
     "backHome": "Go to landing",
-    "tip": "Tip: go back to /login, enter your email and use “Forgot your password?” to generate a new link."
+    "tip": "Tip: go back to /login, enter your email and use \"Forgot your password?\" to generate a new link."
   }
+}

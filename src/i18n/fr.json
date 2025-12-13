@@ -50,7 +50,7 @@
     "heroTitlePrefix": "Contrôlez votre personnel",
     "heroTitleHighlight": "avec des géofences intelligentes",
     "heroTitleSuffix": "partout dans le monde",
-    "heroSubtitle": "App Geocercas vous permet d’affecter des personnes à des zones, d’enregistrer des activités et de calculer les coûts en temps réel.",
+    "heroSubtitle": "App Geocercas vous permet d'affecter des personnes à des zones, d'enregistrer des activités et de calculer les coûts en temps réel.",
     "ctaLogin": "Aller au tableau de bord",
     "ctaMagic": "Entrer avec un lien magique",
     "bulletGeocercasTitle": "Géofences",
@@ -76,9 +76,9 @@
     "rightsReserved": "Tous droits réservés",
     "loginButton": "Se connecter",
     "accessTitle": "Compte autorisé requis",
-    "accessBody": "Cette application nécessite un compte invité par un administrateur. Si vous n’avez pas accès, demandez une invitation à votre organisation.",
+    "accessBody": "Cette application nécessite un compte invité par un administrateur. Si vous n'avez pas accès, demandez une invitation à votre organisation.",
     "accessHint": "Astuce : utilisez « Lien magique » si votre admin vous a invité par e-mail.",
-    "reviewNote": "Note : Si vous évaluez l’app (Google Play), utilisez les identifiants fournis dans Play Console (App access).",
+    "reviewNote": "Note : Si vous évaluez l'app (Google Play), utilisez les identifiants fournis dans Play Console (App access).",
     "privacyMiniNote": "Confidentialité : la localisation est utilisée uniquement pour les fonctions de géofence/suivi selon les autorisations accordées."
   },
   "login": {
@@ -95,7 +95,7 @@
     "goToDashboard": "Aller au tableau de bord",
     "errors": {
       "invalidEmail": "Saisissez une adresse e-mail valide.",
-      "unknown": "Une erreur s’est produite lors de la connexion."
+      "unknown": "Une erreur s'est produite lors de la connexion."
     },
     "modePassword": "Mot de passe",
     "modeMagic": "Lien magique",
@@ -113,19 +113,19 @@
     "errorMissingEmail": "Veuillez saisir un e-mail.",
     "errorInvalidCredentials": "Identifiants invalides.",
     "errorUnexpected": "Erreur inattendue lors de la connexion.",
-    "userNotAuthorized": "Cet e-mail n’est pas autorisé. Demandez une invitation à un admin.",
-    "errorMagicLink": "Impossible d’envoyer le lien magique.",
+    "userNotAuthorized": "Cet e-mail n'est pas autorisé. Demandez une invitation à un admin.",
+    "errorMagicLink": "Impossible d'envoyer le lien magique.",
     "infoMagicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
-    "errorMagicLinkUnexpected": "Erreur inattendue lors de l’envoi du lien magique.",
-    "errorResetPassword": "Impossible d’envoyer l’e-mail de récupération.",
+    "errorMagicLinkUnexpected": "Erreur inattendue lors de l'envoi du lien magique.",
+    "errorResetPassword": "Impossible d'envoyer l'e-mail de récupération.",
     "infoResetPasswordSent": "Nous vous avons envoyé un e-mail pour réinitialiser votre mot de passe. Vérifiez votre boîte de réception.",
-    "errorResetPasswordUnexpected": "Erreur inattendue lors de l’envoi de l’e-mail de récupération."
+    "errorResetPasswordUnexpected": "Erreur inattendue lors de l'envoi de l'e-mail de récupération."
   },
   "inicio": {
     "header": {
-      "badge": "Centre d’aide et de ressources",
+      "badge": "Centre d'aide et de ressources",
       "title": "Bienvenue sur votre tableau de bord",
-      "subtitle": "Depuis ici, vous pouvez accéder aux instructions, FAQ, support et nouveautés d’App Geocercas."
+      "subtitle": "Depuis ici, vous pouvez accéder aux instructions, FAQ, support et nouveautés d'App Geocercas."
     },
     "cards": {
       "instrucciones": {
@@ -143,25 +143,25 @@
       "videoDemo": {
         "badge": "Vidéo",
         "title": "Vidéo démo",
-        "body": "Regardez une courte démonstration d’App Geocercas en situation réelle.",
+        "body": "Regardez une courte démonstration d'App Geocercas en situation réelle.",
         "cta": "Voir la vidéo"
       },
       "soporte": {
         "badge": "Support",
         "title": "Contact / Support",
-        "body": "Besoin d’aide ? Contactez-nous pour du support technique, facturation ou questions sur votre compte.",
+        "body": "Besoin d'aide ? Contactez-nous pour du support technique, facturation ou questions sur votre compte.",
         "cta": "Accéder au support"
       },
       "queEs": {
         "badge": "Info",
-        "title": "Qu’est-ce qu’App Geocercas ?",
-        "body": "Découvrez la vision, les cas d’usage et les bénéfices d’App Geocercas pour votre organisation.",
+        "title": "Qu'est-ce qu'App Geocercas ?",
+        "body": "Découvrez la vision, les cas d'usage et les bénéfices d'App Geocercas pour votre organisation.",
         "cta": "En savoir plus"
       },
       "novedades": {
         "badge": "Nouveautés",
         "title": "Nouveautés / Changelog",
-        "body": "Consultez l’historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
+        "body": "Consultez l'historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
         "cta": "Voir changelog"
       },
       "common": {
@@ -171,16 +171,16 @@
     "userInfo": {
       "connectedAs": "Connecté en tant que",
       "withRole": "avec le rôle",
-      "inOrg": "dans l’organisation",
+      "inOrg": "dans l'organisation",
       "userLabel": "Utilisateur :",
-      "orgIdLabel": "ID d’organisation :"
+      "orgIdLabel": "ID d'organisation :"
     }
   },
   "geocercas": {
     "titleNew": "Nouvelle géofence",
     "subtitleNew": "Dessinez une géofence sur la carte et affectez-la à votre personnel ou vos activités.",
     "panelTitle": "Géofences",
-    "noGeofences": "Vous n’avez pas encore créé de géofences.",
+    "noGeofences": "Vous n'avez pas encore créé de géofences.",
     "placeholderName": "Nom de la géofence",
     "buttonDrawByCoords": "Dessiner par coordonnées",
     "buttonSave": "Enregistrer la géofence",
@@ -205,21 +205,21 @@
     "bannerCreated": "Personnel créé avec succès.",
     "bannerUpdated": "Personnel mis à jour correctement.",
     "bannerDeletedOk": "Enregistrement supprimé correctement.",
-    "errorMissingUser": "Impossible d’obtenir l’utilisateur authentifié.",
+    "errorMissingUser": "Impossible d'obtenir l'utilisateur authentifié.",
     "errorNoAuthUser": "Aucun utilisateur authentifié.",
     "errorLoad": "Erreur lors du chargement du personnel.",
-    "errorNoPermissionCreate": "Vous n’avez pas les permissions pour créer du personnel.",
-    "errorNoPermissionEdit": "Vous n’avez pas les permissions pour modifier du personnel.",
+    "errorNoPermissionCreate": "Vous n'avez pas les permissions pour créer du personnel.",
+    "errorNoPermissionEdit": "Vous n'avez pas les permissions pour modifier du personnel.",
     "errorMustSelectForEdit": "Vous devez sélectionner un enregistrement à modifier.",
-    "errorNoPermissionSave": "Vous n’avez pas les permissions pour enregistrer les modifications.",
+    "errorNoPermissionSave": "Vous n'avez pas les permissions pour enregistrer les modifications.",
     "errorMissingName": "Le nom est requis.",
-    "errorMissingEmail": "L’e-mail est requis.",
+    "errorMissingEmail": "L'e-mail est requis.",
     "errorPhonePolicy": "Le téléphone doit commencer par + (format international E.164).",
     "errorSaveNoRecord": "Aucun enregistrement mis à jour reçu.",
-    "errorSave": "Impossible d’enregistrer le personnel.",
-    "errorNoPermissionDelete": "Vous n’avez pas les permissions pour supprimer du personnel.",
+    "errorSave": "Impossible d'enregistrer le personnel.",
+    "errorNoPermissionDelete": "Vous n'avez pas les permissions pour supprimer du personnel.",
     "errorMustSelectForDelete": "Vous devez sélectionner un enregistrement à supprimer.",
-    "errorDelete": "Impossible de supprimer l’enregistrement.",
+    "errorDelete": "Impossible de supprimer l'enregistrement.",
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (soft delete)",
     "searchPlaceholder": "Rechercher par nom, prénom, e-mail ou téléphone…",
     "onlyActive": "Unicamente actifs",
@@ -247,11 +247,11 @@
   "actividades": {
     "title": "Activités",
     "formTitleNew": "Nouvelle activité",
-    "formTitleEdit": "Modifier l’activité",
-    "fieldName": "Nom de l’activité",
+    "formTitleEdit": "Modifier l'activité",
+    "fieldName": "Nom de l'activité",
     "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
     "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "Brève description de l’activité…",
+    "fieldDescriptionPlaceholder": "Brève description de l'activité…",
     "fieldCurrency": "Devise",
     "fieldHourlyRate": "Tarif horaire",
     "fieldHourlyRatePlaceholder": "Ex. 3.50",
@@ -268,9 +268,9 @@
       "GBP": "Livre sterling",
       "LOCAL": "Devise locale"
     },
-    "buttonCreate": "Créer l’activité",
+    "buttonCreate": "Créer l'activité",
     "buttonSave": "Enregistrer les modifications",
-    "buttonUpdate": "Mettre à jour l’activité",
+    "buttonUpdate": "Mettre à jour l'activité",
     "buttonCancel": "Annuler",
     "tableTitle": "Liste des activités",
     "thName": "Activité",
@@ -292,16 +292,16 @@
     "bannerUpdated": "Activité mise à jour avec succès.",
     "bannerDeleted": "Activité supprimée.",
     "errorLoad": "Erreur lors du chargement des activités.",
-    "errorSave": "Impossible d’enregistrer l’activité.",
-    "errorDelete": "Impossible de supprimer l’activité.",
-    "errorMissingName": "Le nom de l’activité est obligatoire.",
+    "errorSave": "Impossible d'enregistrer l'activité.",
+    "errorDelete": "Impossible de supprimer l'activité.",
+    "errorMissingName": "Le nom de l'activité est obligatoire.",
     "errorMissingCurrency": "La devise est obligatoire.",
     "errorMissingRate": "Le tarif horaire est obligatoire.",
-    "errorNameRequired": "Le nom de l’activité est obligatoire.",
+    "errorNameRequired": "Le nom de l'activité est obligatoire.",
     "errorRatePositive": "Le tarif horaire doit être supérieur à 0.",
-    "errorMissingTenant": "Impossible de trouver l’organisation de l’utilisateur (tenant_id/org_id).",
-    "errorToggle": "Impossible de modifier le statut de l’activité.",
-    "confirmDelete": "Voulez-vous vraiment supprimer l’activité « {{name}} » ?"
+    "errorMissingTenant": "Impossible de trouver l'organisation de l'utilisateur (tenant_id/org_id).",
+    "errorToggle": "Impossible de modifier le statut de l'activité.",
+    "confirmDelete": "Voulez-vous vraiment supprimer l'activité « {{name}} » ?"
   },
   "asignaciones": {
     "title": "Affectations",
@@ -317,7 +317,7 @@
     },
     "form": {
       "newTitle": "Nouvelle affectation",
-      "editTitle": "Modifier l’affectation",
+      "editTitle": "Modifier l'affectation",
       "personLabel": "Personne",
       "personPlaceholder": "Sélectionnez une personne",
       "activityLabel": "Activité",
@@ -330,11 +330,11 @@
       "statusActive": "Active",
       "statusInactive": "Inactive",
       "frequencyLabel": "Fréquence (min)",
-      "saveButton": "Enregistrer l’affectation",
-      "updateButton": "Mettre à jour l’affectation",
+      "saveButton": "Enregistrer l'affectation",
+      "updateButton": "Mettre à jour l'affectation",
       "cancelEditButton": "Annuler la modification",
-      "buttonCreate": "Créer l’affectation",
-      "buttonUpdate": "Mettre à jour l’affectation",
+      "buttonCreate": "Créer l'affectation",
+      "buttonUpdate": "Mettre à jour l'affectation",
       "buttonCancel": "Annuler"
     },
     "table": {
@@ -362,25 +362,25 @@
     "messages": {
       "loadError": "Erreur lors du chargement des affectations.",
       "catalogError": "Erreur lors du chargement des catalogues (personnel, géofences, activités).",
-      "loadingData": "Chargement des données d’affectations…",
+      "loadingData": "Chargement des données d'affectations…",
       "overlapError": "Cette personne a déjà une affectation qui se chevauche sur cette plage de dates.",
       "selectPersonAndFence": "Vous devez sélectionner une personne et une géofence.",
       "selectDates": "Vous devez saisir la date/heure de début et de fin.",
       "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
       "frequencyInvalidRange": "La fréquence doit être comprise entre 5 minutes et 12 heures.",
-      "saveGenericError": "Une erreur s’est produite lors de l’enregistrement de l’affectation.",
-      "createGenericError": "Impossible de créer l’affectation.",
+      "saveGenericError": "Une erreur s'est produite lors de l'enregistrement de l'affectation.",
+      "createGenericError": "Impossible de créer l'affectation.",
       "createSuccess": "Affectation créée correctement.",
-      "updateGenericError": "Impossible de mettre à jour l’affectation.",
+      "updateGenericError": "Impossible de mettre à jour l'affectation.",
       "updateSuccess": "Affectation mise à jour correctement.",
-      "deleteError": "Impossible de supprimer l’affectation.",
+      "deleteError": "Impossible de supprimer l'affectation.",
       "deleteSuccess": "Affectation supprimée correctement.",
       "confirmDelete": "Voulez-vous vraiment supprimer cette affectation ?"
     },
     "error": {
       "load": "Erreur lors du chargement des affectations.",
-      "save": "Impossible d’enregistrer l’affectation.",
-      "delete": "Impossible de supprimer l’affectation.",
+      "save": "Impossible d'enregistrer l'affectation.",
+      "delete": "Impossible de supprimer l'affectation.",
       "missingPerson": "Vous devez sélectionner une personne.",
       "missingGeofence": "Vous devez sélectionner une géofence.",
       "missingActivity": "Vous devez sélectionner une activité.",
@@ -391,7 +391,7 @@
   "reportes": {
     "title": "Rapports de coûts",
     "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
-    "noAccessBody": "Vous n’avez pas l’autorisation d’accéder aux rapports de coûts. Ce module est réservé aux propriétaires et administrateurs.",
+    "noAccessBody": "Vous n'avez pas l'autorisation d'accéder aux rapports de coûts. Ce module est réservé aux propriétaires et administrateurs.",
     "loadingReport": "Chargement du rapport…",
     "filtersTitle": "Filtres",
     "filtersFrom": "Du",
@@ -435,7 +435,7 @@
     "errorCsv": "Impossible de générer le fichier CSV.",
     "errorLoadFilters": "Erreur lors du chargement des filtres (personnes, activités, géofences).",
     "errorRangeInvalid": "La date « Du » ne peut pas être postérieure à la date « Au ».",
-    "errorViewMissing": "La vue v_costos_detalle n’est pas encore créée dans Supabase.",
+    "errorViewMissing": "La vue v_costos_detalle n'est pas encore créée dans Supabase.",
     "errorLoadReport": "Erreur lors du chargement du rapport de coûts.",
     "errorLabel": "Erreur :",
     "exportNoData": "Aucune donnée à exporter.",
@@ -531,7 +531,7 @@
   },
   "tracker": {
     "title": "Tracker GPS",
-    "subtitle": "Visualisez en temps réel la position des trackers à l’intérieur de vos géofences.",
+    "subtitle": "Visualisez en temps réel la position des trackers à l'intérieur de vos géofences.",
     "status": {
       "online": "Tracker en ligne",
       "offline": "Sans données récentes"
@@ -540,10 +540,10 @@
       "centerOnUser": "Centrer sur ma position",
       "refresh": "Rafraîchir les positions",
       "showAll": "Afficher tous",
-      "showInside": "Uniquement à l’intérieur des géofences"
+      "showInside": "Uniquement à l'intérieur des géofences"
     },
     "legend": {
-      "insideFence": "À l’intérieur de la géofence",
+      "insideFence": "À l'intérieur de la géofence",
       "outsideFence": "Hors géofence",
       "geofence": "Géofence"
     },
@@ -560,7 +560,7 @@
   },
   "trackerDashboard": {
     "title": "Tableau de tracking en temps réel",
-    "subtitle": "Les points se mettent à jour automatiquement. La fréquence d’envoi est définie par l’administrateur.",
+    "subtitle": "Les points se mettent à jour automatiquement. La fréquence d'envoi est définie par l'administrateur.",
     "filters": {
       "trackerLabel": "Tracker",
       "timeWindowLabel": "Fenêtre",
@@ -588,13 +588,13 @@
       "countHere": "Enregistrements à cette position",
       "activity": "Activité",
       "geofence": "Géofence",
-      "inside": "À l’intérieur de la géofence",
+      "inside": "À l'intérieur de la géofence",
       "yes": "Oui",
       "no": "Non"
     },
     "messages": {
       "noOrg": "Vous devez sélectionner une organisation.",
-      "autoRefresh": "Les points se mettent à jour automatiquement. Vous n’avez pas besoin de recharger la page.",
+      "autoRefresh": "Les points se mettent à jour automatiquement. Vous n'avez pas besoin de recharger la page.",
       "loading": "Chargement des données de tracking…",
       "noData": "Aucune position trouvée pour les filtres sélectionnés.",
       "error": "Erreur lors du chargement des données de tracking.",
@@ -604,7 +604,7 @@
   "inviteTracker": {
     "orgFallback": "votre organisation",
     "title": "Inviter un tracker",
-    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un e-mail pour l’inviter comme tracker dans {{orgName}}.",
+    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un e-mail pour l'inviter comme tracker dans {{orgName}}.",
     "form": {
       "selectLabel": "Sélectionner un personnel actif (optionnel)",
       "selectPlaceholder": "-- Sélectionner du personnel --",
@@ -612,23 +612,23 @@
       "emailLabel": "E-mail du tracker",
       "emailPlaceholder": "tracker@exemple.com",
       "emailHelp": "Une invitation sera envoyée à cet e-mail.",
-      "buttonSending": "Envoi de l’invitation…",
-      "buttonSend": "Envoyer l’invitation"
+      "buttonSending": "Envoi de l'invitation…",
+      "buttonSend": "Envoyer l'invitation"
     },
     "errors": {
       "emailRequired": "Vous devez saisir une adresse e-mail.",
       "emailInvalid": "Saisissez une adresse e-mail valide."
     },
     "messages": {
-      "serverProblem": "Un problème est survenu lors du contact avec le serveur d’invitations.",
-      "notOk": "L’invitation n’a pas pu être complétée. Vérifiez l’e-mail et réessayez.",
+      "serverProblem": "Un problème est survenu lors du contact avec le serveur d'invitations.",
+      "notOk": "L'invitation n'a pas pu être complétée. Vérifiez l'e-mail et réessayez.",
       "invited": "Une invitation a été envoyée à {{email}} pour rejoindre en tant que tracker dans {{orgName}}.",
-      "magiclinkSent": "Un lien magique d’accès a été envoyé à {{email}}.",
-      "linkOnlyWithLink": "L’invitation a été créée. Utilisez ce lien pour partager l’accès : {{link}}.",
-      "linkOnlyNoLink": "L’invitation a été créée, mais aucun lien public n’a été renvoyé.",
-      "createdWithoutEmail": "L’accès du tracker a été créé sans envoi d’e-mail.",
-      "genericProcessed": "L’invitation pour {{email}} a été traitée avec succès.",
-      "unexpectedError": "Erreur inattendue lors du traitement de l’invitation."
+      "magiclinkSent": "Un lien magique d'accès a été envoyé à {{email}}.",
+      "linkOnlyWithLink": "L'invitation a été créée. Utilisez ce lien pour partager l'accès : {{link}}.",
+      "linkOnlyNoLink": "L'invitation a été créée, mais aucun lien public n'a été renvoyé.",
+      "createdWithoutEmail": "L'accès du tracker a été créé sans envoi d'e-mail.",
+      "genericProcessed": "L'invitation pour {{email}} a été traitée avec succès.",
+      "unexpectedError": "Erreur inattendue lors du traitement de l'invitation."
     }
   },
   "admins": {
@@ -646,36 +646,36 @@
       "inviteTitle": "Inviter un nouvel administrateur",
       "emailLabel": "E-mail",
       "roleLabel": "Rôle",
-      "buttonInvite": "Envoyer l’invitation"
+      "buttonInvite": "Envoyer l'invitation"
     },
     "actions": {
       "makeOwner": "Définir comme propriétaire",
       "makeAdmin": "Définir comme admin",
-      "remove": "Retirer l’accès"
+      "remove": "Retirer l'accès"
     },
     "banner": {
       "invitationSent": "Invitation envoyée avec succès.",
       "roleUpdated": "Rôle mis à jour.",
-      "removed": "Administrateur retiré de l’organisation."
+      "removed": "Administrateur retiré de l'organisation."
     },
     "error": {
       "load": "Erreur lors du chargement de la liste des administrateurs.",
-      "invite": "Impossible d’envoyer l’invitation.",
+      "invite": "Impossible d'envoyer l'invitation.",
       "updateRole": "Impossible de mettre à jour le rôle.",
-      "remove": "Impossible de retirer l’administrateur."
+      "remove": "Impossible de retirer l'administrateur."
     }
   },
   "help": {
     "common": {
-      "breadcrumb": "Centre d’aide",
+      "breadcrumb": "Centre d'aide",
       "back": "Retour",
-      "goHome": "Aller à l’accueil",
+      "goHome": "Aller à l'accueil",
       "viewFaq": "Voir la FAQ"
     },
     "changelog": {
       "breadcrumb": "Nouveautés",
       "title": "Nouveautés / Journal des changements",
-      "subtitle": "Consultez l’historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
+      "subtitle": "Consultez l'historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
       "latest": "Dernières mises à jour",
       "dateLabel": "Date",
       "badges": {
@@ -686,16 +686,16 @@
       },
       "items": {
         "0": {
-          "title": "Centre d’aide : nouvelles pages",
+          "title": "Centre d'aide : nouvelles pages",
           "details": {
             "0": "Ajout des pages Instructions, FAQ, Support et Nouveautés (Changelog).",
-            "1": "Amélioration de la navigation SPA et cohérence de l’interface."
+            "1": "Amélioration de la navigation SPA et cohérence de l'interface."
           }
         },
         "1": {
           "title": "Améliorations des traductions",
           "details": {
-            "0": "Correction des libellés manquants dans le tableau de bord des coûts et les cartes d’accueil."
+            "0": "Correction des libellés manquants dans le tableau de bord des coûts et les cartes d'accueil."
           }
         }
       }
@@ -707,8 +707,8 @@
     "loading": "Préparation du lien de récupération…",
     "invalidOrExpired": "Le lien de récupération est invalide ou expiré. Veuillez en demander un nouveau.",
     "noSession": "Aucune session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
-    "noticeType": "Session détectée. Si ce lien n’était pas pour une récupération, connectez-vous normalement.",
-    "unexpected": "Une erreur s’est produite lors de la préparation de la réinitialisation.",
+    "noticeType": "Session détectée. Si ce lien n'était pas pour une récupération, connectez-vous normalement.",
+    "unexpected": "Une erreur s'est produite lors de la préparation de la réinitialisation.",
     "newPassword": "Nouveau mot de passe",
     "newPasswordPlaceholder": "Au moins 8 caractères",
     "confirmPassword": "Confirmer le mot de passe",

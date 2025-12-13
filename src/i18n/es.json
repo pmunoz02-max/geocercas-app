@@ -77,7 +77,7 @@
     "loginButton": "Entrar",
     "accessTitle": "Acceso con cuenta autorizada",
     "accessBody": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
-    "accessHint": "Consejo: usa “Link mágico” si tu administrador te invitó con correo.",
+    "accessHint": "Consejo: usa \"Link mágico\" si tu administrador te invitó con correo.",
     "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
     "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."
   },
@@ -722,6 +722,6 @@
     "success": "Contraseña actualizada correctamente. Ahora puedes iniciar sesión.",
     "backToLogin": "Volver a iniciar sesión",
     "backHome": "Ir a la landing",
-    "tip": "Tip: vuelve a /login, escribe tu correo y usa “¿Olvidaste tu contraseña?” para generar un nuevo enlace."
+    "tip": "Tip: vuelve a /login, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace."
   }
 }
