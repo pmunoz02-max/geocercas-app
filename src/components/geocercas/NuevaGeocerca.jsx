@@ -1,17 +1,15 @@
 // src/components/geocercas/NuevaGeocerca.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  GeoJSON,
-  useMapEvents,
-} from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, useMapEvents } from "react-leaflet";
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-import { GeomanControls } from "react-leaflet-geoman-v2";
+// ✅ IMPORTANTE: cargar el JS de Geoman (no solo CSS)
+import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+
+import { GeomanControls } from "react-leaflet-geoman-v2";
 
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -229,7 +227,6 @@ function approximateArea(geometry) {
 
 function primaryFeatureFromGeoJSON(geojson) {
   if (!geojson) return null;
-
   if (geojson.type === "Feature") return geojson;
 
   if (geojson.type === "FeatureCollection" && Array.isArray(geojson.features) && geojson.features.length) {
@@ -247,15 +244,11 @@ function primaryFeatureFromGeoJSON(geojson) {
 }
 
 function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
-  if (!featureGroupRef.current || !feature?.geometry) return 0;
+  const fg = featureGroupRef.current;
+  if (!fg || !feature?.geometry) return 0;
 
   const layer = L.geoJSON(feature, {
-    style: {
-      color: "#0ea5e9",
-      weight: 2,
-      fillColor: "#38bdf8",
-      fillOpacity: 0.15,
-    },
+    style: { color: "#0ea5e9", weight: 2, fillColor: "#38bdf8", fillOpacity: 0.15 },
   });
 
   layer.eachLayer((l) => {
@@ -266,18 +259,17 @@ function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
     });
   });
 
-  featureGroupRef.current.addLayer(layer);
+  fg.addLayer(layer);
   return 1;
 }
 
 /* ----------------- Auxiliares ----------------- */
 
 function fitFeatureGroup(map, featureGroupRef, { padding = [20, 20] } = {}) {
-  if (!map || !featureGroupRef.current) return;
-  const bounds = featureGroupRef.current.getBounds();
-  if (bounds && bounds.isValid()) {
-    map.fitBounds(bounds, { padding });
-  }
+  const fg = featureGroupRef.current;
+  if (!map || !fg) return;
+  const bounds = fg.getBounds();
+  if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding });
 }
 
 function CursorPos({ setCursorLatLng }) {
@@ -298,14 +290,12 @@ function parseLatLngPairs(text) {
     .filter(Boolean);
 
   const pairs = [];
-
   for (const line of lines) {
     const parts = line.split(/[,;\s]+/).filter(Boolean);
     if (parts.length < 2) continue;
 
     const lat = parseFloat(String(parts[0]).replace(",", "."));
     const lng = parseFloat(String(parts[1]).replace(",", "."));
-
     if (!Number.isNaN(lat) && !Number.isNaN(lng)) pairs.push([lat, lng]);
   }
 
@@ -344,8 +334,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const [selectedNames, setSelectedNames] = useState(new Set());
 
   const mapRef = useRef(null);
-
-  // ✅ IMPORTANTE: este ref guarda un Leaflet FeatureGroup REAL (no wrapper React)
   const featureGroupRef = useRef(null);
 
   const selectedLayerRef = useRef(null);
@@ -410,21 +398,27 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   }, [refreshGeofenceList]);
 
   /* ---- Cuando se crea el mapa ---- */
-const onMapReady = useCallback((map) => {
-  mapRef.current = map;
+  const onMapReady = useCallback((map) => {
+    mapRef.current = map;
 
-  if (!featureGroupRef.current) {
-    const fg = L.featureGroup().addTo(map);
-    featureGroupRef.current = fg;
-
-    // 🔑 CLAVE: decirle a Geoman que ESTE es su layerGroup
-    if (map.pm) {
-      map.pm.setGlobalOptions({
-        layerGroup: fg,
-      });
+    // 1) Crear FeatureGroup real (Leaflet puro) UNA SOLA VEZ
+    if (!featureGroupRef.current) {
+      const fg = L.featureGroup().addTo(map);
+      featureGroupRef.current = fg;
     }
-  }
-}, []);
+
+    // 2) Enlazar Geoman al layerGroup global para que TODO vaya al mismo canvas
+    // (si pm está listo)
+    try {
+      if (map?.pm && featureGroupRef.current) {
+        map.pm.setGlobalOptions({
+          layerGroup: featureGroupRef.current,
+        });
+      }
+    } catch (e) {
+      console.warn("Geoman pm no disponible aún:", e);
+    }
+  }, []);
 
   /* ---- Operaciones sobre FeatureGroup ---- */
 
@@ -436,9 +430,10 @@ const onMapReady = useCallback((map) => {
 
   const drawGeofences = useCallback(
     ({ names, zoom = true } = {}) => {
-      if (!featureGroupRef.current) return 0;
+      const fg = featureGroupRef.current;
+      if (!fg) return 0;
 
-      featureGroupRef.current.clearLayers();
+      fg.clearLayers();
       selectedLayerRef.current = null;
       lastCreatedLayerRef.current = null;
 
@@ -460,9 +455,7 @@ const onMapReady = useCallback((map) => {
             try {
               const geojson = await loadGeofenceGeometryByName({ name, supabaseClient });
               const feature = primaryFeatureFromGeoJSON(geojson);
-              if (feature) {
-                shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name });
-              }
+              if (feature) shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name });
             } catch (e) {
               console.warn("No se pudo cargar geocerca", name, e);
             }
@@ -474,9 +467,7 @@ const onMapReady = useCallback((map) => {
             try {
               const geojson = await loadGeofenceGeometryByName({ name, supabaseClient: null });
               const feature = primaryFeatureFromGeoJSON(geojson);
-              if (feature) {
-                shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name });
-              }
+              if (feature) shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name });
             } catch (e) {
               console.warn("No se pudo cargar geocerca local", name, e);
             }
@@ -496,10 +487,12 @@ const onMapReady = useCallback((map) => {
 
   const saveGeofenceCollection = useCallback(
     async ({ name }) => {
+      const fg = featureGroupRef.current;
+
       let layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current;
 
       const layers = [];
-      featureGroupRef.current?.eachLayer((l) => layers.push(l));
+      fg?.eachLayer((l) => layers.push(l));
 
       if (!layerToSave) {
         if (layers.length === 1) layerToSave = layers[0];
@@ -538,11 +531,7 @@ const onMapReady = useCallback((map) => {
           .select("id")
           .single();
 
-        if (error) {
-          console.error("Error guardando geocerca en Supabase:", error);
-          throw error;
-        }
-
+        if (error) throw error;
         return { ok: true, via: "supabase", id: data?.id };
       }
 
@@ -551,7 +540,10 @@ const onMapReady = useCallback((map) => {
         if (localStorage.getItem(key)) throw new Error(t("geocercas.errorDuplicateName"));
 
         const fc = { type: "FeatureCollection", features: [feature] };
-        localStorage.setItem(key, JSON.stringify({ nombre: name, geojson: fc, props: { source: "UI", version: 3 } }));
+        localStorage.setItem(
+          key,
+          JSON.stringify({ nombre: name, geojson: fc, props: { source: "UI", version: 3 } })
+        );
         return { ok: true, via: "localStorage", key };
       }
 
@@ -575,7 +567,6 @@ const onMapReady = useCallback((map) => {
         await refreshGeofenceList();
       }
     } catch (e) {
-      console.error("Error en handleSave geocerca:", e);
       const rawMsg = e?.message || String(e);
       const translated = t("geocercas.errorSave", { error: rawMsg });
       alert(translated === "geocercas.errorSave" ? rawMsg : translated);
@@ -595,23 +586,26 @@ const onMapReady = useCallback((map) => {
     setCoordText(e.target.value);
   }, []);
 
-  // ✅ Dibujo por coordenadas (agrega a FeatureGroup REAL)
+  // ✅ Dibujo por coordenadas (con fallback: también lo añade al mapa)
   const handleDrawFromCoords = useCallback(() => {
     const text = coordText.trim();
     if (!text) return;
 
     const map = mapRef.current;
     const fg = featureGroupRef.current;
-    if (!map || !fg) return;
+
+    if (!map) return;
 
     const pairs = parseLatLngPairs(text);
-
     if (pairs.length < 1) {
       alert(t("geocercas.errorCoordsInvalid"));
       return;
     }
 
-    clearCanvas();
+    // limpia canvas
+    if (fg) fg.clearLayers();
+    selectedLayerRef.current = null;
+    lastCreatedLayerRef.current = null;
 
     let polygonCoords = null;
 
@@ -636,7 +630,14 @@ const onMapReady = useCallback((map) => {
       weight: 2,
     });
 
-    fg.addLayer(polygon);
+    // 1) intenta agregar al FG
+    if (fg) fg.addLayer(polygon);
+
+    // 2) fallback: agregar al mapa por si FG/pm no enlazó
+    polygon.addTo(map);
+
+    polygon.bringToFront();
+
     selectedLayerRef.current = polygon;
     lastCreatedLayerRef.current = polygon;
 
@@ -647,7 +648,7 @@ const onMapReady = useCallback((map) => {
 
     setCoordModalOpen(false);
     setCoordText("");
-  }, [coordText, clearCanvas, t]);
+  }, [coordText, t]);
 
   const handleSelectGeofence = useCallback(
     (nombre) => {
@@ -843,10 +844,14 @@ const onMapReady = useCallback((map) => {
               }}
               onCreate={(e) => {
                 const layer = e.layer;
-                // ✅ Asegura que TODO lo que dibuja Geoman viva en el FeatureGroup real
-                if (featureGroupRef.current && layer) {
-                  featureGroupRef.current.addLayer(layer);
-                }
+                const fg = featureGroupRef.current;
+                const map = mapRef.current;
+
+                // Si existe fg, forzamos a que el layer quede ahí
+                if (fg && layer) fg.addLayer(layer);
+                // y lo dejamos también en el mapa por seguridad (si ya estaba, Leaflet lo maneja)
+                if (map && layer) layer.addTo(map);
+
                 selectedLayerRef.current = layer;
                 lastCreatedLayerRef.current = layer;
               }}
@@ -865,7 +870,7 @@ const onMapReady = useCallback((map) => {
             />
           </MapContainer>
 
-          {/* Cuadro de coordenadas SIEMPRE visible, encima del mapa */}
+          {/* Cuadro de coordenadas SIEMPRE visible */}
           <div className="absolute right-3 top-3 z-[9999] px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
             {cursorLatLng ? (
               <>
@@ -889,9 +894,7 @@ const onMapReady = useCallback((map) => {
               <br />
               <span className="font-mono text-[11px]">-0.180653, -78.467838</span>
               <br />
-              <span className="text-[11px] text-slate-500">
-                (Puedes pegar varios puntos: 1 por línea. Ej: lat,lng)
-              </span>
+              <span className="text-[11px] text-slate-500">(Puedes pegar varios puntos: 1 por línea. Ej: lat,lng)</span>
             </p>
 
             <textarea
@@ -922,5 +925,7 @@ const onMapReady = useCallback((map) => {
     </div>
   );
 }
+
+export default NuevaGeocerca;
 
 export default NuevaGeocerca;
