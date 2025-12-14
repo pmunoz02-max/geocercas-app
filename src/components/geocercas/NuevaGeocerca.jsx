@@ -1,18 +1,6 @@
 // src/components/geocercas/NuevaGeocerca.jsx
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  MapContainer,
-  TileLayer,
-  GeoJSON,
-  FeatureGroup,
-  useMapEvents,
-} from "react-leaflet";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, TileLayer, GeoJSON, FeatureGroup, useMapEvents } from "react-leaflet";
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -20,7 +8,7 @@ import L from "leaflet";
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-// ✅ RUTAS CORRECTAS (esto arregla tu build)
+// ✅ RUTAS CORRECTAS
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
@@ -51,9 +39,7 @@ function parseCSV(text) {
     const lat = parseFloat(row[latKey]);
     const lon = parseFloat(row[lonKey]);
 
-    if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-      rows.push({ ...row, lat, lon });
-    }
+    if (!Number.isNaN(lat) && !Number.isNaN(lon)) rows.push({ ...row, lat, lon });
   }
   return rows;
 }
@@ -115,7 +101,6 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
 async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
 
-  // Supabase
   if (supabaseClient && orgId) {
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
@@ -128,7 +113,6 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
     }
   }
 
-  // LocalStorage
   if (typeof window !== "undefined") {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -146,7 +130,6 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
     }
   }
 
-  // Unique by nombre
   const seen = new Set();
   const unique = [];
   for (const g of list) {
@@ -187,7 +170,6 @@ async function deleteGeofences({ items, supabaseClient = null }) {
 }
 
 async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
-  // Supabase
   if (supabaseClient) {
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
@@ -205,7 +187,6 @@ async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
       return geo;
     }
 
-    // Fallback a punto/radio si no hay polígono
     if (data.lat != null && data.lng != null) {
       const lat = parseFloat(data.lat);
       const lng = parseFloat(data.lng);
@@ -240,7 +221,6 @@ async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
     throw new Error("Geocerca sin geometría utilizable");
   }
 
-  // LocalStorage
   if (typeof window !== "undefined") {
     const key = `geocerca_${name}`;
     const raw = localStorage.getItem(key);
@@ -278,7 +258,6 @@ function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
   const props = feature.properties || {};
   if (!geom) return 0;
 
-  // Point
   if (geom.type === "Point" && Array.isArray(geom.coordinates)) {
     const [lng, lat] = geom.coordinates;
     const radius = props.radius_m || props.radius || null;
@@ -315,7 +294,6 @@ function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
     return 0;
   }
 
-  // Polígonos / líneas / multi*
   const layer = L.geoJSON(feature, {
     style: () => ({
       color: "#22c55e",
@@ -410,7 +388,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const mapRef = useRef(null);
 
-  // ✅ Leaflet FeatureGroup REAL
+  // ✅ Leaflet FeatureGroup REAL (normalizado)
   const featureGroupRef = useRef(null);
 
   const selectedLayerRef = useRef(null);
@@ -422,17 +400,21 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
+  // ✅ Normaliza ref de FeatureGroup para evitar “wrapper vs Leaflet instance”
   const setFeatureGroup = useCallback((fg) => {
     if (!fg) return;
 
+    // React-Leaflet v4: Leaflet instance directo
     if (typeof fg.getBounds === "function" && typeof fg.addLayer === "function") {
       featureGroupRef.current = fg;
       return;
     }
+    // React-Leaflet v3: wrapper con leafletElement
     if (fg.leafletElement && typeof fg.leafletElement.addLayer === "function") {
       featureGroupRef.current = fg.leafletElement;
       return;
     }
+    // fallback raro
     if (fg._layer && typeof fg._layer.addLayer === "function") {
       featureGroupRef.current = fg._layer;
     }
@@ -522,7 +504,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         .filter((g) => g.source === "local" && names.includes(g.nombre))
         .map((g) => g.nombre);
 
-      const doDraw = async () => {
+      (async () => {
         if (supaNames.length && supabaseClient) {
           for (const nm of supaNames) {
             try {
@@ -550,9 +532,8 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         if (zoom && mapRef.current) {
           fitFeatureGroup(mapRef.current, featureGroupRef, { padding: [40, 40] });
         }
-      };
+      })();
 
-      doDraw();
       return shown;
     },
     [geofenceList, supabaseClient]
@@ -643,14 +624,22 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     setCoordText(e.target.value);
   }, []);
 
-  // ✅ Dibujo por coordenadas (se agrega al FG REAL)
+  // ✅ Dibujo por coordenadas (agrega al FeatureGroup REAL)
   const handleDrawFromCoords = useCallback(() => {
     const text = coordText.trim();
     if (!text) return;
 
     const map = mapRef.current;
     const fg = featureGroupRef.current;
-    if (!map || !fg) return;
+
+    if (!map) {
+      alert("Mapa no listo (mapRef).");
+      return;
+    }
+    if (!fg || typeof fg.addLayer !== "function") {
+      alert("Canvas no listo (FeatureGroup).");
+      return;
+    }
 
     const pairs = parseLatLngPairs(text);
     if (pairs.length < 1) {
@@ -676,6 +665,12 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       polygonCoords = makeSmallSquarePolygonFromPoint(lat, lng, 0.00015);
     }
 
+    // Si te pasan coords raras, evita reventar
+    if (!polygonCoords || polygonCoords.length < 4) {
+      alert(t("geocercas.errorCoordsInvalid"));
+      return;
+    }
+
     const polygon = L.polygon(polygonCoords, {
       color: "#22c55e",
       fillColor: "#22c55e",
@@ -684,6 +679,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     });
 
     fg.addLayer(polygon);
+
     selectedLayerRef.current = polygon;
     lastCreatedLayerRef.current = polygon;
 
@@ -856,9 +852,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             <div className="mt-3 text-[11px] text-slate-400">{t("geocercas.loadingDataset")}</div>
           )}
           {datasetError && (
-            <div className="mt-3 text-[11px] text-red-300">
-              {t("geocercas.errorDataset", { error: datasetError })}
-            </div>
+            <div className="mt-3 text-[11px] text-red-300">{t("geocercas.errorDataset", { error: datasetError })}</div>
           )}
         </div>
 
@@ -876,17 +870,14 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
+            {/* ✅ FIX: props correctas */}
             {dataset && <GeoJSON data={dataset} {...pointStyle} key="points-layer" />}
 
             {/* Lat/Lng vivos */}
             <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
             {/* Barra Geoman + canvas */}
-            <FeatureGroup
-  whenCreated={(fg) => {
-    featureGroupRef.current = fg;
-  }}
->
+            <FeatureGroup whenCreated={setFeatureGroup}>
               <GeomanControls
                 options={{
                   position: "topleft",
@@ -950,16 +941,14 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               <br />
               <span className="font-mono text-[11px]">-0.180653, -78.467838</span>
               <br />
-              <span className="text-[11px] text-slate-500">
-                (Puedes pegar varios puntos: 1 por línea. Ej: lat,lng)
-              </span>
+              <span className="text-[11px] text-slate-500">(Puedes pegar varios puntos: 1 por línea. Ej: lat,lng)</span>
             </p>
 
             <textarea
               rows={5}
               className="w-full rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               value={coordText}
-              onChange={(e) => setCoordText(e.target.value)}
+              onChange={handleCoordTextChange}
               placeholder={`-0.074624, -78.474352\n-0.070075, -78.464546\n-0.065398, -78.466928`}
             />
 
