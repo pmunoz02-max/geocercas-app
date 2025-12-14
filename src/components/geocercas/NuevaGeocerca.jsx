@@ -882,7 +882,11 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
             {/* Barra Geoman + canvas */}
-            <FeatureGroup ref={setFeatureGroup}>
+            <FeatureGroup
+  whenCreated={(fg) => {
+    featureGroupRef.current = fg;
+  }}
+>
               <GeomanControls
                 options={{
                   position: "topleft",
