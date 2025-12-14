@@ -410,14 +410,21 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   }, [refreshGeofenceList]);
 
   /* ---- Cuando se crea el mapa ---- */
-  const onMapReady = useCallback((map) => {
-    mapRef.current = map;
+const onMapReady = useCallback((map) => {
+  mapRef.current = map;
 
-    // ✅ Creamos un FeatureGroup REAL y lo agregamos al mapa
-    if (!featureGroupRef.current) {
-      featureGroupRef.current = L.featureGroup().addTo(map);
+  if (!featureGroupRef.current) {
+    const fg = L.featureGroup().addTo(map);
+    featureGroupRef.current = fg;
+
+    // 🔑 CLAVE: decirle a Geoman que ESTE es su layerGroup
+    if (map.pm) {
+      map.pm.setGlobalOptions({
+        layerGroup: fg,
+      });
     }
-  }, []);
+  }
+}, []);
 
   /* ---- Operaciones sobre FeatureGroup ---- */
 
