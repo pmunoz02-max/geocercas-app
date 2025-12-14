@@ -4,7 +4,6 @@ import {
   MapContainer,
   TileLayer,
   GeoJSON,
-  FeatureGroup,
   useMapEvents,
 } from "react-leaflet";
 
@@ -86,6 +85,7 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
       .select("*")
       .limit(10000);
     if (error) throw error;
+
     const rows = (data || [])
       .map((r, i) => ({
         lat: parseFloat(r.lat),
@@ -94,6 +94,7 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
         _idx: i,
       }))
       .filter((r) => !Number.isNaN(r.lat) && !Number.isNaN(r.lon));
+
     return pointsToFeatureCollection(rows);
   }
 
@@ -105,7 +106,6 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
 async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
 
-  // 🔒 Si no hay organización, no cargamos nada de Supabase
   if (supabaseClient && orgId) {
     const { data, error } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
@@ -229,6 +229,7 @@ function approximateArea(geometry) {
 
 function primaryFeatureFromGeoJSON(geojson) {
   if (!geojson) return null;
+
   if (geojson.type === "Feature") return geojson;
 
   if (geojson.type === "FeatureCollection" && Array.isArray(geojson.features) && geojson.features.length) {
@@ -249,7 +250,12 @@ function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
   if (!featureGroupRef.current || !feature?.geometry) return 0;
 
   const layer = L.geoJSON(feature, {
-    style: { color: "#0ea5e9", weight: 2, fillColor: "#38bdf8", fillOpacity: 0.15 },
+    style: {
+      color: "#0ea5e9",
+      weight: 2,
+      fillColor: "#38bdf8",
+      fillOpacity: 0.15,
+    },
   });
 
   layer.eachLayer((l) => {
@@ -268,9 +274,10 @@ function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
 
 function fitFeatureGroup(map, featureGroupRef, { padding = [20, 20] } = {}) {
   if (!map || !featureGroupRef.current) return;
-  const fg = featureGroupRef.current;
-  const bounds = fg.getBounds();
-  if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding });
+  const bounds = featureGroupRef.current.getBounds();
+  if (bounds && bounds.isValid()) {
+    map.fitBounds(bounds, { padding });
+  }
 }
 
 function CursorPos({ setCursorLatLng }) {
@@ -282,7 +289,7 @@ function CursorPos({ setCursorLatLng }) {
   return null;
 }
 
-/* ----------------- Parse coordenadas (multi-line) ----------------- */
+/* ----------------- Parse coordenadas ----------------- */
 
 function parseLatLngPairs(text) {
   const lines = String(text || "")
@@ -293,19 +300,15 @@ function parseLatLngPairs(text) {
   const pairs = [];
 
   for (const line of lines) {
-    // Acepta: "lat,lng" o "lat lng" o "lat;lng"
     const parts = line.split(/[,;\s]+/).filter(Boolean);
     if (parts.length < 2) continue;
 
     const lat = parseFloat(String(parts[0]).replace(",", "."));
     const lng = parseFloat(String(parts[1]).replace(",", "."));
 
-    if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-      pairs.push([lat, lng]);
-    }
+    if (!Number.isNaN(lat) && !Number.isNaN(lng)) pairs.push([lat, lng]);
   }
 
-  // Si no hay líneas (usuario pegó todo en una línea), intenta fallback simple
   if (pairs.length === 0) {
     const parts = String(text || "").trim().split(/[,;\s]+/).filter(Boolean);
     if (parts.length >= 2) {
@@ -319,7 +322,6 @@ function parseLatLngPairs(text) {
 }
 
 function makeSmallSquarePolygonFromPoint(lat, lng, delta = 0.00015) {
-  // ~15–25m aprox según latitud
   return [
     [lat + delta, lng - delta],
     [lat + delta, lng + delta],
@@ -342,9 +344,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const [selectedNames, setSelectedNames] = useState(new Set());
 
   const mapRef = useRef(null);
+
+  // ✅ IMPORTANTE: este ref guarda un Leaflet FeatureGroup REAL (no wrapper React)
   const featureGroupRef = useRef(null);
+
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
+
   const [cursorLatLng, setCursorLatLng] = useState(null);
 
   const [geofenceName, setGeofenceName] = useState("");
@@ -354,6 +360,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   /* ---- Cargar dataset externo opcional ---- */
   useEffect(() => {
     let isMounted = true;
+
     if (!DATA_SOURCE) {
       setLoadingDataset(false);
       setDataset(null);
@@ -405,6 +412,11 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   /* ---- Cuando se crea el mapa ---- */
   const onMapReady = useCallback((map) => {
     mapRef.current = map;
+
+    // ✅ Creamos un FeatureGroup REAL y lo agregamos al mapa
+    if (!featureGroupRef.current) {
+      featureGroupRef.current = L.featureGroup().addTo(map);
+    }
   }, []);
 
   /* ---- Operaciones sobre FeatureGroup ---- */
@@ -422,6 +434,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       featureGroupRef.current.clearLayers();
       selectedLayerRef.current = null;
       lastCreatedLayerRef.current = null;
+
       if (!names || !names.length) return 0;
 
       let shown = 0;
@@ -477,6 +490,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const saveGeofenceCollection = useCallback(
     async ({ name }) => {
       let layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current;
+
       const layers = [];
       featureGroupRef.current?.eachLayer((l) => layers.push(l));
 
@@ -527,12 +541,10 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
       if (typeof window !== "undefined") {
         const key = `geocerca_${name}`;
-        const existing = localStorage.getItem(key);
-        if (existing) throw new Error(t("geocercas.errorDuplicateName"));
+        if (localStorage.getItem(key)) throw new Error(t("geocercas.errorDuplicateName"));
 
         const fc = { type: "FeatureCollection", features: [feature] };
-        const payload = { nombre: name, geojson: fc, props: { source: "UI", version: 3 } };
-        localStorage.setItem(key, JSON.stringify(payload));
+        localStorage.setItem(key, JSON.stringify({ nombre: name, geojson: fc, props: { source: "UI", version: 3 } }));
         return { ok: true, via: "localStorage", key };
       }
 
@@ -576,14 +588,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     setCoordText(e.target.value);
   }, []);
 
-  // ✅ CORREGIDO: crea POLÍGONO (real) desde 1 punto o lista de puntos
+  // ✅ Dibujo por coordenadas (agrega a FeatureGroup REAL)
   const handleDrawFromCoords = useCallback(() => {
     const text = coordText.trim();
     if (!text) return;
 
     const map = mapRef.current;
     const fg = featureGroupRef.current;
-
     if (!map || !fg) return;
 
     const pairs = parseLatLngPairs(text);
@@ -593,30 +604,22 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       return;
     }
 
-    // Limpiamos el canvas actual
     clearCanvas();
 
     let polygonCoords = null;
 
     if (pairs.length === 1) {
-      // 1 punto -> cuadrado pequeño como geocerca inicial editable
       const [lat, lng] = pairs[0];
       polygonCoords = makeSmallSquarePolygonFromPoint(lat, lng, 0.00015);
-      map.setView([lat, lng], 18);
     } else if (pairs.length >= 3) {
-      // 3+ puntos -> polígono
       polygonCoords = pairs.map(([lat, lng]) => [lat, lng]);
-
-      // Cierra el polígono si hace falta (Leaflet no siempre lo requiere, pero ayuda al GeoJSON)
       const first = polygonCoords[0];
       const last = polygonCoords[polygonCoords.length - 1];
       const same = first && last && first[0] === last[0] && first[1] === last[1];
       if (!same) polygonCoords.push([first[0], first[1]]);
     } else {
-      // 2 puntos no define polígono => forzamos cuadrado con el primer punto
       const [lat, lng] = pairs[0];
       polygonCoords = makeSmallSquarePolygonFromPoint(lat, lng, 0.00015);
-      map.setView([lat, lng], 18);
     }
 
     const polygon = L.polygon(polygonCoords, {
@@ -630,7 +633,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     selectedLayerRef.current = polygon;
     lastCreatedLayerRef.current = polygon;
 
-    // Ajusta vista si es polígono grande
     try {
       const bounds = polygon.getBounds();
       if (bounds?.isValid?.()) map.fitBounds(bounds, { padding: [40, 40] });
@@ -655,13 +657,11 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
       alert(t("geocercas.errorSelectAtLeastOne"));
       return;
     }
-    const names = Array.from(selectedNames);
-    drawGeofences({ names, zoom: true });
+    drawGeofences({ names: Array.from(selectedNames), zoom: true });
   }, [selectedNames, drawGeofences, t]);
 
   const handleShowAll = useCallback(() => {
-    const names = geofenceList.map((g) => g.nombre);
-    drawGeofences({ names, zoom: true });
+    drawGeofences({ names: geofenceList.map((g) => g.nombre), zoom: true });
   }, [geofenceList, drawGeofences]);
 
   const handleDeleteSelected = useCallback(async () => {
@@ -686,7 +686,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const pointStyle = useMemo(
     () => ({
-      pointToLayer: (feature, latlng) =>
+      pointToLayer: (_feature, latlng) =>
         L.circleMarker(latlng, {
           radius: 4,
           fillColor: "#22c55e",
@@ -761,7 +761,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
                   />
                   <span className="text-xs text-slate-100">{g.nombre}</span>
                 </div>
-
                 <span className="text-[10px] uppercase tracking-wide text-slate-500">
                   {g.source === "supabase" ? t("geocercas.sourceSupabase") : t("geocercas.sourceLocal")}
                 </span>
@@ -776,21 +775,18 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             >
               {t("geocercas.buttonShowSelected")}
             </button>
-
             <button
               onClick={handleShowAll}
               className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-800 text-slate-100 hover:bg-slate-700"
             >
               {t("geocercas.buttonShowAll")}
             </button>
-
             <button
               onClick={handleDeleteSelected}
               className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-red-600 text-white hover:bg-red-500"
             >
               {t("geocercas.buttonDeleteSelected")}
             </button>
-
             <button
               onClick={clearCanvas}
               className="w-full px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
@@ -819,48 +815,47 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             {/* Lat/Lng vivos */}
             <CursorPos setCursorLatLng={setCursorLatLng} />
 
-            <FeatureGroup
-              ref={(fg) => {
-                featureGroupRef.current = fg;
+            {/* ✅ Geoman se mantiene */}
+            <GeomanControls
+              options={{
+                position: "topleft",
+                drawMarker: false,
+                drawCircleMarker: false,
+                drawPolyline: false,
+                drawText: false,
+                drawRectangle: true,
+                drawPolygon: true,
+                drawCircle: true,
+                editMode: true,
+                dragMode: true,
+                removalMode: true,
               }}
-            >
-              <GeomanControls
-                options={{
-                  position: "topleft",
-                  drawMarker: false,
-                  drawCircleMarker: false,
-                  drawPolyline: false,
-                  drawText: false,
-                  drawRectangle: true,
-                  drawPolygon: true,
-                  drawCircle: true,
-                  editMode: true,
-                  dragMode: true,
-                  removalMode: true,
-                }}
-                globalOptions={{
-                  continueDrawing: false,
-                  editable: true,
-                }}
-                onCreate={(e) => {
-                  const layer = e.layer;
-                  selectedLayerRef.current = layer;
-                  lastCreatedLayerRef.current = layer;
-                }}
-                onEdit={(e) => {
-                  if (e.layer) {
-                    selectedLayerRef.current = e.layer;
-                    lastCreatedLayerRef.current = e.layer;
-                  }
-                }}
-                onUpdate={(e) => {
-                  if (e.layer) {
-                    selectedLayerRef.current = e.layer;
-                    lastCreatedLayerRef.current = e.layer;
-                  }
-                }}
-              />
-            </FeatureGroup>
+              globalOptions={{
+                continueDrawing: false,
+                editable: true,
+              }}
+              onCreate={(e) => {
+                const layer = e.layer;
+                // ✅ Asegura que TODO lo que dibuja Geoman viva en el FeatureGroup real
+                if (featureGroupRef.current && layer) {
+                  featureGroupRef.current.addLayer(layer);
+                }
+                selectedLayerRef.current = layer;
+                lastCreatedLayerRef.current = layer;
+              }}
+              onEdit={(e) => {
+                if (e?.layer) {
+                  selectedLayerRef.current = e.layer;
+                  lastCreatedLayerRef.current = e.layer;
+                }
+              }}
+              onUpdate={(e) => {
+                if (e?.layer) {
+                  selectedLayerRef.current = e.layer;
+                  lastCreatedLayerRef.current = e.layer;
+                }
+              }}
+            />
           </MapContainer>
 
           {/* Cuadro de coordenadas SIEMPRE visible, encima del mapa */}
@@ -882,7 +877,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
             <h2 className="text-sm font-semibold text-slate-100 mb-1">{t("geocercas.modalTitle")}</h2>
-
             <p className="text-xs text-slate-400">
               {t("geocercas.modalInstruction")}
               <br />
@@ -908,7 +902,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               >
                 {t("geocercas.modalCancel")}
               </button>
-
               <button
                 onClick={handleDrawFromCoords}
                 className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500"
