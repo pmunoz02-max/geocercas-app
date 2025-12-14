@@ -241,6 +241,11 @@
     }
   },
   "geocercas": {
+  "modalTitle": "Draw by coordinates",
+  "modalInstruction": "Enter coordinates in Lat, Lng format",
+  "modalCancel": "Cancel",
+  "modalDraw": "Draw"
+}
     "title": "Geofences",
     "new": "New geofence",
     "edit": "Edit geofence",
