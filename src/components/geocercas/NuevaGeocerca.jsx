@@ -927,5 +927,3 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 }
 
 export default NuevaGeocerca;
-
-export default NuevaGeocerca;
