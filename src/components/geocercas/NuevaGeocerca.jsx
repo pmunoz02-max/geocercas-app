@@ -1,6 +1,18 @@
 // src/components/geocercas/NuevaGeocerca.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, GeoJSON, FeatureGroup, useMapEvents } from "react-leaflet";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  MapContainer,
+  TileLayer,
+  GeoJSON,
+  FeatureGroup,
+  useMapEvents,
+} from "react-leaflet";
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -8,8 +20,9 @@ import L from "leaflet";
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import { supabase } from "././supabaseClient";
-import { useAuth } from "././context/AuthContext.jsx";
+// ✅ RUTAS CORRECTAS (esto arregla tu build)
+import { supabase } from "../../supabaseClient";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 const DATA_SOURCE = null; // 'geojson' | 'csv' | 'supabase' | null
@@ -244,15 +257,12 @@ async function loadGeofenceGeometryByName({ name, supabaseClient = null }) {
 function primaryFeatureFromGeoJSON(geojson) {
   if (!geojson) return null;
 
-  // Si ya es Feature
   if (geojson.type === "Feature") return geojson;
 
-  // FeatureCollection
   if (geojson.type === "FeatureCollection" && Array.isArray(geojson.features) && geojson.features.length) {
     return geojson.features[0];
   }
 
-  // Geometry -> Feature
   if (geojson.type && geojson.coordinates) {
     return { type: "Feature", properties: {}, geometry: geojson };
   }
@@ -260,18 +270,12 @@ function primaryFeatureFromGeoJSON(geojson) {
   return null;
 }
 
-/**
- * Agrega 1 feature al featureGroupRef (Leaflet).
- * - Point -> circleMarker o circle si hay radius_m
- * - Polygon/Line -> L.geoJSON y se añade al FG
- */
 function addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name }) {
   const fg = featureGroupRef.current;
   if (!fg || !feature) return 0;
 
   const geom = feature.geometry;
   const props = feature.properties || {};
-
   if (!geom) return 0;
 
   // Point
@@ -343,7 +347,7 @@ function fitFeatureGroup(map, featureGroupRef, { padding = [20, 20] } = {}) {
   }
 }
 
-function CursorPos({ setCursorLatLng }) {
+function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
     mousemove(e) {
       setCursorLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -352,8 +356,6 @@ function CursorPos({ setCursorLatLng }) {
   return null;
 }
 
-/* ----------------- Parse coordenadas ----------------- */
-
 function parseLatLngPairs(text) {
   const lines = String(text || "")
     .split(/\r?\n/)
@@ -361,8 +363,6 @@ function parseLatLngPairs(text) {
     .filter(Boolean);
 
   const pairs = [];
-
-  // 1 por línea: lat,lng
   for (const line of lines) {
     const parts = line.split(/[,\s]+/).filter(Boolean);
     if (parts.length < 2) continue;
@@ -373,7 +373,6 @@ function parseLatLngPairs(text) {
     if (!Number.isNaN(lat) && !Number.isNaN(lng)) pairs.push([lat, lng]);
   }
 
-  // fallback: todo en una sola línea "lat lng"
   if (pairs.length === 0) {
     const parts = String(text || "").trim().split(/[,;\s]+/).filter(Boolean);
     if (parts.length >= 2) {
@@ -392,7 +391,7 @@ function makeSmallSquarePolygonFromPoint(lat, lng, delta = 0.00015) {
     [lat + delta, lng + delta],
     [lat - delta, lng + delta],
     [lat - delta, lng - delta],
-    [lat + delta, lng - delta], // cerrar
+    [lat + delta, lng - delta],
   ];
 }
 
@@ -411,7 +410,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const mapRef = useRef(null);
 
-  // ✅ Este ref debe apuntar al FeatureGroup REAL de Leaflet (no wrapper React)
+  // ✅ Leaflet FeatureGroup REAL
   const featureGroupRef = useRef(null);
 
   const selectedLayerRef = useRef(null);
@@ -423,23 +422,17 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
-  // Normaliza el ref de FeatureGroup (React-Leaflet puede entregar wrapper con .leafletElement o .getBounds)
   const setFeatureGroup = useCallback((fg) => {
     if (!fg) return;
 
-    // React-Leaflet v4: ref suele ser instancia Leaflet
     if (typeof fg.getBounds === "function" && typeof fg.addLayer === "function") {
       featureGroupRef.current = fg;
       return;
     }
-
-    // React-Leaflet antiguo: wrapper con leafletElement
     if (fg.leafletElement && typeof fg.leafletElement.addLayer === "function") {
       featureGroupRef.current = fg.leafletElement;
       return;
     }
-
-    // fallback: intenta 'layer'
     if (fg._layer && typeof fg._layer.addLayer === "function") {
       featureGroupRef.current = fg._layer;
     }
@@ -531,29 +524,25 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
       const doDraw = async () => {
         if (supaNames.length && supabaseClient) {
-          for (const name of supaNames) {
+          for (const nm of supaNames) {
             try {
-              const geojson = await loadGeofenceGeometryByName({ name, supabaseClient });
+              const geojson = await loadGeofenceGeometryByName({ name: nm, supabaseClient });
               const feature = primaryFeatureFromGeoJSON(geojson);
-              if (feature) {
-                shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name });
-              }
+              if (feature) shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name: nm });
             } catch (e) {
-              console.warn("No se pudo cargar geocerca", name, e);
+              console.warn("No se pudo cargar geocerca", nm, e);
             }
           }
         }
 
         if (typeof window !== "undefined") {
-          for (const name of localNames) {
+          for (const nm of localNames) {
             try {
-              const geojson = await loadGeofenceGeometryByName({ name, supabaseClient: null });
+              const geojson = await loadGeofenceGeometryByName({ name: nm, supabaseClient: null });
               const feature = primaryFeatureFromGeoJSON(geojson);
-              if (feature) {
-                shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name });
-              }
+              if (feature) shown += addSingleFeatureToFeatureGroup({ featureGroupRef, feature, name: nm });
             } catch (e) {
-              console.warn("No se pudo cargar geocerca local", name, e);
+              console.warn("No se pudo cargar geocerca local", nm, e);
             }
           }
         }
@@ -563,7 +552,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         }
       };
 
-      // async fire-and-forget (no bloquea UI)
       doDraw();
       return shown;
     },
@@ -578,7 +566,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
       let layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current;
 
-      // Si no hay seleccionado, intenta usar la última capa dibujada en el FG
       if (!layerToSave) {
         const layers = [];
         fg.eachLayer((lyr) => layers.push(lyr));
@@ -587,24 +574,18 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
       if (!layerToSave) throw new Error(t("geocercas.errorNoShape"));
 
-      // Convertir a GeoJSON
       let geo = null;
-
-      // GeoJSON de Leaflet layer (Polygon/Circle/etc.)
       if (typeof layerToSave.toGeoJSON === "function") {
         geo = layerToSave.toGeoJSON();
       } else if (layerToSave?.getLayers && typeof layerToSave.getLayers === "function") {
-        // Si es un L.GeoJSON layer
         geo = layerToSave.toGeoJSON();
       }
 
       if (!geo) throw new Error(t("geocercas.errorNoShape"));
 
-      // Guardar (Supabase si hay org, y además local como respaldo)
       const payloadName = String(name || "").trim();
       if (!payloadName) throw new Error(t("geocercas.errorNameRequired"));
 
-      // Guardado local
       if (typeof window !== "undefined") {
         localStorage.setItem(
           `geocerca_${payloadName}`,
@@ -612,7 +593,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
         );
       }
 
-      // Guardado Supabase (si hay org)
       if (supabaseClient && currentOrg?.id) {
         const insertPayload = {
           nombre: payloadName,
@@ -620,12 +600,9 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
           geojson: geo,
         };
 
-        // upsert por nombre+org (si tu tabla no tiene unique, esto insertará duplicados;
-        // si ya tienes unique(org_id,nombre) funcionará perfecto)
         const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(insertPayload, {
           onConflict: "org_id,nombre",
         });
-
         if (error) throw error;
       }
 
@@ -636,12 +613,12 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const handleSave = useCallback(async () => {
     try {
-      const name = geofenceName.trim();
-      if (!name) {
+      const nm = geofenceName.trim();
+      if (!nm) {
         alert(t("geocercas.errorNameRequired"));
         return;
       }
-      await saveGeofenceCollection({ name });
+      await saveGeofenceCollection({ name: nm });
       await refreshGeofenceList();
       alert(t("geocercas.savedOk"));
       setGeofenceName("");
@@ -666,7 +643,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     setCoordText(e.target.value);
   }, []);
 
-  // ✅ Dibujo por coordenadas: agrega al FeatureGroup REAL del mapa
+  // ✅ Dibujo por coordenadas (se agrega al FG REAL)
   const handleDrawFromCoords = useCallback(() => {
     const text = coordText.trim();
     if (!text) return;
@@ -778,8 +755,6 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
     []
   );
 
-  /* ----------------- RENDER ----------------- */
-
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-140px)]">
       {/* TOP BAR */}
@@ -877,12 +852,13 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             </button>
           </div>
 
-          {/* Mensajes dataset */}
           {loadingDataset && (
             <div className="mt-3 text-[11px] text-slate-400">{t("geocercas.loadingDataset")}</div>
           )}
           {datasetError && (
-            <div className="mt-3 text-[11px] text-red-300">{t("geocercas.errorDataset", { error: datasetError })}</div>
+            <div className="mt-3 text-[11px] text-red-300">
+              {t("geocercas.errorDataset", { error: datasetError })}
+            </div>
           )}
         </div>
 
@@ -903,9 +879,9 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             {dataset && <GeoJSON data={dataset} {...pointStyle} key="points-layer" />}
 
             {/* Lat/Lng vivos */}
-            <CursorPos setCursorLatLng={setCursorLatLng} />
+            <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
-            {/* FeatureGroup REAL + Geoman (NO se borra la barra de dibujo) */}
+            {/* Barra Geoman + canvas */}
             <FeatureGroup ref={setFeatureGroup}>
               <GeomanControls
                 options={{
@@ -946,7 +922,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
             </FeatureGroup>
           </MapContainer>
 
-          {/* Cuadro de coordenadas SIEMPRE visible, encima del mapa */}
+          {/* Lat/Lng visible sobre mapa */}
           <div className="absolute right-3 top-3 z-[9999] px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
             {cursorLatLng ? (
               <>
@@ -979,7 +955,7 @@ function NuevaGeocerca({ supabaseClient = supabase }) {
               rows={5}
               className="w-full rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               value={coordText}
-              onChange={handleCoordTextChange}
+              onChange={(e) => setCoordText(e.target.value)}
               placeholder={`-0.074624, -78.474352\n-0.070075, -78.464546\n-0.065398, -78.466928`}
             />
 
