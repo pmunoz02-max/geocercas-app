@@ -502,12 +502,18 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const handleShowSelected = useCallback(async () => {
     try {
-      if (!selectedNames.size) {
-        alert(t("geocercas.errorSelectAtLeastOne") || "Selecciona al menos una geocerca.");
-        return;
+      console.log("handleShowSelected start", { selectedNames: Array.from(selectedNames || []), lastSelectedName, geofenceListLen: geofenceList?.length });
+      let nameToShow = lastSelectedName || Array.from(selectedNames)[0];
+
+      // UX: si no hay selección pero existen geocercas, mostramos la primera
+      if (!nameToShow && geofenceList.length > 0) {
+        nameToShow = geofenceList[0].nombre;
       }
 
-      const nameToShow = lastSelectedName || Array.from(selectedNames)[0];
+      if (!nameToShow) {
+        alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+        return;
+      }
       const item = geofenceList.find((g) => g.nombre === nameToShow);
       if (!item) return;
 
@@ -535,6 +541,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           geo = normalizeGeojson(obj?.geojson);
         }
       }
+
+      console.log("handleShowSelected loaded geo", { source: item.source, nombre: item.nombre, hasGeo: !!geo });
 
       if (!geo) {
         alert(t("geocercas.errorNoGeojson") || "No se encontró el GeoJSON de la geocerca.");
@@ -648,7 +656,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               onClick={handleShowSelected}
               className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 text-white"
             >
-              {t("geocercas.buttonShowOnMap") || "Mostrar en mapa"}
+              t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })
             </button>
 
             <button
