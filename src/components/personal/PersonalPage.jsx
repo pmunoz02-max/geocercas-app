@@ -1,5 +1,5 @@
 // src/components/persona/PersonalPage.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
@@ -83,18 +83,7 @@ export default function PersonalPage() {
     });
   }, [items, q]);
 
-  
-  // Evitar "reapariciones" por respuestas viejas (race condition)
-  const fetchSeqRef = useRef(0);
-  const mountedRef = useRef(true);
-
   useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-useEffect(() => {
     if (!authLoading && user) {
       loadPersonal();
     }
@@ -102,7 +91,6 @@ useEffect(() => {
   }, [authLoading, user, onlyActive, orgId, t]);
 
   async function loadPersonal() {
-    const seq = ++fetchSeqRef.current;
     try {
       setLoading(true);
 
@@ -144,8 +132,15 @@ useEffect(() => {
       });
 
       if (error) throw error;
-      if (!mountedRef.current || seq !== fetchSeqRef.current) return;
-      setItems(data || []);
+
+      if (count === 0) {
+        throw new Error(t("personal.errorDeleteNoRows"));
+      }
+
+      // Defensa extra: aunque RLS ya filtra, evitamos que UI muestre soft-deletes por cualquier causa (cache/vistas).
+      const clean = (data || []).filter((r) => !r?.is_deleted);
+      setItems(clean);
+      console.log("[PersonalPage] IDs cargados:", clean.map((r) => r.id));
       setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
       console.error("[PersonalPage] Error cargando personal:", err);
@@ -155,7 +150,7 @@ useEffect(() => {
         msg: err?.message || t("personal.errorLoad"),
       });
     } finally {
-      if (mountedRef.current && seq === fetchSeqRef.current) setLoading(false);
+      setLoading(false);
     }
   }
 
@@ -203,7 +198,6 @@ useEffect(() => {
   }
 
   async function onGuardar() {
-    fetchSeqRef.current += 1;
     try {
       if (!canEdit) {
         setBanner({ type: "err", msg: t("personal.errorNoPermissionSave") });
@@ -263,6 +257,10 @@ useEffect(() => {
 
       if (error) throw error;
 
+      if (count === 0) {
+        throw new Error(t("personal.errorDeleteNoRows"));
+      }
+
       setBanner({
         type: "ok",
         msg: form.id ? t("personal.bannerUpdated") : t("personal.bannerCreated"),
@@ -281,8 +279,6 @@ useEffect(() => {
   }
 
   async function onEliminar() {
-    // Invalida cualquier carga en vuelo para evitar que "reaparezca" el registro
-    fetchSeqRef.current += 1;
     try {
       if (!canEdit) {
         setBanner({ type: "err", msg: t("personal.errorNoPermissionDelete") });
@@ -313,23 +309,27 @@ useEffect(() => {
 
       // IMPORTANTE:
       // No hacemos .select() aquí para evitar 403 cuando el SELECT policy exige is_deleted=false.
-      const { error } = await supabase
+      const { error, count } = await supabase
         .from("personal")
-        .update({
-          is_deleted: true,
-          vigente: false,
-          deleted_at: now,
-          updated_at: now,
-        })
+        .update(
+          {
+            is_deleted: true,
+            vigente: false,
+            deleted_at: now,
+            updated_at: now,
+          },
+          { count: "exact" }
+        )
         .eq("id", selectedId)
-        .eq("is_deleted", false);
+        .eq("org_id", orgId);
 
-      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, error });
+      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, count, error });
 
       if (error) throw error;
 
-      // UX: reflejar inmediatamente en UI (y luego sincronizar con loadPersonal)
-      setItems((prev) => (prev || []).filter((r) => r.id !== selectedId));
+      if (count === 0) {
+        throw new Error(t("personal.errorDeleteNoRows"));
+      }
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
       setSelectedId(null);
