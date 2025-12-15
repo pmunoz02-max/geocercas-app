@@ -187,7 +187,17 @@
     "buttonShowSelected": "Mostrar seleccionadas",
     "buttonShowAll": "Mostrar todas",
     "buttonDeleteSelected": "Eliminar seleccionadas",
-    "buttonClearCanvas": "Limpiar mapa"
+    "buttonClearCanvas": "Limpiar mapa",
+    "pageTitle": "Geocercas",
+    "pageSubtitle": "Administra las geocercas de tu organización. Desde aquí puedes crear nuevas geocercas y revisar las existentes.",
+    "currentOrgLabel": "Organización actual:",
+    "currentUserLabel": "Usuario:",
+    "noOrgFallback": "— (sin organización seleccionada)",
+    "cardNewTitle": "Nueva geocerca",
+    "cardNewBody": "Crea una nueva geocerca en el mapa y asígnala a tu personal o actividades.",
+    "cardNewCta": "Ir a Nueva geocerca →",
+    "cardListTitle": "Listado de geocercas",
+    "cardListBody": "Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar."
   },
   "personal": {
     "title": "Personal",
@@ -700,69 +710,6 @@
           }
         }
       }
-    },
-    "instructions": {
-      "title": "Instrucciones de uso",
-      "subtitle": "Guía paso a paso para configurar y utilizar App Geocercas correctamente.",
-      "jumpToSteps": "Ir a los pasos",
-      "viewResult": "Ver resultado",
-      "tocTitle": "Contenido",
-      "tocSubtitle": "Accede rápidamente a cada sección de la guía.",
-      "tocSteps": "Pasos principales",
-      "tocTips": "Buenas prácticas",
-      "tocResult": "Resultado esperado",
-      "stepsTitle": "Pasos para comenzar",
-      "stepsSubtitle": "Sigue estos pasos en orden para configurar tu organización y empezar a operar.",
-      "tipsTitle": "Buenas prácticas",
-      "bestPractice1Title": "Define bien tu organización",
-      "bestPractice1Body": "Configura correctamente el nombre, responsables y estructura de tu organización antes de crear geocercas.",
-      "bestPractice2Title": "Dibuja geocercas precisas",
-      "bestPractice2Body": "Asegúrate de que las geocercas cubran exactamente las zonas reales de trabajo para evitar falsos positivos.",
-      "bestPractice3Title": "Asigna personal y actividades",
-      "bestPractice3Body": "Relaciona personas, actividades y geocercas para obtener reportes de costos y trazabilidad.",
-      "bestPractice4Title": "Usa el tracker correctamente",
-      "bestPractice4Body": "Invita trackers solo cuando sea necesario y verifica que tengan permisos y frecuencia adecuados.",
-      "recommendationTitle": "Recomendación final",
-      "recommendationBody": "Una correcta configuración inicial garantiza reportes confiables, control operativo y una mejor experiencia en App Geocercas.",
-      "resultTitle": "Resultado esperado",
-      "resultIntro": "Al finalizar estos pasos, tendrás tu organización configurada, geocercas creadas, personal asignado y trackers listos para operar con reportes y control en tiempo real."
-    },
-    "faq": {
-      "badge": "Preguntas frecuentes",
-      "title": "Preguntas frecuentes",
-      "subtitle": "Respuestas rápidas a las dudas más comunes sobre el uso de App Geocercas.",
-      "seeQuickGuide": "Ver guía rápida",
-      "backToPanel": "Volver al panel",
-      "items": [
-        {
-          "question": "¿Qué es una geocerca?",
-          "answer": "Una geocerca es una zona geográfica delimitada en el mapa que permite controlar presencia, actividades y costos del personal."
-        },
-        {
-          "question": "¿Puedo usar la app con varias organizaciones?",
-          "answer": "Sí. App Geocercas es multi-organización. Puedes administrar varias empresas o proyectos desde una sola cuenta."
-        },
-        {
-          "question": "¿Quién puede ver los reportes de costos?",
-          "answer": "Solo los propietarios y administradores de una organización pueden acceder a los reportes de costos."
-        },
-        {
-          "question": "¿Qué es un tracker?",
-          "answer": "Un tracker es un usuario o dispositivo que envía su ubicación para ser monitoreado dentro de geocercas."
-        },
-        {
-          "question": "¿Cada cuánto se actualiza la ubicación?",
-          "answer": "La frecuencia de actualización la define el administrador al crear la asignación del tracker."
-        }
-      ]
-    },
-    "support": {
-      "title": "Soporte y contacto",
-      "subtitle": "¿Necesitas ayuda? Contáctanos para soporte técnico, facturación o consultas generales.",
-      "emailLabel": "Correo de soporte",
-      "viewFaq": "Ver FAQ",
-      "back": "Volver",
-      "goHome": "Ir a Inicio"
     }
   },
   "resetPassword": {
