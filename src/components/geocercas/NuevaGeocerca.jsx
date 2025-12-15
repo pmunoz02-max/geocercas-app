@@ -18,6 +18,11 @@ import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
+/**
+ * DATASET opcional (no lo quito)
+ * - null: no carga dataset
+ * - 'geojson' | 'csv' | 'supabase'
+ */
 const DATA_SOURCE = null; // 'geojson' | 'csv' | 'supabase' | null
 const GEOJSON_URL = "/data/mapa_corto_214.geojson";
 const CSV_URL = "/data/mapa_corto_214.csv";
@@ -25,7 +30,35 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 const SUPABASE_POINTS_TABLE = "puntos_mapa_corto";
 const SUPABASE_GEOFENCES_TABLE = "geocercas";
 
-/* ----------------- Utils dataset externos ----------------- */
+/* =========================================================
+   FIX CLAVE: obtener layers reales de Geoman (v2)
+========================================================= */
+function getLastGeomanLayer(map) {
+  try {
+    if (!map?.pm?.getGeomanLayers) return null;
+    const layers = map.pm.getGeomanLayers() || [];
+    if (!layers.length) return null;
+    return layers[layers.length - 1];
+  } catch {
+    return null;
+  }
+}
+
+function removeAllGeomanLayers(map) {
+  try {
+    if (!map?.pm?.getGeomanLayers) return;
+    const layers = map.pm.getGeomanLayers() || [];
+    layers.forEach((lyr) => {
+      try {
+        map.removeLayer(lyr);
+      } catch {}
+    });
+  } catch {}
+}
+
+/* =========================================================
+   Utils dataset externos
+========================================================= */
 function parseCSV(text) {
   const lines = String(text || "").split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];
@@ -94,7 +127,9 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
   throw new Error("DATA_SOURCE no reconocido");
 }
 
-/* ----------------- Utils geocercas (lista/borrar) ----------------- */
+/* =========================================================
+   Utils geocercas (lista/borrar)
+========================================================= */
 async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
 
@@ -143,7 +178,7 @@ async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
     const { error, count } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .delete({ count: "exact" })
-      .eq("org_id", orgId) // ✅ CRÍTICO
+      .eq("org_id", orgId) // ✅ CRÍTICO: no borra fuera de org
       .in("nombre", nombres);
 
     if (error) throw error;
@@ -164,7 +199,9 @@ async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   return deleted;
 }
 
-/* ----------------- Lat/Lng vivos ----------------- */
+/* =========================================================
+   Lat/Lng vivos
+========================================================= */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
     mousemove(e) {
@@ -174,7 +211,9 @@ function CursorPosLive({ setCursorLatLng }) {
   return null;
 }
 
-/* ----------------- Coordenadas → Feature ----------------- */
+/* =========================================================
+   Coordenadas → Feature
+========================================================= */
 function parsePairs(text) {
   const lines = String(text || "")
     .split(/\r?\n/)
@@ -245,7 +284,9 @@ function featureFromCoords(pairs) {
   };
 }
 
-/* ----------------- Utils GeoJSON ----------------- */
+/* =========================================================
+   Utils GeoJSON
+========================================================= */
 function normalizeGeojson(geo) {
   if (!geo) return null;
   if (typeof geo === "string") {
@@ -260,7 +301,10 @@ function normalizeGeojson(geo) {
 
 function centroidFeatureFromGeojson(geo) {
   try {
-    const gj = geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
+    const gj =
+      geo?.type === "FeatureCollection"
+        ? geo
+        : { type: "FeatureCollection", features: [geo] };
     const bounds = L.geoJSON(gj).getBounds();
     if (!bounds?.isValid?.()) return null;
     const c = bounds.getCenter();
@@ -274,7 +318,9 @@ function centroidFeatureFromGeojson(geo) {
   }
 }
 
-/* ----------------- Componente principal ----------------- */
+/* =========================================================
+   Componente principal
+========================================================= */
 export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const { currentOrg } = useAuth();
   const { t } = useTranslation();
@@ -296,14 +342,17 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
+  // Draft por coordenadas (no lo quito)
   const [draftFeature, setDraftFeature] = useState(null);
   const [draftId, setDraftId] = useState(0);
 
+  // Visualización de geocercas guardadas
   const [viewFeature, setViewFeature] = useState(null);
   const [viewCentroid, setViewCentroid] = useState(null);
   const [viewId, setViewId] = useState(0);
   const [showLoading, setShowLoading] = useState(false);
 
+  // Refs auxiliares (se mantienen) — pero para guardar, usamos map.pm.getGeomanLayers()
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
 
@@ -316,12 +365,17 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   }, []);
 
   const clearCanvas = useCallback(() => {
+    // Limpia featuregroup react (si tiene algo)
     featureGroupRef.current?.clearLayers?.();
+
+    // Limpia layers reales de geoman (CLAVE)
+    removeAllGeomanLayers(mapRef.current);
+
     selectedLayerRef.current = null;
     lastCreatedLayerRef.current = null;
   }, []);
 
-  // ✅ Selección sin desfase
+  // Selección estable (1 click)
   const handleSelectGeofence = (nombre) => {
     setSelectedNames((prev) => {
       const next = new Set(prev);
@@ -348,7 +402,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     refreshGeofenceList();
   }, [refreshGeofenceList]);
 
-  /* dataset opcional */
+  /* Dataset opcional */
   useEffect(() => {
     let mounted = true;
     if (!DATA_SOURCE) {
@@ -378,7 +432,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     };
   }, [supabaseClient]);
 
-  /* Geoman events */
+  /* Geoman events (se mantienen) */
   const handleGeomanCreate = useCallback((e) => {
     selectedLayerRef.current = e.layer;
     lastCreatedLayerRef.current = e.layer;
@@ -394,7 +448,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     }
   }, []);
 
-  /* ✅ Dibujar por coords */
+  /* Dibujar por coords */
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
     if (!pairs.length) {
@@ -413,6 +467,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     setViewFeature(null);
     setViewCentroid(null);
 
+    // Si dibujas por coords, limpia geoman
     clearCanvas();
 
     if (mapRef.current) {
@@ -426,7 +481,11 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     setCoordText("");
   }, [coordText, clearCanvas, t]);
 
-  /* ✅ Guardar (draft o geoman) */
+  /* Guardar:
+     - Si hay draft coords => guarda draft
+     - Si no => guarda layer de geoman via map.pm.getGeomanLayers()
+     ✅ FIX: UPSERT alinea con UNIQUE (org_id, nombre_ci)
+  */
   const saveGeofenceCollection = useCallback(
     async ({ name }) => {
       const nm = String(name || "").trim();
@@ -441,7 +500,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return false;
       }
 
-      const nombre_ci = nm.toLowerCase(); // ✅ alinea con UNIQUE (org_id, nombre_ci)
+      // ✅ índice único real: (org_id, nombre_ci)
+      const nombre_ci = nm.toLowerCase();
 
       // 1) Draft por coords
       if (draftFeature) {
@@ -459,46 +519,23 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           { onConflict: "org_id,nombre_ci" }
         );
         if (error) throw error;
+
         return true;
       }
 
-      // 2) Geoman layer
-      const fg = featureGroupRef.current;
-      if (!fg) {
-        alert(
-          t("geocercas.errorNoShape", {
-            defaultValue: "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
-          })
-        );
-        return false;
-      }
+      // 2) Geoman layer (FUENTE DE VERDAD)
+      const map = mapRef.current;
 
-      // ✅ FUENTE DE VERDAD: FeatureGroup
-const layers = [];
-fg.eachLayer((lyr) => layers.push(lyr));
-
-const layerToSave =
-  selectedLayerRef.current ||
-  lastCreatedLayerRef.current ||
-  layers[layers.length - 1] ||
-  null;
-
-if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
-  alert(
-    t("geocercas.errorNoShape", {
-      defaultValue:
-        "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
-    })
-  );
-  return false;
-}
-
+      const layerToSave =
+        selectedLayerRef.current ||
+        lastCreatedLayerRef.current ||
+        getLastGeomanLayer(map);
 
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
-        // ✅ Aquí estaba saliendo geocercas.errorNoShape como texto crudo
         alert(
           t("geocercas.errorNoShape", {
-            defaultValue: "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
+            defaultValue:
+              "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
           })
         );
         return false;
@@ -528,14 +565,18 @@ if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
     try {
       const nm = geofenceName.trim();
       if (!nm) {
-        alert(t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." }));
+        alert(
+          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
+        );
         return;
       }
+
       const ok = await saveGeofenceCollection({ name: nm });
       if (!ok) return;
 
       await refreshGeofenceList();
       alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+
       setGeofenceName("");
       setDraftFeature(null);
     } catch (e) {
@@ -543,13 +584,19 @@ if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
 
-  // ✅ Eliminar 1 click
+  // Eliminar SIN doble click
   const handleDeleteSelected = async () => {
     if (!selectedNames || selectedNames.size === 0) {
-      alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+      alert(
+        t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
+      );
       return;
     }
-    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })))
+    if (
+      !window.confirm(
+        t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
+      )
+    )
       return;
 
     try {
@@ -584,7 +631,9 @@ if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
       if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
 
       if (!nameToShow) {
-        alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+        alert(
+          t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
+        );
         return;
       }
 
@@ -797,6 +846,7 @@ if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
 
             <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
+            {/* 👁️ Geocerca guardada seleccionada */}
             <Pane name="viewPane" style={{ zIndex: 640 }}>
               {viewFeature && (
                 <>
@@ -814,13 +864,16 @@ if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
                     <GeoJSON
                       key={`view-marker-${viewId}`}
                       data={viewCentroid}
-                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                      pointToLayer={(_f, latlng) =>
+                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
+                      }
                     />
                   )}
                 </>
               )}
             </Pane>
 
+            {/* ✅ Draft coords arriba */}
             <Pane name="draftPane" style={{ zIndex: 650 }}>
               {draftFeature && (
                 <>
@@ -848,13 +901,16 @@ if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
                           ],
                         },
                       }}
-                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                      pointToLayer={(_f, latlng) =>
+                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
+                      }
                     />
                   )}
                 </>
               )}
             </Pane>
 
+            {/* Geoman controls */}
             <FeatureGroup whenCreated={onFeatureGroupCreated}>
               <GeomanControls
                 options={{
@@ -878,6 +934,7 @@ if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
             </FeatureGroup>
           </MapContainer>
 
+          {/* HUD */}
           <div className="absolute right-3 top-3 z-[9999] space-y-2">
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
               {cursorLatLng ? (
