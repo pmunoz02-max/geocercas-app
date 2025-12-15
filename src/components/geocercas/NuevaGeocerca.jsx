@@ -479,7 +479,15 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         fg.eachLayer((lyr) => layers.push(lyr));
         layerToSave = layers[layers.length - 1] || null;
       }
-      if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") throw new Error(t("geocercas.errorNoShape"));
+     if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
+  alert(
+    t("geocercas.errorNoShape", {
+      defaultValue: "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
+    })
+  );
+  return false;
+}
+
 
       const geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
 
