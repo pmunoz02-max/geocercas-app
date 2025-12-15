@@ -391,7 +391,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         if (supabaseClient && currentOrg?.id) {
           const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
             { nombre: nm, org_id: currentOrg.id, geojson: geo },
-            { onConflict: "org_id,nombre_ci" } // ✅ FIX: coincide con UNIQUE (org_id, nombre_ci)
+            { onConflict: "org_id,nombre_ci" }
           );
           if (error) throw error;
         }
@@ -422,7 +422,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       if (supabaseClient && currentOrg?.id) {
         const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
           { nombre: nm, org_id: currentOrg.id, geojson: geo },
-          { onConflict: "org_id,nombre_ci" } // ✅ FIX: coincide con UNIQUE (org_id, nombre_ci)
+          { onConflict: "org_id,nombre_ci" }
         );
         if (error) throw error;
       }
@@ -550,10 +550,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>
             )}
             {geofenceList.map((g) => (
-              <label
-                key={`${g.source}-${g.nombre}`}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-800"
-              >
+              <label key={`${g.source}-${g.nombre}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-800">
                 <input
                   type="checkbox"
                   checked={selectedNames.has(g.nombre)}
@@ -627,13 +624,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                       data={{
                         type: "Feature",
                         properties: {},
-                        geometry: {
-                          type: "Point",
-                          coordinates: [
-                            draftFeature.geometry.coordinates[0][0][0],
-                            draftFeature.geometry.coordinates[0][0][1],
-                          ],
-                        },
+                        geometry: { type: "Point", coordinates: [draftFeature.geometry.coordinates[0][0][0], draftFeature.geometry.coordinates[0][0][1]] },
                       }}
                       pointToLayer={(_f, latlng) =>
                         L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
