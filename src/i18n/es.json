@@ -252,7 +252,8 @@
     "tableNoResults": "No se encontraron resultados.",
     "yes": "Sí",
     "no": "No",
-    "processing": "Procesando…"
+    "processing": "Procesando…",
+    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado."
   },
   "actividades": {
     "title": "Actividades",

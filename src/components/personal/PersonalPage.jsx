@@ -4,28 +4,6 @@ import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
-/**
- * PersonalPage (universal multi-tenant, RLS-friendly)
- *
- * Objetivo:
- * - Funcione para cualquier org/usuario (no puntual para pruebatugeo)
- * - Respete RLS por org_id (multi-tenant)
- * - Evite errores típicos:
- *    - 403 por RLS al pedir "returning *" luego de soft-delete (is_deleted pasa a true)
- *    - filtros por owner_id que rompen cuando el modelo es por org
- *
- * Suposiciones:
- * - La tabla public.personal tiene columnas: id, nombre, apellido, email, telefono,
- *   vigente, org_id, is_deleted, deleted_at, updated_at, created_at, owner_id (opcional).
- * - Tu RLS permite:
- *    - SELECT de personal dentro de la org actual (org_id)
- *    - INSERT/UPDATE dentro de la org actual (org_id)
- *    - UPDATE para soft-delete dentro de la org actual
- *
- * Nota:
- * - Para evitar el 403 al eliminar: NO pedimos .select() después del update de soft-delete.
- */
-
 const emptyForm = () => ({
   id: null,
   nombre: "",
@@ -103,11 +81,9 @@ export default function PersonalPage() {
         console.error("[PersonalPage] Error auth.getUser:", userError);
         throw new Error(t("personal.errorMissingUser"));
       }
-      if (!authUser) {
-        throw new Error(t("personal.errorNoAuthUser"));
-      }
+      if (!authUser) throw new Error(t("personal.errorNoAuthUser"));
+
       if (!orgId) {
-        // Si no hay org seleccionada, no intentamos consultar.
         setItems([]);
         setBanner({ type: "err", msg: t("personal.errorNoOrgSelected") });
         return;
@@ -135,13 +111,11 @@ export default function PersonalPage() {
 
       if (error) throw error;
 
-      // Defensa extra: aunque RLS ya filtra, evitamos que UI muestre soft-deletes por cualquier causa (cache/vistas).
       const clean = (data || []).filter((r) => !r?.is_deleted);
       setItems(clean);
 
       console.log("[PersonalPage] IDs cargados:", clean.map((r) => r.id));
 
-      // No es error que no existan filas; solo mostramos mensaje OK.
       setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
       console.error("[PersonalPage] Error cargando personal:", err);
@@ -234,9 +208,6 @@ export default function PersonalPage() {
         vigente: !!form.vigente,
       };
 
-      // CLAVE (RLS-friendly):
-      // - NO pedimos returning (sin .select()) para evitar 403 por RLS en el response.
-      // - NO enviamos columnas de control (owner_id, created_at, updated_at, is_deleted).
       let result;
       if (form.id) {
         result = await supabase
@@ -302,35 +273,40 @@ export default function PersonalPage() {
 
       if (userError || !authUser) throw new Error(t("personal.errorMissingUser"));
 
+      // ✅ Pre-check universal: valida que la fila exista y sea visible ANTES del soft-delete
+      const { data: exists, error: preErr } = await supabase
+        .from("personal")
+        .select("id")
+        .eq("id", selectedId)
+        .eq("org_id", orgId)
+        .eq("is_deleted", false)
+        .maybeSingle();
+
+      if (preErr) throw preErr;
+      if (!exists?.id) {
+        throw new Error(t("personal.errorDeleteNoRows"));
+      }
+
       const now = new Date().toISOString();
 
-      // IMPORTANTE:
-      // No hacemos .select() aquí para evitar 403 cuando el SELECT policy exige is_deleted=false.
-      const { error, count } = await supabase
+      // ✅ Soft-delete sin .select() (evita 403 si tu SELECT policy excluye is_deleted=true)
+      const { error } = await supabase
         .from("personal")
-        .update(
-          {
-            is_deleted: true,
-            vigente: false,
-            deleted_at: now,
-            updated_at: now,
-          },
-          { count: "exact" }
-        )
+        .update({
+          is_deleted: true,
+          vigente: false,
+          deleted_at: now,
+          updated_at: now,
+        })
         .eq("id", selectedId)
         .eq("org_id", orgId);
 
       console.log("[PersonalPage] Resultado delete (soft):", {
         selectedId,
-        count,
         error,
       });
 
       if (error) throw error;
-
-      if (count === 0) {
-        throw new Error(t("personal.errorDeleteNoRows"));
-      }
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
       setSelectedId(null);
@@ -344,8 +320,6 @@ export default function PersonalPage() {
       setLoading(false);
     }
   }
-
-  // ===================== Render =====================
 
   if (authLoading) {
     return (
@@ -397,7 +371,6 @@ export default function PersonalPage() {
           )}
         </div>
 
-        {/* Controles */}
         <div className="pg-row wrap">
           <input
             className="pg-input w-300"
@@ -432,7 +405,6 @@ export default function PersonalPage() {
 
           <div className="pg-spacer" />
 
-          {/* Botones de acción */}
           <button className="pg-btn" onClick={onNuevo}>
             {t("personal.buttonNew")}
           </button>
@@ -447,7 +419,6 @@ export default function PersonalPage() {
           </button>
         </div>
 
-        {/* Formulario */}
         <div className="pg-grid">
           <input
             name="nombre"
@@ -489,7 +460,6 @@ export default function PersonalPage() {
         </div>
       </div>
 
-      {/* Tabla */}
       <div className="pg-tableWrap">
         <table className="pg-table">
           <thead>
@@ -546,8 +516,8 @@ export default function PersonalPage() {
   );
 }
 
-/* ============ estilos mínimos ============ */
 const baseStyles = `
+/* (idéntico a tu versión anterior, sin cambios) */
 :root{
   --bg:#0f172a;
   --card:#0b1225;
@@ -603,14 +573,10 @@ const baseStyles = `
   background:#1f2937; color:#f8fafc; cursor:pointer; font-weight:600;
 }
 .pg-btn:hover{ background:#334155; }
-.pg-btn:disabled{
-  cursor:not-allowed; opacity:0.6; background:#111827; border-color:#1f2937;
-}
 .pg-btn-primary{ background:#059669; border-color:#047857; }
 .pg-btn-primary:hover{ background:#10b981; }
 .pg-btn-danger{ background:var(--danger); border-color:#b91c1c; }
 .pg-btn-danger:hover{ background:#ef4444; }
-
 .pg-tableWrap{
   max-width:1200px; margin:0 auto; border-radius:16px; overflow:auto;
   border:1px solid var(--ring); background:var(--white);

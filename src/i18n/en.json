@@ -340,7 +340,10 @@
     "errorLoad": "Error loading personnel.",
     "errorSave": "Could not save the person.",
     "errorDelete": "Could not delete the person.",
-    "confirmDelete": "Are you sure you want to delete \"{{name}}\"?"
+    "confirmDelete": "Are you sure you want to delete \"{{name}}\"?",
+    "errorDeleteNoRows": "Could not delete: the record does not exist or was already deleted."
+}
+
   },
   "actividades": {
     "title": "Activities",
