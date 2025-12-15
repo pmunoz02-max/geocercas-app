@@ -695,6 +695,9 @@
       "bestPractice4Body": "Invita trackers solo cuando sea necesario y verifica que tengan permisos y frecuencia adecuados.",
       "recommendationTitle": "Recomendación final",
       "recommendationBody": "Una correcta configuración inicial garantiza reportes confiables, control operativo y una mejor experiencia en App Geocercas."
+      "resultTitle": "Resultado esperado",
+"resultIntro": "Al finalizar estos pasos, tendrás tu organización configurada, geocercas creadas, personal asignado y trackers listos para operar con reportes y control en tiempo real."
+
     },
     "changelog": {
       "breadcrumb": "Novedades",
