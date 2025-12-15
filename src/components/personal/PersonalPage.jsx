@@ -22,6 +22,53 @@ function asE164OrThrow(raw, t) {
   return tel;
 }
 
+function normEmail(v) {
+  const s = (v || "").trim().toLowerCase();
+  return s || null;
+}
+function normPhone(v) {
+  const s = (v || "").trim();
+  return s || null;
+}
+
+/**
+ * Dedupe defensivo para UI (mientras la BD aún tiene duplicados históricos).
+ * Regla:
+ * - Si hay email_norm, dedupe por email_norm
+ * - Si no hay email_norm pero hay phone_norm, dedupe por phone_norm
+ * - Si no hay ninguno, dedupe por id (no se agrupa)
+ * Estrategia: mantener el más reciente por updated_at/created_at/id.
+ */
+function dedupePersonalRows(rows) {
+  const arr = Array.isArray(rows) ? rows : [];
+  const score = (r) =>
+    new Date(r?.updated_at || r?.created_at || 0).getTime() || 0;
+
+  const map = new Map();
+  for (const r of arr) {
+    const e = normEmail(r?.email);
+    const p = normPhone(r?.telefono);
+    const key = e ? `e:${e}` : p ? `p:${p}` : `id:${r?.id}`;
+
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, r);
+      continue;
+    }
+    const prevScore = score(prev);
+    const curScore = score(r);
+    if (curScore > prevScore) map.set(key, r);
+    else if (curScore === prevScore && String(r?.id) > String(prev?.id))
+      map.set(key, r);
+  }
+  return Array.from(map.values());
+}
+
+function isUniqueViolation(err) {
+  // Supabase/PostgREST: Postgres unique violation = 23505
+  return err?.code === "23505" || /duplicate key|unique/i.test(err?.message || "");
+}
+
 export default function PersonalPage() {
   const {
     user,
@@ -111,10 +158,13 @@ export default function PersonalPage() {
 
       if (error) throw error;
 
+      // Defensa: nunca mostrar soft-deletes + dedupe UI mientras la BD tenga duplicados históricos.
       const clean = (data || []).filter((r) => !r?.is_deleted);
-      setItems(clean);
+      const deduped = dedupePersonalRows(clean);
 
-      console.log("[PersonalPage] IDs cargados:", clean.map((r) => r.id));
+      setItems(deduped);
+
+      console.log("[PersonalPage] IDs cargados (dedup):", deduped.map((r) => r.id));
 
       setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
@@ -227,7 +277,17 @@ export default function PersonalPage() {
 
       console.log("[PersonalPage] Resultado guardar (no-returning):", { error });
 
-      if (error) throw error;
+      if (error) {
+        if (isUniqueViolation(error)) {
+          throw new Error(
+            t("personal.errorDuplicate", {
+              defaultValue:
+                "Duplicate personnel in this organization (email/phone already exists).",
+            })
+          );
+        }
+        throw error;
+      }
 
       setBanner({
         type: "ok",
@@ -273,7 +333,7 @@ export default function PersonalPage() {
 
       if (userError || !authUser) throw new Error(t("personal.errorMissingUser"));
 
-      // ✅ Pre-check universal: valida que la fila exista y sea visible ANTES del soft-delete
+      // ✅ Pre-check universal (evita "no rows" silencioso)
       const { data: exists, error: preErr } = await supabase
         .from("personal")
         .select("id")
@@ -283,13 +343,11 @@ export default function PersonalPage() {
         .maybeSingle();
 
       if (preErr) throw preErr;
-      if (!exists?.id) {
-        throw new Error(t("personal.errorDeleteNoRows"));
-      }
+      if (!exists?.id) throw new Error(t("personal.errorDeleteNoRows"));
 
       const now = new Date().toISOString();
 
-      // ✅ Soft-delete sin .select() (evita 403 si tu SELECT policy excluye is_deleted=true)
+      // ✅ Soft-delete sin returning (evita 403 por policy SELECT is_deleted=false)
       const { error } = await supabase
         .from("personal")
         .update({
@@ -301,12 +359,12 @@ export default function PersonalPage() {
         .eq("id", selectedId)
         .eq("org_id", orgId);
 
-      console.log("[PersonalPage] Resultado delete (soft):", {
-        selectedId,
-        error,
-      });
+      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, error });
 
       if (error) throw error;
+
+      // ✅ UI inmediata: remover del estado local (independiente de duplicados históricos)
+      setItems((prev) => (prev || []).filter((r) => r.id !== selectedId));
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
       setSelectedId(null);
@@ -517,7 +575,6 @@ export default function PersonalPage() {
 }
 
 const baseStyles = `
-/* (idéntico a tu versión anterior, sin cambios) */
 :root{
   --bg:#0f172a;
   --card:#0b1225;
