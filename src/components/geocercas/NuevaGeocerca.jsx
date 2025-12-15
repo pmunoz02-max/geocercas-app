@@ -838,7 +838,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                   <span className="ml-2">Lng: {cursorLatLng.lng.toFixed(6)}</span>
                 </>
               ) : (
-                <span>{t("geocercas.cursorHint")}</span>
+                <span>{t("geocercas.cursorHint", { defaultValue: "Mueve el cursor sobre el mapa" })}</span>
               )}
             </div>
 
@@ -853,7 +853,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       {coordModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
-            <h2 className="text-sm font-semibold text-slate-100 mb-1">{t("geocercas.modalTitle")}</h2>
+            <h2 className="text-sm font-semibold text-slate-100 mb-1">{t("geocercas.modalTitle", { defaultValue: "Dibujar por coordenadas" })}</h2>
 
             <p className="text-xs text-slate-400">
               1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono
@@ -874,13 +874,13 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                 onClick={() => setCoordModalOpen(false)}
                 className="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200"
               >
-                {t("geocercas.modalCancel")}
+                {t("geocercas.modalCancel", { defaultValue: "Cancelar" })}
               </button>
               <button
                 onClick={handleDrawFromCoords}
                 className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white"
               >
-                {t("geocercas.modalDraw")}
+                {t("geocercas.modalDraw", { defaultValue: "Dibujar" })}
               </button>
             </div>
           </div>
