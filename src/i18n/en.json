@@ -268,7 +268,46 @@
     "thDescription": "Description",
     "thAssignments": "Assignments",
     "thStatus": "Status",
-    "thActions": "Actions"
+    "thActions": "Actions",
+    "pageTitle": "Geofences",
+    "pageSubtitle": "Manage your organization’s geofences. From here you can create new geofences and review existing ones.",
+    "currentOrgLabel": "Current organization:",
+    "currentUserLabel": "User:",
+    "cardNewTitle": "New geofence",
+    "cardNewBody": "Create a new geofence on the map and assign it to your personnel or activities.",
+    "cardNewCta": "Go to New geofence →",
+    "cardListTitle": "Geofence list",
+    "cardListBody": "Soon you’ll be able to see the list of existing geofences and their details here. For now, use the New geofence option to create and edit.",
+    "manage": {
+      "noOrgTitle": "Geofences",
+      "noOrgBody": "Select an organization to manage its geofences.",
+      "selectOrgButton": "Select organization",
+      "headerTitle": "Geofences · {{orgName}}",
+      "newNameLabel": "New geofence name",
+      "newNamePlaceholder": "New geofence name",
+      "showButton": "Show",
+      "deleteOrgButton": "Delete org",
+      "activeListTitle": "Active geofences in this organization",
+      "loadingGeofences": "Loading geofences...",
+      "noActiveGeofences": "No active geofences",
+      "helperSelect": "Select one or more. If you select none and click SHOW, all geofences will be displayed.",
+      "helperApplied": "[Geofences] IDs applied to the map:"
+    },
+    "list": {
+      "loading": "Loading...",
+      "loadError": "Error loading geofences",
+      "title": "Geofences",
+      "empty": "No geofences. Create one.",
+      "createOne": "Create one",
+      "thName": "Name",
+      "thCreated": "Created",
+      "thActions": "Actions",
+      "view": "View",
+      "export": "Export GeoJSON",
+      "delete": "Delete",
+      "confirmDelete": "Delete this geofence?",
+      "deleteError": "Error deleting geofence"
+    }
   },
   "personal": {
     "title": "Personnel",
@@ -630,8 +669,7 @@
       "breadcrumb": "Help Center",
       "back": "Back",
       "goHome": "Go to Home",
-      "viewFaq": "View FAQ",
-      "badge": "Help center"
+      "viewFaq": "View FAQ"
     },
     "changelog": {
       "breadcrumb": "Changelog",
@@ -686,44 +724,6 @@
       "recommendationBody": "A correct initial setup ensures reliable reports, operational control, and a better experience in App Geocercas.",
       "resultTitle": "Expected result",
       "resultIntro": "After completing these steps, you will have your organization configured, geofences created, personnel assigned, and trackers ready to operate with real-time control and reporting."
-    },
-    "support": {
-      "title": "Support & contact",
-      "subtitle": "Need help? Contact us for technical support, billing, or general inquiries.",
-      "emailLabel": "Support email",
-      "email": "soporte@tugeocercas.com",
-      "viewFaq": "View FAQ",
-      "back": "Back",
-      "goHome": "Go to Home"
-    },
-    "faq": {
-      "badge": "Frequently asked questions",
-      "title": "Frequently asked questions",
-      "subtitle": "Quick answers to the most common questions about App Geofences.",
-      "seeQuickGuide": "View quick guide",
-      "backToPanel": "Back to dashboard",
-      "items": [
-        {
-          "question": "What is a geofence?",
-          "answer": "A geofence is a geographic area drawn on the map to control presence and activities."
-        },
-        {
-          "question": "Is the app multi-organization?",
-          "answer": "Yes. You can manage multiple organizations from a single account."
-        },
-        {
-          "question": "Who can view cost reports?",
-          "answer": "Only owners and administrators can access cost reports."
-        },
-        {
-          "question": "What is a tracker?",
-          "answer": "A tracker is a user or device that sends its location for monitoring."
-        },
-        {
-          "question": "How often is location updated?",
-          "answer": "The update frequency is defined by the administrator when creating assignments."
-        }
-      ]
     }
   },
   "resetPassword": {

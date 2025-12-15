@@ -1,6 +1,7 @@
 // src/pages/Geocercas.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import GeoMap from "@/components/GeoMap";
 import { listGeocercas } from "@/services/geocercas";
@@ -10,6 +11,7 @@ import OrgSelector from "@/components/OrgSelector";
 export default function GeocercasPage() {
   const { user, role, currentOrg, orgs, loading } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const canEdit = role === "owner" || role === "admin";
 
@@ -196,16 +198,16 @@ export default function GeocercasPage() {
   if (!orgId) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800">Geocercas</h2>
+        <h2 className="text-lg font-semibold text-slate-800">{t("geocercas.manage.noOrgTitle", { defaultValue: "Geocercas" })}</h2>
         <p className="text-sm text-slate-700">
-          Selecciona una organización para gestionar sus geocercas.
+          {t("geocercas.manage.noOrgBody", { defaultValue: "Selecciona una organización para gestionar sus geocercas." })}
         </p>
         <button
           type="button"
           onClick={() => navigate("/seleccionar-organizacion")}
           className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         >
-          Seleccionar organización
+          {t("geocercas.manage.selectOrgButton", { defaultValue: "Seleccionar organización" })}
         </button>
       </div>
     );
@@ -222,7 +224,7 @@ export default function GeocercasPage() {
       {/* Aquí NO dibujamos tabs ni header: eso ya lo hace el layout */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-slate-800">
-          Geocercas · {currentOrgName}
+          {t("geocercas.manage.headerTitle", { orgName: currentOrgName, defaultValue: `Geocercas · ${currentOrgName}` })}
         </h2>
         <div className="hidden md:block">
           <OrgSelector />
@@ -233,12 +235,12 @@ export default function GeocercasPage() {
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="flex-[2]">
           <label className="block text-xs font-medium text-slate-500 mb-1">
-            Nombre de nueva geocerca
+            {t("geocercas.manage.newNameLabel", { defaultValue: "Nombre de nueva geocerca" })}
           </label>
           <input
             type="text"
             className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Nombre de nueva geocerca"
+            placeholder="{t("geocercas.manage.newNameLabel", { defaultValue: "Nombre de nueva geocerca" })}"
             value={newGeocercaName}
             onChange={(e) => setNewGeocercaName(e.target.value)}
           />
@@ -249,7 +251,7 @@ export default function GeocercasPage() {
             onClick={handleMostrar}
             className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            Mostrar
+            {t("geocercas.manage.showButton", { defaultValue: "Mostrar" })}
           </button>
 
           {canEdit && orgId && (
@@ -257,7 +259,7 @@ export default function GeocercasPage() {
               onClick={handleEliminarOrg}
               className="inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
             >
-              Eliminar Org
+              {t("geocercas.manage.deleteOrgButton", { defaultValue: "Eliminar Org" })}
             </button>
           )}
         </div>
@@ -266,7 +268,7 @@ export default function GeocercasPage() {
       {/* Lista de geocercas activas */}
       <div className="space-y-1">
         <div className="text-sm font-semibold text-slate-700">
-          Geocercas activas de la organización
+          {t("geocercas.manage.activeListTitle", { defaultValue: "Geocercas activas de la organización" })}
         </div>
         <select
           multiple
@@ -278,8 +280,8 @@ export default function GeocercasPage() {
           {geocercas.length === 0 && (
             <option value="" disabled>
               {loadingGeocercas
-                ? "Cargando geocercas..."
-                : "No hay geocercas activas"}
+                ? t("geocercas.manage.loadingGeofences", { defaultValue: "Cargando geocercas..." })
+                : t("geocercas.manage.noActiveGeofences", { defaultValue: "No hay geocercas activas" })}
             </option>
           )}
           {geocercas.map((g) => (
@@ -289,12 +291,11 @@ export default function GeocercasPage() {
           ))}
         </select>
         <p className="text-xs text-slate-500">
-          Selecciona una o varias. Si no seleccionas ninguna y pulsas MOSTRAR,
-          se mostrarán todas.
+          {t("geocercas.manage.helperSelect", { defaultValue: "Selecciona una o varias. Si no seleccionas ninguna y pulsas MOSTRAR, se mostrarán todas." })}
         </p>
         <p className="text-xs text-slate-500">
           <span className="font-semibold">
-            [GeocercasPage] IDs aplicados al mapa:
+            {t("geocercas.manage.helperApplied", { defaultValue: "[GeocercasPage] IDs aplicados al mapa:" })}
           </span>{" "}
           {selectedGeocercaIdsApplied.length === 0
             ? "ninguno (todas las geocercas)"

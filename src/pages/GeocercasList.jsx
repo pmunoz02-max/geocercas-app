@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useTranslation } from "react-i18next";
 
 function downloadJSON(filename, data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -15,6 +16,7 @@ export default function GeocercasList() {
   const [loading, setLoading] = React.useState(true);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -24,32 +26,32 @@ export default function GeocercasList() {
       .eq("owner", user?.id ?? "")
       .order("created_at", { ascending: false });
     setLoading(false);
-    if (error) return alert("Error cargando geocercas");
+    if (error) return alert(t("geocercas.list.loadError", { defaultValue: "Error cargando geocercas" }));
     setItems(data || []);
   }, [user?.id]);
 
   React.useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (id) => {
-    if (!confirm("¿Eliminar esta geocerca?")) return;
+    if (!confirm(t("geocercas.list.confirmDelete", { defaultValue: "¿Eliminar esta geocerca?" }))) return;
     const { error } = await supabase.from("geofences").delete().eq("id", id);
-    if (error) alert("Error eliminando geocerca"); else setItems((p) => p.filter((x) => x.id !== id));
+    if (error) alert(t("geocercas.list.deleteError", { defaultValue: "Error eliminando geocerca" })); else setItems((p) => p.filter((x) => x.id !== id));
   };
 
-  if (loading) return <div>Cargando...</div>;
+  if (loading) return <div>{t("geocercas.list.loading", { defaultValue: "Cargando..." })}</div>;
 
   return (
     <div>
-      <h2>Geocercas</h2>
+      <h2>{t("geocercas.list.title", { defaultValue: "Geocercas" })}</h2>
       {items.length === 0 ? (
-        <p>No hay geocercas. <Link to="/nueva">Crea una</Link>.</p>
+        <p>{t("geocercas.list.empty", { defaultValue: "No hay geocercas." })} <Link to="/nueva">{t("geocercas.list.createOne", { defaultValue: "Crea una" })}</Link>.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>Nombre</th>
-              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>Creada</th>
-              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>Acciones</th>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>{t("geocercas.list.thName", { defaultValue: "Nombre" })}</th>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>{t("geocercas.list.thCreated", { defaultValue: "Creada" })}</th>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>{t("geocercas.list.thActions", { defaultValue: "Acciones" })}</th>
             </tr>
           </thead>
           <tbody>
@@ -58,9 +60,9 @@ export default function GeocercasList() {
                 <td style={{ padding: "6px 4px" }}>{g.name}</td>
                 <td style={{ padding: "6px 4px" }}>{new Date(g.created_at).toLocaleString()}</td>
                 <td style={{ padding: "6px 4px", display: "flex", gap: 8 }}>
-                  <button onClick={() => navigate(`/geocercas/${g.id}`)}>Ver</button>
-                  <button onClick={() => downloadJSON(`${g.name || "geocerca"}.geojson`, g.geojson)}>Exportar GeoJSON</button>
-                  <button onClick={() => handleDelete(g.id)} style={{ color: "#b91c1c" }}>Eliminar</button>
+                  <button onClick={() => navigate(`/geocercas/${g.id}`)}>{t("geocercas.list.view", { defaultValue: "Ver" })}</button>
+                  <button onClick={() => downloadJSON(`${g.name || "geocerca"}.geojson`, g.geojson)}>{t("geocercas.list.export", { defaultValue: "Exportar GeoJSON" })}</button>
+                  <button onClick={() => handleDelete(g.id)} style={{ color: "#b91c1c" }}>{t("geocercas.list.delete", { defaultValue: "Eliminar" })}</button>
                 </td>
               </tr>
             ))}
