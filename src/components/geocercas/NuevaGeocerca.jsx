@@ -473,7 +473,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     async ({ name }) => {
       const nm = String(name || "").trim();
       if (!nm) {
-        alert(t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." }));
+        alert(
+          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
+        );
         return false;
       }
       if (!currentOrg?.id) {
@@ -492,7 +494,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           );
         }
 
-        // ✅ IMPORTANTE: NO enviar nombre_ci (BD lo calcula). Mantengo onConflict correcto.
         const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
           { nombre: nm, org_id: currentOrg.id, geojson: geo },
           { onConflict: "org_id,nombre_ci" }
@@ -505,14 +506,13 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       // 2) Geoman layer real
       const map = mapRef.current;
       const layerToSave =
-        selectedLayerRef.current ||
-        lastCreatedLayerRef.current ||
-        getLastGeomanLayer(map);
+        selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
         alert(
           t("geocercas.errorNoShape", {
-            defaultValue: "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
+            defaultValue:
+              "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
           })
         );
         return false;
@@ -527,7 +527,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         );
       }
 
-      // ✅ IMPORTANTE: NO enviar nombre_ci (BD lo calcula). Mantengo onConflict correcto.
       const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
         { nombre: nm, org_id: currentOrg.id, geojson: geo },
         { onConflict: "org_id,nombre_ci" }
@@ -543,7 +542,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     try {
       const nm = geofenceName.trim();
       if (!nm) {
-        alert(t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." }));
+        alert(
+          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
+        );
         return;
       }
 
@@ -562,10 +563,16 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const handleDeleteSelected = async () => {
     if (!selectedNames || selectedNames.size === 0) {
-      alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+      alert(
+        t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
+      );
       return;
     }
-    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })))
+    if (
+      !window.confirm(
+        t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
+      )
+    )
       return;
 
     try {
@@ -600,7 +607,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
 
       if (!nameToShow) {
-        alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+        alert(
+          t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
+        );
         return;
       }
 
@@ -643,13 +652,17 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         if (supaError) {
           console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
           alert(
-            t("geocercas.errorNoGeojson", { defaultValue: "No se pudo cargar el GeoJSON de la geocerca." }) +
+            t("geocercas.errorNoGeojson", {
+              defaultValue: "No se pudo cargar el GeoJSON de la geocerca.",
+            }) +
               "\n\nDetalle: " +
               (supaError.message || String(supaError))
           );
           return;
         }
-        alert(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." }));
+        alert(
+          t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." })
+        );
         return;
       }
 
@@ -914,10 +927,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         </div>
       </div>
 
+      {/* Modal coordenadas */}
       {coordModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
-            <h2 className="text-sm font-semibold text-slate-100 mb-1">{t("geocercas.modalTitle")}</h2>
+            {/* ✅ CAMBIO SOLO TEXTO (ANTES: t("geocercas.modalTitle")) */}
+            <h2 className="text-sm font-semibold text-slate-100 mb-1">
+              Dibujar por coordenadas
+            </h2>
 
             <p className="text-xs text-slate-400">
               1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono
@@ -934,17 +951,20 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             />
 
             <div className="flex justify-end gap-2 mt-2">
+              {/* ✅ CAMBIO SOLO TEXTO (ANTES: t("geocercas.modalCancel")) */}
               <button
                 onClick={() => setCoordModalOpen(false)}
                 className="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200"
               >
-                {t("geocercas.modalCancel")}
+                Cancelar
               </button>
+
+              {/* ✅ CAMBIO SOLO TEXTO (ANTES: t("geocercas.modalDraw")) */}
               <button
                 onClick={handleDrawFromCoords}
                 className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white"
               >
-                {t("geocercas.modalDraw")}
+                Dibujar
               </button>
             </div>
           </div>
@@ -953,3 +973,4 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     </div>
   );
 }
+
