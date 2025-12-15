@@ -252,6 +252,23 @@ function normalizeGeojson(geo) {
   return geo;
 }
 
+
+function centroidFeatureFromGeojson(geo) {
+  try {
+    const gj = geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
+    const bounds = L.geoJSON(gj).getBounds();
+    if (!bounds?.isValid?.()) return null;
+    const c = bounds.getCenter();
+    return {
+      type: "Feature",
+      properties: { _centroid: true },
+      geometry: { type: "Point", coordinates: [c.lng, c.lat] },
+    };
+  } catch {
+    return null;
+  }
+}
+
 /* ----------------- Componente principal ----------------- */
 export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const { currentOrg } = useAuth();
@@ -280,7 +297,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   // ✅ Visualización de geocercas guardadas
   const [viewFeature, setViewFeature] = useState(null);
+  const [viewCentroid, setViewCentroid] = useState(null);
   const [viewId, setViewId] = useState(0);
+  const [showLoading, setShowLoading] = useState(false);
 
   // para guardar desde geoman
   const selectedLayerRef = useRef(null);
@@ -498,14 +517,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     setViewFeature(null);
   }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
 
-
-
   const handleShowSelected = useCallback(async () => {
+    setShowLoading(true);
     try {
-      // Elegir nombre a mostrar:
-      // - preferimos el último click
-      // - si no, la primera seleccionada
-      // - si no hay selección, mostramos la primera de la lista
       let nameToShow = lastSelectedName || Array.from(selectedNames)[0] || null;
       if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
 
@@ -520,24 +534,20 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       let geo = null;
       let supaError = null;
 
-      // 1) Intentar Supabase (si aplica)
       if (item.source === "supabase") {
         if (!supabaseClient || !currentOrg?.id) {
           supaError = new Error("Org no disponible.");
         } else {
-          const { data, error } = await supabaseClient
-            .from(SUPABASE_GEOFENCES_TABLE)
-            .select("geojson")
-            .eq("org_id", currentOrg.id)
-            .eq("nombre", item.nombre)
-            .maybeSingle();
+          const q = supabaseClient.from(SUPABASE_GEOFENCES_TABLE).select("geojson");
+          if (item.id) q.eq("id", item.id);
+          else q.eq("org_id", currentOrg.id).eq("nombre", item.nombre);
 
+          const { data, error } = await q.maybeSingle();
           if (error) supaError = error;
           geo = normalizeGeojson(data?.geojson);
         }
       }
 
-      // 2) Fallback a LocalStorage (si Supabase no devolvió geo o hubo error)
       if (!geo && typeof window !== "undefined") {
         const key = item.key || `geocerca_${item.nombre}`;
         const raw = localStorage.getItem(key);
@@ -549,13 +559,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         }
       }
 
-      // 3) Si no encontramos GeoJSON, mostrar la razón
       if (!geo) {
         if (supaError) {
           console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
           alert(
             (t("geocercas.errorNoGeojson", { defaultValue: "No se pudo cargar el GeoJSON de la geocerca." })) +
-              "\n\nDetalle: " +
+              "
+
+Detalle: " +
               (supaError.message || String(supaError))
           );
           return;
@@ -565,19 +576,24 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       }
 
       setViewFeature(geo);
+      setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
 
-      // Zoom automático
       if (mapRef.current) {
         try {
+          mapRef.current.invalidateSize?.();
           const bounds = L.geoJSON(geo).getBounds();
           if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+          else alert("GeoJSON cargado, pero no se pudo calcular bounds.");
         } catch {}
       }
     } catch (e) {
       alert(e?.message || String(e));
+    } finally {
+      setShowLoading(false);
     }
   }, [selectedNames, lastSelectedName, geofenceList, supabaseClient, currentOrg, t]);
+
 
 
   const pointStyle = useMemo(
@@ -672,7 +688,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               onClick={handleShowSelected}
               className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 text-white"
             >
-              {t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
+              {showLoading ? t("common.loading", { defaultValue: "Cargando..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
             <button
@@ -722,6 +738,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             {/* 👁️ Geocerca seleccionada (guardada) */}
             <Pane name="viewPane" style={{ zIndex: 640 }}>
               {viewFeature && (
+                <>
                 <GeoJSON
                   key={`view-${viewId}`}
                   data={viewFeature}
@@ -732,6 +749,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                     fillOpacity: 0.15,
                   })}
                 />
+                {viewCentroid && (
+                  <GeoJSON
+                    key={`view-marker-${viewId}`}
+                    data={viewCentroid}
+                    pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                  />
+                )}
+                </>
               )}
             </Pane>
 
