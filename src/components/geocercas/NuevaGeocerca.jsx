@@ -129,16 +129,26 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
   return unique;
 }
 
-async function deleteGeofences({ items, supabaseClient = null }) {
+async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   let deleted = 0;
 
   const supaTargets = (items || []).filter((x) => x.source === "supabase");
   if (supabaseClient && supaTargets.length) {
-    const nombres = supaTargets.map((x) => x.nombre);
-    const { error, count } = await supabaseClient
-      .from(SUPABASE_GEOFENCES_TABLE)
-      .delete({ count: "exact" })
-      .in("nombre", nombres);
+    // Prefer borrar por id (más seguro). Si no hay id, cae a nombre+orgId.
+    const ids = supaTargets.map((x) => x.id).filter(Boolean);
+
+    let q = supabaseClient.from(SUPABASE_GEOFENCES_TABLE).delete({ count: "exact" });
+
+    if (orgId) q = q.eq("org_id", orgId);
+
+    if (ids.length) {
+      q = q.in("id", ids);
+    } else {
+      const nombres = supaTargets.map((x) => x.nombre);
+      q = q.in("nombre", nombres);
+    }
+
+    const { error, count } = await q;
     if (error) throw error;
     deleted += count || 0;
   }
@@ -156,6 +166,7 @@ async function deleteGeofences({ items, supabaseClient = null }) {
 
   return deleted;
 }
+
 
 /* ----------------- Lat/Lng vivos ----------------- */
 function CursorPosLive({ setCursorLatLng }) {
@@ -502,20 +513,22 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames.size) {
-      alert(t("geocercas.errorSelectAtLeastOne"));
+      alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
       return;
     }
-    if (!window.confirm(t("geocercas.deleteConfirm"))) return;
+    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }))) return;
 
     const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
-    const count = await deleteGeofences({ items, supabaseClient });
-    alert(t("geocercas.deletedCount", { count }));
+    const count = await deleteGeofences({ items, supabaseClient, orgId: currentOrg?.id });
+    alert(t("geocercas.deletedCount", { count, defaultValue: `Eliminadas: ${count}` }));
     setSelectedNames(new Set());
+    setViewFeature(null);
+    setViewCentroid(null);
     await refreshGeofenceList();
     clearCanvas();
     setDraftFeature(null);
     setViewFeature(null);
-  }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
+  }, [selectedNames, geofenceList, supabaseClient, currentOrg, refreshGeofenceList, clearCanvas, t]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
