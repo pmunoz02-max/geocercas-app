@@ -298,37 +298,24 @@ export default function PersonalPage() {
 
       // IMPORTANTE:
       // No hacemos .select() aquí para evitar 403 cuando el SELECT policy exige is_deleted=false.
-      // En su lugar pedimos count exact para saber si realmente se afectó 1 fila (RLS-friendly).
-      const { error, count } = await supabase
+      const { error } = await supabase
         .from("personal")
-        .update(
-          {
-            is_deleted: true,
-            vigente: false,
-            deleted_at: now,
-            updated_at: now,
-          },
-          { count: "exact" }
-        )
+        .update({
+          is_deleted: true,
+          vigente: false,
+          deleted_at: now,
+          updated_at: now,
+        })
         .eq("id", selectedId)
-        .eq("org_id", orgId)
         .eq("is_deleted", false);
 
-      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, count, error });
+      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, error });
 
       if (error) throw error;
-      if (!count) {
-        // 0 filas afectadas suele indicar RLS (no admin/owner en la org) o que ya estaba eliminado.
-        throw new Error(
-          t(
-            "personal.errorDeleteNoRows",
-            "No se eliminó ningún registro (0 filas afectadas). Verifica permisos (owner/admin) y que el registro esté vigente."
-          )
-        );
-      }
 
-      // Optimista: removemos de la lista actual para que la UI responda de inmediato
+      // UX: reflejar inmediatamente en UI (y luego sincronizar con loadPersonal)
       setItems((prev) => (prev || []).filter((r) => r.id !== selectedId));
+
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
       setSelectedId(null);
       setForm(emptyForm());
@@ -336,7 +323,7 @@ export default function PersonalPage() {
       await loadPersonal();
     } catch (err) {
       console.error("[PersonalPage] Error onEliminar:", err);
-      setBanner({ type: "err", msg: (err?.message && String(err.message).trim()) ? err.message : t("personal.errorDelete") });
+      setBanner({ type: "err", msg: err?.message || t("personal.errorDelete") });
     } finally {
       setLoading(false);
     }
