@@ -659,6 +659,32 @@
           }
         }
       }
+    },
+    "instructions": {
+      "title": "Instructions",
+      "subtitle": "Step-by-step guide to configure and use App Geocercas correctly.",
+      "jumpToSteps": "Jump to steps",
+      "viewResult": "View result",
+      "tocTitle": "Contents",
+      "tocSubtitle": "Quickly access each section of the guide.",
+      "tocSteps": "Main steps",
+      "tocTips": "Best practices",
+      "tocResult": "Expected result",
+      "stepsTitle": "Getting started steps",
+      "stepsSubtitle": "Follow these steps in order to set up your organization and start operating.",
+      "tipsTitle": "Best practices",
+      "bestPractice1Title": "Define your organization first",
+      "bestPractice1Body": "Set up your organization name, managers and structure before creating geofences.",
+      "bestPractice2Title": "Draw accurate geofences",
+      "bestPractice2Body": "Make sure geofences match real work areas to avoid false positives.",
+      "bestPractice3Title": "Assign people and activities",
+      "bestPractice3Body": "Link people, activities and geofences to produce reliable cost reports and traceability.",
+      "bestPractice4Title": "Use the tracker properly",
+      "bestPractice4Body": "Invite trackers only when needed and verify permissions and update frequency.",
+      "recommendationTitle": "Final recommendation",
+      "recommendationBody": "A correct initial setup ensures reliable reports, operational control, and a better experience in App Geocercas.",
+      "resultTitle": "Expected result",
+      "resultIntro": "After completing these steps, you will have your organization configured, geofences created, personnel assigned, and trackers ready to operate with real-time control and reporting."
     }
   },
   "resetPassword": {
