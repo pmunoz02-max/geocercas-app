@@ -296,23 +296,47 @@ export default function PersonalPage() {
 
       const now = new Date().toISOString();
 
-      // IMPORTANTE:
-      // No hacemos .select() aquí para evitar 403 cuando el SELECT policy exige is_deleted=false.
-      const { error } = await supabase
+      // ✅ FIX MÍNIMO Y DEFINITIVO:
+      // 1) Pedimos COUNT exacto (sin .select()) para saber si realmente se eliminó algo.
+      // 2) Si count === 0: NO mostramos “ok”, mostramos error y recargamos.
+      // 3) Si count > 0: limpiamos UI (optimistic) y recargamos.
+      const { error, count } = await supabase
         .from("personal")
-        .update({
-          is_deleted: true,
-          vigente: false,
-          deleted_at: now,
-          updated_at: now,
-        })
+        .update(
+          {
+            is_deleted: true,
+            vigente: false,
+            deleted_at: now,
+            updated_at: now,
+          },
+          { count: "exact" }
+        )
         .eq("id", selectedId)
         .eq("org_id", orgId)
         .eq("is_deleted", false);
 
-      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, error });
+      console.log("[PersonalPage] Resultado delete (soft):", {
+        selectedId,
+        orgId,
+        count,
+        error,
+      });
 
       if (error) throw error;
+
+      // Si no afectó filas, NO fue eliminado realmente.
+      if (!count || count === 0) {
+        setBanner({
+          type: "err",
+          msg: t("personal.errorDeleteNoRows") || "No se eliminó ningún registro (0 filas afectadas).",
+        });
+        // Refrescamos para mantener consistencia visual
+        await loadPersonal();
+        return;
+      }
+
+      // ✅ UI: eliminarlo inmediatamente del listado (no esperar al reload)
+      setItems((prev) => prev.filter((r) => r.id !== selectedId));
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
       setSelectedId(null);
