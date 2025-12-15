@@ -502,56 +502,72 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const handleShowSelected = useCallback(async () => {
     try {
-      console.log("handleShowSelected start", { selectedNames: Array.from(selectedNames || []), lastSelectedName, geofenceListLen: geofenceList?.length });
-      let nameToShow = lastSelectedName || Array.from(selectedNames)[0];
-
-      // UX: si no hay selección pero existen geocercas, mostramos la primera
-      if (!nameToShow && geofenceList.length > 0) {
-        nameToShow = geofenceList[0].nombre;
-      }
+      // Elegir nombre a mostrar:
+      // - preferimos el último click
+      // - si no, la primera seleccionada
+      // - si no hay selección, mostramos la primera de la lista
+      let nameToShow = lastSelectedName || Array.from(selectedNames)[0] || null;
+      if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
 
       if (!nameToShow) {
         alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
         return;
       }
-      const item = geofenceList.find((g) => g.nombre === nameToShow);
+
+      const item = geofenceList.find((g) => g.nombre === nameToShow) || null;
       if (!item) return;
 
       let geo = null;
+      let supaError = null;
 
+      // 1) Intentar Supabase (si aplica)
       if (item.source === "supabase") {
         if (!supabaseClient || !currentOrg?.id) {
-          alert("Org no disponible.");
-          return;
-        }
-        const { data, error } = await supabaseClient
-          .from(SUPABASE_GEOFENCES_TABLE)
-          .select("geojson")
-          .eq("org_id", currentOrg.id)
-          .eq("nombre", item.nombre)
-          .maybeSingle();
+          supaError = new Error("Org no disponible.");
+        } else {
+          const { data, error } = await supabaseClient
+            .from(SUPABASE_GEOFENCES_TABLE)
+            .select("geojson")
+            .eq("org_id", currentOrg.id)
+            .eq("nombre", item.nombre)
+            .maybeSingle();
 
-        if (error) throw error;
-        geo = normalizeGeojson(data?.geojson);
-      } else {
-        if (typeof window !== "undefined") {
-          const key = item.key || `geocerca_${item.nombre}`;
-          const raw = localStorage.getItem(key);
-          const obj = raw ? JSON.parse(raw) : null;
-          geo = normalizeGeojson(obj?.geojson);
+          if (error) supaError = error;
+          geo = normalizeGeojson(data?.geojson);
         }
       }
 
-      console.log("handleShowSelected loaded geo", { source: item.source, nombre: item.nombre, hasGeo: !!geo });
+      // 2) Fallback a LocalStorage (si Supabase no devolvió geo o hubo error)
+      if (!geo && typeof window !== "undefined") {
+        const key = item.key || `geocerca_${item.nombre}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const obj = JSON.parse(raw);
+            geo = normalizeGeojson(obj?.geojson);
+          } catch {}
+        }
+      }
 
+      // 3) Si no encontramos GeoJSON, mostrar la razón
       if (!geo) {
-        alert(t("geocercas.errorNoGeojson") || "No se encontró el GeoJSON de la geocerca.");
+        if (supaError) {
+          console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
+          alert(
+            (t("geocercas.errorNoGeojson", { defaultValue: "No se pudo cargar el GeoJSON de la geocerca." })) +
+              "\n\nDetalle: " +
+              (supaError.message || String(supaError))
+          );
+          return;
+        }
+        alert(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." }));
         return;
       }
 
       setViewFeature(geo);
       setViewId((x) => x + 1);
 
+      // Zoom automático
       if (mapRef.current) {
         try {
           const bounds = L.geoJSON(geo).getBounds();
@@ -656,7 +672,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               onClick={handleShowSelected}
               className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 text-white"
             >
-              t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })
+              {t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
             <button
