@@ -317,7 +317,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const [geofenceList, setGeofenceList] = useState([]);
   const [selectedNames, setSelectedNames] = useState(new Set());
-  const selectedNamesRef = useRef(new Set());
   const [lastSelectedName, setLastSelectedName] = useState(null);
 
   const [cursorLatLng, setCursorLatLng] = useState(null);
@@ -335,7 +334,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const [viewCentroid, setViewCentroid] = useState(null);
   const [viewId, setViewId] = useState(0);
   const [showLoading, setShowLoading] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // para guardar desde geoman
   const selectedLayerRef = useRef(null);
@@ -400,10 +398,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   useEffect(() => {
     refreshGeofenceList();
   }, [refreshGeofenceList]);
-
-  useEffect(() => {
-    selectedNamesRef.current = selectedNames;
-  }, [selectedNames]);
 
   /* Geoman events */
   const handleGeomanCreate = useCallback((e) => {
@@ -553,42 +547,64 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       setGeofenceName("");
       setDraftFeature(null);
     setViewFeature(null);
-      } catch (e) {
+    } catch (e) {
       alert(e?.message || String(e));
-    } finally {
-      setIsDeleting(false);
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
 
-  const handleSelectGeofence = useCallback((nombre) => {
+  const handleSelectGeofence = (nombre) => {
     setSelectedNames((prev) => {
       const next = new Set(prev);
       if (next.has(nombre)) next.delete(nombre);
       else next.add(nombre);
-      selectedNamesRef.current = next; // ✅ evita desfase
       return next;
     });
     setLastSelectedName(nombre);
-  }, []);
+  };
+      s.has(nombre) ? s.delete(nombre) : s.add(nombre);
+      setSelectedNames(s);
+      setLastSelectedName(nombre);
+    },
+    [selectedNames]
+  );
 
+  const handleDeleteSelected = async () => {
+    try {
+      if (!selectedNames || selectedNames.size === 0) {
+        alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+        return;
+      }
 
-  const handleDeleteSelected = useCallback(async () => {
-    if (!selectedNames.size) {
-      alert(t("geocercas.errorSelectAtLeastOne"));
-      return;
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }))
+      )
+        return;
+
+      // Tomamos snapshot actual (sin depender de closures)
+      const names = Array.from(selectedNames);
+      const items = geofenceList.filter((g) => names.includes(g.nombre));
+
+      const count = await deleteGeofences({
+        items,
+        supabaseClient,
+        orgId: currentOrg?.id,
+      });
+
+      alert(t("geocercas.deletedCount", { count, defaultValue: `Eliminadas: ${count}` }));
+
+      // Limpiar selección y vistas
+      setSelectedNames(new Set());
+      setViewFeature(null);
+      setViewCentroid(null);
+
+      await refreshGeofenceList();
+      clearCanvas();
+      setDraftFeature(null);
+    } catch (e) {
+      alert(e?.message || String(e));
     }
-    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }))) return;
-
-    const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
-    const count = await deleteGeofences({ items, supabaseClient });
-    alert(t("geocercas.deletedCount", { count }));
-    setSelectedNames(new Set());
-    selectedNamesRef.current = new Set();
-    await refreshGeofenceList();
-    clearCanvas();
-    setDraftFeature(null);
-    setViewFeature(null);
-  }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
+  };
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
