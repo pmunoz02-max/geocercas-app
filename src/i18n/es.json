@@ -685,16 +685,6 @@
         "perf": "Rendimiento",
         "update": "Actualización"
       },
-      "support": {
-  "title": "Soporte y contacto",
-  "subtitle": "¿Necesitas ayuda? Contáctanos para soporte técnico, facturación o consultas generales.",
-  "emailLabel": "Correo de soporte",
-  "email": "soporte@tugeocercas.com",
-  "viewFaq": "Ver FAQ",
-  "back": "Volver",
-  "goHome": "Ir a inicio"
-}
-
       "items": {
         "0": {
           "title": "Centro de Ayuda: nuevas páginas",
@@ -765,6 +755,14 @@
           "answer": "La frecuencia de actualización la define el administrador al crear la asignación del tracker."
         }
       ]
+    },
+    "support": {
+      "title": "Soporte y contacto",
+      "subtitle": "¿Necesitas ayuda? Contáctanos para soporte técnico, facturación o consultas generales.",
+      "emailLabel": "Correo de soporte",
+      "viewFaq": "Ver FAQ",
+      "back": "Volver",
+      "goHome": "Ir a Inicio"
     }
   },
   "resetPassword": {
