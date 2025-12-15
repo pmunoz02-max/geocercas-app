@@ -670,7 +670,8 @@
       "breadcrumb": "Centre d'aide",
       "back": "Retour",
       "goHome": "Aller à l'accueil",
-      "viewFaq": "Voir la FAQ"
+      "viewFaq": "Voir la FAQ",
+      "badge": "Centre d’aide"
     },
     "changelog": {
       "breadcrumb": "Nouveautés",
@@ -701,8 +702,8 @@
       }
     },
     "instructions": {
-      "title": "Instructions",
-      "subtitle": "Guide pas à pas pour configurer et utiliser App Geocercas correctement.",
+      "title": "Instructions d’utilisation",
+      "subtitle": "Guide étape par étape pour configurer et utiliser App Geocercas correctement.",
       "jumpToSteps": "Aller aux étapes",
       "viewResult": "Voir le résultat",
       "tocTitle": "Sommaire",
@@ -711,52 +712,51 @@
       "tocTips": "Bonnes pratiques",
       "tocResult": "Résultat attendu",
       "stepsTitle": "Étapes pour commencer",
-      "stepsSubtitle": "Suivez ces étapes dans l’ordre pour configurer votre organisation et démarrer.",
+      "stepsSubtitle": "Suivez ces étapes dans l’ordre pour configurer votre organisation et commencer à opérer.",
       "tipsTitle": "Bonnes pratiques",
-      "bestPractice1Title": "Définissez d’abord votre organisation",
-      "bestPractice1Body": "Renseignez le nom, les responsables et la structure de l’organisation avant de créer des géofences.",
+      "bestPractice1Title": "Définissez bien votre organisation",
+      "bestPractice1Body": "Configurez correctement le nom, les responsables et la structure de votre organisation avant de créer des géofences.",
       "bestPractice2Title": "Dessinez des géofences précises",
-      "bestPractice2Body": "Assurez-vous que les géofences correspondent aux zones réelles de travail pour éviter les faux positifs.",
-      "bestPractice3Title": "Affectez le personnel et les activités",
-      "bestPractice3Body": "Reliez personnes, activités et géofences pour obtenir des rapports de coûts fiables et une bonne traçabilité.",
+      "bestPractice2Body": "Assurez‑vous que les géofences couvrent exactement les zones réelles de travail afin d’éviter les faux positifs.",
+      "bestPractice3Title": "Assignez le personnel et les activités",
+      "bestPractice3Body": "Reliez personnes, activités et géofences pour obtenir des rapports de coûts et de la traçabilité.",
       "bestPractice4Title": "Utilisez le tracker correctement",
-      "bestPractice4Body": "Invitez des trackers uniquement si nécessaire et vérifiez les permissions et la fréquence de mise à jour.",
+      "bestPractice4Body": "Invitez des trackers uniquement si nécessaire et vérifiez les autorisations et la fréquence de mise à jour.",
       "recommendationTitle": "Recommandation finale",
-      "recommendationBody": "Une configuration initiale correcte garantit des rapports fiables, un meilleur contrôle opérationnel et une meilleure expérience sur App Geocercas.",
+      "recommendationBody": "Une bonne configuration initiale garantit des rapports fiables, un meilleur contrôle opérationnel et une meilleure expérience sur App Geocercas.",
       "resultTitle": "Résultat attendu",
-      "resultIntro": "Une fois ces étapes terminées, votre organisation sera configurée, les géofences créées, le personnel affecté et les trackers prêts à fonctionner avec contrôle et rapports en temps réel."
+      "resultIntro": "À la fin de ces étapes, votre organisation sera configurée, les géofences créées, le personnel assigné et les trackers prêts à fonctionner avec des rapports et un suivi en temps réel."
+    },
+    "faq": {
+      "badge": "FAQ",
+      "title": "Questions fréquentes",
+      "subtitle": "Réponses rapides aux questions les plus courantes sur l’utilisation d’App Geocercas.",
+      "seeQuickGuide": "Voir le guide rapide",
+      "backToPanel": "Retour au tableau de bord",
+      "items": [
+        {
+          "question": "Qu’est‑ce qu’une géofence ?",
+          "answer": "Une géofence est une zone géographique délimitée sur la carte qui permet de contrôler la présence, les activités et les coûts du personnel."
+        },
+        {
+          "question": "Puis‑je utiliser l’app avec plusieurs organisations ?",
+          "answer": "Oui. App Geocercas est multi‑organisation. Vous pouvez gérer plusieurs entreprises ou projets depuis un seul compte."
+        },
+        {
+          "question": "Qui peut voir les rapports de coûts ?",
+          "answer": "Seuls les propriétaires et les administrateurs d’une organisation peuvent accéder aux rapports de coûts."
+        },
+        {
+          "question": "Qu’est‑ce qu’un tracker ?",
+          "answer": "Un tracker est un utilisateur ou un appareil qui envoie sa position pour être suivi à l’intérieur des géofences."
+        },
+        {
+          "question": "À quelle fréquence la position est‑elle mise à jour ?",
+          "answer": "La fréquence de mise à jour est définie par l’administrateur lors de la création de l’affectation du tracker."
+        }
+      ]
     }
   },
-  "faq": {
-  "badge": "Preguntas frecuentes",
-  "title": "Preguntas frecuentes",
-  "subtitle": "Respuestas rápidas a las dudas más comunes sobre el uso de App Geocercas.",
-  "seeQuickGuide": "Ver guía rápida",
-  "backToPanel": "Volver al panel",
-  "items": [
-    {
-      "question": "¿Qué es una geocerca?",
-      "answer": "Una geocerca es una zona geográfica delimitada en el mapa que permite controlar presencia, actividades y costos del personal."
-    },
-    {
-      "question": "¿Puedo usar la app con varias organizaciones?",
-      "answer": "Sí. App Geocercas es multi-organización. Puedes administrar varias empresas o proyectos desde una sola cuenta."
-    },
-    {
-      "question": "¿Quién puede ver los reportes de costos?",
-      "answer": "Solo los propietarios y administradores de una organización pueden acceder a los reportes de costos."
-    },
-    {
-      "question": "¿Qué es un tracker?",
-      "answer": "Un tracker es un usuario o dispositivo que envía su ubicación para ser monitoreado dentro de geocercas."
-    },
-    {
-      "question": "¿Cada cuánto se actualiza la ubicación?",
-      "answer": "La frecuencia de actualización la define el administrador al crear la asignación del tracker."
-    }
-  ]
-}
-
   "resetPassword": {
     "title": "Réinitialiser le mot de passe",
     "subtitle": "Créez un nouveau mot de passe pour votre compte.",
