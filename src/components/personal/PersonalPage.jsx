@@ -84,11 +84,11 @@ export default function PersonalPage() {
   }, [items, q]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      loadPersonal();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, onlyActive, orgId, t]);
+  if (!authLoading && user) {
+    loadPersonal();
+  }
+}, [authLoading, user, onlyActive, orgId]);
+
 
   async function loadPersonal() {
     try {
