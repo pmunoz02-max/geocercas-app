@@ -187,7 +187,16 @@
     "buttonShowSelected": "Afficher sélectionnées",
     "buttonShowAll": "Afficher toutes",
     "buttonDeleteSelected": "Supprimer sélectionnées",
-    "buttonClearCanvas": "Nettoyer la carte"
+    "buttonClearCanvas": "Nettoyer la carte",
+    "pageTitle": "Géofences",
+    "pageSubtitle": "Gérez les géofences de votre organisation. D’ici, vous pouvez en créer de nouvelles et consulter celles existantes.",
+    "currentOrgLabel": "Organisation actuelle :",
+    "currentUserLabel": "Utilisateur :",
+    "cardNewTitle": "Nouvelle géofence",
+    "cardNewBody": "Créez une nouvelle géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
+    "cardNewCta": "Aller à Nouvelle géofence →",
+    "cardListTitle": "Liste des géofences",
+    "cardListBody": "Bientôt, vous verrez ici la liste des géofences existantes et leurs détails. Pour l’instant, utilisez l’option Nouvelle géofence pour créer et modifier."
   },
   "personal": {
     "title": "Personnel",
@@ -670,8 +679,7 @@
       "breadcrumb": "Centre d'aide",
       "back": "Retour",
       "goHome": "Aller à l'accueil",
-      "viewFaq": "Voir la FAQ",
-      "badge": "Centre d’aide"
+      "viewFaq": "Voir la FAQ"
     },
     "changelog": {
       "breadcrumb": "Nouveautés",
@@ -700,44 +708,6 @@
           }
         }
       }
-    },
-    "support": {
-      "title": "Support et contact",
-      "subtitle": "Besoin d’aide ? Contactez‑nous pour le support technique, la facturation ou des questions générales.",
-      "emailLabel": "E-mail de support",
-      "email": "soporte@tugeocercas.com",
-      "viewFaq": "Voir la FAQ",
-      "back": "Retour",
-      "goHome": "Aller à l'accueil"
-    },
-    "faq": {
-      "badge": "Foire aux questions",
-      "title": "Foire aux questions",
-      "subtitle": "Réponses rapides aux questions les plus courantes sur App Geocercas.",
-      "seeQuickGuide": "Voir le guide rapide",
-      "backToPanel": "Retour au tableau de bord",
-      "items": [
-        {
-          "question": "Qu’est‑ce qu’une géofence (geofence) ?",
-          "answer": "Une géofence est une zone géographique définie sur la carte pour contrôler la présence et les activités."
-        },
-        {
-          "question": "L’application est‑elle multi‑organisation ?",
-          "answer": "Oui. Vous pouvez gérer plusieurs organisations avec un seul compte."
-        },
-        {
-          "question": "Qui peut voir les rapports de coûts ?",
-          "answer": "Seuls les propriétaires et les administrateurs peuvent accéder aux rapports de coûts."
-        },
-        {
-          "question": "Qu’est‑ce qu’un tracker ?",
-          "answer": "Un tracker est un utilisateur ou un appareil qui envoie sa position pour le suivi."
-        },
-        {
-          "question": "À quelle fréquence la position est‑elle mise à jour ?",
-          "answer": "La fréquence est définie par l’administrateur lors de la création des affectations."
-        }
-      ]
     }
   },
   "resetPassword": {
