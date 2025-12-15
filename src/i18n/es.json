@@ -672,32 +672,6 @@
       "goHome": "Ir a Inicio",
       "viewFaq": "Ver FAQ"
     },
-    "instructions": {
-      "title": "Instrucciones de uso",
-      "subtitle": "Guía paso a paso para configurar y utilizar App Geocercas correctamente.",
-      "jumpToSteps": "Ir a los pasos",
-      "viewResult": "Ver resultado",
-      "tocTitle": "Contenido",
-      "tocSubtitle": "Accede rápidamente a cada sección de la guía.",
-      "tocSteps": "Pasos principales",
-      "tocTips": "Buenas prácticas",
-      "tocResult": "Resultado esperado",
-      "stepsTitle": "Pasos para comenzar",
-      "stepsSubtitle": "Sigue estos pasos en orden para configurar tu organización y empezar a operar.",
-      "tipsTitle": "Buenas prácticas",
-      "bestPractice1Title": "Define bien tu organización",
-      "bestPractice1Body": "Configura correctamente el nombre, responsables y estructura de tu organización antes de crear geocercas.",
-      "bestPractice2Title": "Dibuja geocercas precisas",
-      "bestPractice2Body": "Asegúrate de que las geocercas cubran exactamente las zonas reales de trabajo para evitar falsos positivos.",
-      "bestPractice3Title": "Asigna personal y actividades",
-      "bestPractice3Body": "Relaciona personas, actividades y geocercas para obtener reportes de costos y trazabilidad.",
-      "bestPractice4Title": "Usa el tracker correctamente",
-      "bestPractice4Body": "Invita trackers solo cuando sea necesario y verifica que tengan permisos y frecuencia adecuados.",
-      "recommendationTitle": "Recomendación final",
-"recommendationBody": "Una correcta configuración inicial garantiza reportes confiables, control operativo y una mejor experiencia en App Geocercas.",
-"resultTitle": "Resultado esperado",
-"resultIntro": "Al finalizar estos pasos, tendrás tu organización configurada, geocercas creadas, personal asignado y trackers listos para operar con reportes y control en tiempo real."
-
     "changelog": {
       "breadcrumb": "Novedades",
       "title": "Novedades / Changelog",
@@ -725,6 +699,32 @@
           }
         }
       }
+    },
+    "instructions": {
+      "title": "Instrucciones de uso",
+      "subtitle": "Guía paso a paso para configurar y utilizar App Geocercas correctamente.",
+      "jumpToSteps": "Ir a los pasos",
+      "viewResult": "Ver resultado",
+      "tocTitle": "Contenido",
+      "tocSubtitle": "Accede rápidamente a cada sección de la guía.",
+      "tocSteps": "Pasos principales",
+      "tocTips": "Buenas prácticas",
+      "tocResult": "Resultado esperado",
+      "stepsTitle": "Pasos para comenzar",
+      "stepsSubtitle": "Sigue estos pasos en orden para configurar tu organización y empezar a operar.",
+      "tipsTitle": "Buenas prácticas",
+      "bestPractice1Title": "Define bien tu organización",
+      "bestPractice1Body": "Configura correctamente el nombre, responsables y estructura de tu organización antes de crear geocercas.",
+      "bestPractice2Title": "Dibuja geocercas precisas",
+      "bestPractice2Body": "Asegúrate de que las geocercas cubran exactamente las zonas reales de trabajo para evitar falsos positivos.",
+      "bestPractice3Title": "Asigna personal y actividades",
+      "bestPractice3Body": "Relaciona personas, actividades y geocercas para obtener reportes de costos y trazabilidad.",
+      "bestPractice4Title": "Usa el tracker correctamente",
+      "bestPractice4Body": "Invita trackers solo cuando sea necesario y verifica que tengan permisos y frecuencia adecuados.",
+      "recommendationTitle": "Recomendación final",
+      "recommendationBody": "Una correcta configuración inicial garantiza reportes confiables, control operativo y una mejor experiencia en App Geocercas.",
+      "resultTitle": "Resultado esperado",
+      "resultIntro": "Al finalizar estos pasos, tendrás tu organización configurada, geocercas creadas, personal asignado y trackers listos para operar con reportes y control en tiempo real."
     }
   },
   "resetPassword": {
