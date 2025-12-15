@@ -687,32 +687,41 @@
       "resultTitle": "Expected result",
       "resultIntro": "After completing these steps, you will have your organization configured, geofences created, personnel assigned, and trackers ready to operate with real-time control and reporting."
     },
+    "support": {
+      "title": "Support & contact",
+      "subtitle": "Need help? Contact us for technical support, billing, or general inquiries.",
+      "emailLabel": "Support email",
+      "email": "soporte@tugeocercas.com",
+      "viewFaq": "View FAQ",
+      "back": "Back",
+      "goHome": "Go to Home"
+    },
     "faq": {
       "badge": "Frequently asked questions",
       "title": "Frequently asked questions",
-      "subtitle": "Quick answers to the most common questions about using App Geocercas.",
+      "subtitle": "Quick answers to the most common questions about App Geofences.",
       "seeQuickGuide": "View quick guide",
-      "backToPanel": "Back to panel",
+      "backToPanel": "Back to dashboard",
       "items": [
         {
           "question": "What is a geofence?",
-          "answer": "A geofence is a geographic area defined on the map that helps control presence, activities, and personnel costs."
+          "answer": "A geofence is a geographic area drawn on the map to control presence and activities."
         },
         {
-          "question": "Can I use the app with multiple organizations?",
-          "answer": "Yes. App Geocercas is multi-organization. You can manage multiple companies or projects from a single account."
+          "question": "Is the app multi-organization?",
+          "answer": "Yes. You can manage multiple organizations from a single account."
         },
         {
           "question": "Who can view cost reports?",
-          "answer": "Only owners and administrators in an organization can access cost reports."
+          "answer": "Only owners and administrators can access cost reports."
         },
         {
           "question": "What is a tracker?",
-          "answer": "A tracker is a user or device that sends location updates to be monitored in relation to geofences."
+          "answer": "A tracker is a user or device that sends its location for monitoring."
         },
         {
           "question": "How often is location updated?",
-          "answer": "The update frequency is defined by the administrator when creating the tracker's assignment."
+          "answer": "The update frequency is defined by the administrator when creating assignments."
         }
       ]
     }

@@ -701,58 +701,41 @@
         }
       }
     },
-    "instructions": {
-      "title": "Instructions d’utilisation",
-      "subtitle": "Guide étape par étape pour configurer et utiliser App Geocercas correctement.",
-      "jumpToSteps": "Aller aux étapes",
-      "viewResult": "Voir le résultat",
-      "tocTitle": "Sommaire",
-      "tocSubtitle": "Accédez rapidement à chaque section du guide.",
-      "tocSteps": "Étapes principales",
-      "tocTips": "Bonnes pratiques",
-      "tocResult": "Résultat attendu",
-      "stepsTitle": "Étapes pour commencer",
-      "stepsSubtitle": "Suivez ces étapes dans l’ordre pour configurer votre organisation et commencer à opérer.",
-      "tipsTitle": "Bonnes pratiques",
-      "bestPractice1Title": "Définissez bien votre organisation",
-      "bestPractice1Body": "Configurez correctement le nom, les responsables et la structure de votre organisation avant de créer des géofences.",
-      "bestPractice2Title": "Dessinez des géofences précises",
-      "bestPractice2Body": "Assurez‑vous que les géofences couvrent exactement les zones réelles de travail afin d’éviter les faux positifs.",
-      "bestPractice3Title": "Assignez le personnel et les activités",
-      "bestPractice3Body": "Reliez personnes, activités et géofences pour obtenir des rapports de coûts et de la traçabilité.",
-      "bestPractice4Title": "Utilisez le tracker correctement",
-      "bestPractice4Body": "Invitez des trackers uniquement si nécessaire et vérifiez les autorisations et la fréquence de mise à jour.",
-      "recommendationTitle": "Recommandation finale",
-      "recommendationBody": "Une bonne configuration initiale garantit des rapports fiables, un meilleur contrôle opérationnel et une meilleure expérience sur App Geocercas.",
-      "resultTitle": "Résultat attendu",
-      "resultIntro": "À la fin de ces étapes, votre organisation sera configurée, les géofences créées, le personnel assigné et les trackers prêts à fonctionner avec des rapports et un suivi en temps réel."
+    "support": {
+      "title": "Support et contact",
+      "subtitle": "Besoin d’aide ? Contactez‑nous pour le support technique, la facturation ou des questions générales.",
+      "emailLabel": "E-mail de support",
+      "email": "soporte@tugeocercas.com",
+      "viewFaq": "Voir la FAQ",
+      "back": "Retour",
+      "goHome": "Aller à l'accueil"
     },
     "faq": {
-      "badge": "FAQ",
-      "title": "Questions fréquentes",
-      "subtitle": "Réponses rapides aux questions les plus courantes sur l’utilisation d’App Geocercas.",
+      "badge": "Foire aux questions",
+      "title": "Foire aux questions",
+      "subtitle": "Réponses rapides aux questions les plus courantes sur App Geocercas.",
       "seeQuickGuide": "Voir le guide rapide",
       "backToPanel": "Retour au tableau de bord",
       "items": [
         {
-          "question": "Qu’est‑ce qu’une géofence ?",
-          "answer": "Une géofence est une zone géographique délimitée sur la carte qui permet de contrôler la présence, les activités et les coûts du personnel."
+          "question": "Qu’est‑ce qu’une géofence (geofence) ?",
+          "answer": "Une géofence est une zone géographique définie sur la carte pour contrôler la présence et les activités."
         },
         {
-          "question": "Puis‑je utiliser l’app avec plusieurs organisations ?",
-          "answer": "Oui. App Geocercas est multi‑organisation. Vous pouvez gérer plusieurs entreprises ou projets depuis un seul compte."
+          "question": "L’application est‑elle multi‑organisation ?",
+          "answer": "Oui. Vous pouvez gérer plusieurs organisations avec un seul compte."
         },
         {
           "question": "Qui peut voir les rapports de coûts ?",
-          "answer": "Seuls les propriétaires et les administrateurs d’une organisation peuvent accéder aux rapports de coûts."
+          "answer": "Seuls les propriétaires et les administrateurs peuvent accéder aux rapports de coûts."
         },
         {
           "question": "Qu’est‑ce qu’un tracker ?",
-          "answer": "Un tracker est un utilisateur ou un appareil qui envoie sa position pour être suivi à l’intérieur des géofences."
+          "answer": "Un tracker est un utilisateur ou un appareil qui envoie sa position pour le suivi."
         },
         {
           "question": "À quelle fréquence la position est‑elle mise à jour ?",
-          "answer": "La fréquence de mise à jour est définie par l’administrateur lors de la création de l’affectation du tracker."
+          "answer": "La fréquence est définie par l’administrateur lors de la création des affectations."
         }
       ]
     }
