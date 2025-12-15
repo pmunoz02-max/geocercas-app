@@ -124,23 +124,24 @@ export default function PersonalPage() {
 
       const { data, error } = await query;
 
+      const rowCount = Array.isArray(data) ? data.length : 0;
+
       console.log("[PersonalPage] Resultado SELECT personal:", {
         authUserId: authUser.id,
         orgId,
-        count: Array.isArray(data) ? data.length : null,
+        count: rowCount,
         error,
       });
 
       if (error) throw error;
 
-      if (count === 0) {
-        throw new Error(t("personal.errorDeleteNoRows"));
-      }
-
       // Defensa extra: aunque RLS ya filtra, evitamos que UI muestre soft-deletes por cualquier causa (cache/vistas).
       const clean = (data || []).filter((r) => !r?.is_deleted);
       setItems(clean);
+
       console.log("[PersonalPage] IDs cargados:", clean.map((r) => r.id));
+
+      // No es error que no existan filas; solo mostramos mensaje OK.
       setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
       console.error("[PersonalPage] Error cargando personal:", err);
@@ -257,10 +258,6 @@ export default function PersonalPage() {
 
       if (error) throw error;
 
-      if (count === 0) {
-        throw new Error(t("personal.errorDeleteNoRows"));
-      }
-
       setBanner({
         type: "ok",
         msg: form.id ? t("personal.bannerUpdated") : t("personal.bannerCreated"),
@@ -323,7 +320,11 @@ export default function PersonalPage() {
         .eq("id", selectedId)
         .eq("org_id", orgId);
 
-      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, count, error });
+      console.log("[PersonalPage] Resultado delete (soft):", {
+        selectedId,
+        count,
+        error,
+      });
 
       if (error) throw error;
 
