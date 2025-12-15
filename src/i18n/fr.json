@@ -727,6 +727,36 @@
       "resultIntro": "Une fois ces étapes terminées, votre organisation sera configurée, les géofences créées, le personnel affecté et les trackers prêts à fonctionner avec contrôle et rapports en temps réel."
     }
   },
+  "faq": {
+  "badge": "Preguntas frecuentes",
+  "title": "Preguntas frecuentes",
+  "subtitle": "Respuestas rápidas a las dudas más comunes sobre el uso de App Geocercas.",
+  "seeQuickGuide": "Ver guía rápida",
+  "backToPanel": "Volver al panel",
+  "items": [
+    {
+      "question": "¿Qué es una geocerca?",
+      "answer": "Una geocerca es una zona geográfica delimitada en el mapa que permite controlar presencia, actividades y costos del personal."
+    },
+    {
+      "question": "¿Puedo usar la app con varias organizaciones?",
+      "answer": "Sí. App Geocercas es multi-organización. Puedes administrar varias empresas o proyectos desde una sola cuenta."
+    },
+    {
+      "question": "¿Quién puede ver los reportes de costos?",
+      "answer": "Solo los propietarios y administradores de una organización pueden acceder a los reportes de costos."
+    },
+    {
+      "question": "¿Qué es un tracker?",
+      "answer": "Un tracker es un usuario o dispositivo que envía su ubicación para ser monitoreado dentro de geocercas."
+    },
+    {
+      "question": "¿Cada cuánto se actualiza la ubicación?",
+      "answer": "La frecuencia de actualización la define el administrador al crear la asignación del tracker."
+    }
+  ]
+}
+
   "resetPassword": {
     "title": "Réinitialiser le mot de passe",
     "subtitle": "Créez un nouveau mot de passe pour votre compte.",
