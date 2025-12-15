@@ -25,7 +25,9 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 const SUPABASE_POINTS_TABLE = "puntos_mapa_corto";
 const SUPABASE_GEOFENCES_TABLE = "geocercas";
 
-/* ----------------- Utils dataset externos ----------------- */
+/* =========================================================
+   Utils dataset externos
+========================================================= */
 function parseCSV(text) {
   const lines = String(text || "").split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];
@@ -90,7 +92,9 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
   throw new Error("DATA_SOURCE no reconocido");
 }
 
-/* ----------------- Utils geocercas (lista/borrar) ----------------- */
+/* =========================================================
+   Utils geocercas (lista/borrar)
+========================================================= */
 async function listGeofences({ supabaseClient = null, orgId = null }) {
   const list = [];
 
@@ -104,6 +108,7 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
     if (!error && data) data.forEach((r) => list.push({ id: r.id, nombre: r.nombre, source: "supabase" }));
   }
 
+  // localStorage (mantengo: tú lo venías usando)
   if (typeof window !== "undefined") {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -118,6 +123,7 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
     }
   }
 
+  // dedupe por nombre
   const seen = new Set();
   const unique = [];
   for (const g of list) {
@@ -129,16 +135,18 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
   return unique;
 }
 
-async function deleteGeofences({ items, supabaseClient = null }) {
+async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   let deleted = 0;
 
   const supaTargets = (items || []).filter((x) => x.source === "supabase");
-  if (supabaseClient && supaTargets.length) {
+  if (supabaseClient && orgId && supaTargets.length) {
     const nombres = supaTargets.map((x) => x.nombre);
     const { error, count } = await supabaseClient
       .from(SUPABASE_GEOFENCES_TABLE)
       .delete({ count: "exact" })
+      .eq("org_id", orgId)          // ✅ CRÍTICO: filtra por org
       .in("nombre", nombres);
+
     if (error) throw error;
     deleted += count || 0;
   }
@@ -157,7 +165,9 @@ async function deleteGeofences({ items, supabaseClient = null }) {
   return deleted;
 }
 
-/* ----------------- Lat/Lng vivos ----------------- */
+/* =========================================================
+   Lat/Lng vivos
+========================================================= */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
     mousemove(e) {
@@ -167,7 +177,9 @@ function CursorPosLive({ setCursorLatLng }) {
   return null;
 }
 
-/* ----------------- Coordenadas → Feature ----------------- */
+/* =========================================================
+   Coordenadas → Feature
+========================================================= */
 function parsePairs(text) {
   const lines = String(text || "")
     .split(/\r?\n/)
@@ -238,8 +250,9 @@ function featureFromCoords(pairs) {
   };
 }
 
-
-/* ----------------- Utils GeoJSON ----------------- */
+/* =========================================================
+   Utils GeoJSON
+========================================================= */
 function normalizeGeojson(geo) {
   if (!geo) return null;
   if (typeof geo === "string") {
@@ -251,7 +264,6 @@ function normalizeGeojson(geo) {
   }
   return geo;
 }
-
 
 function centroidFeatureFromGeojson(geo) {
   try {
@@ -269,7 +281,9 @@ function centroidFeatureFromGeojson(geo) {
   }
 }
 
-/* ----------------- Componente principal ----------------- */
+/* =========================================================
+   Componente principal
+========================================================= */
 export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const { currentOrg } = useAuth();
   const { t } = useTranslation();
@@ -282,53 +296,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const [datasetError, setDatasetError] = useState(null);
 
   const [geofenceList, setGeofenceList] = useState([]);
-  const [selectedNames, setSelectedNames] = useState(new Set());
+  const [selectedNames, setSelectedNames] = useState(() => new Set());
   const [lastSelectedName, setLastSelectedName] = useState(null);
-
-
-// ✅ Selección SIN useCallback (estable, sin desfase)
-const handleSelectGeofence = (nombre) => {
-  setSelectedNames((prev) => {
-    const next = new Set(prev);
-    if (next.has(nombre)) next.delete(nombre);
-    else next.add(nombre);
-    return next;
-  });
-  setLastSelectedName(nombre);
-};
-
-// ✅ Eliminar SIN useCallback (1 solo click)
-const handleDeleteSelected = async () => {
-  if (!selectedNames || selectedNames.size === 0) {
-    alert("Selecciona al menos una geocerca.");
-    return;
-  }
-
-  if (!window.confirm("¿Eliminar las geocercas seleccionadas?")) return;
-
-  try {
-    const names = Array.from(selectedNames);
-    const items = geofenceList.filter((g) => names.includes(g.nombre));
-
-    const count = await deleteGeofences({
-      items,
-      supabaseClient,
-      orgId: currentOrg?.id,
-    });
-
-    alert(`Eliminadas: ${count}`);
-
-    setSelectedNames(new Set());
-    setViewFeature(null);
-    setViewCentroid(null);
-
-    await refreshGeofenceList();
-    clearCanvas();
-    setDraftFeature(null);
-  } catch (e) {
-    alert(e?.message || String(e));
-  }
-};
 
   const [cursorLatLng, setCursorLatLng] = useState(null);
 
@@ -336,11 +305,11 @@ const handleDeleteSelected = async () => {
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
 
-  // ✅ Dibujo por coordenadas en estado
+  // Dibujo por coordenadas (draft)
   const [draftFeature, setDraftFeature] = useState(null);
   const [draftId, setDraftId] = useState(0);
 
-  // ✅ Visualización de geocercas guardadas
+  // Visualización de geocercas guardadas
   const [viewFeature, setViewFeature] = useState(null);
   const [viewCentroid, setViewCentroid] = useState(null);
   const [viewId, setViewId] = useState(0);
@@ -364,7 +333,34 @@ const handleDeleteSelected = async () => {
     lastCreatedLayerRef.current = null;
   }, []);
 
-  /* dataset opcional */
+  // ✅ Selección SIN desfase
+  const handleSelectGeofence = (nombre) => {
+    setSelectedNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(nombre)) next.delete(nombre);
+      else next.add(nombre);
+      return next;
+    });
+    setLastSelectedName(nombre);
+  };
+
+  const refreshGeofenceList = useCallback(async () => {
+    try {
+      if (!currentOrg?.id) {
+        setGeofenceList([]);
+        return;
+      }
+      setGeofenceList(await listGeofences({ supabaseClient, orgId: currentOrg.id }));
+    } catch {
+      setGeofenceList([]);
+    }
+  }, [supabaseClient, currentOrg?.id]);
+
+  useEffect(() => {
+    refreshGeofenceList();
+  }, [refreshGeofenceList]);
+
+  /* Dataset opcional */
   useEffect(() => {
     let mounted = true;
     if (!DATA_SOURCE) {
@@ -394,29 +390,14 @@ const handleDeleteSelected = async () => {
     };
   }, [supabaseClient]);
 
-  const refreshGeofenceList = useCallback(async () => {
-    try {
-      if (!currentOrg?.id) {
-        setGeofenceList([]);
-        return;
-      }
-      setGeofenceList(await listGeofences({ supabaseClient, orgId: currentOrg.id }));
-    } catch {
-      setGeofenceList([]);
-    }
-  }, [supabaseClient, currentOrg]);
-
-  useEffect(() => {
-    refreshGeofenceList();
-  }, [refreshGeofenceList]);
-
   /* Geoman events */
   const handleGeomanCreate = useCallback((e) => {
     selectedLayerRef.current = e.layer;
     lastCreatedLayerRef.current = e.layer;
-    // si dibuja con geoman, escondemos draft coords (evita confusión)
+    // Si dibuja con geoman, escondemos draft coords
     setDraftFeature(null);
     setViewFeature(null);
+    setViewCentroid(null);
   }, []);
 
   const handleGeomanEditUpdate = useCallback((e) => {
@@ -436,15 +417,13 @@ const handleDeleteSelected = async () => {
 
     const feature = featureFromCoords(pairs);
 
-    // Estado + key para forzar re-render
     setDraftFeature(feature);
     setDraftId((x) => x + 1);
     setViewFeature(null);
+    setViewCentroid(null);
 
-    // No dependemos del canvas, pero limpiamos para que no estorbe
     clearCanvas();
 
-    // zoom seguro
     if (mapRef.current) {
       try {
         const bounds = L.geoJSON(feature).getBounds();
@@ -456,11 +435,18 @@ const handleDeleteSelected = async () => {
     setCoordText("");
   }, [coordText, clearCanvas, t]);
 
-  /* Guardar: si hay draft -> guarda draft; si no, guarda layer geoman */
+  /* Guardar:
+     - Si hay draft coords => guarda draft
+     - Si no => guarda layer de geoman
+     ✅ FIX: UPSERT alinea con UNIQUE (org_id, nombre_ci)
+  */
   const saveGeofenceCollection = useCallback(
     async ({ name }) => {
       const nm = String(name || "").trim();
       if (!nm) throw new Error(t("geocercas.errorNameRequired"));
+      if (!currentOrg?.id) throw new Error("Org no disponible.");
+
+      const nombre_ci = nm.toLowerCase(); // ✅ para el unique index (org_id, nombre_ci)
 
       // 1) coords draft
       if (draftFeature) {
@@ -473,10 +459,10 @@ const handleDeleteSelected = async () => {
           );
         }
 
-        if (supabaseClient && currentOrg?.id) {
+        if (supabaseClient) {
           const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
-            { nombre: nm, org_id: currentOrg.id, geojson: geo },
-            { onConflict: "org_id,nombre" }
+            { nombre: nm, nombre_ci, org_id: currentOrg.id, geojson: geo },
+            { onConflict: "org_id,nombre_ci" }
           );
           if (error) throw error;
         }
@@ -504,17 +490,17 @@ const handleDeleteSelected = async () => {
         );
       }
 
-      if (supabaseClient && currentOrg?.id) {
+      if (supabaseClient) {
         const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
-          { nombre: nm, org_id: currentOrg.id, geojson: geo },
-          { onConflict: "org_id,nombre" }
+          { nombre: nm, nombre_ci, org_id: currentOrg.id, geojson: geo },
+          { onConflict: "org_id,nombre_ci" }
         );
         if (error) throw error;
       }
 
       return true;
     },
-    [draftFeature, supabaseClient, currentOrg, t]
+    [draftFeature, supabaseClient, currentOrg?.id, t]
   );
 
   const handleSave = useCallback(async () => {
@@ -529,25 +515,44 @@ const handleDeleteSelected = async () => {
       alert(t("geocercas.savedOk"));
       setGeofenceName("");
       setDraftFeature(null);
-    setViewFeature(null);
+      // no borro viewFeature automáticamente: lo dejo como estaba (tu flujo)
     } catch (e) {
       alert(e?.message || String(e));
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
 
-        return;
+  // ✅ Eliminar SIN useCallback (1 click, sin desfase)
+  const handleDeleteSelected = async () => {
+    if (!selectedNames || selectedNames.size === 0) {
+      alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+      return;
     }
-    if (!window.confirm(t("geocercas.deleteConfirm"))) return;
+    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }))) return;
 
-    const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
-    const count = await deleteGeofences({ items, supabaseClient });
-    alert(t("geocercas.deletedCount", { count }));
-    setSelectedNames(new Set());
-    await refreshGeofenceList();
-    clearCanvas();
-    setDraftFeature(null);
-    setViewFeature(null);
-  }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
+    try {
+      const names = Array.from(selectedNames);
+      const items = geofenceList.filter((g) => names.includes(g.nombre));
+
+      const count = await deleteGeofences({
+        items,
+        supabaseClient,
+        orgId: currentOrg?.id,
+      });
+
+      alert(t("geocercas.deletedCount", { count, defaultValue: `Eliminadas: ${count}` }));
+
+      setSelectedNames(() => new Set());
+      setLastSelectedName(null);
+      setViewFeature(null);
+      setViewCentroid(null);
+
+      await refreshGeofenceList();
+      clearCanvas();
+      setDraftFeature(null);
+    } catch (e) {
+      alert(e?.message || String(e));
+    }
+  };
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
@@ -570,9 +575,9 @@ const handleDeleteSelected = async () => {
         if (!supabaseClient || !currentOrg?.id) {
           supaError = new Error("Org no disponible.");
         } else {
-          const q = supabaseClient.from(SUPABASE_GEOFENCES_TABLE).select("geojson");
+          const q = supabaseClient.from(SUPABASE_GEOFENCES_TABLE).select("geojson").eq("org_id", currentOrg.id);
           if (item.id) q.eq("id", item.id);
-          else q.eq("org_id", currentOrg.id).eq("nombre", item.nombre);
+          else q.eq("nombre", item.nombre);
 
           const { data, error } = await q.maybeSingle();
           if (error) supaError = error;
@@ -595,9 +600,7 @@ const handleDeleteSelected = async () => {
         if (supaError) {
           console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
           alert(
-            t("geocercas.errorNoGeojson", {
-              defaultValue: "No se pudo cargar el GeoJSON de la geocerca.",
-            }) +
+            t("geocercas.errorNoGeojson", { defaultValue: "No se pudo cargar el GeoJSON de la geocerca." }) +
               "\n\nDetalle: " +
               (supaError.message || String(supaError))
           );
@@ -616,7 +619,6 @@ const handleDeleteSelected = async () => {
           mapRef.current.invalidateSize?.();
           const bounds = L.geoJSON(geo).getBounds();
           if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
-          else alert("GeoJSON cargado, pero no se pudo calcular bounds.");
         } catch {}
       }
     } catch (e) {
@@ -624,9 +626,7 @@ const handleDeleteSelected = async () => {
     } finally {
       setShowLoading(false);
     }
-  }, [selectedNames, lastSelectedName, geofenceList, supabaseClient, currentOrg, t]);
-
-
+  }, [selectedNames, lastSelectedName, geofenceList, supabaseClient, currentOrg?.id, t]);
 
   const pointStyle = useMemo(
     () => ({
@@ -646,7 +646,7 @@ const handleDeleteSelected = async () => {
     }
   }, [draftFeature]);
 
-  // primer punto para marker rojo
+  // primer punto para marker
   const draftFirstLatLng = useMemo(() => {
     try {
       const c = draftFeature?.geometry?.coordinates?.[0]?.[0]; // [lng,lat]
@@ -704,7 +704,10 @@ const handleDeleteSelected = async () => {
               <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>
             )}
             {geofenceList.map((g) => (
-              <label key={`${g.source}-${g.nombre}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-800">
+              <label
+                key={`${g.source}-${g.nombre}`}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-800"
+              >
                 <input
                   type="checkbox"
                   checked={selectedNames.has(g.nombre)}
@@ -720,7 +723,9 @@ const handleDeleteSelected = async () => {
               onClick={handleShowSelected}
               className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 text-white"
             >
-              {showLoading ? t("common.loading", { defaultValue: "Cargando..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
+              {showLoading
+                ? t("common.loading", { defaultValue: "Cargando..." })
+                : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
             <button
@@ -734,8 +739,8 @@ const handleDeleteSelected = async () => {
               onClick={() => {
                 clearCanvas();
                 setDraftFeature(null);
-    setViewFeature(null);
                 setViewFeature(null);
+                setViewCentroid(null);
               }}
               className="w-full px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200"
             >
@@ -743,7 +748,9 @@ const handleDeleteSelected = async () => {
             </button>
           </div>
 
-          {loadingDataset && <div className="mt-3 text-[11px] text-slate-400">{t("geocercas.loadingDataset")}</div>}
+          {loadingDataset && (
+            <div className="mt-3 text-[11px] text-slate-400">{t("geocercas.loadingDataset")}</div>
+          )}
           {datasetError && <div className="mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
@@ -766,33 +773,32 @@ const handleDeleteSelected = async () => {
             {/* Lat/Lng vivos */}
             <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
-
             {/* 👁️ Geocerca seleccionada (guardada) */}
             <Pane name="viewPane" style={{ zIndex: 640 }}>
               {viewFeature && (
                 <>
-                <GeoJSON
-                  key={`view-${viewId}`}
-                  data={viewFeature}
-                  style={() => ({
-                    color: "#38bdf8",
-                    weight: 3,
-                    fillColor: "#38bdf8",
-                    fillOpacity: 0.15,
-                  })}
-                />
-                {viewCentroid && (
                   <GeoJSON
-                    key={`view-marker-${viewId}`}
-                    data={viewCentroid}
-                    pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                    key={`view-${viewId}`}
+                    data={viewFeature}
+                    style={() => ({
+                      color: "#38bdf8",
+                      weight: 3,
+                      fillColor: "#38bdf8",
+                      fillOpacity: 0.15,
+                    })}
                   />
-                )}
+                  {viewCentroid && (
+                    <GeoJSON
+                      key={`view-marker-${viewId}`}
+                      data={viewCentroid}
+                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                    />
+                  )}
                 </>
               )}
             </Pane>
 
-            {/* ✅ Pane SIEMPRE arriba */}
+            {/* ✅ Pane arriba: draft por coordenadas */}
             <Pane name="draftPane" style={{ zIndex: 650 }}>
               {draftFeature && (
                 <>
@@ -806,18 +812,21 @@ const handleDeleteSelected = async () => {
                       fillOpacity: 0.35,
                     })}
                   />
-                  {/* Marker rojo en el primer punto para “verlo sí o sí” */}
                   {draftFirstLatLng && (
                     <GeoJSON
                       key={`draft-marker-${draftId}`}
                       data={{
                         type: "Feature",
                         properties: {},
-                        geometry: { type: "Point", coordinates: [draftFeature.geometry.coordinates[0][0][0], draftFeature.geometry.coordinates[0][0][1]] },
+                        geometry: {
+                          type: "Point",
+                          coordinates: [
+                            draftFeature.geometry.coordinates[0][0][0],
+                            draftFeature.geometry.coordinates[0][0][1],
+                          ],
+                        },
                       }}
-                      pointToLayer={(_f, latlng) =>
-                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
-                      }
+                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
                     />
                   )}
                 </>
