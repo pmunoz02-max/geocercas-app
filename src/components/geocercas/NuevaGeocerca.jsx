@@ -129,26 +129,16 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
   return unique;
 }
 
-async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
+async function deleteGeofences({ items, supabaseClient = null }) {
   let deleted = 0;
 
   const supaTargets = (items || []).filter((x) => x.source === "supabase");
   if (supabaseClient && supaTargets.length) {
-    // Prefer borrar por id (más seguro). Si no hay id, cae a nombre+orgId.
-    const ids = supaTargets.map((x) => x.id).filter(Boolean);
-
-    let q = supabaseClient.from(SUPABASE_GEOFENCES_TABLE).delete({ count: "exact" });
-
-    if (orgId) q = q.eq("org_id", orgId);
-
-    if (ids.length) {
-      q = q.in("id", ids);
-    } else {
-      const nombres = supaTargets.map((x) => x.nombre);
-      q = q.in("nombre", nombres);
-    }
-
-    const { error, count } = await q;
+    const nombres = supaTargets.map((x) => x.nombre);
+    const { error, count } = await supabaseClient
+      .from(SUPABASE_GEOFENCES_TABLE)
+      .delete({ count: "exact" })
+      .in("nombre", nombres);
     if (error) throw error;
     deleted += count || 0;
   }
@@ -167,13 +157,31 @@ async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   return deleted;
 }
 
-
 /* ----------------- Lat/Lng vivos ----------------- */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
     mousemove(e) {
       setCursorLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
     },
+  });
+  return null;
+}
+
+
+/* ----------------- Bridge Geoman (captura pm:* y asegura refs) ----------------- */
+function GeomanBridge({ onCreateLayer, onUpdateLayer, onRemoveLayer }) {
+  useMapEvents({
+    "pm:create": (e) => e?.layer && onCreateLayer?.(e.layer, e),
+    "pm:update": (e) => e?.layer && onUpdateLayer?.(e.layer, e),
+    "pm:edit": (e) => {
+      const lyr = e?.layer || null;
+      if (lyr) onUpdateLayer?.(lyr, e);
+      const layers = e?.layers;
+      if (layers && typeof layers.eachLayer === "function") {
+        layers.eachLayer((l) => onUpdateLayer?.(l, e));
+      }
+    },
+    "pm:remove": (e) => e?.layer && onRemoveLayer?.(e.layer, e),
   });
   return null;
 }
@@ -236,14 +244,12 @@ function pickLastDrawableLayer(layers) {
   const arr = (layers || []).filter(Boolean);
   if (!arr.length) return null;
 
-  // Prefer polygons/rectangles, then circles
   const polys = arr.filter((l) => l instanceof L.Polygon);
   if (polys.length) return polys[polys.length - 1];
 
   const circles = arr.filter((l) => l instanceof L.Circle);
   if (circles.length) return circles[circles.length - 1];
 
-  // Fallback any layer with toGeoJSON
   const any = arr.filter((l) => typeof l.toGeoJSON === "function");
   return any[any.length - 1] || null;
 }
@@ -409,11 +415,39 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     }
   }, []);
 
+
+  /* ✅ Bridge pm:* (garantiza que el layer quede referenciado) */
+  const handlePmCreate = useCallback((layer) => {
+    if (!layer) return;
+    setDraftFeature(null);
+    selectedLayerRef.current = layer;
+    lastCreatedLayerRef.current = layer;
+
+    const fg = featureGroupRef.current;
+    try {
+      if (fg && typeof fg.hasLayer === "function" && !fg.hasLayer(layer) && typeof fg.addLayer === "function") {
+        fg.addLayer(layer);
+      }
+    } catch {}
+  }, []);
+
+  const handlePmUpdate = useCallback((layer) => {
+    if (!layer) return;
+    selectedLayerRef.current = layer;
+    lastCreatedLayerRef.current = layer;
+  }, []);
+
+  const handlePmRemove = useCallback((layer) => {
+    if (!layer) return;
+    if (selectedLayerRef.current === layer) selectedLayerRef.current = null;
+    if (lastCreatedLayerRef.current === layer) lastCreatedLayerRef.current = null;
+  }, []);
+
   /* ✅ DIBUJAR POR COORDS (GARANTIZA VISIBLE) */
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
     if (!pairs.length) {
-      alert(t("geocercas.errorCoordsInvalid", { defaultValue: "Coordenadas inválidas. Ingresa lat,lng (uno por línea)." }));
+      alert(t("geocercas.errorCoordsInvalid"));
       return;
     }
 
@@ -459,7 +493,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         if (supabaseClient && currentOrg?.id) {
           const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
             { nombre: nm, org_id: currentOrg.id, geojson: geo },
-            { onConflict: "org_id,nombre" }
+            { onConflict: "org_id,nombre_ci" }
           );
           if (error) throw error;
         }
@@ -490,7 +524,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       if (supabaseClient && currentOrg?.id) {
         const { error } = await supabaseClient.from(SUPABASE_GEOFENCES_TABLE).upsert(
           { nombre: nm, org_id: currentOrg.id, geojson: geo },
-          { onConflict: "org_id,nombre" }
+          { onConflict: "org_id,nombre_ci" }
         );
         if (error) throw error;
       }
@@ -504,12 +538,12 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     try {
       const nm = geofenceName.trim();
       if (!nm) {
-        alert(t("geocercas.errorNameRequired", { defaultValue: "Ingresa un nombre para la geocerca." }));
+        alert(t("geocercas.errorNameRequired"));
         return;
       }
       await saveGeofenceCollection({ name: nm });
       await refreshGeofenceList();
-      alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+      alert(t("geocercas.savedOk"));
       setGeofenceName("");
       setDraftFeature(null);
     setViewFeature(null);
@@ -530,22 +564,20 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames.size) {
-      alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+      alert(t("geocercas.errorSelectAtLeastOne"));
       return;
     }
-    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }))) return;
+    if (!window.confirm(t("geocercas.deleteConfirm"))) return;
 
     const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
-    const count = await deleteGeofences({ items, supabaseClient, orgId: currentOrg?.id });
-    alert(t("geocercas.deletedCount", { count, defaultValue: `Eliminadas: ${count}` }));
+    const count = await deleteGeofences({ items, supabaseClient });
+    alert(t("geocercas.deletedCount", { count }));
     setSelectedNames(new Set());
-    setViewFeature(null);
-    setViewCentroid(null);
     await refreshGeofenceList();
     clearCanvas();
     setDraftFeature(null);
     setViewFeature(null);
-  }, [selectedNames, geofenceList, supabaseClient, currentOrg, refreshGeofenceList, clearCanvas, t]);
+  }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
@@ -822,8 +854,11 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               )}
             </Pane>
 
+            {/* Bridge Geoman events (pm:*) */}
+            <GeomanBridge onCreateLayer={handlePmCreate} onUpdateLayer={handlePmUpdate} onRemoveLayer={handlePmRemove} />
+
             {/* Canvas Geoman + controles */}
-            <FeatureGroup whenCreated={onFeatureGroupCreated}>
+            <FeatureGroup ref={featureGroupRef} whenCreated={onFeatureGroupCreated}>
               <GeomanControls
                 options={{
                   position: "topleft",
@@ -855,7 +890,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                   <span className="ml-2">Lng: {cursorLatLng.lng.toFixed(6)}</span>
                 </>
               ) : (
-                <span>{t("geocercas.cursorHint", { defaultValue: "Mueve el cursor sobre el mapa" })}</span>
+                <span>{t("geocercas.cursorHint")}</span>
               )}
             </div>
 
