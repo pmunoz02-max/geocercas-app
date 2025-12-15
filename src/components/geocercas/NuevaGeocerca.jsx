@@ -246,6 +246,22 @@ function rectFromTwoPoints([lng1, lat1], [lng2, lat2]) {
   ];
 }
 
+function pickLastDrawableLayer(layers) {
+  const arr = (layers || []).filter(Boolean);
+  if (!arr.length) return null;
+
+  // Prefer polygons/rectangles, then circles
+  const polys = arr.filter((l) => l instanceof L.Polygon);
+  if (polys.length) return polys[polys.length - 1];
+
+  const circles = arr.filter((l) => l instanceof L.Circle);
+  if (circles.length) return circles[circles.length - 1];
+
+  // Fallback any layer with toGeoJSON
+  const any = arr.filter((l) => typeof l.toGeoJSON === "function");
+  return any[any.length - 1] || null;
+}
+
 function featureFromCoords(pairs) {
   let coords;
   if (pairs.length === 1) coords = squareFromPoint(pairs[0]);
@@ -696,7 +712,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             <GeomanBridge onCreateLayer={handlePmCreate} onUpdateLayer={handlePmUpdate} onRemoveLayer={handlePmRemove} />
 
             {/* Canvas Geoman + controles */}
-            <FeatureGroup whenCreated={onFeatureGroupCreated}>
+            <FeatureGroup ref={featureGroupRef} whenCreated={onFeatureGroupCreated}>
               <GeomanControls
                 options={{
                   position: "topleft",
