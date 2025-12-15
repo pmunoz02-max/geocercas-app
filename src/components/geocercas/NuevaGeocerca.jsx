@@ -231,6 +231,23 @@ function rectFromTwoPoints([lng1, lat1], [lng2, lat2]) {
   ];
 }
 
+
+function pickLastDrawableLayer(layers) {
+  const arr = (layers || []).filter(Boolean);
+  if (!arr.length) return null;
+
+  // Prefer polygons/rectangles, then circles
+  const polys = arr.filter((l) => l instanceof L.Polygon);
+  if (polys.length) return polys[polys.length - 1];
+
+  const circles = arr.filter((l) => l instanceof L.Circle);
+  if (circles.length) return circles[circles.length - 1];
+
+  // Fallback any layer with toGeoJSON
+  const any = arr.filter((l) => typeof l.toGeoJSON === "function");
+  return any[any.length - 1] || null;
+}
+
 function featureFromCoords(pairs) {
   let coords;
   if (pairs.length === 1) coords = squareFromPoint(pairs[0]);
@@ -396,7 +413,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
     if (!pairs.length) {
-      alert(t("geocercas.errorCoordsInvalid"));
+      alert(t("geocercas.errorCoordsInvalid", { defaultValue: "Coordenadas inválidas. Ingresa lat,lng (uno por línea)." }));
       return;
     }
 
@@ -451,7 +468,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
       // 2) geoman layer
       const fg = featureGroupRef.current;
-      if (!fg) throw new Error(t("geocercas.errorNoShape"));
+      if (!fg) throw new Error(t("geocercas.errorNoShape", { defaultValue: "No hay una figura para guardar. Dibuja una geocerca primero." }));
 
       let layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current;
       if (!layerToSave) {
@@ -459,7 +476,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         fg.eachLayer((lyr) => layers.push(lyr));
         layerToSave = layers[layers.length - 1] || null;
       }
-      if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") throw new Error(t("geocercas.errorNoShape"));
+      if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") throw new Error(t("geocercas.errorNoShape", { defaultValue: "No hay una figura para guardar. Dibuja una geocerca primero." }));
 
       const geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
 
@@ -487,12 +504,12 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     try {
       const nm = geofenceName.trim();
       if (!nm) {
-        alert(t("geocercas.errorNameRequired"));
+        alert(t("geocercas.errorNameRequired", { defaultValue: "Ingresa un nombre para la geocerca." }));
         return;
       }
       await saveGeofenceCollection({ name: nm });
       await refreshGeofenceList();
-      alert(t("geocercas.savedOk"));
+      alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
       setGeofenceName("");
       setDraftFeature(null);
     setViewFeature(null);
