@@ -294,6 +294,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const [geofenceList, setGeofenceList] = useState([]);
   const [selectedNames, setSelectedNames] = useState(new Set());
+  const [lastSelectedName, setLastSelectedName] = useState(null);
 
   const [cursorLatLng, setCursorLatLng] = useState(null);
 
@@ -369,7 +370,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     } catch {
       setGeofenceList([]);
     }
-  }, [supabaseClient, currentOrg]);
+  }, [supabaseClient, currentOrg, normalizeGeojson]);
 
   useEffect(() => {
     refreshGeofenceList();
@@ -536,6 +537,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const s = new Set(selectedNames);
       s.has(nombre) ? s.delete(nombre) : s.add(nombre);
       setSelectedNames(s);
+      setLastSelectedName(nombre);
     },
     [selectedNames]
   );
@@ -558,7 +560,20 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
 
 
-  const loadGeofenceGeojson = useCallback(
+  
+  const normalizeGeojson = useCallback((geo) => {
+    if (!geo) return null;
+    if (typeof geo === "string") {
+      try {
+        return JSON.parse(geo);
+      } catch {
+        return null;
+      }
+    }
+    return geo;
+  }, []);
+
+const loadGeofenceGeojson = useCallback(
     async ({ item }) => {
       if (!item) return null;
 
@@ -573,7 +588,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           .maybeSingle();
 
         if (error) throw error;
-        return data?.geojson || null;
+        return normalizeGeojson(data?.geojson) || null;
       }
 
       if (typeof window !== "undefined") {
@@ -582,7 +597,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         if (!raw) return null;
         try {
           const obj = JSON.parse(raw);
-          return obj?.geojson || null;
+          return normalizeGeojson(obj?.geojson) || null;
         } catch {
           return null;
         }
@@ -590,7 +605,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
       return null;
     },
-    [supabaseClient, currentOrg]
+    [supabaseClient, currentOrg, normalizeGeojson]
   );
 
   const handleShowSelected = useCallback(async () => {
@@ -600,8 +615,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return;
       }
 
-      const lastName = Array.from(selectedNames).slice(-1)[0];
-      const item = geofenceList.find((g) => g.nombre === lastName);
+      const nameToShow = lastSelectedName || Array.from(selectedNames)[0];
+      const item = geofenceList.find((g) => g.nombre === nameToShow);
       if (!item) return;
 
       const geo = await loadGeofenceGeojson({ item });
@@ -612,6 +627,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
       setViewFeature(geo);
       setViewId((x) => x + 1);
+      console.log("Mostrar geocerca", item?.nombre, geo);
 
       if (mapRef.current) {
         try {
@@ -622,7 +638,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     } catch (e) {
       alert(e?.message || String(e));
     }
-  }, [selectedNames, geofenceList, loadGeofenceGeojson, t]);
+  }, [selectedNames, lastSelectedName, geofenceList, loadGeofenceGeojson, t]);
 
 
   const pointStyle = useMemo(
