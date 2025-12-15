@@ -570,12 +570,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     });
     setLastSelectedName(nombre);
   }, []);
-      s.has(nombre) ? s.delete(nombre) : s.add(nombre);
-      setSelectedNames(s);
-      setLastSelectedName(nombre);
-    },
-    [selectedNames]
-  );
+
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames.size) {
