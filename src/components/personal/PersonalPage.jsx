@@ -7,21 +7,6 @@ import { useTranslation } from "react-i18next";
 /**
  * PersonalPage (universal multi-tenant, RLS-friendly)
  *
- * Objetivo:
- * - Funcione para cualquier org/usuario (no puntual para pruebatugeo)
- * - Respete RLS por org_id (multi-tenant)
- * - Evite errores típicos:
- *    - 403 por RLS al pedir "returning *" luego de soft-delete (is_deleted pasa a true)
- *    - filtros por owner_id que rompen cuando el modelo es por org
- *
- * Suposiciones:
- * - La tabla public.personal tiene columnas: id, nombre, apellido, email, telefono,
- *   vigente, org_id, is_deleted, deleted_at, updated_at, created_at, owner_id (opcional).
- * - Tu RLS permite:
- *    - SELECT de personal dentro de la org actual (org_id)
- *    - INSERT/UPDATE dentro de la org actual (org_id)
- *    - UPDATE para soft-delete dentro de la org actual
- *
  * Nota:
  * - Para evitar el 403 al eliminar: NO pedimos .select() después del update de soft-delete.
  */
@@ -85,12 +70,13 @@ export default function PersonalPage() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      loadPersonal();
+      loadPersonal({ silentOk: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, onlyActive, orgId, t]);
 
-  async function loadPersonal() {
+  // ✅ Nuevo parámetro: silentOk evita que se pise un banner de error
+  async function loadPersonal({ silentOk = false } = {}) {
     try {
       setLoading(true);
 
@@ -107,7 +93,6 @@ export default function PersonalPage() {
         throw new Error(t("personal.errorNoAuthUser"));
       }
       if (!orgId) {
-        // Si no hay org seleccionada, no intentamos consultar.
         setItems([]);
         setBanner({ type: "err", msg: t("personal.errorNoOrgSelected") });
         return;
@@ -125,16 +110,20 @@ export default function PersonalPage() {
       const { data, error } = await query;
 
       console.log("[PersonalPage] Resultado SELECT personal:", {
-        authUserId: authUser.id,
         orgId,
+        onlyActive,
         count: Array.isArray(data) ? data.length : null,
-        error,
+        error: error ? { message: error.message, code: error.code } : null,
       });
 
       if (error) throw error;
 
       setItems(data || []);
-      setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
+
+      // ✅ No pisar banner (para que no desaparezca un error)
+      if (!silentOk) {
+        setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
+      }
     } catch (err) {
       console.error("[PersonalPage] Error cargando personal:", err);
       setItems([]);
@@ -226,9 +215,6 @@ export default function PersonalPage() {
         vigente: !!form.vigente,
       };
 
-      // CLAVE (RLS-friendly):
-      // - NO pedimos returning (sin .select()) para evitar 403 por RLS en el response.
-      // - NO enviamos columnas de control (owner_id, created_at, updated_at, is_deleted).
       let result;
       if (form.id) {
         result = await supabase
@@ -246,7 +232,9 @@ export default function PersonalPage() {
 
       const { error } = result;
 
-      console.log("[PersonalPage] Resultado guardar (no-returning):", { error });
+      console.log("[PersonalPage] Resultado guardar (no-returning):", {
+        error: error ? { message: error.message, code: error.code } : null,
+      });
 
       if (error) throw error;
 
@@ -258,7 +246,8 @@ export default function PersonalPage() {
       setSelectedId(null);
       setForm(emptyForm());
 
-      await loadPersonal();
+      // ✅ recarga pero SIN pisar banners con ok extra
+      await loadPersonal({ silentOk: true });
     } catch (err) {
       console.error("[PersonalPage] Error onGuardar:", err);
       setBanner({ type: "err", msg: err?.message || t("personal.errorSave") });
@@ -296,10 +285,7 @@ export default function PersonalPage() {
 
       const now = new Date().toISOString();
 
-      // ✅ FIX MÍNIMO Y DEFINITIVO:
-      // 1) Pedimos COUNT exacto (sin .select()) para saber si realmente se eliminó algo.
-      // 2) Si count === 0: NO mostramos “ok”, mostramos error y recargamos.
-      // 3) Si count > 0: limpiamos UI (optimistic) y recargamos.
+      // ✅ Pedimos count exacto para detectar "0 filas afectadas"
       const { error, count } = await supabase
         .from("personal")
         .update(
@@ -319,33 +305,35 @@ export default function PersonalPage() {
         selectedId,
         orgId,
         count,
-        error,
+        error: error ? { message: error.message, code: error.code } : null,
       });
 
       if (error) throw error;
 
-      // Si no afectó filas, NO fue eliminado realmente.
+      // ✅ Si no afectó filas, ese "ok" era falso: mostramos error y NO lo pisamos
       if (!count || count === 0) {
         setBanner({
           type: "err",
-          msg: t("personal.errorDeleteNoRows") || "No se eliminó ningún registro (0 filas afectadas).",
+          msg:
+            t("personal.errorDeleteNoRows") ||
+            "No se eliminó ningún registro (0 filas afectadas).",
         });
-        // Refrescamos para mantener consistencia visual
-        await loadPersonal();
+        await loadPersonal({ silentOk: true }); // recarga sin pisar el error
         return;
       }
 
-      // ✅ UI: eliminarlo inmediatamente del listado (no esperar al reload)
+      // ✅ UI inmediata
       setItems((prev) => prev.filter((r) => r.id !== selectedId));
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
       setSelectedId(null);
       setForm(emptyForm());
 
-      await loadPersonal();
+      await loadPersonal({ silentOk: true });
     } catch (err) {
       console.error("[PersonalPage] Error onEliminar:", err);
       setBanner({ type: "err", msg: err?.message || t("personal.errorDelete") });
+      await loadPersonal({ silentOk: true });
     } finally {
       setLoading(false);
     }
@@ -421,7 +409,7 @@ export default function PersonalPage() {
             <span>{t("personal.onlyActive")}</span>
           </label>
 
-          <button className="pg-btn" onClick={loadPersonal}>
+          <button className="pg-btn" onClick={() => loadPersonal({ silentOk: false })}>
             {t("personal.buttonRefresh")}
           </button>
 
@@ -430,7 +418,7 @@ export default function PersonalPage() {
             onClick={() => {
               setQ("");
               setOnlyActive(false);
-              loadPersonal();
+              loadPersonal({ silentOk: false });
             }}
           >
             {t("personal.buttonFullList")}
