@@ -670,7 +670,8 @@
       "breadcrumb": "Centro de Ayuda",
       "back": "Volver",
       "goHome": "Ir a Inicio",
-      "viewFaq": "Ver FAQ"
+      "viewFaq": "Ver FAQ",
+      "badge": "Centro de ayuda"
     },
     "changelog": {
       "breadcrumb": "Novedades",
@@ -725,6 +726,35 @@
       "recommendationBody": "Una correcta configuración inicial garantiza reportes confiables, control operativo y una mejor experiencia en App Geocercas.",
       "resultTitle": "Resultado esperado",
       "resultIntro": "Al finalizar estos pasos, tendrás tu organización configurada, geocercas creadas, personal asignado y trackers listos para operar con reportes y control en tiempo real."
+    },
+    "faq": {
+      "badge": "Preguntas frecuentes",
+      "title": "Preguntas frecuentes",
+      "subtitle": "Respuestas rápidas a las dudas más comunes sobre el uso de App Geocercas.",
+      "seeQuickGuide": "Ver guía rápida",
+      "backToPanel": "Volver al panel",
+      "items": [
+        {
+          "question": "¿Qué es una geocerca?",
+          "answer": "Una geocerca es una zona geográfica delimitada en el mapa que permite controlar presencia, actividades y costos del personal."
+        },
+        {
+          "question": "¿Puedo usar la app con varias organizaciones?",
+          "answer": "Sí. App Geocercas es multi-organización. Puedes administrar varias empresas o proyectos desde una sola cuenta."
+        },
+        {
+          "question": "¿Quién puede ver los reportes de costos?",
+          "answer": "Solo los propietarios y administradores de una organización pueden acceder a los reportes de costos."
+        },
+        {
+          "question": "¿Qué es un tracker?",
+          "answer": "Un tracker es un usuario o dispositivo que envía su ubicación para ser monitoreado dentro de geocercas."
+        },
+        {
+          "question": "¿Cada cuánto se actualiza la ubicación?",
+          "answer": "La frecuencia de actualización la define el administrador al crear la asignación del tracker."
+        }
+      ]
     }
   },
   "resetPassword": {
