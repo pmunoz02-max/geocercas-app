@@ -563,10 +563,10 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         if (supaError) {
           console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
           alert(
-            (t("geocercas.errorNoGeojson", { defaultValue: "No se pudo cargar el GeoJSON de la geocerca." })) +
-              "
-
-Detalle: " +
+            t("geocercas.errorNoGeojson", {
+              defaultValue: "No se pudo cargar el GeoJSON de la geocerca.",
+            }) +
+              "\n\nDetalle: " +
               (supaError.message || String(supaError))
           );
           return;
