@@ -535,13 +535,6 @@ const handleDeleteSelected = async () => {
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
 
-        s.has(nombre) ? s.delete(nombre) : s.add(nombre);
-      setSelectedNames(s);
-      setLastSelectedName(nombre);
-    },
-    [selectedNames]
-  );
-
         return;
     }
     if (!window.confirm(t("geocercas.deleteConfirm"))) return;
