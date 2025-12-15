@@ -167,6 +167,32 @@ function CursorPosLive({ setCursorLatLng }) {
   return null;
 }
 
+
+
+/* ----------------- Bridge Geoman (asegura layers en FeatureGroup) ----------------- */
+function GeomanBridge({ onCreateLayer, onUpdateLayer, onRemoveLayer }) {
+  useMapEvents({
+    "pm:create": (e) => {
+      if (e?.layer) onCreateLayer?.(e.layer, e);
+    },
+    "pm:update": (e) => {
+      if (e?.layer) onUpdateLayer?.(e.layer, e);
+    },
+    "pm:edit": (e) => {
+      const lyr = e?.layer || null;
+      if (lyr) onUpdateLayer?.(lyr, e);
+      const layers = e?.layers;
+      if (layers && typeof layers.eachLayer === "function") {
+        layers.eachLayer((l) => onUpdateLayer?.(l, e));
+      }
+    },
+    "pm:remove": (e) => {
+      if (e?.layer) onRemoveLayer?.(e.layer, e);
+    },
+  });
+  return null;
+}
+
 /* ----------------- Coordenadas → Feature ----------------- */
 function parsePairs(text) {
   const lines = String(text || "")
@@ -342,6 +368,37 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     }
   }, []);
 
+
+  /* ✅ Bridge pm:* (garantiza que los layers queden en el FeatureGroup) */
+  const handlePmCreate = useCallback((layer) => {
+    if (!layer) return;
+    // si dibuja con geoman, escondemos draft coords (evita confusión)
+    setDraftFeature(null);
+
+    selectedLayerRef.current = layer;
+    lastCreatedLayerRef.current = layer;
+
+    // Asegurar que el layer esté dentro del FeatureGroup (para poder guardarlo/borrarlo)
+    const fg = featureGroupRef.current;
+    try {
+      if (fg && typeof fg.hasLayer === "function" && !fg.hasLayer(layer) && typeof fg.addLayer === "function") {
+        fg.addLayer(layer);
+      }
+    } catch {}
+  }, []);
+
+  const handlePmUpdate = useCallback((layer) => {
+    if (!layer) return;
+    selectedLayerRef.current = layer;
+    lastCreatedLayerRef.current = layer;
+  }, []);
+
+  const handlePmRemove = useCallback((layer) => {
+    if (!layer) return;
+    if (selectedLayerRef.current === layer) selectedLayerRef.current = null;
+    if (lastCreatedLayerRef.current === layer) lastCreatedLayerRef.current = null;
+  }, []);
+
   /* ✅ DIBUJAR POR COORDS (GARANTIZA VISIBLE) */
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
@@ -400,7 +457,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
       // 2) geoman layer
       const fg = featureGroupRef.current;
-      if (!fg) throw new Error(t("geocercas.errorNoShape"));
+      if (!fg) throw new Error(t("geocercas.errorNoShape") || "No hay una figura para guardar. Dibuja una geocerca primero.");
 
       let layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current;
       if (!layerToSave) {
@@ -408,7 +465,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         fg.eachLayer((lyr) => layers.push(lyr));
         layerToSave = layers[layers.length - 1] || null;
       }
-      if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") throw new Error(t("geocercas.errorNoShape"));
+      if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") throw new Error(t("geocercas.errorNoShape") || "No hay una figura para guardar. Dibuja una geocerca primero.");
 
       const geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
 
@@ -634,6 +691,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                 </>
               )}
             </Pane>
+
+            {/* Bridge Geoman events (pm:*) */}
+            <GeomanBridge onCreateLayer={handlePmCreate} onUpdateLayer={handlePmUpdate} onRemoveLayer={handlePmRemove} />
 
             {/* Canvas Geoman + controles */}
             <FeatureGroup whenCreated={onFeatureGroupCreated}>
