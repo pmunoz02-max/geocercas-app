@@ -1,5 +1,5 @@
 // src/pages/Personal.jsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   listPersonal,
@@ -20,7 +20,6 @@ function Modal({ open, title, children, onClose }) {
           <button
             className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100"
             onClick={onClose}
-            type="button"
           >
             ✕
           </button>
@@ -39,22 +38,15 @@ export default function PersonalPageLite() {
     currentRole,
     isAdmin,
     isOwner,
+    // compatibilidad por si algún día agregas role al contexto
     role: legacyRole,
-
-    // En tu app multi-tenant normalmente existen estas llaves:
-    currentOrg,
-    tenantId,
   } = useAuth();
 
   const effectiveRole = currentRole || legacyRole || "tracker";
-  const canEdit =
-    isAdmin || isOwner || effectiveRole === "owner" || effectiveRole === "admin";
-
-  // orgId efectivo (multi-tenant real). Fallback si el contexto expone tenantId.
-  const orgId = currentOrg?.id || tenantId || null;
+  const canEdit = isAdmin || isOwner || effectiveRole === "owner" || effectiveRole === "admin";
 
   const [q, setQ] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true);
+  const [onlyActive, setOnlyActive] = useState(true); // Activos por defecto
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -70,42 +62,29 @@ export default function PersonalPageLite() {
   });
   const [saving, setSaving] = useState(false);
 
-  const fetchRows = useCallback(async () => {
+  async function fetchRows() {
     if (!session || !user) {
       setRows([]);
       setMsg("No hay sesión activa");
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setMsg("");
-
-    try {
-      // ✅ listPersonal devuelve directamente un ARRAY (no {data,error})
-      const data = await listPersonal({ q, onlyActive, orgId });
-      setRows(Array.isArray(data) ? data.filter(Boolean) : []);
-    } catch (err) {
-      setMsg(err?.message || "Error al cargar personal");
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [session, user, q, onlyActive, orgId]);
+    const { data, error } = await listPersonal({ q, onlyActive, limit: 500 });
+    if (error) setMsg(error.message || "Error al cargar personal");
+    setRows(Array.isArray(data) ? data.filter(Boolean) : []);
+    setLoading(false);
+  }
 
   useEffect(() => {
     if (!authLoading) fetchRows();
-  }, [authLoading, fetchRows]);
-
-  // Si cambias “Solo activos”, recarga automáticamente (evita “fantasmas”).
-  useEffect(() => {
-    if (!authLoading && session && user) fetchRows();
-  }, [onlyActive, authLoading, session, user, fetchRows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading]);
 
   const filtered = useMemo(() => {
     const source = rows.slice();
     if (!q) return source;
-
     const ql = q.toLowerCase();
     return source.filter((r) =>
       `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${r?.telefono ?? ""}`
@@ -120,25 +99,10 @@ export default function PersonalPageLite() {
       setMsg("No tienes permisos para cambiar vigencia (solo owner/admin).");
       return;
     }
-
     setLoading(true);
-    setMsg("");
-
-    try {
-      // ✅ La API togglea internamente, no necesita el nuevo estado
-      await toggleVigente(row.id);
-
-      // UX inmediata
-      setRows((prev) =>
-        prev.map((p) => (p.id === row.id ? { ...p, vigente: !p.vigente } : p))
-      );
-
-      await fetchRows();
-    } catch (err) {
-      setMsg(err?.message || "No se pudo cambiar estado.");
-    } finally {
-      setLoading(false);
-    }
+    const { error } = await toggleVigente(row.id, !row.vigente);
+    if (error) setMsg(error.message || "No se pudo cambiar estado.");
+    await fetchRows();
   }
 
   async function onDelete(row) {
@@ -148,26 +112,18 @@ export default function PersonalPageLite() {
       return;
     }
     if (!window.confirm("¿Eliminar (soft) este registro?")) return;
-
     setLoading(true);
-    setMsg("");
-
     try {
-      await deletePersonal(row.id);
-
-      // ✅ UX inmediata: desaparece de la tabla ya
-      setRows((prev) => prev.filter((p) => p.id !== row.id));
-
-      // ✅ y luego sincronizamos con backend
-      await fetchRows();
-
-      setMsg("Registro eliminado correctamente.");
+      const deleted = await deletePersonal(row.id);
+      if (!deleted) {
+        setMsg("No se eliminó ningún registro (0 filas afectadas). Verifica permisos (owner/admin) y que el registro esté vigente.");
+      }
     } catch (err) {
       setMsg(err?.message || "No se pudo eliminar.");
     } finally {
+      await fetchRows();
       setLoading(false);
     }
-  }
 
   // Guardar NUEVO
   async function onSaveNew(e) {
@@ -176,30 +132,25 @@ export default function PersonalPageLite() {
       setMsg("No tienes permisos para crear (solo owner/admin).");
       return;
     }
-
     setSaving(true);
     setMsg("");
-
     try {
+      // Validación mínima
       if (!form.nombre.trim()) throw new Error("Nombre es requerido.");
       if (!form.email.trim()) throw new Error("Email es requerido.");
 
-      await upsertPersonal(
-        {
-          nombre: form.nombre,
-          apellido: form.apellido,
-          email: form.email,
-          telefono: form.telefono,
-          vigente: !!form.vigente,
-        },
-        orgId // ✅ asegura org en modo multi-tenant real
-      );
+      const { error } = await upsertPersonal({
+        nombre: form.nombre,
+        apellido: form.apellido,
+        email: form.email,
+        telefono: form.telefono,
+        vigente: !!form.vigente,
+      });
+      if (error) throw error;
 
       setOpenNew(false);
       setForm({ nombre: "", apellido: "", email: "", telefono: "", vigente: true });
-
       await fetchRows();
-      setMsg("Datos actualizados correctamente.");
     } catch (err) {
       setMsg(err?.message || "No se pudo guardar el personal.");
     } finally {
@@ -208,13 +159,12 @@ export default function PersonalPageLite() {
   }
 
   if (authLoading) return <div className="p-6 text-gray-500">Cargando sesión…</div>;
-  if (!session || !user) {
+  if (!session || !user)
     return (
       <div className="p-6 text-red-600">
         No hay sesión activa. Inicia sesión para continuar.
       </div>
     );
-  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -229,12 +179,10 @@ export default function PersonalPageLite() {
             {canEdit ? "(con permisos de edición)" : "(solo lectura)"}
           </p>
         </div>
-
         <button
           className="px-3 py-2 rounded-md bg-black text-white text-sm"
           onClick={() => setOpenNew(true)}
           disabled={!canEdit}
-          type="button"
         >
           Nuevo
         </button>
@@ -249,7 +197,6 @@ export default function PersonalPageLite() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-
         <label className="inline-flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -258,19 +205,17 @@ export default function PersonalPageLite() {
           />
           Mostrar solo activos
         </label>
-
         <button
           className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
           onClick={fetchRows}
           disabled={loading}
-          type="button"
         >
           {loading ? "Actualizando…" : "Actualizar"}
         </button>
       </div>
 
       {msg && (
-        <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2">
+        <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2">
           {msg}
         </div>
       )}
@@ -287,7 +232,6 @@ export default function PersonalPageLite() {
               <th className="px-3">Acciones</th>
             </tr>
           </thead>
-
           <tbody>
             {loading ? (
               <tr>
@@ -316,25 +260,20 @@ export default function PersonalPageLite() {
                         className="px-2 py-1 rounded-md bg-sky-600 text-white"
                         onClick={() => alert("TODO: Editar")}
                         disabled={!canEdit}
-                        type="button"
                       >
                         Editar
                       </button>
-
                       <button
                         className="px-2 py-1 rounded-md bg-indigo-600 text-white"
                         onClick={() => onToggle(r)}
                         disabled={!canEdit}
-                        type="button"
                       >
                         {r?.vigente ? "Desactivar" : "Activar"}
                       </button>
-
                       <button
                         className="px-2 py-1 rounded-md bg-rose-600 text-white"
                         onClick={() => onDelete(r)}
                         disabled={!canEdit}
-                        type="button"
                       >
                         Eliminar (soft)
                       </button>
@@ -362,50 +301,70 @@ export default function PersonalPageLite() {
               <input
                 className="w-full border rounded-md px-3 py-2 text-sm"
                 value={form.nombre}
-                onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    nombre: e.target.value,
+                  }))
+                }
                 required
               />
             </div>
-
             <div>
               <label className="block text-sm text-gray-600 mb-1">Apellido</label>
               <input
                 className="w-full border rounded-md px-3 py-2 text-sm"
                 value={form.apellido}
-                onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    apellido: e.target.value,
+                  }))
+                }
               />
             </div>
-
             <div>
               <label className="block text-sm text-gray-600 mb-1">Email *</label>
               <input
                 type="email"
                 className="w-full border rounded-md px-3 py-2 text-sm"
                 value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    email: e.target.value,
+                  }))
+                }
                 required
               />
             </div>
-
             <div>
               <label className="block text-sm text-gray-600 mb-1">Teléfono</label>
               <input
                 className="w-full border rounded-md px-3 py-2 text-sm"
                 value={form.telefono}
-                onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    telefono: e.target.value,
+                  }))
+                }
               />
             </div>
           </div>
-
           <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={form.vigente}
-              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  vigente: e.target.checked,
+                }))
+              }
             />
             Activo
           </label>
-
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
