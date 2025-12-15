@@ -1,5 +1,5 @@
 // src/components/persona/PersonalPage.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
@@ -83,14 +83,26 @@ export default function PersonalPage() {
     });
   }, [items, q]);
 
-  useEffect(() => {
-  if (!authLoading && user) {
-    loadPersonal();
-  }
-}, [authLoading, user, onlyActive, orgId]);
+  
+  // Evitar "reapariciones" por respuestas viejas (race condition)
+  const fetchSeqRef = useRef(0);
+  const mountedRef = useRef(true);
 
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+useEffect(() => {
+    if (!authLoading && user) {
+      loadPersonal();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user, onlyActive, orgId, t]);
 
   async function loadPersonal() {
+    const seq = ++fetchSeqRef.current;
     try {
       setLoading(true);
 
@@ -132,7 +144,7 @@ export default function PersonalPage() {
       });
 
       if (error) throw error;
-
+      if (!mountedRef.current || seq !== fetchSeqRef.current) return;
       setItems(data || []);
       setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
@@ -143,7 +155,7 @@ export default function PersonalPage() {
         msg: err?.message || t("personal.errorLoad"),
       });
     } finally {
-      setLoading(false);
+      if (mountedRef.current && seq === fetchSeqRef.current) setLoading(false);
     }
   }
 
@@ -191,6 +203,7 @@ export default function PersonalPage() {
   }
 
   async function onGuardar() {
+    fetchSeqRef.current += 1;
     try {
       if (!canEdit) {
         setBanner({ type: "err", msg: t("personal.errorNoPermissionSave") });
@@ -268,6 +281,8 @@ export default function PersonalPage() {
   }
 
   async function onEliminar() {
+    // Invalida cualquier carga en vuelo para evitar que "reaparezca" el registro
+    fetchSeqRef.current += 1;
     try {
       if (!canEdit) {
         setBanner({ type: "err", msg: t("personal.errorNoPermissionDelete") });
