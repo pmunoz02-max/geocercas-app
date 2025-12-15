@@ -630,7 +630,8 @@
       "breadcrumb": "Help Center",
       "back": "Back",
       "goHome": "Go to Home",
-      "viewFaq": "View FAQ"
+      "viewFaq": "View FAQ",
+      "badge": "Help center"
     },
     "changelog": {
       "breadcrumb": "Changelog",
@@ -685,6 +686,35 @@
       "recommendationBody": "A correct initial setup ensures reliable reports, operational control, and a better experience in App Geocercas.",
       "resultTitle": "Expected result",
       "resultIntro": "After completing these steps, you will have your organization configured, geofences created, personnel assigned, and trackers ready to operate with real-time control and reporting."
+    },
+    "faq": {
+      "badge": "Frequently asked questions",
+      "title": "Frequently asked questions",
+      "subtitle": "Quick answers to the most common questions about using App Geocercas.",
+      "seeQuickGuide": "View quick guide",
+      "backToPanel": "Back to panel",
+      "items": [
+        {
+          "question": "What is a geofence?",
+          "answer": "A geofence is a geographic area defined on the map that helps control presence, activities, and personnel costs."
+        },
+        {
+          "question": "Can I use the app with multiple organizations?",
+          "answer": "Yes. App Geocercas is multi-organization. You can manage multiple companies or projects from a single account."
+        },
+        {
+          "question": "Who can view cost reports?",
+          "answer": "Only owners and administrators in an organization can access cost reports."
+        },
+        {
+          "question": "What is a tracker?",
+          "answer": "A tracker is a user or device that sends location updates to be monitored in relation to geofences."
+        },
+        {
+          "question": "How often is location updated?",
+          "answer": "The update frequency is defined by the administrator when creating the tracker's assignment."
+        }
+      ]
     }
   },
   "resetPassword": {
