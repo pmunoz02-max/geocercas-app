@@ -473,12 +473,26 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return false;
       }
 
-      let layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current;
-      if (!layerToSave) {
-        const layers = [];
-        fg.eachLayer((lyr) => layers.push(lyr));
-        layerToSave = layers[layers.length - 1] || null;
-      }
+      // ✅ FUENTE DE VERDAD: FeatureGroup
+const layers = [];
+fg.eachLayer((lyr) => layers.push(lyr));
+
+const layerToSave =
+  selectedLayerRef.current ||
+  lastCreatedLayerRef.current ||
+  layers[layers.length - 1] ||
+  null;
+
+if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
+  alert(
+    t("geocercas.errorNoShape", {
+      defaultValue:
+        "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
+    })
+  );
+  return false;
+}
+
 
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
         // ✅ Aquí estaba saliendo geocercas.errorNoShape como texto crudo
