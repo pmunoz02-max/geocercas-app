@@ -129,7 +129,7 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
   return unique;
 }
 
-async function deleteGeofences({ items, supabaseClient = null }) {
+async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   let deleted = 0;
 
   const supaTargets = (items || []).filter((x) => x.source === "supabase");
@@ -317,6 +317,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
   const [geofenceList, setGeofenceList] = useState([]);
   const [selectedNames, setSelectedNames] = useState(new Set());
+  const selectedNamesRef = useRef(new Set());
   const [lastSelectedName, setLastSelectedName] = useState(null);
 
   const [cursorLatLng, setCursorLatLng] = useState(null);
@@ -552,32 +553,42 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
 
-  const handleSelectGeofence = useCallback(
-    (nombre) => {
-      const s = new Set(selectedNames);
+  const handleSelectGeofence = useCallback((nombre) => {
+    setSelectedNames((prev) => {
+      const s = new Set(prev);
       s.has(nombre) ? s.delete(nombre) : s.add(nombre);
-      setSelectedNames(s);
-      setLastSelectedName(nombre);
-    },
-    [selectedNames]
-  );
+      selectedNamesRef.current = s;
+      return s;
+    });
+    setLastSelectedName(nombre);
+  }, []);
 
   const handleDeleteSelected = useCallback(async () => {
-    if (!selectedNames.size) {
-      alert(t("geocercas.errorSelectAtLeastOne"));
+    const sel = selectedNamesRef.current;
+    const hasAny = sel && sel.size > 0;
+
+    if (!hasAny) {
+      alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
       return;
     }
-    if (!window.confirm(t("geocercas.deleteConfirm"))) return;
 
-    const items = geofenceList.filter((g) => selectedNames.has(g.nombre));
-    const count = await deleteGeofences({ items, supabaseClient });
-    alert(t("geocercas.deletedCount", { count }));
+    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }))) return;
+
+    const items = geofenceList.filter((g) => sel.has(g.nombre));
+    const count = await deleteGeofences({ items, supabaseClient, orgId: currentOrg?.id });
+
+    alert(t("geocercas.deletedCount", { count, defaultValue: `Eliminadas: ${count}` }));
+
+    // limpiar selección inmediatamente (state + ref)
+    selectedNamesRef.current = new Set();
     setSelectedNames(new Set());
+    setViewFeature(null);
+    setViewCentroid?.(null);
+
     await refreshGeofenceList();
     clearCanvas();
     setDraftFeature(null);
-    setViewFeature(null);
-  }, [selectedNames, geofenceList, supabaseClient, refreshGeofenceList, clearCanvas, t]);
+  }, [geofenceList, supabaseClient, currentOrg, refreshGeofenceList, clearCanvas, t]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
