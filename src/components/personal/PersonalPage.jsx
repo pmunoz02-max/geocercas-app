@@ -301,26 +301,34 @@ export default function PersonalPage() {
         .eq("org_id", orgId)
         .eq("is_deleted", false);
 
-      console.log("[PersonalPage] Resultado delete (soft):", {
-        selectedId,
-        orgId,
-        count,
-        error: error ? { message: error.message, code: error.code } : null,
-      });
+      console.log(
+  "[PersonalPage] Resultado SELECT personal:",
+  JSON.stringify(
+    {
+      orgId,
+      onlyActive,
+      count: Array.isArray(data) ? data.length : null,
+      error: error ? { message: error.message, code: error.code } : null,
+    },
+    null,
+    2
+  )
+);
 
-      if (error) throw error;
+console.log(
+  "[PersonalPage] Resultado delete (soft):",
+  JSON.stringify(
+    {
+      selectedId,
+      orgId,
+      count,
+      error: error ? { message: error.message, code: error.code } : null,
+    },
+    null,
+    2
+  )
+);
 
-      // ✅ Si no afectó filas, ese "ok" era falso: mostramos error y NO lo pisamos
-      if (!count || count === 0) {
-        setBanner({
-          type: "err",
-          msg:
-            t("personal.errorDeleteNoRows") ||
-            "No se eliminó ningún registro (0 filas afectadas).",
-        });
-        await loadPersonal({ silentOk: true }); // recarga sin pisar el error
-        return;
-      }
 
       // ✅ UI inmediata
       setItems((prev) => prev.filter((r) => r.id !== selectedId));
