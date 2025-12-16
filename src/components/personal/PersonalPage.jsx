@@ -5,12 +5,13 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 const emptyForm = () => ({
-  id: null,
+  org_people_id: null, // id de la membership (org_people)
+  person_id: null, // id del people
   nombre: "",
   apellido: "",
   email: "",
   telefono: "",
-  vigente: true,
+  vigente: true, // vigente de org_people
 });
 
 function asE164OrThrow(raw, t) {
@@ -32,23 +33,21 @@ function normPhone(v) {
 }
 
 /**
- * Dedupe defensivo para UI (mientras la BD aún tiene duplicados históricos).
- * Regla:
- * - Si hay email_norm, dedupe por email_norm
- * - Si no hay email_norm pero hay phone_norm, dedupe por phone_norm
- * - Si no hay ninguno, dedupe por id (no se agrupa)
- * Estrategia: mantener el más reciente por updated_at/created_at/id.
+ * Dedupe defensivo para UI:
+ * - Dedupe por email_norm, luego phone_norm, sino por person_id.
+ * - Mantiene el registro "más reciente" (por updated_at/created_at).
  */
 function dedupePersonalRows(rows) {
   const arr = Array.isArray(rows) ? rows : [];
   const score = (r) =>
-    new Date(r?.updated_at || r?.created_at || 0).getTime() || 0;
+    new Date(r?.op_updated_at || r?.op_created_at || r?.p_updated_at || r?.p_created_at || 0).getTime() ||
+    0;
 
   const map = new Map();
   for (const r of arr) {
     const e = normEmail(r?.email);
     const p = normPhone(r?.telefono);
-    const key = e ? `e:${e}` : p ? `p:${p}` : `id:${r?.id}`;
+    const key = e ? `e:${e}` : p ? `p:${p}` : `pid:${r?.person_id}`;
 
     const prev = map.get(key);
     if (!prev) {
@@ -58,14 +57,14 @@ function dedupePersonalRows(rows) {
     const prevScore = score(prev);
     const curScore = score(r);
     if (curScore > prevScore) map.set(key, r);
-    else if (curScore === prevScore && String(r?.id) > String(prev?.id))
+    else if (curScore === prevScore && String(r?.person_id) > String(prev?.person_id))
       map.set(key, r);
   }
   return Array.from(map.values());
 }
 
 function isUniqueViolation(err) {
-  // Supabase/PostgREST: Postgres unique violation = 23505
+  // Postgres unique violation = 23505
   return err?.code === "23505" || /duplicate key|unique/i.test(err?.message || "");
 }
 
@@ -89,7 +88,7 @@ export default function PersonalPage() {
   const orgId = currentOrg?.id || null;
 
   const [items, setItems] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [banner, setBanner] = useState({ type: "ok", msg: "" });
   const [loading, setLoading] = useState(false);
@@ -115,6 +114,34 @@ export default function PersonalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, onlyActive, orgId, t]);
 
+  function mapRows(data) {
+    const arr = Array.isArray(data) ? data : [];
+    return arr.map((op) => {
+      const p = op?.people || op?.person || op?.p || null;
+
+      return {
+        // membership (org_people)
+        org_people_id: op?.id ?? null,
+        org_id: op?.org_id ?? null,
+        person_id: op?.person_id ?? null,
+        vigente: !!op?.vigente,
+        is_deleted: !!op?.is_deleted,
+        deleted_at: op?.deleted_at ?? null,
+        op_created_at: op?.created_at ?? null,
+        op_updated_at: op?.updated_at ?? null,
+
+        // person (people)
+        people_id: p?.id ?? op?.person_id ?? null,
+        nombre: p?.nombre ?? "",
+        apellido: p?.apellido ?? "",
+        email: p?.email ?? "",
+        telefono: p?.telefono ?? "",
+        p_created_at: p?.created_at ?? null,
+        p_updated_at: p?.updated_at ?? null,
+      };
+    });
+  }
+
   async function loadPersonal() {
     try {
       setLoading(true);
@@ -136,20 +163,40 @@ export default function PersonalPage() {
         return;
       }
 
+      // ✅ Importante: NO usar select * con join (pisaba columnas como id/updated_at)
       let query = supabase
-        .from("personal")
-        .select("*")
+        .from("org_people")
+        .select(
+          `
+          id,
+          org_id,
+          person_id,
+          vigente,
+          is_deleted,
+          deleted_at,
+          created_at,
+          updated_at,
+          people:people (
+            id,
+            nombre,
+            apellido,
+            email,
+            telefono,
+            created_at,
+            updated_at
+          )
+        `
+        )
         .eq("org_id", orgId)
         .eq("is_deleted", false)
-        .order("nombre", { ascending: true });
+        .order("created_at", { ascending: false });
 
       if (onlyActive) query = query.eq("vigente", true);
 
       const { data, error } = await query;
 
       const rowCount = Array.isArray(data) ? data.length : 0;
-
-      console.log("[PersonalPage] Resultado SELECT personal:", {
+      console.log("[PersonalPage] SELECT org_people+people:", {
         authUserId: authUser.id,
         orgId,
         count: rowCount,
@@ -158,13 +205,25 @@ export default function PersonalPage() {
 
       if (error) throw error;
 
-      // Defensa: nunca mostrar soft-deletes + dedupe UI mientras la BD tenga duplicados históricos.
-      const clean = (data || []).filter((r) => !r?.is_deleted);
+      const mapped = mapRows(data);
+
+      // Defensa UI (por si hay inconsistencias históricas)
+      const clean = mapped.filter((r) => !r?.is_deleted);
       const deduped = dedupePersonalRows(clean);
+
+      // Orden amigable por nombre/apellido/email
+      deduped.sort((a, b) => {
+        const A = `${a?.nombre || ""} ${a?.apellido || ""} ${a?.email || ""}`.toLowerCase();
+        const B = `${b?.nombre || ""} ${b?.apellido || ""} ${b?.email || ""}`.toLowerCase();
+        return A.localeCompare(B);
+      });
 
       setItems(deduped);
 
-      console.log("[PersonalPage] IDs cargados (dedup):", deduped.map((r) => r.id));
+      console.log(
+        "[PersonalPage] IDs cargados:",
+        deduped.map((r) => ({ org_people_id: r.org_people_id, person_id: r.person_id }))
+      );
 
       setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
@@ -180,9 +239,10 @@ export default function PersonalPage() {
   }
 
   function onSelect(row) {
-    setSelectedId(row.id);
+    setSelectedOrgPeopleId(row.org_people_id);
     setForm({
-      id: row.id,
+      org_people_id: row.org_people_id,
+      person_id: row.person_id,
       nombre: row.nombre || "",
       apellido: row.apellido || "",
       email: row.email || "",
@@ -197,7 +257,7 @@ export default function PersonalPage() {
       setBanner({ type: "err", msg: t("personal.errorNoPermissionCreate") });
       return;
     }
-    setSelectedId(null);
+    setSelectedOrgPeopleId(null);
     setForm(emptyForm());
     setBanner({ type: "ok", msg: t("personal.bannerNewMode") });
   }
@@ -207,7 +267,7 @@ export default function PersonalPage() {
       setBanner({ type: "err", msg: t("personal.errorNoPermissionEdit") });
       return;
     }
-    if (!selectedId) {
+    if (!selectedOrgPeopleId) {
       setBanner({ type: "err", msg: t("personal.errorMustSelectForEdit") });
       return;
     }
@@ -250,53 +310,78 @@ export default function PersonalPage() {
       if (!nombre) throw new Error(t("personal.errorMissingName"));
       if (!email) throw new Error(t("personal.errorMissingEmail"));
 
-      const payload = {
+      // 1) UPSERT en people (por email_norm único)
+      // Nota: email_norm lo setea tu DB o lo manejas como lower(email) en triggers/columns;
+      // aquí usamos email normalizado igualmente.
+      const upsertPayload = {
         nombre,
         apellido,
         email,
         telefono,
-        vigente: !!form.vigente,
+        // Si tu tabla people tiene *_norm y triggers, no hace falta enviarlos.
       };
 
-      let result;
-      if (form.id) {
-        result = await supabase
-          .from("personal")
-          .update(payload)
-          .eq("id", form.id)
-          .eq("org_id", orgId)
-          .eq("is_deleted", false);
-      } else {
-        result = await supabase.from("personal").insert({
-          ...payload,
-          org_id: orgId,
-        });
-      }
+      const { data: peopleUpserted, error: peopleErr } = await supabase
+        .from("people")
+        .upsert(upsertPayload, { onConflict: "email_norm" })
+        .select("id,email")
+        .maybeSingle();
 
-      const { error } = result;
-
-      console.log("[PersonalPage] Resultado guardar (no-returning):", { error });
-
-      if (error) {
-        if (isUniqueViolation(error)) {
+      if (peopleErr) {
+        if (isUniqueViolation(peopleErr)) {
           throw new Error(
             t("personal.errorDuplicate", {
               defaultValue:
-                "Duplicate personnel in this organization (email/phone already exists).",
+                "Duplicate personnel (email/phone already exists).",
             })
           );
         }
-        throw error;
+        throw peopleErr;
       }
 
-      setBanner({
-        type: "ok",
-        msg: form.id ? t("personal.bannerUpdated") : t("personal.bannerCreated"),
-      });
+      const personId = peopleUpserted?.id;
+      if (!personId) throw new Error(t("personal.errorSave"));
 
-      setSelectedId(null);
+      // 2) Si venimos editando una membership existente: update org_people + (opcional) update people
+      if (form.org_people_id) {
+        const { error: opErr } = await supabase
+          .from("org_people")
+          .update({
+            vigente: !!form.vigente,
+            // updated_at/deleted_at quedan a cargo de trigger/consistencia en DB si lo agregaste
+          })
+          .eq("id", form.org_people_id)
+          .eq("org_id", orgId)
+          .eq("is_deleted", false);
+
+        if (opErr) throw opErr;
+
+        setBanner({ type: "ok", msg: t("personal.bannerUpdated") });
+      } else {
+        // 3) Nueva membership: insertar org_people (tu índice unique_active evita duplicados activos)
+        const { error: insErr } = await supabase.from("org_people").insert({
+          org_id: orgId,
+          person_id: personId,
+          vigente: !!form.vigente,
+        });
+
+        if (insErr) {
+          if (isUniqueViolation(insErr)) {
+            throw new Error(
+              t("personal.errorDuplicate", {
+                defaultValue:
+                  "This person is already active in this organization.",
+              })
+            );
+          }
+          throw insErr;
+        }
+
+        setBanner({ type: "ok", msg: t("personal.bannerCreated") });
+      }
+
+      setSelectedOrgPeopleId(null);
       setForm(emptyForm());
-
       await loadPersonal();
     } catch (err) {
       console.error("[PersonalPage] Error onGuardar:", err);
@@ -312,7 +397,7 @@ export default function PersonalPage() {
         setBanner({ type: "err", msg: t("personal.errorNoPermissionDelete") });
         return;
       }
-      if (!selectedId) {
+      if (!selectedOrgPeopleId) {
         setBanner({ type: "err", msg: t("personal.errorMustSelectForDelete") });
         return;
       }
@@ -333,11 +418,11 @@ export default function PersonalPage() {
 
       if (userError || !authUser) throw new Error(t("personal.errorMissingUser"));
 
-      // ✅ Pre-check universal (evita "no rows" silencioso)
+      // Pre-check universal (evita "no rows" silencioso)
       const { data: exists, error: preErr } = await supabase
-        .from("personal")
-        .select("id")
-        .eq("id", selectedId)
+        .from("org_people")
+        .select("id, person_id")
+        .eq("id", selectedOrgPeopleId)
         .eq("org_id", orgId)
         .eq("is_deleted", false)
         .maybeSingle();
@@ -347,27 +432,34 @@ export default function PersonalPage() {
 
       const now = new Date().toISOString();
 
-      // ✅ Soft-delete sin returning (evita 403 por policy SELECT is_deleted=false)
+      // Soft-delete de la membership (org_people)
+      // Nota: si ya instalaste el trigger tg_org_people_consistency, puedes omitir vigente/deleted_at/updated_at;
+      // lo dejamos explícito para compatibilidad con entornos sin trigger aún.
       const { error } = await supabase
-        .from("personal")
+        .from("org_people")
         .update({
           is_deleted: true,
           vigente: false,
           deleted_at: now,
           updated_at: now,
         })
-        .eq("id", selectedId)
+        .eq("id", selectedOrgPeopleId)
         .eq("org_id", orgId);
 
-      console.log("[PersonalPage] Resultado delete (soft):", { selectedId, error });
+      console.log("[PersonalPage] Resultado delete (org_people soft):", {
+        selectedOrgPeopleId,
+        error,
+      });
 
       if (error) throw error;
 
-      // ✅ UI inmediata: remover del estado local (independiente de duplicados históricos)
-      setItems((prev) => (prev || []).filter((r) => r.id !== selectedId));
+      // UI inmediata
+      setItems((prev) =>
+        (prev || []).filter((r) => r.org_people_id !== selectedOrgPeopleId)
+      );
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
-      setSelectedId(null);
+      setSelectedOrgPeopleId(null);
       setForm(emptyForm());
 
       await loadPersonal();
@@ -539,10 +631,10 @@ export default function PersonalPage() {
             )}
 
             {filteredItems.map((r, i) => {
-              const active = r.id === selectedId;
+              const active = r.org_people_id === selectedOrgPeopleId;
               return (
                 <tr
-                  key={r.id}
+                  key={r.org_people_id || `${r.person_id}-${i}`}
                   className={active ? "active" : i % 2 === 0 ? "even" : "odd"}
                   onClick={() => onSelect(r)}
                   title={t("personal.tableClickToSelect")}
@@ -667,3 +759,4 @@ const baseStyles = `
 .pill.off{ background:rgba(148,163,184,0.18); color:#e2e8f0; border-color:rgba(148,163,184,0.35); }
 .pill.off i{ background:#94a3b8; }
 `;
+
