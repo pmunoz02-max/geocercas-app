@@ -5,21 +5,19 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 const emptyForm = () => ({
-  org_people_id: null, // id de la membership (org_people)
-  person_id: null, // id del people
+  org_people_id: null,
+  person_id: null,
   nombre: "",
   apellido: "",
   email: "",
   telefono: "",
-  vigente: true, // vigente de org_people
+  vigente: true,
 });
 
 function asE164OrThrow(raw, t) {
   const tel = (raw || "").trim();
   if (!tel) return "";
-  if (!tel.startsWith("+")) {
-    throw new Error(t("personal.errorPhonePolicy"));
-  }
+  if (!tel.startsWith("+")) throw new Error(t("personal.errorPhonePolicy"));
   return tel;
 }
 
@@ -32,16 +30,16 @@ function normPhone(v) {
   return s || null;
 }
 
-/**
- * Dedupe defensivo para UI:
- * - Dedupe por email_norm, luego phone_norm, sino por person_id.
- * - Mantiene el registro "más reciente" (por updated_at/created_at).
- */
 function dedupePersonalRows(rows) {
   const arr = Array.isArray(rows) ? rows : [];
   const score = (r) =>
-    new Date(r?.op_updated_at || r?.op_created_at || r?.p_updated_at || r?.p_created_at || 0).getTime() ||
-    0;
+    new Date(
+      r?.op_updated_at ||
+        r?.op_created_at ||
+        r?.p_updated_at ||
+        r?.p_created_at ||
+        0
+    ).getTime() || 0;
 
   const map = new Map();
   for (const r of arr) {
@@ -57,14 +55,14 @@ function dedupePersonalRows(rows) {
     const prevScore = score(prev);
     const curScore = score(r);
     if (curScore > prevScore) map.set(key, r);
-    else if (curScore === prevScore && String(r?.person_id) > String(prev?.person_id))
+    else if (curScore === prevScore && String(r?.person_id) > String(prev?.person_id)) {
       map.set(key, r);
+    }
   }
   return Array.from(map.values());
 }
 
 function isUniqueViolation(err) {
-  // Postgres unique violation = 23505
   return err?.code === "23505" || /duplicate key|unique/i.test(err?.message || "");
 }
 
@@ -108,19 +106,16 @@ export default function PersonalPage() {
   }, [items, q]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      loadPersonal();
-    }
+    if (!authLoading && user) loadPersonal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, onlyActive, orgId, t]);
+  }, [authLoading, user, onlyActive, orgId]);
 
   function mapRows(data) {
     const arr = Array.isArray(data) ? data : [];
     return arr.map((op) => {
-      const p = op?.people || op?.person || op?.p || null;
-
+      const p = op?.people || null;
       return {
-        // membership (org_people)
+        // org_people
         org_people_id: op?.id ?? null,
         org_id: op?.org_id ?? null,
         person_id: op?.person_id ?? null,
@@ -130,7 +125,7 @@ export default function PersonalPage() {
         op_created_at: op?.created_at ?? null,
         op_updated_at: op?.updated_at ?? null,
 
-        // person (people)
+        // people
         people_id: p?.id ?? op?.person_id ?? null,
         nombre: p?.nombre ?? "",
         apellido: p?.apellido ?? "",
@@ -151,10 +146,7 @@ export default function PersonalPage() {
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
-        console.error("[PersonalPage] Error auth.getUser:", userError);
-        throw new Error(t("personal.errorMissingUser"));
-      }
+      if (userError) throw new Error(t("personal.errorMissingUser"));
       if (!authUser) throw new Error(t("personal.errorNoAuthUser"));
 
       if (!orgId) {
@@ -163,7 +155,6 @@ export default function PersonalPage() {
         return;
       }
 
-      // ✅ Importante: NO usar select * con join (pisaba columnas como id/updated_at)
       let query = supabase
         .from("org_people")
         .select(
@@ -185,7 +176,8 @@ export default function PersonalPage() {
             created_at,
             updated_at
           )
-        `
+        `,
+          { count: "exact" }
         )
         .eq("org_id", orgId)
         .eq("is_deleted", false)
@@ -193,25 +185,22 @@ export default function PersonalPage() {
 
       if (onlyActive) query = query.eq("vigente", true);
 
-      const { data, error } = await query;
+      const { data, error, count } = await query;
 
-      const rowCount = Array.isArray(data) ? data.length : 0;
-      console.log("[PersonalPage] SELECT org_people+people:", {
-        authUserId: authUser.id,
+      console.log("[PersonalPage] Resultado SELECT personal:", {
         orgId,
-        count: rowCount,
+        onlyActive,
+        count,
         error,
+        sample: Array.isArray(data) && data[0] ? { op_id: data[0].id, person_id: data[0].person_id } : null,
       });
 
       if (error) throw error;
 
       const mapped = mapRows(data);
-
-      // Defensa UI (por si hay inconsistencias históricas)
       const clean = mapped.filter((r) => !r?.is_deleted);
       const deduped = dedupePersonalRows(clean);
 
-      // Orden amigable por nombre/apellido/email
       deduped.sort((a, b) => {
         const A = `${a?.nombre || ""} ${a?.apellido || ""} ${a?.email || ""}`.toLowerCase();
         const B = `${b?.nombre || ""} ${b?.apellido || ""} ${b?.email || ""}`.toLowerCase();
@@ -221,18 +210,15 @@ export default function PersonalPage() {
       setItems(deduped);
 
       console.log(
-        "[PersonalPage] IDs cargados:",
-        deduped.map((r) => ({ org_people_id: r.org_people_id, person_id: r.person_id }))
+        "[PersonalPage] IDs cargados (dedup):",
+        deduped.map((r) => ({ org_people_id: r.org_people_id, org_id: r.org_id, person_id: r.person_id }))
       );
 
       setBanner({ type: "ok", msg: t("personal.bannerRefreshedOk") });
     } catch (err) {
       console.error("[PersonalPage] Error cargando personal:", err);
       setItems([]);
-      setBanner({
-        type: "err",
-        msg: err?.message || t("personal.errorLoad"),
-      });
+      setBanner({ type: "err", msg: err?.message || t("personal.errorLoad") });
     } finally {
       setLoading(false);
     }
@@ -253,45 +239,27 @@ export default function PersonalPage() {
   }
 
   function onNuevo() {
-    if (!canEdit) {
-      setBanner({ type: "err", msg: t("personal.errorNoPermissionCreate") });
-      return;
-    }
+    if (!canEdit) return setBanner({ type: "err", msg: t("personal.errorNoPermissionCreate") });
     setSelectedOrgPeopleId(null);
     setForm(emptyForm());
     setBanner({ type: "ok", msg: t("personal.bannerNewMode") });
   }
 
   function onEditar() {
-    if (!canEdit) {
-      setBanner({ type: "err", msg: t("personal.errorNoPermissionEdit") });
-      return;
-    }
-    if (!selectedOrgPeopleId) {
-      setBanner({ type: "err", msg: t("personal.errorMustSelectForEdit") });
-      return;
-    }
+    if (!canEdit) return setBanner({ type: "err", msg: t("personal.errorNoPermissionEdit") });
+    if (!selectedOrgPeopleId) return setBanner({ type: "err", msg: t("personal.errorMustSelectForEdit") });
     setBanner({ type: "ok", msg: t("personal.bannerEditMode") });
   }
 
   function onChange(e) {
     const { name, value, type, checked } = e.target;
-    setForm((f) => ({
-      ...f,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+    setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
   }
 
   async function onGuardar() {
     try {
-      if (!canEdit) {
-        setBanner({ type: "err", msg: t("personal.errorNoPermissionSave") });
-        return;
-      }
-      if (!orgId) {
-        setBanner({ type: "err", msg: t("personal.errorNoOrgSelected") });
-        return;
-      }
+      if (!canEdit) return setBanner({ type: "err", msg: t("personal.errorNoPermissionSave") });
+      if (!orgId) return setBanner({ type: "err", msg: t("personal.errorNoOrgSelected") });
 
       setLoading(true);
 
@@ -299,7 +267,6 @@ export default function PersonalPage() {
         data: { user: authUser },
         error: userError,
       } = await supabase.auth.getUser();
-
       if (userError || !authUser) throw new Error(t("personal.errorMissingUser"));
 
       const nombre = (form.nombre || "").trim();
@@ -310,16 +277,7 @@ export default function PersonalPage() {
       if (!nombre) throw new Error(t("personal.errorMissingName"));
       if (!email) throw new Error(t("personal.errorMissingEmail"));
 
-      // 1) UPSERT en people (por email_norm único)
-      // Nota: email_norm lo setea tu DB o lo manejas como lower(email) en triggers/columns;
-      // aquí usamos email normalizado igualmente.
-      const upsertPayload = {
-        nombre,
-        apellido,
-        email,
-        telefono,
-        // Si tu tabla people tiene *_norm y triggers, no hace falta enviarlos.
-      };
+      const upsertPayload = { nombre, apellido, email, telefono };
 
       const { data: peopleUpserted, error: peopleErr } = await supabase
         .from("people")
@@ -328,54 +286,40 @@ export default function PersonalPage() {
         .maybeSingle();
 
       if (peopleErr) {
-        if (isUniqueViolation(peopleErr)) {
-          throw new Error(
-            t("personal.errorDuplicate", {
-              defaultValue:
-                "Duplicate personnel (email/phone already exists).",
-            })
-          );
-        }
+        if (isUniqueViolation(peopleErr)) throw new Error(t("personal.errorDuplicate"));
         throw peopleErr;
       }
 
       const personId = peopleUpserted?.id;
       if (!personId) throw new Error(t("personal.errorSave"));
 
-      // 2) Si venimos editando una membership existente: update org_people + (opcional) update people
       if (form.org_people_id) {
-        const { error: opErr } = await supabase
+        // update membership
+        const { data: upd, error: opErr } = await supabase
           .from("org_people")
-          .update({
-            vigente: !!form.vigente,
-            // updated_at/deleted_at quedan a cargo de trigger/consistencia en DB si lo agregaste
-          })
+          .update({ vigente: !!form.vigente })
           .eq("id", form.org_people_id)
           .eq("org_id", orgId)
-          .eq("is_deleted", false);
+          .eq("is_deleted", false)
+          .select("id, org_id, person_id, vigente, is_deleted, deleted_at, updated_at");
 
+        console.log("[PersonalPage] Resultado update membership:", { orgId, form_org_people_id: form.org_people_id, upd, opErr });
         if (opErr) throw opErr;
+        if (!Array.isArray(upd) || upd.length === 0) throw new Error(t("personal.errorUpdateNoRows"));
 
         setBanner({ type: "ok", msg: t("personal.bannerUpdated") });
       } else {
-        // 3) Nueva membership: insertar org_people (tu índice unique_active evita duplicados activos)
-        const { error: insErr } = await supabase.from("org_people").insert({
-          org_id: orgId,
-          person_id: personId,
-          vigente: !!form.vigente,
-        });
+        const { data: ins, error: insErr } = await supabase
+          .from("org_people")
+          .insert({ org_id: orgId, person_id: personId, vigente: !!form.vigente })
+          .select("id, org_id, person_id, vigente, is_deleted, created_at");
 
+        console.log("[PersonalPage] Resultado insert membership:", { orgId, personId, ins, insErr });
         if (insErr) {
-          if (isUniqueViolation(insErr)) {
-            throw new Error(
-              t("personal.errorDuplicate", {
-                defaultValue:
-                  "This person is already active in this organization.",
-              })
-            );
-          }
+          if (isUniqueViolation(insErr)) throw new Error(t("personal.errorDuplicate"));
           throw insErr;
         }
+        if (!Array.isArray(ins) || ins.length === 0) throw new Error(t("personal.errorSave"));
 
         setBanner({ type: "ok", msg: t("personal.bannerCreated") });
       }
@@ -393,18 +337,9 @@ export default function PersonalPage() {
 
   async function onEliminar() {
     try {
-      if (!canEdit) {
-        setBanner({ type: "err", msg: t("personal.errorNoPermissionDelete") });
-        return;
-      }
-      if (!selectedOrgPeopleId) {
-        setBanner({ type: "err", msg: t("personal.errorMustSelectForDelete") });
-        return;
-      }
-      if (!orgId) {
-        setBanner({ type: "err", msg: t("personal.errorNoOrgSelected") });
-        return;
-      }
+      if (!canEdit) return setBanner({ type: "err", msg: t("personal.errorNoPermissionDelete") });
+      if (!selectedOrgPeopleId) return setBanner({ type: "err", msg: t("personal.errorMustSelectForDelete") });
+      if (!orgId) return setBanner({ type: "err", msg: t("personal.errorNoOrgSelected") });
 
       const confirmed = window.confirm(t("personal.confirmDelete"));
       if (!confirmed) return;
@@ -415,27 +350,28 @@ export default function PersonalPage() {
         data: { user: authUser },
         error: userError,
       } = await supabase.auth.getUser();
-
       if (userError || !authUser) throw new Error(t("personal.errorMissingUser"));
 
-      // Pre-check universal (evita "no rows" silencioso)
+      console.log("[PersonalPage] Delete init:", { orgId, selectedOrgPeopleId });
+
+      // Pre-check: confirma que existe exactamente esa membership ACTIVA en esta org
       const { data: exists, error: preErr } = await supabase
         .from("org_people")
-        .select("id, person_id")
+        .select("id, org_id, person_id, vigente, is_deleted")
         .eq("id", selectedOrgPeopleId)
         .eq("org_id", orgId)
-        .eq("is_deleted", false)
         .maybeSingle();
+
+      console.log("[PersonalPage] Pre-check delete:", { orgId, selectedOrgPeopleId, exists, preErr });
 
       if (preErr) throw preErr;
       if (!exists?.id) throw new Error(t("personal.errorDeleteNoRows"));
+      if (exists.is_deleted) throw new Error(t("personal.errorAlreadyDeleted"));
 
       const now = new Date().toISOString();
 
-      // Soft-delete de la membership (org_people)
-      // Nota: si ya instalaste el trigger tg_org_people_consistency, puedes omitir vigente/deleted_at/updated_at;
-      // lo dejamos explícito para compatibilidad con entornos sin trigger aún.
-      const { error } = await supabase
+      // ✅ IMPORTANTÍSIMO: pedir retorno con select(), así detectamos "0 rows updated" (RLS / id incorrecto / org incorrecto)
+      const { data: updated, error: delErr } = await supabase
         .from("org_people")
         .update({
           is_deleted: true,
@@ -444,19 +380,24 @@ export default function PersonalPage() {
           updated_at: now,
         })
         .eq("id", selectedOrgPeopleId)
-        .eq("org_id", orgId);
+        .eq("org_id", orgId)
+        .select("id, org_id, person_id, vigente, is_deleted, deleted_at, updated_at");
 
-      console.log("[PersonalPage] Resultado delete (org_people soft):", {
+      console.log("[PersonalPage] Resultado delete (soft):", {
+        orgId,
         selectedOrgPeopleId,
-        error,
+        delErr,
+        updated,
       });
 
-      if (error) throw error;
+      if (delErr) throw delErr;
+      if (!Array.isArray(updated) || updated.length === 0) {
+        // Este es EL caso del “desaparece-reaparece”: la UI cree que borró, pero DB no tocó nada.
+        throw new Error(t("personal.errorDeleteNoRows"));
+      }
 
       // UI inmediata
-      setItems((prev) =>
-        (prev || []).filter((r) => r.org_people_id !== selectedOrgPeopleId)
-      );
+      setItems((prev) => (prev || []).filter((r) => r.org_people_id !== selectedOrgPeopleId));
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
       setSelectedOrgPeopleId(null);
@@ -507,7 +448,8 @@ export default function PersonalPage() {
             <p className="pg-muted">
               {t("personal.orgInfoLabel")}{" "}
               <strong>{currentOrg?.name || t("personal.orgFallback")}</strong> ·{" "}
-              {t("personal.roleLabel")} <strong>{effectiveRole}</strong>
+              {t("personal.roleLabel")} <strong>{effectiveRole}</strong> ·{" "}
+              OrgID: <strong>{orgId || "—"}</strong>
             </p>
           </div>
           {canEdit ? (
@@ -599,12 +541,7 @@ export default function PersonalPage() {
             className="pg-input"
           />
           <label className="pg-check">
-            <input
-              type="checkbox"
-              name="vigente"
-              checked={form.vigente}
-              onChange={onChange}
-            />
+            <input type="checkbox" name="vigente" checked={form.vigente} onChange={onChange} />
             <span>{t("personal.fieldActive")}</span>
           </label>
         </div>
@@ -678,7 +615,6 @@ const baseStyles = `
   --ok:#059669;
   --ok-ink:#ecfdf5;
   --err:#e11d48;
-  --accent:#2563eb;
   --danger:#dc2626;
   --ring:#cbd5e1;
 }
@@ -759,4 +695,3 @@ const baseStyles = `
 .pill.off{ background:rgba(148,163,184,0.18); color:#e2e8f0; border-color:rgba(148,163,184,0.35); }
 .pill.off i{ background:#94a3b8; }
 `;
-
