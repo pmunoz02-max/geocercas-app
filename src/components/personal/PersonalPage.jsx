@@ -192,7 +192,10 @@ export default function PersonalPage() {
         onlyActive,
         count,
         error,
-        sample: Array.isArray(data) && data[0] ? { op_id: data[0].id, person_id: data[0].person_id } : null,
+        sample:
+          Array.isArray(data) && data[0]
+            ? { op_id: data[0].id, person_id: data[0].person_id }
+            : null,
       });
 
       if (error) throw error;
@@ -256,6 +259,58 @@ export default function PersonalPage() {
     setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
   }
 
+  async function getOrCreatePersonByEmail({ nombre, apellido, email, telefono }) {
+    const emailNorm = normEmail(email);
+    if (!emailNorm) throw new Error(t("personal.errorMissingEmail"));
+
+    // 1) buscar
+    const { data: found, error: findErr } = await supabase
+      .from("people")
+      .select("id,email")
+      .eq("email_norm", emailNorm)
+      .maybeSingle();
+
+    if (findErr) throw findErr;
+
+    // 2) si existe -> update (para mantener datos al día)
+    if (found?.id) {
+      const { data: upd, error: updErr } = await supabase
+        .from("people")
+        .update({ nombre, apellido, email: emailNorm, telefono })
+        .eq("id", found.id)
+        .select("id,email")
+        .maybeSingle();
+
+      if (updErr) throw updErr;
+      if (!upd?.id) return found; // fallback
+      return upd;
+    }
+
+    // 3) no existe -> insert
+    const { data: ins, error: insErr } = await supabase
+      .from("people")
+      .insert({ nombre, apellido, email: emailNorm, telefono })
+      .select("id,email")
+      .maybeSingle();
+
+    if (insErr) {
+      // 4) si chocó unique, re-intenta buscar (condición de carrera)
+      if (isUniqueViolation(insErr)) {
+        const { data: found2, error: findErr2 } = await supabase
+          .from("people")
+          .select("id,email")
+          .eq("email_norm", emailNorm)
+          .maybeSingle();
+        if (findErr2) throw findErr2;
+        if (found2?.id) return found2;
+      }
+      throw insErr;
+    }
+
+    if (!ins?.id) throw new Error(t("personal.errorSave"));
+    return ins;
+  }
+
   async function onGuardar() {
     try {
       if (!canEdit) return setBanner({ type: "err", msg: t("personal.errorNoPermissionSave") });
@@ -277,33 +332,22 @@ export default function PersonalPage() {
       if (!nombre) throw new Error(t("personal.errorMissingName"));
       if (!email) throw new Error(t("personal.errorMissingEmail"));
 
-      const upsertPayload = { nombre, apellido, email, telefono };
-
-      const { data: peopleUpserted, error: peopleErr } = await supabase
-        .from("people")
-        .upsert(upsertPayload, { onConflict: "email_norm" })
-        .select("id,email")
-        .maybeSingle();
-
-      if (peopleErr) {
-        if (isUniqueViolation(peopleErr)) throw new Error(t("personal.errorDuplicate"));
-        throw peopleErr;
-      }
-
-      const personId = peopleUpserted?.id;
+      // ✅ Reemplazo universal: sin on_conflict (evita 400)
+      const person = await getOrCreatePersonByEmail({ nombre, apellido, email, telefono });
+      const personId = person?.id;
       if (!personId) throw new Error(t("personal.errorSave"));
 
       if (form.org_people_id) {
-        // update membership
         const { data: upd, error: opErr } = await supabase
           .from("org_people")
           .update({ vigente: !!form.vigente })
           .eq("id", form.org_people_id)
           .eq("org_id", orgId)
           .eq("is_deleted", false)
-          .select("id, org_id, person_id, vigente, is_deleted, deleted_at, updated_at");
+          .select("id, org_id, person_id, vigente, is_deleted, updated_at");
 
         console.log("[PersonalPage] Resultado update membership:", { orgId, form_org_people_id: form.org_people_id, upd, opErr });
+
         if (opErr) throw opErr;
         if (!Array.isArray(upd) || upd.length === 0) throw new Error(t("personal.errorUpdateNoRows"));
 
@@ -315,8 +359,12 @@ export default function PersonalPage() {
           .select("id, org_id, person_id, vigente, is_deleted, created_at");
 
         console.log("[PersonalPage] Resultado insert membership:", { orgId, personId, ins, insErr });
+
         if (insErr) {
-          if (isUniqueViolation(insErr)) throw new Error(t("personal.errorDuplicate"));
+          if (isUniqueViolation(insErr)) {
+            // ya existe activo en esa org
+            throw new Error(t("personal.errorDuplicate"));
+          }
           throw insErr;
         }
         if (!Array.isArray(ins) || ins.length === 0) throw new Error(t("personal.errorSave"));
@@ -329,6 +377,7 @@ export default function PersonalPage() {
       await loadPersonal();
     } catch (err) {
       console.error("[PersonalPage] Error onGuardar:", err);
+      // Aquí dejamos el mensaje del error real si viene del backend; si no, cae a i18n
       setBanner({ type: "err", msg: err?.message || t("personal.errorSave") });
     } finally {
       setLoading(false);
@@ -354,7 +403,6 @@ export default function PersonalPage() {
 
       console.log("[PersonalPage] Delete init:", { orgId, selectedOrgPeopleId });
 
-      // Pre-check: confirma que existe exactamente esa membership ACTIVA en esta org
       const { data: exists, error: preErr } = await supabase
         .from("org_people")
         .select("id, org_id, person_id, vigente, is_deleted")
@@ -370,7 +418,6 @@ export default function PersonalPage() {
 
       const now = new Date().toISOString();
 
-      // ✅ IMPORTANTÍSIMO: pedir retorno con select(), así detectamos "0 rows updated" (RLS / id incorrecto / org incorrecto)
       const { data: updated, error: delErr } = await supabase
         .from("org_people")
         .update({
@@ -383,20 +430,11 @@ export default function PersonalPage() {
         .eq("org_id", orgId)
         .select("id, org_id, person_id, vigente, is_deleted, deleted_at, updated_at");
 
-      console.log("[PersonalPage] Resultado delete (soft):", {
-        orgId,
-        selectedOrgPeopleId,
-        delErr,
-        updated,
-      });
+      console.log("[PersonalPage] Resultado delete (soft):", { orgId, selectedOrgPeopleId, delErr, updated });
 
       if (delErr) throw delErr;
-      if (!Array.isArray(updated) || updated.length === 0) {
-        // Este es EL caso del “desaparece-reaparece”: la UI cree que borró, pero DB no tocó nada.
-        throw new Error(t("personal.errorDeleteNoRows"));
-      }
+      if (!Array.isArray(updated) || updated.length === 0) throw new Error(t("personal.errorDeleteNoRows"));
 
-      // UI inmediata
       setItems((prev) => (prev || []).filter((r) => r.org_people_id !== selectedOrgPeopleId));
 
       setBanner({ type: "ok", msg: t("personal.bannerDeletedOk") });
@@ -448,8 +486,8 @@ export default function PersonalPage() {
             <p className="pg-muted">
               {t("personal.orgInfoLabel")}{" "}
               <strong>{currentOrg?.name || t("personal.orgFallback")}</strong> ·{" "}
-              {t("personal.roleLabel")} <strong>{effectiveRole}</strong> ·{" "}
-              OrgID: <strong>{orgId || "—"}</strong>
+              {t("personal.roleLabel")} <strong>{effectiveRole}</strong> · OrgID:{" "}
+              <strong>{orgId || "—"}</strong>
             </p>
           </div>
           {canEdit ? (
@@ -649,7 +687,6 @@ const baseStyles = `
   border:1px solid var(--ring); background:#0e1a34; color:var(--ink);
   outline:none; width:100%;
 }
-.pg-input:focus{ border-color:#22c55e; box-shadow:0 0 0 2px rgba(34,197,94,0.25); }
 .pg-input.wide{ grid-column: span 2 / span 2; }
 .w-300{ min-width:300px; }
 .pg-check{ display:flex; align-items:center; gap:8px; color:var(--ink); }
@@ -659,13 +696,10 @@ const baseStyles = `
 }
 .pg-btn:hover{ background:#334155; }
 .pg-btn-primary{ background:#059669; border-color:#047857; }
-.pg-btn-primary:hover{ background:#10b981; }
 .pg-btn-danger{ background:var(--danger); border-color:#b91c1c; }
-.pg-btn-danger:hover{ background:#ef4444; }
 .pg-tableWrap{
   max-width:1200px; margin:0 auto; border-radius:16px; overflow:auto;
   border:1px solid var(--ring); background:var(--white);
-  box-shadow:0 18px 40px rgba(2,6,23,0.15);
 }
 .pg-table{ width:100%; border-collapse:separate; border-spacing:0; color:var(--ink-strong); font-size:15px; }
 .pg-table thead th{
@@ -675,8 +709,6 @@ const baseStyles = `
   border-bottom:1px solid #e2e8f0;
 }
 .pg-table tbody td{ padding:12px 14px; border-bottom:1px solid #eef2f7; }
-.pg-table tr.even td{ background:#ffffff; }
-.pg-table tr.odd td{ background:#f8fafc; }
 .pg-table tr.active td{ background:#dbeafe; }
 .pg-table tr:hover td{ background:#e0f2fe; cursor:pointer; }
 .pg-empty{ text-align:center; padding:18px !important; color:#64748b; }
@@ -687,11 +719,10 @@ const baseStyles = `
 .pill{
   display:inline-flex; align-items:center; gap:8px;
   padding:6px 10px; border-radius:999px; font-weight:700; font-size:12.5px;
-  border:1px solid rgba(255,255,255,0.15);
 }
 .pill i{ width:10px; height:10px; border-radius:999px; display:inline-block; }
-.pill.ok{ background:rgba(5,150,105,0.18); color:#d1fae5; border-color:rgba(5,150,105,0.35); }
+.pill.ok{ background:rgba(5,150,105,0.18); color:#d1fae5; }
 .pill.ok i{ background:#10b981; }
-.pill.off{ background:rgba(148,163,184,0.18); color:#e2e8f0; border-color:rgba(148,163,184,0.35); }
+.pill.off{ background:rgba(148,163,184,0.18); color:#e2e8f0; }
 .pill.off i{ background:#94a3b8; }
 `;
