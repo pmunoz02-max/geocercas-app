@@ -22,11 +22,6 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // ------------------------------------------------------------
-  // Redirección universal después de login:
-  //  - TRACKER → /tracker-gps
-  //  - resto → /inicio
-  // ------------------------------------------------------------
   const redirectAfterLogin = useCallback(
     async (userId: string, userMetadata?: any) => {
       try {
@@ -59,13 +54,11 @@ const Login: React.FC = () => {
     [navigate, location.pathname]
   );
 
-  // Limpieza base al cambiar de ruta
   useEffect(() => {
     setErrorMsg(null);
     setInfoMsg(null);
   }, [location.key]);
 
-  // Leer ?mode=magic de la URL
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlMode = params.get("mode");
@@ -73,7 +66,6 @@ const Login: React.FC = () => {
     else if (urlMode === "password") setMode("password");
   }, [location.search]);
 
-  // Mostrar errores que vienen en el hash (#error=...&error_code=otp_expired...)
   useEffect(() => {
     const hash = location.hash || "";
     if (!hash.startsWith("#")) return;
@@ -109,7 +101,6 @@ const Login: React.FC = () => {
 
   const isPasswordMode = mode === "password";
 
-  // Si ya hay sesión y abren /login, decidir destino según rol
   useEffect(() => {
     if (loading) return;
     if (session?.user) {
@@ -117,30 +108,32 @@ const Login: React.FC = () => {
     }
   }, [session, loading, redirectAfterLogin]);
 
-  // Helpers UI (mejor accesibilidad en móvil)
   const inputBase =
     "w-full rounded-lg border px-3 py-3 text-[15px] leading-5 " +
     "bg-white text-slate-900 placeholder:text-slate-400 " +
     "border-slate-300 " +
-    "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 " +
+    "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 " +
     "disabled:opacity-60 disabled:cursor-not-allowed";
 
+  // ✅ CAMBIO: azul más claro + texto más “intenso”
   const primaryBtn =
     "w-full inline-flex items-center justify-center gap-2 " +
-    "px-4 py-3 rounded-lg text-[15px] font-semibold " +
-    "bg-emerald-600 text-white shadow-sm " +
-    "hover:bg-emerald-500 active:bg-emerald-700 " +
-    "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 " +
+    "px-4 py-3 rounded-lg text-[15px] font-extrabold tracking-wide " +
+    "bg-sky-500 text-white shadow-sm " +
+    "hover:bg-sky-400 active:bg-sky-600 " +
+    "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 " +
     "disabled:opacity-60 disabled:cursor-not-allowed";
 
+  // ✅ CAMBIO: “Olvidaste…” con fondo claro y texto más fuerte (sin cambiar lógica)
   const secondaryLink =
-    "inline-flex items-center gap-2 text-[14px] font-semibold " +
-    "text-emerald-700 hover:text-emerald-800 hover:underline " +
-    "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 " +
-    "rounded-md px-1 -mx-1 " +
+    "inline-flex items-center gap-2 text-[14px] font-extrabold tracking-wide " +
+    "text-sky-900 " +
+    "bg-sky-100 border border-sky-200 " +
+    "hover:bg-sky-200 active:bg-sky-300 " +
+    "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 " +
+    "rounded-lg px-3 py-2 " +
     "disabled:opacity-60 disabled:cursor-not-allowed";
 
-  // LOGIN con contraseña
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -172,7 +165,6 @@ const Login: React.FC = () => {
     }
   };
 
-  // MAGIC LINK → /auth/callback
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -221,7 +213,6 @@ const Login: React.FC = () => {
     }
   };
 
-  // RESET PASSWORD (envía correo)
   const handleForgotPassword = async () => {
     setErrorMsg(null);
     setInfoMsg(null);
@@ -285,7 +276,6 @@ const Login: React.FC = () => {
           </div>
         </div>
 
-        {/* Toggle más claro y táctil (mobile-first) */}
         <div
           className="w-full rounded-xl border border-slate-200 bg-slate-50 p-1.5"
           role="tablist"
@@ -300,7 +290,7 @@ const Login: React.FC = () => {
               aria-selected={isPasswordMode}
               className={[
                 "w-full rounded-lg px-3 py-2.5 text-[14px] font-semibold transition",
-                "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2",
                 loadingAction ? "opacity-70 cursor-not-allowed" : "",
                 isPasswordMode
                   ? "bg-white text-slate-900 shadow-sm border border-slate-200"
@@ -321,7 +311,7 @@ const Login: React.FC = () => {
               aria-selected={!isPasswordMode}
               className={[
                 "w-full rounded-lg px-3 py-2.5 text-[14px] font-semibold transition",
-                "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2",
                 loadingAction ? "opacity-70 cursor-not-allowed" : "",
                 !isPasswordMode
                   ? "bg-white text-slate-900 shadow-sm border border-slate-200"
@@ -336,7 +326,6 @@ const Login: React.FC = () => {
           </div>
         </div>
 
-        {/* Mensajes más legibles */}
         {errorMsg && (
           <div
             className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 whitespace-pre-line"
@@ -353,7 +342,7 @@ const Login: React.FC = () => {
 
         {infoMsg && (
           <div
-            className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 whitespace-pre-line"
+            className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 whitespace-pre-line"
             role="status"
           >
             <div className="flex items-start gap-2">
@@ -419,7 +408,9 @@ const Login: React.FC = () => {
             <button type="submit" disabled={loadingAction} className={primaryBtn}>
               {loadingAction ? (
                 <>
-                  <span aria-hidden="true" className="animate-spin">⏳</span>
+                  <span aria-hidden="true" className="animate-spin">
+                    ⏳
+                  </span>
                   {t("login.submitting") || "Ingresando…"}
                 </>
               ) : (
@@ -454,7 +445,9 @@ const Login: React.FC = () => {
             <button type="submit" disabled={loadingAction} className={primaryBtn}>
               {loadingAction ? (
                 <>
-                  <span aria-hidden="true" className="animate-spin">⏳</span>
+                  <span aria-hidden="true" className="animate-spin">
+                    ⏳
+                  </span>
                   {t("login.magicSubmitting") || "Enviando enlace…"}
                 </>
               ) : (
@@ -476,9 +469,9 @@ const Login: React.FC = () => {
               type="button"
               onClick={handleForgotPassword}
               disabled={loadingAction}
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-[14px] font-semibold text-slate-800
-                         hover:bg-slate-50 active:bg-slate-100
-                         focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2
+              className="w-full rounded-lg border border-sky-200 bg-sky-100 px-4 py-3 text-[14px] font-extrabold tracking-wide text-sky-900
+                         hover:bg-sky-200 active:bg-sky-300
+                         focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2
                          disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {t("login.forgotPasswordAlt") || "Prefiero restablecer mi contraseña (enviar correo)"}
