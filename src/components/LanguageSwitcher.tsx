@@ -39,7 +39,7 @@ export default function LanguageSwitcher() {
               "px-2 py-1 rounded-full border transition " +
               (active
                 ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
-                : "bg-slate-900/40 text-slate-100 border-slate-600 hover:bg-slate-800")
+                : "bg-sky-500 text-white border-sky-500 hover:bg-sky-400")
             }
           >
             {lang.label}
