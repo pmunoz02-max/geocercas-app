@@ -115,7 +115,7 @@ const Login: React.FC = () => {
     "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 " +
     "disabled:opacity-60 disabled:cursor-not-allowed";
 
-  // ✅ CAMBIO: azul más claro + texto más “intenso”
+  // Botón principal (para el submit de contraseña)
   const primaryBtn =
     "w-full inline-flex items-center justify-center gap-2 " +
     "px-4 py-3 rounded-lg text-[15px] font-extrabold tracking-wide " +
@@ -124,7 +124,16 @@ const Login: React.FC = () => {
     "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 " +
     "disabled:opacity-60 disabled:cursor-not-allowed";
 
-  // ✅ CAMBIO: “Olvidaste…” con fondo claro y texto más fuerte (sin cambiar lógica)
+  // ✅ Estilo “claro + texto intenso” (igual que Olvidaste tu contraseña)
+  const softActionBtn =
+    "w-full inline-flex items-center justify-center gap-2 " +
+    "rounded-lg border border-sky-200 bg-sky-100 px-4 py-3 " +
+    "text-[14px] font-extrabold tracking-wide text-sky-900 " +
+    "hover:bg-sky-200 active:bg-sky-300 " +
+    "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 " +
+    "disabled:opacity-60 disabled:cursor-not-allowed";
+
+  // ✅ Versión “inline” para el link/botón pequeño (Olvidaste…)
   const secondaryLink =
     "inline-flex items-center gap-2 text-[14px] font-extrabold tracking-wide " +
     "text-sky-900 " +
@@ -442,7 +451,8 @@ const Login: React.FC = () => {
               />
             </div>
 
-            <button type="submit" disabled={loadingAction} className={primaryBtn}>
+            {/* ✅ AQUÍ: “Link mágico” ahora igual al estilo de “Olvidaste…” */}
+            <button type="submit" disabled={loadingAction} className={softActionBtn}>
               {loadingAction ? (
                 <>
                   <span aria-hidden="true" className="animate-spin">
@@ -469,12 +479,10 @@ const Login: React.FC = () => {
               type="button"
               onClick={handleForgotPassword}
               disabled={loadingAction}
-              className="w-full rounded-lg border border-sky-200 bg-sky-100 px-4 py-3 text-[14px] font-extrabold tracking-wide text-sky-900
-                         hover:bg-sky-200 active:bg-sky-300
-                         focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2
-                         disabled:opacity-60 disabled:cursor-not-allowed"
+              className={softActionBtn}
             >
-              {t("login.forgotPasswordAlt") || "Prefiero restablecer mi contraseña (enviar correo)"}
+              {t("login.forgotPasswordAlt") ||
+                "Prefiero restablecer mi contraseña (enviar correo)"}
             </button>
           </form>
         )}
