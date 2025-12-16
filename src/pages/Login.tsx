@@ -59,7 +59,7 @@ const Login: React.FC = () => {
     [navigate, location.pathname]
   );
 
-  // Limpieza base al cambiar de ruta (no limpia hashes de error porque lo manejamos abajo)
+  // Limpieza base al cambiar de ruta
   useEffect(() => {
     setErrorMsg(null);
     setInfoMsg(null);
@@ -73,9 +73,8 @@ const Login: React.FC = () => {
     else if (urlMode === "password") setMode("password");
   }, [location.search]);
 
-  // ✅ Mostrar errores que vienen en el hash (#error=...&error_code=otp_expired...)
+  // Mostrar errores que vienen en el hash (#error=...&error_code=otp_expired...)
   useEffect(() => {
-    // Ejemplo: /login#error=access_denied&error_code=otp_expired&error_description=...
     const hash = location.hash || "";
     if (!hash.startsWith("#")) return;
 
@@ -90,7 +89,6 @@ const Login: React.FC = () => {
     let friendly =
       t("login.errorMagicLink") || "No se pudo procesar el enlace mágico.";
 
-    // Mensajes más claros para casos típicos
     if ((errorCode || "").toLowerCase().includes("otp_expired")) {
       friendly =
         t("login.magicExpired") ||
@@ -101,16 +99,12 @@ const Login: React.FC = () => {
         "Acceso denegado al procesar el enlace. Solicita un nuevo enlace mágico.";
     }
 
-    // Si viene descripción, la dejamos como contexto (sin hacerlo técnico)
     if (errorDesc) {
       friendly += `\n${decodeURIComponent(errorDesc)}`;
     }
 
     setErrorMsg(friendly);
-
-    // Opcional: pasar a modo magic para que el usuario reenvíe rápido
     setMode("magic");
-    // Nota: no limpiamos el hash aquí para no romper navegación, pero si quieres lo hacemos luego.
   }, [location.hash, t]);
 
   const isPasswordMode = mode === "password";
@@ -122,6 +116,29 @@ const Login: React.FC = () => {
       redirectAfterLogin(session.user.id, session.user.user_metadata);
     }
   }, [session, loading, redirectAfterLogin]);
+
+  // Helpers UI (mejor accesibilidad en móvil)
+  const inputBase =
+    "w-full rounded-lg border px-3 py-3 text-[15px] leading-5 " +
+    "bg-white text-slate-900 placeholder:text-slate-400 " +
+    "border-slate-300 " +
+    "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 " +
+    "disabled:opacity-60 disabled:cursor-not-allowed";
+
+  const primaryBtn =
+    "w-full inline-flex items-center justify-center gap-2 " +
+    "px-4 py-3 rounded-lg text-[15px] font-semibold " +
+    "bg-emerald-600 text-white shadow-sm " +
+    "hover:bg-emerald-500 active:bg-emerald-700 " +
+    "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 " +
+    "disabled:opacity-60 disabled:cursor-not-allowed";
+
+  const secondaryLink =
+    "inline-flex items-center gap-2 text-[14px] font-semibold " +
+    "text-emerald-700 hover:text-emerald-800 hover:underline " +
+    "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 " +
+    "rounded-md px-1 -mx-1 " +
+    "disabled:opacity-60 disabled:cursor-not-allowed";
 
   // LOGIN con contraseña
   const handleSubmitPassword = async (e: React.FormEvent) => {
@@ -179,7 +196,12 @@ const Login: React.FC = () => {
         console.error("[Login] signInWithOtp error:", error);
         const msg = (error.message || "").toLowerCase();
 
-        if (msg.includes("signup") || msg.includes("sign up") || msg.includes("new user") || msg.includes("not found")) {
+        if (
+          msg.includes("signup") ||
+          msg.includes("sign up") ||
+          msg.includes("new user") ||
+          msg.includes("not found")
+        ) {
           setErrorMsg(
             t("login.userNotAuthorized") ||
               "Este correo no está autorizado. Solicita una invitación al administrador."
@@ -239,7 +261,7 @@ const Login: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
-        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-700">
           {t("login.loadingSession") || "Cargando tu sesión…"}
         </div>
       </div>
@@ -247,9 +269,9 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center bg-slate-50">
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-5">
-        <div className="flex items-center justify-between mb-2">
+    <div className="min-h-[60vh] flex items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-5">
+        <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold text-slate-900">
               {t("login.title") || "Iniciar sesión"}
@@ -258,138 +280,208 @@ const Login: React.FC = () => {
               {t("login.subtitle") || "Accede a tu cuenta de App Geocercas"}
             </p>
           </div>
-          <LanguageSwitcher />
+          <div className="shrink-0">
+            <LanguageSwitcher />
+          </div>
         </div>
 
-        <div className="inline-flex items-center rounded-full bg-slate-100 p-1 text-xs font-medium">
-          <button
-            type="button"
-            onClick={() => setMode("password")}
-            className={`flex-1 px-3 py-1.5 rounded-full transition-colors ${
-              isPasswordMode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {t("login.modePassword") || "Contraseña"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("magic")}
-            className={`flex-1 px-3 py-1.5 rounded-full transition-colors ${
-              !isPasswordMode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {t("login.modeMagic") || "Link mágico"}
-          </button>
+        {/* Toggle más claro y táctil (mobile-first) */}
+        <div
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-1.5"
+          role="tablist"
+          aria-label={t("login.modeLabel") || "Modo de inicio de sesión"}
+        >
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              onClick={() => setMode("password")}
+              disabled={loadingAction}
+              role="tab"
+              aria-selected={isPasswordMode}
+              className={[
+                "w-full rounded-lg px-3 py-2.5 text-[14px] font-semibold transition",
+                "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                loadingAction ? "opacity-70 cursor-not-allowed" : "",
+                isPasswordMode
+                  ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                  : "text-slate-600 hover:text-slate-900",
+              ].join(" ")}
+            >
+              <span className="inline-flex items-center justify-center gap-2">
+                <span aria-hidden="true">🔒</span>
+                {t("login.modePassword") || "Contraseña"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode("magic")}
+              disabled={loadingAction}
+              role="tab"
+              aria-selected={!isPasswordMode}
+              className={[
+                "w-full rounded-lg px-3 py-2.5 text-[14px] font-semibold transition",
+                "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                loadingAction ? "opacity-70 cursor-not-allowed" : "",
+                !isPasswordMode
+                  ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                  : "text-slate-600 hover:text-slate-900",
+              ].join(" ")}
+            >
+              <span className="inline-flex items-center justify-center gap-2">
+                <span aria-hidden="true">✉️</span>
+                {t("login.modeMagic") || "Link mágico"}
+              </span>
+            </button>
+          </div>
         </div>
 
+        {/* Mensajes más legibles */}
         {errorMsg && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-line">
-            {errorMsg}
+          <div
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 whitespace-pre-line"
+            role="alert"
+          >
+            <div className="flex items-start gap-2">
+              <span aria-hidden="true" className="mt-0.5">
+                ⚠️
+              </span>
+              <div>{errorMsg}</div>
+            </div>
           </div>
         )}
+
         {infoMsg && (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 whitespace-pre-line">
-            {infoMsg}
+          <div
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 whitespace-pre-line"
+            role="status"
+          >
+            <div className="flex items-start gap-2">
+              <span aria-hidden="true" className="mt-0.5">
+                ✅
+              </span>
+              <div>{infoMsg}</div>
+            </div>
           </div>
         )}
 
         {isPasswordMode && (
-          <form onSubmit={handleSubmitPassword} className="space-y-3">
+          <form onSubmit={handleSubmitPassword} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-800 mb-1">
                 {t("login.emailLabel") || "Correo electrónico"}
               </label>
               <input
                 type="email"
-                autoComplete="off"
+                autoComplete="email"
                 name="login-email"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className={inputBase}
                 placeholder={t("login.emailPlaceholder") || "tucorreo@ejemplo.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
+                inputMode="email"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-800 mb-1">
                 {t("login.passwordLabel") || "Contraseña"}
               </label>
               <input
                 type="password"
-                autoComplete="off"
+                autoComplete="current-password"
                 name="login-password"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className={inputBase}
                 placeholder={t("login.passwordPlaceholder") || "Ingresa tu contraseña"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loadingAction}
               />
 
-              {/* ✅ Reset password como LINK claro (mejor visibilidad/lectura) */}
-              <div className="mt-2">
+              <div className="mt-3">
                 <button
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={loadingAction}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+                  className={secondaryLink}
                 >
-                  <span className="text-base leading-none">↻</span>
+                  <span aria-hidden="true">↻</span>
                   {t("login.forgotPassword") || "¿Olvidaste tu contraseña?"}
                 </button>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {t("login.resetHint") || "Te enviaremos un correo con el enlace para crear una nueva contraseña."}
+                <p className="mt-1 text-xs text-slate-500">
+                  {t("login.resetHint") ||
+                    "Te enviaremos un correo con el enlace para crear una nueva contraseña."}
                 </p>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loadingAction}
-              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loadingAction ? t("login.submitting") || "Ingresando…" : t("login.submit") || "Entrar"}
+            <button type="submit" disabled={loadingAction} className={primaryBtn}>
+              {loadingAction ? (
+                <>
+                  <span aria-hidden="true" className="animate-spin">⏳</span>
+                  {t("login.submitting") || "Ingresando…"}
+                </>
+              ) : (
+                <>
+                  <span aria-hidden="true">➡️</span>
+                  {t("login.submit") || "Entrar"}
+                </>
+              )}
             </button>
           </form>
         )}
 
         {!isPasswordMode && (
-          <form onSubmit={handleSubmitMagic} className="space-y-3">
+          <form onSubmit={handleSubmitMagic} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-800 mb-1">
                 {t("login.emailLabel") || "Correo electrónico"}
               </label>
               <input
                 type="email"
-                autoComplete="off"
+                autoComplete="email"
                 name="login-magic-email"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className={inputBase}
                 placeholder={t("login.emailPlaceholder") || "tucorreo@ejemplo.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loadingAction}
+                inputMode="email"
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loadingAction}
-              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loadingAction ? t("login.magicSubmitting") || "Enviando enlace…" : t("login.magicButton") || "Enviar link mágico"}
+            <button type="submit" disabled={loadingAction} className={primaryBtn}>
+              {loadingAction ? (
+                <>
+                  <span aria-hidden="true" className="animate-spin">⏳</span>
+                  {t("login.magicSubmitting") || "Enviando enlace…"}
+                </>
+              ) : (
+                <>
+                  <span aria-hidden="true">✉️</span>
+                  {t("login.magicButton") || "Enviar link mágico"}
+                </>
+              )}
             </button>
 
-            <p className="text-[11px] text-slate-500">
-              {t("login.magicDescription") || "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña."}
-            </p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm text-slate-600">
+                {t("login.magicDescription") ||
+                  "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña."}
+              </p>
+            </div>
 
             <button
               type="button"
               onClick={handleForgotPassword}
               disabled={loadingAction}
-              className="text-xs text-slate-600 hover:text-slate-800 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-[14px] font-semibold text-slate-800
+                         hover:bg-slate-50 active:bg-slate-100
+                         focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2
+                         disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {t("login.forgotPasswordAlt") || "¿Prefieres restablecer tu contraseña? (enviar correo)"}
+              {t("login.forgotPasswordAlt") || "Prefiero restablecer mi contraseña (enviar correo)"}
             </button>
           </form>
         )}
