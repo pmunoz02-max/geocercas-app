@@ -1,13 +1,17 @@
 // src/lib/adminsApi.js
-// API para gestionar administradores usando la tabla "memberships"
-// y el enum role_type: owner / admin / tracker / viewer.
+// =======================================================
+// API BLINDADA para módulo Administrador
+// - ROOT OWNER ONLY (Fenice)
+// - Sin acceso directo a tablas
+// - Usa RPCs security definer
+// =======================================================
 
 import { supabase } from "../supabaseClient";
 
 /**
  * Lista administradores y propietarios de una organización.
- * - Lee la tabla memberships
- * - Incluye roles: owner, admin
+ * ROOT OWNER ONLY
+ * Backend decide permisos vía is_root_owner()
  */
 export async function listAdmins(orgId) {
   if (!orgId) {
@@ -17,11 +21,9 @@ export async function listAdmins(orgId) {
     };
   }
 
-  const { data, error } = await supabase
-    .from("memberships")
-    .select("user_id, org_id, role, created_at")
-    .eq("org_id", orgId)
-    .in("role", ["owner", "admin"]);
+  const { data, error } = await supabase.rpc("admins_list", {
+    p_org_id: orgId,
+  });
 
   if (error) {
     return { data: null, error };
@@ -30,21 +32,16 @@ export async function listAdmins(orgId) {
   const normalized =
     (data || []).map((row) => ({
       user_id: row.user_id,
-      org_id: row.org_id,
-      role: row.role?.toUpperCase() ?? "—", // OWNER / ADMIN
-      email: null, // de momento no traemos email
-      full_name: null,
-      created_at: row.created_at,
+      email: row.email,
+      role: String(row.role || "").toUpperCase(), // OWNER / ADMIN
     })) || [];
 
   return { data: normalized, error: null };
 }
 
 /**
- * Invita a un administrador (o owner adicional) a la ORGANIZACIÓN ACTUAL.
- *
- * @param {string} orgId
- * @param {{ email: string, role: string, full_name?: string, invitedBy?: string }} payload
+ * Invita a un administrador a la ORGANIZACIÓN ACTUAL.
+ * El backend (Edge Function) debe validar is_root_owner().
  */
 export async function inviteAdmin(orgId, payload) {
   const { email, role, full_name } = payload || {};
@@ -59,15 +56,14 @@ export async function inviteAdmin(orgId, payload) {
     return { data: null, error: new Error("Rol requerido") };
   }
 
-  // La Edge Function espera role_name en MAYÚSCULAS
-  const role_name = String(role).toUpperCase(); // ADMIN, OWNER
+  const role_name = String(role).toUpperCase(); // ADMIN
 
   const { data, error } = await supabase.functions.invoke("invite-user", {
     body: {
       email,
       full_name: full_name ?? null,
       role_name,
-      org_id: orgId, // siempre la org actual
+      org_id: orgId,
     },
   });
 
@@ -75,9 +71,8 @@ export async function inviteAdmin(orgId, payload) {
 }
 
 /**
- * Invita a un NUEVO OWNER independiente, con su propia organización.
- *
- * @param {{ email: string, full_name?: string }} payload
+ * Invita a un NUEVO OWNER independiente (nueva organización).
+ * ROOT OWNER ONLY (validado en backend).
  */
 export async function inviteIndependentOwner(payload) {
   const { email, full_name } = payload || {};
@@ -94,7 +89,7 @@ export async function inviteIndependentOwner(payload) {
       email,
       full_name: full_name ?? null,
       role_name: "OWNER",
-      org_id: null, // trigger creará la nueva organización
+      org_id: null, // backend crea org nueva
     },
   });
 
@@ -102,13 +97,10 @@ export async function inviteIndependentOwner(payload) {
 }
 
 /**
- * Elimina un administrador de la organización y delega la lógica
- * de borrado completo a la Edge Function "delete-admin".
- *
- * La Edge Function debe:
- *  - Verificar que el usuario no sea OWNER.
- *  - Borrar memberships / user_organizations de esa org.
- *  - Borrar el usuario en auth.users.
+ * Elimina un administrador de la organización.
+ * ROOT OWNER ONLY
+ * - NO permite eliminar OWNER
+ * - NO toca tablas directo
  */
 export async function deleteAdmin(orgId, userId) {
   if (!orgId || !userId) {
@@ -117,8 +109,9 @@ export async function deleteAdmin(orgId, userId) {
     };
   }
 
-  const { data, error } = await supabase.functions.invoke("delete-admin", {
-    body: { org_id: orgId, user_id: userId },
+  const { data, error } = await supabase.rpc("admins_remove", {
+    p_org_id: orgId,
+    p_user_id: userId,
   });
 
   if (error) {
@@ -135,11 +128,12 @@ export async function deleteAdmin(orgId, userId) {
 }
 
 /**
- * Actualizar rol de admin (pendiente de implementar).
+ * Actualizar rol de admin (reservado para futuro).
+ * Se implementará vía RPC root-only.
  */
-export async function updateAdmin(_orgId, _userId, _fields) {
+export async function updateAdmin() {
   return {
     data: null,
-    error: new Error("updateAdmin aún en construcción"),
+    error: new Error("updateAdmin aún no implementado"),
   };
 }
