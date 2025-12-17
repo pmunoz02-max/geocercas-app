@@ -34,6 +34,7 @@ import { useAuth } from "./context/AuthContext.jsx";
 
 /* ======================================================
    HELPERS: Rol activo por organización (UNIVERSAL)
+   (Se mantiene tal cual para no romper lo existente)
 ====================================================== */
 function normalizeRole(r) {
   const v = String(r || "").toLowerCase();
@@ -54,13 +55,14 @@ function getActiveRole(memberships, orgId) {
 
 /* ======================================================
    SHELL (Layout persistente con tabs + <Outlet />)
-   ✅ Admin tab SOLO si activeRole === "owner"
+   ✅ Admin tab SOLO si isRootOwner === true (Fenice)
 ====================================================== */
 function Shell() {
-  const { loading, memberships, currentOrg } = useAuth();
+  const { loading, memberships, currentOrg, isRootOwner } = useAuth();
 
   const activeOrgId = currentOrg?.id ?? null;
 
+  // Se mantiene para no afectar lógica existente (aunque ya no gobierna Admin)
   const activeRole = useMemo(() => {
     return getActiveRole(memberships, activeOrgId);
   }, [memberships, activeOrgId]);
@@ -88,8 +90,9 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  // ✅ UNIVERSAL: Admin tab SOLO si es OWNER EN LA ORG ACTIVA
-  if (activeRole === "owner") {
+  // ✅ UNIVERSAL: Admin tab SOLO si es ROOT OWNER global (Fenice)
+  // (No depende de la org activa ni de role='owner')
+  if (isRootOwner === true) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
 
@@ -108,17 +111,14 @@ function Shell() {
 }
 
 /* ======================================================
-   GUARD: /admins SOLO si activeRole === "owner"
-   ✅ NO depende de correo, ni de rol global
+   GUARD: /admins SOLO si isRootOwner === true
+   ✅ Blinda URL directa también
 ====================================================== */
-function OwnerRoute({ children }) {
-  const { loading, memberships, currentOrg } = useAuth();
-
-  const activeOrgId = currentOrg?.id ?? null;
-  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [memberships, activeOrgId]);
+function RootOwnerRoute({ children }) {
+  const { loading, isRootOwner } = useAuth();
 
   if (loading) return null;
-  if (activeRole !== "owner") return <Navigate to="/inicio" replace />;
+  if (!isRootOwner) return <Navigate to="/inicio" replace />;
 
   return children;
 }
@@ -168,13 +168,13 @@ export default function App() {
           {/* Tracker */}
           <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
-          {/* ✅ Admin solo owner en org activa */}
+          {/* ✅ Admin solo ROOT OWNER global */}
           <Route
             path="/admins"
             element={
-              <OwnerRoute>
+              <RootOwnerRoute>
                 <AdminsPage />
-              </OwnerRoute>
+              </RootOwnerRoute>
             }
           />
 

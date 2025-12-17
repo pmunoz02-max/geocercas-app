@@ -51,6 +51,10 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState(null);
 
   const [isSuspended, setIsSuspended] = useState(false);
+
+  // ✅ NUEVO: Root Owner global (Fenice)
+  const [isRootOwner, setIsRootOwner] = useState(false);
+
   const [loading, setLoading] = useState(true);
 
   // -----------------------------
@@ -88,8 +92,22 @@ export const AuthProvider = ({ children }) => {
         setTenantId(null);
         setRole(null);
         setIsSuspended(false);
+        setIsRootOwner(false);
         localStorage.removeItem("current_org_id");
         return;
+      }
+
+      // ✅ NUEVO (no rompe si no existe el RPC)
+      try {
+        const { data, error } = await supabase.rpc("is_root_owner");
+        if (error) {
+          // Si el RPC aún no está creado o hay permisos, no rompemos el flujo
+          setIsRootOwner(false);
+        } else {
+          setIsRootOwner(Boolean(data));
+        }
+      } catch (_e) {
+        setIsRootOwner(false);
       }
 
       // 1) Profile
@@ -158,14 +176,11 @@ export const AuthProvider = ({ children }) => {
       setTenantId(activeOrg?.id ?? null);
       setIsSuspended(Boolean(activeOrg?.suspended));
 
-      if (activeOrg?.id)
-        localStorage.setItem("current_org_id", activeOrg.id);
+      if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
       // 5) Rol efectivo
-      const activeMembership = mRows.find(
-        (m) => m.org_id === activeOrg?.id
-      );
+      const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
 
       const resolvedRole = String(
         activeMembership?.role ??
@@ -198,8 +213,7 @@ export const AuthProvider = ({ children }) => {
       setTenantId(active?.id ?? null);
       setIsSuspended(Boolean(active?.suspended));
 
-      if (active?.id)
-        localStorage.setItem("current_org_id", active.id);
+      if (active?.id) localStorage.setItem("current_org_id", active.id);
       else localStorage.removeItem("current_org_id");
 
       const m = memberships.find((x) => x.org_id === active?.id);
@@ -230,6 +244,9 @@ export const AuthProvider = ({ children }) => {
 
       isSuspended, // 🚫 CLAVE SAAS
 
+      // ✅ NUEVO: solo el dueño global de la app (Fenice)
+      isRootOwner,
+
       loading,
 
       reloadAuth: loadAll,
@@ -245,6 +262,7 @@ export const AuthProvider = ({ children }) => {
       tenantId,
       role,
       isSuspended,
+      isRootOwner,
       loading,
       loadAll,
       selectOrg,

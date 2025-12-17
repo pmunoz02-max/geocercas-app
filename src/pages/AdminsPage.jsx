@@ -10,9 +10,8 @@ import {
 } from "../lib/adminsApi";
 
 export default function AdminsPage() {
-  const { currentOrg, currentRole, user } = useAuth();
-
-  const isOwner = currentRole === "owner";
+  // 🔑 CAMBIO CLAVE: usamos ROOT OWNER global, no role por organización
+  const { currentOrg, user, isRootOwner } = useAuth();
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,10 +23,10 @@ export default function AdminsPage() {
   const [inviteRole, setInviteRole] = useState("admin");
 
   // ===========================================================
-  // Cargar administradores de la organización actual
+  // Cargar administradores (SOLO ROOT OWNER)
   // ===========================================================
   useEffect(() => {
-    if (!isOwner) {
+    if (!isRootOwner) {
       setLoading(false);
       return;
     }
@@ -58,13 +57,13 @@ export default function AdminsPage() {
     };
 
     fetchAdmins();
-  }, [currentOrg?.id, isOwner]);
+  }, [currentOrg?.id, isRootOwner]);
 
   // ===========================================================
   // Refresh manual
   // ===========================================================
   const handleRefresh = async () => {
-    if (!currentOrg?.id || !isOwner) return;
+    if (!currentOrg?.id || !isRootOwner) return;
 
     setLoading(true);
     setError(null);
@@ -88,6 +87,8 @@ export default function AdminsPage() {
   // ===========================================================
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
+
+    if (!isRootOwner) return;
 
     const email = inviteEmail.trim();
     setError(null);
@@ -143,7 +144,7 @@ export default function AdminsPage() {
   // DELETE / EDIT
   // ===========================================================
   const handleDelete = async (adm) => {
-    if (!currentOrg?.id) return;
+    if (!currentOrg?.id || !isRootOwner) return;
     if (!window.confirm("¿Eliminar este administrador?")) return;
 
     setLoadingAction(true);
@@ -161,21 +162,17 @@ export default function AdminsPage() {
     setLoadingAction(false);
   };
 
-  const handleEdit = () => {
-    setError("Edición aún en construcción.");
-  };
-
   // ===========================================================
-  // UI – BLOQUEO CORRECTO
+  // UI – BLOQUEO DEFINITIVO
   // ===========================================================
-  if (!isOwner) {
+  if (!isRootOwner) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="text-xl font-semibold text-slate-900 mb-2">
           Administradores
         </h1>
         <p className="text-sm text-slate-600">
-          Este módulo es exclusivo para el propietario de la organización.
+          Este módulo es de uso exclusivo del propietario de la aplicación.
         </p>
       </div>
     );
