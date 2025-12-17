@@ -3,11 +3,10 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function AuthGuard({ children }) {
-  const { session, loading } = useAuth();
+  const { session, loading, role } = useAuth();
   const location = useLocation();
 
-  // 1) Mientras AuthContext todavía está resolviendo la sesión,
-  //    NO redirigimos a ningún lado: mostramos un loader.
+  // 1) Mientras AuthContext todavía está resolviendo la sesión
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -18,7 +17,7 @@ export default function AuthGuard({ children }) {
     );
   }
 
-  // 2) Cuando sabemos que NO hay sesión → mandamos a /login
+  // 2) Sin sesión → login
   if (!session) {
     return (
       <Navigate
@@ -29,6 +28,21 @@ export default function AuthGuard({ children }) {
     );
   }
 
-  // 3) Hay sesión y ya terminó de cargar → render normal
+  const roleLower = String(role || "").toLowerCase();
+  const path = location.pathname;
+
+  // 3) TRACKER: solo puede acceder a /tracker-gps
+  if (roleLower === "tracker") {
+    if (!path.startsWith("/tracker-gps")) {
+      return <Navigate to="/tracker-gps" replace />;
+    }
+  }
+
+  // 4) NO-TRACKER: no puede acceder a /tracker-gps
+  if (roleLower !== "tracker" && path.startsWith("/tracker-gps")) {
+    return <Navigate to="/inicio" replace />;
+  }
+
+  // 5) Todo lo demás → render normal
   return children;
 }
