@@ -36,7 +36,6 @@ function normalizeOrgRow(o) {
     name: o.name ?? o.org_name ?? "Organización",
     suspended: Boolean(o.suspended),
     active: o.active !== false,
-    ...o,
   };
 }
 
@@ -98,6 +97,7 @@ export const AuthProvider = ({ children }) => {
         setIsSuspended(false);
         setIsRootOwner(false);
         localStorage.removeItem("current_org_id");
+        localStorage.removeItem("force_tracker_org_id");
         return;
       }
 
@@ -142,24 +142,32 @@ export const AuthProvider = ({ children }) => {
       // 3) Organizations
       let orgs = [];
       if (orgIds.length) {
-        const { data } = await supabase
-          .from("organizations")
-          .select("*")
-          .in("id", orgIds);
-
+        const { data } = await supabase.from("organizations").select("*").in("id", orgIds);
         orgs = data ?? [];
       }
 
       setOrganizations(orgs);
 
-      // 4) Selección de org activa (prioridad: owner -> localStorage -> primera)
+      // 4) Selección de org activa
       let activeOrg = null;
 
-      const ownerMembership = mRows.find(
-        (m) => String(m.role).toLowerCase() === "owner"
-      );
-      if (ownerMembership) {
-        activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
+      // ✅ FIX invite tracker (ONE-SHOT):
+      // Si viene force_tracker_org_id, lo usamos una sola vez y lo borramos.
+      const forcedTrackerOrgId = localStorage.getItem("force_tracker_org_id");
+      if (forcedTrackerOrgId) {
+        const forced = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
+        if (forced) {
+          activeOrg = forced;
+        }
+        localStorage.removeItem("force_tracker_org_id");
+      }
+
+      // Mantener tu prioridad original si no hubo "force"
+      if (!activeOrg) {
+        const ownerMembership = mRows.find((m) => String(m.role).toLowerCase() === "owner");
+        if (ownerMembership) {
+          activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
+        }
       }
 
       if (!activeOrg) {
@@ -180,19 +188,14 @@ export const AuthProvider = ({ children }) => {
       if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
-      // 5) ✅ ROL EFECTIVO: SOLO por ORG activa (blindaje multi-org)
-      //    - NO usar pickHighestRole()
-      //    - Si no hay membership en la org activa → role='tracker' (mínimo privilegio)
+      // 5) ✅ ROL EFECTIVO: SOLO por ORG activa
       const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
 
-      const resolvedRole = String(
-        activeMembership?.role ?? prof?.role ?? "tracker"
-      ).toLowerCase();
+      const resolvedRole = String(activeMembership?.role ?? prof?.role ?? "tracker").toLowerCase();
 
       setRole(resolvedRole);
     } catch (err) {
       console.error("[AuthContext] fatal error:", err);
-      // fallback seguro
       setRole((prev) => prev ?? "tracker");
     } finally {
       setLoading(false);
@@ -247,7 +250,6 @@ export const AuthProvider = ({ children }) => {
 
       isSuspended,
 
-      // Root Owner global (Fenice)
       isRootOwner,
 
       loading,
