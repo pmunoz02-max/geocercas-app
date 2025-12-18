@@ -1,166 +1,91 @@
 // src/lib/adminsApi.js
 // =======================================================
-// API BLINDADA para módulo Administrador
-// - ROOT OWNER ONLY (Fenice)
-// - Sin acceso directo a tablas
-// - Usa RPCs security definer
-// - Edge Functions SIEMPRE con Authorization: Bearer <JWT>
+// API para módulo Administrador / Invitaciones
+// - RPCs: admins_list, admins_remove (root-only por backend)
+// - Edge Function: invite-user (requiere Authorization: Bearer <JWT>)
 // =======================================================
 
 import { supabase } from "../supabaseClient";
 
-/**
- * Helper: obtiene el JWT actual para invocar Edge Functions.
- * Si no hay sesión, devuelve null.
- */
-async function getAccessToken() {
+/* ===========================
+   Helpers
+=========================== */
+async function getAccessTokenOrThrow() {
   const { data, error } = await supabase.auth.getSession();
-  if (error) return null;
-  return data?.session?.access_token ?? null;
+  if (error) {
+    throw new Error(`No se pudo leer la sesión: ${error.message}`);
+  }
+  const token = data?.session?.access_token;
+  if (!token) {
+    throw new Error("Sesión no disponible. Inicia sesión nuevamente.");
+  }
+  return token;
 }
 
-/**
- * Helper: normaliza errores de Edge Functions (para mostrar detail/hint si existen)
- */
-if (error) {
-  console.error("INVITE-USER RAW ERROR:", error);
-  throw error; // <- esto fuerza a ver el error real
-}
-return { data, error: null };
+function normalizeEdgeInvokeError(error, fallbackMessage = "Error al invocar Edge Function") {
+  if (!error) return null;
 
-  // Supabase FunctionsHttpError suele venir con "context" / "details" dependiendo del entorno.
-  // Lo mantenemos genérico y seguro.
-  const message =
-    error?.message ||
-    error?.name ||
-    "Error al invocar Edge Function (sin mensaje)";
+  // Supabase FunctionsHttpError suele traer solo message; a veces trae context/details.
+  const msg = error?.message ? String(error.message) : fallbackMessage;
 
-  const e = new Error(message);
-
-  // Adjuntar información útil si existe (sin romper compatibilidad)
-  if (error?.context) e.context = error.context;
-  if (error?.details) e.details = error.details;
-  if (error?.status) e.status = error.status;
+  const e = new Error(msg);
+  // Adjuntamos metadata sin romper nada (propiedades opcionales)
+  if (error?.name) e.name = String(error.name);
+  if (typeof error?.status !== "undefined") e.status = error.status;
+  if (typeof error?.context !== "undefined") e.context = error.context;
+  if (typeof error?.details !== "undefined") e.details = error.details;
 
   return e;
 }
 
+async function invokeInviteUser(body) {
+  const token = await getAccessTokenOrThrow();
+
+  const { data, error } = await supabase.functions.invoke("invite-user", {
+    body,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  // Devuelve error normalizado para UI
+  return { data, error: normalizeEdgeInvokeError(error, "invite-user falló") };
+}
+
+/* ===========================
+   Admins (RPCs)
+=========================== */
+
 /**
- * Lista administradores y propietarios de una organización.
- * ROOT OWNER ONLY
- * Backend decide permisos vía is_root_owner()
+ * Lista administradores/owners de una organización.
+ * Root-only se valida en el backend (RPC security definer).
  */
 export async function listAdmins(orgId) {
   if (!orgId) {
-    return {
-      data: [],
-      error: new Error("OrgId requerido para listar administradores"),
-    };
+    return { data: null, error: new Error("orgId requerido") };
   }
 
-  const { data, error } = await supabase.rpc("admins_list", {
-    p_org_id: orgId,
-  });
+  const { data, error } = await supabase.rpc("admins_list", { p_org_id: orgId });
+  if (error) return { data: null, error };
 
-  if (error) {
-    return { data: null, error };
-  }
-
-  const normalized =
-    (data || []).map((row) => ({
-      user_id: row.user_id,
-      email: row.email,
-      role: String(row.role || "").toUpperCase(), // OWNER / ADMIN
-    })) || [];
-
-  return { data: normalized, error: null };
+  // Normaliza salida (sin asumir columnas extras)
+  const rows = Array.isArray(data) ? data : [];
+  return {
+    data: rows.map((r) => ({
+      user_id: r.user_id,
+      email: r.email,
+      role: r.role, // OWNER / ADMIN (según tu RPC)
+    })),
+    error: null,
+  };
 }
 
 /**
- * Invita a un administrador a la ORGANIZACIÓN ACTUAL.
- * El backend (Edge Function) valida permisos:
- * - OWNER/ADMIN => ROOT ONLY
- */
-export async function inviteAdmin(orgId, payload) {
-  const { email, role, full_name } = payload || {};
-
-  if (!orgId) return { data: null, error: new Error("OrgId requerido") };
-  if (!email) return { data: null, error: new Error("Email requerido") };
-  if (!role) return { data: null, error: new Error("Rol requerido") };
-
-  const role_name = String(role).toUpperCase(); // ADMIN (o OWNER si lo usas aquí)
-
-  const accessToken = await getAccessToken();
-  if (!accessToken) {
-    return {
-      data: null,
-      error: new Error("Sesión no disponible. Vuelve a iniciar sesión."),
-    };
-  }
-
-  const { data, error } = await supabase.functions.invoke("invite-user", {
-    body: {
-      email,
-      full_name: full_name ?? null,
-      role_name,
-      org_id: orgId,
-    },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  return { data, error: normalizeInvokeError(error) };
-}
-
-/**
- * Invita a un NUEVO OWNER independiente (nueva organización).
- * ROOT OWNER ONLY (validado en backend).
- */
-export async function inviteIndependentOwner(payload) {
-  const { email, full_name } = payload || {};
-
-  if (!email) {
-    return {
-      data: null,
-      error: new Error("Email requerido para invitar owner independiente"),
-    };
-  }
-
-  const accessToken = await getAccessToken();
-  if (!accessToken) {
-    return {
-      data: null,
-      error: new Error("Sesión no disponible. Vuelve a iniciar sesión."),
-    };
-  }
-
-  const { data, error } = await supabase.functions.invoke("invite-user", {
-    body: {
-      email,
-      full_name: full_name ?? null,
-      role_name: "OWNER",
-      org_id: null, // backend crea org nueva
-    },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  return { data, error: normalizeInvokeError(error) };
-}
-
-/**
- * Elimina un administrador de la organización.
- * ROOT OWNER ONLY
- * - NO permite eliminar OWNER
- * - NO toca tablas directo
+ * Elimina un admin de la organización (root-only en backend).
  */
 export async function deleteAdmin(orgId, userId) {
   if (!orgId || !userId) {
-    return {
-      error: new Error("OrgId y userId requeridos para eliminar admin"),
-    };
+    return { error: new Error("orgId y userId requeridos") };
   }
 
   const { data, error } = await supabase.rpc("admins_remove", {
@@ -170,18 +95,67 @@ export async function deleteAdmin(orgId, userId) {
 
   if (error) return { error };
 
-  if (data && data.ok === false) {
-    return {
-      error: new Error(data.error || "No se pudo eliminar al administrador."),
-    };
+  // Si tu RPC devuelve { ok: false, error: '...' }
+  if (data && typeof data === "object" && data.ok === false) {
+    return { error: new Error(data.error || "No se pudo eliminar el admin") };
   }
 
   return { error: null };
 }
 
+/* ===========================
+   Invitaciones (Edge Function)
+=========================== */
+
 /**
- * Actualizar rol de admin (reservado para futuro).
- * Se implementará vía RPC root-only.
+ * Invita un TRACKER a una organización específica.
+ * Requiere orgId.
+ */
+export async function inviteTracker(orgId, { email, full_name } = {}) {
+  if (!orgId) return { data: null, error: new Error("orgId requerido") };
+  if (!email) return { data: null, error: new Error("Email requerido") };
+
+  return invokeInviteUser({
+    email,
+    full_name: full_name ?? null,
+    role_name: "TRACKER",
+    org_id: orgId,
+  });
+}
+
+/**
+ * Invita un ADMIN a una organización específica.
+ * Requiere orgId.
+ */
+export async function inviteAdmin(orgId, { email, full_name } = {}) {
+  if (!orgId) return { data: null, error: new Error("orgId requerido") };
+  if (!email) return { data: null, error: new Error("Email requerido") };
+
+  return invokeInviteUser({
+    email,
+    full_name: full_name ?? null,
+    role_name: "ADMIN",
+    org_id: orgId,
+  });
+}
+
+/**
+ * Invita un OWNER independiente (nueva organización).
+ * org_id = null (tu backend/edge define el comportamiento).
+ */
+export async function inviteIndependentOwner({ email, full_name } = {}) {
+  if (!email) return { data: null, error: new Error("Email requerido") };
+
+  return invokeInviteUser({
+    email,
+    full_name: full_name ?? null,
+    role_name: "OWNER",
+    org_id: null,
+  });
+}
+
+/**
+ * Placeholder para futuro.
  */
 export async function updateAdmin() {
   return {
