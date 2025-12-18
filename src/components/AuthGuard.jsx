@@ -1,13 +1,13 @@
 // src/components/AuthGuard.jsx
-import { Navigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { useLocation, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function AuthGuard({ children }) {
   const { session, loading, role } = useAuth();
   const location = useLocation();
 
-  // 1) Mientras AuthContext carga sesión / rol → loader
-  //    ⚠️ CLAVE: role === null significa "aún no sabemos qué es el usuario"
+  // 1) Mientras no sabemos sesión / rol → loader
   if (loading || (session && role == null)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -32,18 +32,21 @@ export default function AuthGuard({ children }) {
   const roleLower = String(role || "").toLowerCase();
   const path = location.pathname;
 
-  // 3) TRACKER: solo puede estar en /tracker-gps
+  // 3) 🚨 TRACKER = REDIRECT DURO (NO Navigate)
+  //    Esto evita que Shell / panel se monten siquiera 1 frame
   if (roleLower === "tracker") {
     if (!path.startsWith("/tracker-gps")) {
-      return <Navigate to="/tracker-gps" replace />;
+      // hard redirect: mata el árbol React actual
+      window.location.replace("/tracker-gps");
+      return null;
     }
   }
 
-  // 4) NO-TRACKER: no puede estar en /tracker-gps
+  // 4) NO-TRACKER: nunca puede estar en tracker-gps
   if (roleLower !== "tracker" && path.startsWith("/tracker-gps")) {
     return <Navigate to="/inicio" replace />;
   }
 
-  // 5) Todo OK → render
+  // 5) Todo OK
   return children;
 }
