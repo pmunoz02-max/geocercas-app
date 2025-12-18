@@ -3,6 +3,7 @@
 // API para módulo Administrador / Invitaciones
 // - RPCs: admins_list, admins_remove (root-only por backend)
 // - Edge Function: invite-user (requiere Authorization: Bearer <JWT>)
+// - Extra: extrae y muestra el JSON del error (stage/detail/hint)
 // =======================================================
 
 import { supabase } from "../supabaseClient";
@@ -12,30 +13,55 @@ import { supabase } from "../supabaseClient";
 =========================== */
 async function getAccessTokenOrThrow() {
   const { data, error } = await supabase.auth.getSession();
-  if (error) {
-    throw new Error(`No se pudo leer la sesión: ${error.message}`);
-  }
+  if (error) throw new Error(`No se pudo leer la sesión: ${error.message}`);
+
   const token = data?.session?.access_token;
-  if (!token) {
-    throw new Error("Sesión no disponible. Inicia sesión nuevamente.");
-  }
+  if (!token) throw new Error("Sesión no disponible. Inicia sesión nuevamente.");
   return token;
 }
 
-function normalizeEdgeInvokeError(error, fallbackMessage = "Error al invocar Edge Function") {
-  if (!error) return null;
+/**
+ * Intenta extraer el cuerpo JSON/texto cuando la Edge Function retorna non-2xx.
+ * Supabase-js suele adjuntar un Response en error.context.response.
+ */
+async function extractEdgeErrorPayload(error) {
+  try {
+    const resp = error?.context?.response;
+    if (!resp) return null;
 
-  // Supabase FunctionsHttpError suele traer solo message; a veces trae context/details.
-  const msg = error?.message ? String(error.message) : fallbackMessage;
+    // Intentar JSON
+    try {
+      const cloned = resp.clone ? resp.clone() : resp;
+      return await cloned.json();
+    } catch {
+      // Intentar texto
+      try {
+        const cloned = resp.clone ? resp.clone() : resp;
+        const txt = await cloned.text();
+        return txt || null;
+      } catch {
+        return null;
+      }
+    }
+  } catch {
+    return null;
+  }
+}
 
-  const e = new Error(msg);
-  // Adjuntamos metadata sin romper nada (propiedades opcionales)
-  if (error?.name) e.name = String(error.name);
-  if (typeof error?.status !== "undefined") e.status = error.status;
-  if (typeof error?.context !== "undefined") e.context = error.context;
-  if (typeof error?.details !== "undefined") e.details = error.details;
+function buildReadableErrorMessage(payload) {
+  // payload puede ser objeto {ok:false, error, detail, hint, ctx:{stage}}
+  if (!payload) return null;
 
-  return e;
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  const stage = payload?.ctx?.stage ? `stage=${payload.ctx.stage}` : null;
+  const err = payload?.error ? `error=${payload.error}` : null;
+  const detail = payload?.detail ? `detail=${payload.detail}` : null;
+  const hint = payload?.hint ? `hint=${payload.hint}` : null;
+
+  return [stage, err, detail, hint].filter(Boolean).join(" | ");
 }
 
 async function invokeInviteUser(body) {
@@ -43,13 +69,21 @@ async function invokeInviteUser(body) {
 
   const { data, error } = await supabase.functions.invoke("invite-user", {
     body,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
-  // Devuelve error normalizado para UI
-  return { data, error: normalizeEdgeInvokeError(error, "invite-user falló") };
+  if (!error) return { data, error: null };
+
+  // Extraer JSON/texto del backend
+  const payload = await extractEdgeErrorPayload(error);
+  const readable = buildReadableErrorMessage(payload);
+
+  const e = new Error(readable || error.message || "invite-user falló (sin detalle)");
+  // Adjuntamos para debugging sin romper UI
+  e.raw = error;
+  e.payload = payload;
+  e.status = error?.status;
+  return { data: null, error: e };
 }
 
 /* ===========================
@@ -61,20 +95,17 @@ async function invokeInviteUser(body) {
  * Root-only se valida en el backend (RPC security definer).
  */
 export async function listAdmins(orgId) {
-  if (!orgId) {
-    return { data: null, error: new Error("orgId requerido") };
-  }
+  if (!orgId) return { data: null, error: new Error("orgId requerido") };
 
   const { data, error } = await supabase.rpc("admins_list", { p_org_id: orgId });
   if (error) return { data: null, error };
 
-  // Normaliza salida (sin asumir columnas extras)
   const rows = Array.isArray(data) ? data : [];
   return {
     data: rows.map((r) => ({
       user_id: r.user_id,
       email: r.email,
-      role: r.role, // OWNER / ADMIN (según tu RPC)
+      role: r.role, // OWNER / ADMIN según tu RPC
     })),
     error: null,
   };
@@ -84,9 +115,7 @@ export async function listAdmins(orgId) {
  * Elimina un admin de la organización (root-only en backend).
  */
 export async function deleteAdmin(orgId, userId) {
-  if (!orgId || !userId) {
-    return { error: new Error("orgId y userId requeridos") };
-  }
+  if (!orgId || !userId) return { error: new Error("orgId y userId requeridos") };
 
   const { data, error } = await supabase.rpc("admins_remove", {
     p_org_id: orgId,
@@ -95,7 +124,6 @@ export async function deleteAdmin(orgId, userId) {
 
   if (error) return { error };
 
-  // Si tu RPC devuelve { ok: false, error: '...' }
   if (data && typeof data === "object" && data.ok === false) {
     return { error: new Error(data.error || "No se pudo eliminar el admin") };
   }
@@ -109,7 +137,6 @@ export async function deleteAdmin(orgId, userId) {
 
 /**
  * Invita un TRACKER a una organización específica.
- * Requiere orgId.
  */
 export async function inviteTracker(orgId, { email, full_name } = {}) {
   if (!orgId) return { data: null, error: new Error("orgId requerido") };
@@ -125,7 +152,6 @@ export async function inviteTracker(orgId, { email, full_name } = {}) {
 
 /**
  * Invita un ADMIN a una organización específica.
- * Requiere orgId.
  */
 export async function inviteAdmin(orgId, { email, full_name } = {}) {
   if (!orgId) return { data: null, error: new Error("orgId requerido") };
@@ -141,7 +167,6 @@ export async function inviteAdmin(orgId, { email, full_name } = {}) {
 
 /**
  * Invita un OWNER independiente (nueva organización).
- * org_id = null (tu backend/edge define el comportamiento).
  */
 export async function inviteIndependentOwner({ email, full_name } = {}) {
   if (!email) return { data: null, error: new Error("Email requerido") };
@@ -158,8 +183,5 @@ export async function inviteIndependentOwner({ email, full_name } = {}) {
  * Placeholder para futuro.
  */
 export async function updateAdmin() {
-  return {
-    data: null,
-    error: new Error("updateAdmin aún no implementado"),
-  };
+  return { data: null, error: new Error("updateAdmin aún no implementado") };
 }
