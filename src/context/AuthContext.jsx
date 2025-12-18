@@ -15,9 +15,11 @@ function roleRank(r) {
   if (v === "owner") return 3;
   if (v === "admin") return 2;
   if (v === "tracker") return 1;
+  if (v === "viewer") return 0;
   return 0;
 }
 
+// Se mantiene por compatibilidad / ordenamiento, pero ya NO se usa para resolver el rol efectivo.
 function pickHighestRole(memberships = []) {
   let best = "tracker";
   for (const m of memberships) {
@@ -48,11 +50,13 @@ export const AuthProvider = ({ children }) => {
 
   const [currentOrg, setCurrentOrg] = useState(null);
   const [tenantId, setTenantId] = useState(null);
+
+  // Rol efectivo (SIEMPRE por org activa)
   const [role, setRole] = useState(null);
 
   const [isSuspended, setIsSuspended] = useState(false);
 
-  // ✅ NUEVO: Root Owner global (Fenice)
+  // Root Owner global (Fenice)
   const [isRootOwner, setIsRootOwner] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -97,15 +101,11 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // ✅ NUEVO (no rompe si no existe el RPC)
+      // Root Owner (no rompe si RPC no existe)
       try {
         const { data, error } = await supabase.rpc("is_root_owner");
-        if (error) {
-          // Si el RPC aún no está creado o hay permisos, no rompemos el flujo
-          setIsRootOwner(false);
-        } else {
-          setIsRootOwner(Boolean(data));
-        }
+        if (error) setIsRootOwner(false);
+        else setIsRootOwner(Boolean(data));
       } catch (_e) {
         setIsRootOwner(false);
       }
@@ -119,7 +119,7 @@ export const AuthProvider = ({ children }) => {
 
       setProfile(prof ?? null);
 
-      // 2) Roles reales
+      // 2) Membresías reales (app_user_roles)
       const { data: mRowsRaw } = await supabase
         .from("app_user_roles")
         .select("org_id, role, created_at")
@@ -127,6 +127,7 @@ export const AuthProvider = ({ children }) => {
 
       const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
 
+      // Ordenar para estabilidad (no define permisos globales)
       mRows.sort((a, b) => {
         const ar = roleRank(a?.role);
         const br = roleRank(b?.role);
@@ -138,7 +139,7 @@ export const AuthProvider = ({ children }) => {
 
       const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
 
-      // 3) Organizations (incluye suspended)
+      // 3) Organizations
       let orgs = [];
       if (orgIds.length) {
         const { data } = await supabase
@@ -151,7 +152,7 @@ export const AuthProvider = ({ children }) => {
 
       setOrganizations(orgs);
 
-      // 4) Selección de organización activa
+      // 4) Selección de org activa (prioridad: owner -> localStorage -> primera)
       let activeOrg = null;
 
       const ownerMembership = mRows.find(
@@ -179,19 +180,20 @@ export const AuthProvider = ({ children }) => {
       if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
-      // 5) Rol efectivo
+      // 5) ✅ ROL EFECTIVO: SOLO por ORG activa (blindaje multi-org)
+      //    - NO usar pickHighestRole()
+      //    - Si no hay membership en la org activa → role='tracker' (mínimo privilegio)
       const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
 
       const resolvedRole = String(
-        activeMembership?.role ??
-          pickHighestRole(mRows) ??
-          prof?.role ??
-          "tracker"
+        activeMembership?.role ?? prof?.role ?? "tracker"
       ).toLowerCase();
 
       setRole(resolvedRole);
     } catch (err) {
       console.error("[AuthContext] fatal error:", err);
+      // fallback seguro
+      setRole((prev) => prev ?? "tracker");
     } finally {
       setLoading(false);
     }
@@ -216,11 +218,12 @@ export const AuthProvider = ({ children }) => {
       if (active?.id) localStorage.setItem("current_org_id", active.id);
       else localStorage.removeItem("current_org_id");
 
+      // ✅ Rol efectivo SIEMPRE por org seleccionada
       const m = memberships.find((x) => x.org_id === active?.id);
       if (m?.role) setRole(String(m.role).toLowerCase());
-      else if (!role) setRole("tracker");
+      else setRole("tracker");
     },
-    [organizations, memberships, role]
+    [organizations, memberships]
   );
 
   const value = useMemo(
@@ -242,9 +245,9 @@ export const AuthProvider = ({ children }) => {
       isOwner: role === "owner",
       isAdmin: role === "admin" || role === "owner",
 
-      isSuspended, // 🚫 CLAVE SAAS
+      isSuspended,
 
-      // ✅ NUEVO: solo el dueño global de la app (Fenice)
+      // Root Owner global (Fenice)
       isRootOwner,
 
       loading,
