@@ -1,6 +1,6 @@
-// src/pages/Admin/UsersRoles.jsx
+// src/pages/admin/UsersRoles.jsx
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "@/supabaseClient";
 
 function Notice({ type = "info", children }) {
   const colors =
@@ -11,6 +11,51 @@ function Notice({ type = "info", children }) {
       error: "bg-red-50 border-red-200 text-red-800",
     }[type] || "bg-blue-50 border-blue-200 text-blue-800";
   return <div className={`border rounded p-2 text-sm ${colors}`}>{children}</div>;
+}
+
+async function extractEdgeError(error) {
+  if (!error) return null;
+
+  const ctx = error?.context;
+  const resp = ctx?.response;
+
+  if (resp && typeof resp.json === "function") {
+    try {
+      const payload = await resp.json();
+      return {
+        message: error.message,
+        stage: payload?.ctx?.stage ?? payload?.stage ?? null,
+        detail: payload?.ctx?.detail ?? payload?.detail ?? payload?.error ?? null,
+        hint: payload?.ctx?.hint ?? payload?.hint ?? null,
+        raw: payload,
+      };
+    } catch (_) {
+      try {
+        const text = await resp.text();
+        return { message: error.message, stage: null, detail: text, hint: null, raw: null };
+      } catch (_) {
+        return { message: error.message, stage: null, detail: null, hint: null, raw: null };
+      }
+    }
+  }
+
+  return {
+    message: error?.message || String(error),
+    stage: null,
+    detail: null,
+    hint: null,
+    raw: null,
+  };
+}
+
+function formatEdgeError(info) {
+  if (!info) return "Error desconocido";
+  const parts = [];
+  if (info.stage) parts.push(`stage: ${info.stage}`);
+  if (info.detail) parts.push(`detail: ${info.detail}`);
+  if (info.hint) parts.push(`hint: ${info.hint}`);
+  if (parts.length === 0) return info.message || "Error desconocido";
+  return `${info.message || "Error"} (${parts.join(" · ")})`;
 }
 
 export default function UsersRoles() {
@@ -34,10 +79,7 @@ export default function UsersRoles() {
     setLoading(true);
     setMsg(null);
     try {
-      const { data: r1, error: e1 } = await supabase
-        .from("roles")
-        .select("id,name")
-        .order("name");
+      const { data: r1, error: e1 } = await supabase.from("roles").select("id,name").order("name");
       if (e1) throw e1;
       setRoles(r1 || []);
 
@@ -56,7 +98,7 @@ export default function UsersRoles() {
       setProfiles(r3 || []);
     } catch (err) {
       console.error(err);
-      setMsg({ type: "error", text: err.message || String(err) });
+      setMsg({ type: "error", text: err?.message || String(err) });
     } finally {
       setLoading(false);
     }
@@ -84,20 +126,34 @@ export default function UsersRoles() {
     setMsg(null);
     try {
       const { email, full_name, role_name } = inviteForm;
+
       const { data, error } = await supabase.functions.invoke("invite-user", {
         body: { email, full_name, role_name },
       });
-      if (error) throw error;
+
+      if (error) {
+        const info = await extractEdgeError(error);
+        console.error("[UsersRoles] invite-user ERROR:", { error, info });
+        throw new Error(formatEdgeError(info));
+      }
+
       if (data?.ok) {
         setMessage("success", `Invitación enviada a ${email}`);
         setInviteForm({ email: "", full_name: "", role_name: "tracker" });
         await refreshAll();
       } else {
-        throw new Error(data?.error || "Error invitando usuario");
+        const stage = data?.ctx?.stage || data?.stage || null;
+        const detail = data?.ctx?.detail || data?.detail || data?.error || null;
+        const hint = data?.ctx?.hint || data?.hint || null;
+        const parts = [];
+        if (stage) parts.push(`stage: ${stage}`);
+        if (detail) parts.push(`detail: ${detail}`);
+        if (hint) parts.push(`hint: ${hint}`);
+        throw new Error(parts.length ? `Error invitando usuario (${parts.join(" · ")})` : (detail || "Error invitando usuario"));
       }
     } catch (err) {
       console.error(err);
-      setMessage("error", err.message || String(err));
+      setMessage("error", err?.message || String(err), 8000);
     } finally {
       setLoading(false);
     }
@@ -112,14 +168,17 @@ export default function UsersRoles() {
       const { data, error } = await supabase.functions.invoke("send-magic-link", {
         body: { email, full_name, redirectTo, inviteIfNotExists: true },
       });
-      if (error) throw error;
+
+      if (error) {
+        const info = await extractEdgeError(error);
+        console.error("[UsersRoles] send-magic-link ERROR:", { error, info });
+        throw new Error(formatEdgeError(info));
+      }
 
       if (data?.ok) {
         setMessage(
           "success",
-          data.mode === "INVITE_SENT"
-            ? `Invitación enviada a ${email}`
-            : `Magic link enviado a ${email}`
+          data.mode === "INVITE_SENT" ? `Invitación enviada a ${email}` : `Magic link enviado a ${email}`
         );
       } else {
         throw new Error(data?.error || "Error enviando Magic Link");
@@ -142,7 +201,13 @@ export default function UsersRoles() {
       const { data, error } = await supabase.functions.invoke("admin-set-role", {
         body: { email, full_name, role_name },
       });
-      if (error) throw error;
+
+      if (error) {
+        const info = await extractEdgeError(error);
+        console.error("[UsersRoles] admin-set-role ERROR:", { error, info });
+        throw new Error(formatEdgeError(info));
+      }
+
       if (data?.ok) {
         setMessage("success", `Rol "${role_name}" asignado a ${email}`);
         await refreshAll();
@@ -151,7 +216,7 @@ export default function UsersRoles() {
       }
     } catch (err) {
       console.error(err);
-      setMessage("error", err.message || String(err));
+      setMessage("error", err?.message || String(err));
     } finally {
       setLoading(false);
     }
@@ -165,7 +230,13 @@ export default function UsersRoles() {
       const { data, error } = await supabase.functions.invoke("admin-delete-user", {
         body: { email },
       });
-      if (error) throw error;
+
+      if (error) {
+        const info = await extractEdgeError(error);
+        console.error("[UsersRoles] admin-delete-user ERROR:", { error, info });
+        throw new Error(formatEdgeError(info));
+      }
+
       if (data?.ok) {
         setMessage("success", `Usuario ${email} eliminado/suspendido`);
         await refreshAll();
@@ -174,7 +245,7 @@ export default function UsersRoles() {
       }
     } catch (err) {
       console.error(err);
-      setMessage("error", err.message || String(err));
+      setMessage("error", err?.message || String(err));
     } finally {
       setLoading(false);
     }
@@ -232,7 +303,7 @@ export default function UsersRoles() {
         </form>
       </section>
 
-      {/* INVITACIONES PENDIENTES (sin botón Reenviar) */}
+      {/* INVITACIONES PENDIENTES */}
       <section className="border rounded-lg p-4 space-y-3">
         <h2 className="text-lg font-medium">Invitaciones pendientes</h2>
         {pending.length === 0 ? (
@@ -255,7 +326,6 @@ export default function UsersRoles() {
                     <td>{rolesById.get(p.role_id) || "—"}</td>
                     <td>{new Date(p.created_at).toLocaleString()}</td>
                     <td className="space-x-2">
-                      {/* Solo Magic Link y Eliminar */}
                       <button
                         onClick={() => handleMagicLink(p.email, null)}
                         className="px-2 py-1 border rounded hover:bg-gray-50"
