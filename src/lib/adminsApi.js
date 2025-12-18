@@ -22,8 +22,11 @@ async function getAccessToken() {
 /**
  * Helper: normaliza errores de Edge Functions (para mostrar detail/hint si existen)
  */
-function normalizeInvokeError(error) {
-  if (!error) return null;
+if (error) {
+  console.error("INVITE-USER RAW ERROR:", error);
+  throw error; // <- esto fuerza a ver el error real
+}
+return { data, error: null };
 
   // Supabase FunctionsHttpError suele venir con "context" / "details" dependiendo del entorno.
   // Lo mantenemos genérico y seguro.
