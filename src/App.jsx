@@ -24,7 +24,6 @@ import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Ayuda (si aplica)
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
@@ -33,8 +32,7 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 
 /* ======================================================
-   HELPERS: Rol activo por organización (UNIVERSAL)
-   (Se mantiene tal cual para no romper lo existente)
+   HELPERS: Rol activo por organización (NO TOCAR)
 ====================================================== */
 function normalizeRole(r) {
   const v = String(r || "").toLowerCase();
@@ -54,15 +52,12 @@ function getActiveRole(memberships, orgId) {
 }
 
 /* ======================================================
-   SHELL (Layout persistente con tabs + <Outlet />)
-   ✅ Admin tab SOLO si isRootOwner === true (Fenice)
+   SHELL (Panel)
 ====================================================== */
 function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
-
   const activeOrgId = currentOrg?.id ?? null;
 
-  // Se mantiene para no afectar lógica existente (aunque ya no gobierna Admin)
   const activeRole = useMemo(() => {
     return getActiveRole(memberships, activeOrgId);
   }, [memberships, activeOrgId]);
@@ -90,8 +85,7 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  // ✅ UNIVERSAL: Admin tab SOLO si es ROOT OWNER global (Fenice)
-  // (No depende de la org activa ni de role='owner')
+  // Admin tab SOLO root owner (Fenice)
   if (isRootOwner === true) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
@@ -110,16 +104,10 @@ function Shell() {
   );
 }
 
-/* ======================================================
-   GUARD: /admins SOLO si isRootOwner === true
-   ✅ Blinda URL directa también
-====================================================== */
 function RootOwnerRoute({ children }) {
   const { loading, isRootOwner } = useAuth();
-
   if (loading) return null;
   if (!isRootOwner) return <Navigate to="/inicio" replace />;
-
   return children;
 }
 
@@ -132,7 +120,22 @@ function LoginShell() {
 }
 
 /* ======================================================
-   APP ROUTES
+   Smart fallback:
+   - si es tracker -> /tracker-gps
+   - si no -> /inicio
+====================================================== */
+function SmartFallback() {
+  const { session, loading, role } = useAuth();
+  if (loading) return null;
+  if (!session) return <Navigate to="/" replace />;
+  const roleLower = String(role || "").toLowerCase();
+  return roleLower === "tracker"
+    ? <Navigate to="/tracker-gps" replace />
+    : <Navigate to="/inicio" replace />;
+}
+
+/* ======================================================
+   ROUTES
 ====================================================== */
 export default function App() {
   return (
@@ -144,10 +147,20 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* PRIVATE (panel) */}
+        {/* ✅ TRACKER (FUERA DEL PANEL) */}
+        <Route
+          path="/tracker-gps"
+          element={
+            <AuthGuard mode="tracker">
+              <TrackerGpsPage />
+            </AuthGuard>
+          }
+        />
+
+        {/* ✅ PRIVATE PANEL (NO TRACKERS) */}
         <Route
           element={
-            <AuthGuard>
+            <AuthGuard mode="panel">
               <Shell />
             </AuthGuard>
           }
@@ -165,10 +178,7 @@ export default function App() {
           <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
           <Route path="/invitar-tracker" element={<InvitarTracker />} />
 
-          {/* Tracker */}
-          <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-
-          {/* ✅ Admin solo ROOT OWNER global */}
+          {/* Admin solo root owner */}
           <Route
             path="/admins"
             element={
@@ -185,8 +195,8 @@ export default function App() {
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/inicio" replace />} />
+        {/* Fallback inteligente */}
+        <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
   );
