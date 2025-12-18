@@ -19,6 +19,15 @@ function roleRank(r) {
   return 0;
 }
 
+function pickHighestRole(memberships = []) {
+  let best = "tracker";
+  for (const m of memberships) {
+    const r = String(m?.role || "tracker").toLowerCase();
+    if (roleRank(r) > roleRank(best)) best = r;
+  }
+  return best;
+}
+
 function normalizeOrgRow(o) {
   if (!o) return null;
   return {
@@ -27,6 +36,12 @@ function normalizeOrgRow(o) {
     suspended: Boolean(o.suspended),
     active: o.active !== false,
   };
+}
+
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v || "")
+  );
 }
 
 export const AuthProvider = ({ children }) => {
@@ -86,7 +101,7 @@ export const AuthProvider = ({ children }) => {
         const { data, error } = await supabase.rpc("is_root_owner");
         if (error) setIsRootOwner(false);
         else setIsRootOwner(Boolean(data));
-      } catch {
+      } catch (_e) {
         setIsRootOwner(false);
       }
 
@@ -118,6 +133,7 @@ export const AuthProvider = ({ children }) => {
 
       const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
 
+      // Organizations
       let orgs = [];
       if (orgIds.length) {
         const { data } = await supabase
@@ -129,21 +145,31 @@ export const AuthProvider = ({ children }) => {
 
       setOrganizations(orgs);
 
-      // 4) Org activa
+      // ============================================================
+      // 4) Selección de org activa (FIX invite tracker ONE-SHOT)
+      // prioridad: force_tracker_org_id -> owner -> localStorage -> primera
+      // ============================================================
       let activeOrg = null;
 
-      // ✅ FIX INVITE TRACKER: prioridad absoluta ONE-SHOT
+      // ✅ SOLO invite tracker: si existe force_tracker_org_id, usarlo una vez
       const forcedTrackerOrgId = localStorage.getItem("force_tracker_org_id");
-      if (forcedTrackerOrgId) {
-        const forced = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
-        if (forced) {
-          activeOrg = forced;
+      if (forcedTrackerOrgId && isUuid(forcedTrackerOrgId)) {
+        // solo si realmente el usuario es TRACKER en esa org (evita romper casos)
+        const membershipInForced = mRows.find((m) => m.org_id === forcedTrackerOrgId);
+        const roleInForced = String(membershipInForced?.role || "").toLowerCase();
+
+        if (roleInForced === "tracker") {
+          activeOrg = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
+          if (activeOrg) {
+            localStorage.setItem("current_org_id", forcedTrackerOrgId);
+          }
         }
-        // se consume para no afectar futuros logins
+
+        // se consume siempre (para que sea one-shot)
         localStorage.removeItem("force_tracker_org_id");
       }
 
-      // Tu prioridad original: owner -> localStorage -> primera
+      // Tu prioridad original: owner
       if (!activeOrg) {
         const ownerMembership = mRows.find(
           (m) => String(m.role).toLowerCase() === "owner"
@@ -153,6 +179,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
+      // localStorage current_org_id
       if (!activeOrg) {
         const storedOrgId = localStorage.getItem("current_org_id");
         if (storedOrgId) {
@@ -171,7 +198,7 @@ export const AuthProvider = ({ children }) => {
       if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
-      // Rol efectivo: SOLO por org activa (tu blindaje actual)
+      // Rol efectivo: SOLO por org activa
       const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
       const resolvedRole = String(
         activeMembership?.role ?? prof?.role ?? "tracker"

@@ -1,5 +1,5 @@
 // src/pages/AuthCallback.jsx
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -24,13 +24,17 @@ export default function AuthCallback() {
   const location = useLocation();
   const { loading, session, role, isRootOwner, reloadAuth } = useAuth();
 
-  const sp = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const nextParam = useMemo(() => params.get("next") || null, [params]);
 
-  const nextParam = useMemo(() => sp.get("next") || null, [sp]);
+  // ✅ viene desde invite-user: /auth/callback?tracker_org_id=<uuid>
   const trackerOrgId = useMemo(() => {
-    const v = sp.get("tracker_org_id");
+    const v = params.get("tracker_org_id");
     return isUuid(v) ? v : null;
-  }, [sp]);
+  }, [params]);
+
+  // evita loops de reloadAuth
+  const forcedOnce = useRef(false);
 
   useEffect(() => {
     if (loading) return;
@@ -40,22 +44,28 @@ export default function AuthCallback() {
       return;
     }
 
-    // ✅ SOLO flujo invite tracker: fuerza org activa en AuthContext (one-shot)
-    if (trackerOrgId) {
+    // ✅ SOLO invite tracker: forzar org activa ONE-SHOT
+    if (trackerOrgId && !forcedOnce.current) {
+      forcedOnce.current = true;
+
       localStorage.setItem("force_tracker_org_id", trackerOrgId);
       localStorage.setItem("current_org_id", trackerOrgId);
 
-      // refresca auth para que AuthContext vuelva a calcular org/rol
       if (typeof reloadAuth === "function") reloadAuth();
+
+      // esperamos a que AuthContext recalcule role/org antes de navegar
+      return;
     }
 
     const roleLower = String(role || "").toLowerCase();
 
+    // tracker => tracker-only
     if (roleLower === "tracker") {
       navigate("/tracker-gps", { replace: true });
       return;
     }
 
+    // NO trackers: respetar next si es seguro
     let dest = "/inicio";
     if (nextParam && isSafeInternalPath(nextParam)) {
       if (nextParam.startsWith("/tracker-gps")) dest = "/inicio";
