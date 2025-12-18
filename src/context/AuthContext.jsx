@@ -29,12 +29,6 @@ function normalizeOrgRow(o) {
   };
 }
 
-function isUuid(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    String(v || "")
-  );
-}
-
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -46,19 +40,12 @@ export const AuthProvider = ({ children }) => {
   const [currentOrg, setCurrentOrg] = useState(null);
   const [tenantId, setTenantId] = useState(null);
 
-  // Rol efectivo (SIEMPRE por org activa)
   const [role, setRole] = useState(null);
 
   const [isSuspended, setIsSuspended] = useState(false);
-
-  // Root Owner global
   const [isRootOwner, setIsRootOwner] = useState(false);
-
   const [loading, setLoading] = useState(true);
 
-  // -----------------------------
-  // SESSION
-  // -----------------------------
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getSession();
@@ -76,9 +63,6 @@ export const AuthProvider = ({ children }) => {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // -----------------------------
-  // LOAD ALL
-  // -----------------------------
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
@@ -93,19 +77,20 @@ export const AuthProvider = ({ children }) => {
         setIsSuspended(false);
         setIsRootOwner(false);
         localStorage.removeItem("current_org_id");
+        localStorage.removeItem("force_tracker_org_id");
         return;
       }
 
-      // Root Owner (no rompe si RPC no existe)
+      // Root Owner
       try {
         const { data, error } = await supabase.rpc("is_root_owner");
         if (error) setIsRootOwner(false);
         else setIsRootOwner(Boolean(data));
-      } catch (_e) {
+      } catch {
         setIsRootOwner(false);
       }
 
-      // 1) Profile
+      // Profile
       const { data: prof } = await supabase
         .from("profiles")
         .select("*")
@@ -114,7 +99,7 @@ export const AuthProvider = ({ children }) => {
 
       setProfile(prof ?? null);
 
-      // 2) Membresías reales (app_user_roles)
+      // Memberships
       const { data: mRowsRaw } = await supabase
         .from("app_user_roles")
         .select("org_id, role, created_at")
@@ -122,7 +107,6 @@ export const AuthProvider = ({ children }) => {
 
       const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
 
-      // Orden estable
       mRows.sort((a, b) => {
         const ar = roleRank(a?.role);
         const br = roleRank(b?.role);
@@ -134,7 +118,6 @@ export const AuthProvider = ({ children }) => {
 
       const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
 
-      // 3) Organizations
       let orgs = [];
       if (orgIds.length) {
         const { data } = await supabase
@@ -143,49 +126,24 @@ export const AuthProvider = ({ children }) => {
           .in("id", orgIds);
         orgs = data ?? [];
       }
+
       setOrganizations(orgs);
 
-      // 4) Selección de org activa
+      // 4) Org activa
       let activeOrg = null;
 
-      // =========================================================
-      // ✅ FIX "INVITE TRACKER" (ONE-SHOT, NO ROMPE CASOS ADMIN/OWNER)
-      // Usa user_metadata.* aunque se pierda el querystring.
-      // Solo se aplica una vez por usuario.
-      // =========================================================
-      const meta = user?.user_metadata || {};
-      const metaInvitedRole = String(meta?.invited_role || "").toUpperCase();
-      const metaTrackerOrgId = meta?.tracker_org_id;
-
-      const consumedKey = `tracker_invite_consumed:${user.id}`;
-      const consumed = localStorage.getItem(consumedKey) === "1";
-
-      if (
-        !consumed &&
-        metaInvitedRole === "TRACKER" &&
-        isUuid(metaTrackerOrgId)
-      ) {
-        // Solo forzar si realmente el usuario es TRACKER en esa org
-        const membershipInMetaOrg = mRows.find(
-          (m) => m.org_id === metaTrackerOrgId
-        );
-        const roleInMetaOrg = String(membershipInMetaOrg?.role || "").toLowerCase();
-
-        if (roleInMetaOrg === "tracker") {
-          const forced = orgs.find((o) => o.id === metaTrackerOrgId) ?? null;
-          if (forced) {
-            activeOrg = forced;
-            // Marcamos consumido para no “secuestrar” futuros logins
-            localStorage.setItem(consumedKey, "1");
-            // Persistimos org activa
-            localStorage.setItem("current_org_id", metaTrackerOrgId);
-          }
+      // ✅ FIX INVITE TRACKER: prioridad absoluta ONE-SHOT
+      const forcedTrackerOrgId = localStorage.getItem("force_tracker_org_id");
+      if (forcedTrackerOrgId) {
+        const forced = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
+        if (forced) {
+          activeOrg = forced;
         }
+        // se consume para no afectar futuros logins
+        localStorage.removeItem("force_tracker_org_id");
       }
 
-      // =========================================================
-      // Tu prioridad original (OWNER) — solo si no hubo force tracker
-      // =========================================================
+      // Tu prioridad original: owner -> localStorage -> primera
       if (!activeOrg) {
         const ownerMembership = mRows.find(
           (m) => String(m.role).toLowerCase() === "owner"
@@ -195,7 +153,6 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // localStorage current_org_id (siempre que no haya owner)
       if (!activeOrg) {
         const storedOrgId = localStorage.getItem("current_org_id");
         if (storedOrgId) {
@@ -214,7 +171,7 @@ export const AuthProvider = ({ children }) => {
       if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
-      // 5) ✅ Rol efectivo: SOLO por org activa
+      // Rol efectivo: SOLO por org activa (tu blindaje actual)
       const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
       const resolvedRole = String(
         activeMembership?.role ?? prof?.role ?? "tracker"
@@ -233,9 +190,6 @@ export const AuthProvider = ({ children }) => {
     loadAll();
   }, [loadAll]);
 
-  // -----------------------------
-  // SELECT ORG
-  // -----------------------------
   const selectOrg = useCallback(
     (orgId) => {
       const o = organizations.find((x) => x.id === orgId);
@@ -248,7 +202,6 @@ export const AuthProvider = ({ children }) => {
       if (active?.id) localStorage.setItem("current_org_id", active.id);
       else localStorage.removeItem("current_org_id");
 
-      // Rol por org seleccionada
       const m = memberships.find((x) => x.org_id === active?.id);
       if (m?.role) setRole(String(m.role).toLowerCase());
       else setRole("tracker");
@@ -276,7 +229,6 @@ export const AuthProvider = ({ children }) => {
       isAdmin: role === "admin" || role === "owner",
 
       isSuspended,
-
       isRootOwner,
 
       loading,

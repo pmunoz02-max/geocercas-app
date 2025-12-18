@@ -22,21 +22,15 @@ function isUuid(v) {
 export default function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
-
   const { loading, session, role, isRootOwner, reloadAuth } = useAuth();
 
-  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const sp = useMemo(() => new URLSearchParams(location.search), [location.search]);
 
-  const nextParam = useMemo(() => {
-    const next = params.get("next");
-    return next || null;
-  }, [params]);
-
-  // ✅ viene desde invite-user: /auth/callback?tracker_org_id=<uuid>
+  const nextParam = useMemo(() => sp.get("next") || null, [sp]);
   const trackerOrgId = useMemo(() => {
-    const v = params.get("tracker_org_id");
+    const v = sp.get("tracker_org_id");
     return isUuid(v) ? v : null;
-  }, [params]);
+  }, [sp]);
 
   useEffect(() => {
     if (loading) return;
@@ -46,31 +40,23 @@ export default function AuthCallback() {
       return;
     }
 
-    // ✅ SOLO flujo invite tracker:
-    // guardamos un "force" para que AuthContext escoja esta org, aunque exista owner en otra org
+    // ✅ SOLO flujo invite tracker: fuerza org activa en AuthContext (one-shot)
     if (trackerOrgId) {
       localStorage.setItem("force_tracker_org_id", trackerOrgId);
+      localStorage.setItem("current_org_id", trackerOrgId);
 
-      // Forzamos recarga de auth para que se re-evalúe org activa con el flag
-      // (no rompe nada: reloadAuth ya existe y se usa para refrescar estados)
-      try {
-        if (typeof reloadAuth === "function") reloadAuth();
-      } catch (e) {
-        console.error("[AuthCallback] reloadAuth failed:", e);
-      }
+      // refresca auth para que AuthContext vuelva a calcular org/rol
+      if (typeof reloadAuth === "function") reloadAuth();
     }
 
     const roleLower = String(role || "").toLowerCase();
 
-    // Si ya quedó tracker, directo al tracker-gps
     if (roleLower === "tracker") {
       navigate("/tracker-gps", { replace: true });
       return;
     }
 
-    // NO trackers
     let dest = "/inicio";
-
     if (nextParam && isSafeInternalPath(nextParam)) {
       if (nextParam.startsWith("/tracker-gps")) dest = "/inicio";
       else if (nextParam.startsWith("/admins") && !isRootOwner) dest = "/inicio";
