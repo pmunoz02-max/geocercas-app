@@ -66,6 +66,22 @@ function isUniqueViolation(err) {
   return err?.code === "23505" || /duplicate key|unique/i.test(err?.message || "");
 }
 
+/**
+ * Detecta cuando el error de unique corresponde al límite de 1 tracker por organización.
+ * Esto depende del nombre real del constraint/índice en tu BD, por eso usamos varias heurísticas.
+ */
+function isTrackerLimitViolation(err) {
+  if (!isUniqueViolation(err)) return false;
+  const msg = (err?.message || "").toLowerCase();
+  const details = (err?.details || "").toLowerCase();
+  // Si tu índice se llama parecido a esto, lo capturamos
+  if (msg.includes("one_active") || msg.includes("tracker_limit") || msg.includes("max_trackers")) return true;
+  if (msg.includes("org_people") && msg.includes("org_id") && msg.includes("unique")) return true;
+  // Heurística: duplicates por org_id solamente (sin mencionar person_id) suele ser el limit por org
+  if (details.includes("(org_id)") && details.includes("already exists") && !details.includes("(person_id)")) return true;
+  return false;
+}
+
 export default function PersonalPage() {
   const {
     user,
@@ -361,9 +377,18 @@ export default function PersonalPage() {
         console.log("[PersonalPage] Resultado insert membership:", { orgId, personId, ins, insErr });
 
         if (insErr) {
+          if (isTrackerLimitViolation(insErr)) {
+            throw new Error(
+              t("personal.errorPlanLimitReached", {
+                defaultValue: "Has alcanzado el límite del plan Starter (1 tracker).",
+              })
+            );
+          }
           if (isUniqueViolation(insErr)) {
-            // ya existe activo en esa org
-            throw new Error(t("personal.errorDuplicate"));
+            // ya existe (por ejemplo: mismo person_id en esa org o duplicado de email en people)
+            throw new Error(
+              t("personal.errorDuplicate", { defaultValue: "Este tracker ya existe en tu organización." })
+            );
           }
           throw insErr;
         }
@@ -378,7 +403,13 @@ export default function PersonalPage() {
     } catch (err) {
       console.error("[PersonalPage] Error onGuardar:", err);
       // Aquí dejamos el mensaje del error real si viene del backend; si no, cae a i18n
-      setBanner({ type: "err", msg: err?.message || t("personal.errorSave") });
+      {
+        const rawMsg = (err?.message || "").toString();
+        const msg =
+          rawMsg ||
+          t("personal.errorSave", { defaultValue: "No se pudo guardar. Intenta nuevamente." });
+        setBanner({ type: "err", msg });
+      }
     } finally {
       setLoading(false);
     }
