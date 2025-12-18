@@ -1,129 +1,145 @@
-// src/pages/AuthCallback.tsx
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+// src/pages/AuthCallback.jsx
+import React, { useEffect, useMemo, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+
+function isSafeInternalPath(p) {
+  if (!p) return false;
+  if (typeof p !== "string") return false;
+  if (!p.startsWith("/")) return false;
+  if (p.includes("://")) return false;
+  if (p.startsWith("//")) return false;
+  if (/[\u0000-\u001F\u007F]/.test(p)) return false;
+  return true;
+}
+
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v || "")
+  );
+}
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+
+  const {
+    loading,
+    session,
+    role,
+    isRootOwner,
+    currentOrgId,
+    selectOrg,
+    reloadAuth,
+    organizations,
+  } = useAuth();
+
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+
+  const nextParam = useMemo(() => {
+    const next = params.get("next");
+    return next || null;
+  }, [params]);
+
+  // ✅ Este es el parámetro clave que tu invite-user ya manda en redirectTo
+  const trackerOrgIdParam = useMemo(() => {
+    const v = params.get("tracker_org_id");
+    return isUuid(v) ? v : null;
+  }, [params]);
+
+  // Evitar loops: forzar org activa solo 1 vez por callback
+  const forcedOrgOnceRef = useRef(false);
 
   useEffect(() => {
-    let alive = true;
+    // Esperar a que AuthContext termine de cargar
+    if (loading) return;
 
-    const run = async () => {
-      try {
-        const { data, error: exError } =
-          await supabase.auth.exchangeCodeForSession(window.location.href);
+    // Si no hay sesión, volver a login
+    if (!session) {
+      navigate("/login", { replace: true });
+      return;
+    }
 
-        if (!alive) return;
+    // =========================================================
+    // ✅ FIX TRACKER INVITE:
+    // Si llega tracker_org_id, forzamos org activa ANTES de decidir ruta.
+    // Esto evita que el usuario caiga al panel por tener OWNER/ADMIN en otra org.
+    // =========================================================
+    if (trackerOrgIdParam && !forcedOrgOnceRef.current) {
+      const alreadyActive = String(currentOrgId || "") === trackerOrgIdParam;
 
-        if (exError) {
-          console.error("[AuthCallback] exchangeCodeForSession error:", exError);
-          setError(
-            "No se pudo completar el inicio de sesión. El enlace puede haber expirado."
-          );
-          return;
-        }
+      if (!alreadyActive) {
+        forcedOrgOnceRef.current = true;
 
-        let user = data?.session?.user ?? null;
+        // 1) Persistir para que AuthContext lo use (si aplica)
+        localStorage.setItem("current_org_id", trackerOrgIdParam);
 
-        if (!user) {
-          const { data: sessData, error: sessErr } =
-            await supabase.auth.getSession();
+        // 2) Si ya tenemos organizaciones cargadas, seleccionamos directo.
+        //    Si no, pedimos reloadAuth y luego en el siguiente render se resolverá.
+        const hasOrgLoaded =
+          Array.isArray(organizations) && organizations.some((o) => o?.id === trackerOrgIdParam);
 
-          if (sessErr) {
-            console.error("[AuthCallback] getSession error:", sessErr);
+        try {
+          if (hasOrgLoaded && typeof selectOrg === "function") {
+            selectOrg(trackerOrgIdParam);
+          } else if (typeof reloadAuth === "function") {
+            reloadAuth();
           }
-          user = sessData?.session?.user ?? null;
+        } catch (e) {
+          // Si algo falla, al menos dejamos el current_org_id listo.
+          console.error("[AuthCallback] force tracker org failed:", e);
         }
 
-        if (!user) {
-          console.log(
-            "[AuthCallback] Sin usuario después de exchangeCodeForSession, redirigiendo a /login"
-          );
-          if (!alive) return;
-          navigate("/login", { replace: true });
-          return;
-        }
-
-        const userId = user.id;
-        const metadata = user.user_metadata || {};
-        const invitedAs = (metadata.invited_as || "")
-          .toString()
-          .toLowerCase();
-
-        const { data: orgs, error: orgErr } = await supabase
-          .from("user_organizations")
-          .select("role")
-          .eq("user_id", userId);
-
-        if (orgErr) {
-          console.error(
-            "[AuthCallback] Error leyendo user_organizations:",
-            orgErr
-          );
-        }
-
-        const roles: string[] =
-          orgs?.map((o: any) =>
-            o.role ? String(o.role).toLowerCase() : ""
-          ) || [];
-
-        console.log("[AuthCallback] Post-login roles/metadata:", {
-          userId,
-          invitedAs,
-          roles,
-        });
-
-        const isTracker =
-          roles.includes("tracker") || invitedAs === "tracker";
-
-        if (!alive) return;
-
-        if (isTracker) {
-          console.log("[AuthCallback] Redirigiendo TRACKER a /tracker-gps");
-          navigate("/tracker-gps", { replace: true });
-        } else {
-          console.log("[AuthCallback] Redirigiendo a /inicio");
-          navigate("/inicio", { replace: true });
-        }
-      } catch (e) {
-        console.error("[AuthCallback] excepción:", e);
-        if (!alive) return;
-        setError("Ocurrió un error al procesar el enlace de acceso.");
+        // Importante: salimos aquí para esperar a que role/currentOrg se actualicen
+        return;
+      } else {
+        forcedOrgOnceRef.current = true;
       }
-    };
+    }
 
-    run();
+    const roleLower = String(role || "").toLowerCase();
 
-    return () => {
-      alive = false;
-    };
-  }, [navigate]);
+    // ✅ REGLA UNIVERSAL: tracker SIEMPRE aterriza en la pantalla de envío automático
+    if (roleLower === "tracker") {
+      navigate("/tracker-gps", { replace: true });
+      return;
+    }
 
-  if (!error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-700">
-          Procesando tu enlace de acceso…
-        </div>
-      </div>
-    );
-  }
+    // Para NO-trackers: respetar next si es seguro y permitido
+    let dest = "/inicio";
+
+    if (nextParam && isSafeInternalPath(nextParam)) {
+      // Bloquear acceso directo a tracker-gps para no-trackers
+      if (nextParam.startsWith("/tracker-gps")) {
+        dest = "/inicio";
+      }
+      // Bloquear /admins si no es root owner
+      else if (nextParam.startsWith("/admins") && !isRootOwner) {
+        dest = "/inicio";
+      } else {
+        dest = nextParam;
+      }
+    }
+
+    navigate(dest, { replace: true });
+  }, [
+    loading,
+    session,
+    role,
+    isRootOwner,
+    nextParam,
+    navigate,
+    trackerOrgIdParam,
+    currentOrgId,
+    selectOrg,
+    reloadAuth,
+    organizations,
+  ]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="max-w-sm w-full px-4 py-5 rounded-xl bg-white border border-red-200 shadow-sm text-sm text-slate-800">
-        <h1 className="text-lg font-semibold mb-2 text-red-700">
-          Error al iniciar sesión
-        </h1>
-        <p className="mb-3 whitespace-pre-line">{error}</p>
-        <button
-          onClick={() => navigate("/login", { replace: true })}
-          className="mt-1 inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700"
-        >
-          Ir al inicio de sesión
-        </button>
+      <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+        Finalizando autenticación…
       </div>
     </div>
   );
