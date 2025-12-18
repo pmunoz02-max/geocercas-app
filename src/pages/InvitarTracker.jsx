@@ -1,74 +1,137 @@
 // src/pages/InvitarTracker.jsx
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { supabase } from "../supabaseClient";
+import { supabase } from "@/supabaseClient";
 import { useTranslation } from "react-i18next";
 
 /**
- * Intenta extraer detalles reales de error desde Supabase Functions:
- * - error.context.response (cuando existe)
- * - data devuelta por la Edge (si responde 200 con { ok:false })
+ * Llamada DEBUG/PRODUCCIÓN sin supabase.functions.invoke, para poder leer
+ * el body real incluso cuando el servidor responde 500.
+ *
+ * Requisitos (Vite):
+ * - VITE_SUPABASE_URL
+ * - VITE_SUPABASE_ANON_KEY
  */
-async function extractEdgeError(error) {
-  if (!error) return null;
+async function inviteUserViaFetch(payload) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  // Caso típico: Supabase FunctionsHttpError / FunctionsFetchError
-  const ctx = error?.context;
-  const resp = ctx?.response;
+  if (!supabaseUrl || !anonKey) {
+    return {
+      ok: false,
+      status: 0,
+      parsed: null,
+      text: null,
+      error: "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY",
+    };
+  }
 
-  // Si tenemos Response, intentamos parsear JSON
-  if (resp && typeof resp.json === "function") {
+  const {
+    data: { session },
+    error: sessionErr,
+  } = await supabase.auth.getSession();
+
+  if (sessionErr) {
+    return {
+      ok: false,
+      status: 0,
+      parsed: null,
+      text: null,
+      error: `auth.getSession error: ${sessionErr.message}`,
+    };
+  }
+
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    return {
+      ok: false,
+      status: 0,
+      parsed: null,
+      text: null,
+      error: "No access token in session",
+    };
+  }
+
+  const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/invite-user`;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (networkErr) {
+    return {
+      ok: false,
+      status: 0,
+      parsed: null,
+      text: null,
+      error: `Network error: ${networkErr?.message || String(networkErr)}`,
+    };
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  let parsed = null;
+  let text = null;
+
+  try {
+    if (contentType.includes("application/json")) {
+      parsed = await res.json();
+    } else {
+      text = await res.text();
+    }
+  } catch (parseErr) {
+    // Si falla parse, intentamos leer como texto
     try {
-      const payload = await resp.json();
-      return {
-        message: error.message,
-        stage: payload?.ctx?.stage ?? payload?.stage ?? null,
-        detail: payload?.ctx?.detail ?? payload?.detail ?? payload?.error ?? null,
-        hint: payload?.ctx?.hint ?? payload?.hint ?? null,
-        raw: payload,
-      };
+      text = await res.text();
     } catch (_) {
-      // Si no es JSON
-      try {
-        const text = await resp.text();
-        return { message: error.message, stage: null, detail: text, hint: null, raw: null };
-      } catch (_) {
-        return { message: error.message, stage: null, detail: null, hint: null, raw: null };
-      }
+      text = `Response parse error: ${parseErr?.message || String(parseErr)}`;
     }
   }
 
-  // Fallback
   return {
-    message: error?.message || String(error),
-    stage: null,
-    detail: null,
-    hint: null,
-    raw: null,
+    ok: res.ok,
+    status: res.status,
+    parsed,
+    text,
+    error: null,
   };
 }
 
-function formatEdgeErrorForUI(t, info) {
-  if (!info) {
-    return t(
+function compactErrorMessage(t, resp) {
+  // Resp puede traer parsed con { ctx: { stage, detail, hint }, ... }
+  const p = resp?.parsed;
+  const ctx = p?.ctx || p;
+
+  const stage = ctx?.stage ?? null;
+  const detail = ctx?.detail ?? ctx?.error ?? null;
+  const hint = ctx?.hint ?? null;
+
+  const parts = [];
+  if (resp?.status) parts.push(`http: ${resp.status}`);
+  if (stage) parts.push(`stage: ${stage}`);
+  if (detail) parts.push(`detail: ${detail}`);
+  if (hint) parts.push(`hint: ${hint}`);
+
+  if (parts.length) {
+    return `${t(
       "inviteTracker.messages.serverProblem",
       "There was a problem contacting the invitation server."
-    );
+    )} (${parts.join(" · ")})`;
   }
 
-  // Construimos un mensaje compacto pero útil para diagnóstico
-  const parts = [];
-  if (info.stage) parts.push(`stage: ${info.stage}`);
-  if (info.detail) parts.push(`detail: ${info.detail}`);
-  if (info.hint) parts.push(`hint: ${info.hint}`);
+  if (resp?.error) return resp.error;
+  if (resp?.text) return resp.text;
 
-  // Si no hay nada “estructurado”, al menos damos el message
-  if (parts.length === 0) return info.message || "Unknown error";
-
-  return `${t(
+  return t(
     "inviteTracker.messages.serverProblem",
     "There was a problem contacting the invitation server."
-  )} (${parts.join(" · ")})`;
+  );
 }
 
 export default function InvitarTracker() {
@@ -77,7 +140,6 @@ export default function InvitarTracker() {
 
   const orgName = currentOrg?.name || t("inviteTracker.orgFallback", "your organization");
 
-  // Estados
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState(null);
@@ -86,9 +148,6 @@ export default function InvitarTracker() {
   const [personalList, setPersonalList] = useState([]);
   const [selectedPersonId, setSelectedPersonId] = useState("");
 
-  // ============================================================
-  // Cargar PERSONAL vigente
-  // ============================================================
   useEffect(() => {
     async function loadPersonal() {
       if (!currentOrg?.id) return;
@@ -112,7 +171,6 @@ export default function InvitarTracker() {
     loadPersonal();
   }, [currentOrg?.id]);
 
-  // Cuando el usuario selecciona un personal
   function handleSelectPerson(e) {
     const id = e.target.value;
     setSelectedPersonId(id);
@@ -120,20 +178,14 @@ export default function InvitarTracker() {
     if (!id) return;
 
     const p = personalList.find((x) => x.id === id);
-    if (p?.email) {
-      setEmail(p.email.toLowerCase());
-    }
+    if (p?.email) setEmail(p.email.toLowerCase());
   }
 
-  // Si el usuario escribe manualmente un email, anulamos la selección del dropdown
   function handleEmailChange(e) {
     setEmail(e.target.value);
     setSelectedPersonId("");
   }
 
-  // ============================================================
-  // Enviar invitación
-  // ============================================================
   async function handleSubmit(e) {
     e.preventDefault();
     setMessage(null);
@@ -145,7 +197,6 @@ export default function InvitarTracker() {
       return;
     }
 
-    // Validación simple de formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
       setMessage({ type: "error", text: t("inviteTracker.errors.emailInvalid") });
@@ -166,55 +217,40 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      // ✅ Unificamos la llamada en un solo punto, pero con diagnóstico real.
-      const { data, error } = await supabase.functions.invoke("invite-user", {
-        body: {
-          email: trimmedEmail,
-          role_name: "tracker",
-          full_name: null,
-          org_id: currentOrg.id,
-        },
+      const payload = {
+        email: trimmedEmail,
+        role_name: "tracker",
+        full_name: null,
+        org_id: currentOrg.id,
+      };
+
+      const resp = await inviteUserViaFetch(payload);
+
+      // Log ultra explícito para que no se “oculte” en consola
+      console.error("[InvitarTracker] invite-user RAW RESPONSE:", {
+        ok: resp.ok,
+        status: resp.status,
+        parsed: resp.parsed,
+        text: resp.text,
+        error: resp.error,
       });
 
-      if (error) {
-        const info = await extractEdgeError(error);
-        console.error("[InvitarTracker] invite-user ERROR:", { error, info });
-
-        setMessage({
-          type: "error",
-          text: formatEdgeErrorForUI(t, info),
-        });
+      if (!resp.ok) {
+        setMessage({ type: "error", text: compactErrorMessage(t, resp) });
         return;
       }
+
+      const data = resp.parsed;
 
       if (!data?.ok) {
-        // Edge devolvió 200 pero ok:false
-        console.warn("[InvitarTracker] respuesta no-ok:", data);
-
-        const stage = data?.ctx?.stage || data?.stage || null;
-        const detail = data?.ctx?.detail || data?.detail || data?.error || null;
-        const hint = data?.ctx?.hint || data?.hint || null;
-
-        const parts = [];
-        if (stage) parts.push(`stage: ${stage}`);
-        if (detail) parts.push(`detail: ${detail}`);
-        if (hint) parts.push(`hint: ${hint}`);
-
-        const fallback = t(
-          "inviteTracker.messages.notOk",
-          "The invitation could not be completed. Check the email and try again."
-        );
-
         setMessage({
           type: "error",
-          text: parts.length ? `${fallback} (${parts.join(" · ")})` : (data?.error || fallback),
+          text: compactErrorMessage(t, { ...resp, parsed: data }),
         });
         return;
       }
 
-      // Mensajería por modo
       const mode = data.mode;
-
       if (mode === "invited") {
         setMessage({
           type: "success",
@@ -284,7 +320,6 @@ export default function InvitarTracker() {
         onSubmit={handleSubmit}
         className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4"
       >
-        {/* SELECT DE PERSONAL */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
             {t("inviteTracker.form.selectLabel")}
@@ -301,12 +336,9 @@ export default function InvitarTracker() {
               </option>
             ))}
           </select>
-          <p className="mt-1 text-[11px] text-slate-500">
-            {t("inviteTracker.form.selectHelp")}
-          </p>
+          <p className="mt-1 text-[11px] text-slate-500">{t("inviteTracker.form.selectHelp")}</p>
         </div>
 
-        {/* CAMPO EMAIL */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
             {t("inviteTracker.form.emailLabel")}
@@ -319,12 +351,9 @@ export default function InvitarTracker() {
             value={email}
             onChange={handleEmailChange}
           />
-          <p className="mt-1 text-[11px] text-slate-500">
-            {t("inviteTracker.form.emailHelp")}
-          </p>
+          <p className="mt-1 text-[11px] text-slate-500">{t("inviteTracker.form.emailHelp")}</p>
         </div>
 
-        {/* BOTÓN */}
         <button
           type="submit"
           disabled={sending}
