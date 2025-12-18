@@ -19,16 +19,6 @@ function roleRank(r) {
   return 0;
 }
 
-// Se mantiene por compatibilidad / ordenamiento, pero ya NO se usa para resolver el rol efectivo.
-function pickHighestRole(memberships = []) {
-  let best = "tracker";
-  for (const m of memberships) {
-    const r = String(m?.role || "tracker").toLowerCase();
-    if (roleRank(r) > roleRank(best)) best = r;
-  }
-  return best;
-}
-
 function normalizeOrgRow(o) {
   if (!o) return null;
   return {
@@ -37,6 +27,12 @@ function normalizeOrgRow(o) {
     suspended: Boolean(o.suspended),
     active: o.active !== false,
   };
+}
+
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v || "")
+  );
 }
 
 export const AuthProvider = ({ children }) => {
@@ -55,7 +51,7 @@ export const AuthProvider = ({ children }) => {
 
   const [isSuspended, setIsSuspended] = useState(false);
 
-  // Root Owner global (Fenice)
+  // Root Owner global
   const [isRootOwner, setIsRootOwner] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -81,7 +77,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // -----------------------------
-  // LOAD ALL (UNIVERSAL + SAAS READY)
+  // LOAD ALL
   // -----------------------------
   const loadAll = useCallback(async () => {
     try {
@@ -97,7 +93,6 @@ export const AuthProvider = ({ children }) => {
         setIsSuspended(false);
         setIsRootOwner(false);
         localStorage.removeItem("current_org_id");
-        localStorage.removeItem("force_tracker_org_id");
         return;
       }
 
@@ -127,7 +122,7 @@ export const AuthProvider = ({ children }) => {
 
       const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
 
-      // Ordenar para estabilidad (no define permisos globales)
+      // Orden estable
       mRows.sort((a, b) => {
         const ar = roleRank(a?.role);
         const br = roleRank(b?.role);
@@ -142,34 +137,65 @@ export const AuthProvider = ({ children }) => {
       // 3) Organizations
       let orgs = [];
       if (orgIds.length) {
-        const { data } = await supabase.from("organizations").select("*").in("id", orgIds);
+        const { data } = await supabase
+          .from("organizations")
+          .select("*")
+          .in("id", orgIds);
         orgs = data ?? [];
       }
-
       setOrganizations(orgs);
 
       // 4) Selección de org activa
       let activeOrg = null;
 
-      // ✅ FIX invite tracker (ONE-SHOT):
-      // Si viene force_tracker_org_id, lo usamos una sola vez y lo borramos.
-      const forcedTrackerOrgId = localStorage.getItem("force_tracker_org_id");
-      if (forcedTrackerOrgId) {
-        const forced = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
-        if (forced) {
-          activeOrg = forced;
+      // =========================================================
+      // ✅ FIX "INVITE TRACKER" (ONE-SHOT, NO ROMPE CASOS ADMIN/OWNER)
+      // Usa user_metadata.* aunque se pierda el querystring.
+      // Solo se aplica una vez por usuario.
+      // =========================================================
+      const meta = user?.user_metadata || {};
+      const metaInvitedRole = String(meta?.invited_role || "").toUpperCase();
+      const metaTrackerOrgId = meta?.tracker_org_id;
+
+      const consumedKey = `tracker_invite_consumed:${user.id}`;
+      const consumed = localStorage.getItem(consumedKey) === "1";
+
+      if (
+        !consumed &&
+        metaInvitedRole === "TRACKER" &&
+        isUuid(metaTrackerOrgId)
+      ) {
+        // Solo forzar si realmente el usuario es TRACKER en esa org
+        const membershipInMetaOrg = mRows.find(
+          (m) => m.org_id === metaTrackerOrgId
+        );
+        const roleInMetaOrg = String(membershipInMetaOrg?.role || "").toLowerCase();
+
+        if (roleInMetaOrg === "tracker") {
+          const forced = orgs.find((o) => o.id === metaTrackerOrgId) ?? null;
+          if (forced) {
+            activeOrg = forced;
+            // Marcamos consumido para no “secuestrar” futuros logins
+            localStorage.setItem(consumedKey, "1");
+            // Persistimos org activa
+            localStorage.setItem("current_org_id", metaTrackerOrgId);
+          }
         }
-        localStorage.removeItem("force_tracker_org_id");
       }
 
-      // Mantener tu prioridad original si no hubo "force"
+      // =========================================================
+      // Tu prioridad original (OWNER) — solo si no hubo force tracker
+      // =========================================================
       if (!activeOrg) {
-        const ownerMembership = mRows.find((m) => String(m.role).toLowerCase() === "owner");
+        const ownerMembership = mRows.find(
+          (m) => String(m.role).toLowerCase() === "owner"
+        );
         if (ownerMembership) {
           activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
         }
       }
 
+      // localStorage current_org_id (siempre que no haya owner)
       if (!activeOrg) {
         const storedOrgId = localStorage.getItem("current_org_id");
         if (storedOrgId) {
@@ -188,10 +214,11 @@ export const AuthProvider = ({ children }) => {
       if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
-      // 5) ✅ ROL EFECTIVO: SOLO por ORG activa
+      // 5) ✅ Rol efectivo: SOLO por org activa
       const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
-
-      const resolvedRole = String(activeMembership?.role ?? prof?.role ?? "tracker").toLowerCase();
+      const resolvedRole = String(
+        activeMembership?.role ?? prof?.role ?? "tracker"
+      ).toLowerCase();
 
       setRole(resolvedRole);
     } catch (err) {
@@ -221,7 +248,7 @@ export const AuthProvider = ({ children }) => {
       if (active?.id) localStorage.setItem("current_org_id", active.id);
       else localStorage.removeItem("current_org_id");
 
-      // ✅ Rol efectivo SIEMPRE por org seleccionada
+      // Rol por org seleccionada
       const m = memberships.find((x) => x.org_id === active?.id);
       if (m?.role) setRole(String(m.role).toLowerCase());
       else setRole("tracker");
