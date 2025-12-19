@@ -482,9 +482,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const nm = String(name || "").trim();
       if (!nm) {
         alert(
-          t("geocercas.errorNameRequired", {
-            defaultValue: "Escribe un nombre para la geocerca.",
-          })
+          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
         );
         return false;
       }
@@ -517,7 +515,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const map = mapRef.current;
 
       const layerToSave =
-        selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
+        selectedLayerRef.current ||
+        lastCreatedLayerRef.current ||
+        getLastGeomanLayer(map);
 
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
         alert(
@@ -554,9 +554,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const nm = geofenceName.trim();
       if (!nm) {
         alert(
-          t("geocercas.errorNameRequired", {
-            defaultValue: "Escribe un nombre para la geocerca.",
-          })
+          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
         );
         return;
       }
@@ -665,17 +663,13 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         if (supaError) {
           console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
           alert(
-            t("geocercas.errorNoGeojson", {
-              defaultValue: "No se pudo cargar el GeoJSON de la geocerca.",
-            }) +
+            t("geocercas.errorNoGeojson", { defaultValue: "No se pudo cargar el GeoJSON de la geocerca." }) +
               "\n\nDetalle: " +
               (supaError.message || String(supaError))
           );
           return;
         }
-        alert(
-          t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." })
-        );
+        alert(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." }));
         return;
       }
 
@@ -779,7 +773,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 text-white"
             >
               {showLoading
-                ? t("common.loading", { defaultValue: "Cargando..." })
+                ? t("common.actions.loading", { defaultValue: "Cargando..." })
                 : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
@@ -804,7 +798,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           </div>
 
           {loadingDataset && (
-            <div className="mt-3 text-[11px] text-slate-400">{t("geocercas.loadingDataset")}</div>
+            <div className="mt-3 text-[11px] text-slate-400">
+              {t("geocercas.loadingDataset", { defaultValue: "Cargando dataset..." })}
+            </div>
           )}
           {datasetError && <div className="mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
@@ -858,3 +854,113 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                     <GeoJSON
                       key={`view-marker-${viewId}`}
                       data={viewCentroid}
+                      pointToLayer={(_f, latlng) =>
+                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
+                      }
+                    />
+                  )}
+                </>
+              )}
+            </Pane>
+
+            {/* ✅ ref directo para no depender de whenCreated */}
+            <FeatureGroup ref={featureGroupRef}>
+              <GeomanControls
+                options={{
+                  position: "topleft",
+                  drawMarker: false,
+                  drawCircleMarker: false,
+                  drawPolyline: false,
+                  drawText: false,
+                  drawRectangle: true,
+                  drawPolygon: true,
+                  drawCircle: true,
+                  editMode: true,
+                  dragMode: true,
+                  removalMode: true,
+                }}
+                globalOptions={{ continueDrawing: false, editable: true }}
+                onCreate={handleGeomanCreate}
+                onEdit={handleGeomanEditUpdate}
+                onUpdate={handleGeomanEditUpdate}
+              />
+            </FeatureGroup>
+          </MapContainer>
+
+          <div className="absolute right-3 top-3 z-[9999] space-y-2">
+            <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
+              {cursorLatLng ? (
+                <>
+                  <span>
+                    {t("geocercas.lat", { defaultValue: "Lat" })}: {cursorLatLng.lat.toFixed(6)}
+                  </span>
+                  <span className="ml-2">
+                    {t("geocercas.lng", { defaultValue: "Lng" })}: {cursorLatLng.lng.toFixed(6)}
+                  </span>
+                </>
+              ) : (
+                <span>{t("geocercas.cursorHint")}</span>
+              )}
+            </div>
+
+            <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
+              {t("geocercas.draftLabel", { defaultValue: "Draft" })}:{" "}
+              {draftFeature
+                ? t("common.actions.yes", { defaultValue: "Sí" })
+                : t("common.actions.no", { defaultValue: "No" })}{" "}
+              | {t("geocercas.pointsLabel", { defaultValue: "Pts" })}: {draftPointsCount}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal coordenadas (solo botones/título) */}
+      {coordModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
+            <h2 className="text-sm font-semibold text-slate-100 mb-1">
+              {t("geocercas.modalTitle", { defaultValue: "Dibujar por coordenadas" })}
+            </h2>
+
+            <p className="text-xs text-slate-400">
+              {t("geocercas.modalHintRule", {
+                defaultValue:
+                  "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
+              })}
+              <br />
+              {t("geocercas.modalInstruction", {
+                defaultValue: "Formato:",
+              })}{" "}
+              <span className="font-mono text-[11px]">lat,lng</span>{" "}
+              {t("geocercas.modalOnePerLine", { defaultValue: "(uno por línea)" })}
+            </p>
+
+            <textarea
+              rows={6}
+              className="w-full rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 px-2 py-1.5"
+              value={coordText}
+              onChange={(e) => setCoordText(e.target.value)}
+              placeholder={`-0.180653, -78.467838\n-0.181200, -78.466500\n-0.182000, -78.468200`}
+            />
+
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                onClick={() => setCoordModalOpen(false)}
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200"
+              >
+                {t("common.actions.cancel", { defaultValue: "Cancelar" })}
+              </button>
+
+              <button
+                onClick={handleDrawFromCoords}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white"
+              >
+                {t("geocercas.modalDraw", { defaultValue: "Dibujar" })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
