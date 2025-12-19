@@ -536,7 +536,12 @@
     "tableNoResults": "Aucune donnée pour les filtres actuels.",
     "errorLoad": "Erreur lors du chargement du tableau des coûts.",
     "exportDataButton": "Exporter les données",
-    "exportChartButton": "Exporter le graphique"
+    "exportChartButton": "Exporter le graphique",
+    "chartType": "Type de graphique",
+    "chartTypeBar": "Barres",
+    "chartTypeLine": "Lignes",
+    "chartTypeArea": "Aires",
+    "chartTypePie": "Camembert"
   },
   "tracker": {
     "title": "Tracker GPS",

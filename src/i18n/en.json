@@ -201,7 +201,6 @@
     "cardNewCta": "Go to New geofence →",
     "cardListTitle": "Geofence list",
     "cardListBody": "Soon you will be able to see the list of existing geofences and their details here. For now, use New geofence to create and edit.",
-
     "buttonShowOnMap": "Show on map",
     "loadingDataset": "Loading dataset...",
     "cursorHint": "Move the mouse over the map",
@@ -562,7 +561,12 @@
     "tableNoResults": "No data for the current filters.",
     "errorLoad": "Error loading the costs dashboard.",
     "exportDataButton": "Export data",
-    "exportChartButton": "Export chart"
+    "exportChartButton": "Export chart",
+    "chartType": "Chart type",
+    "chartTypeBar": "Bar",
+    "chartTypeLine": "Line",
+    "chartTypeArea": "Area",
+    "chartTypePie": "Pie"
   },
   "tracker": {
     "title": "GPS Tracker",

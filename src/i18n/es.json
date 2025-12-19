@@ -538,7 +538,12 @@
     "tableNoResults": "No hay datos para los filtros actuales.",
     "errorLoad": "Error al cargar el dashboard de costos.",
     "exportDataButton": "Exportar datos",
-    "exportChartButton": "Exportar gráfico"
+    "exportChartButton": "Exportar gráfico",
+    "chartType": "Tipo de gráfico",
+    "chartTypeBar": "Barras",
+    "chartTypeLine": "Líneas",
+    "chartTypeArea": "Área",
+    "chartTypePie": "Pastel"
   },
   "tracker": {
     "title": "Tracker GPS",
