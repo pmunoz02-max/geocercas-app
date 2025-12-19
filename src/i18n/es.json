@@ -543,7 +543,11 @@
     "chartTypeBar": "Barras",
     "chartTypeLine": "Líneas",
     "chartTypeArea": "Área",
-    "chartTypePie": "Pastel"
+    "chartTypePie": "Pastel",
+    "colCategoria": "Categoría",
+    "colTarifaPromedio": "Tarifa promedio",
+    "colRegistros": "Registros",
+    "tableEmpty": "No hay datos para mostrar"
   },
   "tracker": {
     "title": "Tracker GPS",

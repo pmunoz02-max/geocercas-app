@@ -541,7 +541,11 @@
     "chartTypeBar": "Barres",
     "chartTypeLine": "Lignes",
     "chartTypeArea": "Aires",
-    "chartTypePie": "Camembert"
+    "chartTypePie": "Camembert",
+    "colCategoria": "Catégorie",
+    "colTarifaPromedio": "Tarif moyen",
+    "colRegistros": "Enregistrements",
+    "tableEmpty": "Aucune donnée à afficher"
   },
   "tracker": {
     "title": "Tracker GPS",
@@ -738,4 +742,3 @@
     "backHome": "Aller à la landing",
     "tip": "Astuce : retournez à /login, saisissez votre e-mail et utilisez « Mot de passe oublié ? » pour générer un nouveau lien."
   }
-}

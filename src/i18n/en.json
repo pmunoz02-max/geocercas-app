@@ -566,7 +566,11 @@
     "chartTypeBar": "Bar",
     "chartTypeLine": "Line",
     "chartTypeArea": "Area",
-    "chartTypePie": "Pie"
+    "chartTypePie": "Pie",
+    "colCategoria": "Category",
+    "colTarifaPromedio": "Average rate",
+    "colRegistros": "Records",
+    "tableEmpty": "No data to display"
   },
   "tracker": {
     "title": "GPS Tracker",
