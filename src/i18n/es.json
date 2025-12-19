@@ -26,7 +26,8 @@
       "roleTracker": "Tracker",
       "organizationLabel": "Organización",
       "organizationAriaLabel": "Seleccionar organización",
-      "organizationNone": "Sin organización"
+      "organizationNone": "Sin organización",
+      "loginMagic": "Link mágico"
     },
     "tabs": {
       "inicio": "Inicio",
@@ -691,35 +692,174 @@
       "back": "Volver",
       "goHome": "Ir a Inicio",
       "viewFaq": "Ver FAQ",
-      "badge": "Centro de ayuda"
+      "badge": "Centro de ayuda",
+      "quickGuideBadge": "Guía rápida"
     },
-    "changelog": {
-      "breadcrumb": "Novedades",
-      "title": "Novedades / Changelog",
-      "subtitle": "Revisa el historial de cambios, nuevas funciones, mejoras y correcciones de la plataforma.",
-      "latest": "Últimas actualizaciones",
-      "dateLabel": "Fecha",
-      "badges": {
-        "feature": "Nueva función",
-        "fix": "Corrección",
-        "perf": "Rendimiento",
-        "update": "Actualización"
-      },
-      "items": {
-        "0": {
-          "title": "Centro de Ayuda: nuevas páginas",
-          "details": {
-            "0": "Se añadieron Instrucciones, FAQ, Soporte y Novedades (Changelog).",
-            "1": "Mejoras de navegación SPA y consistencia visual."
-          }
+    "instructions": {
+      "title": "Guía rápida de configuración",
+      "subtitle": "Sigue estos pasos para configurar tu organización, crear geocercas, asignar personal y empezar a trackear.",
+      "jumpToSteps": "Ir a pasos",
+      "viewResult": "Ver resultado",
+      "tocTitle": "Tabla de contenido",
+      "tocSubtitle": "Usa estos accesos para navegar la guía.",
+      "tocSteps": "Pasos",
+      "tocTips": "Buenas prácticas",
+      "tocResult": "Resultado esperado",
+      "recommendationTitle": "Recomendación",
+      "recommendationBody": "Empieza con 1 geocerca y 1 tracker. Cuando el flujo funcione, escala a más zonas y personas.",
+      "stepsTitle": "Paso a paso",
+      "stepsSubtitle": "Una secuencia práctica que funciona para la mayoría de organizaciones.",
+      "steps": [
+        {
+          "title": "Selecciona tu organización",
+          "bullets": [
+            "Usa el selector de organización para elegir dónde vas a trabajar.",
+            "Si eres Propietario, puedes administrar varias organizaciones."
+          ]
         },
-        "1": {
-          "title": "Mejoras de traducciones",
-          "details": {
-            "0": "Se corrigieron etiquetas faltantes en Dashboard de Costos y tarjetas de Inicio."
-          }
+        {
+          "title": "Crea tu primera geocerca",
+          "bullets": [
+            "Ve a Geocerca y dibuja el área en el mapa.",
+            "Pon un nombre claro (Finca A, Lote 3, Planta 1, etc.).",
+            "Guarda y verifica que aparezca en Geocercas."
+          ]
+        },
+        {
+          "title": "Registra tu personal",
+          "bullets": [
+            "Ve a Personal y crea los registros de las personas que trabajarán.",
+            "Usa un correo válido si los vas a invitar como trackers."
+          ]
+        },
+        {
+          "title": "Crea actividades y tarifas",
+          "bullets": [
+            "Ve a Actividades y define tareas (Cosecha, Riego, Mantenimiento…).",
+            "Configura moneda y tarifa por hora para calcular costos y reportes."
+          ]
+        },
+        {
+          "title": "Crea asignaciones",
+          "bullets": [
+            "Ve a Asignaciones y vincula: Persona + Actividad + Geocerca.",
+            "Define inicio/fin y estado Activa.",
+            "Configura frecuencia (mínimo 5 minutos)."
+          ]
+        },
+        {
+          "title": "Invita trackers (teléfonos de campo)",
+          "bullets": [
+            "Ve a Invitar tracker y envía invitación por correo.",
+            "El invitado puede entrar con Link mágico desde el móvil.",
+            "Al iniciar, el tracker enviará puntos GPS según la asignación."
+          ]
+        },
+        {
+          "title": "Revisa reportes y dashboard",
+          "bullets": [
+            "Abre Reportes para filtrar por geocerca/persona/actividad y descargar CSV.",
+            "Abre Dashboard Costos para ver KPIs y gráficos."
+          ]
         }
-      }
+      ],
+      "tipsTitle": "Buenas prácticas",
+      "bestPractice1Title": "Nombres claros",
+      "bestPractice1Body": "Nombra geocercas y actividades de forma que tu equipo las reconozca al instante (Finca, Lote, Bloque, Tarea).",
+      "bestPractice2Title": "Empieza pequeño y escala",
+      "bestPractice2Body": "Valida el flujo completo con una persona y una geocerca antes de crear decenas de registros.",
+      "bestPractice3Title": "Mantén asignaciones al día",
+      "bestPractice3Body": "Cierra o desactiva asignaciones antiguas para que el tracker siga solo el plan vigente.",
+      "bestPractice4Title": "Batería y precisión",
+      "bestPractice4Body": "Usa una frecuencia razonable. Una frecuencia muy alta consume más batería y datos móviles.",
+      "resultTitle": "Qué deberías ver",
+      "resultIntro": "Al completar los pasos, tu organización debería tener lo siguiente:",
+      "resultBullets": [
+        "Al menos 1 geocerca guardada y visible en el mapa",
+        "Personal registrado y listo para asignaciones",
+        "Actividades con moneda y tarifa por hora configuradas",
+        "Asignaciones activas (persona + actividad + geocerca)",
+        "Puntos GPS visibles en Tracker / Dashboard de tracking",
+        "Reportes y dashboard de costos listos para exportar y analizar"
+      ]
+    },
+    "faq": {
+      "title": "Preguntas frecuentes",
+      "subtitle": "Respuestas rápidas sobre invitaciones, roles, tracking, reportes y privacidad de datos.",
+      "seeQuickGuide": "Ver guía rápida",
+      "backToPanel": "Ir al panel",
+      "sections": [
+        {
+          "title": "Acceso y roles",
+          "items": [
+            {
+              "q": "¿Cómo obtengo acceso a la app?",
+              "a": "Necesitas una invitación de un Propietario/Admin de una organización. Si no tienes acceso, solicita que te inviten."
+            },
+            {
+              "q": "¿Cuál es la diferencia entre Propietario, Administrador y Tracker?",
+              "a": "Propietario gestiona la organización y administradores. Administrador gestiona datos operativos (geocercas, personal, actividades, asignaciones). Tracker es un usuario de campo que envía puntos GPS."
+            },
+            {
+              "q": "¿Puedo manejar más de una organización?",
+              "a": "Sí. Los Propietarios pueden trabajar con varias organizaciones y cambiar usando el selector de organización."
+            }
+          ]
+        },
+        {
+          "title": "Tracking",
+          "items": [
+            {
+              "q": "¿Por qué veo “Sin datos recientes” en Tracker?",
+              "a": "El tracker puede estar sin conexión, sin permisos de ubicación, o sin asignación activa. Verifica permisos y asignaciones."
+            },
+            {
+              "q": "¿Cada cuánto se envía la ubicación?",
+              "a": "La frecuencia se define en la asignación. El mínimo permitido es 5 minutos para cuidar batería y datos."
+            },
+            {
+              "q": "¿Funciona con señal débil?",
+              "a": "Sí. El tracker puede almacenar puntos y sincronizar cuando regresa la conectividad (según tu build y permisos)."
+            }
+          ]
+        },
+        {
+          "title": "Costos y reportes",
+          "items": [
+            {
+              "q": "¿Cómo se calculan los costos?",
+              "a": "Los costos se calculan a partir de las asignaciones (horas) y la tarifa por hora configurada en cada actividad."
+            },
+            {
+              "q": "¿Puedo exportar a Excel?",
+              "a": "Sí. Los reportes se exportan como CSV, que puedes abrir en Excel o Google Sheets."
+            },
+            {
+              "q": "¿Puedo filtrar por geocerca, persona, actividad y rango de fechas?",
+              "a": "Sí. Usa los filtros en Reportes y Dashboard Costos para enfocarte por geocerca(s), persona(s), actividad(es) y fechas."
+            }
+          ]
+        },
+        {
+          "title": "Datos y privacidad",
+          "items": [
+            {
+              "q": "¿Qué datos de ubicación se guardan?",
+              "a": "Solo los puntos necesarios para tracking y validación por geocerca. El acceso está controlado por roles y organización."
+            },
+            {
+              "q": "¿Un tracker puede ver datos de otras organizaciones?",
+              "a": "No. Los datos están aislados por organización (multi-tenant) y protegidos por reglas de seguridad en base de datos."
+            }
+          ]
+        }
+      ]
+    },
+    "support": {
+      "title": "Soporte",
+      "subtitle": "Contáctanos para soporte técnico, dudas de facturación o capacitación.",
+      "emailLabel": "Correo de soporte",
+      "notConfigured": "El contacto de soporte aún no está configurado."
     }
   },
   "resetPassword": {

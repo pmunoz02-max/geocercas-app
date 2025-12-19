@@ -74,7 +74,7 @@ export default function AppHeader() {
                   to="/admins"
                   className="px-3 py-1.5 rounded-md text-xs font-semibold bg-amber-500 text-white hover:bg-amber-400"
                 >
-                  {t("app.header.admins")}
+                  {t("app.tabs.admins")}
                 </Link>
               )}
 

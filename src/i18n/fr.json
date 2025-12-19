@@ -26,7 +26,8 @@
       "roleTracker": "Tracker",
       "organizationLabel": "Organisation",
       "organizationAriaLabel": "Sélectionner une organisation",
-      "organizationNone": "Aucune organisation"
+      "organizationNone": "Aucune organisation",
+      "loginMagic": "Lien magique"
     },
     "tabs": {
       "inicio": "Accueil",
@@ -688,35 +689,175 @@
       "breadcrumb": "Centre d'aide",
       "back": "Retour",
       "goHome": "Aller à l'accueil",
-      "viewFaq": "Voir la FAQ"
+      "viewFaq": "Voir la FAQ",
+      "badge": "Centre d'aide",
+      "quickGuideBadge": "Guide rapide"
     },
-    "changelog": {
-      "breadcrumb": "Nouveautés",
-      "title": "Nouveautés / Journal des changements",
-      "subtitle": "Consultez l'historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
-      "latest": "Dernières mises à jour",
-      "dateLabel": "Date",
-      "badges": {
-        "feature": "Nouvelle fonctionnalité",
-        "fix": "Correction",
-        "perf": "Performance",
-        "update": "Mise à jour"
-      },
-      "items": {
-        "0": {
-          "title": "Centre d'aide : nouvelles pages",
-          "details": {
-            "0": "Ajout des pages Instructions, FAQ, Support et Nouveautés (Changelog).",
-            "1": "Amélioration de la navigation SPA et cohérence de l'interface."
-          }
+    "instructions": {
+      "title": "Guide rapide de configuration",
+      "subtitle": "Suivez ces étapes pour configurer votre organisation, créer des géofences, affecter le personnel et démarrer le suivi.",
+      "jumpToSteps": "Aller aux étapes",
+      "viewResult": "Voir le résultat",
+      "tocTitle": "Sommaire",
+      "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
+      "tocSteps": "Étapes",
+      "tocTips": "Bonnes pratiques",
+      "tocResult": "Résultat attendu",
+      "recommendationTitle": "Recommandation",
+      "recommendationBody": "Commencez avec 1 géofence et 1 tracker. Une fois le flux validé, passez à plus de zones et de personnes.",
+      "stepsTitle": "Étape par étape",
+      "stepsSubtitle": "Une séquence pratique qui convient à la plupart des organisations.",
+      "steps": [
+        {
+          "title": "Sélectionnez votre organisation",
+          "bullets": [
+            "Utilisez le sélecteur d'organisation pour choisir où travailler.",
+            "Si vous êtes Propriétaire, vous pouvez gérer plusieurs organisations."
+          ]
         },
-        "1": {
-          "title": "Améliorations des traductions",
-          "details": {
-            "0": "Correction des libellés manquants dans le tableau de bord des coûts et les cartes d'accueil."
-          }
+        {
+          "title": "Créez votre première géofence",
+          "bullets": [
+            "Allez à Géofence et dessinez la zone sur la carte.",
+            "Donnez un nom clair (Ferme A, Parcelle 3, Usine 1, etc.).",
+            "Enregistrez et vérifiez qu’elle apparaît dans la liste."
+          ]
+        },
+        {
+          "title": "Enregistrez votre personnel",
+          "bullets": [
+            "Allez à Personnel et créez les personnes qui travailleront sur le terrain.",
+            "Utilisez un e-mail valide si vous comptez les inviter comme trackers."
+          ]
+        },
+        {
+          "title": "Créez des activités et des tarifs",
+          "bullets": [
+            "Allez à Activités et définissez les tâches (Récolte, Irrigation, Maintenance…).",
+            "Définissez la devise et le tarif horaire pour calculer les coûts et rapports."
+          ]
+        },
+        {
+          "title": "Créez des affectations",
+          "bullets": [
+            "Allez à Affectations et liez : Personne + Activité + Géofence.",
+            "Définissez début/fin et statut Active.",
+            "Choisissez une fréquence (minimum 5 minutes)."
+          ]
+        },
+        {
+          "title": "Invitez des trackers (téléphones terrain)",
+          "bullets": [
+            "Allez à Inviter un tracker et envoyez une invitation par e-mail.",
+            "L’invité peut se connecter avec un Lien magique sur mobile.",
+            "Une fois connecté, le tracker enverra des points GPS selon l’affectation."
+          ]
+        },
+        {
+          "title": "Consultez rapports et tableau des coûts",
+          "bullets": [
+            "Ouvrez Rapports pour filtrer par géofence/personne/activité et exporter en CSV.",
+            "Ouvrez Tableau des coûts pour les KPI et graphiques."
+          ]
         }
-      }
+      ],
+      "tipsTitle": "Bonnes pratiques",
+      "bestPractice1Title": "Noms explicites",
+      "bestPractice1Body": "Nommez géofences et activités de façon évidente pour l’équipe (Ferme, Parcelle, Bloc, Tâche).",
+      "bestPractice2Title": "Commencer petit, puis étendre",
+      "bestPractice2Body": "Validez le flux complet avec une personne et une géofence avant de créer beaucoup d’enregistrements.",
+      "bestPractice3Title": "Affectations à jour",
+      "bestPractice3Body": "Clôturez ou désactivez les anciennes affectations pour que le tracker suive uniquement le plan actuel.",
+      "bestPractice4Title": "Batterie et précision",
+      "bestPractice4Body": "Choisissez une fréquence raisonnable. Une fréquence élevée consomme plus de batterie et de données.",
+      "resultTitle": "Ce que vous devriez voir",
+      "resultIntro": "Après ces étapes, votre organisation devrait avoir :",
+      "resultBullets": [
+        "Au moins 1 géofence enregistrée et visible sur la carte",
+        "Personnel enregistré et prêt pour les affectations",
+        "Activités avec devise et tarif horaire configurés",
+        "Affectations actives (personne + activité + géofence)",
+        "Points GPS visibles dans Tracker / tableau de suivi",
+        "Rapports et tableau des coûts prêts à exporter et analyser"
+      ]
+    },
+    "faq": {
+      "title": "Questions fréquentes",
+      "subtitle": "Réponses rapides sur invitations, rôles, suivi, rapports et confidentialité.",
+      "seeQuickGuide": "Voir le guide rapide",
+      "backToPanel": "Aller au tableau de bord",
+      "sections": [
+        {
+          "title": "Accès et rôles",
+          "items": [
+            {
+              "q": "Comment obtenir l’accès à l’application ?",
+              "a": "Vous devez être invité par un Propriétaire/Admin d’une organisation. Sinon, demandez une invitation."
+            },
+            {
+              "q": "Différence entre Propriétaire, Administrateur et Tracker ?",
+              "a": "Le Propriétaire gère l’organisation et les admins. L’Administrateur gère les données opérationnelles. Le Tracker est un utilisateur terrain qui envoie des points GPS."
+            },
+            {
+              "q": "Puis-je gérer plusieurs organisations ?",
+              "a": "Oui. Les Propriétaires peuvent basculer entre organisations via le sélecteur d’organisation."
+            }
+          ]
+        },
+        {
+          "title": "Suivi (tracking)",
+          "items": [
+            {
+              "q": "Pourquoi “Sans données récentes” dans Tracker ?",
+              "a": "Le tracker peut être hors ligne, sans autorisation de localisation, ou sans affectation active. Vérifiez permissions et affectations."
+            },
+            {
+              "q": "À quelle fréquence la position est-elle envoyée ?",
+              "a": "La fréquence est définie dans l’affectation. Le minimum est 5 minutes pour préserver batterie et données."
+            },
+            {
+              "q": "Fonctionne-t-il avec un signal faible ?",
+              "a": "Oui. Le tracker peut stocker les points et synchroniser lorsque la connexion revient (selon votre build et permissions)."
+            }
+          ]
+        },
+        {
+          "title": "Coûts et rapports",
+          "items": [
+            {
+              "q": "Comment les coûts sont-ils calculés ?",
+              "a": "Les coûts sont calculés à partir des affectations (heures) et du tarif horaire configuré pour chaque activité."
+            },
+            {
+              "q": "Puis-je exporter vers Excel ?",
+              "a": "Oui. Les rapports s’exportent en CSV, ouvrable dans Excel ou Google Sheets."
+            },
+            {
+              "q": "Puis-je filtrer par géofence, personne, activité et dates ?",
+              "a": "Oui. Utilisez les filtres dans Rapports et Tableau des coûts (géofence(s), personne(s), activité(s), période)."
+            }
+          ]
+        },
+        {
+          "title": "Données et confidentialité",
+          "items": [
+            {
+              "q": "Quelles données de localisation sont stockées ?",
+              "a": "Uniquement les points nécessaires au suivi et à la validation des géofences. L’accès est contrôlé par rôles et organisation."
+            },
+            {
+              "q": "Un tracker peut-il voir les données d’autres organisations ?",
+              "a": "Non. Les données sont isolées par organisation (multi-tenant) et protégées par des règles de sécurité."
+            }
+          ]
+        }
+      ]
+    },
+    "support": {
+      "title": "Support",
+      "subtitle": "Contactez-nous pour le support technique, la facturation ou l’onboarding.",
+      "emailLabel": "E-mail de support",
+      "notConfigured": "Le contact support n’est pas encore configuré."
     }
   },
   "resetPassword": {
