@@ -7,14 +7,7 @@ import OrgSelector from "./OrgSelector";
  * tabs = [
  *   { path: "/inicio", labelKey: "app.tabs.inicio", icon: "🏠" },
  *   { path: "/geocercas", labelKey: "app.tabs.geocercas", icon: "📍" },
- *   { path: "/personal", labelKey: "app.tabs.personal", icon: "👥" },
- *   { path: "/actividades", labelKey: "app.tabs.actividades", icon: "🗂️" },
- *   { path: "/asignaciones", labelKey: "app.tabs.asignaciones", icon: "📌" },
- *   { path: "/reportes", labelKey: "app.tabs.reportes", icon: "📊" },
- *   { path: "/costos", labelKey: "app.tabs.dashboard", icon: "💰" },
- *   { path: "/tracker", labelKey: "app.tabs.tracker", icon: "📡" },
- *   { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker", icon: "➕" },
- *   { path: "/admin", labelKey: "app.tabs.admin", icon: "⚙️" }
+ *   ...
  * ];
  */
 
@@ -24,24 +17,23 @@ export default function TopTabs({ tabs = [] }) {
 
   const isActive = (path) => {
     if (!path) return false;
-    return (
-      location.pathname === path ||
-      location.pathname.startsWith(path + "/")
-    );
+    return location.pathname === path || location.pathname.startsWith(path + "/");
   };
 
   return (
     <div className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4">
-        {/* Fila superior: selector de organización (solo Admin/Owner) */}
-        <div className="flex justify-end py-2">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4">
+        {/* Fila superior: selector de organización (compacta en móvil) */}
+        <div className="flex justify-end py-1.5 sm:py-2">
           <OrgSelector />
         </div>
 
         {/* Tabs */}
         <nav
           className="
-            flex gap-2 sm:gap-3 pb-3
+            flex
+            gap-1.5 sm:gap-3
+            pb-2.5 sm:pb-3
             overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300
             justify-start sm:justify-center
           "
@@ -56,9 +48,11 @@ export default function TopTabs({ tabs = [] }) {
                 to={tab.path}
                 className={`
                   group
-                  flex items-center gap-2
-                  px-4 sm:px-5 py-2.5
-                  rounded-full text-sm sm:text-[0.95rem] font-semibold
+                  flex items-center gap-1.5 sm:gap-2
+                  px-2.5 sm:px-5 py-1.5 sm:py-2.5
+                  rounded-full
+                  text-[12px] sm:text-[0.95rem]
+                  font-semibold
                   whitespace-nowrap
                   border
                   transition-all duration-200 ease-out
@@ -73,7 +67,7 @@ export default function TopTabs({ tabs = [] }) {
                 {tab.icon && (
                   <span
                     className={`
-                      text-base leading-none
+                      text-sm sm:text-base leading-none
                       ${active ? "scale-110" : "opacity-80 group-hover:opacity-100"}
                     `}
                   >
