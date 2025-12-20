@@ -1,9 +1,8 @@
-// src/components/CrearGeocercaForm.jsx
-import { useState } from 'react';
-import { crearGeocerca } from '../services/geocercas';
+import { useState } from "react";
+import { crearGeocerca } from "../services/geocercas";
 
 export default function CrearGeocercaForm({ geom }) {
-  const [nombre, setNombre] = useState('');
+  const [nombre, setNombre] = useState("");
   const [activa, setActiva] = useState(true);
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState(null);
@@ -20,21 +19,29 @@ export default function CrearGeocercaForm({ geom }) {
     setLoading(false);
 
     if (error) {
-      setErrorMsg(error.message || 'Error creando geocerca');
+      setErrorMsg(error.message || "Error creando geocerca");
       return;
     }
     setMensaje(`Geocerca "${data.nombre}" creada correctamente`);
-    setNombre('');
+    setNombre("");
     setActiva(true);
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3">
+    <form onSubmit={onSubmit} className="space-y-2 sm:space-y-3">
       <div>
-        <label className="block text-sm font-medium">Nombre de la geocerca</label>
+        <label className="block !text-xs sm:!text-sm font-medium">
+          Nombre de la geocerca
+        </label>
+
         <input
           type="text"
-          className="mt-1 w-full rounded border px-3 py-2"
+          className="
+            mt-1 w-full rounded border
+            !px-3 !py-2 !text-xs
+            sm:!px-3 sm:!py-2 sm:!text-sm
+            lg:!px-4 lg:!py-2.5 lg:!text-sm
+          "
           placeholder="Ej. Zona Norte"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
@@ -49,19 +56,26 @@ export default function CrearGeocercaForm({ geom }) {
           checked={activa}
           onChange={(e) => setActiva(e.target.checked)}
         />
-        <label htmlFor="activa" className="text-sm">Activa</label>
+        <label htmlFor="activa" className="!text-xs sm:!text-sm">
+          Activa
+        </label>
       </div>
 
       <button
         type="submit"
-        className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+        className="
+          rounded bg-blue-600 text-white disabled:opacity-50
+          !px-3 !py-2 !text-xs
+          sm:!px-4 sm:!py-2 sm:!text-sm
+          lg:!px-4 lg:!py-2.5 lg:!text-sm
+        "
         disabled={loading}
       >
-        {loading ? 'Creando...' : 'Crear geocerca'}
+        {loading ? "Creando..." : "Crear geocerca"}
       </button>
 
-      {mensaje && <p className="text-green-700 text-sm">{mensaje}</p>}
-      {errorMsg && <p className="text-red-700 text-sm">{errorMsg}</p>}
+      {mensaje && <p className="text-green-700 !text-xs sm:!text-sm">{mensaje}</p>}
+      {errorMsg && <p className="text-red-700 !text-xs sm:!text-sm">{errorMsg}</p>}
     </form>
   );
 }

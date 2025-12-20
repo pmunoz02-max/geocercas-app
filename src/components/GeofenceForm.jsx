@@ -78,24 +78,35 @@ export default function GeofenceForm() {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
       {/* Panel izquierdo */}
-      <div className="p-4 border rounded-md">
-        <h2 className="font-bold text-lg mb-2">Nueva Geocerca</h2>
+      <div className="p-3 sm:p-4 border rounded-md">
+        <h2 className="font-bold !text-base sm:!text-lg mb-2">Nueva Geocerca</h2>
 
-        <label className="text-sm">Nombre</label>
+        <label className="!text-xs sm:!text-sm">Nombre</label>
         <input
-          className="w-full border rounded px-2 py-1 mb-3"
+          className="
+            w-full border rounded
+            !px-3 !py-2 !text-xs
+            sm:!px-2 sm:!py-1 sm:!text-sm
+            mb-3
+          "
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           placeholder="Ej: Lote 1"
         />
 
-        <label className="text-sm">
+        <label className="!text-xs sm:!text-sm">
           Coordenadas (<code>lat,lng</code> por línea)
         </label>
         <textarea
-          className="w-full h-40 border rounded px-2 py-1 mb-2"
+          className="
+            w-full border rounded
+            !px-3 !py-2 !text-xs
+            sm:!px-2 sm:!py-1 sm:!text-sm
+            h-32 sm:h-40
+            mb-2
+          "
           value={textoCoords}
           onChange={(e) => setTextoCoords(e.target.value)}
           placeholder="-0.1807, -78.4678"
@@ -104,23 +115,32 @@ export default function GeofenceForm() {
         <button
           onClick={handleGuardar}
           disabled={guardando}
-          className="bg-blue-600 text-white px-3 py-2 rounded w-full"
+          className="
+            bg-blue-600 text-white rounded w-full
+            !px-3 !py-2 !text-xs
+            sm:!px-3 sm:!py-2 sm:!text-sm
+            disabled:opacity-60
+          "
         >
           {guardando ? "Guardando..." : "Guardar Geocerca"}
         </button>
 
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="!text-[11px] sm:!text-xs text-gray-500 mt-2">
           Dibuja/selecciona en el mapa; si el cuadro está vacío, se usará ese polígono.
         </p>
       </div>
 
       {/* Mapa */}
-      <div className="md:col-span-2 h-[520px] border rounded-md overflow-hidden relative">
+      <div className="md:col-span-2 border rounded-md overflow-hidden relative h-[58svh] md:h-[520px]">
         {/* HUD Lat/Lng */}
-        <div className="absolute z-[1000] right-2 bottom-2 bg-white/90 border rounded px-2 py-1 text-xs font-mono shadow">
-          {hover.lat != null
-            ? <>Lat: {hover.lat.toFixed(6)} · Lng: {hover.lng.toFixed(6)}</>
-            : <>Mueve el puntero sobre el mapa…</>}
+        <div className="absolute z-[1000] right-2 bottom-2 bg-white/90 border rounded px-2 py-1 !text-[11px] sm:!text-xs font-mono shadow">
+          {hover.lat != null ? (
+            <>
+              Lat: {hover.lat.toFixed(6)} · Lng: {hover.lng.toFixed(6)}
+            </>
+          ) : (
+            <>Mueve el puntero sobre el mapa…</>
+          )}
         </div>
 
         <MapContainer
@@ -158,10 +178,8 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
   );
 
   const upsertLayerEvents = (layer) => {
-    // Habilita edición/borrado por Geoman sobre la capa
     layer.pm?.enable({ allowSelfIntersection: false });
 
-    // Al hacer click, mandamos vértices al panel
     layer.on("click", () => {
       const latlngs = layer.getLatLngs()[0].map((p) => ({ lat: p.lat, lng: p.lng }));
       onVerticesChange?.(latlngs);
@@ -169,21 +187,17 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
   };
 
   const loadGeofences = async () => {
-    // crea el featureGroup si no existe
     if (!groupRef.current) groupRef.current = L.featureGroup().addTo(map);
     groupRef.current.clearLayers();
 
-    // trae desde la vista geojson
-    const { data, error } = await supabase
-      .from("geocercas_geojson")
-      .select("*");
+    const { data, error } = await supabase.from("geocercas_geojson").select("*");
     if (error) {
       console.error("loadGeofences:", error);
       return;
     }
 
     data.forEach((row) => {
-      const gj = JSON.parse(row.geojson); // Polygon en GeoJSON
+      const gj = JSON.parse(row.geojson);
       const coords = gj.coordinates[0].map(([lng, lat]) => [lat, lng]);
       const layer = L.polygon(coords, polyStyle);
       layer.options._geocercaId = row.id;
@@ -194,7 +208,6 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
   };
 
   useEffect(() => {
-    // Controles Geoman
     map.pm.addControls({
       position: "topleft",
       drawMarker: false,
@@ -205,22 +218,20 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
       drawText: false,
       drawPolygon: true,
       editMode: true,
-      removalMode: true,  // <-- botón de basura
+      removalMode: true,
       dragMode: false,
       cutPolygon: false,
     });
 
     map.pm.setGlobalOptions({
-      finishOnDoubleClick: false, // no cierra con doble clic
+      finishOnDoubleClick: false,
       snappable: true,
       snapDistance: 20,
     });
 
-    // HUD Lat/Lng
     const onMove = (e) => setHover({ lat: e.latlng.lat, lng: e.latlng.lng });
     map.on("mousemove", onMove);
 
-    // Crear nuevo (INSERT)
     const onCreate = async (e) => {
       if (e.shape !== "Polygon") return;
       const layer = e.layer;
@@ -236,7 +247,6 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
         if (error) throw error;
 
         layer.options._geocercaId = data.id;
-        // mover la capa creada al featureGroup (para que removal/edición afecte)
         if (!groupRef.current) groupRef.current = L.featureGroup().addTo(map);
         groupRef.current.addLayer(layer);
         upsertLayerEvents(layer);
@@ -245,11 +255,12 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
         alert("✅ Geocerca creada.");
       } catch (err) {
         alert("Error al crear: " + err.message);
-        try { map.removeLayer(layer); } catch {}
+        try {
+          map.removeLayer(layer);
+        } catch {}
       }
     };
 
-    // Editar existente (UPDATE)
     const onEdit = async (e) => {
       const updates = [];
       e.layers.eachLayer((layer) => {
@@ -262,10 +273,7 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
 
       try {
         for (const u of updates) {
-          const { error } = await supabase
-            .from("geocercas")
-            .update({ geom: u.ewkt })
-            .eq("id", u.id);
+          const { error } = await supabase.from("geocercas").update({ geom: u.ewkt }).eq("id", u.id);
           if (error) throw error;
           onVerticesChange?.(u.latlngs);
         }
@@ -276,7 +284,6 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
       }
     };
 
-    // Eliminar (DELETE)
     const onRemove = async (e) => {
       const ids = [];
       e.layers.eachLayer((layer) => {
@@ -298,7 +305,6 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
     map.on("pm:edit", onEdit);
     map.on("pm:remove", onRemove);
 
-    // Primera carga
     loadGeofences();
 
     return () => {
@@ -306,12 +312,13 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
       map.off("pm:create", onCreate);
       map.off("pm:edit", onEdit);
       map.off("pm:remove", onRemove);
-      try { map.pm.removeControls(); } catch {}
+      try {
+        map.pm.removeControls();
+      } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
 
-  // Recargar después de crear desde el panel izquierdo
   useEffect(() => {
     loadGeofences();
     // eslint-disable-next-line react-hooks/exhaustive-deps
