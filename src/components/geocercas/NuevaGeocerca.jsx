@@ -362,12 +362,10 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   }, []);
 
   const clearCanvas = useCallback(() => {
-    // ✅ Limpia FeatureGroup (por si algo quedó dentro)
     try {
       featureGroupRef.current?.clearLayers?.();
     } catch {}
 
-    // ✅ Limpia TODO lo que creó Geoman (fuente real)
     try {
       removeAllGeomanLayers(mapRef.current);
     } catch {}
@@ -491,7 +489,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return false;
       }
 
-      // 1) Draft por coords
       if (draftFeature) {
         const geo = { type: "FeatureCollection", features: [draftFeature] };
 
@@ -511,7 +508,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return true;
       }
 
-      // 2) Shape desde Geoman (robusto)
       const map = mapRef.current;
 
       const layerToSave =
@@ -663,13 +659,17 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         if (supaError) {
           console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
           alert(
-            t("geocercas.errorNoGeojson", { defaultValue: "No se pudo cargar el GeoJSON de la geocerca." }) +
+            t("geocercas.errorNoGeojson", {
+              defaultValue: "No se pudo cargar el GeoJSON de la geocerca.",
+            }) +
               "\n\nDetalle: " +
               (supaError.message || String(supaError))
           );
           return;
         }
-        alert(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." }));
+        alert(
+          t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." })
+        );
         return;
       }
 
@@ -709,7 +709,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   }, [draftFeature]);
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-140px)]">
+    <div className="flex flex-col gap-4 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-slate-100">{t("geocercas.titleNew")}</h1>
@@ -744,11 +744,13 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col">
+      {/* ✅ Mobile/Tablet: flex-col (panel con max-h + mapa flex-1). Desktop: grid intacto */}
+      <div className="flex-1 min-h-0 flex flex-col gap-4 lg:grid lg:grid-cols-4">
+        {/* Panel */}
+        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[34svh] md:max-h-[32svh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle")}</h2>
 
-          <div className="flex-1 overflow-auto space-y-1 pr-1">
+          <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
             {geofenceList.length === 0 && (
               <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>
             )}
@@ -805,7 +807,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           {datasetError && <div className="mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
-        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative">
+        {/* Mapa */}
+        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[58svh] md:min-h-[62svh] lg:min-h-0">
           <MapContainer
             center={[-0.2, -78.5]}
             zoom={8}
@@ -863,7 +866,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               )}
             </Pane>
 
-            {/* ✅ ref directo para no depender de whenCreated */}
             <FeatureGroup ref={featureGroupRef}>
               <GeomanControls
                 options={{
@@ -914,7 +916,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         </div>
       </div>
 
-      {/* Modal coordenadas (solo botones/título) */}
       {coordModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
