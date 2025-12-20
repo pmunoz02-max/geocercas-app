@@ -709,17 +709,24 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   }, [draftFeature]);
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-slate-100">{t("geocercas.titleNew")}</h1>
-          <p className="text-xs text-slate-300">{t("geocercas.subtitleNew")}</p>
+    <div className="flex flex-col gap-3 sm:gap-4 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 sm:gap-3">
+        <div className="space-y-0.5 sm:space-y-1">
+          <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">{t("geocercas.titleNew")}</h1>
+          <p className="text-[11px] sm:text-xs text-slate-300">{t("geocercas.subtitleNew")}</p>
         </div>
 
+        {/* ✅ Controles compactos en móvil */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
           <input
             type="text"
-            className="px-4 py-2.5 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold"
+            className="
+              px-3 py-2 lg:px-4 lg:py-2.5
+              rounded-lg
+              bg-slate-900 border border-emerald-400/60
+              text-white font-semibold
+              text-xs lg:text-sm
+            "
             placeholder={t("geocercas.placeholderName")}
             value={geofenceName}
             onChange={(e) => setGeofenceName(e.target.value)}
@@ -730,14 +737,24 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               setCoordText("");
               setCoordModalOpen(true);
             }}
-            className="px-4 py-2.5 rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600"
+            className="
+              px-3 py-2 lg:px-4 lg:py-2.5
+              rounded-lg font-semibold
+              bg-slate-800 text-slate-50 border border-slate-600
+              text-xs lg:text-sm
+            "
           >
             {t("geocercas.buttonDrawByCoords")}
           </button>
 
           <button
             onClick={handleSave}
-            className="px-4 py-2.5 rounded-lg font-semibold bg-emerald-600 text-white"
+            className="
+              px-3 py-2 lg:px-4 lg:py-2.5
+              rounded-lg font-semibold
+              bg-emerald-600 text-white
+              text-xs lg:text-sm
+            "
           >
             {t("geocercas.buttonSave")}
           </button>
@@ -745,7 +762,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       </div>
 
       {/* ✅ Mobile/Tablet: flex-col (panel con max-h + mapa flex-1). Desktop: grid intacto */}
-      <div className="flex-1 min-h-0 flex flex-col gap-4 lg:grid lg:grid-cols-4">
+      <div className="flex-1 min-h-0 flex flex-col gap-3 sm:gap-4 lg:grid lg:grid-cols-4">
         {/* Panel */}
         <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[34svh] md:max-h-[32svh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle")}</h2>
@@ -762,7 +779,15 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                 <input
                   type="checkbox"
                   checked={selectedNames.has(g.nombre)}
-                  onChange={() => handleSelectGeofence(g.nombre)}
+                  onChange={() => {
+                    setSelectedNames((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(g.nombre)) next.delete(g.nombre);
+                      else next.add(g.nombre);
+                      return next;
+                    });
+                    setLastSelectedName(g.nombre);
+                  }}
                 />
                 <span className="text-xs text-slate-100">{g.nombre}</span>
               </label>
@@ -814,14 +839,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             zoom={8}
             scrollWheelZoom={true}
             style={{ height: "100%", width: "100%" }}
-            whenCreated={onMapReady}
+            whenCreated={(map) => (mapRef.current = map)}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {dataset && <GeoJSON data={dataset} {...pointStyle} />}
+            {dataset && <GeoJSON data={dataset} pointToLayer={pointStyle.pointToLayer} />}
 
             <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
@@ -882,9 +907,25 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                   removalMode: true,
                 }}
                 globalOptions={{ continueDrawing: false, editable: true }}
-                onCreate={handleGeomanCreate}
-                onEdit={handleGeomanEditUpdate}
-                onUpdate={handleGeomanEditUpdate}
+                onCreate={(e) => {
+                  selectedLayerRef.current = e.layer;
+                  lastCreatedLayerRef.current = e.layer;
+                  setDraftFeature(null);
+                  setViewFeature(null);
+                  setViewCentroid(null);
+                }}
+                onEdit={(e) => {
+                  if (e?.layer) {
+                    selectedLayerRef.current = e.layer;
+                    lastCreatedLayerRef.current = e.layer;
+                  }
+                }}
+                onUpdate={(e) => {
+                  if (e?.layer) {
+                    selectedLayerRef.current = e.layer;
+                    lastCreatedLayerRef.current = e.layer;
+                  }
+                }}
               />
             </FeatureGroup>
           </MapContainer>
@@ -929,9 +970,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                   "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
               })}
               <br />
-              {t("geocercas.modalInstruction", {
-                defaultValue: "Formato:",
-              })}{" "}
+              {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
               <span className="font-mono text-[11px]">lat,lng</span>{" "}
               {t("geocercas.modalOnePerLine", { defaultValue: "(uno por línea)" })}
             </p>
