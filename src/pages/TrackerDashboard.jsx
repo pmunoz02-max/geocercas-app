@@ -6,12 +6,7 @@
 // - Geocercas: vista v_geocercas_tracker_ui (RLS, select "*", filtrada por org_id)
 // - Posiciones: vista v_positions_with_activity (RLS; SIN filtrar por org_id aquí)
 
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-} from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -140,12 +135,8 @@ export default function TrackerDashboard() {
 
     // Ordenar en memoria por name / nombre / id
     arr.sort((a, b) => {
-      const labelA = (a.name || a.nombre || a.id || "")
-        .toString()
-        .toLowerCase();
-      const labelB = (b.name || b.nombre || b.id || "")
-        .toString()
-        .toLowerCase();
+      const labelA = (a.name || a.nombre || a.id || "").toString().toLowerCase();
+      const labelB = (b.name || b.nombre || b.id || "").toString().toLowerCase();
       return labelA.localeCompare(labelB);
     });
 
@@ -164,8 +155,7 @@ export default function TrackerDashboard() {
         setErrorMsg("");
 
         const windowConfig =
-          TIME_WINDOWS.find((w) => w.id === timeWindowId) ??
-          TIME_WINDOWS[1]; // 6h default
+          TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1]; // 6h default
         const fromMs = Date.now() - windowConfig.ms;
         const fromIso = new Date(fromMs).toISOString();
 
@@ -274,7 +264,11 @@ export default function TrackerDashboard() {
   const lastPointTime = lastPoint?.recorded_at ?? null;
 
   const mapCenter = useMemo(() => {
-    if (lastPoint && typeof lastPoint.lat === "number" && typeof lastPoint.lng === "number") {
+    if (
+      lastPoint &&
+      typeof lastPoint.lat === "number" &&
+      typeof lastPoint.lng === "number"
+    ) {
       return [lastPoint.lat, lastPoint.lng];
     }
     // Centro por defecto (Quito aprox.)
@@ -288,36 +282,39 @@ export default function TrackerDashboard() {
   if (!orgId) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-4">
-          Dashboard de Tracking
-        </h1>
+        <h1 className="text-2xl font-semibold mb-4">Dashboard de Tracking</h1>
         <p className="text-red-600">
-          Error de configuración: no se pudo resolver la organización
-          activa (<code>orgId</code>).
+          Error de configuración: no se pudo resolver la organización activa (
+          <code>orgId</code>).
         </p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">
+    // MÓVIL: menos padding y menos espacio entre bloques
+    // DESKTOP: igual que antes
+    <div className="p-3 md:p-6 space-y-3 md:space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3">
+        <div className="space-y-1">
+          {/* MÓVIL: título más compacto; DESKTOP: igual */}
+          <h1 className="text-xl md:text-2xl font-semibold leading-tight">
             Dashboard de Tracking en tiempo real
           </h1>
-          <p className="text-sm text-slate-500">
-            Los puntos se actualizan automáticamente. La frecuencia de
-            envío la define el administrador y los trackers.
+          <p className="text-xs md:text-sm text-slate-500 leading-snug">
+            Los puntos se actualizan automáticamente. La frecuencia de envío la
+            define el administrador y los trackers.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        {/* FILTROS */}
+        {/* MÓVIL: grid compacto; DESKTOP: layout original */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:gap-3">
           {/* Ventana de tiempo */}
-          <label className="text-sm flex items-center gap-2">
+          <label className="text-xs md:text-sm flex items-center gap-2">
             <span className="font-medium">Ventana:</span>
             <select
-              className="border rounded px-2 py-1 text-sm"
+              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:w-auto"
               value={timeWindowId}
               onChange={(e) => setTimeWindowId(e.target.value)}
             >
@@ -330,10 +327,10 @@ export default function TrackerDashboard() {
           </label>
 
           {/* Tracker */}
-          <label className="text-sm flex items-center gap-2">
+          <label className="text-xs md:text-sm flex items-center gap-2">
             <span className="font-medium">Tracker:</span>
             <select
-              className="border rounded px-2 py-1 text-sm min-w-[150px]"
+              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[150px]"
               value={selectedTrackerId}
               onChange={(e) => setSelectedTrackerId(e.target.value)}
             >
@@ -347,10 +344,10 @@ export default function TrackerDashboard() {
           </label>
 
           {/* Geocerca */}
-          <label className="text-sm flex items-center gap-2">
+          <label className="text-xs md:text-sm flex items-center gap-2">
             <span className="font-medium">Geocerca:</span>
             <select
-              className="border rounded px-2 py-1 text-sm min-w-[150px]"
+              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[150px]"
               value={selectedGeofenceId}
               onChange={(e) => setSelectedGeofenceId(e.target.value)}
             >
@@ -364,10 +361,11 @@ export default function TrackerDashboard() {
           </label>
 
           {/* Botón refrescar */}
+          {/* MÓVIL: ocupa 2 cols para ser fácil de tocar; DESKTOP: igual */}
           <button
             type="button"
             onClick={() => fetchPositions(orgId)}
-            className="border rounded px-3 py-1 text-sm bg-white hover:bg-slate-50"
+            className="col-span-2 md:col-span-1 border rounded px-3 py-2 md:py-1 text-xs md:text-sm bg-white hover:bg-slate-50"
             disabled={loading}
           >
             {loading ? "Actualizando..." : "Actualizar ahora"}
@@ -381,20 +379,22 @@ export default function TrackerDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-3 md:gap-4">
         {/* MAPA */}
         <div className="rounded-lg border bg-white overflow-hidden">
-          <div className="border-b px-3 py-2 flex items-center justify-between">
-            <span className="text-sm font-medium">
+          {/* Header del mapa: MÓVIL más compacto; DESKTOP igual */}
+          <div className="border-b px-2 py-2 md:px-3 md:py-2 flex items-center justify-between">
+            <span className="text-xs md:text-sm font-medium">
               Mapa de posiciones
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-[11px] md:text-xs text-slate-500">
               Puntos en ventana seleccionada:{" "}
               <span className="font-semibold">{totalPoints}</span>
             </span>
           </div>
 
-          <div className="h-[480px]">
+          {/* Altura del mapa: MÓVIL más grande; DESKTOP mantiene 480px */}
+          <div className="h-[65vh] md:h-[480px]">
             <MapContainer
               center={mapCenter}
               zoom={12}
@@ -430,8 +430,7 @@ export default function TrackerDashboard() {
                     ? g.radius
                     : 0;
 
-                const shape =
-                  g.geojson || g.geometry || g.geom || g.polygon || null;
+                const shape = g.geojson || g.geometry || g.geom || g.polygon || null;
 
                 const layers = [];
 
@@ -490,68 +489,58 @@ export default function TrackerDashboard() {
               })}
 
               {/* POSICIONES / TRACKS */}
-              {Array.from(pointsByTracker.entries()).map(
-                ([trackerId, pts], idx) => {
-                  if (!pts.length) return null;
-                  const color =
-                    TRACKER_COLORS[idx % TRACKER_COLORS.length];
-                  const positionsLatLng = pts
-                    .map((p) =>
-                      typeof p.lat === "number" &&
-                      typeof p.lng === "number"
-                        ? [p.lat, p.lng]
-                        : null
-                    )
-                    .filter(Boolean);
+              {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
+                if (!pts.length) return null;
+                const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
+                const positionsLatLng = pts
+                  .map((p) =>
+                    typeof p.lat === "number" && typeof p.lng === "number"
+                      ? [p.lat, p.lng]
+                      : null
+                  )
+                  .filter(Boolean);
 
-                  const latest = pts[0];
+                const latest = pts[0];
 
-                  return (
-                    <React.Fragment key={trackerId}>
-                      {positionsLatLng.length > 1 && (
-                        <Polyline
-                          positions={positionsLatLng}
-                          pathOptions={{ color, weight: 3 }}
-                        />
-                      )}
+                return (
+                  <React.Fragment key={trackerId}>
+                    {positionsLatLng.length > 1 && (
+                      <Polyline positions={positionsLatLng} pathOptions={{ color, weight: 3 }} />
+                    )}
 
-                      {latest &&
-                        typeof latest.lat === "number" &&
-                        typeof latest.lng === "number" && (
-                          <CircleMarker
-                            center={[latest.lat, latest.lng]}
-                            radius={6}
-                            pathOptions={{
-                              color,
-                              fillColor: color,
-                              fillOpacity: 0.9,
-                            }}
-                          >
-                            <Tooltip direction="top">
-                              <div className="text-xs">
-                                <div>
-                                  <strong>Tracker:</strong> {trackerId}
-                                </div>
-                                <div>
-                                  <strong>Hora:</strong>{" "}
-                                  {formatTime(latest.recorded_at)}
-                                </div>
-                                <div>
-                                  <strong>Lat:</strong>{" "}
-                                  {latest.lat.toFixed(6)}
-                                </div>
-                                <div>
-                                  <strong>Lng:</strong>{" "}
-                                  {latest.lng.toFixed(6)}
-                                </div>
+                    {latest &&
+                      typeof latest.lat === "number" &&
+                      typeof latest.lng === "number" && (
+                        <CircleMarker
+                          center={[latest.lat, latest.lng]}
+                          radius={6}
+                          pathOptions={{
+                            color,
+                            fillColor: color,
+                            fillOpacity: 0.9,
+                          }}
+                        >
+                          <Tooltip direction="top">
+                            <div className="text-xs">
+                              <div>
+                                <strong>Tracker:</strong> {trackerId}
                               </div>
-                            </Tooltip>
-                          </CircleMarker>
-                        )}
-                    </React.Fragment>
-                  );
-                }
-              )}
+                              <div>
+                                <strong>Hora:</strong> {formatTime(latest.recorded_at)}
+                              </div>
+                              <div>
+                                <strong>Lat:</strong> {latest.lat.toFixed(6)}
+                              </div>
+                              <div>
+                                <strong>Lng:</strong> {latest.lng.toFixed(6)}
+                              </div>
+                            </div>
+                          </Tooltip>
+                        </CircleMarker>
+                      )}
+                  </React.Fragment>
+                );
+              })}
 
               {!totalPoints && (
                 <div className="leaflet-bottom leaflet-left mb-2 ml-2">
@@ -565,9 +554,12 @@ export default function TrackerDashboard() {
         </div>
 
         {/* RESUMEN / LEYENDA */}
-        <div className="space-y-4">
+        {/* MÓVIL: queda debajo del mapa (ya pasaba por grid-cols-1), pero con menos espacio */}
+        <div className="space-y-3 md:space-y-4">
           <div className="rounded-lg border bg-white px-4 py-3">
-            <h2 className="text-lg font-semibold mb-3">Resumen</h2>
+            <h2 className="text-base md:text-lg font-semibold mb-2 md:mb-3">
+              Resumen
+            </h2>
 
             <dl className="space-y-1 text-sm">
               <div className="flex justify-between gap-4">
@@ -579,46 +571,34 @@ export default function TrackerDashboard() {
                 <dd>{totalTrackers}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">
-                  Puntos en mapa (filtro actual):
-                </dt>
+                <dt className="font-medium">Puntos en mapa (filtro actual):</dt>
                 <dd>{totalPoints}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">
-                  Último punto registrado:
-                </dt>
-                <dd>
-                  {lastPointTime
-                    ? formatDateTime(lastPointTime)
-                    : "-"}
-                </dd>
+                <dt className="font-medium">Último punto registrado:</dt>
+                <dd>{lastPointTime ? formatDateTime(lastPointTime) : "-"}</dd>
               </div>
             </dl>
 
             {loadingSummary && (
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-2 md:mt-3 text-xs text-slate-500">
                 Actualizando datos de resumen…
               </p>
             )}
           </div>
 
           <div className="rounded-lg border bg-white px-4 py-3 text-sm">
-            <h3 className="font-semibold mb-2">
-              Leyenda de trackers
-            </h3>
+            <h3 className="font-semibold mb-2">Leyenda de trackers</h3>
             {trackers.length === 0 && (
               <p className="text-slate-500 text-sm">
-                No hay perfiles de tracker configurados en esta
-                organización.
+                No hay perfiles de tracker configurados en esta organización.
               </p>
             )}
 
             {trackers.length > 0 && (
               <ul className="space-y-1">
                 {trackers.map((t, idx) => {
-                  const color =
-                    TRACKER_COLORS[idx % TRACKER_COLORS.length];
+                  const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
                   const label = t.nombre || t.email || t.id;
                   return (
                     <li key={t.id} className="flex items-center gap-2">
@@ -636,19 +616,16 @@ export default function TrackerDashboard() {
 
           <div className="rounded-lg border bg-white px-4 py-3 text-xs text-slate-500 space-y-1">
             <div>
-              <strong>Tip:</strong> Si ves que el tracker está
-              enviando (Pantalla de tracker activa) pero aquí no
-              aparecen puntos:
+              <strong>Tip:</strong> Si ves que el tracker está enviando (Pantalla
+              de tracker activa) pero aquí no aparecen puntos:
             </div>
             <ul className="list-disc pl-5 space-y-1">
               <li>Revisa la ventana de tiempo (1h / 6h / 24h).</li>
               <li>
-                Verifica que el filtro de tracker no esté en un
-                perfil distinto.
+                Verifica que el filtro de tracker no esté en un perfil distinto.
               </li>
               <li>
-                Si filtraste por geocerca, prueba con “Todas las
-                geocercas”.
+                Si filtraste por geocerca, prueba con “Todas las geocercas”.
               </li>
             </ul>
           </div>
