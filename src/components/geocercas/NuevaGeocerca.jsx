@@ -208,11 +208,21 @@ async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
     mousemove(e) {
-      setCursorLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
+      if (e?.latlng) setCursorLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+    pointermove(e) {
+      if (e?.latlng) setCursorLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+    touchstart(e) {
+      if (e?.latlng) setCursorLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+    touchmove(e) {
+      if (e?.latlng) setCursorLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
     },
   });
   return null;
 }
+
 
 /* =========================================================
    Coordenadas → Feature
@@ -673,14 +683,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         </div>
 
         {/* ✅ CONTROLES: compactos en móvil con ! para ganar a CSS global */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
+        <div className="grid grid-cols-2 gap-1 md:flex md:flex-row md:items-center md:gap-2">
           <input
             type="text"
             className="
-              !px-3 !py-2 !text-xs
+              !px-2 !py-1.5 !text-[11px]
               sm:!px-3 sm:!py-2 sm:!text-sm
               lg:!px-4 lg:!py-2.5 lg:!text-sm
-              rounded-lg
+              rounded-lg col-span-2 md:col-auto
               bg-slate-900 border border-emerald-400/60
               text-white font-semibold
             "
@@ -695,10 +705,10 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               setCoordModalOpen(true);
             }}
             className="
-              !px-3 !py-2 !text-xs
+              !px-2 !py-1.5 !text-[11px]
               sm:!px-3 sm:!py-2 sm:!text-sm
               lg:!px-4 lg:!py-2.5 lg:!text-sm
-              rounded-lg font-semibold
+              rounded-lg font-semibold !w-full md:!w-auto
               bg-slate-800 text-slate-50 border border-slate-600
               whitespace-nowrap
             "
@@ -709,10 +719,10 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           <button
             onClick={handleSave}
             className="
-              !px-3 !py-2 !text-xs
+              !px-2 !py-1.5 !text-[11px]
               sm:!px-3 sm:!py-2 sm:!text-sm
               lg:!px-4 lg:!py-2.5 lg:!text-sm
-              rounded-lg font-semibold
+              rounded-lg font-semibold !w-full md:!w-auto
               bg-emerald-600 text-white
               whitespace-nowrap
             "
