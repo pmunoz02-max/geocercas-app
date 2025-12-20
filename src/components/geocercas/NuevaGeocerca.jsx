@@ -14,8 +14,8 @@ import "leaflet/dist/leaflet.css";
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import { supabase } from "../../supabaseClient";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -203,7 +203,7 @@ async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
 }
 
 /* =========================================================
-   Lat/Lng vivos
+   Lat/Lng vivos (desktop + móvil)
 ========================================================= */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
@@ -222,7 +222,6 @@ function CursorPosLive({ setCursorLatLng }) {
   });
   return null;
 }
-
 
 /* =========================================================
    Coordenadas → Feature
@@ -370,7 +369,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     try {
       featureGroupRef.current?.clearLayers?.();
     } catch {}
-
     try {
       removeAllGeomanLayers(mapRef.current);
     } catch {}
@@ -489,11 +487,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       }
 
       const map = mapRef.current;
-
       const layerToSave =
-        selectedLayerRef.current ||
-        lastCreatedLayerRef.current ||
-        getLastGeomanLayer(map);
+        selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
         alert(
@@ -675,24 +670,36 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   }, [draftFeature]);
 
   return (
-    <div className="flex flex-col gap-3 sm:gap-4 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 sm:gap-3">
-        <div className="space-y-0.5 sm:space-y-1">
-          <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">{t("geocercas.titleNew")}</h1>
-          <p className="text-[11px] sm:text-xs text-slate-300">{t("geocercas.subtitleNew")}</p>
+    <div className="flex flex-col gap-2 sm:gap-3 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="space-y-0.5">
+          <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">
+            {t("geocercas.titleNew")}
+          </h1>
+
+          {/* ✅ En móvil lo ocultamos para ganar espacio; desktop igual */}
+          <p className="hidden md:block text-xs text-slate-300">
+            {t("geocercas.subtitleNew")}
+          </p>
         </div>
 
-        {/* ✅ CONTROLES: compactos en móvil con ! para ganar a CSS global */}
-        <div className="grid grid-cols-2 gap-1 md:flex md:flex-row md:items-center md:gap-2">
+        {/* ✅ SOLO MÓVIL: input full width + 2 botones en 2 columnas
+            ✅ DESKTOP: se mantiene layout en fila (md:flex) */}
+        <div
+          className="
+            grid grid-cols-2 gap-2
+            md:flex md:items-center md:gap-2
+          "
+        >
           <input
             type="text"
             className="
-              !px-2 !py-1.5 !text-[11px]
-              sm:!px-3 sm:!py-2 sm:!text-sm
-              lg:!px-4 lg:!py-2.5 lg:!text-sm
-              rounded-lg col-span-2 md:col-auto
+              col-span-2
+              rounded-lg
               bg-slate-900 border border-emerald-400/60
               text-white font-semibold
+              px-3 py-2 text-xs
+              md:col-span-1 md:px-4 md:py-2.5 md:text-sm
             "
             placeholder={t("geocercas.placeholderName")}
             value={geofenceName}
@@ -705,11 +712,10 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               setCoordModalOpen(true);
             }}
             className="
-              !px-2 !py-1.5 !text-[11px]
-              sm:!px-3 sm:!py-2 sm:!text-sm
-              lg:!px-4 lg:!py-2.5 lg:!text-sm
-              rounded-lg font-semibold !w-full md:!w-auto
+              rounded-lg font-semibold
               bg-slate-800 text-slate-50 border border-slate-600
+              px-3 py-2 text-xs
+              md:px-4 md:py-2.5 md:text-sm
               whitespace-nowrap
             "
           >
@@ -719,11 +725,10 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           <button
             onClick={handleSave}
             className="
-              !px-2 !py-1.5 !text-[11px]
-              sm:!px-3 sm:!py-2 sm:!text-sm
-              lg:!px-4 lg:!py-2.5 lg:!text-sm
-              rounded-lg font-semibold !w-full md:!w-auto
+              rounded-lg font-semibold
               bg-emerald-600 text-white
+              px-3 py-2 text-xs
+              md:px-4 md:py-2.5 md:text-sm
               whitespace-nowrap
             "
           >
@@ -732,10 +737,10 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         </div>
       </div>
 
-      {/* ✅ Mobile/Tablet: flex-col (panel con max-h + mapa flex-1). Desktop: grid intacto */}
-      <div className="flex-1 min-h-0 flex flex-col gap-3 sm:gap-4 lg:grid lg:grid-cols-4">
+      {/* ✅ Mobile/Tablet: flex-col; Desktop: grid intacto */}
+      <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
         {/* Panel */}
-        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[34svh] md:max-h-[32svh] lg:max-h-none">
+        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[30svh] md:max-h-[32svh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle")}</h2>
 
           <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
@@ -901,7 +906,15 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             </FeatureGroup>
           </MapContainer>
 
-          <div className="absolute right-3 top-3 z-[9999] space-y-2">
+          {/* ✅ MOBILE: barra mini SOLO si hay coordenadas (sin hint grande) */}
+          {cursorLatLng && (
+            <div className="md:hidden absolute right-2 top-2 z-[9999] px-2 py-1 rounded bg-black/80 text-[11px] text-white font-mono pointer-events-none">
+              {cursorLatLng.lat.toFixed(5)}, {cursorLatLng.lng.toFixed(5)}
+            </div>
+          )}
+
+          {/* ✅ DESKTOP: HUD original (no se toca) */}
+          <div className="hidden md:block absolute right-3 top-3 z-[9999] space-y-2">
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
               {cursorLatLng ? (
                 <>
