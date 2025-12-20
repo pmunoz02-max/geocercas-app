@@ -14,8 +14,8 @@ import "leaflet/dist/leaflet.css";
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import { supabase } from "../../supabaseClient";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -169,7 +169,6 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
   return unique;
 }
 
-// ✅ Fix: eliminar en una sola acción (Supabase + LocalStorage por nombre)
 async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
   let deleted = 0;
 
@@ -357,10 +356,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
 
-  const onMapReady = useCallback((map) => {
-    mapRef.current = map;
-  }, []);
-
   const clearCanvas = useCallback(() => {
     try {
       featureGroupRef.current?.clearLayers?.();
@@ -373,16 +368,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     selectedLayerRef.current = null;
     lastCreatedLayerRef.current = null;
   }, []);
-
-  const handleSelectGeofence = (nombre) => {
-    setSelectedNames((prev) => {
-      const next = new Set(prev);
-      if (next.has(nombre)) next.delete(nombre);
-      else next.add(nombre);
-      return next;
-    });
-    setLastSelectedName(nombre);
-  };
 
   const refreshGeofenceList = useCallback(async () => {
     try {
@@ -428,21 +413,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       mounted = false;
     };
   }, [supabaseClient]);
-
-  const handleGeomanCreate = useCallback((e) => {
-    selectedLayerRef.current = e.layer;
-    lastCreatedLayerRef.current = e.layer;
-    setDraftFeature(null);
-    setViewFeature(null);
-    setViewCentroid(null);
-  }, []);
-
-  const handleGeomanEditUpdate = useCallback((e) => {
-    if (e?.layer) {
-      selectedLayerRef.current = e.layer;
-      lastCreatedLayerRef.current = e.layer;
-    }
-  }, []);
 
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
@@ -624,49 +594,35 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       if (!item) return;
 
       let geo = null;
-      let supaError = null;
 
       if (item.source === "supabase") {
         if (!supabaseClient || !currentOrg?.id) {
-          supaError = new Error("Org no disponible.");
-        } else {
-          const q = supabaseClient
-            .from(SUPABASE_GEOFENCES_TABLE)
-            .select("geojson")
-            .eq("org_id", currentOrg.id);
-
-          if (item.id) q.eq("id", item.id);
-          else q.eq("nombre", item.nombre);
-
-          const { data, error } = await q.maybeSingle();
-          if (error) supaError = error;
-          geo = normalizeGeojson(data?.geojson);
+          alert("Org no disponible.");
+          return;
         }
+        const q = supabaseClient
+          .from(SUPABASE_GEOFENCES_TABLE)
+          .select("geojson")
+          .eq("org_id", currentOrg.id);
+
+        if (item.id) q.eq("id", item.id);
+        else q.eq("nombre", item.nombre);
+
+        const { data, error } = await q.maybeSingle();
+        if (error) throw error;
+        geo = normalizeGeojson(data?.geojson);
       }
 
       if (!geo && typeof window !== "undefined") {
         const key = item.key || `geocerca_${item.nombre}`;
         const raw = localStorage.getItem(key);
         if (raw) {
-          try {
-            const obj = JSON.parse(raw);
-            geo = normalizeGeojson(obj?.geojson);
-          } catch {}
+          const obj = JSON.parse(raw);
+          geo = normalizeGeojson(obj?.geojson);
         }
       }
 
       if (!geo) {
-        if (supaError) {
-          console.warn("No se pudo leer geojson desde Supabase (posible RLS):", supaError);
-          alert(
-            t("geocercas.errorNoGeojson", {
-              defaultValue: "No se pudo cargar el GeoJSON de la geocerca.",
-            }) +
-              "\n\nDetalle: " +
-              (supaError.message || String(supaError))
-          );
-          return;
-        }
         alert(
           t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON de la geocerca." })
         );
@@ -716,16 +672,17 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           <p className="text-[11px] sm:text-xs text-slate-300">{t("geocercas.subtitleNew")}</p>
         </div>
 
-        {/* ✅ Controles compactos en móvil */}
+        {/* ✅ CONTROLES: compactos en móvil con ! para ganar a CSS global */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
           <input
             type="text"
             className="
-              px-3 py-2 lg:px-4 lg:py-2.5
+              !px-3 !py-2 !text-xs
+              sm:!px-3 sm:!py-2 sm:!text-sm
+              lg:!px-4 lg:!py-2.5 lg:!text-sm
               rounded-lg
               bg-slate-900 border border-emerald-400/60
               text-white font-semibold
-              text-xs lg:text-sm
             "
             placeholder={t("geocercas.placeholderName")}
             value={geofenceName}
@@ -738,10 +695,12 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               setCoordModalOpen(true);
             }}
             className="
-              px-3 py-2 lg:px-4 lg:py-2.5
+              !px-3 !py-2 !text-xs
+              sm:!px-3 sm:!py-2 sm:!text-sm
+              lg:!px-4 lg:!py-2.5 lg:!text-sm
               rounded-lg font-semibold
               bg-slate-800 text-slate-50 border border-slate-600
-              text-xs lg:text-sm
+              whitespace-nowrap
             "
           >
             {t("geocercas.buttonDrawByCoords")}
@@ -750,10 +709,12 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           <button
             onClick={handleSave}
             className="
-              px-3 py-2 lg:px-4 lg:py-2.5
+              !px-3 !py-2 !text-xs
+              sm:!px-3 sm:!py-2 sm:!text-sm
+              lg:!px-4 lg:!py-2.5 lg:!text-sm
               rounded-lg font-semibold
               bg-emerald-600 text-white
-              text-xs lg:text-sm
+              whitespace-nowrap
             "
           >
             {t("geocercas.buttonSave")}
@@ -846,7 +807,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {dataset && <GeoJSON data={dataset} pointToLayer={pointStyle.pointToLayer} />}
+            {dataset && <GeoJSON data={dataset} {...pointStyle} />}
 
             <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
