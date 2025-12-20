@@ -14,8 +14,13 @@ import "leaflet/dist/leaflet.css";
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext.jsx";
+/**
+ * IMPORTS IMPORTANTES:
+ * Este archivo vive en: src/components/geocercas/NuevaGeocerca.jsx
+ * Por eso, para llegar a src/supabaseClient y src/context hay que subir 2 niveles (../../)
+ */
+import { supabase } from "../../supabaseClient";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -677,30 +682,16 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             {t("geocercas.titleNew")}
           </h1>
 
-          {/* ✅ En móvil lo ocultamos para ganar espacio; desktop igual */}
-          <p className="hidden md:block text-xs text-slate-300">
-            {t("geocercas.subtitleNew")}
-          </p>
+          {/* SOLO MÓVIL: oculto para ganar espacio (desktop intacto) */}
+          <p className="hidden md:block text-xs text-slate-300">{t("geocercas.subtitleNew")}</p>
         </div>
 
-        {/* ✅ SOLO MÓVIL: input full width + 2 botones en 2 columnas
-            ✅ DESKTOP: se mantiene layout en fila (md:flex) */}
-        <div
-          className="
-            grid grid-cols-2 gap-2
-            md:flex md:items-center md:gap-2
-          "
-        >
+        {/* SOLO MÓVIL: input (fila 1) + 2 botones (fila 2)
+            DESKTOP: md:flex como estaba */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
           <input
             type="text"
-            className="
-              col-span-2
-              rounded-lg
-              bg-slate-900 border border-emerald-400/60
-              text-white font-semibold
-              px-3 py-2 text-xs
-              md:col-span-1 md:px-4 md:py-2.5 md:text-sm
-            "
+            className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-2 text-xs md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
             placeholder={t("geocercas.placeholderName")}
             value={geofenceName}
             onChange={(e) => setGeofenceName(e.target.value)}
@@ -711,33 +702,20 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               setCoordText("");
               setCoordModalOpen(true);
             }}
-            className="
-              rounded-lg font-semibold
-              bg-slate-800 text-slate-50 border border-slate-600
-              px-3 py-2 text-xs
-              md:px-4 md:py-2.5 md:text-sm
-              whitespace-nowrap
-            "
+            className="rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600 px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
           >
             {t("geocercas.buttonDrawByCoords")}
           </button>
 
           <button
             onClick={handleSave}
-            className="
-              rounded-lg font-semibold
-              bg-emerald-600 text-white
-              px-3 py-2 text-xs
-              md:px-4 md:py-2.5 md:text-sm
-              whitespace-nowrap
-            "
+            className="rounded-lg font-semibold bg-emerald-600 text-white px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
           >
             {t("geocercas.buttonSave")}
           </button>
         </div>
       </div>
 
-      {/* ✅ Mobile/Tablet: flex-col; Desktop: grid intacto */}
       <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
         {/* Panel */}
         <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[30svh] md:max-h-[32svh] lg:max-h-none">
@@ -906,14 +884,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             </FeatureGroup>
           </MapContainer>
 
-          {/* ✅ MOBILE: barra mini SOLO si hay coordenadas (sin hint grande) */}
+          {/* ✅ MÓVIL: SOLO barrita mini (eliminamos hint grande) */}
           {cursorLatLng && (
             <div className="md:hidden absolute right-2 top-2 z-[9999] px-2 py-1 rounded bg-black/80 text-[11px] text-white font-mono pointer-events-none">
               {cursorLatLng.lat.toFixed(5)}, {cursorLatLng.lng.toFixed(5)}
             </div>
           )}
 
-          {/* ✅ DESKTOP: HUD original (no se toca) */}
+          {/* ✅ DESKTOP: HUD original intacto */}
           <div className="hidden md:block absolute right-3 top-3 z-[9999] space-y-2">
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
               {cursorLatLng ? (
