@@ -9,7 +9,6 @@ import TopTabs from "./components/TopTabs.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
@@ -72,10 +71,12 @@ function Shell() {
     );
   }
 
+  // ✅ Tabs del panel (NO trackers)
+  // ⛔ Se oculta "Geocercas" (landing/listado) para no exponer esa pantalla.
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
     { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
-    { path: "/geocercas", labelKey: "app.tabs.geocercas" },
+    // { path: "/geocercas", labelKey: "app.tabs.geocercas" }, // 🔒 oculto
     { path: "/personal", labelKey: "app.tabs.personal" },
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
@@ -129,9 +130,11 @@ function SmartFallback() {
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
   const roleLower = String(role || "").toLowerCase();
-  return roleLower === "tracker"
-    ? <Navigate to="/tracker-gps" replace />
-    : <Navigate to="/inicio" replace />;
+  return roleLower === "tracker" ? (
+    <Navigate to="/tracker-gps" replace />
+  ) : (
+    <Navigate to="/inicio" replace />
+  );
 }
 
 /* ======================================================
@@ -169,7 +172,13 @@ export default function App() {
 
           {/* Tabs */}
           <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
-          <Route path="/geocercas" element={<GeocercasPage />} />
+
+          {/* 🔒 Ruta mantenida pero redirigida (no rompe nada) */}
+          <Route
+            path="/geocercas"
+            element={<Navigate to="/nueva-geocerca" replace />}
+          />
+
           <Route path="/personal" element={<PersonalPage />} />
           <Route path="/actividades" element={<ActividadesPage />} />
           <Route path="/asignaciones" element={<AsignacionesPage />} />
