@@ -691,7 +691,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
           <input
             type="text"
-            className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-1.5 text-[11px] md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
+            className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-2 text-xs md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
             placeholder={t("geocercas.placeholderName")}
             value={geofenceName}
             onChange={(e) => setGeofenceName(e.target.value)}
@@ -702,14 +702,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               setCoordText("");
               setCoordModalOpen(true);
             }}
-            className="rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600 px-3 py-1.5 text-[11px] md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
+            className="rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600 px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
           >
             {t("geocercas.buttonDrawByCoords")}
           </button>
 
           <button
             onClick={handleSave}
-            className="rounded-lg font-semibold bg-emerald-600 text-white px-3 py-1.5 text-[11px] md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
+            className="rounded-lg font-semibold bg-emerald-600 text-white px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
           >
             {t("geocercas.buttonSave")}
           </button>
@@ -718,7 +718,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
       <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
         {/* Panel */}
-        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[30svh] md:max-h-[32svh] lg:max-h-none">
+        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0
+                        max-h-[42svh] md:max-h-[32svh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle")}</h2>
 
           <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
@@ -728,7 +729,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             {geofenceList.map((g) => (
               <label
                 key={`${g.source}-${g.nombre}`}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-800"
+                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
               >
                 <input
                   type="checkbox"
@@ -743,55 +744,53 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                     setLastSelectedName(g.nombre);
                   }}
                 />
-                <span className="text-xs text-slate-100">{g.nombre}</span>
+                <span className="text-[11px] md:text-xs text-slate-100">{g.nombre}</span>
               </label>
             ))}
           </div>
 
-          {/* ✅ BOTONES ACCIÓN: MÓVIL compacto / DESKTOP igual */}
-          <div className="mt-3">
-            {/* MÓVIL: 2 columnas (Mostrar + Eliminar) y Limpiar debajo full */}
-            <div className="grid grid-cols-2 gap-2 md:flex md:flex-col md:gap-2">
-              <button
-                onClick={handleShowSelected}
-                className="w-full rounded-md font-semibold bg-sky-600 text-white h-8 px-2 text-[11px] md:h-auto md:px-3 md:py-1.5 md:text-xs"
-              >
-                {showLoading
-                  ? t("common.actions.loading", { defaultValue: "Cargando..." })
-                  : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
-              </button>
+          {/* Acciones: compactas en móvil (3 columnas), desktop intacto (columna) */}
+          <div className="mt-2 grid grid-cols-3 gap-2 md:mt-3 md:flex md:flex-col md:gap-2">
+            <button
+              onClick={handleShowSelected}
+              className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
+            >
+              {showLoading
+                ? t("common.actions.loading", { defaultValue: "Cargando..." })
+                : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
+            </button>
 
-              <button
-                onClick={handleDeleteSelected}
-                className="w-full rounded-md font-semibold bg-red-600 text-white h-8 px-2 text-[11px] md:h-auto md:px-3 md:py-1.5 md:text-xs"
-              >
-                {t("geocercas.buttonDeleteSelected")}
-              </button>
+            <button
+              onClick={handleDeleteSelected}
+              className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-red-600 text-white md:px-3 md:py-1.5 md:text-xs"
+            >
+              {t("geocercas.buttonDeleteSelected")}
+            </button>
 
-              <button
-                onClick={() => {
-                  clearCanvas();
-                  setDraftFeature(null);
-                  setViewFeature(null);
-                  setViewCentroid(null);
-                }}
-                className="col-span-2 w-full rounded-md font-medium bg-slate-800 text-slate-200 h-8 px-2 text-[11px] md:col-span-1 md:h-auto md:px-3 md:py-1.5 md:text-xs"
-              >
-                {t("geocercas.buttonClearCanvas")}
-              </button>
-            </div>
-
-            {loadingDataset && (
-              <div className="mt-3 text-[11px] text-slate-400">
-                {t("geocercas.loadingDataset", { defaultValue: "Cargando dataset..." })}
-              </div>
-            )}
-            {datasetError && <div className="mt-3 text-[11px] text-red-300">{datasetError}</div>}
+            <button
+              onClick={() => {
+                clearCanvas();
+                setDraftFeature(null);
+                setViewFeature(null);
+                setViewCentroid(null);
+              }}
+              className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-200 md:px-3 md:py-1.5 md:text-xs"
+            >
+              {t("geocercas.buttonClearCanvas")}
+            </button>
           </div>
+
+          {loadingDataset && (
+            <div className="mt-2 md:mt-3 text-[11px] text-slate-400">
+              {t("geocercas.loadingDataset", { defaultValue: "Cargando dataset..." })}
+            </div>
+          )}
+          {datasetError && <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
         {/* Mapa */}
-        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[58svh] md:min-h-[62svh] lg:min-h-0">
+        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1
+                        min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
           <MapContainer
             center={[-0.2, -78.5]}
             zoom={8}
