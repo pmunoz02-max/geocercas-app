@@ -686,49 +686,50 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           <p className="hidden md:block text-xs text-slate-300">{t("geocercas.subtitleNew")}</p>
         </div>
 
-        {/* =========================================================
-            HEADER CONTROLS
-            - MÓVIL: input (fila 1) + 2 botones (fila 2) MÁS PEQUEÑOS
-            - DESKTOP: md:flex como estaba
-           ========================================================= */}
-        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
+        {/* SOLO MÓVIL: input (fila 1) + 2 botones compactos (fila 2)
+            DESKTOP: md:flex como estaba */}
+        <div className="grid grid-cols-4 gap-2 md:flex md:items-center md:gap-2">
           <input
             type="text"
-            className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-2 text-xs md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
+            className="col-span-4 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold
+                       px-3 py-2 text-[12px]
+                       md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
             placeholder={t("geocercas.placeholderName")}
             value={geofenceName}
             onChange={(e) => setGeofenceName(e.target.value)}
           />
 
-          {/* MÓVIL: más compacto (py/px/text), sin romper desktop */}
           <button
             onClick={() => {
               setCoordText("");
               setCoordModalOpen(true);
             }}
-            className="min-w-0 rounded-md font-semibold bg-slate-800 text-slate-50 border border-slate-600
-                       px-2.5 py-1.5 text-[11px] leading-tight
-                       md:rounded-lg md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
-            title={t("geocercas.buttonDrawByCoords")}
+            className="col-span-2 rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600
+                       px-2.5 py-2 text-[12px] leading-none whitespace-nowrap
+                       md:px-4 md:py-2.5 md:text-sm"
           >
-            <span className="block truncate">{t("geocercas.buttonDrawByCoords")}</span>
+            {t("geocercas.buttonDrawByCoords")}
           </button>
 
           <button
             onClick={handleSave}
-            className="min-w-0 rounded-md font-semibold bg-emerald-600 text-white
-                       px-2.5 py-1.5 text-[11px] leading-tight
-                       md:rounded-lg md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
-            title={t("geocercas.buttonSave")}
+            className="col-span-2 rounded-lg font-semibold bg-emerald-600 text-white
+                       px-2.5 py-2 text-[12px] leading-none whitespace-nowrap
+                       md:px-4 md:py-2.5 md:text-sm"
           >
-            <span className="block truncate">{t("geocercas.buttonSave")}</span>
+            {t("geocercas.buttonSave")}
           </button>
         </div>
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
         {/* Panel */}
-        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[30svh] md:max-h-[32svh] lg:max-h-none">
+        <div
+          className="bg-slate-900/80 rounded-xl border border-slate-700/80
+                     p-2 md:p-3
+                     flex flex-col min-h-0
+                     max-h-[28svh] md:max-h-[32svh] lg:max-h-none"
+        >
           <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle")}</h2>
 
           <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
@@ -758,32 +759,31 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             ))}
           </div>
 
-          {/* =========================================================
-              ACCIONES DEL PANEL
-              - MÓVIL: 2 columnas (Mostrar / Eliminar) + Limpiar a lo ancho
-              - DESKTOP: vuelve al stack vertical (md:flex-col) como estaba
-             ========================================================= */}
-          <div className="mt-3 grid grid-cols-2 gap-2 md:flex md:flex-col">
+          {/* ✅ MÓVIL: 3 botones en una fila (compactos)
+              ✅ DESKTOP: se mantiene columna (como antes) */}
+          <div className="mt-2 md:mt-3 grid grid-cols-3 gap-2 md:flex md:flex-col">
             <button
               onClick={handleShowSelected}
-              className="w-full px-2.5 py-1.5 rounded-md text-[11px] leading-tight font-semibold bg-sky-600 text-white
-                         md:px-3 md:py-1.5 md:rounded-md md:text-xs"
+              className="w-full rounded-md font-semibold
+                         px-2 py-2 text-[11px] leading-none
+                         bg-sky-600 text-white
+                         md:px-3 md:py-1.5 md:text-xs"
               title={t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             >
-              <span className="block truncate">
-                {showLoading
-                  ? t("common.actions.loading", { defaultValue: "Cargando..." })
-                  : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
-              </span>
+              {showLoading
+                ? t("common.actions.loading", { defaultValue: "Cargando..." })
+                : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar" })}
             </button>
 
             <button
               onClick={handleDeleteSelected}
-              className="w-full px-2.5 py-1.5 rounded-md text-[11px] leading-tight font-semibold bg-red-600 text-white
-                         md:px-3 md:py-1.5 md:rounded-md md:text-xs"
+              className="w-full rounded-md font-semibold
+                         px-2 py-2 text-[11px] leading-none
+                         bg-red-600 text-white
+                         md:px-3 md:py-1.5 md:text-xs"
               title={t("geocercas.buttonDeleteSelected")}
             >
-              <span className="block truncate">{t("geocercas.buttonDeleteSelected")}</span>
+              {t("geocercas.buttonDeleteSelected", { defaultValue: "Eliminar" })}
             </button>
 
             <button
@@ -793,11 +793,13 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
                 setViewFeature(null);
                 setViewCentroid(null);
               }}
-              className="col-span-2 w-full px-2.5 py-1.5 rounded-md text-[11px] leading-tight font-medium bg-slate-800 text-slate-200
-                         md:col-span-1 md:px-3 md:py-1.5 md:rounded-md md:text-xs"
+              className="w-full rounded-md font-medium
+                         px-2 py-2 text-[11px] leading-none
+                         bg-slate-800 text-slate-200
+                         md:px-3 md:py-1.5 md:text-xs"
               title={t("geocercas.buttonClearCanvas")}
             >
-              <span className="block truncate">{t("geocercas.buttonClearCanvas")}</span>
+              {t("geocercas.buttonClearCanvas", { defaultValue: "Limpiar" })}
             </button>
           </div>
 
