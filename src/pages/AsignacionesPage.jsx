@@ -1,5 +1,5 @@
 // src/pages/AsignacionesPage.jsx
-// VERSION CANONICA: usa org_people_id (NO personal_id)
+// VERSION CANONICA: usa org_people_id y activity_id OBLIGATORIO
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,7 +15,8 @@ import { useAuth } from "../context/AuthContext";
 
 function localDateTimeToISO(localDateTime) {
   if (!localDateTime) return null;
-  const [d, t] = localDateTime.split("T");
+  const [d, t] = String(localDateTime).split("T");
+  if (!d || !t) return null;
   const [y, m, day] = d.split("-").map(Number);
   const [hh, mm] = t.split(":").map(Number);
   return new Date(y, m - 1, day, hh, mm, 0, 0).toISOString();
@@ -31,59 +32,104 @@ export default function AsignacionesPage() {
   const [asignaciones, setAsignaciones] = useState([]);
   const [loadingAsignaciones, setLoadingAsignaciones] = useState(true);
   const [loadingCatalogos, setLoadingCatalogos] = useState(true);
+
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
+  // FORM
   const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
-  const [selectedActivityId, setSelectedActivityId] = useState("");
+  const [selectedActivityId, setSelectedActivityId] = useState(""); // ✅ ahora OBLIGATORIO
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [frecuenciaEnvioMin, setFrecuenciaEnvioMin] = useState(5);
   const [status, setStatus] = useState("activa");
   const [editingId, setEditingId] = useState(null);
 
+  // CATALOGOS
   const [peopleOptions, setPeopleOptions] = useState([]);
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
   async function loadAsignaciones() {
     setLoadingAsignaciones(true);
+    setError(null);
     const { data, error } = await getAsignaciones();
     if (error) {
+      console.error("[AsignacionesPage] getAsignaciones error:", error);
       setError(t("asignaciones.messages.loadError"));
       setAsignaciones([]);
     } else {
-      setAsignaciones(data || []);
+      setAsignaciones(Array.isArray(data) ? data : []);
     }
     setLoadingAsignaciones(false);
   }
 
+  async function loadActivitiesWithFallback(activeOrgId) {
+    // Intento 1: tenant_id
+    const q1 = await supabase
+      .from("activities")
+      .select("id,name,tenant_id")
+      .eq("tenant_id", activeOrgId)
+      .order("name", { ascending: true });
+
+    if (!q1.error && Array.isArray(q1.data) && q1.data.length > 0) return q1.data;
+
+    // Intento 2: org_id
+    const q2 = await supabase
+      .from("activities")
+      .select("id,name,org_id")
+      .eq("org_id", activeOrgId)
+      .order("name", { ascending: true });
+
+    if (q2.error) throw q2.error;
+    return q2.data || [];
+  }
+
   async function loadCatalogos() {
     if (!orgId) return;
-    setLoadingCatalogos(true);
-    try {
-      const [{ data: people }, { data: geocercas }, { data: activities }] =
-        await Promise.all([
-          supabase
-            .from("v_org_people_ui")
-            .select("org_people_id, nombre, apellido")
-            .eq("org_id", orgId)
-            .eq("is_deleted", false)
-            .order("nombre"),
-          supabase.from("geocercas").select("id,nombre").eq("org_id", orgId),
-          supabase.from("activities").select("id,name").eq("tenant_id", orgId),
-        ]);
 
-      setPeopleOptions(people || []);
-      setGeocercaOptions(geocercas || []);
+    setLoadingCatalogos(true);
+    setError(null);
+
+    try {
+      const [peopleRes, geocercasRes, activities] = await Promise.all([
+        supabase
+          .from("v_org_people_ui")
+          .select("org_people_id, nombre, apellido, is_deleted, org_id")
+          .eq("org_id", orgId)
+          .eq("is_deleted", false)
+          .order("nombre", { ascending: true }),
+        supabase
+          .from("geocercas")
+          .select("id,nombre,org_id")
+          .eq("org_id", orgId)
+          .order("nombre", { ascending: true }),
+        loadActivitiesWithFallback(orgId),
+      ]);
+
+      if (peopleRes.error) throw peopleRes.error;
+      if (geocercasRes.error) throw geocercasRes.error;
+
+      setPeopleOptions(peopleRes.data || []);
+      setGeocercaOptions(geocercasRes.data || []);
       setActivityOptions(activities || []);
+
+      // Si solo hay 1 activity, autoseleccionar (reduce fricción)
+      if (!selectedActivityId && activities && activities.length === 1) {
+        setSelectedActivityId(activities[0].id);
+      }
     } catch (e) {
+      console.error("[AsignacionesPage] loadCatalogos error:", e);
       setError(t("asignaciones.messages.catalogError"));
+      setPeopleOptions([]);
+      setGeocercaOptions([]);
+      setActivityOptions([]);
+    } finally {
+      setLoadingCatalogos(false);
     }
-    setLoadingCatalogos(false);
   }
 
   useEffect(() => {
@@ -94,20 +140,16 @@ export default function AsignacionesPage() {
   }, [orgId]);
 
   const filteredAsignaciones = useMemo(() => {
-    let rows = asignaciones;
-    if (estadoFilter !== "todos") {
-      rows = rows.filter((a) => a.status === estadoFilter);
-    }
-    if (selectedOrgPeopleId) {
-      rows = rows.filter((a) => a.org_people_id === selectedOrgPeopleId);
-    }
+    let rows = Array.isArray(asignaciones) ? asignaciones : [];
+    if (estadoFilter !== "todos") rows = rows.filter((a) => a.status === estadoFilter);
+    if (selectedOrgPeopleId) rows = rows.filter((a) => a.org_people_id === selectedOrgPeopleId);
     return rows;
   }, [asignaciones, estadoFilter, selectedOrgPeopleId]);
 
   function resetForm() {
     setSelectedOrgPeopleId("");
     setSelectedGeocercaId("");
-    setSelectedActivityId("");
+    // NO limpiamos selectedActivityId si quieres mantenerlo como default
     setStartTime("");
     setEndTime("");
     setFrecuenciaEnvioMin(5);
@@ -120,8 +162,30 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccessMessage(null);
 
+    if (!orgId) {
+      setError(t("asignaciones.messages.noOrg") || "No hay organización activa.");
+      return;
+    }
+
     if (!selectedOrgPeopleId || !selectedGeocercaId) {
       setError(t("asignaciones.messages.selectPersonAndFence"));
+      return;
+    }
+
+    // ✅ activity_id obligatorio (por constraint)
+    if (!selectedActivityId) {
+      setError("Debes seleccionar una Actividad (activity_id es obligatorio en la base de datos).");
+      return;
+    }
+
+    if (!startTime || !endTime) {
+      setError(t("asignaciones.messages.selectDates"));
+      return;
+    }
+
+    const freqMin = Number(frecuenciaEnvioMin) || 0;
+    if (freqMin < 5) {
+      setError(t("asignaciones.messages.frequencyTooLow"));
       return;
     }
 
@@ -129,10 +193,10 @@ export default function AsignacionesPage() {
       org_id: orgId,
       org_people_id: selectedOrgPeopleId,
       geocerca_id: selectedGeocercaId,
-      activity_id: selectedActivityId || null,
+      activity_id: selectedActivityId, // ✅ SIEMPRE
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
-      frecuencia_envio_sec: frecuenciaEnvioMin * 60,
+      frecuencia_envio_sec: freqMin * 60,
       status,
     };
 
@@ -141,107 +205,188 @@ export default function AsignacionesPage() {
       : await createAsignacion(payload);
 
     if (resp.error) {
-      setError(resp.error.message);
+      console.error("[AsignacionesPage] save error:", resp.error);
+      setError(resp.error.message || "Error guardando asignación.");
       return;
     }
 
     setSuccessMessage(
-      editingId
-        ? t("asignaciones.messages.updateSuccess")
-        : t("asignaciones.messages.createSuccess")
+      editingId ? t("asignaciones.messages.updateSuccess") : t("asignaciones.messages.createSuccess")
     );
+
     resetForm();
-    loadAsignaciones();
+    await loadAsignaciones();
+  }
+
+  if (!orgId) {
+    return (
+      <div className="w-full">
+        <h1 className="text-2xl font-bold mb-2">{t("asignaciones.title")}</h1>
+        <p className="text-sm text-slate-600">
+          {t("asignaciones.messages.noOrg") || "No hay organización activa."}
+        </p>
+      </div>
+    );
   }
 
   return (
     <div className="w-full">
       <h1 className="text-2xl font-bold mb-4">{t("asignaciones.title")}</h1>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div>
-          <label>{t("asignaciones.form.personLabel")}</label>
-          <select
-            value={selectedOrgPeopleId}
-            onChange={(e) => setSelectedOrgPeopleId(e.target.value)}
-            required
-          >
-            <option value="">{t("asignaciones.form.personPlaceholder")}</option>
-            {peopleOptions.map((p) => (
-              <option key={p.org_people_id} value={p.org_people_id}>
-                {`${p.nombre || ""} ${p.apellido || ""}`}
+      {/* Filtro estado */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <label className="font-medium">{t("asignaciones.filters.statusLabel")}</label>
+          <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+            {ESTADOS.map((v) => (
+              <option key={v} value={v}>
+                {t(`asignaciones.filters.status.${v}`)}
               </option>
             ))}
           </select>
         </div>
+      </div>
 
-        <div>
-          <label>{t("asignaciones.form.geofenceLabel")}</label>
-          <select
-            value={selectedGeocercaId}
-            onChange={(e) => setSelectedGeocercaId(e.target.value)}
-            required
-          >
-            <option value="">{t("asignaciones.form.geofencePlaceholder")}</option>
-            {geocercaOptions.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Form */}
+      <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
+        <h2 className="text-lg font-semibold mb-4">
+          {editingId ? t("asignaciones.form.editTitle") : t("asignaciones.form.newTitle")}
+        </h2>
 
-        <div>
-          <label>{t("asignaciones.form.startLabel")}</label>
-          <input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
-        </div>
+        {(loadingCatalogos || loadingAsignaciones) && (
+          <p className="text-sm text-gray-500 mb-3">{t("asignaciones.messages.loadingData")}</p>
+        )}
 
-        <div>
-          <label>{t("asignaciones.form.endLabel")}</label>
-          <input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
-        </div>
+        {/* Si no hay actividades, bloquea creación */}
+        {activityOptions.length === 0 && (
+          <p className="text-red-600 font-semibold mb-3">
+            No hay actividades creadas para esta organización. Crea al menos una Actividad para poder asignar.
+          </p>
+        )}
 
-        <div>
-          <label>{t("asignaciones.form.frequencyLabel")}</label>
-          <input
-            type="number"
-            min={5}
-            value={frecuenciaEnvioMin}
-            onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value))}
-          />
-        </div>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Persona */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.personLabel")}</label>
+            <select className="border rounded px-3 py-2" value={selectedOrgPeopleId} onChange={(e) => setSelectedOrgPeopleId(e.target.value)} required>
+              <option value="">{t("asignaciones.form.personPlaceholder")}</option>
+              {peopleOptions.map((p) => (
+                <option key={p.org_people_id} value={p.org_people_id}>
+                  {`${p.nombre || ""} ${p.apellido || ""}`.trim()}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label>{t("asignaciones.form.statusLabel")}</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="activa">{t("asignaciones.form.statusActive")}</option>
-            <option value="inactiva">{t("asignaciones.form.statusInactive")}</option>
-          </select>
-        </div>
+          {/* Geocerca */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.geofenceLabel")}</label>
+            <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
+              <option value="">{t("asignaciones.form.geofencePlaceholder")}</option>
+              {geocercaOptions.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nombre || g.id}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <button type="submit" className="md:col-span-2">
-          {editingId ? t("asignaciones.form.updateButton") : t("asignaciones.form.saveButton")}
-        </button>
-      </form>
+          {/* Actividad (OBLIGATORIA) */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.activityLabel")}</label>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedActivityId}
+              onChange={(e) => setSelectedActivityId(e.target.value)}
+              required
+              disabled={activityOptions.length === 0}
+            >
+              <option value="">{t("asignaciones.form.activityPlaceholder")}</option>
+              {activityOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name || a.id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Inicio */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.startLabel")}</label>
+            <input type="datetime-local" className="border rounded px-3 py-2" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+          </div>
+
+          {/* Fin */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.endLabel")}</label>
+            <input type="datetime-local" className="border rounded px-3 py-2" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+          </div>
+
+          {/* Estado */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.statusLabel")}</label>
+            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="activa">{t("asignaciones.form.statusActive")}</option>
+              <option value="inactiva">{t("asignaciones.form.statusInactive")}</option>
+            </select>
+          </div>
+
+          {/* Frecuencia */}
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.frequencyLabel")}</label>
+            <input type="number" className="border rounded px-3 py-2" min={5} value={frecuenciaEnvioMin} onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)} />
+          </div>
+
+          {/* Botones */}
+          <div className="md:col-span-2 flex flex-wrap gap-3 mt-2">
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
+              disabled={loadingCatalogos || loadingAsignaciones || activityOptions.length === 0}
+            >
+              {editingId ? t("asignaciones.form.updateButton") : t("asignaciones.form.saveButton")}
+            </button>
+
+            {editingId && (
+              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
+                {t("asignaciones.form.cancelEditButton")}
+              </button>
+            )}
+          </div>
+
+          <div className="md:col-span-2">
+            {successMessage && <p className="text-green-600 font-semibold">{successMessage}</p>}
+            {error && <p className="text-red-600 font-semibold">{error}</p>}
+          </div>
+        </form>
+      </div>
 
       <AsignacionesTable
         asignaciones={filteredAsignaciones}
         loading={loadingAsignaciones}
         onEdit={(a) => {
           setEditingId(a.id);
-          setSelectedOrgPeopleId(a.org_people_id);
-          setSelectedGeocercaId(a.geocerca_id);
+          setSelectedOrgPeopleId(a.org_people_id || "");
+          setSelectedGeocercaId(a.geocerca_id || "");
           setSelectedActivityId(a.activity_id || "");
-          setStartTime(a.start_time?.slice(0, 16));
-          setEndTime(a.end_time?.slice(0, 16));
-          setFrecuenciaEnvioMin(Math.round((a.frecuencia_envio_sec || 300) / 60));
-          setStatus(a.status);
+          setStartTime(a.start_time?.slice(0, 16) || "");
+          setEndTime(a.end_time?.slice(0, 16) || "");
+          setFrecuenciaEnvioMin(Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60)));
+          setStatus(a.status || "activa");
+          setError(null);
+          setSuccessMessage(null);
         }}
-        onDelete={deleteAsignacion}
+        onDelete={async (id) => {
+          const ok = window.confirm(t("asignaciones.messages.confirmDelete"));
+          if (!ok) return;
+          const { error } = await deleteAsignacion(id);
+          if (error) setError(t("asignaciones.messages.deleteError"));
+          else {
+            setSuccessMessage(t("asignaciones.messages.deleteSuccess"));
+            loadAsignaciones();
+          }
+        }}
       />
-
-      {error && <p className="text-red-600">{error}</p>}
-      {successMessage && <p className="text-green-600">{successMessage}</p>}
     </div>
   );
 }
