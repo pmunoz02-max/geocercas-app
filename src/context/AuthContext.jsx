@@ -19,15 +19,6 @@ function roleRank(r) {
   return 0;
 }
 
-function pickHighestRole(memberships = []) {
-  let best = "tracker";
-  for (const m of memberships) {
-    const r = String(m?.role || "tracker").toLowerCase();
-    if (roleRank(r) > roleRank(best)) best = r;
-  }
-  return best;
-}
-
 function normalizeOrgRow(o) {
   if (!o) return null;
   return {
@@ -42,6 +33,15 @@ function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     String(v || "")
   );
+}
+
+/**
+ * Regla de seguridad:
+ * - NUNCA usar profiles.role para permitir panel
+ * - Si no hay memberships confiables -> TRACKER
+ */
+function safeRoleFallback() {
+  return "tracker";
 }
 
 export const AuthProvider = ({ children }) => {
@@ -105,7 +105,7 @@ export const AuthProvider = ({ children }) => {
         setIsRootOwner(false);
       }
 
-      // Profile
+      // Profile (solo informativo; NO para role routing)
       const { data: prof } = await supabase
         .from("profiles")
         .select("*")
@@ -114,11 +114,15 @@ export const AuthProvider = ({ children }) => {
 
       setProfile(prof ?? null);
 
-      // Memberships
-      const { data: mRowsRaw } = await supabase
+      // Memberships (FUENTE DE VERDAD)
+      const { data: mRowsRaw, error: mErr } = await supabase
         .from("app_user_roles")
         .select("org_id, role, created_at")
         .eq("user_id", user.id);
+
+      if (mErr) {
+        console.error("[AuthContext] app_user_roles error (probable RLS):", mErr);
+      }
 
       const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
 
@@ -145,31 +149,22 @@ export const AuthProvider = ({ children }) => {
 
       setOrganizations(orgs);
 
-      // ============================================================
-      // 4) Selección de org activa (FIX invite tracker ONE-SHOT)
-      // prioridad: force_tracker_org_id -> owner -> localStorage -> primera
-      // ============================================================
+      // Selección de org activa
       let activeOrg = null;
 
-      // ✅ SOLO invite tracker: si existe force_tracker_org_id, usarlo una vez
+      // one-shot para tracker invitado
       const forcedTrackerOrgId = localStorage.getItem("force_tracker_org_id");
       if (forcedTrackerOrgId && isUuid(forcedTrackerOrgId)) {
-        // solo si realmente el usuario es TRACKER en esa org (evita romper casos)
-        const membershipInForced = mRows.find((m) => m.org_id === forcedTrackerOrgId);
-        const roleInForced = String(membershipInForced?.role || "").toLowerCase();
-
-        if (roleInForced === "tracker") {
+        const forcedMembership = mRows.find((m) => m.org_id === forcedTrackerOrgId);
+        const forcedRole = String(forcedMembership?.role || "").toLowerCase();
+        if (forcedRole === "tracker") {
           activeOrg = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
-          if (activeOrg) {
-            localStorage.setItem("current_org_id", forcedTrackerOrgId);
-          }
+          if (activeOrg) localStorage.setItem("current_org_id", forcedTrackerOrgId);
         }
-
-        // se consume siempre (para que sea one-shot)
         localStorage.removeItem("force_tracker_org_id");
       }
 
-      // Tu prioridad original: owner
+      // prioridad owner
       if (!activeOrg) {
         const ownerMembership = mRows.find(
           (m) => String(m.role).toLowerCase() === "owner"
@@ -179,7 +174,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // localStorage current_org_id
+      // localStorage
       if (!activeOrg) {
         const storedOrgId = localStorage.getItem("current_org_id");
         if (storedOrgId) {
@@ -198,13 +193,34 @@ export const AuthProvider = ({ children }) => {
       if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
-      // Rol efectivo: SOLO por org activa
-      const activeMembership = mRows.find((m) => m.org_id === activeOrg?.id);
-      const resolvedRole = String(
-        activeMembership?.role ?? prof?.role ?? "tracker"
-      ).toLowerCase();
+      // ✅ ROL EFECTIVO: SOLO desde memberships. Si no se puede -> tracker.
+      let resolvedRole = safeRoleFallback();
+
+      if (mRows.length && activeOrg?.id) {
+        const activeMembership = mRows.find((m) => m.org_id === activeOrg.id);
+        if (activeMembership?.role) {
+          resolvedRole = String(activeMembership.role).toLowerCase();
+        } else {
+          // Si hay memberships pero no para esa org, seguridad primero
+          resolvedRole = "tracker";
+        }
+      } else {
+        resolvedRole = "tracker";
+      }
 
       setRole(resolvedRole);
+
+      // ✅ DEBUG: inspección directa desde consola sin “role is not defined”
+      // (Puedes quitarlo cuando cierres el caso)
+      try {
+        window.__AUTH__ = {
+          email: user?.email,
+          user_id: user?.id,
+          role: resolvedRole,
+          currentOrgId: activeOrg?.id ?? null,
+          memberships: mRows,
+        };
+      } catch (_) {}
     } catch (err) {
       console.error("[AuthContext] fatal error:", err);
       setRole((prev) => prev ?? "tracker");
@@ -230,6 +246,8 @@ export const AuthProvider = ({ children }) => {
       else localStorage.removeItem("current_org_id");
 
       const m = memberships.find((x) => x.org_id === active?.id);
+
+      // ✅ NUNCA usar profile.role para habilitar panel
       if (m?.role) setRole(String(m.role).toLowerCase());
       else setRole("tracker");
     },
