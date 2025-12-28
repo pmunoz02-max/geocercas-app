@@ -86,7 +86,6 @@ async function inviteUserViaFetch(payload) {
       text = await res.text();
     }
   } catch (parseErr) {
-    // Si falla parse, intentamos leer como texto
     try {
       text = await res.text();
     } catch (_) {
@@ -104,7 +103,6 @@ async function inviteUserViaFetch(payload) {
 }
 
 function compactErrorMessage(t, resp) {
-  // Resp puede traer parsed con { ctx: { stage, detail, hint }, ... }
   const p = resp?.parsed;
   const ctx = p?.ctx || p;
 
@@ -138,52 +136,53 @@ export default function InvitarTracker() {
   const { currentOrg } = useAuth();
   const { t } = useTranslation();
 
-  const orgName = currentOrg?.name || t("inviteTracker.orgFallback", "your organization");
+  const orgName =
+    currentOrg?.name || t("inviteTracker.orgFallback", "your organization");
 
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState(null);
 
-  // Personal vigente
-  const [personalList, setPersonalList] = useState([]);
-  const [selectedPersonId, setSelectedPersonId] = useState("");
+  // ✅ Lista canónica de personas por org (org_people + people)
+  const [peopleList, setPeopleList] = useState([]);
+  const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
 
   useEffect(() => {
-    async function loadPersonal() {
+    async function loadPeople() {
       if (!currentOrg?.id) return;
 
+      // ✅ Fuente canónica
       const { data, error } = await supabase
-        .from("personal")
-        .select("id, nombre, email")
+        .from("v_org_people_ui")
+        .select("org_people_id, nombre, apellido, email, is_deleted, org_id")
         .eq("org_id", currentOrg.id)
-        .eq("vigente", true)
         .eq("is_deleted", false)
         .order("nombre", { ascending: true });
 
       if (error) {
-        console.error("[InvitarTracker] Error cargando personal:", error);
+        console.error("[InvitarTracker] Error cargando v_org_people_ui:", error);
         return;
       }
 
-      setPersonalList(data || []);
+      setPeopleList(data || []);
     }
 
-    loadPersonal();
+    loadPeople();
   }, [currentOrg?.id]);
 
   function handleSelectPerson(e) {
     const id = e.target.value;
-    setSelectedPersonId(id);
+    setSelectedOrgPeopleId(id);
 
     if (!id) return;
 
-    const p = personalList.find((x) => x.id === id);
-    if (p?.email) setEmail(p.email.toLowerCase());
+    const p = peopleList.find((x) => x.org_people_id === id);
+    if (p?.email) setEmail(String(p.email).trim().toLowerCase());
   }
 
   function handleEmailChange(e) {
     setEmail(e.target.value);
-    setSelectedPersonId("");
+    setSelectedOrgPeopleId("");
   }
 
   async function handleSubmit(e) {
@@ -193,13 +192,19 @@ export default function InvitarTracker() {
     const trimmedEmail = (email || "").trim().toLowerCase();
 
     if (!trimmedEmail) {
-      setMessage({ type: "error", text: t("inviteTracker.errors.emailRequired") });
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.errors.emailRequired"),
+      });
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
-      setMessage({ type: "error", text: t("inviteTracker.errors.emailInvalid") });
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.errors.emailInvalid"),
+      });
       return;
     }
 
@@ -217,6 +222,7 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
+      // ⚠️ Conservamos el payload actual (para no romper tu Edge Function)
       const payload = {
         email: trimmedEmail,
         role_name: "tracker",
@@ -226,7 +232,6 @@ export default function InvitarTracker() {
 
       const resp = await inviteUserViaFetch(payload);
 
-      // Log ultra explícito para que no se “oculte” en consola
       console.error("[InvitarTracker] invite-user RAW RESPONSE:", {
         ok: resp.ok,
         status: resp.status,
@@ -289,7 +294,7 @@ export default function InvitarTracker() {
       }
 
       setEmail("");
-      setSelectedPersonId("");
+      setSelectedOrgPeopleId("");
     } catch (err) {
       console.error("[InvitarTracker] Error inesperado:", err);
       setMessage({
@@ -324,19 +329,26 @@ export default function InvitarTracker() {
           <label className="block text-xs font-medium text-slate-700 mb-1">
             {t("inviteTracker.form.selectLabel")}
           </label>
+
           <select
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            value={selectedPersonId}
+            value={selectedOrgPeopleId}
             onChange={handleSelectPerson}
           >
-            <option value="">{t("inviteTracker.form.selectPlaceholder")}</option>
-            {personalList.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre} — {p.email}
+            <option value="">
+              {t("inviteTracker.form.selectPlaceholder")}
+            </option>
+
+            {peopleList.map((p) => (
+              <option key={p.org_people_id} value={p.org_people_id}>
+                {`${p.nombre || ""} ${p.apellido || ""}`.trim()} — {p.email || ""}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-[11px] text-slate-500">{t("inviteTracker.form.selectHelp")}</p>
+
+          <p className="mt-1 text-[11px] text-slate-500">
+            {t("inviteTracker.form.selectHelp")}
+          </p>
         </div>
 
         <div>
@@ -347,11 +359,16 @@ export default function InvitarTracker() {
             type="email"
             required
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder={t("inviteTracker.form.emailPlaceholder", "tracker@example.com")}
+            placeholder={t(
+              "inviteTracker.form.emailPlaceholder",
+              "tracker@example.com"
+            )}
             value={email}
             onChange={handleEmailChange}
           />
-          <p className="mt-1 text-[11px] text-slate-500">{t("inviteTracker.form.emailHelp")}</p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            {t("inviteTracker.form.emailHelp")}
+          </p>
         </div>
 
         <button
@@ -359,13 +376,17 @@ export default function InvitarTracker() {
           disabled={sending}
           className="w-full inline-flex justify-center items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
         >
-          {sending ? t("inviteTracker.form.buttonSending") : t("inviteTracker.form.buttonSend")}
+          {sending
+            ? t("inviteTracker.form.buttonSending")
+            : t("inviteTracker.form.buttonSend")}
         </button>
 
         {message && (
           <div
             className={`mt-2 text-sm ${
-              message.type === "success" ? "text-emerald-700" : "text-red-600"
+              message.type === "success"
+                ? "text-emerald-700"
+                : "text-red-600"
             }`}
           >
             {message.text}
