@@ -51,15 +51,45 @@ function getActiveRole(memberships, orgId) {
 }
 
 /* ======================================================
+   HARD ROLE GATES (FIX DEFINITIVO)
+   - PanelGate: bloquea trackers antes de renderizar Shell
+   - TrackerGate: evita que admins/owners entren a tracker-gps
+====================================================== */
+function PanelGate({ children }) {
+  const { loading, session, role } = useAuth();
+  if (loading) return null;
+  if (!session) return <Navigate to="/" replace />;
+  const r = String(role || "").toLowerCase();
+  if (r === "tracker") return <Navigate to="/tracker-gps" replace />;
+  return children;
+}
+
+function TrackerGate({ children }) {
+  const { loading, session, role } = useAuth();
+  if (loading) return null;
+  if (!session) return <Navigate to="/" replace />;
+  const r = String(role || "").toLowerCase();
+  if (r !== "tracker") return <Navigate to="/inicio" replace />;
+  return children;
+}
+
+/* ======================================================
    SHELL (Panel)
 ====================================================== */
 function Shell() {
-  const { loading, memberships, currentOrg, isRootOwner } = useAuth();
+  const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
   const activeRole = useMemo(() => {
     return getActiveRole(memberships, activeOrgId);
   }, [memberships, activeOrgId]);
+
+  // 🔒 Defensa en profundidad:
+  // Si por alguna razón el router llegara aquí con tracker, lo sacamos.
+  const roleLower = String(role || activeRole || "").toLowerCase();
+  if (!loading && roleLower === "tracker") {
+    return <Navigate to="/tracker-gps" replace />;
+  }
 
   if (loading) {
     return (
@@ -155,16 +185,20 @@ export default function App() {
           path="/tracker-gps"
           element={
             <AuthGuard mode="tracker">
-              <TrackerGpsPage />
+              <TrackerGate>
+                <TrackerGpsPage />
+              </TrackerGate>
             </AuthGuard>
           }
         />
 
-        {/* ✅ PRIVATE PANEL (NO TRACKERS) */}
+        {/* ✅ PRIVATE PANEL (BLOQUEA TRACKERS) */}
         <Route
           element={
             <AuthGuard mode="panel">
-              <Shell />
+              <PanelGate>
+                <Shell />
+              </PanelGate>
             </AuthGuard>
           }
         >
