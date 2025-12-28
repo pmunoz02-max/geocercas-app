@@ -47,7 +47,7 @@ export default function AsignacionesPage() {
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
   // Formulario
-  const [selectedPersonalId, setSelectedPersonalId] = useState("");
+  const [selectedPersonalId, setSelectedPersonalId] = useState(""); // ✅ ahora será person_id (no org_people.id)
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -87,7 +87,10 @@ export default function AsignacionesPage() {
       // Seguridad extra en frontend (no reemplaza backend/RLS):
       // si el dataset trae org_id, filtramos por la organización activa.
       const filtered =
-        activeOrgId && rows.length > 0 && rows[0] && Object.prototype.hasOwnProperty.call(rows[0], "org_id")
+        activeOrgId &&
+        rows.length > 0 &&
+        rows[0] &&
+        Object.prototype.hasOwnProperty.call(rows[0], "org_id")
           ? rows.filter((r) => r.org_id === activeOrgId)
           : rows;
 
@@ -119,16 +122,16 @@ export default function AsignacionesPage() {
 
     try {
       const [
-        { data: personalData, error: personalError },
+        { data: peopleUiData, error: peopleUiError },
         { data: geocercasData, error: geocercasError },
         { data: activitiesData, error: activitiesError },
       ] = await Promise.all([
-        // PERSONAL: filtrar por org_id y no borrados
+        // ✅ PERSONAL (CANÓNICO): usar vista basada en org_people + people
         supabase
-          .from("personal")
-          .select("id, nombre, apellido, email, is_deleted, org_id")
+          .from("v_org_people_ui")
+          .select("person_id, nombre, apellido, email, telefono, vigente, org_id")
           .eq("org_id", activeOrgId)
-          .eq("is_deleted", false)
+          .eq("is_deleted", false) // si la vista la expone, perfecto; si no, el select fallará y lo veremos en consola
           .order("nombre", { ascending: true }),
 
         // GEOCERCAS: filtrar por org_id
@@ -159,11 +162,12 @@ export default function AsignacionesPage() {
         })(),
       ]);
 
-      if (personalError) throw personalError;
+      if (peopleUiError) throw peopleUiError;
       if (geocercasError) throw geocercasError;
       if (activitiesError) throw activitiesError;
 
-      setPersonalOptions(Array.isArray(personalData) ? personalData : []);
+      // Nota: en el select de persona usaremos person_id (porque asignaciones.personal_id apunta a la PERSONA, no al org_people)
+      setPersonalOptions(Array.isArray(peopleUiData) ? peopleUiData : []);
       setGeocercaOptions(Array.isArray(geocercasData) ? geocercasData : []);
       setActivityOptions(Array.isArray(activitiesData) ? activitiesData : []);
     } catch (err) {
@@ -257,7 +261,7 @@ export default function AsignacionesPage() {
     }
 
     const payload = {
-      personal_id: selectedPersonalId,
+      personal_id: selectedPersonalId, // ✅ person_id
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId || null,
       start_time: localDateTimeToISO(startTime),
@@ -436,8 +440,8 @@ export default function AsignacionesPage() {
             >
               <option value="">{t("asignaciones.form.personPlaceholder")}</option>
               {personalOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id}
+                <option key={p.person_id} value={p.person_id}>
+                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.person_id}
                 </option>
               ))}
             </select>
