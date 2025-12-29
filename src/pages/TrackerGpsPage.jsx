@@ -2,19 +2,25 @@
 import { useEffect, useRef, useState } from "react";
 import { supabaseTracker } from "../supabaseTrackerClient";
 
-const CLIENT_SEND_INTERVAL_MS = 12_000;
+// ====== Config 5 minutos ======
+const SERVER_MIN_INTERVAL_MS = 5 * 60 * 1000; // 300000
+const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000; // igual al server
+// Intentamos cada 30s, pero el throttle manda (no spameamos)
+const TICK_MS = 30_000;
 
 export default function TrackerGpsPage() {
   const [status, setStatus] = useState("Iniciando tracker…");
   const [coords, setCoords] = useState(null);
   const [lastSend, setLastSend] = useState(null);
   const [lastError, setLastError] = useState(null);
-  const [isSending, setIsSending] = useState(false);
   const [debugLines, setDebugLines] = useState([]);
 
   const watchIdRef = useRef(null);
   const intervalRef = useRef(null);
+
   const lastCoordsRef = useRef(null);
+  const isSendingRef = useRef(false);
+  const lastSentAtRef = useRef(0);
 
   // Edge Function está en Project A
   const A_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -26,34 +32,36 @@ export default function TrackerGpsPage() {
     console.log("[TrackerGpsPage]", line);
     setDebugLines((prev) => {
       const next = [...prev, line];
-      if (next.length > 20) next.shift();
+      if (next.length > 25) next.shift();
       return next;
     });
   };
 
-  // 1) Sesión en Project B
+  // 1) Sesión Project B
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      log("checkSession(B) → supabaseTracker.auth.getSession()");
       const { data, error } = await supabaseTracker.auth.getSession();
       if (cancelled) return;
 
       if (error) {
         setStatus("Error obteniendo sesión tracker.");
         setLastError(error.message || String(error));
+        log(`getSession(B) error: ${error.message || String(error)}`);
         return;
       }
 
       if (!data?.session) {
         setStatus("No hay sesión activa. Abre el tracker desde tu magic link.");
         setLastError("Sesión tracker no encontrada.");
+        log("getSession(B): sin sesión");
         return;
       }
 
       setStatus("Sesión OK. Iniciando geolocalización…");
       setLastError(null);
+      log(`getSession(B): OK email=${data.session.user.email}`);
     })();
 
     return () => {
@@ -84,14 +92,13 @@ export default function TrackerGpsPage() {
       setCoords(c);
       setStatus("Tracker activo");
       setLastError(null);
-      log(`GPS ok lat=${c.lat.toFixed(6)} lng=${c.lng.toFixed(6)} acc=${c.accuracy}`);
     };
 
     const handleError = (err) => {
       if (cancelled) return;
-      log(`GPS error: ${err?.message || String(err)} (code=${err?.code})`);
       setStatus("Error GPS");
       setLastError(err?.message || String(err));
+      log(`GPS error: ${err?.message || String(err)} (code=${err?.code})`);
     };
 
     watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
@@ -107,7 +114,7 @@ export default function TrackerGpsPage() {
     };
   }, []);
 
-  // 3) Envío a Project A con token B
+  // 3) Envío throttled (cada 5 min)
   useEffect(() => {
     if (!SEND_URL || !A_ANON) {
       setStatus("Config incompleta (Project A).");
@@ -117,9 +124,19 @@ export default function TrackerGpsPage() {
 
     async function sendOnce() {
       const c = lastCoordsRef.current;
-      if (!c || isSending) return;
+      if (!c) return;
 
-      setIsSending(true);
+      // throttle real 5 minutos
+      const now = Date.now();
+      const elapsed = now - lastSentAtRef.current;
+      if (elapsed < CLIENT_MIN_INTERVAL_MS) {
+        const remain = Math.ceil((CLIENT_MIN_INTERVAL_MS - elapsed) / 1000);
+        setStatus(`Esperando ventana mínima… (${remain}s)`);
+        return;
+      }
+
+      if (isSendingRef.current) return;
+      isSendingRef.current = true;
 
       try {
         const { data: sData, error: sErr } = await supabaseTracker.auth.getSession();
@@ -128,6 +145,7 @@ export default function TrackerGpsPage() {
         if (sErr || !tokenB) {
           setStatus("Sesión tracker expirada. Reabre el magic link.");
           setLastError("Token tracker no disponible.");
+          log(`No tokenB: ${sErr?.message || "sin sesión"}`);
           return;
         }
 
@@ -152,6 +170,17 @@ export default function TrackerGpsPage() {
         const json = await resp.json().catch(() => ({}));
 
         if (!resp.ok) {
+          if (resp.status === 429) {
+            const retryMs =
+              typeof json?.retry_after_ms === "number" ? json.retry_after_ms : SERVER_MIN_INTERVAL_MS;
+            // Ajuste fuerte: movemos lastSentAtRef para que no reintente antes de retry
+            lastSentAtRef.current = Date.now() - (CLIENT_MIN_INTERVAL_MS - retryMs);
+            setStatus("Esperando ventana mínima de envío…");
+            setLastError("Frecuencia mínima entre posiciones");
+            log(`429 rate limit. retry_after_ms=${retryMs}`);
+            return;
+          }
+
           const msg = json?.error || `HTTP ${resp.status}`;
           setStatus("Error al enviar la posición al servidor.");
           setLastError(`Edge Function: ${msg}`);
@@ -159,26 +188,28 @@ export default function TrackerGpsPage() {
           return;
         }
 
+        lastSentAtRef.current = Date.now();
         setStatus("Posición enviada correctamente.");
         setLastSend(new Date());
         setLastError(null);
-        log(`send_position OK: ${JSON.stringify(json)}`);
+        log("send_position OK");
       } catch (e) {
         setStatus("Error de red al enviar la posición.");
         setLastError(e?.message || String(e));
+        log(`send_position exception: ${e?.message || String(e)}`);
       } finally {
-        setIsSending(false);
+        isSendingRef.current = false;
       }
     }
 
-    intervalRef.current = window.setInterval(sendOnce, CLIENT_SEND_INTERVAL_MS);
-    sendOnce();
+    // ticker suave: intenta cada 30s, pero el throttle manda
+    intervalRef.current = window.setInterval(sendOnce, TICK_MS);
 
     return () => {
       if (intervalRef.current != null) window.clearInterval(intervalRef.current);
       intervalRef.current = null;
     };
-  }, [SEND_URL, A_ANON, isSending]);
+  }, [SEND_URL, A_ANON]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
   const latText = coords?.lat != null ? coords.lat.toFixed(6) : "—";
