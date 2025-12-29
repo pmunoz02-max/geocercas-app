@@ -13,7 +13,6 @@ export default function TrackerGpsPage() {
   const [coords, setCoords] = useState(null);
   const [lastSend, setLastSend] = useState(null);
   const [lastError, setLastError] = useState(null);
-  const [debugLines, setDebugLines] = useState([]);
 
   const watchIdRef = useRef(null);
   const intervalRef = useRef(null);
@@ -30,11 +29,6 @@ export default function TrackerGpsPage() {
   const log = (msg) => {
     const line = `${new Date().toISOString().slice(11, 19)} - ${msg}`;
     console.log("[TrackerGpsPage]", line);
-    setDebugLines((prev) => {
-      const next = [...prev, line];
-      if (next.length > 25) next.shift();
-      return next;
-    });
   };
 
   // 1) Sesión Project B
@@ -173,7 +167,6 @@ export default function TrackerGpsPage() {
           if (resp.status === 429) {
             const retryMs =
               typeof json?.retry_after_ms === "number" ? json.retry_after_ms : SERVER_MIN_INTERVAL_MS;
-            // Ajuste fuerte: movemos lastSentAtRef para que no reintente antes de retry
             lastSentAtRef.current = Date.now() - (CLIENT_MIN_INTERVAL_MS - retryMs);
             setStatus("Esperando ventana mínima de envío…");
             setLastError("Frecuencia mínima entre posiciones");
@@ -202,7 +195,6 @@ export default function TrackerGpsPage() {
       }
     }
 
-    // ticker suave: intenta cada 30s, pero el throttle manda
     intervalRef.current = window.setInterval(sendOnce, TICK_MS);
 
     return () => {
@@ -238,13 +230,6 @@ export default function TrackerGpsPage() {
             </div>
           ) : null}
         </div>
-
-        <details className="mt-4">
-          <summary className="cursor-pointer text-xs text-slate-300">Debug (solo pruebas)</summary>
-          <div className="mt-2 rounded-xl bg-slate-950 border border-slate-800 p-2 text-[11px] text-slate-300 max-h-48 overflow-auto">
-            {debugLines.length ? debugLines.map((l, i) => <div key={i}>{l}</div>) : <div>Sin logs…</div>}
-          </div>
-        </details>
       </div>
     </div>
   );
