@@ -5,24 +5,27 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 /**
  * AuthGuard universal y permanente.
- * - No usa window.location (evita bucles).
- * - Aplica tracker-only en un único punto (fuente de verdad del routing).
+ * - Evita bucles (NO usa window.location).
+ * - Enforza reglas por rol y opcionalmente por "mode".
  *
- * Reglas:
- * 1) loading => mostrar "Cargando permisos…"
+ * Reglas base:
+ * 1) loading => "Cargando permisos…"
  * 2) sin sesión => /login
  * 3) role === tracker:
  *    - solo permite /tracker-gps
  * 4) role !== tracker:
  *    - nunca permite /tracker-gps
- * 5) caso válido => render children
+ *
+ * Reglas extra por mode (si se pasa):
+ * - mode="tracker": solo permite /tracker-gps (aunque haya errores aguas arriba)
+ * - mode="panel":  nunca permite /tracker-gps
  */
-export default function AuthGuard({ children }) {
+export default function AuthGuard({ children, mode }) {
   const { session, loading, role } = useAuth();
   const location = useLocation();
   const path = location?.pathname || "/";
 
-  // 1) Espera explícita (evita parpadeos / decisiones sin rol)
+  // 1) Espera explícita (evita decisiones sin rol)
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -33,7 +36,7 @@ export default function AuthGuard({ children }) {
     );
   }
 
-  // 2) No autenticado => login (preserva destino si lo necesitas luego)
+  // 2) No autenticado => login
   if (!session) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
@@ -42,6 +45,17 @@ export default function AuthGuard({ children }) {
   const isTracker = roleLower === "tracker";
   const isTrackerPath = path === "/tracker-gps" || path.startsWith("/tracker-gps/");
 
+  const modeLower = String(mode || "").toLowerCase();
+
+  // A) Reglas por mode (primero)
+  if (modeLower === "tracker" && !isTrackerPath) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
+  if (modeLower === "panel" && isTrackerPath) {
+    return <Navigate to="/inicio" replace />;
+  }
+
+  // B) Reglas base por rol (canon)
   // 3) TRACKER: solo puede estar en /tracker-gps
   if (isTracker && !isTrackerPath) {
     return <Navigate to="/tracker-gps" replace />;
