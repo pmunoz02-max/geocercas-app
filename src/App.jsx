@@ -51,11 +51,11 @@ function normalizeRole(r) {
   if (v === "admin") return "admin";
   if (v === "tracker") return "tracker";
   if (v === "viewer") return "viewer";
-  return v || "tracker";
+  return v || "";
 }
 
 function getActiveRole(memberships, orgId) {
-  if (!orgId) return "tracker";
+  if (!orgId) return "";
   const row = Array.isArray(memberships)
     ? memberships.find((m) => m?.org_id === orgId)
     : null;
@@ -120,7 +120,10 @@ function PanelGate({ children }) {
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
+  // Si hay sesión pero aún no resolvimos rol (carrera de triggers / RLS), esperamos.
   const r = String(role || "").toLowerCase().trim();
+  if (!r) return null;
+
   if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
 
   return children;
@@ -135,6 +138,8 @@ function TrackerGate({ children }) {
   if (isTrackerHostname(window.location.hostname)) return children;
 
   const r = String(role || "").toLowerCase().trim();
+  if (!r) return null;
+
   if (PANEL_ROLES.has(r)) return <Navigate to="/inicio" replace />;
 
   return children;
@@ -151,11 +156,13 @@ function Shell() {
   }
 
   const roleLower = String(role || activeRole || "").toLowerCase().trim();
-  if (!loading && !PANEL_ROLES.has(roleLower)) {
-    return <Navigate to="/tracker-gps" replace />;
-  }
 
   if (loading) return null;
+  if (!roleLower) return null;
+
+  if (!PANEL_ROLES.has(roleLower)) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
 
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
@@ -211,6 +218,8 @@ function SmartFallback() {
   if (!session) return <Navigate to="/" replace />;
 
   const r = String(role || "").toLowerCase().trim();
+  if (!r) return null;
+
   return PANEL_ROLES.has(r) ? <Navigate to="/inicio" replace /> : <Navigate to="/tracker-gps" replace />;
 }
 

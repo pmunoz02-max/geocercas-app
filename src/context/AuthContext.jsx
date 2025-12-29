@@ -43,7 +43,9 @@ function isUuid(v) {
 }
 
 function safeRoleFallback() {
-  return "tracker";
+  // Rol desconocido aún: evitamos caer por defecto a "tracker"
+  // porque eso fuerza redirects indebidos en el panel.
+  return "";
 }
 
 export const AuthProvider = ({ children }) => {
@@ -217,11 +219,26 @@ export const AuthProvider = ({ children }) => {
       else localStorage.removeItem("current_org_id");
 
       let resolvedRole = safeRoleFallback();
+
+      // Si tenemos org activo, tomamos el rol de ese org.
       if (mRows.length && activeOrg?.id) {
         const activeMembership = mRows.find((m) => m.org_id === activeOrg.id);
-        resolvedRole = activeMembership?.role ? String(activeMembership.role).toLowerCase() : "tracker";
+        resolvedRole = activeMembership?.role ? String(activeMembership.role).toLowerCase() : "";
+      } else if (mRows.length) {
+        // ✅ Caso crítico: el usuario tiene memberships pero aún no podemos resolver activeOrg
+        // (por ejemplo, triggers creando la org al aceptar invitación). No debemos caer a tracker.
+        // Usamos el rol de mayor jerarquía (mRows ya está ordenado por roleRank y created_at).
+        resolvedRole = mRows[0]?.role ? String(mRows[0].role).toLowerCase() : "";
+
+        // También fijamos un orgId tentativo para que el panel pueda abrir.
+        const tentativeOrgId = mRows[0]?.org_id || null;
+        if (tentativeOrgId) {
+          setCurrentOrg((prev) => prev ?? { id: tentativeOrgId, name: "", suspended: false });
+          setTenantId(tentativeOrgId);
+          localStorage.setItem("current_org_id", tentativeOrgId);
+        }
       } else {
-        resolvedRole = "tracker";
+        resolvedRole = "";
       }
 
       setRole(resolvedRole);
