@@ -143,7 +143,7 @@ export default function InvitarTracker() {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState(null);
 
-  // ✅ Lista canónica de personas por org (org_people + people)
+  // Lista canónica de personas por org (v_org_people_ui)
   const [peopleList, setPeopleList] = useState([]);
   const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
 
@@ -151,7 +151,6 @@ export default function InvitarTracker() {
     async function loadPeople() {
       if (!currentOrg?.id) return;
 
-      // ✅ Fuente canónica
       const { data, error } = await supabase
         .from("v_org_people_ui")
         .select("org_people_id, nombre, apellido, email, is_deleted, org_id")
@@ -222,12 +221,22 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      // ⚠️ Conservamos el payload actual (para no romper tu Edge Function)
+      // ✅ FIX: redirect_to explícito con tracker_org_id
+      const origin = window.location.origin.replace(/\/$/, "");
+      const redirect_to = `${origin}/auth/callback?tracker_org_id=${currentOrg.id}`;
+
+      // ✅ Payload extendido (si tu Edge Function lo soporta; si no, lo ignora)
       const payload = {
         email: trimmedEmail,
         role_name: "tracker",
         full_name: null,
         org_id: currentOrg.id,
+
+        // NUEVO: fuerza el retorno a tu callback con org tracker
+        redirect_to,
+
+        // redundante: por si tu función lo usa para construir links
+        tracker_org_id: currentOrg.id,
       };
 
       const resp = await inviteUserViaFetch(payload);
@@ -238,6 +247,7 @@ export default function InvitarTracker() {
         parsed: resp.parsed,
         text: resp.text,
         error: resp.error,
+        payloadSent: payload,
       });
 
       if (!resp.ok) {
@@ -256,6 +266,9 @@ export default function InvitarTracker() {
       }
 
       const mode = data.mode;
+      const link = data.invite_link || data.magic_link || null;
+
+      // Mensajes
       if (mode === "invited") {
         setMessage({
           type: "success",
@@ -267,16 +280,17 @@ export default function InvitarTracker() {
       } else if (mode === "magiclink_sent") {
         setMessage({
           type: "success",
-          text: t("inviteTracker.messages.magiclinkSent", {
-            email: data.email || trimmedEmail,
-          }),
+          text: link
+            ? `Magic link enviado. Si necesitas el link: ${link}`
+            : t("inviteTracker.messages.magiclinkSent", {
+                email: data.email || trimmedEmail,
+              }),
         });
       } else if (mode === "link_only") {
-        const link = data.invite_link;
         setMessage({
           type: "success",
           text: link
-            ? t("inviteTracker.messages.linkOnlyWithLink", { link })
+            ? `Link generado (tracker-only): ${link}`
             : t("inviteTracker.messages.linkOnlyNoLink"),
         });
       } else if (mode === "created_without_email") {
@@ -287,9 +301,11 @@ export default function InvitarTracker() {
       } else {
         setMessage({
           type: "success",
-          text: t("inviteTracker.messages.genericProcessed", {
-            email: data.email || trimmedEmail,
-          }),
+          text: link
+            ? `Invitación procesada. Link: ${link}`
+            : t("inviteTracker.messages.genericProcessed", {
+                email: data.email || trimmedEmail,
+              }),
         });
       }
 
@@ -335,9 +351,7 @@ export default function InvitarTracker() {
             value={selectedOrgPeopleId}
             onChange={handleSelectPerson}
           >
-            <option value="">
-              {t("inviteTracker.form.selectPlaceholder")}
-            </option>
+            <option value="">{t("inviteTracker.form.selectPlaceholder")}</option>
 
             {peopleList.map((p) => (
               <option key={p.org_people_id} value={p.org_people_id}>
@@ -359,10 +373,7 @@ export default function InvitarTracker() {
             type="email"
             required
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder={t(
-              "inviteTracker.form.emailPlaceholder",
-              "tracker@example.com"
-            )}
+            placeholder={t("inviteTracker.form.emailPlaceholder", "tracker@example.com")}
             value={email}
             onChange={handleEmailChange}
           />
@@ -384,9 +395,7 @@ export default function InvitarTracker() {
         {message && (
           <div
             className={`mt-2 text-sm ${
-              message.type === "success"
-                ? "text-emerald-700"
-                : "text-red-600"
+              message.type === "success" ? "text-emerald-700" : "text-red-600"
             }`}
           >
             {message.text}
