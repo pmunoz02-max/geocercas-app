@@ -5,7 +5,9 @@ import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
 
 function isUuid(v: unknown) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v ?? ""));
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v ?? "")
+  );
 }
 
 function parseHash(hash: string) {
@@ -18,27 +20,40 @@ function parseHash(hash: string) {
   };
 }
 
+// Keys explícitas (flow-isolated)
+const AUTH_KEY_PANEL = "sb-tugeocercas-auth-token-panel";
+const AUTH_KEY_TRACKER = "sb-tugeocercas-auth-token-tracker";
+
 /**
- * PURGA universal de auth storage para evitar que una sesión admin previa “gane”.
- * No es “borrar cookies”; es un reset controlado SOLO de keys Supabase auth.
+ * Purga controlada SOLO de keys Supabase auth.
+ * (No es “borra cookies”. Es reset determinístico de Supabase storage.)
  */
 function purgeSupabaseAuthStorage() {
   const buckets: Storage[] = [];
-  try { buckets.push(window.localStorage); } catch {}
-  try { buckets.push(window.sessionStorage); } catch {}
+  try {
+    buckets.push(window.localStorage);
+  } catch {}
+  try {
+    buckets.push(window.sessionStorage);
+  } catch {}
 
   for (const storage of buckets) {
     try {
+      storage.removeItem(AUTH_KEY_PANEL);
+      storage.removeItem(AUTH_KEY_TRACKER);
+
+      // Además, por compatibilidad con keys antiguas:
       const keys: string[] = [];
       for (let i = 0; i < storage.length; i++) {
         const k = storage.key(i);
         if (k) keys.push(k);
       }
+
       for (const k of keys) {
-        // Supabase-js v2 usa keys tipo "sb-<project-ref>-auth-token"
-        // y otras variantes sb-... (mfa, refresh, etc.)
-        if (k.startsWith("sb-") && k.includes("auth")) storage.removeItem(k);
-        if (k.startsWith("sb-") && k.includes("token")) storage.removeItem(k);
+        // Remueve restos viejos de supabase-js
+        if (k.startsWith("sb-") && (k.includes("auth") || k.includes("token"))) {
+          storage.removeItem(k);
+        }
       }
     } catch {}
   }
@@ -49,7 +64,11 @@ export default function AuthCallback() {
   const location = useLocation();
   const { reloadAuth } = useAuth();
 
-  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const params = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search]
+  );
+
   const code = useMemo(() => params.get("code"), [params]);
 
   const trackerOrgId = useMemo(() => {
@@ -70,16 +89,16 @@ export default function AuthCallback() {
       try {
         setWorking(true);
 
-        // Si viene tracker_org_id, fijamos contexto tracker desde ya
+        // Si viene tracker_org_id, fijamos “one-shot” contexto tracker
         if (trackerOrgId) {
           localStorage.setItem("force_tracker_org_id", trackerOrgId);
           localStorage.setItem("current_org_id", trackerOrgId);
         }
 
-        // ✅ Candado universal: purga storage antes de setear sesión nueva
+        // 0) RESET determinístico antes de aceptar la nueva sesión
         purgeSupabaseAuthStorage();
 
-        // ✅ extra: también intentamos signOut local (no dependemos de que funcione)
+        // 0.1) Intento de signOut local (best effort)
         try {
           await supabase.auth.signOut({ scope: "local" });
         } catch {}
@@ -96,7 +115,10 @@ export default function AuthCallback() {
           // 2) Legacy hash tokens
           const { access_token, refresh_token } = parseHash(location.hash || "");
           if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+            const { error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
             if (error) {
               console.error("[AuthCallback] setSession error:", error);
               navigate("/login", { replace: true });
@@ -108,25 +130,28 @@ export default function AuthCallback() {
           }
         }
 
-        // Recalcular rol canónico desde BD
+        // 2) Recalcular rol canónico desde BD
         if (typeof reloadAuth === "function") {
           await reloadAuth();
         }
 
-        // ✅ Tracker-only: si viene tracker_org_id o metadata app_flow=tracker
+        // 3) Tracker-only hard routing
         if (trackerOrgId) {
           navigate("/tracker-gps", { replace: true });
           return;
         }
 
         const { data } = await supabase.auth.getUser();
-        const appFlow = String(data?.user?.user_metadata?.app_flow ?? "").toLowerCase();
+        const appFlow = String(
+          data?.user?.user_metadata?.app_flow ?? ""
+        ).toLowerCase();
+
         if (appFlow === "tracker") {
           navigate("/tracker-gps", { replace: true });
           return;
         }
 
-        // Caso no-tracker
+        // 4) Default panel
         navigate("/inicio", { replace: true });
       } finally {
         if (alive) setWorking(false);
