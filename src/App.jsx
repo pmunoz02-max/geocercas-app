@@ -1,6 +1,6 @@
 // src/App.jsx
-import React, { useMemo } from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import React, { useEffect, useMemo } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
@@ -30,29 +30,69 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-/* ======================================================
-   HELPERS: Rol activo por organización (NO TOCAR)
-====================================================== */
+/**
+ * IMPORTANT:
+ * - Solo estos roles pueden ver el panel.
+ * - Todo lo demás => tracker-gps (fail-closed).
+ */
+const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
+
+/**
+ * Cambia este string en cada deploy para confirmar en consola que cargó el build correcto.
+ * (Ej: fecha/hora, o commit hash)
+ */
+const BUILD_TAG = "APP-ROUTER-BLINDAGE-2025-12-29-01";
+
 function normalizeRole(r) {
-  const v = String(r || "").toLowerCase();
-  if (v === "owner") return "owner";
-  if (v === "admin") return "admin";
-  if (v === "tracker") return "tracker";
-  if (v === "viewer") return "viewer";
-  return v || "tracker";
+  return String(r ?? "").toLowerCase().trim();
 }
 
-function getActiveRole(memberships, orgId) {
-  if (!orgId) return "tracker";
-  const row = Array.isArray(memberships)
-    ? memberships.find((m) => m?.org_id === orgId)
-    : null;
-  return normalizeRole(row?.role);
+/**
+ * Candado global anti-panel (hard redirect).
+ * Si hay sesión y el rol NO está en whitelist del panel, NO permitimos rutas del panel.
+ * Esto evita race conditions incluso si el router ya resolvió /inicio.
+ */
+function GlobalRoleRedirector() {
+  const { loading, session, role } = useAuth();
+  const loc = useLocation();
+
+  useEffect(() => {
+    // Solo log 1 vez por load (útil para confirmar deploy real)
+    // eslint-disable-next-line no-console
+    console.log("[BUILD_TAG]", BUILD_TAG);
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const path = loc.pathname;
+    const r = normalizeRole(role);
+
+    // Rutas que SIEMPRE permitimos, aunque el rol sea raro.
+    const allowAlways =
+      path === "/" ||
+      path === "/login" ||
+      path === "/reset-password" ||
+      path.startsWith("/auth/callback") ||
+      path.startsWith("/tracker-gps");
+
+    if (!session) return; // sin sesión, AuthGuard ya decide
+
+    if (allowAlways) return;
+
+    // Si no es rol de panel => fuera (hard replace)
+    if (!PANEL_ROLES.has(r)) {
+      // eslint-disable-next-line no-console
+      console.warn("[GlobalRoleRedirector] BLOCK PANEL", { path, role: r });
+      window.location.replace("/tracker-gps");
+    }
+  }, [loading, session, role, loc.pathname]);
+
+  return null;
 }
 
 /* ======================================================
-   HARD ROLE GATES (FIX DEFINITIVO)
-   - FAIL CLOSED: si role aún no está listo, NO renderiza panel
+   HARD ROLE GATES (FAIL-CLOSED)
 ====================================================== */
 function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
@@ -69,12 +109,10 @@ function PanelGate({ children }) {
 
   if (!session) return <Navigate to="/" replace />;
 
-  const r = String(role || "").toLowerCase();
+  const r = normalizeRole(role);
 
-  // ✅ Fail-closed: si por cualquier razón role no está resuelto, bloquea panel.
-  if (!r) return <Navigate to="/tracker-gps" replace />;
-
-  if (r === "tracker") return <Navigate to="/tracker-gps" replace />;
+  // ✅ Whitelist: solo panel roles pasan
+  if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
 
   return children;
 }
@@ -94,8 +132,10 @@ function TrackerGate({ children }) {
 
   if (!session) return <Navigate to="/" replace />;
 
-  const r = String(role || "").toLowerCase();
-  if (r !== "tracker") return <Navigate to="/inicio" replace />;
+  // Para tracker: si el rol no es de panel, lo dejamos entrar al tracker flow.
+  // Esto es intencional: si role es "", "authenticated", etc., igual lo tratamos como tracker.
+  const r = normalizeRole(role);
+  if (PANEL_ROLES.has(r)) return <Navigate to="/inicio" replace />;
 
   return children;
 }
@@ -104,16 +144,12 @@ function TrackerGate({ children }) {
    SHELL (Panel)
 ====================================================== */
 function Shell() {
-  const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
-  const activeOrgId = currentOrg?.id ?? null;
+  const { loading, isRootOwner, role } = useAuth();
 
-  const activeRole = useMemo(() => {
-    return getActiveRole(memberships, activeOrgId);
-  }, [memberships, activeOrgId]);
+  const r = normalizeRole(role);
 
-  // Defensa en profundidad
-  const roleLower = String(role || activeRole || "").toLowerCase();
-  if (!loading && roleLower === "tracker") {
+  // Defensa en profundidad (aunque PanelGate ya filtró)
+  if (!loading && !PANEL_ROLES.has(r)) {
     return <Navigate to="/tracker-gps" replace />;
   }
 
@@ -121,7 +157,7 @@ function Shell() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          Cargando organización y permisos…
+          Cargando…
         </div>
       </div>
     );
@@ -179,11 +215,14 @@ function SmartFallback() {
   const { session, loading, role } = useAuth();
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
-  const roleLower = String(role || "").toLowerCase();
-  return roleLower === "tracker" ? (
-    <Navigate to="/tracker-gps" replace />
-  ) : (
+
+  const r = normalizeRole(role);
+
+  // Whitelist: panel roles -> /inicio, todo lo demás -> /tracker-gps
+  return PANEL_ROLES.has(r) ? (
     <Navigate to="/inicio" replace />
+  ) : (
+    <Navigate to="/tracker-gps" replace />
   );
 }
 
@@ -193,6 +232,9 @@ function SmartFallback() {
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Candado global anti-panel */}
+      <GlobalRoleRedirector />
+
       <Routes>
         {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
@@ -212,7 +254,7 @@ export default function App() {
           }
         />
 
-        {/* PRIVATE PANEL (FIX DEFINITIVO: PanelGate NO monta Shell) */}
+        {/* PRIVATE PANEL (whitelist) */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -222,7 +264,6 @@ export default function App() {
             </AuthGuard>
           }
         >
-          {/* El layout del panel vive aquí adentro */}
           <Route element={<Shell />}>
             <Route path="/inicio" element={<Inicio />} />
             <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
