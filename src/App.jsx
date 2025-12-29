@@ -52,24 +52,51 @@ function getActiveRole(memberships, orgId) {
 
 /* ======================================================
    HARD ROLE GATES (FIX DEFINITIVO)
-   - PanelGate: bloquea trackers antes de renderizar Shell
-   - TrackerGate: evita que admins/owners entren a tracker-gps
+   - FAIL CLOSED: si role aún no está listo, NO renderiza panel
 ====================================================== */
 function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
-  if (loading) return null;
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+          Cargando permisos…
+        </div>
+      </div>
+    );
+  }
+
   if (!session) return <Navigate to="/" replace />;
+
   const r = String(role || "").toLowerCase();
+
+  // ✅ Fail-closed: si por cualquier razón role no está resuelto, bloquea panel.
+  if (!r) return <Navigate to="/tracker-gps" replace />;
+
   if (r === "tracker") return <Navigate to="/tracker-gps" replace />;
+
   return children;
 }
 
 function TrackerGate({ children }) {
   const { loading, session, role } = useAuth();
-  if (loading) return null;
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+          Cargando permisos…
+        </div>
+      </div>
+    );
+  }
+
   if (!session) return <Navigate to="/" replace />;
+
   const r = String(role || "").toLowerCase();
   if (r !== "tracker") return <Navigate to="/inicio" replace />;
+
   return children;
 }
 
@@ -84,8 +111,7 @@ function Shell() {
     return getActiveRole(memberships, activeOrgId);
   }, [memberships, activeOrgId]);
 
-  // 🔒 Defensa en profundidad:
-  // Si por alguna razón el router llegara aquí con tracker, lo sacamos.
+  // Defensa en profundidad
   const roleLower = String(role || activeRole || "").toLowerCase();
   if (!loading && roleLower === "tracker") {
     return <Navigate to="/tracker-gps" replace />;
@@ -101,12 +127,9 @@ function Shell() {
     );
   }
 
-  // ✅ Tabs del panel (NO trackers)
-  // ⛔ Se oculta "Geocercas" (landing/listado) para no exponer esa pantalla.
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
     { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
-    // { path: "/geocercas", labelKey: "app.tabs.geocercas" }, // 🔒 oculto
     { path: "/personal", labelKey: "app.tabs.personal" },
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
@@ -116,7 +139,6 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  // Admin tab SOLO root owner (Fenice)
   if (isRootOwner === true) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
@@ -151,9 +173,7 @@ function LoginShell() {
 }
 
 /* ======================================================
-   Smart fallback:
-   - si es tracker -> /tracker-gps
-   - si no -> /inicio
+   Smart fallback
 ====================================================== */
 function SmartFallback() {
   const { session, loading, role } = useAuth();
@@ -180,7 +200,7 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* ✅ TRACKER (FUERA DEL PANEL) */}
+        {/* TRACKER */}
         <Route
           path="/tracker-gps"
           element={
@@ -192,7 +212,7 @@ export default function App() {
           }
         />
 
-        {/* ✅ PRIVATE PANEL (BLOQUEA TRACKERS) */}
+        {/* PRIVATE PANEL */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -203,16 +223,8 @@ export default function App() {
           }
         >
           <Route path="/inicio" element={<Inicio />} />
-
-          {/* Tabs */}
           <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
-
-          {/* 🔒 Ruta mantenida pero redirigida (no rompe nada) */}
-          <Route
-            path="/geocercas"
-            element={<Navigate to="/nueva-geocerca" replace />}
-          />
-
+          <Route path="/geocercas" element={<Navigate to="/nueva-geocerca" replace />} />
           <Route path="/personal" element={<PersonalPage />} />
           <Route path="/actividades" element={<ActividadesPage />} />
           <Route path="/asignaciones" element={<AsignacionesPage />} />
@@ -221,7 +233,6 @@ export default function App() {
           <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
           <Route path="/invitar-tracker" element={<InvitarTracker />} />
 
-          {/* Admin solo root owner */}
           <Route
             path="/admins"
             element={
@@ -231,14 +242,12 @@ export default function App() {
             }
           />
 
-          {/* Help */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
-        {/* Fallback inteligente */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>

@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import {
   createContext,
   useContext,
@@ -96,7 +97,11 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // Root Owner
+      // ✅ Fail-closed temprano: mientras resolvemos memberships,
+      // el rol por defecto en sesión autenticada es tracker.
+      setRole("tracker");
+
+      // Root Owner (informativo para UI admin root)
       try {
         const { data, error } = await supabase.rpc("is_root_owner");
         if (error) setIsRootOwner(false);
@@ -140,49 +145,74 @@ export const AuthProvider = ({ children }) => {
       // Organizations
       let orgs = [];
       if (orgIds.length) {
-        const { data } = await supabase
-          .from("organizations")
-          .select("*")
-          .in("id", orgIds);
+        const { data } = await supabase.from("organizations").select("*").in("id", orgIds);
         orgs = data ?? [];
       }
-
       setOrganizations(orgs);
 
-      // Selección de org activa
+      // =====================================================
+      // Selección de org activa (race-proof)
+      // =====================================================
       let activeOrg = null;
 
-      // one-shot para tracker invitado
+      // Si hay force_tracker_org_id, este flujo TIENE prioridad absoluta
+      // y bloquea cualquier "owner priority" para evitar leaks al panel.
       const forcedTrackerOrgId = localStorage.getItem("force_tracker_org_id");
-      if (forcedTrackerOrgId && isUuid(forcedTrackerOrgId)) {
+      const hasForced = forcedTrackerOrgId && isUuid(forcedTrackerOrgId);
+
+      if (hasForced) {
+        // 1) Intento exacto: esa org debe existir y el rol debe ser tracker
         const forcedMembership = mRows.find((m) => m.org_id === forcedTrackerOrgId);
         const forcedRole = String(forcedMembership?.role || "").toLowerCase();
         if (forcedRole === "tracker") {
           activeOrg = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
-          if (activeOrg) localStorage.setItem("current_org_id", forcedTrackerOrgId);
+          if (activeOrg) {
+            localStorage.setItem("current_org_id", forcedTrackerOrgId);
+            // ✅ Solo ahora consumimos el one-shot
+            localStorage.removeItem("force_tracker_org_id");
+          }
         }
-        localStorage.removeItem("force_tracker_org_id");
+
+        // 2) Si no existe esa org (o no coincide), pero sí hay alguna membership tracker,
+        // elegimos la primera org tracker como fallback seguro.
+        if (!activeOrg) {
+          const anyTracker = mRows.find(
+            (m) => String(m.role || "").toLowerCase() === "tracker" && m.org_id
+          );
+          if (anyTracker) {
+            activeOrg = orgs.find((o) => o.id === anyTracker.org_id) ?? null;
+            if (activeOrg) {
+              localStorage.setItem("current_org_id", activeOrg.id);
+              // ✅ Consumimos el one-shot solo si logramos fijar una org tracker válida
+              localStorage.removeItem("force_tracker_org_id");
+            }
+          }
+        }
+
+        // 3) Si aún no hay orgs/memberships suficientes (carrera / RLS),
+        // mantenemos fail-closed: no elegimos org owner; dejamos que el próximo reload lo resuelva.
       }
 
-      // prioridad owner
-      if (!activeOrg) {
+      // Si NO estamos en flujo forzado, aplicamos la lógica normal
+      if (!activeOrg && !hasForced) {
+        // prioridad owner
         const ownerMembership = mRows.find(
           (m) => String(m.role).toLowerCase() === "owner"
         );
         if (ownerMembership) {
           activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
         }
-      }
 
-      // localStorage
-      if (!activeOrg) {
-        const storedOrgId = localStorage.getItem("current_org_id");
-        if (storedOrgId) {
-          activeOrg = orgs.find((o) => o.id === storedOrgId) ?? null;
+        // localStorage
+        if (!activeOrg) {
+          const storedOrgId = localStorage.getItem("current_org_id");
+          if (storedOrgId) {
+            activeOrg = orgs.find((o) => o.id === storedOrgId) ?? null;
+          }
         }
-      }
 
-      if (!activeOrg && orgs.length) activeOrg = orgs[0];
+        if (!activeOrg && orgs.length) activeOrg = orgs[0];
+      }
 
       activeOrg = normalizeOrgRow(activeOrg);
 
@@ -193,7 +223,9 @@ export const AuthProvider = ({ children }) => {
       if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
       else localStorage.removeItem("current_org_id");
 
+      // =====================================================
       // ✅ ROL EFECTIVO: SOLO desde memberships. Si no se puede -> tracker.
+      // =====================================================
       let resolvedRole = safeRoleFallback();
 
       if (mRows.length && activeOrg?.id) {
@@ -201,17 +233,16 @@ export const AuthProvider = ({ children }) => {
         if (activeMembership?.role) {
           resolvedRole = String(activeMembership.role).toLowerCase();
         } else {
-          // Si hay memberships pero no para esa org, seguridad primero
           resolvedRole = "tracker";
         }
       } else {
+        // Si no hay org aún (carrera), fail-closed tracker
         resolvedRole = "tracker";
       }
 
       setRole(resolvedRole);
 
-      // ✅ DEBUG: inspección directa desde consola sin “role is not defined”
-      // (Puedes quitarlo cuando cierres el caso)
+      // ✅ DEBUG útil
       try {
         window.__AUTH__ = {
           email: user?.email,
@@ -219,6 +250,7 @@ export const AuthProvider = ({ children }) => {
           role: resolvedRole,
           currentOrgId: activeOrg?.id ?? null,
           memberships: mRows,
+          hasForcedTrackerOrg: Boolean(hasForced),
         };
       } catch (_) {}
     } catch (err) {

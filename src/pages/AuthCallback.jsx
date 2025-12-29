@@ -1,44 +1,44 @@
 // src/pages/AuthCallback.jsx
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
 function isSafeInternalPath(p) {
   if (!p) return false;
   if (typeof p !== "string") return false;
-
-  // Solo rutas internas absolutas
   if (!p.startsWith("/")) return false;
-
-  // Evitar esquemas raros o intentos de URL externas
   if (p.includes("://")) return false;
-
-  // Evitar doble slash tipo //evil.com
   if (p.startsWith("//")) return false;
-
-  // Evitar caracteres de control
   if (/[\u0000-\u001F\u007F]/.test(p)) return false;
-
   return true;
+}
+
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v || "")
+  );
 }
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { loading, session, role, isRootOwner, reloadAuth } = useAuth();
 
-  const { loading, session, role, isRootOwner } = useAuth();
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const nextParam = useMemo(() => params.get("next") || null, [params]);
 
-  const nextParam = useMemo(() => {
-    const sp = new URLSearchParams(location.search);
-    const next = sp.get("next");
-    return next || null;
-  }, [location.search]);
+  // ✅ viene desde invite-user: /auth/callback?tracker_org_id=<uuid>
+  const trackerOrgId = useMemo(() => {
+    const v = params.get("tracker_org_id");
+    return isUuid(v) ? v : null;
+  }, [params]);
+
+  const forcedOnce = useRef(false);
+  const inviteStartTs = useRef(0);
 
   useEffect(() => {
-    // Esperar a que AuthContext termine de cargar
     if (loading) return;
 
-    // Si no hay sesión, volver a login
     if (!session) {
       navigate("/login", { replace: true });
       return;
@@ -46,32 +46,66 @@ export default function AuthCallback() {
 
     const roleLower = String(role || "").toLowerCase();
 
-    // ✅ REGLA UNIVERSAL: tracker SIEMPRE aterriza en la pantalla de envío automático
+    // ======================================================
+    // ✅ CASO 1: INVITE TRACKER
+    // Regla: JAMÁS navegar a panel desde aquí.
+    // - Fuerza org one-shot
+    // - Espera a que role sea tracker
+    // - Si no se resuelve, reintenta reloadAuth (fail-closed)
+    // ======================================================
+    if (trackerOrgId) {
+      // Primera pasada: fuerza org y recarga auth
+      if (!forcedOnce.current) {
+        forcedOnce.current = true;
+        inviteStartTs.current = Date.now();
+
+        localStorage.setItem("force_tracker_org_id", trackerOrgId);
+        localStorage.setItem("current_org_id", trackerOrgId);
+
+        if (typeof reloadAuth === "function") reloadAuth();
+        return; // <- NO navegar todavía
+      }
+
+      // Ya forzamos: si ya es tracker, listo.
+      if (roleLower === "tracker") {
+        navigate("/tracker-gps", { replace: true });
+        return;
+      }
+
+      // Fail-closed: si aún no es tracker, NO ir al panel.
+      // Reintenta reloadAuth por un tiempo corto (por si hubo race).
+      const elapsed = Date.now() - (inviteStartTs.current || 0);
+
+      if (elapsed < 6000) {
+        // Reintento suave (sin loops infinitos)
+        if (typeof reloadAuth === "function") reloadAuth();
+        return;
+      }
+
+      // Si en 6s no resolvió tracker, preferimos mandar a tracker-gps igual;
+      // y el AuthGuard/TrackerGate hará cumplir reglas.
+      navigate("/tracker-gps", { replace: true });
+      return;
+    }
+
+    // ======================================================
+    // ✅ CASO 2: CALLBACK NORMAL
+    // ======================================================
     if (roleLower === "tracker") {
       navigate("/tracker-gps", { replace: true });
       return;
     }
 
-    // Para NO-trackers: respetar next si es seguro y permitido
     let dest = "/inicio";
-
     if (nextParam && isSafeInternalPath(nextParam)) {
-      // Bloquear acceso directo a tracker-gps para no-trackers
-      if (nextParam.startsWith("/tracker-gps")) {
-        dest = "/inicio";
-      }
-      // Bloquear /admins si no es root owner
-      else if (nextParam.startsWith("/admins") && !isRootOwner) {
-        dest = "/inicio";
-      } else {
-        dest = nextParam;
-      }
+      if (nextParam.startsWith("/tracker-gps")) dest = "/inicio";
+      else if (nextParam.startsWith("/admins") && !isRootOwner) dest = "/inicio";
+      else dest = nextParam;
     }
 
     navigate(dest, { replace: true });
-  }, [loading, session, role, isRootOwner, nextParam, navigate]);
+  }, [loading, session, role, isRootOwner, nextParam, navigate, trackerOrgId, reloadAuth]);
 
-  // UI simple mientras decide
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
