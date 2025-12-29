@@ -22,6 +22,7 @@ function parseHash(hash: string) {
   return {
     access_token: p.get("access_token"),
     refresh_token: p.get("refresh_token"),
+    type: p.get("type"),
   };
 }
 
@@ -38,23 +39,21 @@ export default function AuthCallback() {
 
   const trackerOrgId = useMemo(() => {
     const v = params.get("tracker_org_id");
-    return isUuid(v) ? v : null;
+    return v && isUuid(v) ? v : null;
   }, [params]);
 
   const ranOnce = useRef(false);
   const [working, setWorking] = useState(true);
 
   useEffect(() => {
+    let alive = true;
     if (ranOnce.current) return;
     ranOnce.current = true;
-
-    let alive = true;
 
     (async () => {
       try {
         setWorking(true);
 
-        // Si viene tracker_org_id, fija contexto (solo UX)
         if (trackerOrgId) {
           localStorage.setItem("force_tracker_org_id", trackerOrgId);
           localStorage.setItem("current_org_id", trackerOrgId);
@@ -84,17 +83,23 @@ export default function AuthCallback() {
           }
         }
 
-        // 3) Si es tracker domain, NO cargues AuthContext con client panel
-        //    porque AuthContext consulta BD A.
-        //    En tracker domain solo redirige a /tracker-gps.
+        // 2) Tracker domain: NO recargar panel DB; directo
         if (trackerDomain) {
           navigate("/tracker-gps", { replace: true });
           return;
         }
 
-        // Panel domain: refresca permisos (BD A)
+        // 3) Panel domain: recalcular permisos
         if (typeof reloadAuth === "function") {
           await reloadAuth();
+        }
+
+        // 4) Si metadata dice tracker, manda a tracker
+        const { data } = await supabase.auth.getUser();
+        const appFlow = String(data?.user?.user_metadata?.app_flow ?? "").toLowerCase();
+        if (appFlow === "tracker" || trackerOrgId) {
+          navigate("/tracker-gps", { replace: true });
+          return;
         }
 
         navigate("/inicio", { replace: true });
@@ -106,7 +111,7 @@ export default function AuthCallback() {
     return () => {
       alive = false;
     };
-  }, [client, code, trackerOrgId, trackerDomain, location.hash, navigate, reloadAuth]);
+  }, [client, code, trackerDomain, trackerOrgId, location.hash, navigate, reloadAuth]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">

@@ -8,6 +8,7 @@ import {
   useCallback,
 } from "react";
 import { supabase } from "../supabaseClient";
+import { supabaseTracker } from "../supabaseTrackerClient";
 
 const AuthContext = createContext();
 
@@ -47,6 +48,7 @@ function safeRoleFallback() {
 
 export const AuthProvider = ({ children }) => {
   const trackerDomain = isTrackerHostname(window.location.hostname);
+  const client = trackerDomain ? supabaseTracker : supabase;
 
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -64,40 +66,47 @@ export const AuthProvider = ({ children }) => {
   const [isRootOwner, setIsRootOwner] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Sesión del cliente correcto (A o B)
   useEffect(() => {
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await client.auth.getSession();
       setSession(data?.session ?? null);
       setUser(data?.session?.user ?? null);
+      setLoading(false);
     };
 
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: listener } = client.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
     });
 
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [client]);
 
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
 
-      // 🔒 Si es tracker domain, AuthContext NO debe consultar panel DB.
+      // ✅ Tracker domain: NO consultamos DB panel. Solo sesión.
       if (trackerDomain) {
-        setProfile(null);
-        setMemberships([]);
-        setOrganizations([]);
-        setCurrentOrg(null);
-        setTenantId(null);
-        setRole("tracker");
-        setIsSuspended(false);
-        setIsRootOwner(false);
+        if (!user) {
+          setRole(null);
+          setProfile(null);
+          setMemberships([]);
+          setOrganizations([]);
+          setCurrentOrg(null);
+          setTenantId(null);
+          setIsSuspended(false);
+          setIsRootOwner(false);
+        } else {
+          setRole("tracker");
+        }
         return;
       }
 
+      // ---------------- PANEL DOMAIN (Project A) ----------------
       if (!user) {
         setProfile(null);
         setMemberships([]);
@@ -112,13 +121,13 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      setRole("tracker");
+      setRole("tracker"); // fail-closed
 
       try {
         const { data, error } = await supabase.rpc("is_root_owner");
         if (error) setIsRootOwner(false);
         else setIsRootOwner(Boolean(data));
-      } catch (_e) {
+      } catch {
         setIsRootOwner(false);
       }
 
@@ -138,14 +147,12 @@ export const AuthProvider = ({ children }) => {
       if (mErr) console.error("[AuthContext] app_user_roles error:", mErr);
 
       const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
-
       mRows.sort((a, b) => {
         const ar = roleRank(a?.role);
         const br = roleRank(b?.role);
         if (ar !== br) return br - ar;
         return new Date(b.created_at) - new Date(a.created_at);
       });
-
       setMemberships(mRows);
 
       const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
@@ -189,7 +196,9 @@ export const AuthProvider = ({ children }) => {
 
       if (!activeOrg && !hasForced) {
         const ownerMembership = mRows.find((m) => String(m.role).toLowerCase() === "owner");
-        if (ownerMembership) activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
+        if (ownerMembership) {
+          activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
+        }
 
         if (!activeOrg) {
           const storedOrgId = localStorage.getItem("current_org_id");
@@ -200,7 +209,6 @@ export const AuthProvider = ({ children }) => {
       }
 
       activeOrg = normalizeOrgRow(activeOrg);
-
       setCurrentOrg(activeOrg);
       setTenantId(activeOrg?.id ?? null);
       setIsSuspended(Boolean(activeOrg?.suspended));
@@ -211,8 +219,7 @@ export const AuthProvider = ({ children }) => {
       let resolvedRole = safeRoleFallback();
       if (mRows.length && activeOrg?.id) {
         const activeMembership = mRows.find((m) => m.org_id === activeOrg.id);
-        if (activeMembership?.role) resolvedRole = String(activeMembership.role).toLowerCase();
-        else resolvedRole = "tracker";
+        resolvedRole = activeMembership?.role ? String(activeMembership.role).toLowerCase() : "tracker";
       } else {
         resolvedRole = "tracker";
       }
@@ -228,10 +235,7 @@ export const AuthProvider = ({ children }) => {
           memberships: mRows,
           hasForcedTrackerOrg: Boolean(hasForced),
         };
-      } catch (_) {}
-    } catch (err) {
-      console.error("[AuthContext] fatal error:", err);
-      setRole((prev) => prev ?? "tracker");
+      } catch {}
     } finally {
       setLoading(false);
     }
@@ -265,25 +269,18 @@ export const AuthProvider = ({ children }) => {
       session,
       user,
       profile,
-
       organizations,
       memberships,
-
       currentOrg,
       tenantId,
       currentOrgId: currentOrg?.id ?? null,
-
       role,
       currentRole: role,
-
       isOwner: role === "owner",
       isAdmin: role === "admin" || role === "owner",
-
       isSuspended,
       isRootOwner,
-
       loading,
-
       reloadAuth: loadAll,
       selectOrg,
     }),

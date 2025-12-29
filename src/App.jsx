@@ -40,11 +40,6 @@ import { useAuth } from "./context/AuthContext.jsx";
 
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
 
-/* ======================================================
-   DOMAIN FLOW (CANONICAL)
-   - En tracker.tugeocercas.com: tracker-only SIEMPRE
-   - En otros dominios: panel por rol
-====================================================== */
 function isTrackerHostname(hostname) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
@@ -69,10 +64,10 @@ function getActiveRole(memberships, orgId) {
 
 /* ======================================================
    DOMAIN ENFORCER (HARD CANONICAL ROUTING)
-   - Si estás en tracker domain:
-       - CAPTURA magic link (?code / #access_token) y fuerza /auth/callback
-       - si hay sesión => /tracker-gps
-       - si NO hay sesión => permitido /, /login, /reset-password, /auth/callback
+   - Tracker domain:
+     - CAPTURA magic link (?code / #access_token) y fuerza /auth/callback
+     - con sesión => /tracker-gps
+     - sin sesión => permitido /, /login, /reset-password, /auth/callback
 ====================================================== */
 function DomainEnforcer() {
   const { loading, session } = useAuth();
@@ -89,9 +84,6 @@ function DomainEnforcer() {
     const search = location.search || "";
     const hash = location.hash || "";
 
-    // ✅ Captura universal del magic link:
-    // Si Supabase B devuelve a "/" (o cualquier ruta) con ?code=... o #access_token=...
-    // redirigimos SIEMPRE a /auth/callback preservando query/hash.
     const hasCode = new URLSearchParams(search).has("code");
     const hasAccessToken = hash.includes("access_token=");
     if ((hasCode || hasAccessToken) && path !== "/auth/callback") {
@@ -108,49 +100,24 @@ function DomainEnforcer() {
     ]);
 
     if (!session) {
-      if (!publicAllowed.has(path)) {
-        navigate("/", { replace: true });
-      }
+      if (!publicAllowed.has(path)) navigate("/", { replace: true });
       return;
     }
 
-    if (path !== "/tracker-gps") {
-      navigate("/tracker-gps", { replace: true });
-    }
-  }, [
-    loading,
-    session,
-    location.pathname,
-    location.search,
-    location.hash,
-    navigate,
-    trackerDomain,
-  ]);
+    if (path !== "/tracker-gps") navigate("/tracker-gps", { replace: true });
+  }, [loading, session, location.pathname, location.search, location.hash, navigate, trackerDomain]);
 
   return null;
 }
 
-/* ======================================================
-   HARD ROLE GATES (permisos)
-====================================================== */
 function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
 
-  // Candado por dominio: tracker domain jamás puede mostrar panel
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          Cargando permisos…
-        </div>
-      </div>
-    );
-  }
-
+  if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
   const r = String(role || "").toLowerCase().trim();
@@ -162,22 +129,11 @@ function PanelGate({ children }) {
 function TrackerGate({ children }) {
   const { loading, session, role } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          Cargando permisos…
-        </div>
-      </div>
-    );
-  }
-
+  if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
-  // En tracker domain: SIEMPRE permitimos tracker flow (aunque tenga panel role)
   if (isTrackerHostname(window.location.hostname)) return children;
 
-  // En dominio panel: si es panel role, fuera del tracker flow
   const r = String(role || "").toLowerCase().trim();
   if (PANEL_ROLES.has(r)) return <Navigate to="/inicio" replace />;
 
@@ -188,11 +144,8 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  const activeRole = useMemo(() => {
-    return getActiveRole(memberships, activeOrgId);
-  }, [memberships, activeOrgId]);
+  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [memberships, activeOrgId]);
 
-  // Candado por dominio: tracker domain jamás renderiza Shell
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
   }
@@ -202,15 +155,7 @@ function Shell() {
     return <Navigate to="/tracker-gps" replace />;
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          Cargando organización y permisos…
-        </div>
-      </div>
-    );
-  }
+  if (loading) return null;
 
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
@@ -224,9 +169,7 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  if (isRootOwner === true) {
-    tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
-  }
+  if (isRootOwner === true) tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -261,7 +204,6 @@ function SmartFallback() {
   const { session, loading, role } = useAuth();
   if (loading) return null;
 
-  // tracker domain: siempre tracker flow
   if (isTrackerHostname(window.location.hostname)) {
     return session ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/" replace />;
   }
@@ -269,11 +211,7 @@ function SmartFallback() {
   if (!session) return <Navigate to="/" replace />;
 
   const r = String(role || "").toLowerCase().trim();
-  return PANEL_ROLES.has(r) ? (
-    <Navigate to="/inicio" replace />
-  ) : (
-    <Navigate to="/tracker-gps" replace />
-  );
+  return PANEL_ROLES.has(r) ? <Navigate to="/inicio" replace /> : <Navigate to="/tracker-gps" replace />;
 }
 
 export default function App() {
@@ -282,13 +220,11 @@ export default function App() {
       <DomainEnforcer />
 
       <Routes>
-        {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* TRACKER */}
         <Route
           path="/tracker-gps"
           element={
@@ -300,7 +236,6 @@ export default function App() {
           }
         />
 
-        {/* PRIVATE PANEL */}
         <Route
           element={
             <AuthGuard mode="panel">

@@ -14,8 +14,9 @@ export const supabaseTracker = createClient(trackerUrl, trackerAnon, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    // Importante: solo el AuthCallback debe hacer el exchange
+    // Importante: solo AuthCallback hace el exchange
     detectSessionInUrl: false,
+    // storageKey separado (tracker)
     storageKey: "sb-tugeocercas-auth-token-tracker-authB",
     storage: window.localStorage,
   },
