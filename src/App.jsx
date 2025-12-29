@@ -70,9 +70,9 @@ function getActiveRole(memberships, orgId) {
 /* ======================================================
    DOMAIN ENFORCER (HARD CANONICAL ROUTING)
    - Si estás en tracker domain:
+       - CAPTURA magic link (?code / #access_token) y fuerza /auth/callback
        - si hay sesión => /tracker-gps
        - si NO hay sesión => permitido /, /login, /reset-password, /auth/callback
-       - cualquier otra ruta => redirige a /tracker-gps (con sesión) o / (sin sesión)
 ====================================================== */
 function DomainEnforcer() {
   const { loading, session } = useAuth();
@@ -83,10 +83,21 @@ function DomainEnforcer() {
 
   useEffect(() => {
     if (loading) return;
+    if (!trackerDomain) return;
 
-    if (!trackerDomain) return; // En dominios no-tracker no forzamos nada aquí
+    const path = location.pathname || "/";
+    const search = location.search || "";
+    const hash = location.hash || "";
 
-    const path = location.pathname;
+    // ✅ Captura universal del magic link:
+    // Si Supabase B devuelve a "/" (o cualquier ruta) con ?code=... o #access_token=...
+    // redirigimos SIEMPRE a /auth/callback preservando query/hash.
+    const hasCode = new URLSearchParams(search).has("code");
+    const hasAccessToken = hash.includes("access_token=");
+    if ((hasCode || hasAccessToken) && path !== "/auth/callback") {
+      navigate(`/auth/callback${search}${hash}`, { replace: true });
+      return;
+    }
 
     const publicAllowed = new Set([
       "/",
@@ -96,8 +107,6 @@ function DomainEnforcer() {
       "/tracker-gps",
     ]);
 
-    // En tracker domain:
-    // - si no hay sesión, SOLO dejamos rutas públicas (incluye callback)
     if (!session) {
       if (!publicAllowed.has(path)) {
         navigate("/", { replace: true });
@@ -105,11 +114,18 @@ function DomainEnforcer() {
       return;
     }
 
-    // - si hay sesión: NUNCA permitir panel, siempre tracker-gps
     if (path !== "/tracker-gps") {
       navigate("/tracker-gps", { replace: true });
     }
-  }, [loading, session, location.pathname, navigate, trackerDomain]);
+  }, [
+    loading,
+    session,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigate,
+    trackerDomain,
+  ]);
 
   return null;
 }
@@ -263,7 +279,6 @@ function SmartFallback() {
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Candado global por dominio */}
       <DomainEnforcer />
 
       <Routes>
