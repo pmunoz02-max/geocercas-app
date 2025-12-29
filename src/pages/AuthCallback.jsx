@@ -1,18 +1,8 @@
-// src/pages/AuthCallback.tsx  (puede ser .tsx o .jsx, el contenido es JS válido)
+// src/pages/AuthCallback.tsx (contenido JS válido)
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
-
-function isSafeInternalPath(p) {
-  if (!p) return false;
-  if (typeof p !== "string") return false;
-  if (!p.startsWith("/")) return false;
-  if (p.includes("://")) return false;
-  if (p.startsWith("//")) return false;
-  if (/[\u0000-\u001F\u007F]/.test(p)) return false;
-  return true;
-}
 
 function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -20,113 +10,91 @@ function isUuid(v) {
   );
 }
 
-/**
- * AuthCallback robusto:
- * - Fuerza el exchange del `code` -> session (no depende de auto-detección)
- * - Reemplaza una sesión previa (owner/admin) por la del invitado
- * - Si llega tracker_org_id => fuerza tracker flow (one-shot)
- */
 export default function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { loading, session, role, isRootOwner, reloadAuth } = useAuth();
+  const { loading, session, role, reloadAuth } = useAuth();
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-
   const code = useMemo(() => params.get("code"), [params]);
-  const nextParam = useMemo(() => params.get("next") || null, [params]);
 
   const trackerOrgId = useMemo(() => {
     const v = params.get("tracker_org_id");
     return isUuid(v) ? v : null;
   }, [params]);
 
-  const exchangedOnce = useRef(false);
+  const ranOnce = useRef(false);
   const forcedOnce = useRef(false);
-  const [exchanging, setExchanging] = useState(true);
+  const [working, setWorking] = useState(true);
 
-  // 1) Exchange explícito si hay `code`
+  // 1) Callback robusto: SIEMPRE reemplaza la sesión local antes del exchange
   useEffect(() => {
     let alive = true;
 
-    async function runExchange() {
+    async function run() {
       try {
-        if (!code) return;
-        if (exchangedOnce.current) return;
-        exchangedOnce.current = true;
+        if (!code) {
+          // si no hay code, no es callback válido
+          navigate("/login", { replace: true });
+          return;
+        }
+        if (ranOnce.current) return;
+        ranOnce.current = true;
 
-        setExchanging(true);
+        setWorking(true);
 
+        // ✅ Mata cualquier sesión previa en este navegador (solo local)
+        // evita que el owner "contamine" el callback del tracker
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch (_) {}
+
+        // ✅ Fuerza exchange del code -> nueva sesión
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) {
-          console.error("[AuthCallback] exchangeCodeForSession error:", error);
-          if (alive) navigate("/login", { replace: true });
+          console.error("[AuthCallback] exchangeCodeForSession:", error);
+          navigate("/login", { replace: true });
           return;
         }
 
-        if (typeof reloadAuth === "function") {
-          await reloadAuth();
+        // ✅ Si viene de invite tracker, fuerza org one-shot
+        if (trackerOrgId) {
+          localStorage.setItem("force_tracker_org_id", trackerOrgId);
+          localStorage.setItem("current_org_id", trackerOrgId);
         }
+
+        // ✅ Rehidrata AuthContext ya con la sesión correcta
+        if (typeof reloadAuth === "function") await reloadAuth();
+
+        // Navegación final: si es tracker, irá a /tracker-gps (por tus guards igual)
+        navigate("/tracker-gps", { replace: true });
       } finally {
-        if (alive) setExchanging(false);
+        if (alive) setWorking(false);
       }
     }
 
-    runExchange();
+    run();
     return () => {
       alive = false;
     };
-  }, [code, navigate, reloadAuth]);
+  }, [code, trackerOrgId, navigate, reloadAuth]);
 
-  // 2) Luego navegar según rol (y force tracker org si aplica)
+  // 2) Defensa: si ya está resuelto y no es tracker, no lo dejes en callback
   useEffect(() => {
     if (loading) return;
-    if (exchanging) return;
+    if (!session) return;
 
-    if (!session) {
-      navigate("/login", { replace: true });
-      return;
+    const r = String(role || "").toLowerCase();
+    if (r && r !== "tracker") {
+      navigate("/inicio", { replace: true });
     }
-
-    if (trackerOrgId && !forcedOnce.current) {
-      forcedOnce.current = true;
-      localStorage.setItem("force_tracker_org_id", trackerOrgId);
-      localStorage.setItem("current_org_id", trackerOrgId);
-      if (typeof reloadAuth === "function") reloadAuth();
-      return;
-    }
-
-    const roleLower = String(role || "").toLowerCase();
-
-    if (roleLower === "tracker") {
-      navigate("/tracker-gps", { replace: true });
-      return;
-    }
-
-    let dest = "/inicio";
-    if (nextParam && isSafeInternalPath(nextParam)) {
-      if (nextParam.startsWith("/tracker-gps")) dest = "/inicio";
-      else if (nextParam.startsWith("/admins") && !isRootOwner) dest = "/inicio";
-      else dest = nextParam;
-    }
-
-    navigate(dest, { replace: true });
-  }, [
-    loading,
-    exchanging,
-    session,
-    role,
-    isRootOwner,
-    nextParam,
-    navigate,
-    trackerOrgId,
-    reloadAuth,
-  ]);
+  }, [loading, session, role, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
         Finalizando autenticación…
+        {working ? "" : ""}
       </div>
     </div>
   );
