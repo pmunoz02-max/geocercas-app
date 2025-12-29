@@ -1,6 +1,14 @@
 // src/App.jsx
-import React, { useMemo } from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import React, { useMemo, useEffect } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
@@ -17,7 +25,7 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 
 import Login from "./pages/Login.tsx";
-import AuthCallback from "./pages/AuthCallback.tsx"; // ✅ IMPORT EXPLÍCITO
+import AuthCallback from "./pages/AuthCallback.tsx";
 import Inicio from "./pages/Inicio.jsx";
 import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
@@ -32,8 +40,18 @@ import { useAuth } from "./context/AuthContext.jsx";
 
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
 
+/* ======================================================
+   DOMAIN FLOW (CANONICAL)
+   - En tracker.tugeocercas.com: tracker-only SIEMPRE
+   - En otros dominios: panel por rol
+====================================================== */
+function isTrackerHostname(hostname) {
+  const h = String(hostname || "").toLowerCase().trim();
+  return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
+}
+
 function normalizeRole(r) {
-  const v = String(r || "").toLowerCase();
+  const v = String(r || "").toLowerCase().trim();
   if (v === "owner") return "owner";
   if (v === "admin") return "admin";
   if (v === "tracker") return "tracker";
@@ -50,12 +68,62 @@ function getActiveRole(memberships, orgId) {
 }
 
 /* ======================================================
-   HARD ROLE GATES (DEFINITIVO)
-   - Panel: SOLO owner/admin/viewer
-   - Todo lo demás => tracker-gps (fail closed)
+   DOMAIN ENFORCER (HARD CANONICAL ROUTING)
+   - Si estás en tracker domain:
+       - si hay sesión => /tracker-gps
+       - si NO hay sesión => permitido /, /login, /reset-password, /auth/callback
+       - cualquier otra ruta => redirige a /tracker-gps (con sesión) o / (sin sesión)
+====================================================== */
+function DomainEnforcer() {
+  const { loading, session } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const trackerDomain = isTrackerHostname(window.location.hostname);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (!trackerDomain) return; // En dominios no-tracker no forzamos nada aquí
+
+    const path = location.pathname;
+
+    const publicAllowed = new Set([
+      "/",
+      "/login",
+      "/reset-password",
+      "/auth/callback",
+      "/tracker-gps",
+    ]);
+
+    // En tracker domain:
+    // - si no hay sesión, SOLO dejamos rutas públicas (incluye callback)
+    if (!session) {
+      if (!publicAllowed.has(path)) {
+        navigate("/", { replace: true });
+      }
+      return;
+    }
+
+    // - si hay sesión: NUNCA permitir panel, siempre tracker-gps
+    if (path !== "/tracker-gps") {
+      navigate("/tracker-gps", { replace: true });
+    }
+  }, [loading, session, location.pathname, navigate, trackerDomain]);
+
+  return null;
+}
+
+/* ======================================================
+   HARD ROLE GATES (permisos)
 ====================================================== */
 function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
+
+  // Candado por dominio: tracker domain jamás puede mostrar panel
+  if (isTrackerHostname(window.location.hostname)) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
 
   if (loading) {
     return (
@@ -70,7 +138,6 @@ function PanelGate({ children }) {
   if (!session) return <Navigate to="/" replace />;
 
   const r = String(role || "").toLowerCase().trim();
-
   if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
 
   return children;
@@ -91,9 +158,11 @@ function TrackerGate({ children }) {
 
   if (!session) return <Navigate to="/" replace />;
 
-  const r = String(role || "").toLowerCase().trim();
+  // En tracker domain: SIEMPRE permitimos tracker flow (aunque tenga panel role)
+  if (isTrackerHostname(window.location.hostname)) return children;
 
-  // Si es panel role, fuera del tracker flow
+  // En dominio panel: si es panel role, fuera del tracker flow
+  const r = String(role || "").toLowerCase().trim();
   if (PANEL_ROLES.has(r)) return <Navigate to="/inicio" replace />;
 
   return children;
@@ -106,6 +175,11 @@ function Shell() {
   const activeRole = useMemo(() => {
     return getActiveRole(memberships, activeOrgId);
   }, [memberships, activeOrgId]);
+
+  // Candado por dominio: tracker domain jamás renderiza Shell
+  if (isTrackerHostname(window.location.hostname)) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
 
   const roleLower = String(role || activeRole || "").toLowerCase().trim();
   if (!loading && !PANEL_ROLES.has(roleLower)) {
@@ -170,6 +244,12 @@ function LoginShell() {
 function SmartFallback() {
   const { session, loading, role } = useAuth();
   if (loading) return null;
+
+  // tracker domain: siempre tracker flow
+  if (isTrackerHostname(window.location.hostname)) {
+    return session ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/" replace />;
+  }
+
   if (!session) return <Navigate to="/" replace />;
 
   const r = String(role || "").toLowerCase().trim();
@@ -183,6 +263,9 @@ function SmartFallback() {
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Candado global por dominio */}
+      <DomainEnforcer />
+
       <Routes>
         {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
