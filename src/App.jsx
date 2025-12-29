@@ -212,40 +212,43 @@ export default function App() {
           }
         />
 
-        {/* PRIVATE PANEL */}
+        {/* PRIVATE PANEL (FIX DEFINITIVO: PanelGate NO monta Shell) */}
         <Route
           element={
             <AuthGuard mode="panel">
               <PanelGate>
-                <Shell />
+                <Outlet />
               </PanelGate>
             </AuthGuard>
           }
         >
-          <Route path="/inicio" element={<Inicio />} />
-          <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
-          <Route path="/geocercas" element={<Navigate to="/nueva-geocerca" replace />} />
-          <Route path="/personal" element={<PersonalPage />} />
-          <Route path="/actividades" element={<ActividadesPage />} />
-          <Route path="/asignaciones" element={<AsignacionesPage />} />
-          <Route path="/costos" element={<CostosPage />} />
-          <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
-          <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
-          <Route path="/invitar-tracker" element={<InvitarTracker />} />
+          {/* El layout del panel vive aquí adentro */}
+          <Route element={<Shell />}>
+            <Route path="/inicio" element={<Inicio />} />
+            <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
+            <Route path="/geocercas" element={<Navigate to="/nueva-geocerca" replace />} />
+            <Route path="/personal" element={<PersonalPage />} />
+            <Route path="/actividades" element={<ActividadesPage />} />
+            <Route path="/asignaciones" element={<AsignacionesPage />} />
+            <Route path="/costos" element={<CostosPage />} />
+            <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
+            <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
+            <Route path="/invitar-tracker" element={<InvitarTracker />} />
 
-          <Route
-            path="/admins"
-            element={
-              <RootOwnerRoute>
-                <AdminsPage />
-              </RootOwnerRoute>
-            }
-          />
+            <Route
+              path="/admins"
+              element={
+                <RootOwnerRoute>
+                  <AdminsPage />
+                </RootOwnerRoute>
+              }
+            />
 
-          <Route path="/help/instructions" element={<InstructionsPage />} />
-          <Route path="/help/faq" element={<FaqPage />} />
-          <Route path="/help/support" element={<SupportPage />} />
-          <Route path="/help/changelog" element={<ChangelogPage />} />
+            <Route path="/help/instructions" element={<InstructionsPage />} />
+            <Route path="/help/faq" element={<FaqPage />} />
+            <Route path="/help/support" element={<SupportPage />} />
+            <Route path="/help/changelog" element={<ChangelogPage />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<SmartFallback />} />
