@@ -1,13 +1,23 @@
-// src/pages/AuthCallback.tsx (contenido JS válido)
+// src/pages/AuthCallback.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
 
-function isUuid(v) {
+function isUuid(v: any) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     String(v || "")
   );
+}
+
+function parseHash(hash: string) {
+  const h = (hash || "").replace(/^#/, "");
+  const p = new URLSearchParams(h);
+  return {
+    access_token: p.get("access_token"),
+    refresh_token: p.get("refresh_token"),
+    type: p.get("type"),
+  };
 }
 
 export default function AuthCallback() {
@@ -18,55 +28,79 @@ export default function AuthCallback() {
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const code = useMemo(() => params.get("code"), [params]);
 
+  // viene desde invite-user: /auth/callback?tracker_org_id=<uuid>
   const trackerOrgId = useMemo(() => {
     const v = params.get("tracker_org_id");
     return isUuid(v) ? v : null;
   }, [params]);
 
   const ranOnce = useRef(false);
-  const forcedOnce = useRef(false);
   const [working, setWorking] = useState(true);
 
-  // 1) Callback robusto: SIEMPRE reemplaza la sesión local antes del exchange
   useEffect(() => {
     let alive = true;
 
     async function run() {
-      try {
-        if (!code) {
-          // si no hay code, no es callback válido
-          navigate("/login", { replace: true });
-          return;
-        }
-        if (ranOnce.current) return;
-        ranOnce.current = true;
+      if (ranOnce.current) return;
+      ranOnce.current = true;
 
+      try {
         setWorking(true);
 
-        // ✅ Mata cualquier sesión previa en este navegador (solo local)
-        // evita que el owner "contamine" el callback del tracker
-        try {
-          await supabase.auth.signOut({ scope: "local" });
-        } catch (_) {}
-
-        // ✅ Fuerza exchange del code -> nueva sesión
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          console.error("[AuthCallback] exchangeCodeForSession:", error);
-          navigate("/login", { replace: true });
-          return;
-        }
-
-        // ✅ Si viene de invite tracker, fuerza org one-shot
+        // Si llega tracker_org_id, lo guardamos one-shot para AuthContext
         if (trackerOrgId) {
           localStorage.setItem("force_tracker_org_id", trackerOrgId);
           localStorage.setItem("current_org_id", trackerOrgId);
         }
 
-        // ✅ Rehidrata AuthContext ya con la sesión correcta
-        if (typeof reloadAuth === "function") await reloadAuth();
+        // 1) Caso PKCE: viene ?code=...
+        if (code) {
+          // IMPORTANTÍSIMO: si había sesión previa en el navegador, la “contamina”.
+          // La reemplazamos localmente antes de hacer exchange.
+          try {
+            await supabase.auth.signOut({ scope: "local" });
+          } catch (_) {}
 
-        // Navegación final: si es tracker, irá a /tracker-gps (por tus guards igual)
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error("[AuthCallback] exchangeCodeForSession error:", error);
+            navigate("/login", { replace: true });
+            return;
+          }
+        } else {
+          // 2) Caso OAuth/magic-link legacy: viene en hash #access_token=...
+          const { access_token, refresh_token } = parseHash(location.hash || "");
+          if (access_token && refresh_token) {
+            try {
+              await supabase.auth.signOut({ scope: "local" });
+            } catch (_) {}
+
+            const { error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+
+            if (error) {
+              console.error("[AuthCallback] setSession error:", error);
+              navigate("/login", { replace: true });
+              return;
+            }
+          }
+        }
+
+        // Rehidrata AuthContext con la sesión real (la del link)
+        if (typeof reloadAuth === "function") {
+          await reloadAuth();
+        }
+
+        // Si por alguna razón aún no hay sesión, manda a login
+        const { data } = await supabase.auth.getSession();
+        if (!data?.session) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        // Navegación final: el AuthGuard/SmartFallback también reforzará esto
         navigate("/tracker-gps", { replace: true });
       } finally {
         if (alive) setWorking(false);
@@ -77,13 +111,12 @@ export default function AuthCallback() {
     return () => {
       alive = false;
     };
-  }, [code, trackerOrgId, navigate, reloadAuth]);
+  }, [code, trackerOrgId, location.hash, navigate, reloadAuth]);
 
-  // 2) Defensa: si ya está resuelto y no es tracker, no lo dejes en callback
+  // Defensa: si ya está logueado y NO es tracker, fuera del callback
   useEffect(() => {
     if (loading) return;
     if (!session) return;
-
     const r = String(role || "").toLowerCase();
     if (r && r !== "tracker") {
       navigate("/inicio", { replace: true });
