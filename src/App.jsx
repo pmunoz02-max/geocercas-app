@@ -105,13 +105,27 @@ function DomainEnforcer() {
     }
 
     if (path !== "/tracker-gps") navigate("/tracker-gps", { replace: true });
-  }, [loading, session, location.pathname, location.search, location.hash, navigate, trackerDomain]);
+  }, [
+    loading,
+    session,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigate,
+    trackerDomain,
+  ]);
 
   return null;
 }
 
 function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
+  const location = useLocation();
+
+  // ✅ CLAVE: AuthCallback debe ejecutarse sin interferencia de guards/roles
+  if (location.pathname === "/auth/callback") {
+    return children;
+  }
 
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
@@ -122,7 +136,13 @@ function PanelGate({ children }) {
 
   // Si hay sesión pero aún no resolvimos rol (carrera de triggers / RLS), esperamos.
   const r = String(role || "").toLowerCase().trim();
-  if (!r) return null;
+  if (!r) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center text-slate-600">
+        Preparando tu espacio de trabajo…
+      </div>
+    );
+  }
 
   if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
 
@@ -149,7 +169,10 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [memberships, activeOrgId]);
+  const activeRole = useMemo(
+    () => getActiveRole(memberships, activeOrgId),
+    [memberships, activeOrgId]
+  );
 
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
