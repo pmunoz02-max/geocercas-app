@@ -2,9 +2,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// Ajusta esta ruta según tu proyecto:
-// - Si supabaseClient está en src/supabaseClient.* => "../supabaseClient"
-// - Si está en src/pages/supabaseClient.* => "./supabaseClient"
+// ✅ IMPORT CANONICAL (PANEL)
+// Ajusta SOLO esta ruta si tu proyecto lo requiere:
+// - si existe src/supabaseClient.(ts|js)  => "../supabaseClient"
+// - si existe src/pages/supabaseClient.* => "./supabaseClient"
 import { supabase } from "../supabaseClient";
 
 type Status =
@@ -29,6 +30,36 @@ function getHashParam(hash: string, key: string): string | null {
   return p.get(key);
 }
 
+function decodeJwtPayload(token: string): any | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+    const json = atob(b64 + pad);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Valida “issued in the future” por skew de reloj, ANTES de llamar a setSession.
+ * Si el iat está muy adelantado respecto al reloj local, lo detectamos y mostramos
+ * un mensaje claro (en vez de terminar en timeout/403 confuso).
+ */
+function detectClockSkew(accessToken: string): { skewSec: number; iat?: number; now?: number } | null {
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload || typeof payload.iat !== "number") return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  const iat = payload.iat;
+
+  // iat en el futuro => skew positivo
+  const skewSec = iat - now;
+  return { skewSec, iat, now };
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -41,9 +72,14 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
-function isIssuedInTheFutureError(e: any): boolean {
+function looksLikeClockError(e: any) {
   const msg = String(e?.message || e || "").toLowerCase();
   return msg.includes("issued in the future") || msg.includes("clock") || msg.includes("skew");
+}
+
+function looksLikeForbidden(e: any) {
+  const msg = String(e?.message || e || "").toLowerCase();
+  return msg.includes("403") || msg.includes("forbidden");
 }
 
 export default function AuthCallback() {
@@ -57,6 +93,7 @@ export default function AuthCallback() {
     message: "Confirmando acceso…",
   });
 
+  // evita doble ejecución (StrictMode)
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -70,17 +107,28 @@ export default function AuthCallback() {
         const code = new URLSearchParams(window.location.search).get("code");
         const hash = window.location.hash || "";
 
-        // 🔥 Tiempo más alto para móvil/TWA
-        const SET_SESSION_TIMEOUT = 25_000;
-        const EXCHANGE_TIMEOUT = 25_000;
+        // Timeouts más realistas para móvil/TWA
+        const SET_SESSION_TIMEOUT = 30_000;
+        const EXCHANGE_TIMEOUT = 30_000;
         const GET_SESSION_TIMEOUT = 15_000;
 
+        // --- IMPLICIT FLOW (#access_token=...&refresh_token=...) ---
         if (hasHashTokens(hash)) {
           const access_token = getHashParam(hash, "access_token");
           const refresh_token = getHashParam(hash, "refresh_token");
 
           if (!access_token || !refresh_token) {
             throw new Error("Faltan tokens en el hash (access_token/refresh_token).");
+          }
+
+          // ✅ Detecta skew antes de setSession
+          const skew = detectClockSkew(access_token);
+          // tolerancia 120s (2 min). Si tu entorno es sensible, sube a 300s.
+          if (skew && skew.skewSec > 120) {
+            throw new Error(
+              `CLOCK_SKEW: El token fue emitido en el futuro (iat=${skew.iat}, now=${skew.now}, skew=${skew.skewSec}s). ` +
+                `Activa Fecha/Hora automáticas y Zona Horaria automática y reintenta.`
+            );
           }
 
           setStatus({ phase: "working", message: "Estableciendo sesión…" });
@@ -91,17 +139,16 @@ export default function AuthCallback() {
             "setSession"
           );
 
-          // Limpia hash para evitar reproceso
+          // Limpia hash para evitar reproceso (muy importante en móviles/WhatsApp)
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        } else if (code) {
+        }
+        // --- PKCE FLOW (?code=...) ---
+        else if (code) {
           setStatus({ phase: "working", message: "Intercambiando código…" });
 
-          await withTimeout(
-            supabase.auth.exchangeCodeForSession(code),
-            EXCHANGE_TIMEOUT,
-            "exchangeCodeForSession"
-          );
+          await withTimeout(supabase.auth.exchangeCodeForSession(code), EXCHANGE_TIMEOUT, "exchangeCodeForSession");
 
+          // Limpia el code, preservando otros params
           const p = new URLSearchParams(window.location.search);
           p.delete("code");
           const qs = p.toString();
@@ -110,28 +157,43 @@ export default function AuthCallback() {
           throw new Error("Callback sin parámetros (ni hash tokens ni code).");
         }
 
+        // Confirmación mínima: la sesión debe existir
         setStatus({ phase: "working", message: "Confirmando sesión…" });
 
-        const { data, error } = await withTimeout(
-          supabase.auth.getSession(),
-          GET_SESSION_TIMEOUT,
-          "getSession"
-        );
+        const { data, error } = await withTimeout(supabase.auth.getSession(), GET_SESSION_TIMEOUT, "getSession");
         if (error) throw error;
         if (!data?.session) throw new Error("Sesión no disponible luego del callback.");
 
         setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
 
+        // ✅ Redirección final (el rol lo valida PanelGate/SmartFallback)
         navigate(target === "tracker" ? "/tracker-gps" : "/inicio", { replace: true });
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
 
-        if (isIssuedInTheFutureError(e)) {
+        const msg = String(e?.message || e);
+
+        // Mensaje ultra-claro para el caso que ya viste en consola:
+        // "Session as retrieved from URL was issued in the future? Check the device clock for skew"
+        if (msg.startsWith("CLOCK_SKEW:") || looksLikeClockError(e)) {
           setStatus({
             phase: "error",
             message: "El reloj del dispositivo está desfasado.",
             details:
-              "Activa 'Fecha y hora automáticas' y 'Zona horaria automática', luego reintenta el Magic Link.",
+              "Activa 'Fecha y hora automáticas' y 'Zona horaria automática' (y reinicia el dispositivo si es necesario). Luego abre un Magic Link nuevo.",
+          });
+          return;
+        }
+
+        // Si ves 403 en /auth/v1/user en consola, lo más común es:
+        // - token emitido por otro proyecto Supabase (mezcla de proyectos)
+        // - o sesión inválida por skew/expiración
+        if (looksLikeForbidden(e) || msg.includes("403")) {
+          setStatus({
+            phase: "error",
+            message: "Acceso rechazado (403) por Supabase.",
+            details:
+              "Causas típicas: (1) el Magic Link fue emitido por otro proyecto Supabase distinto al que usa la app; (2) reloj del dispositivo desfasado; (3) link expirado. Genera un Magic Link nuevo tras confirmar VITE_SUPABASE_URL/ANON_KEY en Vercel.",
           });
           return;
         }
@@ -139,7 +201,7 @@ export default function AuthCallback() {
         setStatus({
           phase: "error",
           message: "No se pudo completar el inicio de sesión.",
-          details: String(e?.message || e),
+          details: msg,
         });
       }
     };
