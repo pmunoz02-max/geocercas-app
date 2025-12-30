@@ -40,18 +40,21 @@ import { useAuth } from "./context/AuthContext.jsx";
 
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
 
+function Loader({ label = "Cargando…" }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-slate-500">
+      {label}
+    </div>
+  );
+}
+
 function isTrackerHostname(hostname) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
 function normalizeRole(r) {
-  const v = String(r || "").toLowerCase().trim();
-  if (v === "owner") return "owner";
-  if (v === "admin") return "admin";
-  if (v === "tracker") return "tracker";
-  if (v === "viewer") return "viewer";
-  return v || "";
+  return String(r || "").toLowerCase().trim();
 }
 
 function getActiveRole(memberships, orgId) {
@@ -62,28 +65,22 @@ function getActiveRole(memberships, orgId) {
   return normalizeRole(row?.role);
 }
 
-/* ======================================================
-   DOMAIN ENFORCER (HARD CANONICAL ROUTING)
-====================================================== */
+/* ================= DOMAIN ENFORCER ================= */
 function DomainEnforcer() {
   const { loading, session } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
   const trackerDomain = isTrackerHostname(window.location.hostname);
 
   useEffect(() => {
     if (loading) return;
     if (!trackerDomain) return;
 
-    const path = location.pathname || "/";
-    const search = location.search || "";
-    const hash = location.hash || "";
-
+    const { pathname, search, hash } = location;
     const hasCode = new URLSearchParams(search).has("code");
     const hasAccessToken = hash.includes("access_token=");
 
-    if ((hasCode || hasAccessToken) && path !== "/auth/callback") {
+    if ((hasCode || hasAccessToken) && pathname !== "/auth/callback") {
       navigate(`/auth/callback${search}${hash}`, { replace: true });
       return;
     }
@@ -96,65 +93,44 @@ function DomainEnforcer() {
       "/tracker-gps",
     ]);
 
-    if (!session) {
-      if (!publicAllowed.has(path)) navigate("/", { replace: true });
+    if (!session && !publicAllowed.has(pathname)) {
+      navigate("/", { replace: true });
       return;
     }
 
-    if (path !== "/tracker-gps") navigate("/tracker-gps", { replace: true });
-  }, [
-    loading,
-    session,
-    location.pathname,
-    location.search,
-    location.hash,
-    navigate,
-    trackerDomain,
-  ]);
+    if (session && pathname !== "/tracker-gps") {
+      navigate("/tracker-gps", { replace: true });
+    }
+  }, [loading, session, location, navigate, trackerDomain]);
 
   return null;
 }
 
+/* ================= PANEL GATE ================= */
 function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
   const location = useLocation();
 
-  // ✅ CLAVE: permitir que /auth/callback termine su trabajo (Magic Link)
-  if (location.pathname === "/auth/callback") {
-    return children;
-  }
+  if (location.pathname === "/auth/callback") return children;
 
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
   }
 
-  if (loading) return null;
+  if (loading) return <Loader label="Validando sesión…" />;
   if (!session) return <Navigate to="/" replace />;
 
-  const r = String(role || "").toLowerCase().trim();
-  if (!r) return null;
+  const r = normalizeRole(role);
+  if (!r) return <Loader label="Resolviendo permisos…" />;
 
-  if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
+  if (!PANEL_ROLES.has(r)) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
 
   return children;
 }
 
-function TrackerGate({ children }) {
-  const { loading, session, role } = useAuth();
-
-  if (loading) return null;
-  if (!session) return <Navigate to="/" replace />;
-
-  if (isTrackerHostname(window.location.hostname)) return children;
-
-  const r = String(role || "").toLowerCase().trim();
-  if (!r) return null;
-
-  if (PANEL_ROLES.has(r)) return <Navigate to="/inicio" replace />;
-
-  return children;
-}
-
+/* ================= SHELL ================= */
 function Shell() {
   const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
@@ -164,14 +140,10 @@ function Shell() {
     [memberships, activeOrgId]
   );
 
-  if (isTrackerHostname(window.location.hostname)) {
-    return <Navigate to="/tracker-gps" replace />;
-  }
+  if (loading) return <Loader label="Cargando panel…" />;
 
-  const roleLower = String(role || activeRole || "").toLowerCase().trim();
-
-  if (loading) return null;
-  if (!roleLower) return null;
+  const roleLower = normalizeRole(role || activeRole);
+  if (!roleLower) return <Loader label="Preparando entorno…" />;
 
   if (!PANEL_ROLES.has(roleLower)) {
     return <Navigate to="/tracker-gps" replace />;
@@ -189,7 +161,7 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  if (isRootOwner === true) {
+  if (isRootOwner) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
 
@@ -199,7 +171,6 @@ function Shell() {
       <div className="border-b border-slate-200 bg-white">
         <TopTabs tabs={tabs} />
       </div>
-
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
         <Outlet />
       </main>
@@ -207,24 +178,10 @@ function Shell() {
   );
 }
 
-function RootOwnerRoute({ children }) {
-  const { loading, isRootOwner } = useAuth();
-  if (loading) return null;
-  if (!isRootOwner) return <Navigate to="/inicio" replace />;
-  return children;
-}
-
-function LoginShell() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Login />
-    </div>
-  );
-}
-
+/* ================= FALLBACK ================= */
 function SmartFallback() {
   const { session, loading, role } = useAuth();
-  if (loading) return null;
+  if (loading) return <Loader />;
 
   if (isTrackerHostname(window.location.hostname)) {
     return session ? (
@@ -236,8 +193,8 @@ function SmartFallback() {
 
   if (!session) return <Navigate to="/" replace />;
 
-  const r = String(role || "").toLowerCase().trim();
-  if (!r) return null;
+  const r = normalizeRole(role);
+  if (!r) return <Loader />;
 
   return PANEL_ROLES.has(r) ? (
     <Navigate to="/inicio" replace />
@@ -246,6 +203,7 @@ function SmartFallback() {
   );
 }
 
+/* ================= APP ================= */
 export default function App() {
   return (
     <BrowserRouter>
@@ -253,7 +211,7 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<LoginShell />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
@@ -261,9 +219,7 @@ export default function App() {
           path="/tracker-gps"
           element={
             <AuthGuard mode="tracker">
-              <TrackerGate>
-                <TrackerGpsPage />
-              </TrackerGate>
+              <TrackerGpsPage />
             </AuthGuard>
           }
         />
@@ -279,7 +235,6 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
           <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
-          <Route path="/geocercas" element={<Navigate to="/nueva-geocerca" replace />} />
           <Route path="/personal" element={<PersonalPage />} />
           <Route path="/actividades" element={<ActividadesPage />} />
           <Route path="/asignaciones" element={<AsignacionesPage />} />
@@ -287,15 +242,7 @@ export default function App() {
           <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
           <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
           <Route path="/invitar-tracker" element={<InvitarTracker />} />
-
-          <Route
-            path="/admins"
-            element={
-              <RootOwnerRoute>
-                <AdminsPage />
-              </RootOwnerRoute>
-            }
-          />
+          <Route path="/admins" element={<AdminsPage />} />
 
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
@@ -308,4 +255,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
