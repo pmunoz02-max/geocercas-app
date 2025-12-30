@@ -2,9 +2,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// OJO: usa el cliente canonical (panel) que ya tienes en tu proyecto.
-// Mantengo el mismo import que tu archivo actual para no romper el build.
-import { supabase } from "./supabaseClient"; // ajusta ruta solo si tu proyecto lo requiere
+// Usa el cliente canonical (panel)
+import { supabase } from "./supabaseClient"; // ajusta ruta si en tu proyecto es distinta
 
 type Status =
   | { phase: "init"; message: string }
@@ -19,7 +18,6 @@ function safeGetTarget(search: string): "panel" | "tracker" {
 }
 
 function hasHashTokens(hash: string) {
-  // IMPLICIT: #access_token=...&refresh_token=...&expires_in=...
   return /access_token=/.test(hash) && /refresh_token=/.test(hash);
 }
 
@@ -34,35 +32,55 @@ function sleep(ms: number) {
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let t: any;
+  let t: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
   });
   try {
     return await Promise.race([promise, timeout]);
   } finally {
-    clearTimeout(t);
+    if (t) clearTimeout(t);
   }
 }
 
 /**
- * Espera a que Supabase emita un evento de sesión (SIGNED_IN / TOKEN_REFRESHED),
- * lo cual reduce al mínimo carreras con AuthContext.
+ * Espera un evento de sesión (SIGNED_IN / TOKEN_REFRESHED) para reducir carreras con AuthContext.
+ * NO falla el flujo si el evento no llega; se usa como “mejor esfuerzo”.
  */
-function waitForSessionEvent(ms: number) {
+function waitForSessionEvent(ms: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      sub?.subscription?.unsubscribe?.();
-      reject(new Error("No se recibió evento de sesión a tiempo."));
-    }, ms);
+    let done = false;
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        clearTimeout(timer);
-        sub?.subscription?.unsubscribe?.();
-        resolve();
-      }
+    const finishOk = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve();
+    };
+
+    const finishErr = (err: Error) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject(err);
+    };
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) finishOk();
     });
+
+    const cleanup = () => {
+      try {
+        data?.subscription?.unsubscribe?.();
+      } catch {}
+      try {
+        clearTimeout(timer);
+      } catch {}
+    };
+
+    const timer = setTimeout(() => {
+      finishErr(new Error("No se recibió evento de sesión a tiempo."));
+    }, ms);
   });
 }
 
@@ -110,14 +128,10 @@ export default function AuthCallback() {
         // 1) Identificar callback (PKCE code o implicit hash)
         const code = new URLSearchParams(window.location.search).get("code");
         const hash = window.location.hash || "";
-
         const sawHashTokens = hasHashTokens(hash);
 
-        // Prepara espera de evento de sesión ANTES de hacer el exchange/setSession
-        const sessionEventPromise = waitForSessionEvent(12_000).catch(() => {
-          // No fallamos aquí aún; puede que AuthContext obtenga sesión por otra vía.
-          // Igual, la navegación final exige que la sesión exista en storage.
-        });
+        // Espera “mejor esfuerzo” a evento de sesión (para evitar carreras)
+        const sessionEventPromise = waitForSessionEvent(12_000).catch(() => {});
 
         // 2) IMPLICIT (#access_token)
         if (sawHashTokens) {
@@ -137,11 +151,7 @@ export default function AuthCallback() {
           );
 
           // Limpia hash para evitar re-proceso al refrescar
-          window.history.replaceState(
-            {},
-            document.title,
-            window.location.pathname + window.location.search
-          );
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
         }
         // 3) PKCE (?code=...)
         else if (code) {
@@ -157,11 +167,7 @@ export default function AuthCallback() {
           const p = new URLSearchParams(window.location.search);
           p.delete("code");
           const qs = p.toString();
-          window.history.replaceState(
-            {},
-            document.title,
-            window.location.pathname + (qs ? `?${qs}` : "")
-          );
+          window.history.replaceState({}, document.title, window.location.pathname + (qs ? `?${qs}` : ""));
         } else {
           throw new Error("Callback sin parámetros de sesión (ni hash tokens ni code).");
         }
@@ -187,15 +193,15 @@ export default function AuthCallback() {
         if (target === "tracker") {
           navigate("/tracker-gps", { replace: true });
         } else {
-          // Nota técnica: aquí NO validamos rol; esa responsabilidad es de PanelGate/SmartFallback
+          // Aquí NO validamos rol: esa responsabilidad es de PanelGate/SmartFallback
           navigate("/inicio", { replace: true });
         }
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
+
         sessionStorage.removeItem(lockKey);
 
         const msg = String(e?.message || e);
-
         setStatus({
           phase: "error",
           message: "No se pudo completar el inicio de sesión.",
