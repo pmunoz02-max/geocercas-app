@@ -2,8 +2,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// Usa el cliente canonical (panel)
-import { supabase } from "./supabaseClient"; // ajusta ruta SOLO si tu proyecto la tiene distinta
+// Cliente canonical (panel)
+import { supabase } from "./supabaseClient"; // ajusta la ruta SOLO si tu proyecto la tiene distinta
 
 type Status =
   | { phase: "init"; message: string }
@@ -62,16 +62,16 @@ export default function AuthCallback() {
 
         const code = new URLSearchParams(window.location.search).get("code");
         const hash = window.location.hash || "";
-        const sawHashTokens = hasHashTokens(hash);
 
         // IMPLICIT (#access_token)
-        if (sawHashTokens) {
+        if (hasHashTokens(hash)) {
           const access_token = getHashParam(hash, "access_token");
           const refresh_token = getHashParam(hash, "refresh_token");
-
           if (!access_token || !refresh_token) {
             throw new Error("Faltan tokens en el hash (access_token/refresh_token).");
           }
+
+          setStatus({ phase: "working", message: "Estableciendo sesión…" });
 
           await withTimeout(
             supabase.auth.setSession({ access_token, refresh_token }),
@@ -84,7 +84,13 @@ export default function AuthCallback() {
         }
         // PKCE (?code=...)
         else if (code) {
-          await withTimeout(supabase.auth.exchangeCodeForSession(code), 15_000, "exchangeCodeForSession");
+          setStatus({ phase: "working", message: "Intercambiando código…" });
+
+          await withTimeout(
+            supabase.auth.exchangeCodeForSession(code),
+            15_000,
+            "exchangeCodeForSession"
+          );
 
           // Limpia el code (respeta target u otros params)
           const p = new URLSearchParams(window.location.search);
@@ -92,29 +98,26 @@ export default function AuthCallback() {
           const qs = p.toString();
           window.history.replaceState({}, document.title, window.location.pathname + (qs ? `?${qs}` : ""));
         } else {
-          throw new Error("Callback sin parámetros de sesión (ni hash tokens ni code).");
+          throw new Error("Callback sin parámetros (ni hash tokens ni code).");
         }
 
         // Confirmación mínima: la sesión debe existir
         setStatus({ phase: "working", message: "Confirmando sesión…" });
+
         const { data, error } = await withTimeout(supabase.auth.getSession(), 12_000, "getSession");
         if (error) throw error;
         if (!data?.session) throw new Error("Sesión no disponible luego del callback.");
 
         setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
 
-        if (target === "tracker") {
-          navigate("/tracker-gps", { replace: true });
-        } else {
-          navigate("/inicio", { replace: true });
-        }
+        // Redirección final (rol lo valida PanelGate/SmartFallback)
+        navigate(target === "tracker" ? "/tracker-gps" : "/inicio", { replace: true });
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
-        const msg = String(e?.message || e);
         setStatus({
           phase: "error",
           message: "No se pudo completar el inicio de sesión.",
-          details: msg,
+          details: String(e?.message || e),
         });
       }
     };
@@ -142,7 +145,6 @@ export default function AuthCallback() {
             >
               Ir a Login
             </button>
-
             <button
               onClick={() => window.location.reload()}
               style={{ padding: "10px 14px", cursor: "pointer" }}
