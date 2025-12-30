@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import {
   createContext,
   useContext,
@@ -21,9 +20,9 @@ function roleRank(r) {
   const v = String(r || "").toLowerCase();
   if (v === "owner") return 3;
   if (v === "admin") return 2;
-  if (v === "tracker") return 1;
-  if (v === "viewer") return 0;
-  return 0;
+  if (v === "viewer") return 1;
+  if (v === "tracker") return 0;
+  return -1;
 }
 
 function normalizeOrgRow(o) {
@@ -43,8 +42,7 @@ function isUuid(v) {
 }
 
 function safeRoleFallback() {
-  // Rol desconocido aún: evitamos caer por defecto a "tracker"
-  // porque eso fuerza redirects indebidos en el panel.
+  // Rol desconocido aún: NO debemos forzar tracker
   return "";
 }
 
@@ -62,7 +60,7 @@ export const AuthProvider = ({ children }) => {
   const [currentOrg, setCurrentOrg] = useState(null);
   const [tenantId, setTenantId] = useState(null);
 
-  const [role, setRole] = useState(null);
+  const [role, setRole] = useState("");
 
   const [isSuspended, setIsSuspended] = useState(false);
   const [isRootOwner, setIsRootOwner] = useState(false);
@@ -94,7 +92,7 @@ export const AuthProvider = ({ children }) => {
       // ✅ Tracker domain: NO consultamos DB panel. Solo sesión.
       if (trackerDomain) {
         if (!user) {
-          setRole(null);
+          setRole("");
           setProfile(null);
           setMemberships([]);
           setOrganizations([]);
@@ -103,6 +101,7 @@ export const AuthProvider = ({ children }) => {
           setIsSuspended(false);
           setIsRootOwner(false);
         } else {
+          // tracker domain fuerza rol tracker
           setRole("tracker");
         }
         return;
@@ -115,7 +114,7 @@ export const AuthProvider = ({ children }) => {
         setOrganizations([]);
         setCurrentOrg(null);
         setTenantId(null);
-        setRole(null);
+        setRole("");
         setIsSuspended(false);
         setIsRootOwner(false);
         localStorage.removeItem("current_org_id");
@@ -123,7 +122,9 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      setRole("tracker"); // fail-closed
+      // ✅ Importante: NO “fail-closed” a tracker aquí.
+      // Dejamos rol en blanco hasta resolver memberships.
+      setRole("");
 
       try {
         const { data, error } = await supabase.rpc("is_root_owner");
@@ -220,17 +221,14 @@ export const AuthProvider = ({ children }) => {
 
       let resolvedRole = safeRoleFallback();
 
-      // Si tenemos org activo, tomamos el rol de ese org.
       if (mRows.length && activeOrg?.id) {
         const activeMembership = mRows.find((m) => m.org_id === activeOrg.id);
         resolvedRole = activeMembership?.role ? String(activeMembership.role).toLowerCase() : "";
       } else if (mRows.length) {
-        // ✅ Caso crítico: el usuario tiene memberships pero aún no podemos resolver activeOrg
-        // (por ejemplo, triggers creando la org al aceptar invitación). No debemos caer a tracker.
-        // Usamos el rol de mayor jerarquía (mRows ya está ordenado por roleRank y created_at).
+        // Caso carrera: hay memberships pero activeOrg aún no resolvió.
+        // Usamos el rol de mayor jerarquía (mRows está ordenado).
         resolvedRole = mRows[0]?.role ? String(mRows[0].role).toLowerCase() : "";
 
-        // También fijamos un orgId tentativo para que el panel pueda abrir.
         const tentativeOrgId = mRows[0]?.org_id || null;
         if (tentativeOrgId) {
           setCurrentOrg((prev) => prev ?? { id: tentativeOrgId, name: "", suspended: false });
@@ -276,7 +274,7 @@ export const AuthProvider = ({ children }) => {
 
       const m = memberships.find((x) => x.org_id === active?.id);
       if (m?.role) setRole(String(m.role).toLowerCase());
-      else setRole("tracker");
+      else setRole(""); // ✅ no forzar tracker
     },
     [organizations, memberships]
   );

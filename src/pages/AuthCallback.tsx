@@ -1,202 +1,132 @@
-// src/pages/AuthCallback.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { supabaseTracker } from "../supabaseTrackerClient";
-import { useAuth } from "../context/AuthContext.jsx";
 
 function isTrackerHostname(hostname: string) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
-function isUuid(v: unknown) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    String(v ?? "")
-  );
+function normalizeRole(r: any) {
+  const v = String(r || "").toLowerCase().trim();
+  if (v === "owner") return "owner";
+  if (v === "admin") return "admin";
+  if (v === "viewer") return "viewer";
+  if (v === "tracker") return "tracker";
+  return "";
+}
+
+function roleRank(r: string) {
+  if (r === "owner") return 3;
+  if (r === "admin") return 2;
+  if (r === "viewer") return 1;
+  if (r === "tracker") return 0;
+  return -1;
 }
 
 function parseHash(hash: string) {
-  const h = String(hash || "").replace(/^#/, "");
-  const p = new URLSearchParams(h);
-  return {
-    access_token: p.get("access_token"),
-    refresh_token: p.get("refresh_token"),
-    type: p.get("type"),
-  };
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+  const h = (hash || "").replace(/^#/, "");
+  const params = new URLSearchParams(h);
+  const access_token = params.get("access_token") || "";
+  const refresh_token = params.get("refresh_token") || "";
+  return { access_token, refresh_token };
 }
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // 🔑 Importante: usamos el estado del AuthContext (rol/memberships) para decidir el redirect,
-  // NO un user_metadata.app_flow que puede quedar "pegado" y mandar a Tracker por error.
-  const { reloadAuth, role, memberships } = useAuth();
-
-  const trackerDomain = isTrackerHostname(window.location.hostname);
-  const client = trackerDomain ? supabaseTracker : supabase;
-
-  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const code = useMemo(() => params.get("code"), [params]);
-
-  // Señales explícitas de “flujo tracker” por URL (no por metadata):
-  // - ?app_flow=tracker
-  // - ?flow=tracker
-  // - ?tracker=1
-  const explicitTrackerFlow = useMemo(() => {
-    const a = String(params.get("app_flow") || "").toLowerCase();
-    const f = String(params.get("flow") || "").toLowerCase();
-    const t = String(params.get("tracker") || "").toLowerCase();
-    return a === "tracker" || f === "tracker" || t === "1" || t === "true";
-  }, [params]);
-
-  // tracker_org_id es válido solo si realmente vamos a Tracker.
-  const trackerOrgId = useMemo(() => {
-    const v = params.get("tracker_org_id");
-    return v && isUuid(v) ? v : null;
-  }, [params]);
-
-  const ranOnce = useRef(false);
-  const [working, setWorking] = useState(true);
+  const [msg, setMsg] = useState("Procesando acceso...");
 
   useEffect(() => {
-    let alive = true;
-    if (ranOnce.current) return;
-    ranOnce.current = true;
-
-    (async () => {
+    const run = async () => {
       try {
-        setWorking(true);
+        const trackerDomain = isTrackerHostname(window.location.hostname);
+        const client = trackerDomain ? supabaseTracker : supabase;
 
-        // 1) PKCE code
+        // 1) Resolver sesión desde code (PKCE) o desde hash tokens
+        const search = new URLSearchParams(location.search || "");
+        const code = search.get("code");
+
         if (code) {
+          setMsg("Validando enlace...");
           const { error } = await client.auth.exchangeCodeForSession(code);
-          if (error) {
-            console.error("[AuthCallback] exchange error:", error);
-            navigate("/login", { replace: true });
-            return;
-          }
+          if (error) throw error;
         } else {
-          // 2) Hash tokens (legacy)
           const { access_token, refresh_token } = parseHash(location.hash || "");
           if (access_token && refresh_token) {
-            const { error } = await client.auth.setSession({ access_token, refresh_token });
-            if (error) {
-              console.error("[AuthCallback] setSession error:", error);
-              navigate("/login", { replace: true });
-              return;
-            }
-          } else {
-            navigate("/login", { replace: true });
-            return;
+            setMsg("Estableciendo sesión...");
+            const { error } = await client.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (error) throw error;
           }
         }
 
-        // 2) Tracker domain: directo
+        // 2) Confirmar sesión
+        const { data } = await client.auth.getSession();
+        const session = data?.session ?? null;
+
+        if (!session?.user?.id) {
+          // sin sesión => al landing
+          navigate("/", { replace: true });
+          return;
+        }
+
+        // 3) Tracker domain: SIEMPRE a tracker-gps
         if (trackerDomain) {
-          // Si viene tracker_org_id, lo guardamos para el flujo tracker.
-          if (trackerOrgId) {
-            localStorage.setItem("force_tracker_org_id", trackerOrgId);
-            localStorage.setItem("current_org_id", trackerOrgId);
-          }
           navigate("/tracker-gps", { replace: true });
           return;
         }
 
-        // 3) Panel domain: recalcular permisos (puede haber triggers recién ejecutándose)
-        // Intentamos un par de recargas para evitar “tracker por defecto” por carrera.
-        if (typeof reloadAuth === "function") {
-          await reloadAuth();
-          await sleep(350);
-          await reloadAuth();
-        }
+        // 4) Panel domain: decidir según rol real en app_user_roles
+        setMsg("Cargando permisos...");
+        const userId = session.user.id;
 
-        // 4) Decisión de flujo: SOLO enviamos a Tracker si:
-        //    a) hay señal explícita por URL, o
-        //    b) tracker_org_id corresponde a un membership tracker, o
-        //    c) el usuario NO tiene ningún admin/owner y su rol efectivo es tracker.
-        //
-        // Nota: después de reloadAuth, el estado del contexto puede tardar un render en reflejarse.
-        // Para no depender de un valor stale, leemos memberships “fresh” desde la DB del panel.
-        let m: any[] = Array.isArray(memberships) ? memberships : [];
-        try {
-          const { data: u } = await supabase.auth.getUser();
-          const uid = u?.user?.id;
-          if (uid) {
-            const { data: freshRows } = await supabase
-              .from("app_user_roles")
-              .select("org_id, role, created_at")
-              .eq("user_id", uid);
-            if (Array.isArray(freshRows)) m = freshRows;
-          }
-        } catch {
-          // si falla, usamos lo que haya en contexto
-        }
+        const { data: roles, error: rolesErr } = await supabase
+          .from("app_user_roles")
+          .select("role, created_at")
+          .eq("user_id", userId);
 
-        const hasAdminish = m.some((x: any) => {
-          const r = String(x?.role || "").toLowerCase();
-          return r === "admin" || r === "owner";
-        });
-
-        const trackerOrgIsTrackerMembership =
-          Boolean(trackerOrgId) &&
-          m.some(
-            (x: any) =>
-              String(x?.org_id || "") === trackerOrgId &&
-              String(x?.role || "").toLowerCase() === "tracker"
-          );
-
-        const resolvedRole = String(role || "").toLowerCase();
-
-        const shouldGoTracker =
-          explicitTrackerFlow ||
-          trackerOrgIsTrackerMembership ||
-          (!hasAdminish && resolvedRole === "tracker");
-
-        if (shouldGoTracker) {
-          if (trackerOrgId) {
-            localStorage.setItem("force_tracker_org_id", trackerOrgId);
-            localStorage.setItem("current_org_id", trackerOrgId);
-          }
-          navigate("/tracker-gps", { replace: true });
+        if (rolesErr) {
+          // Si por RLS/carrera no se puede leer aún, igual entramos al panel
+          navigate("/inicio", { replace: true });
           return;
         }
 
-        // 5) Panel normal (Admin/Owner/Viewer)
-        // Si por error quedó force_tracker_org_id guardado de antes, lo limpiamos.
-        localStorage.removeItem("force_tracker_org_id");
-        navigate("/inicio", { replace: true });
-      } finally {
-        if (alive) setWorking(false);
+        const normalized = (roles || [])
+          .map((r) => normalizeRole(r?.role))
+          .filter(Boolean) as string[];
+
+        let bestRole = "";
+        for (const r of normalized) {
+          if (!bestRole || roleRank(r) > roleRank(bestRole)) bestRole = r;
+        }
+
+        if (bestRole === "tracker") {
+          navigate("/tracker-gps", { replace: true });
+        } else {
+          // owner/admin/viewer o desconocido => panel
+          navigate("/inicio", { replace: true });
+        }
+      } catch (e: any) {
+        console.error("[AuthCallback] error:", e);
+        setMsg("No se pudo completar el acceso. Reintenta el enlace.");
+        // fallback suave
+        setTimeout(() => navigate("/", { replace: true }), 1200);
       }
-    })();
-
-    return () => {
-      alive = false;
     };
-  }, [
-    client,
-    code,
-    trackerDomain,
-    trackerOrgId,
-    explicitTrackerFlow,
-    location.hash,
-    navigate,
-    reloadAuth,
-    role,
-    memberships,
-  ]);
+
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-        Finalizando autenticación…
-        {working ? "" : ""}
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-md w-full">
+        <div className="text-lg font-semibold text-slate-900">App Geocercas</div>
+        <div className="text-sm text-slate-600 mt-2">{msg}</div>
       </div>
     </div>
   );
