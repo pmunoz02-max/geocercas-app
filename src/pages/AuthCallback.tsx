@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 // Cliente canonical (panel)
-import { supabase } from "./supabaseClient"; // ajusta la ruta SOLO si tu proyecto la tiene distinta
+// Si tu supabaseClient está en /src/supabaseClient.* esta ruta es la correcta:
+import { supabase } from "../supabaseClient"; // <-- si no compila, dime dónde está tu supabaseClient y la ajusto
 
 type Status =
   | { phase: "init"; message: string }
@@ -29,9 +30,12 @@ function getHashParam(hash: string, key: string): string | null {
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
+
   const timeout = new Promise<never>((_, reject) => {
+    // ✅ Correcto: setTimeout(fn, ms)
     t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
   });
+
   try {
     return await Promise.race([promise, timeout]);
   } finally {
