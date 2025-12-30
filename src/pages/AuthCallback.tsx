@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 // Usa el cliente canonical (panel)
-import { supabase } from "./supabaseClient"; // ajusta ruta si en tu proyecto es distinta
+import { supabase } from "./supabaseClient"; // ajusta la ruta SOLO si tu proyecto la tiene distinta
 
 type Status =
   | { phase: "init"; message: string }
@@ -44,29 +44,19 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
 }
 
 /**
- * Espera un evento de sesión (SIGNED_IN / TOKEN_REFRESHED) para reducir carreras con AuthContext.
- * NO falla el flujo si el evento no llega; se usa como “mejor esfuerzo”.
+ * Espera un evento de sesión para reducir carreras con AuthContext.
+ * No aborta si no llega (se usa como "mejor esfuerzo").
  */
 function waitForSessionEvent(ms: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let done = false;
 
-    const finishOk = () => {
-      if (done) return;
-      done = true;
-      cleanup();
-      resolve();
-    };
-
-    const finishErr = (err: Error) => {
-      if (done) return;
-      done = true;
-      cleanup();
-      reject(err);
-    };
-
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) finishOk();
+      if (session && !done) {
+        done = true;
+        cleanup();
+        resolve();
+      }
     });
 
     const cleanup = () => {
@@ -79,7 +69,11 @@ function waitForSessionEvent(ms: number): Promise<void> {
     };
 
     const timer = setTimeout(() => {
-      finishErr(new Error("No se recibió evento de sesión a tiempo."));
+      if (!done) {
+        done = true;
+        cleanup();
+        reject(new Error("No se recibió evento de sesión a tiempo."));
+      }
     }, ms);
   });
 }
@@ -95,7 +89,7 @@ export default function AuthCallback() {
     message: "Confirmando acceso…",
   });
 
-  // Evita dobles ejecuciones (React strict mode / re-render)
+  // Evita doble ejecución (StrictMode)
   const startedRef = useRef(false);
 
   // Lock anti-loop al recargar / volver
@@ -110,7 +104,7 @@ export default function AuthCallback() {
       try {
         setStatus({ phase: "working", message: "Procesando Magic Link…" });
 
-        // 0) Lock anti-loop (con TTL)
+        // 0) Lock anti-loop con TTL
         const lockRaw = sessionStorage.getItem(lockKey);
         if (lockRaw) {
           const ts = Number(lockRaw);
@@ -150,7 +144,7 @@ export default function AuthCallback() {
             "setSession"
           );
 
-          // Limpia hash para evitar re-proceso al refrescar
+          // Limpia hash para evitar reproceso
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
         }
         // 3) PKCE (?code=...)
@@ -163,7 +157,7 @@ export default function AuthCallback() {
             "exchangeCodeForSession"
           );
 
-          // Limpia el code de la URL (pero respeta otros params como target)
+          // Limpia el code (respeta target u otros params)
           const p = new URLSearchParams(window.location.search);
           p.delete("code");
           const qs = p.toString();
@@ -172,33 +166,28 @@ export default function AuthCallback() {
           throw new Error("Callback sin parámetros de sesión (ni hash tokens ni code).");
         }
 
-        // 4) Confirmación mínima: la sesión debe existir en storage
+        // 4) Confirmación mínima: la sesión debe existir
         setStatus({ phase: "working", message: "Confirmando sesión…" });
 
         const { data, error } = await withTimeout(supabase.auth.getSession(), 12_000, "getSession");
         if (error) throw error;
-        if (!data?.session) {
-          throw new Error("Sesión no disponible luego del callback.");
-        }
+        if (!data?.session) throw new Error("Sesión no disponible luego del callback.");
 
-        // 5) Espera corta al evento (reduce carreras con AuthContext)
+        // 5) Reduce carrera con AuthContext
         await sessionEventPromise;
         await sleep(100);
 
         // 6) Redirección final
         setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
-
         sessionStorage.removeItem(lockKey);
 
         if (target === "tracker") {
           navigate("/tracker-gps", { replace: true });
         } else {
-          // Aquí NO validamos rol: esa responsabilidad es de PanelGate/SmartFallback
           navigate("/inicio", { replace: true });
         }
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
-
         sessionStorage.removeItem(lockKey);
 
         const msg = String(e?.message || e);
