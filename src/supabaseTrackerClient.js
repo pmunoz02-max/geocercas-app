@@ -12,15 +12,12 @@ if (!trackerUrl || !trackerAnon) {
 
 export const supabaseTracker = createClient(trackerUrl, trackerAnon, {
   auth: {
-    // ✅ PKCE estable
-    flowType: "pkce",
+    // ✅ Invitaciones tracker también deben ser IMPLICIT
+    flowType: "implicit",
     persistSession: true,
     autoRefreshToken: true,
-
-    // ✅ Captura sesión desde callback
     detectSessionInUrl: true,
 
-    // ✅ storageKey separado (tracker)
     storageKey: "sb-tugeocercas-auth-token-tracker-authB",
     storage: window.localStorage,
   },
