@@ -5,19 +5,22 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 /**
  * AuthGuard universal y permanente.
- * - Evita bucles (NO usa window.location).
- * - Enforza reglas por rol y opcionalmente por "mode".
+ *
+ * PRINCIPIO CRÍTICO:
+ * - /auth/callback NUNCA debe ser bloqueado
+ * - ningún redirect a /login antes de que AuthCallback termine
  *
  * Reglas base:
- * 1) loading => "Cargando permisos…"
- * 2) sin sesión => /login
- * 3) role === tracker:
+ * 1) /auth/callback => PASA SIEMPRE
+ * 2) loading => loader visible (nunca null)
+ * 3) sin sesión => /login
+ * 4) role === tracker:
  *    - solo permite /tracker-gps
- * 4) role !== tracker:
+ * 5) role !== tracker:
  *    - nunca permite /tracker-gps
  *
  * Reglas extra por mode (si se pasa):
- * - mode="tracker": solo permite /tracker-gps (aunque haya errores aguas arriba)
+ * - mode="tracker": solo permite /tracker-gps
  * - mode="panel":  nunca permite /tracker-gps
  */
 export default function AuthGuard({ children, mode }) {
@@ -25,7 +28,12 @@ export default function AuthGuard({ children, mode }) {
   const location = useLocation();
   const path = location?.pathname || "/";
 
-  // 1) Espera explícita (evita decisiones sin rol)
+  // 🔓 REGLA CRÍTICA: AuthCallback jamás se bloquea
+  if (path === "/auth/callback") {
+    return <>{children}</>;
+  }
+
+  // 1) Espera explícita (evita decisiones prematuras)
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -41,16 +49,18 @@ export default function AuthGuard({ children, mode }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  const roleLower = String(role || "").toLowerCase();
+  const roleLower = String(role || "").toLowerCase().trim();
   const isTracker = roleLower === "tracker";
-  const isTrackerPath = path === "/tracker-gps" || path.startsWith("/tracker-gps/");
+  const isTrackerPath =
+    path === "/tracker-gps" || path.startsWith("/tracker-gps/");
 
-  const modeLower = String(mode || "").toLowerCase();
+  const modeLower = String(mode || "").toLowerCase().trim();
 
   // A) Reglas por mode (primero)
   if (modeLower === "tracker" && !isTrackerPath) {
     return <Navigate to="/tracker-gps" replace />;
   }
+
   if (modeLower === "panel" && isTrackerPath) {
     return <Navigate to="/inicio" replace />;
   }
