@@ -50,6 +50,7 @@ export default function AuthCallback() {
     message: "Confirmando acceso…",
   });
 
+  // Evita doble ejecución (StrictMode)
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export default function AuthCallback() {
         if (hasHashTokens(hash)) {
           const access_token = getHashParam(hash, "access_token");
           const refresh_token = getHashParam(hash, "refresh_token");
+
           if (!access_token || !refresh_token) {
             throw new Error("Faltan tokens en el hash (access_token/refresh_token).");
           }
@@ -145,6 +147,7 @@ export default function AuthCallback() {
             >
               Ir a Login
             </button>
+
             <button
               onClick={() => window.location.reload()}
               style={{ padding: "10px 14px", cursor: "pointer" }}
