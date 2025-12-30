@@ -1,9 +1,10 @@
+// src/pages/AuthCallback.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// OJO: importa TU cliente canonical (panel)
-// (si tienes uno específico para tracker, aquí NO lo uses)
-import { supabase } from "./supabaseClient"; // ajusta ruta si es distinto
+// OJO: usa el cliente canonical (panel) que ya tienes en tu proyecto.
+// Mantengo el mismo import que tu archivo actual para no romper el build.
+import { supabase } from "./supabaseClient"; // ajusta ruta solo si tu proyecto lo requiere
 
 type Status =
   | { phase: "init"; message: string }
@@ -44,11 +45,33 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
+/**
+ * Espera a que Supabase emita un evento de sesión (SIGNED_IN / TOKEN_REFRESHED),
+ * lo cual reduce al mínimo carreras con AuthContext.
+ */
+function waitForSessionEvent(ms: number) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      sub?.subscription?.unsubscribe?.();
+      reject(new Error("No se recibió evento de sesión a tiempo."));
+    }, ms);
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        clearTimeout(timer);
+        sub?.subscription?.unsubscribe?.();
+        resolve();
+      }
+    });
+  });
+}
+
 export default function AuthCallback() {
   const location = useLocation();
   const navigate = useNavigate();
 
   const target = useMemo(() => safeGetTarget(location.search), [location.search]);
+
   const [status, setStatus] = useState<Status>({
     phase: "init",
     message: "Confirmando acceso…",
@@ -57,8 +80,9 @@ export default function AuthCallback() {
   // Evita dobles ejecuciones (React strict mode / re-render)
   const startedRef = useRef(false);
 
-  // Lock en sessionStorage para evitar loop al volver/recargar
-  const lockKey = "auth_callback_lock_v1";
+  // Lock anti-loop al recargar / volver
+  const lockKey = "auth_callback_lock_v2";
+  const lockTtlMs = 30_000;
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -66,33 +90,37 @@ export default function AuthCallback() {
 
     const run = async () => {
       try {
-        setStatus({ phase: "working", message: "Estableciendo sesión…" });
+        setStatus({ phase: "working", message: "Procesando Magic Link…" });
 
-        // 0) Lock anti-loop
-        const existingLock = sessionStorage.getItem(lockKey);
-        if (existingLock) {
-          // Si ya intentó hace nada, evita bucle
-          setStatus({
-            phase: "error",
-            message: "Se detectó un bucle de autenticación. Reintenta el Magic Link.",
-            details: "lock",
-          });
-          return;
+        // 0) Lock anti-loop (con TTL)
+        const lockRaw = sessionStorage.getItem(lockKey);
+        if (lockRaw) {
+          const ts = Number(lockRaw);
+          if (!Number.isNaN(ts) && Date.now() - ts < lockTtlMs) {
+            setStatus({
+              phase: "error",
+              message: "Se detectó un posible bucle de autenticación. Reintenta el Magic Link.",
+              details: "lock",
+            });
+            return;
+          }
         }
         sessionStorage.setItem(lockKey, String(Date.now()));
 
-        // 1) Detectar tipo de callback
-        const url = window.location.href;
+        // 1) Identificar callback (PKCE code o implicit hash)
         const code = new URLSearchParams(window.location.search).get("code");
         const hash = window.location.hash || "";
 
-        console.log("[AuthCallback] url:", url);
-        console.log("[AuthCallback] target:", target);
-        console.log("[AuthCallback] code?:", code);
-        console.log("[AuthCallback] hasHashTokens?:", hasHashTokens(hash));
+        const sawHashTokens = hasHashTokens(hash);
 
-        // 2) Si viene con tokens en hash (IMPLICIT)
-        if (hasHashTokens(hash)) {
+        // Prepara espera de evento de sesión ANTES de hacer el exchange/setSession
+        const sessionEventPromise = waitForSessionEvent(12_000).catch(() => {
+          // No fallamos aquí aún; puede que AuthContext obtenga sesión por otra vía.
+          // Igual, la navegación final exige que la sesión exista en storage.
+        });
+
+        // 2) IMPLICIT (#access_token)
+        if (sawHashTokens) {
           const access_token = getHashParam(hash, "access_token");
           const refresh_token = getHashParam(hash, "refresh_token");
 
@@ -100,76 +128,74 @@ export default function AuthCallback() {
             throw new Error("Faltan tokens en el hash (access_token/refresh_token).");
           }
 
-          // setSession guarda en storage y dispara onAuthStateChange
+          setStatus({ phase: "working", message: "Estableciendo sesión…" });
+
           await withTimeout(
             supabase.auth.setSession({ access_token, refresh_token }),
-            12000,
+            12_000,
             "setSession"
           );
 
-          // Limpia el hash para que no re-procese al refrescar
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          // Limpia hash para evitar re-proceso al refrescar
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname + window.location.search
+          );
         }
-        // 3) Si viene con code (PKCE)
+        // 3) PKCE (?code=...)
         else if (code) {
-          // exchangeCodeForSession usa el code_verifier guardado por el login/flow PKCE
-          // (Si el code viene de un link generado sin PKCE, este paso falla.)
-          await withTimeout(supabase.auth.exchangeCodeForSession(code), 15000, "exchangeCodeForSession");
+          setStatus({ phase: "working", message: "Intercambiando código de acceso…" });
 
-          // Limpia el code de la URL
+          await withTimeout(
+            supabase.auth.exchangeCodeForSession(code),
+            15_000,
+            "exchangeCodeForSession"
+          );
+
+          // Limpia el code de la URL (pero respeta otros params como target)
           const p = new URLSearchParams(window.location.search);
           p.delete("code");
           const qs = p.toString();
-          window.history.replaceState({}, document.title, window.location.pathname + (qs ? `?${qs}` : ""));
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname + (qs ? `?${qs}` : "")
+          );
         } else {
           throw new Error("Callback sin parámetros de sesión (ni hash tokens ni code).");
         }
 
-        // 4) Confirmar sesión real
-        setStatus({ phase: "working", message: "Validando sesión…" });
+        // 4) Confirmación mínima: la sesión debe existir en storage
+        setStatus({ phase: "working", message: "Confirmando sesión…" });
 
-        const { data: sData, error: sErr } = await withTimeout(supabase.auth.getSession(), 12000, "getSession");
-        if (sErr) throw sErr;
-        const session = sData?.session ?? null;
-        if (!session) {
+        const { data, error } = await withTimeout(supabase.auth.getSession(), 12_000, "getSession");
+        if (error) throw error;
+        if (!data?.session) {
           throw new Error("Sesión no disponible luego del callback.");
         }
 
-        // 5) Obtener usuario (si falla con “issued in the future”, suele ser reloj del dispositivo)
-        const { data: uData, error: uErr } = await withTimeout(supabase.auth.getUser(), 12000, "getUser");
-        if (uErr) {
-          const msg = String((uErr as any)?.message || uErr);
-          if (msg.toLowerCase().includes("issued in the future")) {
-            throw new Error(
-              "El reloj del dispositivo parece desfasado. Ajusta fecha/hora automáticas y reintenta el Magic Link."
-            );
-          }
-          throw uErr;
-        }
+        // 5) Espera corta al evento (reduce carreras con AuthContext)
+        await sessionEventPromise;
+        await sleep(100);
 
-        console.log("[AuthCallback] user:", uData?.user?.email);
-
-        // 6) Redirección final (universal)
+        // 6) Redirección final
         setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
 
-        // Quita lock
         sessionStorage.removeItem(lockKey);
-
-        // Pequeño delay para que AuthContext alcance a reaccionar
-        await sleep(150);
 
         if (target === "tracker") {
           navigate("/tracker-gps", { replace: true });
         } else {
+          // Nota técnica: aquí NO validamos rol; esa responsabilidad es de PanelGate/SmartFallback
           navigate("/inicio", { replace: true });
         }
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
-
-        // Quita lock para permitir reintento manual
         sessionStorage.removeItem(lockKey);
 
         const msg = String(e?.message || e);
+
         setStatus({
           phase: "error",
           message: "No se pudo completar el inicio de sesión.",
@@ -193,13 +219,15 @@ export default function AuthCallback() {
           <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>
             {status.details || status.message}
           </p>
-          <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+
+          <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
             <button
               onClick={() => navigate("/login", { replace: true })}
               style={{ padding: "10px 14px", cursor: "pointer" }}
             >
               Ir a Login
             </button>
+
             <button
               onClick={() => window.location.reload()}
               style={{ padding: "10px 14px", cursor: "pointer" }}
