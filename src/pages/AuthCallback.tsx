@@ -1,259 +1,218 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/supabaseClient";
-import { supabaseTracker } from "@/supabaseTrackerClient";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-/**
- * AuthCallback UNIVERSAL (panel + tracker)
- *
- * IMPORTANTÍSIMO:
- * - Los Magic Links generados con supabaseAdmin.auth.admin.generateLink()
- *   NO pueden completar PKCE (?code=...) porque el browser no tiene code_verifier.
- *   => Deben llegar como IMPLICIT: #access_token=...
- *
- * Este callback:
- * - Soporta IMPLICIT (#access_token, refresh_token, expires_at...)
- * - Si llega PKCE (?code=...), muestra mensaje accionable (no bucle infinito).
- * - Decide destino por query param:
- *    /auth/callback?target=panel   -> /inicio
- *    /auth/callback?target=tracker -> /tracker-gps
- */
+// OJO: importa TU cliente canonical (panel)
+// (si tienes uno específico para tracker, aquí NO lo uses)
+import { supabase } from "./supabaseClient"; // ajusta ruta si es distinto
 
-type Target = "panel" | "tracker";
+type Status =
+  | { phase: "init"; message: string }
+  | { phase: "working"; message: string }
+  | { phase: "ok"; message: string }
+  | { phase: "error"; message: string; details?: string };
 
-function getTargetFromUrl(): Target {
-  const url = new URL(window.location.href);
-  const t = (url.searchParams.get("target") || "").toLowerCase().trim();
+function safeGetTarget(search: string): "panel" | "tracker" {
+  const p = new URLSearchParams(search);
+  const t = (p.get("target") || "").toLowerCase();
   return t === "tracker" ? "tracker" : "panel";
 }
 
-function parseHash(hash: string) {
-  if (!hash) return {};
-  const clean = hash.startsWith("#") ? hash.slice(1) : hash;
-  const p = new URLSearchParams(clean);
-  return {
-    access_token: p.get("access_token") || "",
-    refresh_token: p.get("refresh_token") || "",
-    expires_at: Number(p.get("expires_at") || 0) || 0,
-    expires_in: Number(p.get("expires_in") || 0) || 0,
-    token_type: p.get("token_type") || "bearer",
-    type: p.get("type") || "",
-  };
+function hasHashTokens(hash: string) {
+  // IMPLICIT: #access_token=...&refresh_token=...&expires_in=...
+  return /access_token=/.test(hash) && /refresh_token=/.test(hash);
 }
 
-function projectRefFromUrl(supabaseUrl: string) {
-  try {
-    const u = new URL(supabaseUrl);
-    const host = u.hostname; // <ref>.supabase.co
-    return host.split(".")[0];
-  } catch {
-    return null;
-  }
+function getHashParam(hash: string, key: string): string | null {
+  const h = hash.startsWith("#") ? hash.slice(1) : hash;
+  const p = new URLSearchParams(h);
+  return p.get(key);
 }
 
-/**
- * Obtiene el user usando el access_token (sin depender de setSession).
- */
-async function fetchUserViaRest(supabaseUrl: string, anonKey: string, accessToken: string) {
-  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    method: "GET",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${accessToken}`,
-    },
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let t: any;
+  const timeout = new Promise<never>((_, reject) => {
+    t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
   });
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(
-      `No se pudo obtener user (/auth/v1/user). Status ${res.status}. ${txt}`.trim()
-    );
-  }
-  return await res.json();
-}
-
-/**
- * Guarda sesión en el storage que Supabase espera: sb-<ref>-auth-token
- * Esto permite que tu AuthContext / supabase-js "vea" la sesión al cargar.
- */
-function writeSessionToLocalStorage(opts: {
-  supabaseUrl: string;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt?: number;
-  tokenType?: string;
-  user: any;
-}) {
-  const ref = projectRefFromUrl(opts.supabaseUrl);
-  if (!ref) throw new Error("No se pudo derivar project ref del SUPABASE_URL.");
-
-  const key = `sb-${ref}-auth-token`;
-  const now = Math.floor(Date.now() / 1000);
-  const expires_at = opts.expiresAt && opts.expiresAt > 0 ? opts.expiresAt : now + 3600;
-
-  const payload = {
-    access_token: opts.accessToken,
-    refresh_token: opts.refreshToken,
-    token_type: opts.tokenType || "bearer",
-    expires_at,
-    expires_in: Math.max(0, expires_at - now),
-    user: opts.user,
-  };
-
-  localStorage.setItem(key, JSON.stringify(payload));
-}
-
-function cleanUrlKeepOriginPath() {
   try {
-    const clean = `${window.location.origin}${window.location.pathname}${window.location.search
-      .replace(/([?&])code=[^&]+(&|$)/, "$1")
-      .replace(/[?&]$/, "")}`;
-    // Además, quitamos el hash completo (access_token) para evitar re-procesos.
-    window.history.replaceState({}, document.title, clean);
-  } catch {
-    // noop
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(t);
   }
-}
-
-function redirectAfterLogin(target: Target) {
-  // Tracker SIEMPRE a su pantalla; Panel SIEMPRE al panel.
-  const dest = target === "tracker" ? "/tracker-gps" : "/inicio";
-  window.location.replace(dest);
 }
 
 export default function AuthCallback() {
-  const [status, setStatus] = useState<string>("Estableciendo sesión...");
-  const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const target = useMemo(() => {
-    try {
-      return getTargetFromUrl();
-    } catch {
-      return "panel";
-    }
-  }, []);
+  const target = useMemo(() => safeGetTarget(location.search), [location.search]);
+  const [status, setStatus] = useState<Status>({
+    phase: "init",
+    message: "Confirmando acceso…",
+  });
+
+  // Evita dobles ejecuciones (React strict mode / re-render)
+  const startedRef = useRef(false);
+
+  // Lock en sessionStorage para evitar loop al volver/recargar
+  const lockKey = "auth_callback_lock_v1";
 
   useEffect(() => {
-    let cancelled = false;
+    if (startedRef.current) return;
+    startedRef.current = true;
 
     const run = async () => {
       try {
-        setError(null);
-        setStatus("Estableciendo sesión...");
+        setStatus({ phase: "working", message: "Estableciendo sesión…" });
 
-        const url = new URL(window.location.href);
-        const code = url.searchParams.get("code");
-
-        // Elegimos cliente según target (NO por hostname)
-        const client = target === "tracker" ? supabaseTracker : supabase;
-
-        // Detectar URL/key
-        const SUPABASE_URL =
-          (client as any)?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
-        const ANON_KEY =
-          (client as any)?.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-        if (!SUPABASE_URL || !ANON_KEY) {
-          throw new Error("Faltan SUPABASE_URL o ANON_KEY (env o cliente).");
+        // 0) Lock anti-loop
+        const existingLock = sessionStorage.getItem(lockKey);
+        if (existingLock) {
+          // Si ya intentó hace nada, evita bucle
+          setStatus({
+            phase: "error",
+            message: "Se detectó un bucle de autenticación. Reintenta el Magic Link.",
+            details: "lock",
+          });
+          return;
         }
+        sessionStorage.setItem(lockKey, String(Date.now()));
 
-        // --- CASO PKCE (code=...) ---
-        // Esto NO es compatible con generateLink (admin) porque falta code_verifier.
-        // En vez de bucle/timeout, damos error claro.
-        if (code) {
-          cleanUrlKeepOriginPath();
-          throw new Error(
-            "Este Magic Link llegó en modo PKCE (?code=...), pero los links generados por el servidor (generateLink) no pueden completar PKCE porque falta el code_verifier. Solución: cambia Auth Flow Type a IMPLICIT en Supabase Auth o genera el login desde el cliente (signInWithOtp)."
+        // 1) Detectar tipo de callback
+        const url = window.location.href;
+        const code = new URLSearchParams(window.location.search).get("code");
+        const hash = window.location.hash || "";
+
+        console.log("[AuthCallback] url:", url);
+        console.log("[AuthCallback] target:", target);
+        console.log("[AuthCallback] code?:", code);
+        console.log("[AuthCallback] hasHashTokens?:", hasHashTokens(hash));
+
+        // 2) Si viene con tokens en hash (IMPLICIT)
+        if (hasHashTokens(hash)) {
+          const access_token = getHashParam(hash, "access_token");
+          const refresh_token = getHashParam(hash, "refresh_token");
+
+          if (!access_token || !refresh_token) {
+            throw new Error("Faltan tokens en el hash (access_token/refresh_token).");
+          }
+
+          // setSession guarda en storage y dispara onAuthStateChange
+          await withTimeout(
+            supabase.auth.setSession({ access_token, refresh_token }),
+            12000,
+            "setSession"
           );
+
+          // Limpia el hash para que no re-procese al refrescar
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        }
+        // 3) Si viene con code (PKCE)
+        else if (code) {
+          // exchangeCodeForSession usa el code_verifier guardado por el login/flow PKCE
+          // (Si el code viene de un link generado sin PKCE, este paso falla.)
+          await withTimeout(supabase.auth.exchangeCodeForSession(code), 15000, "exchangeCodeForSession");
+
+          // Limpia el code de la URL
+          const p = new URLSearchParams(window.location.search);
+          p.delete("code");
+          const qs = p.toString();
+          window.history.replaceState({}, document.title, window.location.pathname + (qs ? `?${qs}` : ""));
+        } else {
+          throw new Error("Callback sin parámetros de sesión (ni hash tokens ni code).");
         }
 
-        // --- CASO IMPLICIT (#access_token=...) ---
-        const h = parseHash(window.location.hash);
-        if (!h.access_token) {
-          cleanUrlKeepOriginPath();
-          throw new Error(
-            "No se encontró access_token en el callback. Asegura que el Auth Flow Type esté en IMPLICIT y que el redirect sea /auth/callback?target=panel o /auth/callback?target=tracker."
-          );
+        // 4) Confirmar sesión real
+        setStatus({ phase: "working", message: "Validando sesión…" });
+
+        const { data: sData, error: sErr } = await withTimeout(supabase.auth.getSession(), 12000, "getSession");
+        if (sErr) throw sErr;
+        const session = sData?.session ?? null;
+        if (!session) {
+          throw new Error("Sesión no disponible luego del callback.");
         }
 
-        // OJO: si el reloj del dispositivo está mal, Supabase avisa "issued in the future"
-        // y puede fallar. Aviso proactivo:
-        setStatus("Validando usuario...");
-        const user = await fetchUserViaRest(SUPABASE_URL, ANON_KEY, h.access_token);
-
-        if (!user?.id) {
-          cleanUrlKeepOriginPath();
-          throw new Error("No se pudo validar el usuario con el access_token.");
+        // 5) Obtener usuario (si falla con “issued in the future”, suele ser reloj del dispositivo)
+        const { data: uData, error: uErr } = await withTimeout(supabase.auth.getUser(), 12000, "getUser");
+        if (uErr) {
+          const msg = String((uErr as any)?.message || uErr);
+          if (msg.toLowerCase().includes("issued in the future")) {
+            throw new Error(
+              "El reloj del dispositivo parece desfasado. Ajusta fecha/hora automáticas y reintenta el Magic Link."
+            );
+          }
+          throw uErr;
         }
 
-        setStatus("Guardando sesión...");
-        writeSessionToLocalStorage({
-          supabaseUrl: SUPABASE_URL,
-          accessToken: h.access_token,
-          refreshToken: h.refresh_token,
-          expiresAt: h.expires_at,
-          tokenType: h.token_type,
-          user,
-        });
+        console.log("[AuthCallback] user:", uData?.user?.email);
 
-        if (cancelled) return;
+        // 6) Redirección final (universal)
+        setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
 
-        setStatus("Redirigiendo...");
-        cleanUrlKeepOriginPath();
-        redirectAfterLogin(target);
+        // Quita lock
+        sessionStorage.removeItem(lockKey);
+
+        // Pequeño delay para que AuthContext alcance a reaccionar
+        await sleep(150);
+
+        if (target === "tracker") {
+          navigate("/tracker-gps", { replace: true });
+        } else {
+          navigate("/inicio", { replace: true });
+        }
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
-        if (cancelled) return;
 
-        const msg =
-          typeof e?.message === "string" && e.message.trim()
-            ? e.message.trim()
-            : "Error estableciendo sesión.";
+        // Quita lock para permitir reintento manual
+        sessionStorage.removeItem(lockKey);
 
-        setError(msg);
-        setStatus("No se pudo completar el inicio de sesión.");
+        const msg = String(e?.message || e);
+        setStatus({
+          phase: "error",
+          message: "No se pudo completar el inicio de sesión.",
+          details: msg,
+        });
       }
     };
 
     run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [target]);
+  }, [navigate, target]);
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-10">
-      <div className="border rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-900">App Geocercas</h1>
-        <p className="text-sm text-slate-600 mt-2">{status}</p>
+    <div style={{ padding: 24, maxWidth: 720 }}>
+      <h1 style={{ marginBottom: 8 }}>App Geocercas</h1>
 
-        {error ? (
-          <div className="mt-4 text-sm text-red-600">
-            {error}
-
-            <div className="mt-4 text-xs text-slate-600">
-              Tip: si el link viene de WhatsApp/FB, evita abrirlo en “preview”.
-              Usa “Abrir en navegador”. Y revisa que el reloj del teléfono/PC esté
-              en hora automática.
-            </div>
-
-            <div className="mt-3 flex gap-2">
-              <button
-                className="border rounded px-3 py-2 text-xs"
-                onClick={() => window.location.replace("/login")}
-              >
-                Ir a Login
-              </button>
-              <button
-                className="border rounded px-3 py-2 text-xs"
-                onClick={() => window.location.reload()}
-              >
-                Reintentar
-              </button>
-            </div>
+      {status.phase !== "error" ? (
+        <p>{status.message}</p>
+      ) : (
+        <>
+          <p>Ocurrió un problema.</p>
+          <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>
+            {status.details || status.message}
+          </p>
+          <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+            <button
+              onClick={() => navigate("/login", { replace: true })}
+              style={{ padding: "10px 14px", cursor: "pointer" }}
+            >
+              Ir a Login
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{ padding: "10px 14px", cursor: "pointer" }}
+            >
+              Reintentar
+            </button>
           </div>
-        ) : null}
-      </div>
+
+          <p style={{ marginTop: 16, opacity: 0.8 }}>
+            Tip: si el link viene de WhatsApp/FB, evita abrirlo en “preview”. Usa “Abrir en navegador”.
+          </p>
+        </>
+      )}
     </div>
   );
 }
