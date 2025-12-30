@@ -64,10 +64,6 @@ function getActiveRole(memberships, orgId) {
 
 /* ======================================================
    DOMAIN ENFORCER (HARD CANONICAL ROUTING)
-   - Tracker domain:
-     - CAPTURA magic link (?code / #access_token) y fuerza /auth/callback
-     - con sesión => /tracker-gps
-     - sin sesión => permitido /, /login, /reset-password, /auth/callback
 ====================================================== */
 function DomainEnforcer() {
   const { loading, session } = useAuth();
@@ -86,6 +82,7 @@ function DomainEnforcer() {
 
     const hasCode = new URLSearchParams(search).has("code");
     const hasAccessToken = hash.includes("access_token=");
+
     if ((hasCode || hasAccessToken) && path !== "/auth/callback") {
       navigate(`/auth/callback${search}${hash}`, { replace: true });
       return;
@@ -105,7 +102,15 @@ function DomainEnforcer() {
     }
 
     if (path !== "/tracker-gps") navigate("/tracker-gps", { replace: true });
-  }, [loading, session, location.pathname, location.search, location.hash, navigate, trackerDomain]);
+  }, [
+    loading,
+    session,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigate,
+    trackerDomain,
+  ]);
 
   return null;
 }
@@ -126,7 +131,6 @@ function PanelGate({ children }) {
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
-  // Si hay sesión pero aún no resolvimos rol (carrera de triggers / RLS), esperamos.
   const r = String(role || "").toLowerCase().trim();
   if (!r) return null;
 
@@ -155,7 +159,10 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [memberships, activeOrgId]);
+  const activeRole = useMemo(
+    () => getActiveRole(memberships, activeOrgId),
+    [memberships, activeOrgId]
+  );
 
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
@@ -182,7 +189,9 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  if (isRootOwner === true) tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
+  if (isRootOwner === true) {
+    tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -218,7 +227,11 @@ function SmartFallback() {
   if (loading) return null;
 
   if (isTrackerHostname(window.location.hostname)) {
-    return session ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/" replace />;
+    return session ? (
+      <Navigate to="/tracker-gps" replace />
+    ) : (
+      <Navigate to="/" replace />
+    );
   }
 
   if (!session) return <Navigate to="/" replace />;
@@ -226,7 +239,11 @@ function SmartFallback() {
   const r = String(role || "").toLowerCase().trim();
   if (!r) return null;
 
-  return PANEL_ROLES.has(r) ? <Navigate to="/inicio" replace /> : <Navigate to="/tracker-gps" replace />;
+  return PANEL_ROLES.has(r) ? (
+    <Navigate to="/inicio" replace />
+  ) : (
+    <Navigate to="/tracker-gps" replace />
+  );
 }
 
 export default function App() {
@@ -291,3 +308,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
