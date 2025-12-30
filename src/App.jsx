@@ -134,14 +134,9 @@ function PanelGate({ children }) {
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
+  // Espera rol (triggers/RLS) sin romper el parser con JSX en return
   const r = String(role || "").toLowerCase().trim();
-  if (!r) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center text-slate-600">
-        Preparando tu espacio de trabajo…
-      </div>
-    );
-  }
+  if (!r) return null;
 
   if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
 
