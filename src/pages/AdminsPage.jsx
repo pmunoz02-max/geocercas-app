@@ -5,22 +5,27 @@ import {
   listAdmins,
   inviteAdmin,
   inviteIndependentOwner,
-  updateAdmin,
   deleteAdmin,
 } from "../lib/adminsApi";
 
 export default function AdminsPage() {
-  // 🔑 CAMBIO CLAVE: usamos ROOT OWNER global, no role por organización
+  // ROOT OWNER global
   const { currentOrg, user, isRootOwner } = useAuth();
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
+
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin");
+
+  // NUEVO: info del resultado de invitación
+  const [invitedVia, setInvitedVia] = useState(null); // "email" | "action_link" | null
+  const [actionLink, setActionLink] = useState(null); // string | null
+  const [lastInvitedEmail, setLastInvitedEmail] = useState(null);
 
   // ===========================================================
   // Cargar administradores (SOLO ROOT OWNER)
@@ -46,13 +51,11 @@ export default function AdminsPage() {
 
       if (fetchError) {
         console.error("[AdminsPage] listAdmins error:", fetchError);
-        setError(
-          fetchError.message ||
-            "No se pudo cargar la lista de administradores."
-        );
+        setError(fetchError.message || "No se pudo cargar la lista de administradores.");
       } else {
         setAdmins(data || []);
       }
+
       setLoading(false);
     };
 
@@ -72,14 +75,17 @@ export default function AdminsPage() {
     const { data, error: fetchError } = await listAdmins(currentOrg.id);
 
     if (fetchError) {
-      setError(
-        fetchError.message ||
-          "No se pudo actualizar la lista de administradores."
-      );
+      setError(fetchError.message || "No se pudo actualizar la lista de administradores.");
     } else {
       setAdmins(data || []);
     }
     setLoading(false);
+  };
+
+  const resetInviteResult = () => {
+    setInvitedVia(null);
+    setActionLink(null);
+    setLastInvitedEmail(null);
   };
 
   // ===========================================================
@@ -87,12 +93,13 @@ export default function AdminsPage() {
   // ===========================================================
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
-
     if (!isRootOwner) return;
 
-    const email = inviteEmail.trim();
+    const email = inviteEmail.trim().toLowerCase();
+
     setError(null);
     setSuccessMessage(null);
+    resetInviteResult();
 
     if (!email || !email.includes("@")) {
       setError("Ingresa un correo electrónico válido.");
@@ -105,17 +112,13 @@ export default function AdminsPage() {
       let response;
 
       if (inviteRole === "admin") {
-        response = await inviteAdmin(currentOrg.id, {
-          email,
-          role: "ADMIN",
-        });
+        // admin (misma org) -> tu backend decide cómo asociarlo
+        response = await inviteAdmin(currentOrg.id, { email, role: "ADMIN" });
       }
 
       if (inviteRole === "owner") {
-        response = await inviteIndependentOwner({
-          email,
-          full_name: null,
-        });
+        // owner (nueva org)
+        response = await inviteIndependentOwner({ email, full_name: null });
       }
 
       const { error: fnError, data } = response || {};
@@ -130,8 +133,32 @@ export default function AdminsPage() {
         return;
       }
 
+      // === CONTRATO NUEVO (universal): invited_via + action_link
+      // Soportamos ambos formatos:
+      // - { invited_via, action_link, ... }
+      // - { action_link } únicamente
+      const via = data?.invited_via || (data?.action_link ? "action_link" : null);
+      const link = data?.action_link || null;
+
+      setLastInvitedEmail(email);
+      setInvitedVia(via);
+      setActionLink(link);
+
+      // Mensaje UX universal:
+      if (via === "email") {
+        setSuccessMessage(
+          `Invitación enviada por correo a ${email}. (Si no llega, revisa Spam/Promociones)`
+        );
+      } else if (via === "action_link") {
+        setSuccessMessage(
+          `No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo a ${email} (NO uses /inicio).`
+        );
+      } else {
+        setSuccessMessage(`Invitación procesada para ${email}.`);
+      }
+
       setInviteEmail("");
-      setSuccessMessage(`La invitación fue enviada a ${email}.`);
+      await handleRefresh();
     } catch (err) {
       console.error("[AdminsPage] excepción:", err);
       setError("Error inesperado al enviar la invitación.");
@@ -141,7 +168,7 @@ export default function AdminsPage() {
   };
 
   // ===========================================================
-  // DELETE / EDIT
+  // DELETE
   // ===========================================================
   const handleDelete = async (adm) => {
     if (!currentOrg?.id || !isRootOwner) return;
@@ -162,15 +189,23 @@ export default function AdminsPage() {
     setLoadingAction(false);
   };
 
+  const handleCopyMagicLink = async () => {
+    if (!actionLink) return;
+    try {
+      await navigator.clipboard.writeText(actionLink);
+      setSuccessMessage("Magic Link copiado. Envíalo por WhatsApp/Email (abrir en Chrome/Safari).");
+    } catch (e) {
+      setError("No se pudo copiar el link. Copia manualmente desde el recuadro.");
+    }
+  };
+
   // ===========================================================
   // UI – BLOQUEO DEFINITIVO
   // ===========================================================
   if (!isRootOwner) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-xl font-semibold text-slate-900 mb-2">
-          Administradores
-        </h1>
+        <h1 className="text-xl font-semibold text-slate-900 mb-2">Administradores</h1>
         <p className="text-sm text-slate-600">
           Este módulo es de uso exclusivo del propietario de la aplicación.
         </p>
@@ -181,9 +216,7 @@ export default function AdminsPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Administradores actuales
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Administradores actuales</h1>
         <p className="text-sm text-slate-600 mt-1">
           Organización: <b>{currentOrg?.name}</b>
         </p>
@@ -194,14 +227,16 @@ export default function AdminsPage() {
 
       {/* INVITAR */}
       <section className="mb-8 border rounded-xl p-4 bg-white">
-        <h2 className="text-sm font-semibold mb-2">
-          Invitar nuevo administrador
-        </h2>
+        <h2 className="text-sm font-semibold mb-2">Invitar nuevo administrador</h2>
 
-        <form
-          onSubmit={handleInviteSubmit}
-          className="flex flex-col md:flex-row gap-3"
-        >
+        {/* Nota universal anti-whatsapp-preview */}
+        <div className="text-xs text-slate-600 mb-3">
+          Importante: el acceso funciona solo con el <b>Magic Link real</b> (con tokens).{" "}
+          <b>No</b> envíes links como <span className="font-mono">/inicio</span>. Si compartes por WhatsApp,
+          pide que lo abran en <b>Chrome/Safari</b> (no en el preview).
+        </div>
+
+        <form onSubmit={handleInviteSubmit} className="flex flex-col md:flex-row gap-3">
           <input
             type="email"
             placeholder="correo@ejemplo.com"
@@ -227,6 +262,52 @@ export default function AdminsPage() {
             {loadingAction ? "Procesando..." : "Invitar"}
           </button>
         </form>
+
+        {/* Resultado: correo o link */}
+        {(invitedVia || actionLink) && (
+          <div className="mt-4 border rounded-lg p-3 bg-slate-50">
+            <div className="text-xs text-slate-700">
+              Invitado: <b>{lastInvitedEmail}</b>
+            </div>
+
+            {invitedVia === "email" ? (
+              <div className="text-xs text-emerald-700 mt-1">
+                ✅ Invitación enviada por correo. (Revisar Spam/Promociones)
+              </div>
+            ) : invitedVia === "action_link" ? (
+              <div className="text-xs text-amber-700 mt-1">
+                ⚠️ No se pudo enviar correo automáticamente. Usa este Magic Link real:
+              </div>
+            ) : null}
+
+            {actionLink && (
+              <div className="mt-2">
+                <div className="flex gap-2 items-center mb-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyMagicLink}
+                    className="bg-emerald-600 text-white rounded px-3 py-1.5 text-xs"
+                  >
+                    Copiar Magic Link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
+                    className="border rounded px-3 py-1.5 text-xs"
+                  >
+                    Probar link
+                  </button>
+                </div>
+                <div className="text-[11px] text-slate-500 mb-2">
+                  Si lo envías por WhatsApp: que lo abran en navegador (Chrome/Safari), no en el preview.
+                </div>
+                <div className="bg-white border rounded p-2 text-[11px] break-all select-all">
+                  {actionLink}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {error && (
@@ -257,9 +338,7 @@ export default function AdminsPage() {
         {loading ? (
           <p className="p-4 text-sm text-slate-500">Cargando…</p>
         ) : admins.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">
-            No hay administradores.
-          </p>
+          <p className="p-4 text-sm text-slate-500">No hay administradores.</p>
         ) : (
           <table className="w-full text-xs">
             <thead className="bg-slate-50">
