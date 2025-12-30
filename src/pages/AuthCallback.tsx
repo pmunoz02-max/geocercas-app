@@ -1,12 +1,7 @@
 // src/pages/AuthCallback.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-// ✅ IMPORT CANONICAL (PANEL)
-// Ajusta SOLO esta ruta si tu proyecto lo requiere:
-// - si existe src/supabaseClient.(ts|js)  => "../supabaseClient"
-// - si existe src/pages/supabaseClient.* => "./supabaseClient"
-import { supabase } from "../supabaseClient";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 type Status =
   | { phase: "init"; message: string }
@@ -18,6 +13,11 @@ function safeGetTarget(search: string): "panel" | "tracker" {
   const p = new URLSearchParams(search);
   const t = (p.get("target") || "").toLowerCase();
   return t === "tracker" ? "tracker" : "panel";
+}
+
+function isTrackerHostname(hostname: string) {
+  const h = String(hostname || "").toLowerCase().trim();
+  return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
 function hasHashTokens(hash: string) {
@@ -43,21 +43,16 @@ function decodeJwtPayload(token: string): any | null {
   }
 }
 
-/**
- * Valida “issued in the future” por skew de reloj, ANTES de llamar a setSession.
- * Si el iat está muy adelantado respecto al reloj local, lo detectamos y mostramos
- * un mensaje claro (en vez de terminar en timeout/403 confuso).
- */
-function detectClockSkew(accessToken: string): { skewSec: number; iat?: number; now?: number } | null {
+function issuerHostFromAccessToken(accessToken: string): string | null {
   const payload = decodeJwtPayload(accessToken);
-  if (!payload || typeof payload.iat !== "number") return null;
-
-  const now = Math.floor(Date.now() / 1000);
-  const iat = payload.iat;
-
-  // iat en el futuro => skew positivo
-  const skewSec = iat - now;
-  return { skewSec, iat, now };
+  const iss = String(payload?.iss || "");
+  // iss suele ser: https://<project>.supabase.co/auth/v1
+  try {
+    const u = new URL(iss);
+    return u.host || null;
+  } catch {
+    return null;
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -72,29 +67,32 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
-function looksLikeClockError(e: any) {
-  const msg = String(e?.message || e || "").toLowerCase();
-  return msg.includes("issued in the future") || msg.includes("clock") || msg.includes("skew");
+function buildClient(url: string, anonKey: string): SupabaseClient {
+  return createClient(url, anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false, // nosotros manejamos el callback manualmente
+    },
+  });
 }
 
-function looksLikeForbidden(e: any) {
-  const msg = String(e?.message || e || "").toLowerCase();
-  return msg.includes("403") || msg.includes("forbidden");
+function getEnvOrThrow(name: string): string {
+  const v = (import.meta as any).env?.[name];
+  if (!v) throw new Error(`Falta env var: ${name}`);
+  return String(v);
 }
 
 export default function AuthCallback() {
   const location = useLocation();
   const navigate = useNavigate();
-
   const target = useMemo(() => safeGetTarget(location.search), [location.search]);
+  const startedRef = useRef(false);
 
   const [status, setStatus] = useState<Status>({
     phase: "init",
     message: "Confirmando acceso…",
   });
-
-  // evita doble ejecución (StrictMode)
-  const startedRef = useRef(false);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -104,51 +102,58 @@ export default function AuthCallback() {
       try {
         setStatus({ phase: "working", message: "Procesando Magic Link…" });
 
+        const trackerHost = isTrackerHostname(window.location.hostname);
+
+        // 1) Crea ambos clientes desde ENV (blindaje definitivo)
+        const panelUrl = getEnvOrThrow("VITE_SUPABASE_URL");
+        const panelKey = getEnvOrThrow("VITE_SUPABASE_ANON_KEY");
+
+        const trackerUrl = getEnvOrThrow("VITE_SUPABASE_TRACKER_URL");
+        const trackerKey = getEnvOrThrow("VITE_SUPABASE_TRACKER_ANON_KEY");
+
+        const panelClient = buildClient(panelUrl, panelKey);
+        const trackerClient = buildClient(trackerUrl, trackerKey);
+
+        // 2) Decide cliente por hostname (primario)
+        let client: SupabaseClient = trackerHost ? trackerClient : panelClient;
+
         const code = new URLSearchParams(window.location.search).get("code");
         const hash = window.location.hash || "";
 
-        // Timeouts más realistas para móvil/TWA
-        const SET_SESSION_TIMEOUT = 30_000;
-        const EXCHANGE_TIMEOUT = 30_000;
-        const GET_SESSION_TIMEOUT = 15_000;
-
-        // --- IMPLICIT FLOW (#access_token=...&refresh_token=...) ---
+        // 3) Si viene access_token, también decidimos por ISS (secundario, súper robusto)
         if (hasHashTokens(hash)) {
           const access_token = getHashParam(hash, "access_token");
           const refresh_token = getHashParam(hash, "refresh_token");
-
           if (!access_token || !refresh_token) {
             throw new Error("Faltan tokens en el hash (access_token/refresh_token).");
           }
 
-          // ✅ Detecta skew antes de setSession
-          const skew = detectClockSkew(access_token);
-          // tolerancia 120s (2 min). Si tu entorno es sensible, sube a 300s.
-          if (skew && skew.skewSec > 120) {
-            throw new Error(
-              `CLOCK_SKEW: El token fue emitido en el futuro (iat=${skew.iat}, now=${skew.now}, skew=${skew.skewSec}s). ` +
-                `Activa Fecha/Hora automáticas y Zona Horaria automática y reintenta.`
-            );
+          const issHost = issuerHostFromAccessToken(access_token);
+          if (issHost) {
+            const panelHost = new URL(panelUrl).host;
+            const trackerAuthHost = new URL(trackerUrl).host;
+
+            if (issHost === trackerAuthHost) client = trackerClient;
+            else if (issHost === panelHost) client = panelClient;
+            // Si no coincide con ninguno, seguimos con el elegido por hostname
           }
 
           setStatus({ phase: "working", message: "Estableciendo sesión…" });
 
+          // TWA/móvil: timeouts más altos
           await withTimeout(
-            supabase.auth.setSession({ access_token, refresh_token }),
-            SET_SESSION_TIMEOUT,
+            client.auth.setSession({ access_token, refresh_token }),
+            30_000,
             "setSession"
           );
 
-          // Limpia hash para evitar reproceso (muy importante en móviles/WhatsApp)
+          // Limpia hash para evitar reproceso
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        }
-        // --- PKCE FLOW (?code=...) ---
-        else if (code) {
+        } else if (code) {
           setStatus({ phase: "working", message: "Intercambiando código…" });
 
-          await withTimeout(supabase.auth.exchangeCodeForSession(code), EXCHANGE_TIMEOUT, "exchangeCodeForSession");
+          await withTimeout(client.auth.exchangeCodeForSession(code), 30_000, "exchangeCodeForSession");
 
-          // Limpia el code, preservando otros params
           const p = new URLSearchParams(window.location.search);
           p.delete("code");
           const qs = p.toString();
@@ -157,57 +162,28 @@ export default function AuthCallback() {
           throw new Error("Callback sin parámetros (ni hash tokens ni code).");
         }
 
-        // Confirmación mínima: la sesión debe existir
         setStatus({ phase: "working", message: "Confirmando sesión…" });
 
-        const { data, error } = await withTimeout(supabase.auth.getSession(), GET_SESSION_TIMEOUT, "getSession");
+        const { data, error } = await withTimeout(client.auth.getSession(), 15_000, "getSession");
         if (error) throw error;
         if (!data?.session) throw new Error("Sesión no disponible luego del callback.");
 
         setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
 
-        // ✅ Redirección final (el rol lo valida PanelGate/SmartFallback)
-        navigate(target === "tracker" ? "/tracker-gps" : "/inicio", { replace: true });
+        // Redirección final
+        navigate(target === "tracker" || trackerHost ? "/tracker-gps" : "/inicio", { replace: true });
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
-
-        const msg = String(e?.message || e);
-
-        // Mensaje ultra-claro para el caso que ya viste en consola:
-        // "Session as retrieved from URL was issued in the future? Check the device clock for skew"
-        if (msg.startsWith("CLOCK_SKEW:") || looksLikeClockError(e)) {
-          setStatus({
-            phase: "error",
-            message: "El reloj del dispositivo está desfasado.",
-            details:
-              "Activa 'Fecha y hora automáticas' y 'Zona horaria automática' (y reinicia el dispositivo si es necesario). Luego abre un Magic Link nuevo.",
-          });
-          return;
-        }
-
-        // Si ves 403 en /auth/v1/user en consola, lo más común es:
-        // - token emitido por otro proyecto Supabase (mezcla de proyectos)
-        // - o sesión inválida por skew/expiración
-        if (looksLikeForbidden(e) || msg.includes("403")) {
-          setStatus({
-            phase: "error",
-            message: "Acceso rechazado (403) por Supabase.",
-            details:
-              "Causas típicas: (1) el Magic Link fue emitido por otro proyecto Supabase distinto al que usa la app; (2) reloj del dispositivo desfasado; (3) link expirado. Genera un Magic Link nuevo tras confirmar VITE_SUPABASE_URL/ANON_KEY en Vercel.",
-          });
-          return;
-        }
-
         setStatus({
           phase: "error",
-          message: "No se pudo completar el inicio de sesión.",
-          details: msg,
+          message: "Ocurrió un problema.",
+          details: String(e?.message || e),
         });
       }
     };
 
     run();
-  }, [navigate, target]);
+  }, [navigate, target, location.search]);
 
   return (
     <div style={{ padding: 24, maxWidth: 720 }}>
@@ -229,7 +205,6 @@ export default function AuthCallback() {
             >
               Ir a Login
             </button>
-
             <button
               onClick={() => window.location.reload()}
               style={{ padding: "10px 14px", cursor: "pointer" }}
