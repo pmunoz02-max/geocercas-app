@@ -1,149 +1,54 @@
-// src/pages/InvitarTracker.jsx
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/supabaseClient";
 import { useTranslation } from "react-i18next";
 
 /**
- * Llamada DEBUG/PRODUCCIÓN sin supabase.functions.invoke, para poder leer
- * el body real incluso cuando el servidor responde 500.
- *
- * Requisitos (Vite):
- * - VITE_SUPABASE_URL
- * - VITE_SUPABASE_ANON_KEY
+ * Llamada directa a Edge Function invite_tracker
  */
-async function inviteUserViaFetch(payload) {
+async function inviteTracker(payload) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !anonKey) {
-    return {
-      ok: false,
-      status: 0,
-      parsed: null,
-      text: null,
-      error: "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY",
-    };
-  }
-
   const {
     data: { session },
-    error: sessionErr,
   } = await supabase.auth.getSession();
 
-  if (sessionErr) {
-    return {
-      ok: false,
-      status: 0,
-      parsed: null,
-      text: null,
-      error: `auth.getSession error: ${sessionErr.message}`,
-    };
+  if (!session?.access_token) {
+    return { ok: false, error: "No session token" };
   }
 
-  const accessToken = session?.access_token;
-  if (!accessToken) {
-    return {
-      ok: false,
-      status: 0,
-      parsed: null,
-      text: null,
-      error: "No access token in session",
-    };
-  }
-
-  const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/invite-user`;
-
-  let res;
-  try {
-    res = await fetch(url, {
+  const res = await fetch(
+    `${supabaseUrl.replace(/\/$/, "")}/functions/v1/invite_tracker`,
+    {
       method: "POST",
       headers: {
         apikey: anonKey,
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
-    });
-  } catch (networkErr) {
-    return {
-      ok: false,
-      status: 0,
-      parsed: null,
-      text: null,
-      error: `Network error: ${networkErr?.message || String(networkErr)}`,
-    };
-  }
-
-  const contentType = res.headers.get("content-type") || "";
-  let parsed = null;
-  let text = null;
-
-  try {
-    if (contentType.includes("application/json")) {
-      parsed = await res.json();
-    } else {
-      text = await res.text();
     }
-  } catch (parseErr) {
-    try {
-      text = await res.text();
-    } catch (_) {
-      text = `Response parse error: ${parseErr?.message || String(parseErr)}`;
-    }
-  }
+  );
+
+  const json = await res.json().catch(() => null);
 
   return {
     ok: res.ok,
     status: res.status,
-    parsed,
-    text,
-    error: null,
+    data: json,
   };
-}
-
-function compactErrorMessage(t, resp) {
-  const p = resp?.parsed;
-  const ctx = p?.ctx || p;
-
-  const stage = ctx?.stage ?? null;
-  const detail = ctx?.detail ?? ctx?.error ?? null;
-  const hint = ctx?.hint ?? null;
-
-  const parts = [];
-  if (resp?.status) parts.push(`http: ${resp.status}`);
-  if (stage) parts.push(`stage: ${stage}`);
-  if (detail) parts.push(`detail: ${detail}`);
-  if (hint) parts.push(`hint: ${hint}`);
-
-  if (parts.length) {
-    return `${t(
-      "inviteTracker.messages.serverProblem",
-      "There was a problem contacting the invitation server."
-    )} (${parts.join(" · ")})`;
-  }
-
-  if (resp?.error) return resp.error;
-  if (resp?.text) return resp.text;
-
-  return t(
-    "inviteTracker.messages.serverProblem",
-    "There was a problem contacting the invitation server."
-  );
 }
 
 export default function InvitarTracker() {
   const { currentOrg } = useAuth();
   const { t } = useTranslation();
 
-  const orgName =
-    currentOrg?.name || t("inviteTracker.orgFallback", "your organization");
-
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState(null);
+  const [magicLink, setMagicLink] = useState(null);
 
-  // Lista canónica de personas por org (v_org_people_ui)
   const [peopleList, setPeopleList] = useState([]);
   const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
 
@@ -153,17 +58,12 @@ export default function InvitarTracker() {
 
       const { data, error } = await supabase
         .from("v_org_people_ui")
-        .select("org_people_id, nombre, apellido, email, is_deleted, org_id")
+        .select("org_people_id, nombre, apellido, email")
         .eq("org_id", currentOrg.id)
         .eq("is_deleted", false)
-        .order("nombre", { ascending: true });
+        .order("nombre");
 
-      if (error) {
-        console.error("[InvitarTracker] Error cargando v_org_people_ui:", error);
-        return;
-      }
-
-      setPeopleList(data || []);
+      if (!error) setPeopleList(data || []);
     }
 
     loadPeople();
@@ -173,154 +73,62 @@ export default function InvitarTracker() {
     const id = e.target.value;
     setSelectedOrgPeopleId(id);
 
-    if (!id) return;
-
     const p = peopleList.find((x) => x.org_people_id === id);
-    if (p?.email) setEmail(String(p.email).trim().toLowerCase());
-  }
-
-  function handleEmailChange(e) {
-    setEmail(e.target.value);
-    setSelectedOrgPeopleId("");
+    if (p?.email) setEmail(p.email.toLowerCase());
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setMessage(null);
+    setMagicLink(null);
 
-    const trimmedEmail = (email || "").trim().toLowerCase();
-
-    if (!trimmedEmail) {
-      setMessage({
-        type: "error",
-        text: t("inviteTracker.errors.emailRequired"),
-      });
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setMessage({
-        type: "error",
-        text: t("inviteTracker.errors.emailInvalid"),
-      });
+    if (!email || !email.includes("@")) {
+      setMessage({ type: "error", text: t("inviteTracker.errors.emailInvalid") });
       return;
     }
 
     if (!currentOrg?.id) {
-      setMessage({
-        type: "error",
-        text: t(
-          "inviteTracker.errors.noOrg",
-          "No active organization found. Please select an organization and try again."
-        ),
-      });
+      setMessage({ type: "error", text: t("inviteTracker.errors.noOrg") });
       return;
     }
 
     try {
       setSending(true);
 
-      // ✅ FIX: redirect_to explícito con tracker_org_id
-      const origin = window.location.origin.replace(/\/$/, "");
-      const redirect_to = `${origin}/auth/callback?tracker_org_id=${currentOrg.id}`;
-
-      // ✅ Payload extendido (si tu Edge Function lo soporta; si no, lo ignora)
-      const payload = {
-        email: trimmedEmail,
-        role_name: "tracker",
-        full_name: null,
+      const resp = await inviteTracker({
+        email: email.trim().toLowerCase(),
         org_id: currentOrg.id,
-
-        // NUEVO: fuerza el retorno a tu callback con org tracker
-        redirect_to,
-
-        // redundante: por si tu función lo usa para construir links
-        tracker_org_id: currentOrg.id,
-      };
-
-      const resp = await inviteUserViaFetch(payload);
-
-      console.error("[InvitarTracker] invite-user RAW RESPONSE:", {
-        ok: resp.ok,
-        status: resp.status,
-        parsed: resp.parsed,
-        text: resp.text,
-        error: resp.error,
-        payloadSent: payload,
       });
 
-      if (!resp.ok) {
-        setMessage({ type: "error", text: compactErrorMessage(t, resp) });
-        return;
-      }
-
-      const data = resp.parsed;
-
-      if (!data?.ok) {
+      if (!resp.ok || !resp.data) {
         setMessage({
           type: "error",
-          text: compactErrorMessage(t, { ...resp, parsed: data }),
+          text: t("inviteTracker.messages.serverProblem"),
         });
         return;
       }
 
-      const mode = data.mode;
-      const link = data.invite_link || data.magic_link || null;
+      if (resp.data.invited_via === "email") {
+        setMessage({
+          type: "success",
+          text: t("inviteTracker.messages.invited", { email }),
+        });
+      }
 
-      // Mensajes
-      if (mode === "invited") {
+      if (resp.data.invited_via === "action_link") {
+        setMagicLink(resp.data.action_link);
         setMessage({
           type: "success",
-          text: t("inviteTracker.messages.invited", {
-            email: data.email || trimmedEmail,
-            orgName,
-          }),
-        });
-      } else if (mode === "magiclink_sent") {
-        setMessage({
-          type: "success",
-          text: link
-            ? `Magic link enviado. Si necesitas el link: ${link}`
-            : t("inviteTracker.messages.magiclinkSent", {
-                email: data.email || trimmedEmail,
-              }),
-        });
-      } else if (mode === "link_only") {
-        setMessage({
-          type: "success",
-          text: link
-            ? `Link generado (tracker-only): ${link}`
-            : t("inviteTracker.messages.linkOnlyNoLink"),
-        });
-      } else if (mode === "created_without_email") {
-        setMessage({
-          type: "success",
-          text: t("inviteTracker.messages.createdWithoutEmail"),
-        });
-      } else {
-        setMessage({
-          type: "success",
-          text: link
-            ? `Invitación procesada. Link: ${link}`
-            : t("inviteTracker.messages.genericProcessed", {
-                email: data.email || trimmedEmail,
-              }),
+          text: t("inviteTracker.messages.magiclinkSent"),
         });
       }
 
       setEmail("");
       setSelectedOrgPeopleId("");
     } catch (err) {
-      console.error("[InvitarTracker] Error inesperado:", err);
       setMessage({
         type: "error",
-        text:
-          err?.message ||
-          t(
-            "inviteTracker.messages.unexpectedError",
-            "Unexpected error while processing the invitation."
-          ),
+        text: t("inviteTracker.messages.unexpectedError"),
       });
     } finally {
       setSending(false);
@@ -329,63 +137,40 @@ export default function InvitarTracker() {
 
   return (
     <div className="max-w-lg mx-auto">
-      <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-3">
+      <h1 className="text-2xl font-semibold mb-4">
         {t("inviteTracker.title")}
       </h1>
 
-      <p className="text-sm md:text-base text-slate-600 mb-6">
-        {t("inviteTracker.subtitle", { orgName })}
-      </p>
-
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4"
+        className="bg-white border rounded-xl p-5 space-y-4"
       >
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            {t("inviteTracker.form.selectLabel")}
-          </label>
+        <select
+          className="w-full border rounded px-3 py-2 text-sm"
+          value={selectedOrgPeopleId}
+          onChange={handleSelectPerson}
+        >
+          <option value="">
+            {t("inviteTracker.form.selectPlaceholder")}
+          </option>
+          {peopleList.map((p) => (
+            <option key={p.org_people_id} value={p.org_people_id}>
+              {`${p.nombre || ""} ${p.apellido || ""}`} — {p.email}
+            </option>
+          ))}
+        </select>
 
-          <select
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            value={selectedOrgPeopleId}
-            onChange={handleSelectPerson}
-          >
-            <option value="">{t("inviteTracker.form.selectPlaceholder")}</option>
-
-            {peopleList.map((p) => (
-              <option key={p.org_people_id} value={p.org_people_id}>
-                {`${p.nombre || ""} ${p.apellido || ""}`.trim()} — {p.email || ""}
-              </option>
-            ))}
-          </select>
-
-          <p className="mt-1 text-[11px] text-slate-500">
-            {t("inviteTracker.form.selectHelp")}
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            {t("inviteTracker.form.emailLabel")}
-          </label>
-          <input
-            type="email"
-            required
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder={t("inviteTracker.form.emailPlaceholder", "tracker@example.com")}
-            value={email}
-            onChange={handleEmailChange}
-          />
-          <p className="mt-1 text-[11px] text-slate-500">
-            {t("inviteTracker.form.emailHelp")}
-          </p>
-        </div>
+        <input
+          type="email"
+          className="w-full border rounded px-3 py-2 text-sm"
+          placeholder="tracker@ejemplo.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
         <button
-          type="submit"
           disabled={sending}
-          className="w-full inline-flex justify-center items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm"
         >
           {sending
             ? t("inviteTracker.form.buttonSending")
@@ -394,11 +179,25 @@ export default function InvitarTracker() {
 
         {message && (
           <div
-            className={`mt-2 text-sm ${
-              message.type === "success" ? "text-emerald-700" : "text-red-600"
+            className={`text-sm ${
+              message.type === "success"
+                ? "text-emerald-700"
+                : "text-red-600"
             }`}
           >
             {message.text}
+          </div>
+        )}
+
+        {magicLink && (
+          <div className="text-xs break-all bg-slate-50 border rounded p-2">
+            <p className="mb-1 font-semibold">Magic Link (tracker):</p>
+            <button
+              onClick={() => navigator.clipboard.writeText(magicLink)}
+              className="text-blue-600 underline"
+            >
+              Copiar link
+            </button>
           </div>
         )}
       </form>

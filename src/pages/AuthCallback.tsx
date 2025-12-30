@@ -1,61 +1,107 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { supabase } from "../supabaseClient";
-import { supabaseTracker } from "../supabaseTrackerClient";
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "@/supabaseClient";
+import { supabaseTracker } from "@/supabaseTrackerClient";
 
-function isTrackerHostname(hostname: string) {
+/**
+ * AuthCallback.jsx
+ * - Procesa Magic Links (PKCE ?code=... o hash #access_token=...).
+ * - Establece sesión en el cliente correcto según dominio:
+ *    - tracker.*  => supabaseTracker
+ *    - panel      => supabase
+ * - Redirige de forma UNIVERSAL:
+ *    - role tracker  => /tracker-gps
+ *    - role no-tracker => /inicio
+ * - Si no puede leer roles por carrera/RLS: fallback seguro
+ *    - tracker domain => /tracker-gps
+ *    - panel domain   => /inicio
+ */
+
+function isTrackerHostname(hostname) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
-function normalizeRole(r: any) {
-  const v = String(r || "").toLowerCase().trim();
-  if (v === "owner") return "owner";
-  if (v === "admin") return "admin";
-  if (v === "viewer") return "viewer";
-  if (v === "tracker") return "tracker";
+function parseHashTokens(hash) {
+  const h = String(hash || "").replace(/^#/, "");
+  const params = new URLSearchParams(h);
+  return {
+    access_token: params.get("access_token") || "",
+    refresh_token: params.get("refresh_token") || "",
+    // A veces viene type=recovery/magiclink, etc.
+    type: params.get("type") || "",
+  };
+}
+
+function normalizeRole(role) {
+  const r = String(role || "").toLowerCase().trim();
+  if (r === "owner") return "owner";
+  if (r === "admin") return "admin";
+  if (r === "viewer") return "viewer";
+  if (r === "tracker") return "tracker";
   return "";
 }
 
-function roleRank(r: string) {
-  if (r === "owner") return 3;
-  if (r === "admin") return 2;
-  if (r === "viewer") return 1;
-  if (r === "tracker") return 0;
+function roleRank(role) {
+  if (role === "owner") return 3;
+  if (role === "admin") return 2;
+  if (role === "viewer") return 1;
+  if (role === "tracker") return 0;
   return -1;
 }
 
-function parseHash(hash: string) {
-  const h = (hash || "").replace(/^#/, "");
-  const params = new URLSearchParams(h);
-  const access_token = params.get("access_token") || "";
-  const refresh_token = params.get("refresh_token") || "";
-  return { access_token, refresh_token };
+async function resolveBestRoleForUser(userId) {
+  // Nota: usamos el supabase del panel para consultar roles
+  // porque app_user_roles está en el proyecto principal.
+  const { data, error } = await supabase
+    .from("app_user_roles")
+    .select("role, created_at")
+    .eq("user_id", userId);
+
+  if (error) return { role: "", error };
+
+  const roles = (data || [])
+    .map((r) => normalizeRole(r?.role))
+    .filter(Boolean);
+
+  let best = "";
+  for (const r of roles) {
+    if (!best || roleRank(r) > roleRank(best)) best = r;
+  }
+  return { role: best, error: null };
 }
 
 export default function AuthCallback() {
-  const navigate = useNavigate();
   const location = useLocation();
-  const [msg, setMsg] = useState("Procesando acceso...");
+  const navigate = useNavigate();
+  const [status, setStatus] = useState("Procesando acceso...");
+  const [details, setDetails] = useState("");
+
+  const trackerDomain = useMemo(
+    () => isTrackerHostname(window.location.hostname),
+    []
+  );
+
+  const client = useMemo(
+    () => (trackerDomain ? supabaseTracker : supabase),
+    [trackerDomain]
+  );
 
   useEffect(() => {
     const run = async () => {
       try {
-        const trackerDomain = isTrackerHostname(window.location.hostname);
-        const client = trackerDomain ? supabaseTracker : supabase;
-
-        // 1) Resolver sesión desde code (PKCE) o desde hash tokens
+        // 1) Resolver sesión desde ?code=... (PKCE) o desde hash tokens
         const search = new URLSearchParams(location.search || "");
         const code = search.get("code");
 
         if (code) {
-          setMsg("Validando enlace...");
+          setStatus("Validando enlace...");
           const { error } = await client.auth.exchangeCodeForSession(code);
           if (error) throw error;
         } else {
-          const { access_token, refresh_token } = parseHash(location.hash || "");
+          const { access_token, refresh_token } = parseHashTokens(location.hash);
           if (access_token && refresh_token) {
-            setMsg("Estableciendo sesión...");
+            setStatus("Estableciendo sesión...");
             const { error } = await client.auth.setSession({
               access_token,
               refresh_token,
@@ -65,56 +111,56 @@ export default function AuthCallback() {
         }
 
         // 2) Confirmar sesión
-        const { data } = await client.auth.getSession();
-        const session = data?.session ?? null;
+        setStatus("Confirmando sesión...");
+        const { data: sessData, error: sessErr } = await client.auth.getSession();
+        if (sessErr) throw sessErr;
 
-        if (!session?.user?.id) {
-          // sin sesión => al landing
-          navigate("/", { replace: true });
+        const session = sessData?.session ?? null;
+        const userId = session?.user?.id ?? null;
+
+        if (!userId) {
+          // Sin sesión => volver al landing correspondiente
+          if (trackerDomain) navigate("/tracker-gps", { replace: true });
+          else navigate("/", { replace: true });
           return;
         }
 
-        // 3) Tracker domain: SIEMPRE a tracker-gps
+        // 3) Si estamos en tracker domain: SIEMPRE tracker-gps
+        //    (El dominio tracker es un "lock" de UX + seguridad)
         if (trackerDomain) {
           navigate("/tracker-gps", { replace: true });
           return;
         }
 
-        // 4) Panel domain: decidir según rol real en app_user_roles
-        setMsg("Cargando permisos...");
-        const userId = session.user.id;
+        // 4) Panel domain: resolver rol real en app_user_roles
+        setStatus("Cargando permisos...");
 
-        const { data: roles, error: rolesErr } = await supabase
-          .from("app_user_roles")
-          .select("role, created_at")
-          .eq("user_id", userId);
+        const { role, error } = await resolveBestRoleForUser(userId);
 
-        if (rolesErr) {
-          // Si por RLS/carrera no se puede leer aún, igual entramos al panel
+        if (error) {
+          console.warn("[AuthCallback] No se pudo leer app_user_roles, fallback a /inicio:", error);
           navigate("/inicio", { replace: true });
           return;
         }
 
-        const normalized = (roles || [])
-          .map((r) => normalizeRole(r?.role))
-          .filter(Boolean) as string[];
-
-        let bestRole = "";
-        for (const r of normalized) {
-          if (!bestRole || roleRank(r) > roleRank(bestRole)) bestRole = r;
-        }
-
-        if (bestRole === "tracker") {
+        if (role === "tracker") {
           navigate("/tracker-gps", { replace: true });
-        } else {
-          // owner/admin/viewer o desconocido => panel
-          navigate("/inicio", { replace: true });
+          return;
         }
-      } catch (e: any) {
-        console.error("[AuthCallback] error:", e);
-        setMsg("No se pudo completar el acceso. Reintenta el enlace.");
-        // fallback suave
-        setTimeout(() => navigate("/", { replace: true }), 1200);
+
+        // owner/admin/viewer o desconocido => panel
+        navigate("/inicio", { replace: true });
+      } catch (e) {
+        console.error("[AuthCallback] Error:", e);
+        const msg = e?.message || "Error desconocido";
+        setStatus("No se pudo completar el acceso.");
+        setDetails(msg);
+
+        // Fallback seguro según dominio
+        setTimeout(() => {
+          if (trackerDomain) navigate("/tracker-gps", { replace: true });
+          else navigate("/", { replace: true });
+        }, 1200);
       }
     };
 
@@ -126,7 +172,10 @@ export default function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-md w-full">
         <div className="text-lg font-semibold text-slate-900">App Geocercas</div>
-        <div className="text-sm text-slate-600 mt-2">{msg}</div>
+        <div className="text-sm text-slate-600 mt-2">{status}</div>
+        {details ? (
+          <div className="text-xs text-slate-500 mt-3 break-all">{details}</div>
+        ) : null}
       </div>
     </div>
   );
