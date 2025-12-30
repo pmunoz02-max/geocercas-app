@@ -1,29 +1,35 @@
 // src/pages/Inicio.jsx
 import React, { useMemo } from "react";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export default function Inicio() {
+  const navigate = useNavigate();
+
   const {
     authReady,
     user,
     currentOrg,
-    currentRole, // si existe (fix en AuthContext)
-    bestRole, // fallback
-    roles,
+    currentRole, // viene NORMALIZADO desde AuthContext
+    bestRole,    // fallback de seguridad
     orgs,
     trackerDomain,
   } = useAuth();
 
-  // 1) Evita estados intermedios que dejan la UI colgada
+  // ===============================
+  // 1) Estado de hidratación
+  // ===============================
   if (!authReady) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
-        Resolviendo permisos…
+        Resolviendo permisos...
       </div>
     );
   }
 
-  // 2) Si no hay usuario (debería estar protegido por AuthGuard, pero lo blindamos)
+  // ===============================
+  // 2) Usuario no logueado (blindaje)
+  // ===============================
   if (!user) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
@@ -32,23 +38,30 @@ export default function Inicio() {
     );
   }
 
-  // 3) Rol robusto: currentRole (si existe) -> bestRole -> vacío
-  const roleLower = String(currentRole || bestRole || "").toLowerCase().trim();
+  // ===============================
+  // 3) Rol efectivo (robusto)
+  // ===============================
+  const roleLower = String(currentRole || bestRole || "")
+    .toLowerCase()
+    .trim();
 
-  // 4) Si por alguna carrera todavía no hay rol, mostramos loader en vez de pantalla blanca
+  // Si aún no hay rol resuelto → loader
   if (!roleLower) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
-        Resolviendo permisos…
+        Resolviendo permisos...
       </div>
     );
   }
 
-  // 5) Si no hay org todavía, también loader (y muestra hints)
-  if (!currentOrg) {
+  // ===============================
+  // 4) Organización aún no resuelta
+  // ===============================
+  if (!trackerDomain && !currentOrg) {
     const orgCount = Array.isArray(orgs) ? orgs.length : 0;
+
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-600 px-4 text-center gap-3">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-600 px-4 text-center gap-2">
         <div className="text-slate-500">Preparando organización…</div>
         <div className="text-sm text-slate-500">
           {orgCount === 0
@@ -59,73 +72,66 @@ export default function Inicio() {
     );
   }
 
-  // 6) Render del panel de inicio (simple y seguro)
-  const email = user?.email || "";
-  const orgName = currentOrg?.name || currentOrg?.org_name || currentOrg?.id || "";
-
+  // ===============================
+  // 5) Etiqueta de rol (UI)
+  // ===============================
   const roleLabel = useMemo(() => {
     if (roleLower === "owner") return "Owner";
     if (roleLower === "admin") return "Admin";
     if (roleLower === "viewer") return "Viewer";
     if (roleLower === "tracker") return "Tracker";
-    return roleLower || "—";
+    return roleLower;
   }, [roleLower]);
 
-  const rolesCount = Array.isArray(roles) ? roles.length : 0;
-
+  // ===============================
+  // 6) Render principal
+  // ===============================
   return (
-    <div className="space-y-4">
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Inicio</h2>
-        <p className="text-slate-600 mt-1">
-          Bienvenido{email ? `, ${email}` : ""}.
-        </p>
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-semibold text-slate-800 mb-2">
+        Bienvenido a App Geocercas
+      </h1>
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Organización activa
-            </div>
-            <div className="text-slate-900 font-medium mt-1">{orgName}</div>
-          </div>
+      <p className="text-slate-600 mb-6">
+        Sesión iniciada como <b>{roleLabel}</b>
+      </p>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Rol
-            </div>
-            <div className="text-slate-900 font-medium mt-1">{roleLabel}</div>
-          </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
+        <div className="text-sm text-slate-600">
+          <b>Email:</b> {user.email}
+        </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Contexto
-            </div>
-            <div className="text-slate-900 font-medium mt-1">
-              {trackerDomain ? "Tracker domain" : "Panel domain"}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              Roles detectados: {rolesCount}
-            </div>
+        {!trackerDomain && currentOrg && (
+          <div className="text-sm text-slate-600">
+            <b>Organización:</b>{" "}
+            {currentOrg.name || currentOrg.org_name || currentOrg.id}
           </div>
+        )}
+
+        <div className="text-sm text-slate-600">
+          <b>Modo:</b> {trackerDomain ? "Tracker" : "Panel"}
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900">Estado</h3>
-        <div className="mt-2 text-sm text-slate-600 space-y-1">
-          <div>
-            <span className="text-slate-500">authReady:</span>{" "}
-            {String(authReady)}
-          </div>
-          <div>
-            <span className="text-slate-500">currentOrg.id:</span>{" "}
-            {String(currentOrg?.id || "")}
-          </div>
-          <div>
-            <span className="text-slate-500">role:</span>{" "}
-            {String(currentRole || bestRole || "")}
-          </div>
-        </div>
+      {/* Acciones base */}
+      <div className="mt-6 flex flex-wrap gap-3">
+        {!trackerDomain && (
+          <button
+            onClick={() => navigate("/geocercas")}
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            Ir a Geocercas
+          </button>
+        )}
+
+        {trackerDomain && (
+          <button
+            onClick={() => navigate("/tracker-gps")}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Abrir Tracker
+          </button>
+        )}
       </div>
     </div>
   );
