@@ -5,17 +5,15 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Faltan variables de entorno Supabase (panel A)");
+  throw new Error("Faltan variables de entorno Supabase (panel)");
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    flowType: "pkce",              // ✅ CLAVE
     persistSession: true,
     autoRefreshToken: true,
-    // CLAVE: NO capturar sesión desde URL automáticamente
-    detectSessionInUrl: false,
-    // CLAVE: aislamiento real por storageKey (panel)
-    storageKey: "sb-tugeocercas-auth-token-panel-authA",
-    storage: window.localStorage,
+    detectSessionInUrl: true,      // ✅ Supabase maneja el callback
+    storageKey: "sb-tugeocercas-panel-auth",
   },
 });
