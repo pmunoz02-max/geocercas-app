@@ -2,13 +2,22 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/supabaseClient";
 import { supabaseTracker } from "@/supabaseTrackerClient";
 
+/**
+ * AuthCallback UNIVERSAL y PERMANENTE
+ * - Soporta PKCE (?code=...) e Implicit (#access_token=...&refresh_token=...)
+ * - NO consulta roles/orgs (evita cuelgues por RLS/red)
+ * - Decide destino por HOSTNAME:
+ *     www.*      -> /inicio
+ *     tracker.*  -> /tracker-gps
+ * - Limpia el hash por seguridad.
+ */
+
 function isTrackerHostname(hostname) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
 function parseHashTokens(hash) {
-  // hash viene como: "#access_token=...&refresh_token=...&type=magiclink..."
   if (!hash || typeof hash !== "string") return null;
   const clean = hash.startsWith("#") ? hash.slice(1) : hash;
   const params = new URLSearchParams(clean);
@@ -17,26 +26,15 @@ function parseHashTokens(hash) {
   const refresh_token = params.get("refresh_token");
 
   if (!access_token) return null;
-  return { access_token, refresh_token: refresh_token || null };
+  return { access_token, refresh_token: refresh_token || "" };
 }
 
-function pickBestRole(rows) {
-  const norm = (r) => String(r || "").toLowerCase().trim();
-  const rank = (r) => {
-    if (r === "owner") return 3;
-    if (r === "admin") return 2;
-    if (r === "viewer") return 1;
-    if (r === "tracker") return 0;
-    return -1;
-  };
-
-  let best = null;
-  for (const row of rows || []) {
-    const r = norm(row?.role);
-    if (!r) continue;
-    if (!best || rank(r) > rank(best)) best = r;
-  }
-  return best;
+function withTimeout(promise, ms, label = "timeout") {
+  let t;
+  const timeout = new Promise((_, reject) => {
+    t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
 export default function AuthCallback() {
@@ -64,52 +62,48 @@ export default function AuthCallback() {
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
 
-        let session = null;
-
-        // 1) PKCE (code)
+        // 1) Consumir callback (PKCE o Implicit)
         if (code) {
           if (!client?.auth?.exchangeCodeForSession) {
-            throw new Error("SDK Supabase no soporta exchangeCodeForSession().");
+            throw new Error("El SDK Supabase no soporta exchangeCodeForSession().");
           }
-          const { data, error: exErr } = await client.auth.exchangeCodeForSession(code);
-          if (exErr) throw exErr;
-          session = data?.session ?? null;
+
+          setStatus("Confirmando Magic Link...");
+          await withTimeout(
+            client.auth.exchangeCodeForSession(code),
+            8000,
+            "exchangeCodeForSession"
+          );
         } else {
-          // 2) IMPLICIT (hash tokens) - soporte universal
           const tokens = parseHashTokens(window.location.hash);
+          if (!tokens?.access_token) {
+            throw new Error("No se encontraron tokens en el Magic Link.");
+          }
 
-          if (tokens?.access_token) {
-            // Preferido en supabase-js v2
-            if (client?.auth?.setSession) {
-              const { data, error: setErr } = await client.auth.setSession({
+          // Preferido (v2)
+          if (client?.auth?.setSession) {
+            setStatus("Guardando sesión...");
+            await withTimeout(
+              client.auth.setSession({
                 access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token || "",
-              });
-              if (setErr) throw setErr;
-              session = data?.session ?? null;
-            } else if (client?.auth?.setAuth) {
-              // Fallback supabase-js v1
-              client.auth.setAuth(tokens.access_token);
-              // En v1, intentamos leer sesión luego
-              const { data } = await client.auth.getSession?.();
-              session = data?.session ?? null;
-            } else {
-              throw new Error("SDK Supabase no soporta setSession/setAuth para consumir hash tokens.");
-            }
+                refresh_token: tokens.refresh_token,
+              }),
+              8000,
+              "setSession"
+            );
+          } else if (client?.auth?.setAuth) {
+            // Fallback (v1)
+            setStatus("Guardando sesión...");
+            client.auth.setAuth(tokens.access_token);
           } else {
-            // 3) Sin code ni hash tokens: intentar recuperar sesión existente
-            if (client?.auth?.getSession) {
-              const { data } = await client.auth.getSession();
-              session = data?.session ?? null;
-            }
+            throw new Error("El SDK Supabase no soporta setSession/setAuth.");
           }
         }
 
-        // 4) Fallback: leer sesión ya guardada
-        if (!session && client?.auth?.getSession) {
-          const { data } = await client.auth.getSession();
-          session = data?.session ?? null;
-        }
+        // 2) Verificar que la sesión exista
+        setStatus("Verificando sesión...");
+        const sessRes = await withTimeout(client.auth.getSession(), 8000, "getSession");
+        const session = sessRes?.data?.session ?? null;
 
         if (!session?.user?.id) {
           throw new Error("No se pudo establecer la sesión. Reintenta el Magic Link.");
@@ -117,38 +111,14 @@ export default function AuthCallback() {
 
         if (cancelled) return;
 
-        // 5) Verificar rol
-        setStatus("Verificando rol...");
-
-        const { data: rolesRows, error: rolesErr } = await supabase
-          .from("app_user_roles")
-          .select("role, org_id, created_at")
-          .eq("user_id", session.user.id);
-
-        if (rolesErr) console.warn("[AuthCallback] rolesErr:", rolesErr);
-
-        const bestRole = pickBestRole(rolesRows || []);
-
-        // 6) Resolver destino (trackers siempre a su pantalla)
-        const PANEL_HOME = "/inicio";
-        const TRACKER_HOME = "/tracker-gps";
-        const TRACKER_BASE =
-          (import.meta.env.VITE_TRACKER_URL || "https://tracker.tugeocercas.com").replace(/\/+$/, "");
-
-        let target = PANEL_HOME;
-
-        if (bestRole === "tracker") {
-          target = trackerDomain ? TRACKER_HOME : `${TRACKER_BASE}${TRACKER_HOME}`;
-        } else {
-          target = PANEL_HOME;
-        }
+        // 3) Destino por dominio (universal, sin roles)
+        const target = trackerDomain ? "/tracker-gps" : "/inicio";
 
         setStatus("Redirigiendo...");
 
-        // 7) Limpiar URL (evitar dejar tokens)
+        // 4) Limpieza para no dejar tokens en URL
         cleanUrl();
 
-        // 8) Redirigir
         window.location.replace(target);
       } catch (e) {
         console.error("[AuthCallback] error:", e);
@@ -160,14 +130,7 @@ export default function AuthCallback() {
       }
     };
 
-    const timeout = setTimeout(() => {
-      if (cancelled) return;
-      setError("Tiempo de espera agotado estableciendo sesión. Reintenta el Magic Link.");
-      setStatus("No se pudo completar el inicio de sesión.");
-      cleanUrl();
-    }, 12000);
-
-    run().finally(() => clearTimeout(timeout));
+    run();
 
     return () => {
       cancelled = true;
