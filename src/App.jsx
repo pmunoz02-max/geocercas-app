@@ -134,7 +134,6 @@ function PanelGate({ children }) {
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
-  // Si hay sesión pero aún no resolvimos rol (carrera de triggers / RLS), esperamos.
   const r = String(role || "").toLowerCase().trim();
   if (!r) {
     return (
