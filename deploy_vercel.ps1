@@ -1,57 +1,73 @@
-# ==============================
-# Script de deploy a Vercel vía Git (PowerShell)
-# - Hace add, commit y push al branch actual
-# - Vercel toma el push y hace el deploy
-# ==============================
+# deploy_vercel.ps1
+# Vercel deploy helper (Git based)
+# Encoding: ASCII safe
 
-param(
-    [string]$CommitMessage = "chore: update asignaciones local time"
-)
+Write-Host "=== Detecting Git repository root ==="
 
-Write-Host "=== Detectando raíz del repositorio Git ==="
-$repoRoot = git rev-parse --show-toplevel
-if (-not $repoRoot) {
-    Write-Host "No se pudo detectar la raíz del repositorio. ¿Estás dentro de un repo Git?" -ForegroundColor Red
+try {
+    $repoRoot = git rev-parse --show-toplevel 2>$null
+    if (-not $repoRoot) {
+        throw "Not a Git repository."
+    }
+} catch {
+    Write-Error "ERROR: This directory is not a Git repository."
     exit 1
 }
 
 Set-Location $repoRoot
-Write-Host "Repositorio: $repoRoot"
+Write-Host "Repository: $repoRoot"
 Write-Host ""
 
-Write-Host "=== Estado actual (git status) ==="
+Write-Host "=== Current status (git status) ==="
 git status
 Write-Host ""
 
-# Confirmación interactiva
-$reply = Read-Host "¿Continuar con add + commit + push? [s/N]"
-if ($reply -notmatch '^[sS]$') {
-    Write-Host "Operación cancelada."
+# Detect real changes
+$changes = git status --porcelain
+
+if (-not $changes) {
+    Write-Host "INFO: No changes to commit."
+    Write-Host "Nothing to push. Exiting."
+    exit 0
+}
+
+$answer = Read-Host "Continue with add + commit + push? [s/N]"
+if ($answer.ToLower() -ne "s") {
+    Write-Host "Cancelled by user."
     exit 0
 }
 
 Write-Host ""
-Write-Host "=== Agregando archivos (git add .) ==="
+Write-Host "=== Adding files (git add .) ==="
 git add .
 
-Write-Host "=== Haciendo commit ==="
-try {
-    git commit -m "$CommitMessage"
-    Write-Host "Commit creado correctamente."
+Write-Host ""
+Write-Host "=== Creating commit ==="
+$commitMessage = "deploy: automatic update"
+
+git commit -m $commitMessage
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "ERROR: Commit failed."
+    exit 1
 }
-catch {
-    Write-Host "No se creó commit (posiblemente no había cambios)." -ForegroundColor Yellow
+
+Write-Host "Commit created successfully."
+Write-Host ""
+
+Write-Host "=== Detecting current branch ==="
+$branch = git branch --show-current
+Write-Host "Current branch: $branch"
+Write-Host ""
+
+Write-Host "=== Pushing to origin/$branch ==="
+git push origin $branch
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "ERROR: Push failed."
+    exit 1
 }
 
 Write-Host ""
-Write-Host "=== Detectando branch actual ==="
-$currentBranch = git rev-parse --abbrev-ref HEAD
-Write-Host "Branch actual: $currentBranch"
-Write-Host ""
-
-Write-Host "=== Haciendo push a origin/$currentBranch ==="
-git push origin "$currentBranch"
-
-Write-Host ""
-Write-Host "✅ Listo. Push enviado a Git."
-Write-Host "   Vercel tomará este push y hará el deploy según la configuración de tu proyecto."
+Write-Host "OK. Push sent to Git."
+Write-Host "Vercel will pick up this commit and run the deploy."
