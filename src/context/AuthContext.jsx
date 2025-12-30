@@ -1,322 +1,280 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-} from "react";
-import { supabase } from "../supabaseClient";
-import { supabaseTracker } from "../supabaseTrackerClient";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/supabaseClient";
+import { supabaseTracker } from "@/supabaseTrackerClient";
 
-const AuthContext = createContext();
+/**
+ * AuthContext (universal)
+ * - Soporta panel y tracker (según hostname)
+ * - Mantiene user, session, roles, currentOrg, orgs
+ * - Expone authReady para bloquear acciones hasta hidratar sesión
+ * - Expone debug seguro en window:
+ *    window.__SUPABASE_AUTH_DEBUG.getSession()
+ *    window.__SUPABASE_AUTH_DEBUG.getUser()
+ *    window.__SUPABASE_AUTH_DEBUG.getOrg()
+ *    window.__SUPABASE_AUTH_DEBUG.getRole()
+ *    window.__debug_currentOrg
+ */
+
+const AuthContext = createContext(null);
 
 function isTrackerHostname(hostname) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
-function roleRank(r) {
-  const v = String(r || "").toLowerCase();
-  if (v === "owner") return 3;
-  if (v === "admin") return 2;
-  if (v === "viewer") return 1;
-  if (v === "tracker") return 0;
-  return -1;
-}
+export function AuthProvider({ children }) {
+  const trackerDomain = useMemo(() => isTrackerHostname(window.location.hostname), []);
+  const client = useMemo(() => (trackerDomain ? supabaseTracker : supabase), [trackerDomain]);
 
-function normalizeOrgRow(o) {
-  if (!o) return null;
-  return {
-    id: o.id ?? o.org_id ?? o.tenant_id ?? null,
-    name: o.name ?? o.org_name ?? "Organización",
-    suspended: Boolean(o.suspended),
-    active: o.active !== false,
-  };
-}
-
-function isUuid(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    String(v || "")
-  );
-}
-
-function safeRoleFallback() {
-  // Rol desconocido aún: NO debemos forzar tracker
-  return "";
-}
-
-export const AuthProvider = ({ children }) => {
-  const trackerDomain = isTrackerHostname(window.location.hostname);
-  const client = trackerDomain ? supabaseTracker : supabase;
+  const [authReady, setAuthReady] = useState(false);
 
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
 
-  const [profile, setProfile] = useState(null);
-  const [memberships, setMemberships] = useState([]);
-  const [organizations, setOrganizations] = useState([]);
+  const [roles, setRoles] = useState([]); // app_user_roles rows
+  const [bestRole, setBestRole] = useState(null); // "owner"|"admin"|"viewer"|"tracker"|null
 
+  const [orgs, setOrgs] = useState([]); // organizations disponibles para el user (panel)
   const [currentOrg, setCurrentOrg] = useState(null);
-  const [tenantId, setTenantId] = useState(null);
 
-  const [role, setRole] = useState("");
+  // ===========================================================
+  // Helpers de rol
+  // ===========================================================
+  const normalizeRole = (r) => {
+    const s = String(r || "").toLowerCase().trim();
+    if (["owner", "admin", "viewer", "tracker"].includes(s)) return s;
+    return null;
+  };
 
-  const [isSuspended, setIsSuspended] = useState(false);
-  const [isRootOwner, setIsRootOwner] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const roleRank = (r) => {
+    if (r === "owner") return 3;
+    if (r === "admin") return 2;
+    if (r === "viewer") return 1;
+    if (r === "tracker") return 0;
+    return -1;
+  };
 
-  // Sesión del cliente correcto (A o B)
+  const computeBestRole = (rows) => {
+    let best = null;
+    for (const row of rows || []) {
+      const r = normalizeRole(row?.role);
+      if (!r) continue;
+      if (!best || roleRank(r) > roleRank(best)) best = r;
+    }
+    return best;
+  };
+
+  // ===========================================================
+  // Carga roles (siempre desde supabase del panel)
+  // ===========================================================
+  const loadRoles = async (userId) => {
+    if (!userId) return [];
+
+    // roles viven en el proyecto principal (panel)
+    const { data, error } = await supabase
+      .from("app_user_roles")
+      .select("org_id, role, created_at")
+      .eq("user_id", userId);
+
+    if (error) {
+      console.warn("[AuthContext] loadRoles error:", error);
+      return [];
+    }
+    return data || [];
+  };
+
+  // ===========================================================
+  // Carga organizaciones visibles (panel)
+  // ===========================================================
+  const loadOrgs = async (userId) => {
+    if (!userId) return [];
+
+    // Si tienes una vista/función propia, ajústala aquí.
+    // Este enfoque es universal si tu RLS permite ver orgs por app_user_roles.
+    const { data, error } = await supabase
+      .from("organizations")
+      .select("id, name, active, plan, owner_id, created_at")
+      .eq("active", true)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.warn("[AuthContext] loadOrgs error:", error);
+      return [];
+    }
+
+    return data || [];
+  };
+
+  // ===========================================================
+  // Resolver org actual: preferencia por la del rol más alto
+  // ===========================================================
+  const resolveCurrentOrg = (rolesRows, orgRows) => {
+    if (!Array.isArray(orgRows) || orgRows.length === 0) return null;
+
+    // preferir la org del rol "best"
+    const best = computeBestRole(rolesRows);
+    if (best && Array.isArray(rolesRows)) {
+      // buscar org_id asociado al rol "best"
+      const row = rolesRows
+        .map((r) => ({ ...r, role: normalizeRole(r.role) }))
+        .filter((r) => r.role === best)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+      if (row?.org_id) {
+        const found = orgRows.find((o) => o.id === row.org_id);
+        if (found) return found;
+      }
+    }
+
+    // fallback: primera org
+    return orgRows[0] || null;
+  };
+
+  // ===========================================================
+  // Bootstrap principal
+  // ===========================================================
   useEffect(() => {
-    const init = async () => {
-      const { data } = await client.auth.getSession();
-      setSession(data?.session ?? null);
-      setUser(data?.session?.user ?? null);
-      setLoading(false);
+    let mounted = true;
+
+    const bootstrap = async () => {
+      try {
+        setAuthReady(false);
+
+        // 1) sesión inicial
+        const { data: sessData } = await client.auth.getSession();
+        const sess = sessData?.session ?? null;
+
+        if (!mounted) return;
+
+        setSession(sess);
+        setUser(sess?.user ?? null);
+
+        if (!sess?.user?.id) {
+          // No logueado
+          setRoles([]);
+          setBestRole(null);
+          setOrgs([]);
+          setCurrentOrg(null);
+          return;
+        }
+
+        // 2) roles (siempre panel)
+        const rolesRows = await loadRoles(sess.user.id);
+        if (!mounted) return;
+        setRoles(rolesRows);
+        const best = computeBestRole(rolesRows);
+        setBestRole(best);
+
+        // 3) orgs solo para panel
+        if (!trackerDomain) {
+          const orgRows = await loadOrgs(sess.user.id);
+          if (!mounted) return;
+          setOrgs(orgRows);
+
+          const resolved = resolveCurrentOrg(rolesRows, orgRows);
+          setCurrentOrg(resolved);
+        } else {
+          // tracker domain: no necesita org selector
+          setOrgs([]);
+          setCurrentOrg(null);
+        }
+      } finally {
+        if (mounted) setAuthReady(true);
+      }
     };
 
-    init();
+    bootstrap();
 
-    const { data: listener } = client.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
+    // 4) listener de auth state
+    const { data: sub } = client.auth.onAuthStateChange(async (_event, newSession) => {
+      if (!mounted) return;
+
+      setAuthReady(false);
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+
+      if (!newSession?.user?.id) {
+        setRoles([]);
+        setBestRole(null);
+        setOrgs([]);
+        setCurrentOrg(null);
+        setAuthReady(true);
+        return;
+      }
+
+      // recargar roles/orgs en cualquier cambio de sesión
+      const rolesRows = await loadRoles(newSession.user.id);
+      if (!mounted) return;
+      setRoles(rolesRows);
+      const best = computeBestRole(rolesRows);
+      setBestRole(best);
+
+      if (!trackerDomain) {
+        const orgRows = await loadOrgs(newSession.user.id);
+        if (!mounted) return;
+        setOrgs(orgRows);
+        setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
+      } else {
+        setOrgs([]);
+        setCurrentOrg(null);
+      }
+
+      setAuthReady(true);
     });
 
-    return () => listener.subscription.unsubscribe();
-  }, [client]);
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, [client, trackerDomain]);
 
-  const loadAll = useCallback(async () => {
-    try {
-      setLoading(true);
-
-      // ✅ Tracker domain: NO consultamos DB panel. Solo sesión.
-      if (trackerDomain) {
-        if (!user) {
-          setRole("");
-          setProfile(null);
-          setMemberships([]);
-          setOrganizations([]);
-          setCurrentOrg(null);
-          setTenantId(null);
-          setIsSuspended(false);
-          setIsRootOwner(false);
-        } else {
-          // tracker domain fuerza rol tracker
-          setRole("tracker");
-        }
-        return;
-      }
-
-      // ---------------- PANEL DOMAIN (Project A) ----------------
-      if (!user) {
-        setProfile(null);
-        setMemberships([]);
-        setOrganizations([]);
-        setCurrentOrg(null);
-        setTenantId(null);
-        setRole("");
-        setIsSuspended(false);
-        setIsRootOwner(false);
-        localStorage.removeItem("current_org_id");
-        localStorage.removeItem("force_tracker_org_id");
-        return;
-      }
-
-      // ✅ Importante: NO “fail-closed” a tracker aquí.
-      // Dejamos rol en blanco hasta resolver memberships.
-      setRole("");
-
-      try {
-        const { data, error } = await supabase.rpc("is_root_owner");
-        if (error) setIsRootOwner(false);
-        else setIsRootOwner(Boolean(data));
-      } catch {
-        setIsRootOwner(false);
-      }
-
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("email", user.email)
-        .maybeSingle();
-
-      setProfile(prof ?? null);
-
-      const { data: mRowsRaw, error: mErr } = await supabase
-        .from("app_user_roles")
-        .select("org_id, role, created_at")
-        .eq("user_id", user.id);
-
-      if (mErr) console.error("[AuthContext] app_user_roles error:", mErr);
-
-      const mRows = Array.isArray(mRowsRaw) ? [...mRowsRaw] : [];
-      mRows.sort((a, b) => {
-        const ar = roleRank(a?.role);
-        const br = roleRank(b?.role);
-        if (ar !== br) return br - ar;
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
-      setMemberships(mRows);
-
-      const orgIds = mRows.map((m) => m.org_id).filter(Boolean);
-
-      let orgs = [];
-      if (orgIds.length) {
-        const { data } = await supabase.from("organizations").select("*").in("id", orgIds);
-        orgs = data ?? [];
-      }
-      setOrganizations(orgs);
-
-      let activeOrg = null;
-
-      const forcedTrackerOrgId = localStorage.getItem("force_tracker_org_id");
-      const hasForced = forcedTrackerOrgId && isUuid(forcedTrackerOrgId);
-
-      if (hasForced) {
-        const forcedMembership = mRows.find((m) => m.org_id === forcedTrackerOrgId);
-        const forcedRole = String(forcedMembership?.role || "").toLowerCase();
-        if (forcedRole === "tracker") {
-          activeOrg = orgs.find((o) => o.id === forcedTrackerOrgId) ?? null;
-          if (activeOrg) {
-            localStorage.setItem("current_org_id", forcedTrackerOrgId);
-            localStorage.removeItem("force_tracker_org_id");
-          }
-        }
-
-        if (!activeOrg) {
-          const anyTracker = mRows.find(
-            (m) => String(m.role || "").toLowerCase() === "tracker" && m.org_id
-          );
-          if (anyTracker) {
-            activeOrg = orgs.find((o) => o.id === anyTracker.org_id) ?? null;
-            if (activeOrg) {
-              localStorage.setItem("current_org_id", activeOrg.id);
-              localStorage.removeItem("force_tracker_org_id");
-            }
-          }
-        }
-      }
-
-      if (!activeOrg && !hasForced) {
-        const ownerMembership = mRows.find((m) => String(m.role).toLowerCase() === "owner");
-        if (ownerMembership) {
-          activeOrg = orgs.find((o) => o.id === ownerMembership.org_id) ?? null;
-        }
-
-        if (!activeOrg) {
-          const storedOrgId = localStorage.getItem("current_org_id");
-          if (storedOrgId) activeOrg = orgs.find((o) => o.id === storedOrgId) ?? null;
-        }
-
-        if (!activeOrg && orgs.length) activeOrg = orgs[0];
-      }
-
-      activeOrg = normalizeOrgRow(activeOrg);
-      setCurrentOrg(activeOrg);
-      setTenantId(activeOrg?.id ?? null);
-      setIsSuspended(Boolean(activeOrg?.suspended));
-
-      if (activeOrg?.id) localStorage.setItem("current_org_id", activeOrg.id);
-      else localStorage.removeItem("current_org_id");
-
-      let resolvedRole = safeRoleFallback();
-
-      if (mRows.length && activeOrg?.id) {
-        const activeMembership = mRows.find((m) => m.org_id === activeOrg.id);
-        resolvedRole = activeMembership?.role ? String(activeMembership.role).toLowerCase() : "";
-      } else if (mRows.length) {
-        // Caso carrera: hay memberships pero activeOrg aún no resolvió.
-        // Usamos el rol de mayor jerarquía (mRows está ordenado).
-        resolvedRole = mRows[0]?.role ? String(mRows[0].role).toLowerCase() : "";
-
-        const tentativeOrgId = mRows[0]?.org_id || null;
-        if (tentativeOrgId) {
-          setCurrentOrg((prev) => prev ?? { id: tentativeOrgId, name: "", suspended: false });
-          setTenantId(tentativeOrgId);
-          localStorage.setItem("current_org_id", tentativeOrgId);
-        }
-      } else {
-        resolvedRole = "";
-      }
-
-      setRole(resolvedRole);
-
-      try {
-        window.__AUTH__ = {
-          email: user?.email,
-          user_id: user?.id,
-          role: resolvedRole,
-          currentOrgId: activeOrg?.id ?? null,
-          memberships: mRows,
-          hasForcedTrackerOrg: Boolean(hasForced),
-        };
-      } catch {}
-    } finally {
-      setLoading(false);
-    }
-  }, [user, trackerDomain]);
-
+  // ===========================================================
+  // Exponer debug y currentOrg en window (universal)
+  // ===========================================================
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+    // debug_currentOrg (ya lo estabas intentando)
+    window.__debug_currentOrg = currentOrg ?? null;
 
-  const selectOrg = useCallback(
-    (orgId) => {
-      const o = organizations.find((x) => x.id === orgId);
-      const active = normalizeOrgRow(o) ?? null;
+    // Debug API segura: solo lectura de estado local del cliente
+    window.__SUPABASE_AUTH_DEBUG = {
+      getSession: async () => {
+        const { data } = await client.auth.getSession();
+        return data?.session ?? null;
+      },
+      getUser: async () => {
+        const { data } = await client.auth.getUser();
+        return data?.user ?? null;
+      },
+      getOrg: () => currentOrg ?? null,
+      getRole: () => bestRole ?? null,
+      getReady: () => !!authReady,
+      isTrackerDomain: () => !!trackerDomain,
+    };
+  }, [authReady, bestRole, client, currentOrg, trackerDomain]);
 
-      setCurrentOrg(active);
-      setTenantId(active?.id ?? null);
-      setIsSuspended(Boolean(active?.suspended));
-
-      if (active?.id) localStorage.setItem("current_org_id", active.id);
-      else localStorage.removeItem("current_org_id");
-
-      const m = memberships.find((x) => x.org_id === active?.id);
-      if (m?.role) setRole(String(m.role).toLowerCase());
-      else setRole(""); // ✅ no forzar tracker
-    },
-    [organizations, memberships]
-  );
+  const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
 
   const value = useMemo(
     () => ({
+      authReady,
       session,
       user,
-      profile,
-      organizations,
-      memberships,
-      currentOrg,
-      tenantId,
-      currentOrgId: currentOrg?.id ?? null,
-      role,
-      currentRole: role,
-      isOwner: role === "owner",
-      isAdmin: role === "admin" || role === "owner",
-      isSuspended,
+      roles,
+      bestRole,
       isRootOwner,
-      loading,
-      reloadAuth: loadAll,
-      selectOrg,
+      orgs,
+      currentOrg,
+      setCurrentOrg, // para selector de org (panel)
+      trackerDomain,
     }),
-    [
-      session,
-      user,
-      profile,
-      organizations,
-      memberships,
-      currentOrg,
-      tenantId,
-      role,
-      isSuspended,
-      isRootOwner,
-      loading,
-      loadAll,
-      selectOrg,
-    ]
+    [authReady, session, user, roles, bestRole, isRootOwner, orgs, currentOrg, trackerDomain]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+}
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  return ctx;
+}
