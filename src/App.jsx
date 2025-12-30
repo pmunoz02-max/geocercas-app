@@ -86,7 +86,6 @@ function DomainEnforcer() {
 
     const hasCode = new URLSearchParams(search).has("code");
     const hasAccessToken = hash.includes("access_token=");
-
     if ((hasCode || hasAccessToken) && path !== "/auth/callback") {
       navigate(`/auth/callback${search}${hash}`, { replace: true });
       return;
@@ -106,15 +105,7 @@ function DomainEnforcer() {
     }
 
     if (path !== "/tracker-gps") navigate("/tracker-gps", { replace: true });
-  }, [
-    loading,
-    session,
-    location.pathname,
-    location.search,
-    location.hash,
-    navigate,
-    trackerDomain,
-  ]);
+  }, [loading, session, location.pathname, location.search, location.hash, navigate, trackerDomain]);
 
   return null;
 }
@@ -123,7 +114,7 @@ function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
   const location = useLocation();
 
-  // ✅ SOLO UNA VEZ: no interferir con /auth/callback
+  // ✅ CLAVE: permitir que /auth/callback termine su trabajo (Magic Link)
   if (location.pathname === "/auth/callback") {
     return children;
   }
@@ -135,6 +126,7 @@ function PanelGate({ children }) {
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
+  // Si hay sesión pero aún no resolvimos rol (carrera de triggers / RLS), esperamos.
   const r = String(role || "").toLowerCase().trim();
   if (!r) return null;
 
@@ -163,10 +155,7 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  const activeRole = useMemo(
-    () => getActiveRole(memberships, activeOrgId),
-    [memberships, activeOrgId]
-  );
+  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [memberships, activeOrgId]);
 
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
@@ -193,10 +182,7 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  // ✅ SOLO UNA VEZ
-  if (isRootOwner === true) {
-    tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
-  }
+  if (isRootOwner === true) tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -240,11 +226,7 @@ function SmartFallback() {
   const r = String(role || "").toLowerCase().trim();
   if (!r) return null;
 
-  return PANEL_ROLES.has(r) ? (
-    <Navigate to="/inicio" replace />
-  ) : (
-    <Navigate to="/tracker-gps" replace />
-  );
+  return PANEL_ROLES.has(r) ? <Navigate to="/inicio" replace /> : <Navigate to="/tracker-gps" replace />;
 }
 
 export default function App() {
