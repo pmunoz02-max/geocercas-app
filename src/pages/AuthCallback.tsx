@@ -2,23 +2,22 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/supabaseClient";
 import { supabaseTracker } from "@/supabaseTrackerClient";
 
-/**
- * AuthCallback universal:
- * - Soporta Magic Link con:
- *    A) PKCE:  /auth/callback?code=...
- *    B) Implicit: /auth/callback#access_token=...&refresh_token=...
- * - Crea sesión y redirige:
- *    - Admin/Owner/Viewer -> /inicio  (panel)
- *    - Tracker            -> /tracker-gps (tracker)
- *
- * Importante:
- * - NO usa "window.supabase" (no existe global).
- * - Limpia la URL (borra hash/tokens) al final por seguridad.
- */
-
 function isTrackerHostname(hostname) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
+}
+
+function parseHashTokens(hash) {
+  // hash viene como: "#access_token=...&refresh_token=...&type=magiclink..."
+  if (!hash || typeof hash !== "string") return null;
+  const clean = hash.startsWith("#") ? hash.slice(1) : hash;
+  const params = new URLSearchParams(clean);
+
+  const access_token = params.get("access_token");
+  const refresh_token = params.get("refresh_token");
+
+  if (!access_token) return null;
+  return { access_token, refresh_token: refresh_token || null };
 }
 
 function pickBestRole(rows) {
@@ -47,6 +46,13 @@ export default function AuthCallback() {
   useEffect(() => {
     let cancelled = false;
 
+    const cleanUrl = () => {
+      try {
+        const clean = `${window.location.origin}${window.location.pathname}`;
+        window.history.replaceState({}, document.title, clean);
+      } catch (_) {}
+    };
+
     const run = async () => {
       try {
         setError(null);
@@ -58,26 +64,49 @@ export default function AuthCallback() {
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
 
-        // 1) Consumir callback (PKCE o Implicit)
         let session = null;
 
+        // 1) PKCE (code)
         if (code) {
-          // PKCE
+          if (!client?.auth?.exchangeCodeForSession) {
+            throw new Error("SDK Supabase no soporta exchangeCodeForSession().");
+          }
           const { data, error: exErr } = await client.auth.exchangeCodeForSession(code);
           if (exErr) throw exErr;
           session = data?.session ?? null;
         } else {
-          // Implicit (hash: access_token, refresh_token...)
-          // getSessionFromUrl guarda sesión si storeSession=true
-          const { data, error: fromUrlErr } = await client.auth.getSessionFromUrl({
-            storeSession: true,
-          });
-          if (fromUrlErr) throw fromUrlErr;
-          session = data?.session ?? null;
+          // 2) IMPLICIT (hash tokens) - soporte universal
+          const tokens = parseHashTokens(window.location.hash);
+
+          if (tokens?.access_token) {
+            // Preferido en supabase-js v2
+            if (client?.auth?.setSession) {
+              const { data, error: setErr } = await client.auth.setSession({
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token || "",
+              });
+              if (setErr) throw setErr;
+              session = data?.session ?? null;
+            } else if (client?.auth?.setAuth) {
+              // Fallback supabase-js v1
+              client.auth.setAuth(tokens.access_token);
+              // En v1, intentamos leer sesión luego
+              const { data } = await client.auth.getSession?.();
+              session = data?.session ?? null;
+            } else {
+              throw new Error("SDK Supabase no soporta setSession/setAuth para consumir hash tokens.");
+            }
+          } else {
+            // 3) Sin code ni hash tokens: intentar recuperar sesión existente
+            if (client?.auth?.getSession) {
+              const { data } = await client.auth.getSession();
+              session = data?.session ?? null;
+            }
+          }
         }
 
-        // 2) Fallback: leer sesión ya guardada
-        if (!session) {
+        // 4) Fallback: leer sesión ya guardada
+        if (!session && client?.auth?.getSession) {
           const { data } = await client.auth.getSession();
           session = data?.session ?? null;
         }
@@ -88,9 +117,7 @@ export default function AuthCallback() {
 
         if (cancelled) return;
 
-        // 3) Determinar destino por rol
-        //    Roles siempre se consultan en el proyecto principal (panel),
-        //    incluso si el callback se ejecuta desde tracker.
+        // 5) Verificar rol
         setStatus("Verificando rol...");
 
         const { data: rolesRows, error: rolesErr } = await supabase
@@ -98,41 +125,30 @@ export default function AuthCallback() {
           .select("role, org_id, created_at")
           .eq("user_id", session.user.id);
 
-        if (rolesErr) {
-          // Si por RLS no permite leer roles, al menos no nos quedamos colgados
-          console.warn("[AuthCallback] rolesErr:", rolesErr);
-        }
+        if (rolesErr) console.warn("[AuthCallback] rolesErr:", rolesErr);
 
         const bestRole = pickBestRole(rolesRows || []);
 
-        // 4) Construir redirecciones
+        // 6) Resolver destino (trackers siempre a su pantalla)
         const PANEL_HOME = "/inicio";
         const TRACKER_HOME = "/tracker-gps";
-
-        // Si tu tracker vive en subdominio separado, usa esto:
         const TRACKER_BASE =
           (import.meta.env.VITE_TRACKER_URL || "https://tracker.tugeocercas.com").replace(/\/+$/, "");
 
         let target = PANEL_HOME;
 
         if (bestRole === "tracker") {
-          // Regla: trackers solo a su pantalla
-          if (trackerDomain) target = TRACKER_HOME;
-          else target = `${TRACKER_BASE}${TRACKER_HOME}`;
+          target = trackerDomain ? TRACKER_HOME : `${TRACKER_BASE}${TRACKER_HOME}`;
         } else {
-          // admin/owner/viewer -> panel
           target = PANEL_HOME;
         }
 
         setStatus("Redirigiendo...");
 
-        // 5) Limpiar URL para no dejar tokens en el hash
-        try {
-          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-          window.history.replaceState({}, document.title, cleanUrl);
-        } catch (_) {}
+        // 7) Limpiar URL (evitar dejar tokens)
+        cleanUrl();
 
-        // 6) Redirigir (replace evita volver al callback con back)
+        // 8) Redirigir
         window.location.replace(target);
       } catch (e) {
         console.error("[AuthCallback] error:", e);
@@ -140,19 +156,15 @@ export default function AuthCallback() {
 
         setError(e?.message || "Error estableciendo sesión.");
         setStatus("No se pudo completar el inicio de sesión.");
-        // Limpieza por seguridad
-        try {
-          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-          window.history.replaceState({}, document.title, cleanUrl);
-        } catch (_) {}
+        cleanUrl();
       }
     };
 
-    // Timeout anti-cuelgue (universal)
     const timeout = setTimeout(() => {
       if (cancelled) return;
       setError("Tiempo de espera agotado estableciendo sesión. Reintenta el Magic Link.");
       setStatus("No se pudo completar el inicio de sesión.");
+      cleanUrl();
     }, 12000);
 
     run().finally(() => clearTimeout(timeout));
