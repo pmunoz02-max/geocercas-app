@@ -122,7 +122,7 @@ function PanelGate({ children }) {
   const { loading, session, role } = useAuth();
   const location = useLocation();
 
-  // ✅ CLAVE: AuthCallback debe ejecutarse sin interferencia de guards/roles
+  // ✅ CLAVE: /auth/callback debe ejecutarse sin interferencia del gate
   if (location.pathname === "/auth/callback") {
     return children;
   }
