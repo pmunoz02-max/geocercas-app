@@ -1,19 +1,29 @@
-// src/pages/AuthCallback.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
-import { supabaseTracker } from "../supabaseTrackerClient";
+import { supabase } from "@/supabaseClient";
+import { supabaseTracker } from "@/supabaseTrackerClient";
 
-type StatusStep =
-  | "init"
-  | "parsing"
-  | "saving"
-  | "setting"
-  | "redirecting"
-  | "error";
+/**
+ * AuthCallback UNIVERSAL (panel + tracker)
+ *
+ * IMPORTANTÍSIMO:
+ * - Los Magic Links generados con supabaseAdmin.auth.admin.generateLink()
+ *   NO pueden completar PKCE (?code=...) porque el browser no tiene code_verifier.
+ *   => Deben llegar como IMPLICIT: #access_token=...
+ *
+ * Este callback:
+ * - Soporta IMPLICIT (#access_token, refresh_token, expires_at...)
+ * - Si llega PKCE (?code=...), muestra mensaje accionable (no bucle infinito).
+ * - Decide destino por query param:
+ *    /auth/callback?target=panel   -> /inicio
+ *    /auth/callback?target=tracker -> /tracker-gps
+ */
 
-function isTrackerHostname(hostname: string) {
-  const h = String(hostname || "").toLowerCase().trim();
-  return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
+type Target = "panel" | "tracker";
+
+function getTargetFromUrl(): Target {
+  const url = new URL(window.location.href);
+  const t = (url.searchParams.get("target") || "").toLowerCase().trim();
+  return t === "tracker" ? "tracker" : "panel";
 }
 
 function parseHash(hash: string) {
@@ -24,158 +34,160 @@ function parseHash(hash: string) {
     access_token: p.get("access_token") || "",
     refresh_token: p.get("refresh_token") || "",
     expires_at: Number(p.get("expires_at") || 0) || 0,
+    expires_in: Number(p.get("expires_in") || 0) || 0,
     token_type: p.get("token_type") || "bearer",
     type: p.get("type") || "",
   };
 }
 
-function safeJsonParse<T = any>(s: string | null): T | null {
-  if (!s) return null;
+function projectRefFromUrl(supabaseUrl: string) {
   try {
-    return JSON.parse(s) as T;
+    const u = new URL(supabaseUrl);
+    const host = u.hostname; // <ref>.supabase.co
+    return host.split(".")[0];
   } catch {
     return null;
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
-  let t: any;
-  const timeout = new Promise<T>((_, reject) => {
-    t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
+/**
+ * Obtiene el user usando el access_token (sin depender de setSession).
+ */
+async function fetchUserViaRest(supabaseUrl: string, anonKey: string, accessToken: string) {
+  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: "GET",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(
+      `No se pudo obtener user (/auth/v1/user). Status ${res.status}. ${txt}`.trim()
+    );
+  }
+  return await res.json();
 }
 
-function cleanUrlKeepPath() {
-  try {
-    const clean = `${window.location.origin}${window.location.pathname}`;
-    window.history.replaceState({}, document.title, clean);
-  } catch {}
-}
-
-function base64UrlToJson(b64url: string) {
-  // base64url -> base64
-  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
-  const str = atob(b64 + pad);
-  return JSON.parse(str);
-}
-
-function decodeJwt(accessToken: string) {
-  const parts = accessToken.split(".");
-  if (parts.length !== 3) throw new Error("Access token JWT inválido.");
-  const payload = base64UrlToJson(parts[1]);
-  return payload;
-}
-
-function writeSessionToStorage(storageKey: string, payload: any) {
-  localStorage.setItem(storageKey, JSON.stringify(payload));
-}
-
-function buildSessionPayload(params: {
+/**
+ * Guarda sesión en el storage que Supabase espera: sb-<ref>-auth-token
+ * Esto permite que tu AuthContext / supabase-js "vea" la sesión al cargar.
+ */
+function writeSessionToLocalStorage(opts: {
+  supabaseUrl: string;
   accessToken: string;
   refreshToken: string;
   expiresAt?: number;
   tokenType?: string;
   user: any;
 }) {
-  const now = Math.floor(Date.now() / 1000);
-  const expires_at = params.expiresAt && params.expiresAt > 0 ? params.expiresAt : now + 3600;
+  const ref = projectRefFromUrl(opts.supabaseUrl);
+  if (!ref) throw new Error("No se pudo derivar project ref del SUPABASE_URL.");
 
-  return {
-    access_token: params.accessToken,
-    refresh_token: params.refreshToken,
-    token_type: params.tokenType || "bearer",
+  const key = `sb-${ref}-auth-token`;
+  const now = Math.floor(Date.now() / 1000);
+  const expires_at = opts.expiresAt && opts.expiresAt > 0 ? opts.expiresAt : now + 3600;
+
+  const payload = {
+    access_token: opts.accessToken,
+    refresh_token: opts.refreshToken,
+    token_type: opts.tokenType || "bearer",
     expires_at,
     expires_in: Math.max(0, expires_at - now),
-    user: params.user,
+    user: opts.user,
   };
+
+  localStorage.setItem(key, JSON.stringify(payload));
+}
+
+function cleanUrlKeepOriginPath() {
+  try {
+    const clean = `${window.location.origin}${window.location.pathname}${window.location.search
+      .replace(/([?&])code=[^&]+(&|$)/, "$1")
+      .replace(/[?&]$/, "")}`;
+    // Además, quitamos el hash completo (access_token) para evitar re-procesos.
+    window.history.replaceState({}, document.title, clean);
+  } catch {
+    // noop
+  }
+}
+
+function redirectAfterLogin(target: Target) {
+  // Tracker SIEMPRE a su pantalla; Panel SIEMPRE al panel.
+  const dest = target === "tracker" ? "/tracker-gps" : "/inicio";
+  window.location.replace(dest);
 }
 
 export default function AuthCallback() {
-  const trackerDomain = useMemo(() => isTrackerHostname(window.location.hostname), []);
-  const client = trackerDomain ? supabaseTracker : supabase;
+  const [status, setStatus] = useState<string>("Estableciendo sesión...");
+  const [error, setError] = useState<string | null>(null);
 
-  // Deben coincidir con tus createClient()
-  const STORAGE_KEY_PANEL = "sb-tugeocercas-auth-token-panel-authA";
-  const STORAGE_KEY_TRACKER = "sb-tugeocercas-auth-token-tracker-authB";
-  const storageKey = trackerDomain ? STORAGE_KEY_TRACKER : STORAGE_KEY_PANEL;
-
-  const [step, setStep] = useState<StatusStep>("init");
-  const [status, setStatus] = useState("Iniciando...");
-  const [error, setError] = useState<string>("");
-
-  useEffect(() => {
-    // Debug útil en consola:
-    (window as any).__SUPABASE_AUTH_DEBUG = {
-      storageKey,
-      trackerDomain,
-      getRawStorage: () => safeJsonParse(localStorage.getItem(storageKey)),
-    };
-  }, [storageKey, trackerDomain]);
+  const target = useMemo(() => {
+    try {
+      return getTargetFromUrl();
+    } catch {
+      return "panel";
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    const hardRedirect = (to: string) => {
-      window.location.replace(to);
-    };
-
     const run = async () => {
       try {
-        setError("");
-        setStep("parsing");
-        setStatus("Confirmando acceso...");
+        setError(null);
+        setStatus("Estableciendo sesión...");
 
         const url = new URL(window.location.href);
-        const code = url.searchParams.get("code") || "";
+        const code = url.searchParams.get("code");
 
-        // ✅ Para invitaciones universales, esperamos tokens en HASH
-        // Si llega code=..., normalmente es PKCE y puede fallar por faltar verifier.
+        // Elegimos cliente según target (NO por hostname)
+        const client = target === "tracker" ? supabaseTracker : supabase;
+
+        // Detectar URL/key
+        const SUPABASE_URL =
+          (client as any)?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
+        const ANON_KEY =
+          (client as any)?.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!SUPABASE_URL || !ANON_KEY) {
+          throw new Error("Faltan SUPABASE_URL o ANON_KEY (env o cliente).");
+        }
+
+        // --- CASO PKCE (code=...) ---
+        // Esto NO es compatible con generateLink (admin) porque falta code_verifier.
+        // En vez de bucle/timeout, damos error claro.
         if (code) {
+          cleanUrlKeepOriginPath();
           throw new Error(
-            "Este link llegó como ?code= (PKCE). Para invitaciones universales debes usar el Magic Link real con #access_token. " +
-              "Reenvía el link que devuelve la Edge Function (action_link)."
+            "Este Magic Link llegó en modo PKCE (?code=...), pero los links generados por el servidor (generateLink) no pueden completar PKCE porque falta el code_verifier. Solución: cambia Auth Flow Type a IMPLICIT en Supabase Auth o genera el login desde el cliente (signInWithOtp)."
           );
         }
 
-        const h = parseHash(window.location.hash || "");
-        if (!h.access_token || !h.refresh_token) {
+        // --- CASO IMPLICIT (#access_token=...) ---
+        const h = parseHash(window.location.hash);
+        if (!h.access_token) {
+          cleanUrlKeepOriginPath();
           throw new Error(
-            "No llegaron tokens en el link (access_token/refresh_token). " +
-              "Si lo abriste desde previsualización (WhatsApp/FB), usa 'Abrir en navegador' (Chrome/Safari) y el Magic Link original."
+            "No se encontró access_token en el callback. Asegura que el Auth Flow Type esté en IMPLICIT y que el redirect sea /auth/callback?target=panel o /auth/callback?target=tracker."
           );
         }
 
-        // ✅ Decodificamos JWT para armar user sin llamar /auth/v1/user (evita 403 por proyecto equivocado)
-        const jwt = decodeJwt(h.access_token);
+        // OJO: si el reloj del dispositivo está mal, Supabase avisa "issued in the future"
+        // y puede fallar. Aviso proactivo:
+        setStatus("Validando usuario...");
+        const user = await fetchUserViaRest(SUPABASE_URL, ANON_KEY, h.access_token);
 
-        // ✅ Detectar reloj desfasado (token “del futuro”)
-        const now = Math.floor(Date.now() / 1000);
-        const iat = Number(jwt?.iat || 0);
-        // Si iat está > ahora + 2 min, hay skew
-        if (iat && iat > now + 120) {
-          throw new Error(
-            "El reloj del dispositivo está desfasado (la sesión parece emitida en el futuro). " +
-              "Activa 'Fecha y hora automáticas' y 'Zona horaria automática' en el dispositivo y vuelve a abrir el Magic Link."
-          );
+        if (!user?.id) {
+          cleanUrlKeepOriginPath();
+          throw new Error("No se pudo validar el usuario con el access_token.");
         }
 
-        const user = {
-          id: jwt.sub,
-          email: jwt.email,
-          phone: jwt.phone || "",
-          app_metadata: jwt.app_metadata || {},
-          user_metadata: jwt.user_metadata || {},
-          aud: jwt.aud,
-          created_at: jwt.created_at,
-          role: jwt.role,
-        };
-
-        setStep("saving");
         setStatus("Guardando sesión...");
-
-        const sessionPayload = buildSessionPayload({
+        writeSessionToLocalStorage({
+          supabaseUrl: SUPABASE_URL,
           accessToken: h.access_token,
           refreshToken: h.refresh_token,
           expiresAt: h.expires_at,
@@ -183,77 +195,61 @@ export default function AuthCallback() {
           user,
         });
 
-        // Guardamos en TU storageKey (panel/tracker)
-        writeSessionToStorage(storageKey, sessionPayload);
-
-        // Best-effort setSession (si cuelga, no bloquea)
-        setStep("setting");
-        setStatus("Estableciendo sesión...");
-
-        try {
-          await withTimeout(
-            (client as any).auth.setSession({
-              access_token: sessionPayload.access_token,
-              refresh_token: sessionPayload.refresh_token,
-            }),
-            6000,
-            "setSession"
-          );
-        } catch {
-          // No es fatal: el hard redirect rehidrata desde localStorage
-        }
-
-        cleanUrlKeepPath();
-
         if (cancelled) return;
-        setStep("redirecting");
-        setStatus("Redirigiendo...");
 
-        hardRedirect(trackerDomain ? "/tracker-gps" : "/inicio");
+        setStatus("Redirigiendo...");
+        cleanUrlKeepOriginPath();
+        redirectAfterLogin(target);
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
         if (cancelled) return;
-        setStep("error");
+
+        const msg =
+          typeof e?.message === "string" && e.message.trim()
+            ? e.message.trim()
+            : "Error estableciendo sesión.";
+
+        setError(msg);
         setStatus("No se pudo completar el inicio de sesión.");
-        setError(e?.message || "Error estableciendo sesión.");
-        cleanUrlKeepPath();
       }
     };
 
     run();
+
     return () => {
       cancelled = true;
     };
-  }, [client, storageKey, trackerDomain]);
+  }, [target]);
 
   return (
     <div className="max-w-xl mx-auto px-4 py-10">
       <div className="border rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-slate-900">App Geocercas</h1>
-        <p className="text-sm text-slate-600 mt-2">
-          {step === "error" ? "Ocurrió un problema." : "Procesando..."}
-        </p>
-
-        <p className="text-sm text-slate-700 mt-4">{status}</p>
+        <p className="text-sm text-slate-600 mt-2">{status}</p>
 
         {error ? (
           <div className="mt-4 text-sm text-red-600">
-            <div className="whitespace-pre-wrap">{error}</div>
+            {error}
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 text-xs text-slate-600">
+              Tip: si el link viene de WhatsApp/FB, evita abrirlo en “preview”.
+              Usa “Abrir en navegador”. Y revisa que el reloj del teléfono/PC esté
+              en hora automática.
+            </div>
+
+            <div className="mt-3 flex gap-2">
               <button
                 className="border rounded px-3 py-2 text-xs"
                 onClick={() => window.location.replace("/login")}
               >
                 Ir a Login
               </button>
-              <button className="border rounded px-3 py-2 text-xs" onClick={() => window.location.reload()}>
+              <button
+                className="border rounded px-3 py-2 text-xs"
+                onClick={() => window.location.reload()}
+              >
                 Reintentar
               </button>
-            </div>
-
-            <div className="mt-4 text-xs text-slate-500">
-              Tip: si el link viene de WhatsApp/FB, evita abrirlo en “preview”. Usa “Abrir en navegador”.
             </div>
           </div>
         ) : null}
