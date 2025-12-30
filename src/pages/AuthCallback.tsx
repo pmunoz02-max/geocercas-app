@@ -3,13 +3,13 @@ import { supabase } from "@/supabaseClient";
 import { supabaseTracker } from "@/supabaseTrackerClient";
 
 /**
- * AuthCallback UNIVERSAL y PERMANENTE
- * - Soporta PKCE (?code=...) e Implicit (#access_token=...&refresh_token=...)
- * - NO consulta roles/orgs (evita cuelgues por RLS/red)
- * - Decide destino por HOSTNAME:
- *     www.*      -> /inicio
- *     tracker.*  -> /tracker-gps
- * - Limpia el hash por seguridad.
+ * AuthCallback UNIVERSAL (anti-cuelgue):
+ * - Soporta PKCE (?code=...) usando exchangeCodeForSession (si existe)
+ * - Para implicit (#access_token=...): NO usa setSession (porque cuelga)
+ *   -> guarda sesión manualmente en localStorage con key sb-<ref>-auth-token
+ * - Redirige por hostname:
+ *     www.*     -> /inicio
+ *     tracker.* -> /tracker-gps
  */
 
 function isTrackerHostname(hostname) {
@@ -17,24 +17,62 @@ function isTrackerHostname(hostname) {
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
-function parseHashTokens(hash) {
-  if (!hash || typeof hash !== "string") return null;
+function parseHash(hash) {
+  if (!hash) return {};
   const clean = hash.startsWith("#") ? hash.slice(1) : hash;
-  const params = new URLSearchParams(clean);
-
-  const access_token = params.get("access_token");
-  const refresh_token = params.get("refresh_token");
-
-  if (!access_token) return null;
-  return { access_token, refresh_token: refresh_token || "" };
+  const p = new URLSearchParams(clean);
+  return {
+    access_token: p.get("access_token") || "",
+    refresh_token: p.get("refresh_token") || "",
+    expires_at: Number(p.get("expires_at") || 0) || 0,
+    expires_in: Number(p.get("expires_in") || 0) || 0,
+    token_type: p.get("token_type") || "bearer",
+    type: p.get("type") || "",
+  };
 }
 
-function withTimeout(promise, ms, label = "timeout") {
-  let t;
-  const timeout = new Promise((_, reject) => {
-    t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
+function projectRefFromUrl(supabaseUrl) {
+  try {
+    const u = new URL(supabaseUrl);
+    const host = u.hostname; // <ref>.supabase.co
+    return host.split(".")[0];
+  } catch {
+    return null;
+  }
+}
+
+async function fetchUserViaRest(supabaseUrl, anonKey, accessToken) {
+  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: "GET",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`No se pudo obtener user (/auth/v1/user). Status ${res.status}. ${txt}`);
+  }
+  return await res.json();
+}
+
+function writeSessionToLocalStorage({ supabaseUrl, accessToken, refreshToken, expiresAt, tokenType, user }) {
+  const ref = projectRefFromUrl(supabaseUrl);
+  if (!ref) throw new Error("No se pudo derivar project ref del SUPABASE_URL.");
+
+  const key = `sb-${ref}-auth-token`;
+
+  const payload = {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: tokenType || "bearer",
+    expires_at: expiresAt || Math.floor(Date.now() / 1000) + 3600,
+    expires_in: expiresAt ? Math.max(0, expiresAt - Math.floor(Date.now() / 1000)) : 3600,
+    user,
+  };
+
+  localStorage.setItem(key, JSON.stringify(payload));
 }
 
 export default function AuthCallback() {
@@ -48,7 +86,7 @@ export default function AuthCallback() {
       try {
         const clean = `${window.location.origin}${window.location.pathname}`;
         window.history.replaceState({}, document.title, clean);
-      } catch (_) {}
+      } catch {}
     };
 
     const run = async () => {
@@ -59,74 +97,71 @@ export default function AuthCallback() {
         const trackerDomain = isTrackerHostname(window.location.hostname);
         const client = trackerDomain ? supabaseTracker : supabase;
 
+        // Intentar obtener URL y key desde el client (v2 suele tener supabaseUrl/supabaseKey)
+        const SUPABASE_URL = client?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
+        const ANON_KEY = client?.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!SUPABASE_URL || !ANON_KEY) {
+          throw new Error("Faltan SUPABASE_URL o ANON_KEY (env o cliente).");
+        }
+
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
 
-        // 1) Consumir callback (PKCE o Implicit)
-        if (code) {
-          if (!client?.auth?.exchangeCodeForSession) {
-            throw new Error("El SDK Supabase no soporta exchangeCodeForSession().");
-          }
-
+        // 1) PKCE (si viene code)
+        if (code && client?.auth?.exchangeCodeForSession) {
           setStatus("Confirmando Magic Link...");
-          await withTimeout(
-            client.auth.exchangeCodeForSession(code),
-            8000,
-            "exchangeCodeForSession"
-          );
-        } else {
-          const tokens = parseHashTokens(window.location.hash);
-          if (!tokens?.access_token) {
-            throw new Error("No se encontraron tokens en el Magic Link.");
-          }
+          const { error: exErr } = await client.auth.exchangeCodeForSession(code);
+          if (exErr) throw exErr;
 
-          // Preferido (v2)
-          if (client?.auth?.setSession) {
-            setStatus("Guardando sesión...");
-            await withTimeout(
-              client.auth.setSession({
-                access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token,
-              }),
-              8000,
-              "setSession"
-            );
-          } else if (client?.auth?.setAuth) {
-            // Fallback (v1)
-            setStatus("Guardando sesión...");
-            client.auth.setAuth(tokens.access_token);
-          } else {
-            throw new Error("El SDK Supabase no soporta setSession/setAuth.");
-          }
+          // Si exchange funcionó, limpiamos URL y redirigimos
+          setStatus("Redirigiendo...");
+          cleanUrl();
+          window.location.replace(trackerDomain ? "/tracker-gps" : "/inicio");
+          return;
         }
 
-        // 2) Verificar que la sesión exista
-        setStatus("Verificando sesión...");
-        const sessRes = await withTimeout(client.auth.getSession(), 8000, "getSession");
-        const session = sessRes?.data?.session ?? null;
+        // 2) IMPLICIT (hash)
+        const h = parseHash(window.location.hash);
 
-        if (!session?.user?.id) {
-          throw new Error("No se pudo establecer la sesión. Reintenta el Magic Link.");
+        if (!h.access_token) {
+          throw new Error("No se encontró access_token en el callback.");
         }
+
+        setStatus("Validando usuario...");
+        const user = await fetchUserViaRest(SUPABASE_URL, ANON_KEY, h.access_token);
+
+        if (!user?.id) {
+          throw new Error("No se pudo validar el usuario con el access_token.");
+        }
+
+        setStatus("Guardando sesión...");
+        writeSessionToLocalStorage({
+          supabaseUrl: SUPABASE_URL,
+          accessToken: h.access_token,
+          refreshToken: h.refresh_token,
+          expiresAt: h.expires_at,
+          tokenType: h.token_type,
+          user,
+        });
 
         if (cancelled) return;
 
-        // 3) Destino por dominio (universal, sin roles)
-        const target = trackerDomain ? "/tracker-gps" : "/inicio";
-
         setStatus("Redirigiendo...");
-
-        // 4) Limpieza para no dejar tokens en URL
         cleanUrl();
 
-        window.location.replace(target);
+        // IMPORTANTE: redirigir según dominio
+        window.location.replace(trackerDomain ? "/tracker-gps" : "/inicio");
       } catch (e) {
         console.error("[AuthCallback] error:", e);
         if (cancelled) return;
-
         setError(e?.message || "Error estableciendo sesión.");
         setStatus("No se pudo completar el inicio de sesión.");
-        cleanUrl();
+        // limpieza por seguridad
+        try {
+          const clean = `${window.location.origin}${window.location.pathname}`;
+          window.history.replaceState({}, document.title, clean);
+        } catch {}
       }
     };
 
