@@ -64,6 +64,10 @@ function getActiveRole(memberships, orgId) {
 
 /* ======================================================
    DOMAIN ENFORCER (HARD CANONICAL ROUTING)
+   - Tracker domain:
+     - CAPTURA magic link (?code / #access_token) y fuerza /auth/callback
+     - con sesión => /tracker-gps
+     - sin sesión => permitido /, /login, /reset-password, /auth/callback
 ====================================================== */
 function DomainEnforcer() {
   const { loading, session } = useAuth();
@@ -119,7 +123,9 @@ function PanelGate({ children }) {
   const location = useLocation();
 
   // ✅ CLAVE: /auth/callback debe ejecutarse sin interferencia del gate
-  if (location.pathname === "/auth/callback") return children;
+  if (location.pathname === "/auth/callback") {
+    return children;
+  }
 
   if (isTrackerHostname(window.location.hostname)) {
     return <Navigate to="/tracker-gps" replace />;
@@ -128,6 +134,7 @@ function PanelGate({ children }) {
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
+  // Si hay sesión pero aún no resolvimos rol (carrera de triggers / RLS), esperamos.
   const r = String(role || "").toLowerCase().trim();
   if (!r) return null;
 
@@ -186,6 +193,7 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
+  // ✅ SOLO UNA VEZ (sin duplicados)
   if (isRootOwner === true) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
