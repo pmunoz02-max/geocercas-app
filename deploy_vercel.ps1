@@ -1,15 +1,16 @@
 # deploy_vercel.ps1
-# Vercel deploy helper (Git based)
-# Encoding: ASCII safe
+# Git-based deploy helper for Vercel
+# Safe ASCII version (no accents, no emojis)
+
+param(
+    [string]$CommitMessage = "deploy: automatic update"
+)
 
 Write-Host "=== Detecting Git repository root ==="
 
-try {
-    $repoRoot = git rev-parse --show-toplevel 2>$null
-    if (-not $repoRoot) {
-        throw "Not a Git repository."
-    }
-} catch {
+# Verify Git repository
+$repoRoot = git rev-parse --show-toplevel 2>$null
+if (-not $repoRoot) {
     Write-Error "ERROR: This directory is not a Git repository."
     exit 1
 }
@@ -24,13 +25,13 @@ Write-Host ""
 
 # Detect real changes
 $changes = git status --porcelain
-
 if (-not $changes) {
     Write-Host "INFO: No changes to commit."
     Write-Host "Nothing to push. Exiting."
     exit 0
 }
 
+# User confirmation
 $answer = Read-Host "Continue with add + commit + push? [s/N]"
 if ($answer.ToLower() -ne "s") {
     Write-Host "Cancelled by user."
@@ -43,9 +44,7 @@ git add .
 
 Write-Host ""
 Write-Host "=== Creating commit ==="
-$commitMessage = "deploy: automatic update"
-
-git commit -m $commitMessage
+git commit -m $CommitMessage
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ERROR: Commit failed."
