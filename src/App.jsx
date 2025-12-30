@@ -243,7 +243,11 @@ function SmartFallback() {
   const r = String(role || "").toLowerCase().trim();
   if (!r) return null;
 
-  return PANEL_ROLES.has(r) ? <Navigate to="/inicio" replace /> : <Navigate to="/tracker-gps" replace />;
+  return PANEL_ROLES.has(r) ? (
+    <Navigate to="/inicio" replace />
+  ) : (
+    <Navigate to="/tracker-gps" replace />
+  );
 }
 
 export default function App() {
