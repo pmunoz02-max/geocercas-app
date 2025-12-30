@@ -10,10 +10,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    flowType: "pkce",              // ✅ CLAVE
+    flowType: "pkce",          // ✅ CLAVE
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,      // ✅ Supabase maneja el callback
+    detectSessionInUrl: true,  // ✅ CLAVE (permite callback con ?code=)
     storageKey: "sb-tugeocercas-panel-auth",
+    storage: window.localStorage,
   },
 });
