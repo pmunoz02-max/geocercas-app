@@ -2,9 +2,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// Cliente canonical (panel)
-// Si tu supabaseClient está en /src/supabaseClient.* esta ruta es la correcta:
-import { supabase } from "../supabaseClient"; // <-- si no compila, dime dónde está tu supabaseClient y la ajusto
+// Ajusta esta ruta según tu proyecto:
+// - Si supabaseClient está en src/supabaseClient.* => "../supabaseClient"
+// - Si está en src/pages/supabaseClient.* => "./supabaseClient"
+import { supabase } from "../supabaseClient";
 
 type Status =
   | { phase: "init"; message: string }
@@ -30,17 +31,19 @@ function getHashParam(hash: string, key: string): string | null {
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
-
   const timeout = new Promise<never>((_, reject) => {
-    // ✅ Correcto: setTimeout(fn, ms)
     t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
   });
-
   try {
     return await Promise.race([promise, timeout]);
   } finally {
     if (t) clearTimeout(t);
   }
+}
+
+function isIssuedInTheFutureError(e: any): boolean {
+  const msg = String(e?.message || e || "").toLowerCase();
+  return msg.includes("issued in the future") || msg.includes("clock") || msg.includes("skew");
 }
 
 export default function AuthCallback() {
@@ -54,7 +57,6 @@ export default function AuthCallback() {
     message: "Confirmando acceso…",
   });
 
-  // Evita doble ejecución (StrictMode)
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -68,7 +70,11 @@ export default function AuthCallback() {
         const code = new URLSearchParams(window.location.search).get("code");
         const hash = window.location.hash || "";
 
-        // IMPLICIT (#access_token)
+        // 🔥 Tiempo más alto para móvil/TWA
+        const SET_SESSION_TIMEOUT = 25_000;
+        const EXCHANGE_TIMEOUT = 25_000;
+        const GET_SESSION_TIMEOUT = 15_000;
+
         if (hasHashTokens(hash)) {
           const access_token = getHashParam(hash, "access_token");
           const refresh_token = getHashParam(hash, "refresh_token");
@@ -81,24 +87,21 @@ export default function AuthCallback() {
 
           await withTimeout(
             supabase.auth.setSession({ access_token, refresh_token }),
-            12_000,
+            SET_SESSION_TIMEOUT,
             "setSession"
           );
 
           // Limpia hash para evitar reproceso
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        }
-        // PKCE (?code=...)
-        else if (code) {
+        } else if (code) {
           setStatus({ phase: "working", message: "Intercambiando código…" });
 
           await withTimeout(
             supabase.auth.exchangeCodeForSession(code),
-            15_000,
+            EXCHANGE_TIMEOUT,
             "exchangeCodeForSession"
           );
 
-          // Limpia el code (respeta target u otros params)
           const p = new URLSearchParams(window.location.search);
           p.delete("code");
           const qs = p.toString();
@@ -107,19 +110,32 @@ export default function AuthCallback() {
           throw new Error("Callback sin parámetros (ni hash tokens ni code).");
         }
 
-        // Confirmación mínima: la sesión debe existir
         setStatus({ phase: "working", message: "Confirmando sesión…" });
 
-        const { data, error } = await withTimeout(supabase.auth.getSession(), 12_000, "getSession");
+        const { data, error } = await withTimeout(
+          supabase.auth.getSession(),
+          GET_SESSION_TIMEOUT,
+          "getSession"
+        );
         if (error) throw error;
         if (!data?.session) throw new Error("Sesión no disponible luego del callback.");
 
         setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
 
-        // Redirección final (rol lo valida PanelGate/SmartFallback)
         navigate(target === "tracker" ? "/tracker-gps" : "/inicio", { replace: true });
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
+
+        if (isIssuedInTheFutureError(e)) {
+          setStatus({
+            phase: "error",
+            message: "El reloj del dispositivo está desfasado.",
+            details:
+              "Activa 'Fecha y hora automáticas' y 'Zona horaria automática', luego reintenta el Magic Link.",
+          });
+          return;
+        }
+
         setStatus({
           phase: "error",
           message: "No se pudo completar el inicio de sesión.",
