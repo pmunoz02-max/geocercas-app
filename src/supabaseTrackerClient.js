@@ -12,11 +12,16 @@ if (!trackerUrl || !trackerAnon) {
 
 export const supabaseTracker = createClient(trackerUrl, trackerAnon, {
   auth: {
-    flowType: "pkce",          // ✅ CLAVE
+    // ✅ PKCE estable
+    flowType: "pkce",
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,  // ✅ CLAVE
-    storageKey: "sb-tugeocercas-tracker-auth",
+
+    // ✅ Captura sesión desde callback
+    detectSessionInUrl: true,
+
+    // ✅ storageKey separado (tracker)
+    storageKey: "sb-tugeocercas-auth-token-tracker-authB",
     storage: window.localStorage,
   },
 });
