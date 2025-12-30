@@ -46,13 +46,17 @@ function decodeJwtPayload(token: string): any | null {
 function issuerHostFromAccessToken(accessToken: string): string | null {
   const payload = decodeJwtPayload(accessToken);
   const iss = String(payload?.iss || "");
-  // iss suele ser: https://<project>.supabase.co/auth/v1
   try {
     const u = new URL(iss);
     return u.host || null;
   } catch {
     return null;
   }
+}
+
+function looksLikeClockSkew(e: any) {
+  const msg = String(e?.message || e || "").toLowerCase();
+  return msg.includes("issued in the future") || msg.includes("clock") || msg.includes("skew");
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -72,15 +76,14 @@ function buildClient(url: string, anonKey: string): SupabaseClient {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: false, // nosotros manejamos el callback manualmente
+      detectSessionInUrl: false, // lo manejamos manual
     },
   });
 }
 
-function getEnvOrThrow(name: string): string {
+function getEnv(name: string): string | null {
   const v = (import.meta as any).env?.[name];
-  if (!v) throw new Error(`Falta env var: ${name}`);
-  return String(v);
+  return v ? String(v) : null;
 }
 
 export default function AuthCallback() {
@@ -104,23 +107,38 @@ export default function AuthCallback() {
 
         const trackerHost = isTrackerHostname(window.location.hostname);
 
-        // 1) Crea ambos clientes desde ENV (blindaje definitivo)
-        const panelUrl = getEnvOrThrow("VITE_SUPABASE_URL");
-        const panelKey = getEnvOrThrow("VITE_SUPABASE_ANON_KEY");
+        // Panel env (obligatorias)
+        const panelUrl = getEnv("VITE_SUPABASE_URL");
+        const panelKey = getEnv("VITE_SUPABASE_ANON_KEY");
+        if (!panelUrl || !panelKey) {
+          throw new Error("Faltan env vars de PANEL: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY");
+        }
 
-        const trackerUrl = getEnvOrThrow("VITE_SUPABASE_TRACKER_URL");
-        const trackerKey = getEnvOrThrow("VITE_SUPABASE_TRACKER_ANON_KEY");
+        // Tracker env (opcionales; solo se usan si aplica)
+        const trackerUrl = getEnv("VITE_SUPABASE_TRACKER_URL");
+        const trackerKey = getEnv("VITE_SUPABASE_TRACKER_ANON_KEY");
 
         const panelClient = buildClient(panelUrl, panelKey);
-        const trackerClient = buildClient(trackerUrl, trackerKey);
-
-        // 2) Decide cliente por hostname (primario)
-        let client: SupabaseClient = trackerHost ? trackerClient : panelClient;
+        const trackerClient =
+          trackerUrl && trackerKey ? buildClient(trackerUrl, trackerKey) : null;
 
         const code = new URLSearchParams(window.location.search).get("code");
         const hash = window.location.hash || "";
 
-        // 3) Si viene access_token, también decidimos por ISS (secundario, súper robusto)
+        // Elegimos cliente
+        let client: SupabaseClient = panelClient;
+
+        // Si estamos en tracker domain, intentamos usar tracker auth si existe
+        if (trackerHost) {
+          if (!trackerClient) {
+            throw new Error(
+              "Este dominio es TRACKER, pero faltan env vars: VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY"
+            );
+          }
+          client = trackerClient;
+        }
+
+        // Si viene access_token, podemos escoger por ISS (blindaje)
         if (hasHashTokens(hash)) {
           const access_token = getHashParam(hash, "access_token");
           const refresh_token = getHashParam(hash, "refresh_token");
@@ -129,25 +147,29 @@ export default function AuthCallback() {
           }
 
           const issHost = issuerHostFromAccessToken(access_token);
-          if (issHost) {
-            const panelHost = new URL(panelUrl).host;
-            const trackerAuthHost = new URL(trackerUrl).host;
+          const panelHost = new URL(panelUrl).host;
+          const trackerAuthHost = trackerUrl ? new URL(trackerUrl).host : null;
 
-            if (issHost === trackerAuthHost) client = trackerClient;
-            else if (issHost === panelHost) client = panelClient;
-            // Si no coincide con ninguno, seguimos con el elegido por hostname
+          if (issHost && trackerAuthHost && issHost === trackerAuthHost) {
+            if (!trackerClient) {
+              throw new Error(
+                "El Magic Link fue emitido por SUPABASE TRACKER, pero faltan env vars: VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY"
+              );
+            }
+            client = trackerClient;
+          } else if (issHost && issHost === panelHost) {
+            client = panelClient;
           }
 
           setStatus({ phase: "working", message: "Estableciendo sesión…" });
 
-          // TWA/móvil: timeouts más altos
           await withTimeout(
             client.auth.setSession({ access_token, refresh_token }),
             30_000,
             "setSession"
           );
 
-          // Limpia hash para evitar reproceso
+          // Limpia hash
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
         } else if (code) {
           setStatus({ phase: "working", message: "Intercambiando código…" });
@@ -171,9 +193,21 @@ export default function AuthCallback() {
         setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
 
         // Redirección final
-        navigate(target === "tracker" || trackerHost ? "/tracker-gps" : "/inicio", { replace: true });
+        const goTracker = trackerHost || target === "tracker";
+        navigate(goTracker ? "/tracker-gps" : "/inicio", { replace: true });
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
+
+        if (looksLikeClockSkew(e)) {
+          setStatus({
+            phase: "error",
+            message: "El reloj del dispositivo está desfasado.",
+            details:
+              "Activa 'Fecha y hora automáticas' y 'Zona horaria automática' y vuelve a abrir un Magic Link NUEVO.",
+          });
+          return;
+        }
+
         setStatus({
           phase: "error",
           message: "Ocurrió un problema.",
