@@ -1,160 +1,132 @@
 // src/pages/Inicio.jsx
-import React from "react";
+import React, { useMemo } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-
-function InfoPill({ label, value }) {
-  if (!value) return null;
-  return (
-    <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-600 mr-2">
-      <span className="font-semibold">{label}</span>
-      <span className="font-mono text-[11px] truncate max-w-[160px]">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function StarterCard({ badge, title, body, cta, onCta, disabled, disabledText }) {
-  return (
-    <div className="flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow p-4">
-      <div className="text-[10px] uppercase tracking-wide text-emerald-600 font-semibold mb-1">
-        {badge}
-      </div>
-
-      <h3 className="text-sm font-semibold text-slate-900 mb-1">{title}</h3>
-      <p className="text-xs text-slate-600 flex-1 mb-3">{body}</p>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className={
-            disabled
-              ? "self-start inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500 cursor-not-allowed"
-              : "self-start inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100"
-          }
-          onClick={disabled ? undefined : onCta}
-          aria-disabled={disabled ? "true" : "false"}
-          title={disabled ? disabledText : undefined}
-        >
-          {cta}
-        </button>
-
-        {disabled ? (
-          <span className="text-[11px] text-slate-400">
-            {disabledText}
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
 
 export default function Inicio() {
-  const { user, currentOrg, currentRole } = useAuth();
-  const { t } = useTranslation();
-  const navigate = useNavigate();
+  const {
+    authReady,
+    user,
+    currentOrg,
+    currentRole, // si existe (fix en AuthContext)
+    bestRole, // fallback
+    roles,
+    orgs,
+    trackerDomain,
+  } = useAuth();
 
-  const roleLabel = (() => {
-    const r = (currentRole || "").toLowerCase();
-    if (r === "owner") return t("app.header.roleOwner");
-    if (r === "admin") return t("app.header.roleAdmin");
-    if (r === "tracker") return t("app.header.roleTracker");
-    return currentRole || "—";
-  })();
+  // 1) Evita estados intermedios que dejan la UI colgada
+  if (!authReady) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
+        Resolviendo permisos…
+      </div>
+    );
+  }
 
-  // Rutas de ayuda (YA ACTIVAS)
-  const helpRoutes = {
-    instructions: "/help/instructions",
-    faq: "/help/faq",
-    soporte: "/help/support",
-    novedades: "/help/changelog",
-  };
+  // 2) Si no hay usuario (debería estar protegido por AuthGuard, pero lo blindamos)
+  if (!user) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
+        Inicia sesión para continuar.
+      </div>
+    );
+  }
+
+  // 3) Rol robusto: currentRole (si existe) -> bestRole -> vacío
+  const roleLower = String(currentRole || bestRole || "").toLowerCase().trim();
+
+  // 4) Si por alguna carrera todavía no hay rol, mostramos loader en vez de pantalla blanca
+  if (!roleLower) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
+        Resolviendo permisos…
+      </div>
+    );
+  }
+
+  // 5) Si no hay org todavía, también loader (y muestra hints)
+  if (!currentOrg) {
+    const orgCount = Array.isArray(orgs) ? orgs.length : 0;
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-600 px-4 text-center gap-3">
+        <div className="text-slate-500">Preparando organización…</div>
+        <div className="text-sm text-slate-500">
+          {orgCount === 0
+            ? "Tu usuario aún no tiene una organización asignada."
+            : "Seleccionando organización activa…"}
+        </div>
+      </div>
+    );
+  }
+
+  // 6) Render del panel de inicio (simple y seguro)
+  const email = user?.email || "";
+  const orgName = currentOrg?.name || currentOrg?.org_name || currentOrg?.id || "";
+
+  const roleLabel = useMemo(() => {
+    if (roleLower === "owner") return "Owner";
+    if (roleLower === "admin") return "Admin";
+    if (roleLower === "viewer") return "Viewer";
+    if (roleLower === "tracker") return "Tracker";
+    return roleLower || "—";
+  }, [roleLower]);
+
+  const rolesCount = Array.isArray(roles) ? roles.length : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Encabezado */}
-      <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+        <h2 className="text-xl font-semibold text-slate-900">Inicio</h2>
+        <p className="text-slate-600 mt-1">
+          Bienvenido{email ? `, ${email}` : ""}.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              Organización activa
+            </div>
+            <div className="text-slate-900 font-medium mt-1">{orgName}</div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              Rol
+            </div>
+            <div className="text-slate-900 font-medium mt-1">{roleLabel}</div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              Contexto
+            </div>
+            <div className="text-slate-900 font-medium mt-1">
+              {trackerDomain ? "Tracker domain" : "Panel domain"}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">
+              Roles detectados: {rolesCount}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-900">Estado</h3>
+        <div className="mt-2 text-sm text-slate-600 space-y-1">
           <div>
-            <div className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700 mb-2">
-              {t("inicio.header.badge")}
-            </div>
-            <h1 className="text-xl md:text-2xl font-bold text-slate-900 mb-1">
-              {t("inicio.header.title")}
-            </h1>
-            <p className="text-sm text-slate-600 max-w-xl">
-              {t("inicio.header.subtitle")}
-            </p>
+            <span className="text-slate-500">authReady:</span>{" "}
+            {String(authReady)}
           </div>
-
-          {/* Info usuario */}
-          <div className="bg-slate-50 rounded-xl border border-slate-200 px-3 py-2 text-[11px] text-slate-600 max-w-xs">
-            <div className="font-semibold mb-1">
-              {t("inicio.userInfo.connectedAs")}{" "}
-              <span className="text-slate-900">
-                {user?.email || user?.id}
-              </span>
-            </div>
-            <div className="mb-1">
-              {t("inicio.userInfo.withRole")}{" "}
-              <span className="font-semibold text-slate-900">{roleLabel}</span>
-            </div>
-            <div className="mb-1">
-              {t("inicio.userInfo.inOrg")}{" "}
-              <span className="font-semibold text-slate-900">
-                {currentOrg?.nombre || currentOrg?.name}
-              </span>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-y-1">
-              <InfoPill label="User" value={user?.id} />
-              <InfoPill label="Org" value={currentOrg?.id} />
-            </div>
+          <div>
+            <span className="text-slate-500">currentOrg.id:</span>{" "}
+            {String(currentOrg?.id || "")}
+          </div>
+          <div>
+            <span className="text-slate-500">role:</span>{" "}
+            {String(currentRole || bestRole || "")}
           </div>
         </div>
-      </section>
-
-      {/* Centro de ayuda */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-800">
-          {t("inicio.header.badge")}
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <StarterCard
-            badge={t("inicio.cards.instrucciones.badge")}
-            title={t("inicio.cards.instrucciones.title")}
-            body={t("inicio.cards.instrucciones.body")}
-            cta={t("inicio.cards.instrucciones.cta")}
-            onCta={() => navigate(helpRoutes.instructions)}
-          />
-
-          <StarterCard
-            badge={t("inicio.cards.faq.badge")}
-            title={t("inicio.cards.faq.title")}
-            body={t("inicio.cards.faq.body")}
-            cta={t("inicio.cards.faq.cta")}
-            onCta={() => navigate(helpRoutes.faq)}
-          />
-
-          <StarterCard
-            badge={t("inicio.cards.soporte.badge")}
-            title={t("inicio.cards.soporte.title")}
-            body={t("inicio.cards.soporte.body")}
-            cta={t("inicio.cards.soporte.cta")}
-            onCta={() => navigate(helpRoutes.soporte)}
-          />
-
-          <StarterCard
-            badge={t("inicio.cards.novedades.badge")}
-            title={t("inicio.cards.novedades.title")}
-            body={t("inicio.cards.novedades.body")}
-            cta={t("inicio.cards.novedades.cta")}
-            onCta={() => navigate(helpRoutes.novedades)}
-          />
-        </div>
-      </section>
+      </div>
     </div>
   );
 }
