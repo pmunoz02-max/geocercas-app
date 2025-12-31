@@ -1,3 +1,4 @@
+// src/pages/Login.tsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -10,7 +11,7 @@ type Mode = "password" | "magic";
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { session, loading } = useAuth();
+  const { session, authReady } = useAuth();
   const { t } = useTranslation();
 
   const [email, setEmail] = useState("");
@@ -21,27 +22,21 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  /* ---------------------------------------------------------
-   * 1) Si el usuario entra a /login y ya hay sesión → /inicio
-   * --------------------------------------------------------- */
+  // 1) Si ya hay sesión, ir a /inicio (panel)
   useEffect(() => {
-    if (loading) return;
+    if (!authReady) return;
     if (session?.user) {
       navigate("/inicio", { replace: true });
     }
-  }, [session, loading, navigate]);
+  }, [session, authReady, navigate]);
 
-  /* ---------------------------------------------------------
-   * 2) Reset mensajes al cambiar de URL
-   * --------------------------------------------------------- */
+  // 2) Reset mensajes al cambiar de URL
   useEffect(() => {
     setErrorMsg(null);
     setInfoMsg(null);
   }, [location.key]);
 
-  /* ---------------------------------------------------------
-   * 3) Modo desde querystring (?mode=magic)
-   * --------------------------------------------------------- */
+  // 3) Modo desde querystring (?mode=magic)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlMode = params.get("mode");
@@ -49,9 +44,7 @@ const Login: React.FC = () => {
     else if (urlMode === "password") setMode("password");
   }, [location.search]);
 
-  /* ---------------------------------------------------------
-   * 4) Errores devueltos por Supabase en hash
-   * --------------------------------------------------------- */
+  // 4) Errores devueltos por Supabase en hash
   useEffect(() => {
     const hash = location.hash || "";
     if (!hash.startsWith("#")) return;
@@ -78,9 +71,7 @@ const Login: React.FC = () => {
     setMode("magic");
   }, [location.hash, t]);
 
-  /* ---------------------------------------------------------
-   * LOGIN CON CONTRASEÑA
-   * --------------------------------------------------------- */
+  // LOGIN CON CONTRASEÑA
   const handleSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -112,9 +103,7 @@ const Login: React.FC = () => {
     }
   };
 
-  /* ---------------------------------------------------------
-   * LOGIN CON MAGIC LINK
-   * --------------------------------------------------------- */
+  // LOGIN CON MAGIC LINK (solo envía correo)
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -127,7 +116,9 @@ const Login: React.FC = () => {
 
     try {
       setLoadingAction(true);
-      const redirectTo = `${window.location.origin}/auth/callback?target=panel`;
+
+      // ✅ Opción A: callback limpio, sin target
+      const redirectTo = `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -150,7 +141,7 @@ const Login: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (!authReady) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         Cargando…
@@ -169,7 +160,7 @@ const Login: React.FC = () => {
         </div>
 
         {errorMsg && (
-          <div className="border border-red-200 bg-red-50 p-3 text-sm text-red-800 rounded-lg">
+          <div className="border border-red-200 bg-red-50 p-3 text-sm text-red-800 rounded-lg whitespace-pre-line">
             {errorMsg}
           </div>
         )}
@@ -197,10 +188,11 @@ const Login: React.FC = () => {
               className="w-full border rounded-xl p-2"
             />
             <button
+              type="submit"
               disabled={loadingAction}
               className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-500 transition disabled:opacity-50"
             >
-              Entrar
+              {loadingAction ? "Entrando…" : "Entrar"}
             </button>
           </form>
         ) : (
@@ -213,7 +205,7 @@ const Login: React.FC = () => {
               className="w-full border rounded-xl p-2"
             />
 
-            {/* 🔥 BOTÓN CTA FUERTE */}
+            {/* 🔥 CTA FUERTE */}
             <button
               type="submit"
               disabled={loadingAction}

@@ -27,7 +27,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 function parseHashTokens(hash: string) {
-  // hash viene como "#access_token=...&refresh_token=...&..."
   const raw = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
   const params = new URLSearchParams(raw);
   const access_token = params.get("access_token") || "";
@@ -58,72 +57,60 @@ export default function AuthCallback() {
         setDetail("");
 
         const searchParams = new URLSearchParams(location.search);
-        const target = (searchParams.get("target") || "").toLowerCase();
 
-        // 1) PKCE Code flow (lo normal en Magic Link moderno)
+        // PKCE (moderno): /auth/callback?code=...
         const code = searchParams.get("code") || "";
 
-        // 2) Legacy implicit flow (hash tokens)
+        // Legacy (hash tokens): /auth/callback#access_token=...&refresh_token=...
         const { access_token, refresh_token } = parseHashTokens(location.hash);
 
-        // 3) Si NO hay code ni tokens => NO podemos crear sesión
+        // Si no llega ningún dato de auth, no hay nada que hacer
         if (!code && !(access_token && refresh_token)) {
           throw new Error(
             "Falta el parámetro de autenticación (no llegó ?code=... ni #access_token=...). Revisa Redirect URLs en Supabase Auth."
           );
         }
 
-        // 4) Establecer sesión
+        // Establecer sesión
         if (code) {
           setMessage("Intercambiando código por sesión…");
-          // exchangeCodeForSession puede demorar por red; lo protegemos con timeout
           await withTimeout(
             supabase.auth.exchangeCodeForSession(code),
-            12000,
+            15000,
             "exchangeCodeForSession"
           );
         } else {
           setMessage("Aplicando tokens de sesión…");
           await withTimeout(
             supabase.auth.setSession({ access_token, refresh_token }),
-            12000,
+            15000,
             "setSession"
           );
         }
 
-        // 5) Confirmar sesión (sin llamar /user antes de tiempo)
+        // Confirmar sesión
         setMessage("Confirmando sesión…");
         const { data, error } = await withTimeout(
           supabase.auth.getSession(),
-          12000,
+          15000,
           "getSession"
         );
-
         if (error) throw error;
 
         const sess = data?.session ?? null;
         if (!sess) {
           throw new Error(
-            "No se pudo confirmar la sesión (session=null). Verifica cookies, third-party cookies, y Redirect URLs."
+            "No se pudo confirmar la sesión (session=null). Verifica cookies, dominio (www vs no-www) y Redirect URLs."
           );
         }
 
-        // 6) Redirección final
+        // Redirigir por dominio (Opción A)
         setMessage("Redirigiendo…");
-
-        // tracker domain manda a tracker-gps SIEMPRE
-        if (trackerDomain) {
-          if (!alive) return;
-          setStep("success");
-          navigate("/tracker-gps", { replace: true });
-          return;
-        }
-
-        // panel domain: target puede sugerir tracker/panel, pero aquí lo dejamos simple y seguro
         if (!alive) return;
+
         setStep("success");
 
-        if (target === "tracker") {
+        if (trackerDomain) {
           navigate("/tracker-gps", { replace: true });
         } else {
           navigate("/inicio", { replace: true });
@@ -145,11 +132,7 @@ export default function AuthCallback() {
   }, [location.search, location.hash, navigate, trackerDomain]);
 
   const goLogin = () => navigate("/login", { replace: true });
-
-  const retry = () => {
-    // Reintento limpio: recargar la misma URL
-    window.location.reload();
-  };
+  const retry = () => window.location.reload();
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
@@ -169,7 +152,9 @@ export default function AuthCallback() {
               <div className="text-sm font-semibold text-red-800">
                 Ocurrió un problema.
               </div>
-              <div className="mt-1 text-sm text-red-700">{detail}</div>
+              <div className="mt-1 text-sm text-red-700 whitespace-pre-line">
+                {detail}
+              </div>
             </div>
 
             <div className="flex gap-3">
@@ -188,11 +173,14 @@ export default function AuthCallback() {
             </div>
 
             <div className="text-xs text-slate-400">
-              Si el link llega sin <code>?code=</code>, revisa en Supabase:
-              Authentication → URL Configuration →{" "}
-              <b>Redirect URLs</b> y agrega tu callback exacto:
+              Revisa en Supabase: Authentication → URL Configuration → Redirect
+              URLs. Debe incluir:
               <br />
               <code>https://www.tugeocercas.com/auth/callback</code>
+              <br />
+              (y si usas tracker):
+              <br />
+              <code>https://tracker.tugeocercas.com/auth/callback</code>
             </div>
           </>
         )}
