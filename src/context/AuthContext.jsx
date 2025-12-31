@@ -1,22 +1,22 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
+
 import { supabase } from "@/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
 
 /**
- * AuthContext (panel-first, tracker-safe)
- * - NO se cuelga si falla memberships/roles (authReady siempre termina en true)
- * - NO requiere env vars tracker a menos que el hostname sea tracker.*
- * - currentRole viene normalizado y estable (owner/admin/viewer/tracker)
- *
- * Expone:
- * - authReady
- * - session, user
- * - roles (rows)
- * - bestRole (string)
- * - currentRole (string)  <-- alias estable para UI/guards
- * - orgs (panel)
- * - currentOrg + setCurrentOrg
- * - trackerDomain (bool)
+ * AuthContext (universal)
+ * - Panel (Project A) + Tracker (Project B) segun hostname
+ * - Mantiene session, user, roles, bestRole, currentOrg, orgs
+ * - authReady: true cuando ya intento hidratar sesion/permisos
+ * - authError: mensaje si algo falla (ej: RLS 403 app_user_roles)
  */
 
 const AuthContext = createContext(null);
@@ -43,134 +43,191 @@ function roleRank(r) {
 function computeBestRole(rows) {
   let best = null;
   for (const row of rows || []) {
-    const rr = normalizeRole(row?.role);
-    if (!rr) continue;
-    if (!best || roleRank(rr) > roleRank(best)) best = rr;
+    const r = normalizeRole(row?.role);
+    if (!r) continue;
+    if (!best || roleRank(r) > roleRank(best)) best = r;
   }
   return best;
 }
 
+function buildTrackerClient() {
+  // Acepta ambos nombres (por si tienes variaciones en Vercel)
+  const url =
+    import.meta.env.VITE_SUPABASE_TRACKER_URL ||
+    import.meta.env.VITE_TRACKER_SUPABASE_URL;
+
+  const anon =
+    import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY ||
+    import.meta.env.VITE_TRACKER_SUPABASE_ANON_KEY;
+
+  if (!url || !anon) {
+    throw new Error(
+      "Missing tracker env vars: VITE_SUPABASE_TRACKER_URL/VITE_TRACKER_SUPABASE_URL and VITE_SUPABASE_TRACKER_ANON_KEY/VITE_TRACKER_SUPABASE_ANON_KEY"
+    );
+  }
+
+  return createClient(url, anon, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false, // AuthCallback hace el exchange
+      storageKey: "sb-tugeocercas-auth-token-tracker",
+      storage: window.localStorage,
+    },
+  });
+}
+
 export function AuthProvider({ children }) {
-  const trackerDomain = useMemo(() => isTrackerHostname(window.location.hostname), []);
+  const trackerDomain = useMemo(
+    () => isTrackerHostname(window.location.hostname),
+    []
+  );
+
   const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
 
-  const [roles, setRoles] = useState([]);
-  const [bestRole, setBestRole] = useState(null);
+  const [roles, setRoles] = useState([]); // app_user_roles
+  const [bestRole, setBestRole] = useState(null); // owner/admin/viewer/tracker/null
+  const [currentRole, setCurrentRole] = useState(null); // normalizado (preferible para UI)
 
   const [orgs, setOrgs] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
 
-  // ---- Carga roles desde el PROYECTO PANEL (única fuente de verdad)
-  const loadRoles = async (userId) => {
-    if (!userId) return [];
+  // Cliente segun dominio (tracker / panel)
+  const client = useMemo(() => {
+    if (!trackerDomain) return supabase;
+    try {
+      return buildTrackerClient();
+    } catch (e) {
+      // En tracker domain: si falta env, igual no “rompemos” todo React;
+      // Dejamos error visible.
+      console.error("[AuthContext] tracker client error:", e);
+      return supabase; // fallback (solo para no crash)
+    }
+  }, [trackerDomain]);
 
-    // Ajusta el nombre de tabla/vista si en tu DB se llama distinto.
-    // En tu app venías usando algo tipo app_user_roles.
+  // -------- loaders (panel) --------
+  const loadRoles = useCallback(async (userId) => {
+    if (!userId) return [];
     const { data, error } = await supabase
       .from("app_user_roles")
       .select("org_id, role, created_at")
       .eq("user_id", userId);
 
     if (error) {
-      console.warn("[AuthContext] memberships/roles error:", error);
-      return [];
+      console.warn("[AuthContext] loadRoles error:", error);
+      throw error;
     }
     return data || [];
-  };
+  }, []);
 
-  // ---- Carga organizaciones SOLO si aplica (no trackerDomain y role no tracker)
-  const loadOrgsByIds = async (orgIds) => {
-    const ids = Array.from(new Set((orgIds || []).filter(Boolean)));
-    if (!ids.length) return [];
-
-    // Ajusta fields si tu tabla se llama distinto o no tiene "name"
-    const { data, error } = await supabase.from("organizations").select("id, name, active, created_at").in("id", ids);
+  const loadOrgs = useCallback(async (userId) => {
+    if (!userId) return [];
+    const { data, error } = await supabase
+      .from("organizations")
+      .select("id, name, active, plan, owner_id, created_at")
+      .eq("active", true)
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.warn("[AuthContext] orgs error:", error);
-      return [];
+      console.warn("[AuthContext] loadOrgs error:", error);
+      throw error;
     }
     return data || [];
-  };
+  }, []);
 
-  const resolveCurrentOrg = (rolesRows, orgRows, best) => {
+  const resolveCurrentOrg = useCallback((rolesRows, orgRows) => {
     if (!Array.isArray(orgRows) || orgRows.length === 0) return null;
-    if (best === "tracker") return null;
 
-    // prioriza org_id asociado al "bestRole"
-    const bestRows = (rolesRows || [])
-      .map((r) => ({ ...r, role: normalizeRole(r?.role) }))
-      .filter((r) => r.role === best && r.org_id);
+    const best = computeBestRole(rolesRows);
 
-    if (bestRows.length) {
-      // el más reciente primero
-      bestRows.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-      const orgId = bestRows[0].org_id;
-      const found = orgRows.find((o) => o.id === orgId);
-      if (found) return found;
+    if (best && Array.isArray(rolesRows) && rolesRows.length) {
+      // ✅ FIX: spread correcto
+      const row = rolesRows
+        .map((r) => ({ ...r, role: normalizeRole(r.role) }))
+        .filter((r) => r.role === best)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+      if (row?.org_id) {
+        const found = orgRows.find((o) => o.id === row.org_id);
+        if (found) return found;
+      }
     }
 
-    // fallback: primera org
     return orgRows[0] || null;
-  };
+  }, []);
 
-  // ---- Bootstrap + listener
+  // Bootstrap + listener
   useEffect(() => {
     let mounted = true;
 
     const bootstrap = async () => {
       setAuthReady(false);
+      setAuthError(null);
 
       try {
-        const { data } = await supabase.auth.getSession();
-        const sess = data?.session ?? null;
+        const { data: sessData } = await client.auth.getSession();
+        const sess = sessData?.session ?? null;
 
         if (!mounted) return;
 
         setSession(sess);
         setUser(sess?.user ?? null);
 
+        // No logueado
         if (!sess?.user?.id) {
-          // no logueado
           setRoles([]);
           setBestRole(null);
+          setCurrentRole(null);
           setOrgs([]);
           setCurrentOrg(null);
           return;
         }
 
-        // 1) roles
+        // Tracker domain: NO consultamos DB panel
+        if (trackerDomain) {
+          setRoles([]);
+          setBestRole("tracker");
+          setCurrentRole("tracker");
+          setOrgs([]);
+          setCurrentOrg(null);
+          return;
+        }
+
+        // Panel domain: roles + orgs
         const rolesRows = await loadRoles(sess.user.id);
         if (!mounted) return;
 
         setRoles(rolesRows);
-        const best = computeBestRole(rolesRows) || normalizeRole(sess.user.user_metadata?.role) || null;
+
+        const best = computeBestRole(rolesRows);
         setBestRole(best);
+        setCurrentRole(best); // ✅ clave: UI consume currentRole estable
 
-        // 2) orgs (solo si NO es trackerDomain y bestRole != tracker)
-        if (!trackerDomain && best !== "tracker") {
-          const orgIds = rolesRows.map((r) => r.org_id).filter(Boolean);
-          const orgRows = await loadOrgsByIds(orgIds);
-          if (!mounted) return;
+        const orgRows = await loadOrgs(sess.user.id);
+        if (!mounted) return;
 
-          setOrgs(orgRows);
-          const resolved = resolveCurrentOrg(rolesRows, orgRows, best);
-          setCurrentOrg(resolved);
-        } else {
-          setOrgs([]);
-          setCurrentOrg(null);
-        }
+        setOrgs(orgRows);
+        setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
       } catch (e) {
         console.error("[AuthContext] bootstrap error:", e);
+        if (!mounted) return;
 
-        // IMPORTANTÍSIMO: NO bloquear UI
-        setSession(null);
-        setUser(null);
+        // IMPORTANTE: authReady debe terminar en true para que Inicio NO se quede colgado
+        const msg =
+          e?.message ||
+          e?.error_description ||
+          (typeof e === "string" ? e : "Unknown auth error");
+        setAuthError(msg);
+
+        // Fail-closed pero sin loop infinito:
+        // dejamos role null y que Inicio muestre tarjeta de error
         setRoles([]);
         setBestRole(null);
+        setCurrentRole(null);
         setOrgs([]);
         setCurrentOrg(null);
       } finally {
@@ -180,17 +237,29 @@ export function AuthProvider({ children }) {
 
     bootstrap();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: sub } = client.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return;
 
       setAuthReady(false);
+      setAuthError(null);
+
       try {
-        setSession(newSession ?? null);
+        setSession(newSession);
         setUser(newSession?.user ?? null);
 
         if (!newSession?.user?.id) {
           setRoles([]);
           setBestRole(null);
+          setCurrentRole(null);
+          setOrgs([]);
+          setCurrentOrg(null);
+          return;
+        }
+
+        if (trackerDomain) {
+          setRoles([]);
+          setBestRole("tracker");
+          setCurrentRole("tracker");
           setOrgs([]);
           setCurrentOrg(null);
           return;
@@ -200,23 +269,30 @@ export function AuthProvider({ children }) {
         if (!mounted) return;
 
         setRoles(rolesRows);
-        const best = computeBestRole(rolesRows) || normalizeRole(newSession.user.user_metadata?.role) || null;
+        const best = computeBestRole(rolesRows);
         setBestRole(best);
+        setCurrentRole(best);
 
-        if (!trackerDomain && best !== "tracker") {
-          const orgIds = rolesRows.map((r) => r.org_id).filter(Boolean);
-          const orgRows = await loadOrgsByIds(orgIds);
-          if (!mounted) return;
+        const orgRows = await loadOrgs(newSession.user.id);
+        if (!mounted) return;
 
-          setOrgs(orgRows);
-          const resolved = resolveCurrentOrg(rolesRows, orgRows, best);
-          setCurrentOrg(resolved);
-        } else {
-          setOrgs([]);
-          setCurrentOrg(null);
-        }
+        setOrgs(orgRows);
+        setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
       } catch (e) {
         console.error("[AuthContext] onAuthStateChange error:", e);
+        if (!mounted) return;
+
+        const msg =
+          e?.message ||
+          e?.error_description ||
+          (typeof e === "string" ? e : "Unknown auth error");
+        setAuthError(msg);
+
+        setRoles([]);
+        setBestRole(null);
+        setCurrentRole(null);
+        setOrgs([]);
+        setCurrentOrg(null);
       } finally {
         if (mounted) setAuthReady(true);
       }
@@ -224,24 +300,44 @@ export function AuthProvider({ children }) {
 
     return () => {
       mounted = false;
-      try {
-        sub?.subscription?.unsubscribe?.();
-      } catch {}
+      sub?.subscription?.unsubscribe?.();
     };
-  }, [trackerDomain]);
+  }, [client, trackerDomain, loadRoles, loadOrgs, resolveCurrentOrg]);
 
-  // currentRole: nombre estable para UI/guards
-  const currentRole = useMemo(() => bestRole || null, [bestRole]);
+  // Debug helpers en window
+  useEffect(() => {
+    window.__debug_currentOrg = currentOrg ?? null;
+    window.__SUPABASE_AUTH_DEBUG = {
+      getSession: async () => {
+        const { data } = await client.auth.getSession();
+        return data?.session ?? null;
+      },
+      getUser: async () => {
+        const { data } = await client.auth.getUser();
+        return data?.user ?? null;
+      },
+      getOrg: () => currentOrg ?? null,
+      getRole: () => currentRole ?? bestRole ?? null,
+      getReady: () => !!authReady,
+      isTrackerDomain: () => !!trackerDomain,
+      getError: () => authError ?? null,
+    };
+  }, [authReady, authError, bestRole, client, currentOrg, currentRole, trackerDomain]);
+
+  const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
 
   const value = useMemo(
     () => ({
       authReady,
+      authError,
+
       session,
       user,
 
       roles,
       bestRole,
       currentRole,
+      isRootOwner,
 
       orgs,
       currentOrg,
@@ -249,7 +345,19 @@ export function AuthProvider({ children }) {
 
       trackerDomain,
     }),
-    [authReady, session, user, roles, bestRole, currentRole, orgs, currentOrg, trackerDomain]
+    [
+      authReady,
+      authError,
+      session,
+      user,
+      roles,
+      bestRole,
+      currentRole,
+      isRootOwner,
+      orgs,
+      currentOrg,
+      trackerDomain,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
