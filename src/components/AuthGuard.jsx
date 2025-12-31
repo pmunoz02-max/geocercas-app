@@ -4,41 +4,35 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
 /**
- * AuthGuard universal y permanente.
+ * AuthGuard universal (alineado a AuthContext actual)
  *
- * PRINCIPIO CRÍTICO:
- * - /auth/callback NUNCA debe ser bloqueado
- * - ningún redirect a /login antes de que AuthCallback termine
+ * REGLAS CRÍTICAS:
+ * 1) /auth/callback NUNCA se bloquea
+ * 2) No se decide nada hasta authReady === true
+ * 3) Sin sesión => /login
+ * 4) trackerDomain => solo permite /tracker-gps (y rutas públicas)
+ * 5) panelDomain:
+ *    - tracker solo permite /tracker-gps
+ *    - panel roles (owner/admin/viewer) NO permiten /tracker-gps
  *
- * Reglas base:
- * 1) /auth/callback => PASA SIEMPRE
- * 2) loading => loader visible (nunca null)
- * 3) sin sesión => /login
- * 4) role === tracker:
- *    - solo permite /tracker-gps
- * 5) role !== tracker:
- *    - nunca permite /tracker-gps
- *
- * Reglas extra por mode (si se pasa):
- * - mode="tracker": solo permite /tracker-gps
- * - mode="panel":  nunca permite /tracker-gps
+ * mode:
+ * - mode="tracker": fuerza /tracker-gps
+ * - mode="panel":   fuerza /inicio (y bloquea /tracker-gps)
  */
 export default function AuthGuard({ children, mode }) {
-  const { session, loading, role } = useAuth();
+  const { authReady, session, currentRole, trackerDomain } = useAuth();
   const location = useLocation();
   const path = location?.pathname || "/";
 
-  // 🔓 REGLA CRÍTICA: AuthCallback jamás se bloquea
-  if (path === "/auth/callback") {
-    return <>{children}</>;
-  }
+  // 🔓 NUNCA bloquear callback
+  if (path === "/auth/callback") return <>{children}</>;
 
-  // 1) Espera explícita (evita decisiones prematuras)
-  if (loading) {
+  // 1) Espera explícita y única (evita decisiones prematuras)
+  if (!authReady) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          Cargando permisos…
+          Validando sesión…
         </div>
       </div>
     );
@@ -49,8 +43,9 @@ export default function AuthGuard({ children, mode }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  const roleLower = String(role || "").toLowerCase().trim();
-  const isTracker = roleLower === "tracker";
+  const roleLower = String(currentRole || "").toLowerCase().trim();
+  const isTrackerRole = roleLower === "tracker";
+
   const isTrackerPath =
     path === "/tracker-gps" || path.startsWith("/tracker-gps/");
 
@@ -60,22 +55,26 @@ export default function AuthGuard({ children, mode }) {
   if (modeLower === "tracker" && !isTrackerPath) {
     return <Navigate to="/tracker-gps" replace />;
   }
-
   if (modeLower === "panel" && isTrackerPath) {
     return <Navigate to="/inicio" replace />;
   }
 
-  // B) Reglas base por rol (canon)
-  // 3) TRACKER: solo puede estar en /tracker-gps
-  if (isTracker && !isTrackerPath) {
+  // B) Reglas por dominio
+  // En trackerDomain: forzar tracker-gps
+  if (trackerDomain && !isTrackerPath) {
     return <Navigate to="/tracker-gps" replace />;
   }
 
-  // 4) NO TRACKER: nunca puede estar en /tracker-gps
-  if (!isTracker && isTrackerPath) {
+  // C) Reglas por rol
+  // Tracker role solo puede estar en /tracker-gps
+  if (isTrackerRole && !isTrackerPath) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
+
+  // No-tracker role nunca puede estar en /tracker-gps
+  if (!isTrackerRole && isTrackerPath) {
     return <Navigate to="/inicio" replace />;
   }
 
-  // 5) OK
   return <>{children}</>;
 }
