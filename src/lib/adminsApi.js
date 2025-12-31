@@ -1,10 +1,6 @@
 // src/lib/adminsApi.js
 // =======================================================
 // API para módulo Administrador / Invitaciones
-// - RPCs: admins_list, admins_remove (root-only por backend)
-// - Edge Functions:
-//      • invite_admin   (ADMIN / OWNER)
-//      • invite_tracker (TRACKER)
 // =======================================================
 
 import { supabase } from "../supabaseClient";
@@ -12,53 +8,56 @@ import { supabase } from "../supabaseClient";
 /* ===========================
    Helpers
 =========================== */
-async function getAccessTokenOrThrow() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw new Error(`No se pudo leer la sesión: ${error.message}`);
-
-  const token = data?.session?.access_token;
-  if (!token) throw new Error("Sesión no disponible. Inicia sesión nuevamente.");
-  return token;
-}
 
 /**
- * Invocador genérico de Edge Functions con manejo de errores
+ * Invocador seguro de Edge Functions
+ * - NO lanza excepciones
+ * - Devuelve { data, error }
+ * - Error incluye status + payload si existe
  */
 async function invokeEdgeFunction(fnName, body) {
-  const token = await getAccessTokenOrThrow();
-
-  const { data, error } = await supabase.functions.invoke(fnName, {
-    body,
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!error) return { data, error: null };
-
-  // Intentar leer payload detallado
-  let payload = null;
   try {
-    const resp = error?.context?.response;
-    if (resp) {
-      try {
-        payload = await resp.clone().json();
-      } catch {
-        payload = await resp.clone().text();
-      }
+    const { data, error } = await supabase.functions.invoke(fnName, {
+      body,
+    });
+
+    if (!error) {
+      return { data, error: null };
     }
-  } catch {
-    payload = null;
+
+    // Intentar leer respuesta detallada del backend
+    let payload = null;
+    try {
+      const resp = error?.context?.response;
+      if (resp) {
+        try {
+          payload = await resp.clone().json();
+        } catch {
+          payload = await resp.clone().text();
+        }
+      }
+    } catch {
+      payload = null;
+    }
+
+    const e = new Error(
+      payload?.error ||
+        payload?.message ||
+        error.message ||
+        `${fnName} falló`
+    );
+
+    e.status = error.status || 500;
+    e.payload = payload;
+
+    return { data: null, error: e };
+  } catch (e) {
+    // Errores JS puros (network, runtime, etc.)
+    return {
+      data: null,
+      error: new Error(`No se pudo invocar ${fnName}: ${e.message}`),
+    };
   }
-
-  const e = new Error(
-    payload?.error ||
-      payload?.message ||
-      error.message ||
-      `${fnName} falló`
-  );
-  e.payload = payload;
-  e.status = error.status;
-
-  return { data: null, error: e };
 }
 
 /* ===========================
@@ -67,17 +66,20 @@ async function invokeEdgeFunction(fnName, body) {
 
 /**
  * Lista administradores/owners de una organización.
- * Root-only se valida en el backend.
  */
 export async function listAdmins(orgId) {
-  if (!orgId) return { data: null, error: new Error("orgId requerido") };
+  if (!orgId) {
+    return { data: null, error: new Error("orgId requerido") };
+  }
 
-  const { data, error } = await supabase.rpc("admins_list", { p_org_id: orgId });
+  const { data, error } = await supabase.rpc("admins_list", {
+    p_org_id: orgId,
+  });
+
   if (error) return { data: null, error };
 
-  const rows = Array.isArray(data) ? data : [];
   return {
-    data: rows.map((r) => ({
+    data: (Array.isArray(data) ? data : []).map((r) => ({
       user_id: r.user_id,
       email: r.email,
       role: r.role,
@@ -90,8 +92,9 @@ export async function listAdmins(orgId) {
  * Elimina un admin de la organización.
  */
 export async function deleteAdmin(orgId, userId) {
-  if (!orgId || !userId)
+  if (!orgId || !userId) {
     return { error: new Error("orgId y userId requeridos") };
+  }
 
   const { data, error } = await supabase.rpc("admins_remove", {
     p_org_id: orgId,
@@ -100,7 +103,7 @@ export async function deleteAdmin(orgId, userId) {
 
   if (error) return { error };
 
-  if (data && data.ok === false) {
+  if (data?.ok === false) {
     return { error: new Error(data.error || "No se pudo eliminar el admin") };
   }
 
@@ -139,7 +142,7 @@ export async function inviteIndependentOwner({ email } = {}) {
 }
 
 /**
- * Invita un TRACKER (usa Edge Function separada).
+ * Invita un TRACKER (Edge Function separada).
  */
 export async function inviteTracker(orgId, { email } = {}) {
   if (!orgId) return { data: null, error: new Error("orgId requerido") };
