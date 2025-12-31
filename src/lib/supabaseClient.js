@@ -1,17 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+// src/lib/supabaseClient.js
+// Re-export del Supabase client único del panel.
+// Objetivo: que TODO /src/lib use la MISMA sesión del panel.
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Faltan variables de entorno Supabase");
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: window.localStorage,
-  },
-});
+export { supabase } from "../supabaseClient";

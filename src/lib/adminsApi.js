@@ -18,48 +18,10 @@ function normalizeRole(role) {
   return r === "admin" ? "admin" : "owner";
 }
 
-/**
- * Espera una sesión disponible (para evitar "access_token vacío" al inicio).
- * - NO usa timers largos; solo espera eventos de auth brevemente.
- */
-async function waitForSession() {
-  // 1) intento inmediato
-  const first = await supabase.auth.getSession();
-  const token1 = first?.data?.session?.access_token || null;
-  if (token1) return token1;
-
-  // 2) espera a que auth emita evento (si está cargando en background)
-  return await new Promise((resolve) => {
-    let done = false;
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (done) return;
-      const tok = session?.access_token || null;
-      if (tok) {
-        done = true;
-        sub?.subscription?.unsubscribe?.();
-        resolve(tok);
-      }
-    });
-
-    // 3) fallback: microtask loop (sin bloquear UI)
-    // Si nunca llega sesión, resolvemos null (y UI mostrará error)
-    queueMicrotask(async () => {
-      if (done) return;
-      const again = await supabase.auth.getSession();
-      const tok2 = again?.data?.session?.access_token || null;
-      if (tok2) {
-        done = true;
-        sub?.subscription?.unsubscribe?.();
-        resolve(tok2);
-      } else {
-        // sin token
-        done = true;
-        sub?.subscription?.unsubscribe?.();
-        resolve(null);
-      }
-    });
-  });
+async function getAccessToken() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) return null;
+  return data?.session?.access_token || null;
 }
 
 /**
@@ -69,13 +31,13 @@ async function waitForSession() {
  */
 async function invokeEdgeFunction(fnName, body) {
   try {
-    const token = await waitForSession();
+    const token = await getAccessToken();
 
     if (!token) {
       return {
         data: null,
         error: new Error(
-          "No hay sesión activa (access_token vacío). Re-carga la página o vuelve a iniciar sesión."
+          "No hay sesión activa (access_token vacío). Recarga la página o vuelve a iniciar sesión."
         ),
       };
     }
@@ -173,7 +135,7 @@ export async function inviteAdmin(orgId, { email, role } = {}) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail) return { data: null, error: new Error("Email requerido") };
 
-  // Esta acción es “invitar admin a la org actual”
+  // Acción: invitar admin a la org actual
   const normalizedRole = normalizeRole(role || "admin");
   const finalRole = normalizedRole === "admin" ? "admin" : "admin";
 
