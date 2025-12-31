@@ -12,15 +12,16 @@ import { supabase } from "@/supabaseClient";
 /**
  * AuthContext UNIVERSAL (Panel + Tracker)
  *
- * REGLA:
+ * REGLAS:
  * - Un solo Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)
  * - trackerDomain solo cambia UX/rutas. NO usa otro proyecto/cliente.
  *
- * Garantías:
- * - authReady SIEMPRE termina en true (no cuelga UI)
+ * GARANTÍAS:
  * - Nunca hace throw por variables tracker
+ * - authReady SIEMPRE termina en true (no cuelga UI)
+ * - NO “mata” la sesión por timeouts de roles/orgs
  *
- * Compatibilidad legacy:
+ * COMPATIBILIDAD legacy:
  * - loading = !authReady
  * - role = currentRole
  */
@@ -56,6 +57,7 @@ function computeBestRole(rows) {
   return best;
 }
 
+// Timeout SOLO para queries (roles/orgs). NUNCA para getSession (no destructivo).
 function withTimeout(promise, ms, label) {
   return Promise.race([
     promise,
@@ -86,9 +88,8 @@ export function AuthProvider({ children }) {
   const [orgs, setOrgs] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
 
-  const resetAuthState = useCallback(() => {
-    setSession(null);
-    setUser(null);
+  const resetNonSessionState = useCallback(() => {
+    // ⚠️ OJO: no tocamos session/user aquí
     setRoles([]);
     setBestRole(null);
     setCurrentRole(null);
@@ -96,9 +97,18 @@ export function AuthProvider({ children }) {
     setCurrentOrg(null);
   }, []);
 
+  const resetAllAuthState = useCallback(() => {
+    setSession(null);
+    setUser(null);
+    resetNonSessionState();
+  }, [resetNonSessionState]);
+
   const loadRoles = useCallback(
     async (userId) => {
       if (!userId) return [];
+
+      // ⚠️ Importante: si por RLS aún no hay fila/permiso, puede fallar.
+      // NO debe tumbar la sesión.
       const q = client
         .from("app_user_roles")
         .select("org_id, role, created_at")
@@ -127,6 +137,7 @@ export function AuthProvider({ children }) {
     if (!Array.isArray(orgRows) || orgRows.length === 0) return null;
 
     const best = computeBestRole(rolesRows);
+
     if (best && Array.isArray(rolesRows) && rolesRows.length) {
       const row = rolesRows
         .map((r) => ({ ...r, role: normalizeRole(r.role) }))
@@ -142,6 +153,65 @@ export function AuthProvider({ children }) {
     return orgRows[0] || null;
   }, []);
 
+  const applyTrackerDefaults = useCallback(() => {
+    setRoles([]);
+    setBestRole("tracker");
+    setCurrentRole("tracker");
+    setOrgs([]);
+    setCurrentOrg(null);
+  }, []);
+
+  const hydrateNonSessionData = useCallback(
+    async (sess) => {
+      // Esta función NO debe romper la sesión si roles/orgs fallan.
+      if (!sess?.user?.id) {
+        resetNonSessionState();
+        return;
+      }
+
+      if (trackerDomain) {
+        applyTrackerDefaults();
+        return;
+      }
+
+      // 1) Roles (no destructivo)
+      let rolesRows = [];
+      try {
+        rolesRows = await loadRoles(sess.user.id);
+        setRoles(rolesRows);
+
+        const best = computeBestRole(rolesRows);
+        setBestRole(best);
+        setCurrentRole(best);
+      } catch (e) {
+        console.warn("[AuthContext] roles not ready:", e);
+        // Mantener sesión, pero sin roles aún
+        setRoles([]);
+        setBestRole(null);
+        setCurrentRole(null);
+      }
+
+      // 2) Orgs (no destructivo)
+      try {
+        const orgRows = await loadOrgs();
+        setOrgs(orgRows);
+        setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
+      } catch (e) {
+        console.warn("[AuthContext] orgs not ready:", e);
+        setOrgs([]);
+        setCurrentOrg(null);
+      }
+    },
+    [
+      trackerDomain,
+      applyTrackerDefaults,
+      loadRoles,
+      loadOrgs,
+      resolveCurrentOrg,
+      resetNonSessionState,
+    ]
+  );
+
   useEffect(() => {
     let mounted = true;
 
@@ -150,50 +220,31 @@ export function AuthProvider({ children }) {
       setAuthError(null);
 
       try {
-        const sessResp = await withTimeout(
-          client.auth.getSession(),
-          12000,
-          "getSession"
-        );
-        const sess = sessResp?.data?.session ?? null;
+        // ✅ SIN timeout: getSession puede tardar (storage/cookies). No debe tumbar la UI.
+        const { data, error } = await client.auth.getSession();
+        if (error) throw error;
+
+        const sess = data?.session ?? null;
 
         if (!mounted) return;
         setSession(sess);
         setUser(sess?.user ?? null);
 
         if (!sess?.user?.id) {
-          resetAuthState();
+          resetAllAuthState();
           return;
         }
 
-        // trackerDomain: no consultamos roles/orgs de panel
-        if (trackerDomain) {
-          setRoles([]);
-          setBestRole("tracker");
-          setCurrentRole("tracker");
-          setOrgs([]);
-          setCurrentOrg(null);
-          return;
-        }
-
-        const rolesRows = await loadRoles(sess.user.id);
-        if (!mounted) return;
-
-        setRoles(rolesRows);
-        const best = computeBestRole(rolesRows);
-        setBestRole(best);
-        setCurrentRole(best);
-
-        const orgRows = await loadOrgs();
-        if (!mounted) return;
-
-        setOrgs(orgRows);
-        setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
+        // Cargar roles/orgs (no destructivo)
+        await hydrateNonSessionData(sess);
       } catch (e) {
         console.error("[AuthContext] bootstrap error:", e);
         if (!mounted) return;
+
+        // Si falla bootstrap (por red, etc.), NO inventamos sesión.
+        // Dejamos error visible y estado limpio.
         setAuthError(e?.message || "Auth bootstrap error");
-        resetAuthState();
+        resetAllAuthState();
       } finally {
         if (mounted) setAuthReady(true);
       }
@@ -213,37 +264,21 @@ export function AuthProvider({ children }) {
           setUser(newSession?.user ?? null);
 
           if (!newSession?.user?.id) {
-            resetAuthState();
+            resetAllAuthState();
             return;
           }
 
-          if (trackerDomain) {
-            setRoles([]);
-            setBestRole("tracker");
-            setCurrentRole("tracker");
-            setOrgs([]);
-            setCurrentOrg(null);
-            return;
-          }
-
-          const rolesRows = await loadRoles(newSession.user.id);
-          if (!mounted) return;
-
-          setRoles(rolesRows);
-          const best = computeBestRole(rolesRows);
-          setBestRole(best);
-          setCurrentRole(best);
-
-          const orgRows = await loadOrgs();
-          if (!mounted) return;
-
-          setOrgs(orgRows);
-          setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
+          await hydrateNonSessionData(newSession);
         } catch (e) {
           console.error("[AuthContext] onAuthStateChange error:", e);
           if (!mounted) return;
+
+          // ⚠️ No matamos sesión por fallos de roles/orgs aquí.
+          // Solo registramos el error y dejamos sesión viva.
           setAuthError(e?.message || "Auth state change error");
-          resetAuthState();
+
+          // Mantener session/user, limpiar solo roles/orgs para evitar loops de guard
+          resetNonSessionState();
         } finally {
           if (mounted) setAuthReady(true);
         }
@@ -254,9 +289,9 @@ export function AuthProvider({ children }) {
       mounted = false;
       sub?.subscription?.unsubscribe?.();
     };
-  }, [client, trackerDomain, loadRoles, loadOrgs, resolveCurrentOrg, resetAuthState]);
+  }, [client, hydrateNonSessionData, resetAllAuthState, resetNonSessionState]);
 
-  // Debug
+  // Debug útil en consola: window.__SUPABASE_AUTH_DEBUG.getReady()
   useEffect(() => {
     window.__SUPABASE_AUTH_DEBUG = {
       getReady: () => !!authReady,
@@ -264,8 +299,10 @@ export function AuthProvider({ children }) {
       isTrackerDomain: () => !!trackerDomain,
       getRole: () => currentRole ?? bestRole ?? null,
       getOrg: () => currentOrg ?? null,
+      getUser: () => user ?? null,
+      getSession: () => session ?? null,
     };
-  }, [authReady, authError, trackerDomain, currentRole, bestRole, currentOrg]);
+  }, [authReady, authError, trackerDomain, currentRole, bestRole, currentOrg, user, session]);
 
   const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
 
