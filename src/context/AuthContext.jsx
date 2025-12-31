@@ -7,22 +7,18 @@ import React, {
   useState,
   useCallback,
 } from "react";
-
 import { supabase } from "@/supabaseClient";
 
 /**
  * AuthContext UNIVERSAL (Panel + Tracker)
  *
- * PRINCIPIO CLAVE:
- * - Un solo proyecto Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)
- * - trackerDomain SOLO define experiencia/routing, NO otro Supabase client.
+ * REGLA:
+ * - Un solo Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)
+ * - trackerDomain solo cambia UX/rutas. NO usa otro proyecto/cliente.
  *
- * Expuesto:
- * - authReady, authError
- * - session, user
- * - roles, bestRole, currentRole
- * - orgs, currentOrg
- * - trackerDomain
+ * Garantías:
+ * - authReady SIEMPRE termina en true (no cuelga UI)
+ * - Nunca hace throw por variables tracker
  *
  * Compatibilidad legacy:
  * - loading = !authReady
@@ -75,7 +71,7 @@ export function AuthProvider({ children }) {
     []
   );
 
-  const client = supabase; // ✅ SIEMPRE el mismo cliente
+  const client = supabase; // ✅ siempre el mismo cliente
 
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState(null);
@@ -93,16 +89,13 @@ export function AuthProvider({ children }) {
   const resetAuthState = useCallback(() => {
     setSession(null);
     setUser(null);
-
     setRoles([]);
     setBestRole(null);
     setCurrentRole(null);
-
     setOrgs([]);
     setCurrentOrg(null);
   }, []);
 
-  // Carga roles (solo panel; en trackerDomain no hace falta)
   const loadRoles = useCallback(
     async (userId) => {
       if (!userId) return [];
@@ -118,27 +111,22 @@ export function AuthProvider({ children }) {
     [client]
   );
 
-  // Carga orgs (solo panel)
-  const loadOrgs = useCallback(
-    async () => {
-      const q = client
-        .from("organizations")
-        .select("id, name, active, plan, owner_id, created_at")
-        .eq("active", true)
-        .order("created_at", { ascending: false });
+  const loadOrgs = useCallback(async () => {
+    const q = client
+      .from("organizations")
+      .select("id, name, active, plan, owner_id, created_at")
+      .eq("active", true)
+      .order("created_at", { ascending: false });
 
-      const { data, error } = await withTimeout(q, 12000, "loadOrgs");
-      if (error) throw error;
-      return data || [];
-    },
-    [client]
-  );
+    const { data, error } = await withTimeout(q, 12000, "loadOrgs");
+    if (error) throw error;
+    return data || [];
+  }, [client]);
 
   const resolveCurrentOrg = useCallback((rolesRows, orgRows) => {
     if (!Array.isArray(orgRows) || orgRows.length === 0) return null;
 
     const best = computeBestRole(rolesRows);
-
     if (best && Array.isArray(rolesRows) && rolesRows.length) {
       const row = rolesRows
         .map((r) => ({ ...r, role: normalizeRole(r.role) }))
@@ -154,7 +142,6 @@ export function AuthProvider({ children }) {
     return orgRows[0] || null;
   }, []);
 
-  // Bootstrap
   useEffect(() => {
     let mounted = true;
 
@@ -168,20 +155,18 @@ export function AuthProvider({ children }) {
           12000,
           "getSession"
         );
-
         const sess = sessResp?.data?.session ?? null;
-        if (!mounted) return;
 
+        if (!mounted) return;
         setSession(sess);
         setUser(sess?.user ?? null);
 
-        // No logueado
         if (!sess?.user?.id) {
           resetAuthState();
           return;
         }
 
-        // Tracker domain: no consultamos tablas panel (roles/orgs)
+        // trackerDomain: no consultamos roles/orgs de panel
         if (trackerDomain) {
           setRoles([]);
           setBestRole("tracker");
@@ -191,7 +176,6 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        // Panel domain
         const rolesRows = await loadRoles(sess.user.id);
         if (!mounted) return;
 
@@ -208,13 +192,7 @@ export function AuthProvider({ children }) {
       } catch (e) {
         console.error("[AuthContext] bootstrap error:", e);
         if (!mounted) return;
-
-        const msg =
-          e?.message ||
-          e?.error_description ||
-          (typeof e === "string" ? e : "Unknown auth error");
-
-        setAuthError(msg);
+        setAuthError(e?.message || "Auth bootstrap error");
         resetAuthState();
       } finally {
         if (mounted) setAuthReady(true);
@@ -264,13 +242,7 @@ export function AuthProvider({ children }) {
         } catch (e) {
           console.error("[AuthContext] onAuthStateChange error:", e);
           if (!mounted) return;
-
-          const msg =
-            e?.message ||
-            e?.error_description ||
-            (typeof e === "string" ? e : "Unknown auth error");
-
-          setAuthError(msg);
+          setAuthError(e?.message || "Auth state change error");
           resetAuthState();
         } finally {
           if (mounted) setAuthReady(true);
@@ -286,27 +258,18 @@ export function AuthProvider({ children }) {
 
   // Debug
   useEffect(() => {
-    window.__debug_currentOrg = currentOrg ?? null;
     window.__SUPABASE_AUTH_DEBUG = {
-      getSession: async () => {
-        const { data } = await client.auth.getSession();
-        return data?.session ?? null;
-      },
-      getUser: async () => {
-        const { data } = await client.auth.getUser();
-        return data?.user ?? null;
-      },
-      getOrg: () => currentOrg ?? null,
-      getRole: () => currentRole ?? bestRole ?? null,
       getReady: () => !!authReady,
-      isTrackerDomain: () => !!trackerDomain,
       getError: () => authError ?? null,
+      isTrackerDomain: () => !!trackerDomain,
+      getRole: () => currentRole ?? bestRole ?? null,
+      getOrg: () => currentOrg ?? null,
     };
-  }, [authReady, authError, bestRole, client, currentOrg, currentRole, trackerDomain]);
+  }, [authReady, authError, trackerDomain, currentRole, bestRole, currentOrg]);
 
   const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
 
-  // Compatibilidad legacy
+  // legacy
   const loading = !authReady;
   const role = currentRole;
 
@@ -314,22 +277,16 @@ export function AuthProvider({ children }) {
     () => ({
       authReady,
       authError,
-
       session,
       user,
-
       roles,
       bestRole,
       currentRole,
       isRootOwner,
-
       orgs,
       currentOrg,
       setCurrentOrg,
-
       trackerDomain,
-
-      // legacy
       loading,
       role,
     }),
