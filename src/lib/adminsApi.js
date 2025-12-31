@@ -19,17 +19,40 @@ function normalizeRole(role) {
 }
 
 /**
+ * Obtiene el access_token actual (si hay sesión).
+ */
+async function getAccessToken() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) return null;
+  return data?.session?.access_token || null;
+}
+
+/**
  * Invocador seguro de Edge Functions
+ * - Inyecta Authorization explícitamente (FIX 401)
  * - NO lanza excepciones (devuelve { data, error })
- * - Error incluye status + payload si existe
  */
 async function invokeEdgeFunction(fnName, body) {
   try {
-    const { data, error } = await supabase.functions.invoke(fnName, { body });
+    const token = await getAccessToken();
+
+    if (!token) {
+      return {
+        data: null,
+        error: new Error("No hay sesión activa (access_token vacío)."),
+      };
+    }
+
+    const { data, error } = await supabase.functions.invoke(fnName, {
+      body,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
     if (!error) return { data, error: null };
 
-    // Intentar leer respuesta detallada del backend
+    // Intentar extraer respuesta detallada del backend
     let payload = null;
     try {
       const resp = error?.context?.response;
@@ -63,61 +86,14 @@ async function invokeEdgeFunction(fnName, body) {
   }
 }
 
-/**
- * RPC universal con fallback de firma:
- * - Primero intenta args "canon" (p_org_id / p_user_id)
- * - Si PostgREST responde 400 por firma/param, reintenta con (org_id / user_id)
- *
- * Devuelve { data, error }
- */
-async function invokeRpcWithFallback(rpcName, variants) {
-  let lastError = null;
-
-  for (const args of variants) {
-    const { data, error } = await supabase.rpc(rpcName, args);
-
-    if (!error) return { data, error: null };
-
-    // Guardamos el error y probamos el siguiente set de args
-    lastError = error;
-
-    // Si el error NO es por firma/param, no tiene sentido reintentar
-    // PostgREST suele usar 400 para firma; supabase-js lo pone en error.
-    const msg = String(error.message || "");
-    const looksLikeSignature =
-      msg.toLowerCase().includes("could not find the function") ||
-      msg.toLowerCase().includes("function") && msg.toLowerCase().includes("does not exist") ||
-      msg.toLowerCase().includes("invalid input syntax") ||
-      msg.toLowerCase().includes("schema cache") ||
-      msg.toLowerCase().includes("pgrst");
-
-    if (!looksLikeSignature) {
-      return { data: null, error };
-    }
-  }
-
-  return { data: null, error: lastError || new Error(`RPC ${rpcName} falló`) };
-}
-
 /* ===========================
    Admins (RPCs)
 =========================== */
 
-/**
- * Lista administradores/owners de una organización.
- * Soporta firmas típicas:
- *  - admins_list(p_org_id uuid)
- *  - admins_list(org_id uuid)
- */
 export async function listAdmins(orgId) {
   if (!orgId) return { data: null, error: new Error("orgId requerido") };
 
-  const { data, error } = await invokeRpcWithFallback("admins_list", [
-    { p_org_id: orgId },
-    { org_id: orgId },
-    { p_org: orgId },
-  ]);
-
+  const { data, error } = await supabase.rpc("admins_list", { p_org_id: orgId });
   if (error) return { data: null, error };
 
   const rows = Array.isArray(data) ? data : [];
@@ -131,26 +107,18 @@ export async function listAdmins(orgId) {
   };
 }
 
-/**
- * Elimina un admin de la organización.
- * Soporta firmas típicas:
- *  - admins_remove(p_org_id uuid, p_user_id uuid)
- *  - admins_remove(org_id uuid, user_id uuid)
- */
 export async function deleteAdmin(orgId, userId) {
   if (!orgId || !userId) {
     return { error: new Error("orgId y userId requeridos") };
   }
 
-  const { data, error } = await invokeRpcWithFallback("admins_remove", [
-    { p_org_id: orgId, p_user_id: userId },
-    { org_id: orgId, user_id: userId },
-    { p_org: orgId, p_user: userId },
-  ]);
+  const { data, error } = await supabase.rpc("admins_remove", {
+    p_org_id: orgId,
+    p_user_id: userId,
+  });
 
   if (error) return { error };
 
-  // Si tu RPC devuelve { ok: false, error: "..." }
   if (data?.ok === false) {
     return { error: new Error(data.error || "No se pudo eliminar el admin") };
   }
@@ -162,21 +130,14 @@ export async function deleteAdmin(orgId, userId) {
    Invitaciones (Edge Functions)
 =========================== */
 
-/**
- * Invita un ADMIN a la organización actual.
- * Firma usada por AdminsPage.jsx:
- *   inviteAdmin(currentOrg.id, { email, role: "ADMIN" })
- */
 export async function inviteAdmin(orgId, { email, role } = {}) {
   if (!orgId) return { data: null, error: new Error("orgId requerido") };
 
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail) return { data: null, error: new Error("Email requerido") };
 
-  // UI puede mandar "ADMIN"; normalizamos
+  // Aunque UI mande "OWNER", esta función es para admins de org actual.
   const normalizedRole = normalizeRole(role || "admin");
-
-  // Esta función es para invitar admin de la org actual
   const finalRole = normalizedRole === "admin" ? "admin" : "admin";
 
   return invokeEdgeFunction("invite_admin", {
@@ -186,9 +147,6 @@ export async function inviteAdmin(orgId, { email, role } = {}) {
   });
 }
 
-/**
- * Invita un OWNER independiente (crea nueva org).
- */
 export async function inviteIndependentOwner({ email } = {}) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail) return { data: null, error: new Error("Email requerido") };
@@ -200,9 +158,6 @@ export async function inviteIndependentOwner({ email } = {}) {
   });
 }
 
-/**
- * Invita un TRACKER (Edge Function separada).
- */
 export async function inviteTracker(orgId, { email } = {}) {
   if (!orgId) return { data: null, error: new Error("orgId requerido") };
 
