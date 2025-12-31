@@ -1,4 +1,3 @@
-// src/pages/Login.tsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -23,9 +22,7 @@ const Login: React.FC = () => {
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
   /* ---------------------------------------------------------
-   * 1) Si el usuario entra MANUALMENTE a /login
-   *    y ya hay sesión válida → ir al panel.
-   *    (NO aplica a Magic Link)
+   * 1) Si el usuario entra a /login y ya hay sesión → /inicio
    * --------------------------------------------------------- */
   useEffect(() => {
     if (loading) return;
@@ -61,11 +58,10 @@ const Login: React.FC = () => {
 
     const raw = hash.slice(1);
     const params = new URLSearchParams(raw);
-    const error = params.get("error");
     const errorCode = params.get("error_code");
     const errorDesc = params.get("error_description");
 
-    if (!error && !errorCode && !errorDesc) return;
+    if (!errorCode && !errorDesc) return;
 
     let friendly =
       t("login.errorMagicLink") || "No se pudo procesar el enlace mágico.";
@@ -109,7 +105,7 @@ const Login: React.FC = () => {
       }
 
       navigate("/inicio", { replace: true });
-    } catch (err: any) {
+    } catch {
       setErrorMsg("Error inesperado al iniciar sesión.");
     } finally {
       setLoadingAction(false);
@@ -117,7 +113,7 @@ const Login: React.FC = () => {
   };
 
   /* ---------------------------------------------------------
-   * LOGIN CON MAGIC LINK (solo envía correo)
+   * LOGIN CON MAGIC LINK
    * --------------------------------------------------------- */
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,13 +158,10 @@ const Login: React.FC = () => {
     );
   }
 
-  /* ---------------------------------------------------------
-   * UI (idéntica a la tuya, sin cambios funcionales)
-   * --------------------------------------------------------- */
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border rounded-2xl p-6 space-y-5">
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <h1 className="text-2xl font-semibold">
             {t("login.title") || "Iniciar sesión"}
           </h1>
@@ -176,13 +169,13 @@ const Login: React.FC = () => {
         </div>
 
         {errorMsg && (
-          <div className="border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="border border-red-200 bg-red-50 p-3 text-sm text-red-800 rounded-lg">
             {errorMsg}
           </div>
         )}
 
         {infoMsg && (
-          <div className="border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+          <div className="border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 rounded-lg">
             {infoMsg}
           </div>
         )}
@@ -194,16 +187,19 @@ const Login: React.FC = () => {
               placeholder="Correo"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border rounded p-2"
+              className="w-full border rounded-xl p-2"
             />
             <input
               type="password"
               placeholder="Contraseña"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border rounded p-2"
+              className="w-full border rounded-xl p-2"
             />
-            <button className="w-full bg-sky-500 text-white rounded p-2">
+            <button
+              disabled={loadingAction}
+              className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-500 transition disabled:opacity-50"
+            >
               Entrar
             </button>
           </form>
@@ -214,19 +210,51 @@ const Login: React.FC = () => {
               placeholder="Correo"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border rounded p-2"
+              className="w-full border rounded-xl p-2"
             />
-            <button className="w-full bg-sky-100 border rounded p-2">
-              Enviar link mágico
+
+            {/* 🔥 BOTÓN CTA FUERTE */}
+            <button
+              type="submit"
+              disabled={loadingAction}
+              className="
+                w-full
+                rounded-xl
+                bg-gradient-to-r from-emerald-500 to-emerald-400
+                px-4 py-3
+                text-sm font-bold
+                text-slate-950
+                shadow-lg shadow-emerald-500/40
+                hover:from-emerald-400 hover:to-emerald-300
+                focus:outline-none
+                focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2
+                disabled:opacity-50
+                disabled:shadow-none
+                transition
+              "
+            >
+              {loadingAction
+                ? t("login.sending") || "Enviando…"
+                : t("login.sendMagic") || "Enviar link mágico"}
             </button>
           </form>
         )}
 
-        <div className="flex gap-2">
-          <button onClick={() => setMode("password")} className="text-sm underline">
+        <div className="flex gap-4 justify-center pt-2">
+          <button
+            onClick={() => setMode("password")}
+            className={`text-sm underline ${
+              mode === "password" ? "font-semibold" : ""
+            }`}
+          >
             Contraseña
           </button>
-          <button onClick={() => setMode("magic")} className="text-sm underline">
+          <button
+            onClick={() => setMode("magic")}
+            className={`text-sm underline ${
+              mode === "magic" ? "font-semibold" : ""
+            }`}
+          >
             Link mágico
           </button>
         </div>
