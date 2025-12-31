@@ -1,13 +1,13 @@
 param(
-  [string]$CommitMessage = "deploy: automatic update"
+    [string]$CommitMessage = "deploy: automatic update"
 )
 
 Write-Host "=== Detecting Git repository root ==="
 
 $repoRoot = git rev-parse --show-toplevel 2>$null
 if (-not $repoRoot) {
-  Write-Error "ERROR: This directory is not a Git repository."
-  exit 1
+    Write-Error "ERROR: This directory is not a Git repository."
+    exit 1
 }
 
 Set-Location $repoRoot
@@ -20,15 +20,15 @@ Write-Host ""
 
 $changes = git status --porcelain
 if (-not $changes) {
-  Write-Host "INFO: No changes to commit."
-  Write-Host "Nothing to push. Exiting."
-  exit 0
+    Write-Host "INFO: No changes to commit."
+    Write-Host "Nothing to push. Exiting."
+    exit 0
 }
 
 $answer = Read-Host "Continue with add + commit + push? [s/N]"
 if ($answer.ToLower() -ne "s") {
-  Write-Host "Cancelled by user."
-  exit 0
+    Write-Host "Cancelled by user."
+    exit 0
 }
 
 Write-Host ""
@@ -39,8 +39,8 @@ Write-Host ""
 Write-Host "=== Creating commit ==="
 git commit -m $CommitMessage
 if ($LASTEXITCODE -ne 0) {
-  Write-Error "ERROR: Commit failed."
-  exit 1
+    Write-Error "ERROR: Commit failed."
+    exit 1
 }
 
 Write-Host ""
@@ -52,8 +52,8 @@ Write-Host ""
 Write-Host "=== Pushing to origin/$branch ==="
 git push origin $branch
 if ($LASTEXITCODE -ne 0) {
-  Write-Error "ERROR: Push failed."
-  exit 1
+    Write-Error "ERROR: Push failed."
+    exit 1
 }
 
 Write-Host ""
