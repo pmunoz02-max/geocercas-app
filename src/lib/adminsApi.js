@@ -19,27 +19,64 @@ function normalizeRole(role) {
 }
 
 /**
- * Obtiene el access_token actual (si hay sesión).
+ * Espera una sesión disponible (para evitar "access_token vacío" al inicio).
+ * - NO usa timers largos; solo espera eventos de auth brevemente.
  */
-async function getAccessToken() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return null;
-  return data?.session?.access_token || null;
+async function waitForSession() {
+  // 1) intento inmediato
+  const first = await supabase.auth.getSession();
+  const token1 = first?.data?.session?.access_token || null;
+  if (token1) return token1;
+
+  // 2) espera a que auth emita evento (si está cargando en background)
+  return await new Promise((resolve) => {
+    let done = false;
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (done) return;
+      const tok = session?.access_token || null;
+      if (tok) {
+        done = true;
+        sub?.subscription?.unsubscribe?.();
+        resolve(tok);
+      }
+    });
+
+    // 3) fallback: microtask loop (sin bloquear UI)
+    // Si nunca llega sesión, resolvemos null (y UI mostrará error)
+    queueMicrotask(async () => {
+      if (done) return;
+      const again = await supabase.auth.getSession();
+      const tok2 = again?.data?.session?.access_token || null;
+      if (tok2) {
+        done = true;
+        sub?.subscription?.unsubscribe?.();
+        resolve(tok2);
+      } else {
+        // sin token
+        done = true;
+        sub?.subscription?.unsubscribe?.();
+        resolve(null);
+      }
+    });
+  });
 }
 
 /**
  * Invocador seguro de Edge Functions
- * - Inyecta Authorization explícitamente (FIX 401)
+ * - Inyecta Authorization explícitamente
  * - NO lanza excepciones (devuelve { data, error })
  */
 async function invokeEdgeFunction(fnName, body) {
   try {
-    const token = await getAccessToken();
+    const token = await waitForSession();
 
     if (!token) {
       return {
         data: null,
-        error: new Error("No hay sesión activa (access_token vacío)."),
+        error: new Error(
+          "No hay sesión activa (access_token vacío). Re-carga la página o vuelve a iniciar sesión."
+        ),
       };
     }
 
@@ -52,7 +89,7 @@ async function invokeEdgeFunction(fnName, body) {
 
     if (!error) return { data, error: null };
 
-    // Intentar extraer respuesta detallada del backend
+    // Intentar leer respuesta detallada del backend
     let payload = null;
     try {
       const resp = error?.context?.response;
@@ -136,7 +173,7 @@ export async function inviteAdmin(orgId, { email, role } = {}) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail) return { data: null, error: new Error("Email requerido") };
 
-  // Aunque UI mande "OWNER", esta función es para admins de org actual.
+  // Esta acción es “invitar admin a la org actual”
   const normalizedRole = normalizeRole(role || "admin");
   const finalRole = normalizedRole === "admin" ? "admin" : "admin";
 
