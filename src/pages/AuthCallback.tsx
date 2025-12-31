@@ -44,8 +44,8 @@ export default function AuthCallback() {
   );
 
   const [step, setStep] = useState<Step>("working");
-  const [message, setMessage] = useState<string>("Estableciendo sesión…");
-  const [detail, setDetail] = useState<string>("");
+  const [message, setMessage] = useState("Estableciendo sesión…");
+  const [detail, setDetail] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -58,37 +58,47 @@ export default function AuthCallback() {
 
         const searchParams = new URLSearchParams(location.search);
 
-        // PKCE (moderno): /auth/callback?code=...
+        // ✅ Modo robusto: token_hash + type (desde el template)
+        const token_hash = searchParams.get("token_hash") || "";
+        const type = (searchParams.get("type") || "").toLowerCase(); // magiclink | recovery | signup | invite | email_change
+
+        // PKCE code flow (si viniera)
         const code = searchParams.get("code") || "";
 
-        // Legacy (hash tokens): /auth/callback#access_token=...&refresh_token=...
+        // Legacy hash tokens (si viniera)
         const { access_token, refresh_token } = parseHashTokens(location.hash);
 
-        // Si no llega ningún dato de auth, no hay nada que hacer
-        if (!code && !(access_token && refresh_token)) {
-          throw new Error(
-            "Falta el parámetro de autenticación (no llegó ?code=... ni #access_token=...). Revisa Redirect URLs en Supabase Auth."
+        if (token_hash && type) {
+          setMessage("Verificando enlace…");
+          const { error } = await withTimeout(
+            supabase.auth.verifyOtp({
+              token_hash,
+              type: type as any,
+            }),
+            15000,
+            "verifyOtp"
           );
-        }
-
-        // Establecer sesión
-        if (code) {
+          if (error) throw error;
+        } else if (code) {
           setMessage("Intercambiando código por sesión…");
           await withTimeout(
             supabase.auth.exchangeCodeForSession(code),
             15000,
             "exchangeCodeForSession"
           );
-        } else {
+        } else if (access_token && refresh_token) {
           setMessage("Aplicando tokens de sesión…");
           await withTimeout(
             supabase.auth.setSession({ access_token, refresh_token }),
             15000,
             "setSession"
           );
+        } else {
+          throw new Error(
+            "Falta el parámetro de autenticación (no llegó token_hash/type, ni ?code=..., ni #access_token=...). Revisa Email Template de Magic Link."
+          );
         }
 
-        // Confirmar sesión
         setMessage("Confirmando sesión…");
         const { data, error } = await withTimeout(
           supabase.auth.getSession(),
@@ -100,21 +110,18 @@ export default function AuthCallback() {
         const sess = data?.session ?? null;
         if (!sess) {
           throw new Error(
-            "No se pudo confirmar la sesión (session=null). Verifica cookies, dominio (www vs no-www) y Redirect URLs."
+            "No se pudo confirmar la sesión (session=null). Revisa cookies/dominio y Redirect URLs."
           );
         }
 
-        // Redirigir por dominio (Opción A)
         setMessage("Redirigiendo…");
         if (!alive) return;
 
         setStep("success");
 
-        if (trackerDomain) {
-          navigate("/tracker-gps", { replace: true });
-        } else {
-          navigate("/inicio", { replace: true });
-        }
+        // ✅ Opción A: destino por dominio (la más robusta)
+        if (trackerDomain) navigate("/tracker-gps", { replace: true });
+        else navigate("/inicio", { replace: true });
       } catch (e: any) {
         console.error("[AuthCallback] error:", e);
         if (!alive) return;
@@ -173,14 +180,15 @@ export default function AuthCallback() {
             </div>
 
             <div className="text-xs text-slate-400">
-              Revisa en Supabase: Authentication → URL Configuration → Redirect
-              URLs. Debe incluir:
+              Revisa el Email Template de Magic Link: debe apuntar a
+              <br />
+              <code>
+                /auth/callback?token_hash=...&amp;type=magiclink
+              </code>
+              <br />
+              y en Supabase Redirect URLs debe estar:
               <br />
               <code>https://www.tugeocercas.com/auth/callback</code>
-              <br />
-              (y si usas tracker):
-              <br />
-              <code>https://tracker.tugeocercas.com/auth/callback</code>
             </div>
           </>
         )}
