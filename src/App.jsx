@@ -48,38 +48,36 @@ function Loader({ label = "Cargando…" }) {
   );
 }
 
-function isTrackerHostname(hostname) {
-  const h = String(hostname || "").toLowerCase().trim();
-  return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
-}
-
 function normalizeRole(r) {
   return String(r || "").toLowerCase().trim();
 }
 
-function getActiveRole(memberships, orgId) {
+function getActiveRoleFromRolesRows(rolesRows, orgId) {
   if (!orgId) return "";
-  const row = Array.isArray(memberships)
-    ? memberships.find((m) => m?.org_id === orgId)
+  const row = Array.isArray(rolesRows)
+    ? rolesRows.find((m) => m?.org_id === orgId)
     : null;
   return normalizeRole(row?.role);
 }
 
-/* ================= DOMAIN ENFORCER ================= */
+/* ================= DOMAIN ENFORCER =================
+   - En tracker domain, fuerza /tracker-gps
+   - Si llega callback con code/hash en tracker domain, lo manda a /auth/callback
+*/
 function DomainEnforcer() {
-  const { loading, session } = useAuth();
+  const { authReady, session, trackerDomain } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const trackerDomain = isTrackerHostname(window.location.hostname);
 
   useEffect(() => {
-    if (loading) return;
+    if (!authReady) return;
     if (!trackerDomain) return;
 
     const { pathname, search, hash } = location;
     const hasCode = new URLSearchParams(search).has("code");
-    const hasAccessToken = hash.includes("access_token=");
+    const hasAccessToken = String(hash || "").includes("access_token=");
 
+    // Si viene callback pero no está en /auth/callback, redirige ahí
     if ((hasCode || hasAccessToken) && pathname !== "/auth/callback") {
       navigate(`/auth/callback${search}${hash}`, { replace: true });
       return;
@@ -101,29 +99,68 @@ function DomainEnforcer() {
     if (session && pathname !== "/tracker-gps") {
       navigate("/tracker-gps", { replace: true });
     }
-  }, [loading, session, location, navigate, trackerDomain]);
+  }, [authReady, session, location, navigate, trackerDomain]);
 
   return null;
 }
 
-/* ================= PANEL GATE ================= */
+/* ================= PANEL GATE =================
+   - Jamás loader infinito
+   - Si no hay rol => tarjeta de error (NO loader)
+*/
 function PanelGate({ children }) {
-  const { loading, session, role } = useAuth();
+  const { authReady, authError, session, currentRole, trackerDomain } = useAuth();
   const location = useLocation();
 
+  // Nunca bloquear AuthCallback
   if (location.pathname === "/auth/callback") return children;
 
-  if (isTrackerHostname(window.location.hostname)) {
+  // Dominio tracker nunca entra al panel
+  if (trackerDomain) {
     return <Navigate to="/tracker-gps" replace />;
   }
 
-  if (loading) return <Loader label="Validando sesión…" />;
+  // Espera controlada
+  if (!authReady) return <Loader label="Validando sesión…" />;
+
+  // No autenticado => landing
   if (!session) return <Navigate to="/" replace />;
 
-  const r = normalizeRole(role);
-  if (!r) return <Loader label="Resolviendo permisos…" />;
+  // Sin rol => ERROR visible (no loader infinito)
+  if (!currentRole) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center px-4">
+        <div className="w-full max-w-xl rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm">
+          <div className="text-sm font-semibold text-red-800">
+            Error de permisos
+          </div>
+          <div className="mt-2 text-sm text-red-700">
+            Tu cuenta no tiene un rol asignado para el panel.
+          </div>
+          <div className="mt-3 text-xs text-red-600">
+            {authError || "Verifica invitación, organización o RLS en app_user_roles."}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-xl bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600"
+            >
+              Reintentar
+            </button>
+            <button
+              onClick={() => (window.location.href = "/login")}
+              className="rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+            >
+              Volver a Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  if (!PANEL_ROLES.has(r)) {
+  // Rol válido pero no panel
+  if (!PANEL_ROLES.has(currentRole)) {
     return <Navigate to="/tracker-gps" replace />;
   }
 
@@ -132,17 +169,17 @@ function PanelGate({ children }) {
 
 /* ================= SHELL ================= */
 function Shell() {
-  const { loading, memberships, currentOrg, isRootOwner, role } = useAuth();
+  const { authReady, roles, currentOrg, isRootOwner, currentRole } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
   const activeRole = useMemo(
-    () => getActiveRole(memberships, activeOrgId),
-    [memberships, activeOrgId]
+    () => getActiveRoleFromRolesRows(roles, activeOrgId),
+    [roles, activeOrgId]
   );
 
-  if (loading) return <Loader label="Cargando panel…" />;
+  if (!authReady) return <Loader label="Cargando panel…" />;
 
-  const roleLower = normalizeRole(role || activeRole);
+  const roleLower = normalizeRole(currentRole || activeRole);
   if (!roleLower) return <Loader label="Preparando entorno…" />;
 
   if (!PANEL_ROLES.has(roleLower)) {
@@ -180,10 +217,10 @@ function Shell() {
 
 /* ================= FALLBACK ================= */
 function SmartFallback() {
-  const { session, loading, role } = useAuth();
-  if (loading) return <Loader />;
+  const { session, authReady, currentRole, trackerDomain } = useAuth();
+  if (!authReady) return <Loader />;
 
-  if (isTrackerHostname(window.location.hostname)) {
+  if (trackerDomain) {
     return session ? (
       <Navigate to="/tracker-gps" replace />
     ) : (
@@ -193,7 +230,7 @@ function SmartFallback() {
 
   if (!session) return <Navigate to="/" replace />;
 
-  const r = normalizeRole(role);
+  const r = normalizeRole(currentRole);
   if (!r) return <Loader />;
 
   return PANEL_ROLES.has(r) ? (
