@@ -10,20 +10,13 @@ import React, {
 import { supabase } from "@/supabaseClient";
 
 /**
- * AuthContext UNIVERSAL (Panel + Tracker)
+ * AuthContext UNIVERSAL (Panel + Tracker) — Optimizado rendimiento
  *
- * REGLAS:
- * - Un solo Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)
- * - trackerDomain solo cambia UX/rutas. NO usa otro proyecto/cliente.
- *
- * GARANTÍAS:
- * - Nunca hace throw por variables tracker
- * - authReady SIEMPRE termina en true (no cuelga UI)
- * - NO “mata” la sesión por timeouts de roles/orgs
- *
- * COMPATIBILIDAD legacy:
- * - loading = !authReady
- * - role = currentRole
+ * Objetivos:
+ * - UI rápida: authReady se pone TRUE apenas hay session (no espera roles/orgs)
+ * - Roles/Orgs se cargan en background (no bloquea /inicio)
+ * - Orgs: NO se carga "todas las activas"; solo las orgs de los roles del usuario
+ * - Si roles/orgs fallan (RLS/red), NO tumba sesión, solo deja "pendiente"
  */
 
 const AuthContext = createContext(null);
@@ -57,7 +50,11 @@ function computeBestRole(rows) {
   return best;
 }
 
-// Timeout SOLO para queries (roles/orgs). NUNCA para getSession (no destructivo).
+function uniq(arr) {
+  return Array.from(new Set((arr || []).filter(Boolean)));
+}
+
+// Timeout SOLO para queries REST (no para getSession)
 function withTimeout(promise, ms, label) {
   return Promise.race([
     promise,
@@ -73,7 +70,7 @@ export function AuthProvider({ children }) {
     []
   );
 
-  const client = supabase; // ✅ siempre el mismo cliente
+  const client = supabase;
 
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState(null);
@@ -88,13 +85,18 @@ export function AuthProvider({ children }) {
   const [orgs, setOrgs] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
 
+  // Estados de carga “finos” (para UI/diagnóstico)
+  const [rolesReady, setRolesReady] = useState(false);
+  const [orgsReady, setOrgsReady] = useState(false);
+
   const resetNonSessionState = useCallback(() => {
-    // ⚠️ OJO: no tocamos session/user aquí
     setRoles([]);
     setBestRole(null);
     setCurrentRole(null);
     setOrgs([]);
     setCurrentOrg(null);
+    setRolesReady(false);
+    setOrgsReady(false);
   }, []);
 
   const resetAllAuthState = useCallback(() => {
@@ -103,12 +105,19 @@ export function AuthProvider({ children }) {
     resetNonSessionState();
   }, [resetNonSessionState]);
 
+  const applyTrackerDefaults = useCallback(() => {
+    setRoles([]);
+    setBestRole("tracker");
+    setCurrentRole("tracker");
+    setOrgs([]);
+    setCurrentOrg(null);
+    setRolesReady(true);
+    setOrgsReady(true);
+  }, []);
+
   const loadRoles = useCallback(
     async (userId) => {
       if (!userId) return [];
-
-      // ⚠️ Importante: si por RLS aún no hay fila/permiso, puede fallar.
-      // NO debe tumbar la sesión.
       const q = client
         .from("app_user_roles")
         .select("org_id, role, created_at")
@@ -121,23 +130,29 @@ export function AuthProvider({ children }) {
     [client]
   );
 
-  const loadOrgs = useCallback(async () => {
-    const q = client
-      .from("organizations")
-      .select("id, name, active, plan, owner_id, created_at")
-      .eq("active", true)
-      .order("created_at", { ascending: false });
+  // ✅ Solo orgs que el usuario realmente usa (por roles)
+  const loadOrgsByIds = useCallback(
+    async (orgIds) => {
+      const ids = uniq(orgIds);
+      if (!ids.length) return [];
 
-    const { data, error } = await withTimeout(q, 12000, "loadOrgs");
-    if (error) throw error;
-    return data || [];
-  }, [client]);
+      const q = client
+        .from("organizations")
+        .select("id, name, active, plan, owner_id, created_at")
+        .in("id", ids)
+        .eq("active", true);
+
+      const { data, error } = await withTimeout(q, 12000, "loadOrgsByIds");
+      if (error) throw error;
+      return data || [];
+    },
+    [client]
+  );
 
   const resolveCurrentOrg = useCallback((rolesRows, orgRows) => {
     if (!Array.isArray(orgRows) || orgRows.length === 0) return null;
 
     const best = computeBestRole(rolesRows);
-
     if (best && Array.isArray(rolesRows) && rolesRows.length) {
       const row = rolesRows
         .map((r) => ({ ...r, role: normalizeRole(r.role) }))
@@ -153,17 +168,12 @@ export function AuthProvider({ children }) {
     return orgRows[0] || null;
   }, []);
 
-  const applyTrackerDefaults = useCallback(() => {
-    setRoles([]);
-    setBestRole("tracker");
-    setCurrentRole("tracker");
-    setOrgs([]);
-    setCurrentOrg(null);
-  }, []);
-
+  /**
+   * Carga roles + orgs en BACKGROUND.
+   * No toca session/user. No bloquea authReady.
+   */
   const hydrateNonSessionData = useCallback(
     async (sess) => {
-      // Esta función NO debe romper la sesión si roles/orgs fallan.
       if (!sess?.user?.id) {
         resetNonSessionState();
         return;
@@ -174,7 +184,8 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      // 1) Roles (no destructivo)
+      // 1) Roles
+      setRolesReady(false);
       let rolesRows = [];
       try {
         rolesRows = await loadRoles(sess.user.id);
@@ -185,28 +196,34 @@ export function AuthProvider({ children }) {
         setCurrentRole(best);
       } catch (e) {
         console.warn("[AuthContext] roles not ready:", e);
-        // Mantener sesión, pero sin roles aún
         setRoles([]);
         setBestRole(null);
         setCurrentRole(null);
+      } finally {
+        setRolesReady(true);
       }
 
-      // 2) Orgs (no destructivo)
+      // 2) Orgs (solo por org_ids de roles)
+      setOrgsReady(false);
       try {
-        const orgRows = await loadOrgs();
+        const orgIds = uniq((rolesRows || []).map((r) => r.org_id));
+        const orgRows = await loadOrgsByIds(orgIds);
+
         setOrgs(orgRows);
         setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
       } catch (e) {
         console.warn("[AuthContext] orgs not ready:", e);
         setOrgs([]);
         setCurrentOrg(null);
+      } finally {
+        setOrgsReady(true);
       }
     },
     [
       trackerDomain,
       applyTrackerDefaults,
       loadRoles,
-      loadOrgs,
+      loadOrgsByIds,
       resolveCurrentOrg,
       resetNonSessionState,
     ]
@@ -220,7 +237,7 @@ export function AuthProvider({ children }) {
       setAuthError(null);
 
       try {
-        // ✅ SIN timeout: getSession puede tardar (storage/cookies). No debe tumbar la UI.
+        // ✅ Sin timeout: no queremos “auto-logout” por latencias
         const { data, error } = await client.auth.getSession();
         if (error) throw error;
 
@@ -230,23 +247,22 @@ export function AuthProvider({ children }) {
         setSession(sess);
         setUser(sess?.user ?? null);
 
+        // ✅ IMPORTANTE: authReady TRUE lo antes posible
+        setAuthReady(true);
+
         if (!sess?.user?.id) {
           resetAllAuthState();
           return;
         }
 
-        // Cargar roles/orgs (no destructivo)
-        await hydrateNonSessionData(sess);
+        // ✅ Roles/orgs en background (no bloquea UI)
+        hydrateNonSessionData(sess);
       } catch (e) {
         console.error("[AuthContext] bootstrap error:", e);
         if (!mounted) return;
-
-        // Si falla bootstrap (por red, etc.), NO inventamos sesión.
-        // Dejamos error visible y estado limpio.
         setAuthError(e?.message || "Auth bootstrap error");
         resetAllAuthState();
-      } finally {
-        if (mounted) setAuthReady(true);
+        setAuthReady(true);
       }
     };
 
@@ -256,32 +272,19 @@ export function AuthProvider({ children }) {
       async (_event, newSession) => {
         if (!mounted) return;
 
-        setAuthReady(false);
         setAuthError(null);
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
 
-        try {
-          setSession(newSession);
-          setUser(newSession?.user ?? null);
+        // ✅ Auth listo ya (la UI no debe colgarse)
+        setAuthReady(true);
 
-          if (!newSession?.user?.id) {
-            resetAllAuthState();
-            return;
-          }
-
-          await hydrateNonSessionData(newSession);
-        } catch (e) {
-          console.error("[AuthContext] onAuthStateChange error:", e);
-          if (!mounted) return;
-
-          // ⚠️ No matamos sesión por fallos de roles/orgs aquí.
-          // Solo registramos el error y dejamos sesión viva.
-          setAuthError(e?.message || "Auth state change error");
-
-          // Mantener session/user, limpiar solo roles/orgs para evitar loops de guard
-          resetNonSessionState();
-        } finally {
-          if (mounted) setAuthReady(true);
+        if (!newSession?.user?.id) {
+          resetAllAuthState();
+          return;
         }
+
+        hydrateNonSessionData(newSession);
       }
     );
 
@@ -289,9 +292,9 @@ export function AuthProvider({ children }) {
       mounted = false;
       sub?.subscription?.unsubscribe?.();
     };
-  }, [client, hydrateNonSessionData, resetAllAuthState, resetNonSessionState]);
+  }, [client, hydrateNonSessionData, resetAllAuthState]);
 
-  // Debug útil en consola: window.__SUPABASE_AUTH_DEBUG.getReady()
+  // Debug
   useEffect(() => {
     window.__SUPABASE_AUTH_DEBUG = {
       getReady: () => !!authReady,
@@ -301,8 +304,21 @@ export function AuthProvider({ children }) {
       getOrg: () => currentOrg ?? null,
       getUser: () => user ?? null,
       getSession: () => session ?? null,
+      rolesReady: () => !!rolesReady,
+      orgsReady: () => !!orgsReady,
     };
-  }, [authReady, authError, trackerDomain, currentRole, bestRole, currentOrg, user, session]);
+  }, [
+    authReady,
+    authError,
+    trackerDomain,
+    currentRole,
+    bestRole,
+    currentOrg,
+    user,
+    session,
+    rolesReady,
+    orgsReady,
+  ]);
 
   const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
 
@@ -324,6 +340,12 @@ export function AuthProvider({ children }) {
       currentOrg,
       setCurrentOrg,
       trackerDomain,
+
+      // extras útiles
+      rolesReady,
+      orgsReady,
+
+      // legacy
       loading,
       role,
     }),
@@ -339,6 +361,8 @@ export function AuthProvider({ children }) {
       orgs,
       currentOrg,
       trackerDomain,
+      rolesReady,
+      orgsReady,
       loading,
       role,
     ]
