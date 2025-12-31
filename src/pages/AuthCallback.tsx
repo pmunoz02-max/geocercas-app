@@ -34,6 +34,51 @@ function parseHashTokens(hash: string) {
   return { access_token, refresh_token };
 }
 
+function normalizeType(t: string) {
+  return String(t || "").toLowerCase().trim();
+}
+
+async function verifyWithFallbackTypes(token_hash: string, incomingType?: string) {
+  const primary = normalizeType(incomingType);
+  const candidates = [
+    primary,
+    "invite",
+    "magiclink",
+    "signup",
+    "recovery",
+    "email_change",
+  ].filter(Boolean);
+
+  // evitar duplicados manteniendo orden
+  const seen = new Set<string>();
+  const ordered = candidates.filter((x) => {
+    if (seen.has(x)) return false;
+    seen.add(x);
+    return true;
+  });
+
+  let lastErr: any = null;
+
+  for (const type of ordered) {
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.verifyOtp({
+          token_hash,
+          type: type as any,
+        }),
+        15000,
+        `verifyOtp(${type})`
+      );
+      if (!error) return { ok: true, usedType: type };
+      lastErr = error;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  return { ok: false, error: lastErr, tried: ordered };
+}
+
 export default function AuthCallback() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -58,27 +103,24 @@ export default function AuthCallback() {
 
         const searchParams = new URLSearchParams(location.search);
 
-        // ✅ Modo robusto: token_hash + type (desde el template)
         const token_hash = searchParams.get("token_hash") || "";
-        const type = (searchParams.get("type") || "").toLowerCase(); // magiclink | recovery | signup | invite | email_change
+        const type = searchParams.get("type") || "";
 
-        // PKCE code flow (si viniera)
         const code = searchParams.get("code") || "";
-
-        // Legacy hash tokens (si viniera)
         const { access_token, refresh_token } = parseHashTokens(location.hash);
 
-        if (token_hash && type) {
+        if (token_hash) {
           setMessage("Verificando enlace…");
-          const { error } = await withTimeout(
-            supabase.auth.verifyOtp({
-              token_hash,
-              type: type as any,
-            }),
-            15000,
-            "verifyOtp"
-          );
-          if (error) throw error;
+
+          const res = await verifyWithFallbackTypes(token_hash, type);
+          if (!res.ok) {
+            const msg =
+              res?.error?.message ||
+              "No se pudo verificar el enlace. Puede haber expirado o estar mal formateado.";
+            throw new Error(
+              `${msg}\n\nTipos probados: ${(res as any).tried?.join(", ")}`
+            );
+          }
         } else if (code) {
           setMessage("Intercambiando código por sesión…");
           await withTimeout(
@@ -95,7 +137,7 @@ export default function AuthCallback() {
           );
         } else {
           throw new Error(
-            "Falta el parámetro de autenticación (no llegó token_hash/type, ni ?code=..., ni #access_token=...). Revisa Email Template de Magic Link."
+            "Falta el parámetro de autenticación (no llegó token_hash ni ?code=... ni #access_token=...). Revisa los Email Templates de Supabase."
           );
         }
 
@@ -110,16 +152,15 @@ export default function AuthCallback() {
         const sess = data?.session ?? null;
         if (!sess) {
           throw new Error(
-            "No se pudo confirmar la sesión (session=null). Revisa cookies/dominio y Redirect URLs."
+            "No se pudo confirmar la sesión (session=null). Verifica cookies/dominio y Redirect URLs."
           );
         }
 
         setMessage("Redirigiendo…");
         if (!alive) return;
-
         setStep("success");
 
-        // ✅ Opción A: destino por dominio (la más robusta)
+        // destino por dominio
         if (trackerDomain) navigate("/tracker-gps", { replace: true });
         else navigate("/inicio", { replace: true });
       } catch (e: any) {
@@ -180,15 +221,9 @@ export default function AuthCallback() {
             </div>
 
             <div className="text-xs text-slate-400">
-              Revisa el Email Template de Magic Link: debe apuntar a
-              <br />
-              <code>
-                /auth/callback?token_hash=...&amp;type=magiclink
-              </code>
-              <br />
-              y en Supabase Redirect URLs debe estar:
-              <br />
-              <code>https://www.tugeocercas.com/auth/callback</code>
+              Si el mensaje dice “invalid or expired” incluso con un link nuevo,
+              normalmente es un mismatch de <code>type</code>. Este callback ya
+              prueba automáticamente: invite, magiclink, signup, recovery.
             </div>
           </>
         )}
