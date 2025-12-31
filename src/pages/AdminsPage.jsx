@@ -1,5 +1,5 @@
 // src/pages/AdminsPage.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   listAdmins,
@@ -7,6 +7,55 @@ import {
   inviteIndependentOwner,
   deleteAdmin,
 } from "../lib/adminsApi";
+
+// Helper: intenta sacar el mensaje real (step/message) del backend o del wrapper
+function extractEdgeError(response, fallback = "Error al enviar la invitación.") {
+  if (!response) return fallback;
+
+  // Formato típico: { data, error }
+  const { data, error } = response;
+
+  // 1) Si supabase-js devolvió error (non-2xx, network, etc.)
+  if (error) {
+    // A veces el wrapper mete info en error.normalized o error.context
+    const step =
+      error?.normalized?.step ||
+      error?.context?.step ||
+      error?.step ||
+      null;
+
+    const msg =
+      error?.normalized?.message ||
+      error?.message ||
+      fallback;
+
+    const details =
+      error?.normalized?.details ||
+      error?.details ||
+      error?.context ||
+      null;
+
+    // Si hay step, lo mostramos con más señal
+    if (step) return `[${step}] ${msg}`;
+    return msg;
+  }
+
+  // 2) Si el backend respondió JSON con ok:false
+  if (data && data.ok === false) {
+    const step = data.step || "backend";
+    const msg = data.message || data.error || fallback;
+    return `[${step}] ${msg}`;
+  }
+
+  // 3) Si el backend respondió un payload distinto con "error"
+  if (data && data.error) {
+    const step = data.step || "backend";
+    const msg = typeof data.error === "string" ? data.error : fallback;
+    return `[${step}] ${msg}`;
+  }
+
+  return fallback;
+}
 
 export default function AdminsPage() {
   // ROOT OWNER global
@@ -22,10 +71,12 @@ export default function AdminsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin");
 
-  // NUEVO: info del resultado de invitación
+  // Resultado de invitación
   const [invitedVia, setInvitedVia] = useState(null); // "email" | "action_link" | null
   const [actionLink, setActionLink] = useState(null); // string | null
   const [lastInvitedEmail, setLastInvitedEmail] = useState(null);
+
+  const orgName = useMemo(() => currentOrg?.name || "—", [currentOrg?.name]);
 
   // ===========================================================
   // Cargar administradores (SOLO ROOT OWNER)
@@ -47,10 +98,11 @@ export default function AdminsPage() {
       setError(null);
       setSuccessMessage(null);
 
-      const { data, error: fetchError } = await listAdmins(currentOrg.id);
+      const resp = await listAdmins(currentOrg.id);
+      const { data, error: fetchError } = resp || {};
 
       if (fetchError) {
-        console.error("[AdminsPage] listAdmins error:", fetchError);
+        console.error("[AdminsPage] listAdmins error:", fetchError, resp);
         setError(fetchError.message || "No se pudo cargar la lista de administradores.");
       } else {
         setAdmins(data || []);
@@ -72,7 +124,8 @@ export default function AdminsPage() {
     setError(null);
     setSuccessMessage(null);
 
-    const { data, error: fetchError } = await listAdmins(currentOrg.id);
+    const resp = await listAdmins(currentOrg.id);
+    const { data, error: fetchError } = resp || {};
 
     if (fetchError) {
       setError(fetchError.message || "No se pudo actualizar la lista de administradores.");
@@ -101,6 +154,11 @@ export default function AdminsPage() {
     setSuccessMessage(null);
     resetInviteResult();
 
+    if (!currentOrg?.id) {
+      setError("No se encontró la organización actual.");
+      return;
+    }
+
     if (!email || !email.includes("@")) {
       setError("Ingresa un correo electrónico válido.");
       return;
@@ -111,32 +169,39 @@ export default function AdminsPage() {
     try {
       let response;
 
-      if (inviteRole === "admin") {
-        // admin (misma org) -> tu backend decide cómo asociarlo
-        response = await inviteAdmin(currentOrg.id, { email, role: "ADMIN" });
-      }
+      // DEBUG (puedes dejarlo, no molesta en prod; si quieres lo quitamos luego)
+      console.log("[AdminsPage] INVITE start", {
+        inviteRole,
+        orgId: currentOrg.id,
+        email,
+      });
 
-      if (inviteRole === "owner") {
+      if (inviteRole === "admin") {
+        // admin (misma org)
+        // OJO: manda role en lowercase para evitar ambigüedad
+        response = await inviteAdmin(currentOrg.id, { email, role: "admin" });
+      } else if (inviteRole === "owner") {
         // owner (nueva org)
         response = await inviteIndependentOwner({ email, full_name: null });
       }
 
+      console.log("[AdminsPage] INVITE raw response:", response);
+
       const { error: fnError, data } = response || {};
 
       if (fnError) {
-        setError(fnError.message || "Error al enviar la invitación.");
+        const msg = extractEdgeError(response, "Error al enviar la invitación.");
+        setError(msg);
         return;
       }
 
       if (data && data.ok === false) {
-        setError(data.error ?? "La invitación no pudo ser enviada.");
+        const msg = extractEdgeError({ data, error: null }, "La invitación no pudo ser enviada.");
+        setError(msg);
         return;
       }
 
-      // === CONTRATO NUEVO (universal): invited_via + action_link
-      // Soportamos ambos formatos:
-      // - { invited_via, action_link, ... }
-      // - { action_link } únicamente
+      // Contrato: invited_via + action_link
       const via = data?.invited_via || (data?.action_link ? "action_link" : null);
       const link = data?.action_link || null;
 
@@ -144,7 +209,7 @@ export default function AdminsPage() {
       setInvitedVia(via);
       setActionLink(link);
 
-      // Mensaje UX universal:
+      // Mensaje UX
       if (via === "email") {
         setSuccessMessage(
           `Invitación enviada por correo a ${email}. (Si no llega, revisa Spam/Promociones)`
@@ -161,7 +226,7 @@ export default function AdminsPage() {
       await handleRefresh();
     } catch (err) {
       console.error("[AdminsPage] excepción:", err);
-      setError("Error inesperado al enviar la invitación.");
+      setError(err?.message || "Error inesperado al enviar la invitación.");
     } finally {
       setLoadingAction(false);
     }
@@ -178,7 +243,8 @@ export default function AdminsPage() {
     setError(null);
     setSuccessMessage(null);
 
-    const { error: delErr } = await deleteAdmin(currentOrg.id, adm.user_id);
+    const resp = await deleteAdmin(currentOrg.id, adm.user_id);
+    const { error: delErr } = resp || {};
 
     if (delErr) {
       setError(delErr.message || "No se pudo eliminar al administrador.");
@@ -218,7 +284,7 @@ export default function AdminsPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Administradores actuales</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Organización: <b>{currentOrg?.name}</b>
+          Organización: <b>{orgName}</b>
         </p>
         <p className="text-xs text-slate-500 mt-1">
           Usuario: <span className="font-mono">{user?.email}</span>
@@ -229,7 +295,6 @@ export default function AdminsPage() {
       <section className="mb-8 border rounded-xl p-4 bg-white">
         <h2 className="text-sm font-semibold mb-2">Invitar nuevo administrador</h2>
 
-        {/* Nota universal anti-whatsapp-preview */}
         <div className="text-xs text-slate-600 mb-3">
           Importante: el acceso funciona solo con el <b>Magic Link real</b> (con tokens).{" "}
           <b>No</b> envíes links como <span className="font-mono">/inicio</span>. Si compartes por WhatsApp,
