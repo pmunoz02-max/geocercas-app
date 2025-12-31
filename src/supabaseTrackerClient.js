@@ -1,24 +1,17 @@
 // src/supabaseTrackerClient.js
-import { createClient } from "@supabase/supabase-js";
+// ⚠️ Este archivo existe SOLO por compatibilidad.
+// El tracker usa el MISMO cliente Supabase que el resto de la app.
+// NO hay segundo proyecto Supabase.
+// NO hay VITE_TRACKER_*
+// NO hay throw (nunca más pantalla blanca)
 
-const trackerUrl = import.meta.env.VITE_TRACKER_SUPABASE_URL;
-const trackerAnon = import.meta.env.VITE_TRACKER_SUPABASE_ANON_KEY;
+import { supabase } from "./supabaseClient";
 
-if (!trackerUrl || !trackerAnon) {
-  throw new Error(
-    "Faltan variables tracker Supabase: VITE_TRACKER_SUPABASE_URL / VITE_TRACKER_SUPABASE_ANON_KEY"
-  );
-}
+/**
+ * Alias de compatibilidad histórica.
+ * Cualquier código que importe `supabaseTracker`
+ * recibirá el cliente Supabase único del proyecto.
+ */
+export const supabaseTracker = supabase;
 
-export const supabaseTracker = createClient(trackerUrl, trackerAnon, {
-  auth: {
-    // ✅ Invitaciones tracker también deben ser IMPLICIT
-    flowType: "implicit",
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-
-    storageKey: "sb-tugeocercas-auth-token-tracker-authB",
-    storage: window.localStorage,
-  },
-});
+export default supabaseTracker;
