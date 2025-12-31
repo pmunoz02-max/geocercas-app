@@ -1,264 +1,202 @@
 // src/pages/AuthCallback.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { supabase } from "../supabaseClient";
 
-// ✅ Cliente CANONICAL del PANEL (el mismo que usa tu AuthContext)
-import { supabase as supabasePanel } from "../supabaseClient";
-
-type Status =
-  | { phase: "init"; message: string }
-  | { phase: "working"; message: string }
-  | { phase: "ok"; message: string }
-  | { phase: "error"; message: string; details?: string };
-
-function safeGetTarget(search: string): "panel" | "tracker" {
-  const p = new URLSearchParams(search);
-  const t = (p.get("target") || "").toLowerCase();
-  return t === "tracker" ? "tracker" : "panel";
-}
+type Step = "working" | "success" | "error";
 
 function isTrackerHostname(hostname: string) {
   const h = String(hostname || "").toLowerCase().trim();
   return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
 }
 
-function hasHashTokens(hash: string) {
-  return /access_token=/.test(hash) && /refresh_token=/.test(hash);
-}
-
-function getHashParam(hash: string, key: string): string | null {
-  const h = hash.startsWith("#") ? hash.slice(1) : hash;
-  const p = new URLSearchParams(h);
-  return p.get(key);
-}
-
-function decodeJwtPayload(token: string): any | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length < 2) return null;
-    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
-    const json = atob(b64 + pad);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function issuerHostFromAccessToken(accessToken: string): string | null {
-  const payload = decodeJwtPayload(accessToken);
-  const iss = String(payload?.iss || "");
-  try {
-    const u = new URL(iss);
-    return u.host || null;
-  } catch {
-    return null;
-  }
-}
-
-function looksLikeClockSkew(e: any) {
-  const msg = String(e?.message || e || "").toLowerCase();
-  return msg.includes("issued in the future") || msg.includes("clock") || msg.includes("skew");
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let t: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
   });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (t) clearTimeout(t);
-  }
 }
 
-function getEnv(name: string): string | null {
-  const v = (import.meta as any).env?.[name];
-  return v ? String(v) : null;
-}
-
-function buildTrackerClientIfPossible(): SupabaseClient | null {
-  const trackerUrl = getEnv("VITE_SUPABASE_TRACKER_URL");
-  const trackerKey = getEnv("VITE_SUPABASE_TRACKER_ANON_KEY");
-  if (!trackerUrl || !trackerKey) return null;
-
-  return createClient(trackerUrl, trackerKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-    },
-  });
+function parseHashTokens(hash: string) {
+  // hash viene como "#access_token=...&refresh_token=...&..."
+  const raw = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
+  const params = new URLSearchParams(raw);
+  const access_token = params.get("access_token") || "";
+  const refresh_token = params.get("refresh_token") || "";
+  return { access_token, refresh_token };
 }
 
 export default function AuthCallback() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const target = useMemo(() => safeGetTarget(location.search), [location.search]);
-  const startedRef = useRef(false);
+  const trackerDomain = useMemo(
+    () => isTrackerHostname(window.location.hostname),
+    []
+  );
 
-  const [status, setStatus] = useState<Status>({
-    phase: "init",
-    message: "Confirmando acceso…",
-  });
+  const [step, setStep] = useState<Step>("working");
+  const [message, setMessage] = useState<string>("Estableciendo sesión…");
+  const [detail, setDetail] = useState<string>("");
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+    let alive = true;
 
     const run = async () => {
       try {
-        setStatus({ phase: "working", message: "Procesando Magic Link…" });
+        setStep("working");
+        setMessage("Estableciendo sesión…");
+        setDetail("");
 
-        const trackerHost = isTrackerHostname(window.location.hostname);
-        const trackerClient = buildTrackerClientIfPossible();
+        const searchParams = new URLSearchParams(location.search);
+        const target = (searchParams.get("target") || "").toLowerCase();
 
-        const code = new URLSearchParams(window.location.search).get("code");
-        const hash = window.location.hash || "";
+        // 1) PKCE Code flow (lo normal en Magic Link moderno)
+        const code = searchParams.get("code") || "";
 
-        // timeouts realistas (móvil/TWA)
-        const SET_SESSION_TIMEOUT = 30_000;
-        const EXCHANGE_TIMEOUT = 30_000;
-        const GET_SESSION_TIMEOUT = 15_000;
+        // 2) Legacy implicit flow (hash tokens)
+        const { access_token, refresh_token } = parseHashTokens(location.hash);
 
-        // Selección por defecto:
-        // - Panel domain => SIEMPRE usamos el cliente canonical del panel (supabasePanel)
-        // - Tracker domain => usamos trackerClient si existe, si no, mostramos error claro
-        let client: SupabaseClient = supabasePanel;
-
-        if (trackerHost) {
-          if (!trackerClient) {
-            throw new Error(
-              "Dominio TRACKER detectado, pero faltan env vars: VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY"
-            );
-          }
-          client = trackerClient;
+        // 3) Si NO hay code ni tokens => NO podemos crear sesión
+        if (!code && !(access_token && refresh_token)) {
+          throw new Error(
+            "Falta el parámetro de autenticación (no llegó ?code=... ni #access_token=...). Revisa Redirect URLs en Supabase Auth."
+          );
         }
 
-        // Si viene token en hash, podemos ajustar por ISS (blindaje):
-        // - Si el token dice que viene del tracker y estás en panel, no lo “fuerces” al panel:
-        //   muéstralo como error (evita loops).
-        if (hasHashTokens(hash)) {
-          const access_token = getHashParam(hash, "access_token");
-          const refresh_token = getHashParam(hash, "refresh_token");
-          if (!access_token || !refresh_token) {
-            throw new Error("Faltan tokens en el hash (access_token/refresh_token).");
-          }
-
-          const issHost = issuerHostFromAccessToken(access_token);
-
-          // Si tenemos trackerClient y el issuer es tracker, usamos tracker
-          if (trackerClient && issHost) {
-            const trackerHostFromEnv = new URL(getEnv("VITE_SUPABASE_TRACKER_URL") as string).host;
-            if (issHost === trackerHostFromEnv) {
-              client = trackerClient;
-            }
-          }
-
-          // Si estás en panel (www) pero el token es tracker -> no intentes setSession en panel
-          if (!trackerHost && trackerClient && issHost) {
-            const trackerHostFromEnv = new URL(getEnv("VITE_SUPABASE_TRACKER_URL") as string).host;
-            if (issHost === trackerHostFromEnv) {
-              throw new Error(
-                "Este Magic Link pertenece al TRACKER (proyecto tracker-auth). Abre el link en el dominio tracker o genera un link de ADMIN/PANEL."
-              );
-            }
-          }
-
-          setStatus({ phase: "working", message: "Estableciendo sesión…" });
-
+        // 4) Establecer sesión
+        if (code) {
+          setMessage("Intercambiando código por sesión…");
+          // exchangeCodeForSession puede demorar por red; lo protegemos con timeout
           await withTimeout(
-            client.auth.setSession({ access_token, refresh_token }),
-            SET_SESSION_TIMEOUT,
+            supabase.auth.exchangeCodeForSession(code),
+            12000,
+            "exchangeCodeForSession"
+          );
+        } else {
+          setMessage("Aplicando tokens de sesión…");
+          await withTimeout(
+            supabase.auth.setSession({ access_token, refresh_token }),
+            12000,
             "setSession"
           );
-
-          // Limpia hash para evitar reproceso
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        } else if (code) {
-          // PKCE: se intercambia con el mismo cliente que corresponda al dominio
-          setStatus({ phase: "working", message: "Intercambiando código…" });
-
-          await withTimeout(client.auth.exchangeCodeForSession(code), EXCHANGE_TIMEOUT, "exchangeCodeForSession");
-
-          const p = new URLSearchParams(window.location.search);
-          p.delete("code");
-          const qs = p.toString();
-          window.history.replaceState({}, document.title, window.location.pathname + (qs ? `?${qs}` : ""));
-        } else {
-          throw new Error("Callback sin parámetros (ni hash tokens ni code).");
         }
 
-        // ✅ Confirmación mínima: sesión debe existir EN EL CLIENTE CANONICAL DEL PANEL si estamos en panel
-        setStatus({ phase: "working", message: "Confirmando sesión…" });
+        // 5) Confirmar sesión (sin llamar /user antes de tiempo)
+        setMessage("Confirmando sesión…");
+        const { data, error } = await withTimeout(
+          supabase.auth.getSession(),
+          12000,
+          "getSession"
+        );
 
-        const confirmClient = trackerHost ? client : supabasePanel; // panel confirma en canonical
-        const { data, error } = await withTimeout(confirmClient.auth.getSession(), GET_SESSION_TIMEOUT, "getSession");
         if (error) throw error;
-        if (!data?.session) throw new Error("Sesión no disponible luego del callback.");
 
-        setStatus({ phase: "ok", message: "Acceso confirmado. Redirigiendo…" });
+        const sess = data?.session ?? null;
+        if (!sess) {
+          throw new Error(
+            "No se pudo confirmar la sesión (session=null). Verifica cookies, third-party cookies, y Redirect URLs."
+          );
+        }
 
-        // redirección final
-        const goTracker = trackerHost || target === "tracker";
-        navigate(goTracker ? "/tracker-gps" : "/inicio", { replace: true });
-      } catch (e: any) {
-        console.error("[AuthCallback] error:", e);
+        // 6) Redirección final
+        setMessage("Redirigiendo…");
 
-        if (looksLikeClockSkew(e)) {
-          setStatus({
-            phase: "error",
-            message: "El reloj del dispositivo está desfasado.",
-            details:
-              "Activa 'Fecha y hora automáticas' y 'Zona horaria automática'. Luego abre un Magic Link NUEVO.",
-          });
+        // tracker domain manda a tracker-gps SIEMPRE
+        if (trackerDomain) {
+          if (!alive) return;
+          setStep("success");
+          navigate("/tracker-gps", { replace: true });
           return;
         }
 
-        setStatus({
-          phase: "error",
-          message: "Ocurrió un problema.",
-          details: String(e?.message || e),
-        });
+        // panel domain: target puede sugerir tracker/panel, pero aquí lo dejamos simple y seguro
+        if (!alive) return;
+        setStep("success");
+
+        if (target === "tracker") {
+          navigate("/tracker-gps", { replace: true });
+        } else {
+          navigate("/inicio", { replace: true });
+        }
+      } catch (e: any) {
+        console.error("[AuthCallback] error:", e);
+        if (!alive) return;
+        setStep("error");
+        setMessage("Ocurrió un problema.");
+        setDetail(e?.message || String(e));
       }
     };
 
     run();
-  }, [navigate, target, location.search]);
+
+    return () => {
+      alive = false;
+    };
+  }, [location.search, location.hash, navigate, trackerDomain]);
+
+  const goLogin = () => navigate("/login", { replace: true });
+
+  const retry = () => {
+    // Reintento limpio: recargar la misma URL
+    window.location.reload();
+  };
 
   return (
-    <div style={{ padding: 24, maxWidth: 720 }}>
-      <h1 style={{ marginBottom: 8 }}>App Geocercas</h1>
+    <div className="min-h-[60vh] flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-white border rounded-2xl p-6 space-y-4">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold">App Geocercas</h1>
+          <p className="text-sm text-slate-600">{message}</p>
+        </div>
 
-      {status.phase !== "error" ? (
-        <p>{status.message}</p>
-      ) : (
-        <>
-          <p>Ocurrió un problema.</p>
-          <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>
-            {status.details || status.message}
-          </p>
+        {step === "working" && (
+          <div className="text-sm text-slate-500">Procesando…</div>
+        )}
 
-          <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
-            <button
-              onClick={() => navigate("/login", { replace: true })}
-              style={{ padding: "10px 14px", cursor: "pointer" }}
-            >
-              Ir a Login
-            </button>
+        {step === "error" && (
+          <>
+            <div className="border border-red-200 bg-red-50 p-3 rounded-lg">
+              <div className="text-sm font-semibold text-red-800">
+                Ocurrió un problema.
+              </div>
+              <div className="mt-1 text-sm text-red-700">{detail}</div>
+            </div>
 
-            <button
-              onClick={() => window.location.reload()}
-              style={{ padding: "10px 14px", cursor: "pointer" }}
-            >
-              Reintentar
-            </button>
-          </div>
-        </>
-      )}
+            <div className="flex gap-3">
+              <button
+                onClick={goLogin}
+                className="flex-1 rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-500 transition"
+              >
+                Ir a Login
+              </button>
+              <button
+                onClick={retry}
+                className="flex-1 rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-500 transition"
+              >
+                Reintentar
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-400">
+              Si el link llega sin <code>?code=</code>, revisa en Supabase:
+              Authentication → URL Configuration →{" "}
+              <b>Redirect URLs</b> y agrega tu callback exacto:
+              <br />
+              <code>https://www.tugeocercas.com/auth/callback</code>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
