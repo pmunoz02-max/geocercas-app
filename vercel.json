@@ -1,16 +1,16 @@
-{
-  "routes": [
+﻿{
+  "redirects": [
     {
-      "src": "/(.*)",
+      "source": "/(.*)",
       "has": [
         { "type": "host", "value": "tugeocercas.com" }
       ],
-      "status": 308,
-      "headers": {
-        "Location": "https://www.tugeocercas.com/$1"
-      }
-    },
+      "destination": "https://www.tugeocercas.com/$1",
+      "permanent": true
+    }
+  ],
 
+  "routes": [
     { "src": "^/icons/(.*)$", "dest": "/icons/$1" },
     { "src": "^/manifest\\.webmanifest$", "dest": "/manifest.webmanifest" },
 
