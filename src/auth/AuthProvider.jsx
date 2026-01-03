@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
   const [currentOrg, setCurrentOrg] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ===== BOOTSTRAP INICIAL =====
+  // ===== BOOTSTRAP INICIAL (solo 1 vez) =====
   useEffect(() => {
     let mounted = true;
 
@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
       if (!mounted) return;
       setProfile(prof ?? null);
 
-      // Organizaciones
+      // Orgs (memberships -> organizations)
       const { data: memberships } = await supabase
         .from("memberships")
         .select("org_id")
@@ -82,7 +82,7 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // ===== LISTENER AUTH =====
+  // ===== LISTENER AUTH (solo 1 vez) =====
   useEffect(() => {
     const {
       data: { subscription },
@@ -115,11 +115,9 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // ===== DERIVADOS =====
   const role = useMemo(() => profile?.role ?? null, [profile]);
   const isRootOwner = role === "root_owner";
 
-  // ===== API CONTEXTO =====
   const value = useMemo(
     () => ({
       session,
@@ -132,12 +130,12 @@ export function AuthProvider({ children }) {
       setCurrentOrg,
       loading,
       supabase,
+      signOut: async () => {
+        await supabase.auth.signOut();
+      },
       reloadAuth: async () => {
         const { data } = await supabase.auth.getSession();
         setSession(data?.session ?? null);
-      },
-      signOut: async () => {
-        await supabase.auth.signOut();
       },
     }),
     [session, profile, role, isRootOwner, orgs, currentOrg, loading]
@@ -160,8 +158,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within <AuthProvider>");
-  }
+  if (!ctx) throw new Error("useAuth must be used within <AuthProvider>");
   return ctx;
 }
