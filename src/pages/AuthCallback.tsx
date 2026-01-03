@@ -1,107 +1,153 @@
-// src/pages/AuthCallback.tsx
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 
-type Step = "working" | "success" | "error";
-
-function isTrackerHostname(hostname: string) {
-  const h = String(hostname || "").toLowerCase().trim();
-  return h === "tracker.tugeocercas.com" || h.startsWith("tracker.");
+function isSafeInternalPath(p?: string | null) {
+  if (!p) return false;
+  if (typeof p !== "string") return false;
+  if (!p.startsWith("/")) return false;
+  if (p.includes("://")) return false;
+  if (p.startsWith("//")) return false;
+  if (/[\u0000-\u001F\u007F]/.test(p)) return false;
+  return true;
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`Timeout en ${label}`)), ms);
-    p.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      }
-    );
-  });
+function isUuid(v?: string | null) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v || "")
+  );
 }
 
 export default function AuthCallback() {
-  const location = useLocation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { loading, session, role, isRootOwner, reloadAuth } = useAuth();
 
-  const trackerDomain = useMemo(
-    () => isTrackerHostname(window.location.hostname),
-    []
-  );
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
 
-  const [step, setStep] = useState<Step>("working");
-  const [message, setMessage] = useState("Estableciendo sesión…");
-  const [detail, setDetail] = useState("");
+  const code = params.get("code");
+  const tokenHash = params.get("token_hash");
+  const type = params.get("type"); // invite | recovery | email
+  const nextParam = params.get("next");
+
+  const trackerOrgId = useMemo(() => {
+    const v = params.get("tracker_org_id");
+    return isUuid(v) ? v : null;
+  }, [params]);
+
+  const forcedOnce = useRef(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(true);
+
+  // ✅ Forzar dominio canónico (no depender de redirects externos)
+  useEffect(() => {
+    const host = window.location.host.toLowerCase();
+    if (host === "tugeocercas.com") {
+      const target =
+        "https://www.tugeocercas.com" +
+        window.location.pathname +
+        window.location.search +
+        window.location.hash;
+      window.location.replace(target);
+    }
+  }, []);
 
   useEffect(() => {
-    let alive = true;
+    let cancelled = false;
 
-    const run = async () => {
+    async function finalizeAuth() {
       try {
-        const params = new URLSearchParams(location.search);
-        const token_hash = params.get("token_hash");
-        const type = params.get("type");
+        // si aún estamos en el root sin www, dejamos que el replace ocurra
+        if (window.location.host.toLowerCase() === "tugeocercas.com") return;
 
-        if (!token_hash || !type) {
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+        }
+
+        if (tokenHash && type) {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type as any,
+          });
+          if (error) throw error;
+        }
+
+        if (!code && !(tokenHash && type)) {
           throw new Error("Falta token_hash o type en el callback");
         }
-
-        setMessage("Verificando enlace…");
-
-        const { error } = await withTimeout(
-          supabase.auth.verifyOtp({
-            token_hash,
-            type: type as any,
-          }),
-          15000,
-          "verifyOtp"
-        );
-
-        if (error) throw error;
-
-        const { data } = await supabase.auth.getSession();
-        if (!data?.session) {
-          throw new Error("Sesión no creada después de verifyOtp");
-        }
-
-        if (!alive) return;
-        setStep("success");
-
-        navigate(trackerDomain ? "/tracker-gps" : "/inicio", {
-          replace: true,
-        });
       } catch (e: any) {
-        console.error("[AuthCallback] error:", e);
-        if (!alive) return;
-        setStep("error");
-        setMessage("Error de autenticación");
-        setDetail(e?.message || String(e));
+        if (!cancelled) {
+          console.error("Auth callback error:", e);
+          setAuthError(e?.message || "Authentication error");
+        }
+      } finally {
+        if (!cancelled) setProcessing(false);
       }
-    };
+    }
 
-    run();
+    finalizeAuth();
     return () => {
-      alive = false;
+      cancelled = true;
     };
-  }, [location.search, navigate, trackerDomain]);
+  }, [code, tokenHash, type]);
+
+  useEffect(() => {
+    if (processing || loading) return;
+
+    if (authError) {
+      navigate("/login?error=auth", { replace: true });
+      return;
+    }
+
+    if (!session) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    if (trackerOrgId && !forcedOnce.current) {
+      forcedOnce.current = true;
+      localStorage.setItem("force_tracker_org_id", trackerOrgId);
+      localStorage.setItem("current_org_id", trackerOrgId);
+      if (typeof reloadAuth === "function") reloadAuth();
+      return;
+    }
+
+    const roleLower = String(role || "").toLowerCase();
+
+    if (roleLower === "tracker") {
+      navigate("/tracker-gps", { replace: true });
+      return;
+    }
+
+    let dest = "/inicio";
+    if (nextParam && isSafeInternalPath(nextParam)) {
+      if (nextParam.startsWith("/tracker-gps")) dest = "/inicio";
+      else if (nextParam.startsWith("/admins") && !isRootOwner) dest = "/inicio";
+      else dest = nextParam;
+    }
+
+    navigate(dest, { replace: true });
+  }, [
+    processing,
+    loading,
+    session,
+    role,
+    isRootOwner,
+    nextParam,
+    navigate,
+    trackerOrgId,
+    reloadAuth,
+    authError,
+  ]);
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <div className="bg-white border rounded-xl p-6 max-w-md">
-        <h1 className="font-semibold text-lg">App Geocercas</h1>
-        <p className="text-sm text-slate-600">{message}</p>
-        {step === "error" && (
-          <pre className="mt-3 text-xs text-red-600 whitespace-pre-wrap">
-            {detail}
-          </pre>
-        )}
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+        Finalizando autenticación…
       </div>
     </div>
   );
 }
+
