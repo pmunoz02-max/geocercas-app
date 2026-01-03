@@ -1,87 +1,74 @@
 // src/App.jsx
 import React, { useMemo } from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
+
+import { useAuth } from "./context/AuthContext.jsx";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
-import PersonalPage from "./components/personal/PersonalPage.jsx";
-import AsignacionesPage from "./pages/AsignacionesPage.jsx";
+import Landing from "./pages/Landing.jsx";
+import Login from "./pages/Login.tsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
+import AuthCallback from "./pages/AuthCallback.tsx";
+
+import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
+import PersonalPage from "./components/personal/PersonalPage.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
+import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
-import AdminsPage from "./pages/AdminsPage.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
-
-import Login from "./pages/Login.tsx";
-import AuthCallback from "./pages/AuthCallback";
-import Inicio from "./pages/Inicio.jsx";
-import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
-import ResetPassword from "./pages/ResetPassword.jsx";
 
+import AdminsPage from "./pages/AdminsPage.jsx";
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
-import { useAuth } from "./context/AuthContext.jsx";
+/* ================= HELPERS ================= */
 
-/* =========================
-   HELPERS
-========================= */
+const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
+
 function normalizeRole(r) {
-  const v = String(r || "").toLowerCase();
-  if (["owner", "admin", "tracker", "viewer"].includes(v)) return v;
-  return "tracker";
+  return String(r || "").toLowerCase().trim();
 }
 
-function getActiveRole(memberships, orgId) {
-  if (!orgId) return "tracker";
-  const row = memberships?.find((m) => m?.org_id === orgId);
-  return normalizeRole(row?.role);
-}
+/* ================= PANEL GATE ================= */
 
-/* =========================
-   PANEL SHELL
-========================= */
-function Shell() {
-  const { loading, memberships, currentOrg, isRootOwner } = useAuth();
-  const activeOrgId = currentOrg?.id ?? null;
-
-  const activeRole = useMemo(
-    () => getActiveRole(memberships, activeOrgId),
-    [memberships, activeOrgId]
-  );
+function PanelGate({ children }) {
+  const { loading, session, role } = useAuth();
 
   if (loading) return null;
+  if (!session) return <Navigate to="/" replace />;
 
-  const tabs = [
-    { path: "/inicio", labelKey: "app.tabs.inicio" },
-    { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
-    { path: "/geocercas", labelKey: "app.tabs.geocercas" },
-    { path: "/personal", labelKey: "app.tabs.personal" },
-    { path: "/actividades", labelKey: "app.tabs.actividades" },
-    { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
-    { path: "/costos", labelKey: "app.tabs.reportes" },
-    { path: "/costos-dashboard", labelKey: "app.tabs.dashboard" },
-    { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
-    { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
-  ];
-
-  if (isRootOwner) {
-    tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
+  const r = normalizeRole(role);
+  if (!PANEL_ROLES.has(r)) {
+    return <Navigate to="/tracker-gps" replace />;
   }
 
+  return children;
+}
+
+/* ================= SHELL ================= */
+
+function Shell() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <AppHeader />
       <div className="border-b border-slate-200 bg-white">
-        <TopTabs tabs={tabs} />
+        <TopTabs />
       </div>
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
         <Outlet />
@@ -90,41 +77,27 @@ function Shell() {
   );
 }
 
-function RootOwnerRoute({ children }) {
-  const { loading, isRootOwner } = useAuth();
-  if (loading) return null;
-  if (!isRootOwner) return <Navigate to="/inicio" replace />;
-  return children;
-}
-
-function LoginShell() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Login />
-    </div>
-  );
-}
+/* ================= FALLBACK ================= */
 
 function SmartFallback() {
-  const { session, loading, role } = useAuth();
+  const { loading, session, role } = useAuth();
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
-  return String(role).toLowerCase() === "tracker"
+  return normalizeRole(role) === "tracker"
     ? <Navigate to="/tracker-gps" replace />
     : <Navigate to="/inicio" replace />;
 }
 
-/* =========================
-   ROUTES
-========================= */
+/* ================= APP ================= */
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<LoginShell />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
@@ -142,7 +115,9 @@ export default function App() {
         <Route
           element={
             <AuthGuard mode="panel">
-              <Shell />
+              <PanelGate>
+                <Shell />
+              </PanelGate>
             </AuthGuard>
           }
         >
@@ -156,15 +131,7 @@ export default function App() {
           <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
           <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
           <Route path="/invitar-tracker" element={<InvitarTracker />} />
-
-          <Route
-            path="/admins"
-            element={
-              <RootOwnerRoute>
-                <AdminsPage />
-              </RootOwnerRoute>
-            }
-          />
+          <Route path="/admins" element={<AdminsPage />} />
 
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
@@ -172,7 +139,7 @@ export default function App() {
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
-        {/* Fallback */}
+        {/* FALLBACK */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
