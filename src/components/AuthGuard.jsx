@@ -4,24 +4,18 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 /**
  * AuthGuard (simple y estable)
+ * - Espera loading del AuthContext
+ * - Si no hay sesión -> /login
+ * - Si hay sesión -> render children
  *
- * Responsabilidad ÚNICA:
- * - Esperar a que AuthContext termine (loading)
- * - Si NO hay sesión => enviar a /login
- * - Si hay sesión => permitir render
+ * NO decide tracker vs panel (eso vive en App.jsx).
  *
- * NO decide tracker vs panel.
- * NO decide roles.
- * (Esa autoridad vive en App.jsx: rutas + SmartFallback)
- *
- * Nota:
- * - Se acepta prop `mode` SOLO por compatibilidad con App.jsx actual.
+ * mode se acepta solo por compatibilidad con App.jsx (no se usa).
  */
 export default function AuthGuard({ children, mode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
 
-  // Mientras carga auth -> loader (evita redirects prematuros)
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -32,7 +26,6 @@ export default function AuthGuard({ children, mode }) {
     );
   }
 
-  // Sin sesión -> login
   if (!session) {
     return (
       <Navigate
@@ -43,6 +36,5 @@ export default function AuthGuard({ children, mode }) {
     );
   }
 
-  // Con sesión -> permitir acceso (NO decidir rutas por rol aquí)
   return children;
 }
