@@ -1,10 +1,14 @@
 // src/supabaseTrackerClient.js
 // Cliente Supabase para el flujo Tracker.
-// IMPORTANTE: este archivo asume que supabaseClient.js está en /src/supabaseClient.js
+// Regla de oro: 1 solo entrypoint (reutiliza el cliente unificado).
 
 import { supabase } from "./supabaseClient.js";
 
-// En caso de que en el futuro quieras un cliente separado para Tracker,
-// aquí es donde lo harías. Por ahora, reutilizamos el cliente único (regla de oro).
-export default supabase;
+// Export nombrado esperado por TrackerGpsPage.jsx
+export const supabaseTracker = supabase;
+
+// Export opcional por compatibilidad con otros imports
 export { supabase };
+
+// Default export (por si alguna parte lo usa así)
+export default supabase;
