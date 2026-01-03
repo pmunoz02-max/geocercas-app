@@ -17,188 +17,170 @@ function isSafeInternalPath(p?: string | null) {
   return true;
 }
 
-function isUuid(v?: string | null) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    String(v || "")
-  );
-}
-
 /**
- * Une params de query + hash (Supabase puede usar ambos)
- * - search: "?a=1&b=2"
- * - hash: "#access_token=...&refresh_token=..."  o "#/auth/callback?token_hash=...&type=invite"
+ * AuthCallback (Supabase Auth v2)
+ * Objetivo: convertir callback (invite/magiclink/pkce) en sesión válida y redirigir.
+ * - NO decide permisos/roles.
+ * - NO aplica lógica de org.
+ * - SOLO:
+ *    1) exchangeCodeForSession (PKCE) si hay ?code=
+ *    2) verifyOtp si hay token_hash + type (invite/magiclink/...)
+ *    3) setSession si vienen access_token/refresh_token en hash
+ *    4) espera session y navega.
  */
-function getAllParams(search: string, hash: string) {
-  const out = new URLSearchParams(search || "");
-
-  const rawHash = (hash || "").startsWith("#") ? (hash || "").slice(1) : (hash || "");
-  if (rawHash) {
-    const hashPart = rawHash.includes("?") ? rawHash.split("?").pop() || "" : rawHash;
-    const h = new URLSearchParams(hashPart);
-    h.forEach((v, k) => {
-      if (!out.has(k)) out.set(k, v);
-    });
-  }
-
-  return out;
-}
-
 export default function AuthCallback() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session, loading, role, isRootOwner, reloadAuth } = useAuth();
+  const { reloadAuth } = useAuth() as any;
 
-  const params = useMemo(
-    () => getAllParams(location.search, location.hash),
-    [location.search, location.hash]
-  );
+  const [status, setStatus] = useState<string>("Procesando autenticación…");
+  const [detail, setDetail] = useState<string>("");
 
-  const code = params.get("code");
-  const tokenHash = params.get("token_hash") || params.get("token");
-  const type = params.get("type"); // invite | recovery | email | magiclink
-  const nextParam = params.get("next");
+  const ranRef = useRef(false);
 
-  const errorParam = params.get("error") || params.get("error_code");
-  const errorDesc = params.get("error_description") || params.get("error_message");
+  // Une query + hash params (Supabase puede enviar en uno u otro)
+  const params = useMemo(() => {
+    const out = new URLSearchParams();
 
-  const accessToken = params.get("access_token");
-  const refreshToken = params.get("refresh_token");
+    // query
+    const searchParams = new URLSearchParams(location.search || "");
+    searchParams.forEach((v, k) => out.set(k, v));
 
-  const trackerOrgId = useMemo(() => {
-    const v = params.get("tracker_org_id");
-    return isUuid(v) ? v : null;
+    // hash: puede ser "#access_token=.." o "#/auth/callback?token_hash=.."
+    const rawHash = (location.hash || "").replace(/^#/, "");
+    if (rawHash) {
+      let hashPart = rawHash;
+
+      // si viene como ruta con '?', nos quedamos con lo que está después de '?'
+      const qIndex = rawHash.indexOf("?");
+      if (qIndex >= 0) hashPart = rawHash.slice(qIndex + 1);
+
+      const hashParams = new URLSearchParams(hashPart);
+      hashParams.forEach((v, k) => {
+        // no pisar query si ya existe, salvo que query no lo tenga
+        if (!out.has(k)) out.set(k, v);
+      });
+    }
+
+    return out;
+  }, [location.search, location.hash]);
+
+  const nextPath = useMemo(() => {
+    // Prioridad:
+    // 1) ?next=/ruta
+    // 2) ?returnTo=/ruta
+    // 3) localStorage (opcional)
+    // 4) default
+    const fromQuery = params.get("next") || params.get("returnTo");
+    if (isSafeInternalPath(fromQuery)) return fromQuery!;
+
+    const ls = (() => {
+      try {
+        return window.localStorage.getItem("postAuthRedirect");
+      } catch {
+        return null;
+      }
+    })();
+    if (isSafeInternalPath(ls)) return ls!;
+
+    return "/inicio";
   }, [params]);
 
-  const forcedOnce = useRef(false);
-  const [processing, setProcessing] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
-
-  // Forzar www si cae en root domain
   useEffect(() => {
-    const host = window.location.host.toLowerCase();
-    if (host === "tugeocercas.com") {
-      const target =
-        "https://www.tugeocercas.com" +
-        window.location.pathname +
-        window.location.search +
-        window.location.hash;
-      window.location.replace(target);
-    }
-  }, []);
+    if (ranRef.current) return;
+    ranRef.current = true;
 
-  // Paso 1: Finalizar autenticación
-  useEffect(() => {
-    let cancelled = false;
-
-    async function finalizeAuth() {
+    (async () => {
       try {
-        if (window.location.host.toLowerCase() === "tugeocercas.com") return;
+        setStatus("Procesando autenticación…");
+        setDetail("");
 
-        if (errorParam || errorDesc) {
-          throw new Error(errorDesc || errorParam || "Authentication error");
-        }
+        const code = params.get("code");
+        const token_hash = params.get("token_hash");
+        const type = params.get("type"); // "invite" | "magiclink" | "recovery" | etc.
+        const access_token = params.get("access_token");
+        const refresh_token = params.get("refresh_token");
 
+        // 1) PKCE: ?code=
         if (code) {
+          setStatus("Validando código (PKCE)…");
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-        } else if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) throw error;
-        } else if (tokenHash && type) {
+        }
+        // 2) OTP: token_hash + type (invite/magic link)
+        else if (token_hash && type) {
+          setStatus("Verificando enlace (OTP)…");
           const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
+            token_hash,
             type: type as any,
           });
           if (error) throw error;
+        }
+        // 3) Hash tokens: access_token + refresh_token
+        else if (access_token && refresh_token) {
+          setStatus("Estableciendo sesión…");
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (error) throw error;
         } else {
-          // ✅ Si no vienen params, NO lo tratamos como error:
-          // solo seguimos si ya existe sesión.
-          const { data } = await supabase.auth.getSession();
-          if (!data?.session) {
-            // no hubo nada que finalizar
-            return;
+          // Si no hay nada de lo anterior, probablemente el link llegó incompleto
+          throw new Error("Callback sin parámetros de autenticación (code / token_hash / access_token).");
+        }
+
+        // 4) Esperar a que supabase persista la sesión
+        setStatus("Confirmando sesión…");
+        let sessionOk = false;
+
+        for (let i = 0; i < 15; i++) {
+          const { data, error } = await supabase.auth.getSession();
+          if (error) {
+            // error transitorio: espera y reintenta
+            await sleep(150);
+            continue;
+          }
+          if (data?.session) {
+            sessionOk = true;
+            break;
+          }
+          await sleep(150);
+        }
+
+        if (!sessionOk) {
+          throw new Error("No se pudo confirmar sesión luego del callback.");
+        }
+
+        // 5) Opcional: forzar re-hidratación del AuthContext
+        if (typeof reloadAuth === "function") {
+          try {
+            await reloadAuth();
+          } catch {
+            // No bloquea navegación si falla
           }
         }
 
-        // Espera a que sesión aparezca
-        for (let i = 0; i < 10; i++) {
-          const { data } = await supabase.auth.getSession();
-          if (data?.session) break;
-          await sleep(200);
-        }
+        // Limpia redirect guardado si existe
+        try {
+          window.localStorage.removeItem("postAuthRedirect");
+        } catch {}
 
-        if (typeof reloadAuth === "function") {
-          await reloadAuth();
-        }
+        setStatus("Listo. Redirigiendo…");
+        navigate(nextPath, { replace: true });
       } catch (e: any) {
-        console.error("Auth callback error:", e);
-        if (!cancelled) setAuthError(e?.message || "auth");
-      } finally {
-        if (!cancelled) setProcessing(false);
+        const msg = e?.message ? String(e.message) : "Error de autenticación";
+        setStatus("Error de autenticación");
+        setDetail(msg);
+
+        // fallback universal
+        navigate(`/login?error=auth`, { replace: true });
       }
-    }
-
-    finalizeAuth();
-    return () => {
-      cancelled = true;
-    };
-  }, [code, tokenHash, type, accessToken, refreshToken, errorParam, errorDesc, reloadAuth]);
-
-  // Paso 2: navegación final
-  useEffect(() => {
-    if (processing || loading) return;
-
-    if (authError) {
-      navigate("/login?error=auth", { replace: true });
-      return;
-    }
-
-    if (!session) {
-      // si todavía no hay sesión, vamos al login (sin “error”)
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    if (trackerOrgId && !forcedOnce.current) {
-      forcedOnce.current = true;
-      localStorage.setItem("force_tracker_org_id", trackerOrgId);
-      localStorage.setItem("current_org_id", trackerOrgId);
-    }
-
-    const roleLower = String(role || "").toLowerCase();
-    if (roleLower === "tracker") {
-      navigate("/tracker-gps", { replace: true });
-      return;
-    }
-
-    let dest = "/inicio";
-    if (nextParam && isSafeInternalPath(nextParam)) {
-      if (nextParam.startsWith("/tracker-gps")) dest = "/inicio";
-      else if (nextParam.startsWith("/admins") && !isRootOwner) dest = "/inicio";
-      else dest = nextParam;
-    }
-
-    navigate(dest, { replace: true });
-  }, [
-    processing,
-    loading,
-    session,
-    role,
-    isRootOwner,
-    authError,
-    nextParam,
-    trackerOrgId,
-    navigate,
-  ]);
+    })();
+  }, [navigate, params, nextPath, reloadAuth]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-        Finalizando autenticación…
-      </div>
-    </div>
-  );
-}
+    <div style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
+      <h2 style={{ marginBottom: 8 }}>Auth Callback</h2>
+      <div style={{ opacity: 0.8, marginBottom: 16 }}>{status}</div>
+      {detail ? (
+        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#ddd", padding: 12, borderRadius: 8
