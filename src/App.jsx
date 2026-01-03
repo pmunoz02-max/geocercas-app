@@ -100,10 +100,10 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [
-    memberships,
-    activeOrgId,
-  ]);
+  const activeRole = useMemo(
+    () => getActiveRole(memberships, activeOrgId),
+    [memberships, activeOrgId]
+  );
   void activeRole;
 
   if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
