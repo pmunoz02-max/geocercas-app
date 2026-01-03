@@ -1,25 +1,32 @@
 // src/pages/AuthCallback.tsx
-import { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function AuthCallback() {
-  const { session, loading } = useAuth();
   const navigate = useNavigate();
+  const { loading, session, reloadAuth } = useAuth();
+  const ranOnce = useRef(false);
 
   useEffect(() => {
     if (loading) return;
 
-    // Si no hay sesión, el magic link falló
+    // ❌ Sin sesión: auth falló
     if (!session) {
-      navigate("/login?error=auth", { replace: true });
+      navigate("/login", { replace: true });
       return;
     }
 
-    // ❗ NO decidir rol aquí
-    // Dejar que App.jsx (PanelGate / SmartFallback) decida
+    // ✅ Con sesión: solo asegurar que AuthContext esté recalculado
+    if (!ranOnce.current) {
+      ranOnce.current = true;
+      if (typeof reloadAuth === "function") reloadAuth();
+    }
+
+    // ✅ NO decidir rol ni destino aquí
+    // 👉 Punto neutro, App.jsx decide
     navigate("/inicio", { replace: true });
-  }, [loading, session, navigate]);
+  }, [loading, session, reloadAuth, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
