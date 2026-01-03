@@ -9,11 +9,9 @@
       "permanent": true
     }
   ],
-
   "routes": [
     { "src": "^/icons/(.*)$", "dest": "/icons/$1" },
     { "src": "^/manifest\\.webmanifest$", "dest": "/manifest.webmanifest" },
-
     { "handle": "filesystem" },
     { "src": "/.*", "dest": "/index.html" }
   ]
