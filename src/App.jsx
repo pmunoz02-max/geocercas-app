@@ -1,4 +1,6 @@
 // src/App.jsx
+// === APP.JSX GOLD v2026-01-03 (NO DUPLICATES) ===
+
 import React, { useMemo } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
@@ -7,14 +9,14 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
-/* Public pages */
+/* Public */
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import AuthCallback from "./pages/AuthCallback";
 import Inicio from "./pages/Inicio.jsx";
 
-/* Panel pages */
+/* Panel */
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
@@ -58,9 +60,9 @@ function getActiveRole(memberships, orgId) {
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
 
 /* ======================================================
-   UI HELPERS
+   UI
 ====================================================== */
-function FullScreenLoader({ text }) {
+function FullScreenLoader({ text = "Cargando…" }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
@@ -71,23 +73,16 @@ function FullScreenLoader({ text }) {
 }
 
 /* ======================================================
-   GATES (ÚNICA AUTORIDAD DE DECISIÓN)
+   GATES (ÚNICA AUTORIDAD)
 ====================================================== */
 function RequirePanel({ children }) {
   const { loading, session, role } = useAuth();
 
-  if (loading) {
-    return <FullScreenLoader text="Cargando organización y permisos…" />;
-  }
-
-  if (!session) {
-    return <Navigate to="/" replace />;
-  }
+  if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
+  if (!session) return <Navigate to="/" replace />;
 
   const r = normalizeRole(role);
-  if (!PANEL_ROLES.has(r)) {
-    return <Navigate to="/tracker-gps" replace />;
-  }
+  if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
 
   return children;
 }
@@ -95,18 +90,11 @@ function RequirePanel({ children }) {
 function RequireTracker({ children }) {
   const { loading, session, role } = useAuth();
 
-  if (loading) {
-    return <FullScreenLoader text="Cargando autenticación…" />;
-  }
-
-  if (!session) {
-    return <Navigate to="/login" replace />;
-  }
+  if (loading) return <FullScreenLoader text="Cargando autenticación…" />;
+  if (!session) return <Navigate to="/login" replace />;
 
   const r = normalizeRole(role);
-  if (r !== "tracker") {
-    return <Navigate to="/inicio" replace />;
-  }
+  if (r !== "tracker") return <Navigate to="/inicio" replace />;
 
   return children;
 }
@@ -118,16 +106,13 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  // Solo para coherencia futura (no se usa directamente)
   const activeRole = useMemo(
     () => getActiveRole(memberships, activeOrgId),
     [memberships, activeOrgId]
   );
   void activeRole;
 
-  if (loading) {
-    return <FullScreenLoader text="Cargando organización y permisos…" />;
-  }
+  if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
 
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
@@ -176,11 +161,10 @@ function LoginShell() {
 }
 
 /* ======================================================
-   SMART FALLBACK GLOBAL
+   SMART FALLBACK
 ====================================================== */
 function SmartFallback() {
   const { loading, session, role } = useAuth();
-
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
