@@ -11,20 +11,18 @@ export default function AuthCallback() {
   useEffect(() => {
     if (loading) return;
 
-    // ❌ Sin sesión: auth falló
     if (!session) {
       navigate("/login", { replace: true });
       return;
     }
 
-    // ✅ Con sesión: solo asegurar que AuthContext esté recalculado
+    // Recalcula org/role una vez y suelta el control a App.jsx
     if (!ranOnce.current) {
       ranOnce.current = true;
       if (typeof reloadAuth === "function") reloadAuth();
     }
 
-    // ✅ NO decidir rol ni destino aquí
-    // 👉 Punto neutro, App.jsx decide
+    // Punto neutro: App.jsx (SmartFallback/Require*) decide destino final
     navigate("/inicio", { replace: true });
   }, [loading, session, reloadAuth, navigate]);
 

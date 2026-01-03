@@ -2,34 +2,34 @@
 import React, { useMemo } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
+import { useAuth } from "./context/AuthContext.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
-import PersonalPage from "./components/personal/PersonalPage.jsx";
-import AsignacionesPage from "./pages/AsignacionesPage.jsx";
-import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx";
-import ActividadesPage from "./pages/ActividadesPage.jsx";
-import CostosPage from "./pages/CostosPage.jsx";
-import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
-import AdminsPage from "./pages/AdminsPage.jsx";
-import TrackerDashboard from "./pages/TrackerDashboard.jsx";
-import InvitarTracker from "./pages/InvitarTracker.jsx";
-
+import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 import AuthCallback from "./pages/AuthCallback";
 import Inicio from "./pages/Inicio.jsx";
-import Landing from "./pages/Landing.jsx";
+
+import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
+import GeocercasPage from "./pages/GeocercasPage.jsx";
+import PersonalPage from "./components/personal/PersonalPage.jsx";
+import ActividadesPage from "./pages/ActividadesPage.jsx";
+import AsignacionesPage from "./pages/AsignacionesPage.jsx";
+import CostosPage from "./pages/CostosPage.jsx";
+import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
+import TrackerDashboard from "./pages/TrackerDashboard.jsx";
+import InvitarTracker from "./pages/InvitarTracker.jsx";
+import AdminsPage from "./pages/AdminsPage.jsx";
+
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
-import ResetPassword from "./pages/ResetPassword.jsx";
 
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
-
-import { useAuth } from "./context/AuthContext.jsx";
 
 /* ======================================================
    HELPERS: Rol activo por organización (NO TOCAR)
@@ -72,15 +72,10 @@ function FullScreenLoader({ text = "Cargando…" }) {
 function RequirePanel({ children }) {
   const { loading, session, role } = useAuth();
 
-  // Nunca decidir durante loading
   if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
-
-  // Sin sesión -> landing
   if (!session) return <Navigate to="/" replace />;
 
   const r = normalizeRole(role);
-
-  // Tracker NO puede entrar al panel
   if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
 
   return children;
@@ -90,12 +85,9 @@ function RequireTracker({ children }) {
   const { loading, session, role } = useAuth();
 
   if (loading) return <FullScreenLoader text="Cargando autenticación…" />;
-
   if (!session) return <Navigate to="/login" replace />;
 
   const r = normalizeRole(role);
-
-  // No-tracker NO puede estar en tracker-gps
   if (r !== "tracker") return <Navigate to="/inicio" replace />;
 
   return children;
@@ -108,17 +100,13 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  // Se calcula por consistencia con tu arquitectura (y futura UI)
-  const activeRole = useMemo(() => {
-    return getActiveRole(memberships, activeOrgId);
-  }, [memberships, activeOrgId]);
-
-  // Evita warnings por variable no usada si tu linter es estricto
+  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [
+    memberships,
+    activeOrgId,
+  ]);
   void activeRole;
 
-  if (loading) {
-    return <FullScreenLoader text="Cargando organización y permisos…" />;
-  }
+  if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
 
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
@@ -133,7 +121,6 @@ function Shell() {
     { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
   ];
 
-  // Admin tab SOLO root owner (Fenice)
   if (isRootOwner === true) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
@@ -192,8 +179,6 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-
-        {/* Auth callback siempre público */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* TRACKER (FUERA DEL PANEL) */}
