@@ -1,5 +1,6 @@
 // src/lib/membershipsService.js
-import { supabase } from './supabaseClient';
+import { supabase } from "../supabaseClient.js";
+
 
 export async function listMembers(orgId) {
   const { data, error } = await supabase.rpc('list_members_with_email', { p_org: orgId });

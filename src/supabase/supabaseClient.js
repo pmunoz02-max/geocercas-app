@@ -1,6 +1,6 @@
 // src/supabase/supabaseClient.js
-export { default, supabase, getSupabase,
-  getSessionSafe, getUserSafe, signInWithPassword, signInWithEmailOtp,
-  signOut, onAuthChange, tryExchangeCodeForSessionIfPresent,
-  getProfileSafe, isEnvReady, envInfo
-} from "../supabaseClient.js";
+// Re-export TOTAL del Supabase client único.
+// Evita duplicación de sesión y errores de build.
+
+export * from "../supabaseClient.js";
+export { supabase } from "../supabaseClient.js";

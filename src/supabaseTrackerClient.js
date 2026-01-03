@@ -5,8 +5,7 @@
 // NO hay VITE_TRACKER_*
 // NO hay throw (nunca más pantalla blanca)
 
-import { supabase } from "./supabaseClient";
-
+import { supabase } from "../supabaseClient.js";
 /**
  * Alias de compatibilidad histórica.
  * Cualquier código que importe `supabaseTracker`

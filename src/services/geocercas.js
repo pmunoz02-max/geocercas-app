@@ -1,5 +1,5 @@
 // src/services/geocercas.js
-import { supabase } from "@/supabaseClient";
+import { supabase } from "../supabaseClient.js";
 
 /**
  * Lista geocercas completas (incluye geometría) para el mapa.

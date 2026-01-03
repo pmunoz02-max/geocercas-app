@@ -1,6 +1,5 @@
 // src/lib/profileService.js
-import { supabase } from './supabaseClient';
-
+import { supabase } from "../supabaseClient.js";
 export async function getMyProfile() {
   // Usa la vista my_profile creada en SQL
   const { data, error } = await supabase.from('my_profile').select('*').single();

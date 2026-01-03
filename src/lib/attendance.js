@@ -1,5 +1,5 @@
 // src/lib/attendance.js
-import { supabase } from './supabaseClient';
+import { supabase } from "../supabaseClient.js";
 
 /**
  * Obtiene (o crea) el registro de asistencia del usuario para una fecha dada.

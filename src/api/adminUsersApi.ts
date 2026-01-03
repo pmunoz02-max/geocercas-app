@@ -1,5 +1,6 @@
 // src/api/adminUsersApi.ts
-import { supabase } from "@/supabaseClient";
+import { supabase } from "../supabaseClient.js";
+
 
 export async function deleteUserCompletely(targetUserId: string) {
   const { data, error } = await supabase.functions.invoke("delete-user", {

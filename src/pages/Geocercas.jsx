@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import GeoMap from "@/components/GeoMap";
 import { listGeocercas } from "@/services/geocercas";
-import { supabase } from "@/supabaseClient";
+import { supabase } from "../supabaseClient.js";
 import OrgSelector from "@/components/OrgSelector";
 
 export default function GeocercasPage() {

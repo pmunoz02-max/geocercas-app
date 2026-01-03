@@ -1,6 +1,6 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../auth/AuthProvider";
 
 /**
  * RouteGuard
@@ -17,11 +17,15 @@ export default function RouteGuard({ allow, children }) {
   // Si NO hay sesión -> login (guardando returnTo)
   if (!session) {
     const returnTo = location.pathname + location.search + location.hash;
-    return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+    return (
+      <Navigate
+        to={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+        replace
+      />
+    );
   }
 
   // Hay sesión pero rol todavía no llegó -> espera (muy común post-callback)
-  // Nota: si tu app permite "role === null" para algunos usuarios, ajusta aquí.
   if (!role) return null;
 
   // Si se especifica allow, validar rol

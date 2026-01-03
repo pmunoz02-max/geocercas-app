@@ -7,7 +7,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { supabase } from "@/supabaseClient";
+import { supabase } from "../supabaseClient.js";
 
 /**
  * AuthContext UNIVERSAL (Panel + Tracker) — Optimizado rendimiento
