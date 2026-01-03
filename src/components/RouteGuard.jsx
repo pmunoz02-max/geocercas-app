@@ -1,31 +1,25 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 
 /**
- * RouteGuard (FIX)
- * - NO redirige por falta de "role" mientras la sesión ya existe.
- * - Evita bucles donde el Magic Link llega a /auth/callback, pero el rol aún no está resuelto
- *   y el guard te manda a /inicio -> / (login) -> etc.
+ * RouteGuard
+ * - Protege rutas privadas por rol.
+ * - IMPORTANTE: NO usar para /auth/callback (debe ser pública).
  */
 export default function RouteGuard({ allow, children }) {
-  const location = useLocation();
   const { session, role, loading } = useAuth();
 
-  // Nunca bloqueamos el callback de auth (Magic Link / PKCE).
-  if (location.pathname.startsWith("/auth/callback")) return children;
-
+  // Mientras AuthProvider resuelve sesión/rol, no redirects (evita loops)
   if (loading) return null;
 
-  // Sin sesión => login
-  if (!session) return <Navigate to="/" replace />;
+  // Si NO hay sesión -> login
+  if (!session) return <Navigate to="/login" replace />;
 
-  // Con sesión pero sin rol todavía => esperamos (carrera de triggers/RLS/carga)
+  // Hay sesión pero rol todavía no llegó -> espera (muy común post-callback)
   if (!role) return null;
 
-  // Si hay allow-list, la aplicamos
-  if (allow && Array.isArray(allow) && !allow.includes(role)) {
-    return <Navigate to="/inicio" replace />;
-  }
+  // Si se especifica allow, validar rol
+  if (allow && !allow.includes(role)) return <Navigate to="/inicio" replace />;
 
   return children;
 }
