@@ -17,9 +17,7 @@ export function AuthProvider({ children }) {
   const [currentOrg, setCurrentOrg] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* =========================
-     BOOTSTRAP INICIAL
-     ========================= */
+  // ===== BOOTSTRAP INICIAL =====
   useEffect(() => {
     let mounted = true;
 
@@ -84,9 +82,7 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  /* =========================
-     LISTENER AUTH
-     ========================= */
+  // ===== LISTENER AUTH =====
   useEffect(() => {
     const {
       data: { subscription },
@@ -119,15 +115,11 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  /* =========================
-     DERIVADOS
-     ========================= */
+  // ===== DERIVADOS =====
   const role = useMemo(() => profile?.role ?? null, [profile]);
   const isRootOwner = role === "root_owner";
 
-  /* =========================
-     API CONTEXTO
-     ========================= */
+  // ===== API CONTEXTO =====
   const value = useMemo(
     () => ({
       session,
