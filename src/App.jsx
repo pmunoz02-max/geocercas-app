@@ -7,12 +7,14 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
+/* Public pages */
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import AuthCallback from "./pages/AuthCallback";
 import Inicio from "./pages/Inicio.jsx";
 
+/* Panel pages */
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
@@ -24,23 +26,25 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import AdminsPage from "./pages/AdminsPage.jsx";
 
+/* Tracker */
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
+/* Help */
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 /* ======================================================
-   HELPERS: Rol activo por organización (NO TOCAR)
+   HELPERS
 ====================================================== */
 function normalizeRole(r) {
   const v = String(r || "").toLowerCase();
   if (v === "owner") return "owner";
   if (v === "admin") return "admin";
-  if (v === "tracker") return "tracker";
   if (v === "viewer") return "viewer";
-  return v || "tracker";
+  if (v === "tracker") return "tracker";
+  return "tracker";
 }
 
 function getActiveRole(memberships, orgId) {
@@ -54,9 +58,9 @@ function getActiveRole(memberships, orgId) {
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
 
 /* ======================================================
-   LOADER UI
+   UI HELPERS
 ====================================================== */
-function FullScreenLoader({ text = "Cargando…" }) {
+function FullScreenLoader({ text }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
@@ -67,16 +71,23 @@ function FullScreenLoader({ text = "Cargando…" }) {
 }
 
 /* ======================================================
-   GATES (ÚNICA AUTORIDAD DE DESTINO VIVE AQUÍ)
+   GATES (ÚNICA AUTORIDAD DE DECISIÓN)
 ====================================================== */
 function RequirePanel({ children }) {
   const { loading, session, role } = useAuth();
 
-  if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
-  if (!session) return <Navigate to="/" replace />;
+  if (loading) {
+    return <FullScreenLoader text="Cargando organización y permisos…" />;
+  }
+
+  if (!session) {
+    return <Navigate to="/" replace />;
+  }
 
   const r = normalizeRole(role);
-  if (!PANEL_ROLES.has(r)) return <Navigate to="/tracker-gps" replace />;
+  if (!PANEL_ROLES.has(r)) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
 
   return children;
 }
@@ -84,29 +95,39 @@ function RequirePanel({ children }) {
 function RequireTracker({ children }) {
   const { loading, session, role } = useAuth();
 
-  if (loading) return <FullScreenLoader text="Cargando autenticación…" />;
-  if (!session) return <Navigate to="/login" replace />;
+  if (loading) {
+    return <FullScreenLoader text="Cargando autenticación…" />;
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
 
   const r = normalizeRole(role);
-  if (r !== "tracker") return <Navigate to="/inicio" replace />;
+  if (r !== "tracker") {
+    return <Navigate to="/inicio" replace />;
+  }
 
   return children;
 }
 
 /* ======================================================
-   SHELL (Panel)
+   PANEL SHELL
 ====================================================== */
 function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
+  // Solo para coherencia futura (no se usa directamente)
   const activeRole = useMemo(
     () => getActiveRole(memberships, activeOrgId),
     [memberships, activeOrgId]
   );
   void activeRole;
 
-  if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
+  if (loading) {
+    return <FullScreenLoader text="Cargando organización y permisos…" />;
+  }
 
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
@@ -155,10 +176,11 @@ function LoginShell() {
 }
 
 /* ======================================================
-   Smart fallback (ÚNICO fallback global)
+   SMART FALLBACK GLOBAL
 ====================================================== */
 function SmartFallback() {
-  const { session, loading, role } = useAuth();
+  const { loading, session, role } = useAuth();
+
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
@@ -181,7 +203,7 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* TRACKER (FUERA DEL PANEL) */}
+        {/* TRACKER */}
         <Route
           path="/tracker-gps"
           element={
@@ -193,7 +215,7 @@ export default function App() {
           }
         />
 
-        {/* PRIVATE PANEL (NO TRACKERS) */}
+        {/* PANEL */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -204,8 +226,6 @@ export default function App() {
           }
         >
           <Route path="/inicio" element={<Inicio />} />
-
-          {/* Tabs */}
           <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
           <Route path="/geocercas" element={<GeocercasPage />} />
           <Route path="/personal" element={<PersonalPage />} />
@@ -216,7 +236,6 @@ export default function App() {
           <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
           <Route path="/invitar-tracker" element={<InvitarTracker />} />
 
-          {/* Admin solo root owner */}
           <Route
             path="/admins"
             element={
@@ -226,14 +245,14 @@ export default function App() {
             }
           />
 
-          {/* Help */}
+          {/* HELP */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
-        {/* Fallback inteligente */}
+        {/* FALLBACK */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
