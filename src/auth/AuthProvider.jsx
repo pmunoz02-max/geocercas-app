@@ -6,7 +6,6 @@ import {
   useMemo,
   useState,
 } from "react";
-
 import { supabase } from "../supabaseClient.js";
 
 const AuthContext = createContext(null);
@@ -14,104 +13,151 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [orgs, setOrgs] = useState([]);
+  const [currentOrg, setCurrentOrg] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 1️⃣ Cargar sesión inicial
+  /* =========================
+     BOOTSTRAP INICIAL
+     ========================= */
   useEffect(() => {
     let mounted = true;
 
-    (async () => {
+    async function bootstrap() {
       setLoading(true);
 
       const { data, error } = await supabase.auth.getSession();
       if (!mounted) return;
 
-      if (error) {
-        console.error("[AuthProvider] getSession error:", error);
+      if (error || !data?.session) {
         setSession(null);
         setProfile(null);
+        setOrgs([]);
+        setCurrentOrg(null);
         setLoading(false);
         return;
       }
 
-      setSession(data?.session ?? null);
+      const s = data.session;
+      setSession(s);
 
-      if (data?.session?.user) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", data.session.user.id)
-          .maybeSingle();
-        if (mounted) setProfile(prof ?? null);
+      // Perfil
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", s.user.id)
+        .maybeSingle();
+
+      if (!mounted) return;
+      setProfile(prof ?? null);
+
+      // Organizaciones
+      const { data: memberships } = await supabase
+        .from("memberships")
+        .select("org_id")
+        .eq("user_id", s.user.id);
+
+      if (!mounted) return;
+
+      if (memberships && memberships.length > 0) {
+        const orgIds = memberships.map((m) => m.org_id);
+        const { data: orgRows } = await supabase
+          .from("organizations")
+          .select("id, name, active, owner_id")
+          .in("id", orgIds);
+
+        setOrgs(orgRows ?? []);
+        if (orgRows && orgRows.length > 0) {
+          setCurrentOrg(orgRows[0].id);
+        }
       } else {
-        setProfile(null);
+        setOrgs([]);
+        setCurrentOrg(null);
       }
 
       setLoading(false);
-    })();
+    }
 
+    bootstrap();
     return () => {
       mounted = false;
     };
   }, []);
 
-  // 2️⃣ Escuchar cambios de sesión (login / logout / refresh)
+  /* =========================
+     LISTENER AUTH
+     ========================= */
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setLoading(true);
-      setSession(newSession ?? null);
 
-      if (newSession?.user) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", newSession.user.id)
-          .maybeSingle();
-        setProfile(prof ?? null);
-      } else {
+      if (!newSession) {
+        setSession(null);
         setProfile(null);
+        setOrgs([]);
+        setCurrentOrg(null);
+        setLoading(false);
+        return;
       }
 
+      setSession(newSession);
+
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", newSession.user.id)
+        .maybeSingle();
+
+      setProfile(prof ?? null);
       setLoading(false);
     });
 
     return () => {
-      subscription?.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
+  /* =========================
+     DERIVADOS
+     ========================= */
   const role = useMemo(() => profile?.role ?? null, [profile]);
   const isRootOwner = role === "root_owner";
 
+  /* =========================
+     API CONTEXTO
+     ========================= */
   const value = useMemo(
     () => ({
       session,
+      user: session?.user ?? null,
       profile,
       role,
       isRootOwner,
+      orgs,
+      currentOrg,
+      setCurrentOrg,
       loading,
       supabase,
       reloadAuth: async () => {
-        setLoading(true);
         const { data } = await supabase.auth.getSession();
         setSession(data?.session ?? null);
-        if (data?.session?.user) {
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", data.session.user.id)
-            .maybeSingle();
-          setProfile(prof ?? null);
-        } else {
-          setProfile(null);
-        }
-        setLoading(false);
+      },
+      signOut: async () => {
+        await supabase.auth.signOut();
       },
     }),
-    [session, profile, role, isRootOwner, loading]
+    [session, profile, role, isRootOwner, orgs, currentOrg, loading]
   );
+
+  if (loading) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center text-gray-600">
+        Verificando sesión…
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={value}>
