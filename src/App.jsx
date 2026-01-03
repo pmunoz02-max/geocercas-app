@@ -1,14 +1,6 @@
 // src/App.jsx
-import React, { useMemo, useEffect } from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  Outlet,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import React, { useMemo } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
@@ -17,6 +9,7 @@ import TopTabs from "./components/TopTabs.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
+import GeocercasPage from "./pages/GeocercasPage.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
@@ -25,7 +18,7 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 
 import Login from "./pages/Login.tsx";
-import AuthCallback from "./pages/AuthCallback.tsx";
+import AuthCallback from "./pages/AuthCallback";
 import Inicio from "./pages/Inicio.jsx";
 import Landing from "./pages/Landing.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
@@ -38,157 +31,39 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
-
-function Loader({ label = "Cargando…" }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center text-slate-500">
-      {label}
-    </div>
-  );
-}
-
+/* =========================
+   HELPERS
+========================= */
 function normalizeRole(r) {
-  return String(r || "").toLowerCase().trim();
+  const v = String(r || "").toLowerCase();
+  if (["owner", "admin", "tracker", "viewer"].includes(v)) return v;
+  return "tracker";
 }
 
-function getActiveRoleFromRolesRows(rolesRows, orgId) {
-  if (!orgId) return "";
-  const row = Array.isArray(rolesRows)
-    ? rolesRows.find((m) => m?.org_id === orgId)
-    : null;
+function getActiveRole(memberships, orgId) {
+  if (!orgId) return "tracker";
+  const row = memberships?.find((m) => m?.org_id === orgId);
   return normalizeRole(row?.role);
 }
 
-/* ================= DOMAIN ENFORCER =================
-   - En tracker domain, fuerza /tracker-gps
-   - Si llega callback con code/hash en tracker domain, lo manda a /auth/callback
-*/
-function DomainEnforcer() {
-  const { authReady, session, trackerDomain } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    if (!authReady) return;
-    if (!trackerDomain) return;
-
-    const { pathname, search, hash } = location;
-    const hasCode = new URLSearchParams(search).has("code");
-    const hasAccessToken = String(hash || "").includes("access_token=");
-
-    // Si viene callback pero no está en /auth/callback, redirige ahí
-    if ((hasCode || hasAccessToken) && pathname !== "/auth/callback") {
-      navigate(`/auth/callback${search}${hash}`, { replace: true });
-      return;
-    }
-
-    const publicAllowed = new Set([
-      "/",
-      "/login",
-      "/reset-password",
-      "/auth/callback",
-      "/tracker-gps",
-    ]);
-
-    if (!session && !publicAllowed.has(pathname)) {
-      navigate("/", { replace: true });
-      return;
-    }
-
-    if (session && pathname !== "/tracker-gps") {
-      navigate("/tracker-gps", { replace: true });
-    }
-  }, [authReady, session, location, navigate, trackerDomain]);
-
-  return null;
-}
-
-/* ================= PANEL GATE =================
-   - Jamás loader infinito
-   - Si no hay rol => tarjeta de error (NO loader)
-*/
-function PanelGate({ children }) {
-  const { authReady, authError, session, currentRole, trackerDomain } = useAuth();
-  const location = useLocation();
-
-  // Nunca bloquear AuthCallback
-  if (location.pathname === "/auth/callback") return children;
-
-  // Dominio tracker nunca entra al panel
-  if (trackerDomain) {
-    return <Navigate to="/tracker-gps" replace />;
-  }
-
-  // Espera controlada
-  if (!authReady) return <Loader label="Validando sesión…" />;
-
-  // No autenticado => landing
-  if (!session) return <Navigate to="/" replace />;
-
-  // Sin rol => ERROR visible (no loader infinito)
-  if (!currentRole) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center px-4">
-        <div className="w-full max-w-xl rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm">
-          <div className="text-sm font-semibold text-red-800">
-            Error de permisos
-          </div>
-          <div className="mt-2 text-sm text-red-700">
-            Tu cuenta no tiene un rol asignado para el panel.
-          </div>
-          <div className="mt-3 text-xs text-red-600">
-            {authError || "Verifica invitación, organización o RLS en app_user_roles."}
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => window.location.reload()}
-              className="rounded-xl bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600"
-            >
-              Reintentar
-            </button>
-            <button
-              onClick={() => (window.location.href = "/login")}
-              className="rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
-            >
-              Volver a Login
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Rol válido pero no panel
-  if (!PANEL_ROLES.has(currentRole)) {
-    return <Navigate to="/tracker-gps" replace />;
-  }
-
-  return children;
-}
-
-/* ================= SHELL ================= */
+/* =========================
+   PANEL SHELL
+========================= */
 function Shell() {
-  const { authReady, roles, currentOrg, isRootOwner, currentRole } = useAuth();
+  const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
   const activeRole = useMemo(
-    () => getActiveRoleFromRolesRows(roles, activeOrgId),
-    [roles, activeOrgId]
+    () => getActiveRole(memberships, activeOrgId),
+    [memberships, activeOrgId]
   );
 
-  if (!authReady) return <Loader label="Cargando panel…" />;
-
-  const roleLower = normalizeRole(currentRole || activeRole);
-  if (!roleLower) return <Loader label="Preparando entorno…" />;
-
-  if (!PANEL_ROLES.has(roleLower)) {
-    return <Navigate to="/tracker-gps" replace />;
-  }
+  if (loading) return null;
 
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
     { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
+    { path: "/geocercas", labelKey: "app.tabs.geocercas" },
     { path: "/personal", labelKey: "app.tabs.personal" },
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
@@ -215,43 +90,45 @@ function Shell() {
   );
 }
 
-/* ================= FALLBACK ================= */
-function SmartFallback() {
-  const { session, authReady, currentRole, trackerDomain } = useAuth();
-  if (!authReady) return <Loader />;
+function RootOwnerRoute({ children }) {
+  const { loading, isRootOwner } = useAuth();
+  if (loading) return null;
+  if (!isRootOwner) return <Navigate to="/inicio" replace />;
+  return children;
+}
 
-  if (trackerDomain) {
-    return session ? (
-      <Navigate to="/tracker-gps" replace />
-    ) : (
-      <Navigate to="/" replace />
-    );
-  }
-
-  if (!session) return <Navigate to="/" replace />;
-
-  const r = normalizeRole(currentRole);
-  if (!r) return <Loader />;
-
-  return PANEL_ROLES.has(r) ? (
-    <Navigate to="/inicio" replace />
-  ) : (
-    <Navigate to="/tracker-gps" replace />
+function LoginShell() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <Login />
+    </div>
   );
 }
 
-/* ================= APP ================= */
+function SmartFallback() {
+  const { session, loading, role } = useAuth();
+  if (loading) return null;
+  if (!session) return <Navigate to="/" replace />;
+
+  return String(role).toLowerCase() === "tracker"
+    ? <Navigate to="/tracker-gps" replace />
+    : <Navigate to="/inicio" replace />;
+}
+
+/* =========================
+   ROUTES
+========================= */
 export default function App() {
   return (
     <BrowserRouter>
-      <DomainEnforcer />
-
       <Routes>
+        {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
+        {/* TRACKER */}
         <Route
           path="/tracker-gps"
           element={
@@ -261,17 +138,17 @@ export default function App() {
           }
         />
 
+        {/* PANEL */}
         <Route
           element={
             <AuthGuard mode="panel">
-              <PanelGate>
-                <Shell />
-              </PanelGate>
+              <Shell />
             </AuthGuard>
           }
         >
           <Route path="/inicio" element={<Inicio />} />
           <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
+          <Route path="/geocercas" element={<GeocercasPage />} />
           <Route path="/personal" element={<PersonalPage />} />
           <Route path="/actividades" element={<ActividadesPage />} />
           <Route path="/asignaciones" element={<AsignacionesPage />} />
@@ -279,7 +156,15 @@ export default function App() {
           <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
           <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
           <Route path="/invitar-tracker" element={<InvitarTracker />} />
-          <Route path="/admins" element={<AdminsPage />} />
+
+          <Route
+            path="/admins"
+            element={
+              <RootOwnerRoute>
+                <AdminsPage />
+              </RootOwnerRoute>
+            }
+          />
 
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
@@ -287,6 +172,7 @@ export default function App() {
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
+        {/* Fallback */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
