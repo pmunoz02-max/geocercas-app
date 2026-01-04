@@ -1,5 +1,5 @@
 // src/App.jsx
-// GOLD CLEAN — NO FRAGILE
+// GOLD CLEAN — stable (NO useMemo, NO activeRole)
 
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
@@ -185,7 +185,7 @@ export default function App() {
           }
         />
 
-        {/* PANEL + HELP (todo queda DENTRO del panel, no suelto) */}
+        {/* PANEL + HELP (NO lo borres ni lo edites por partes) */}
         <Route
           element={
             <AuthGuard mode="panel">
