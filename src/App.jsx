@@ -1,7 +1,7 @@
 // src/App.jsx
-// GOLD CLEAN — stable
+// GOLD CLEAN — stable (NO useMemo, NO activeRole)
 
-import React, { useMemo } from "react";
+import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import { useAuth } from "./context/AuthContext.jsx";
@@ -47,14 +47,6 @@ function normalizeRole(r) {
   if (v === "viewer") return "viewer";
   if (v === "tracker") return "tracker";
   return "tracker";
-}
-
-function getActiveRole(memberships, orgId) {
-  if (!orgId) return "tracker";
-  const row = Array.isArray(memberships)
-    ? memberships.find((m) => m?.org_id === orgId)
-    : null;
-  return normalizeRole(row?.role);
 }
 
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
@@ -103,15 +95,7 @@ function RequireTracker({ children }) {
    PANEL SHELL
 ========================= */
 function Shell() {
-  const { loading, memberships, currentOrg, isRootOwner } = useAuth();
-  const activeOrgId = currentOrg?.id ?? null;
-
-  // ✅ CERRADO correctamente (aquí estaba tu error)
-  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [
-    memberships,
-    activeOrgId,
-  ]);
-  void activeRole;
+  const { loading, isRootOwner } = useAuth();
 
   if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
 
@@ -232,6 +216,7 @@ export default function App() {
             }
           />
 
+          {/* HELP */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
