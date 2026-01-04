@@ -1,5 +1,5 @@
 // src/App.jsx
-// GOLD CLEAN — stable (NO useMemo, NO activeRole)
+// GOLD CLEAN — NO FRAGILE (no JSX comments)
 
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
@@ -34,10 +34,6 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-/* =========================
-   HELPERS
-========================= */
-
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
 
 function FullScreenLoader({ text = "Cargando..." }) {
@@ -49,10 +45,6 @@ function FullScreenLoader({ text = "Cargando..." }) {
     </div>
   );
 }
-
-/* =========================
-   GATES (ÚNICA AUTORIDAD)
-========================= */
 
 function RequirePanel({ children }) {
   const { loading, session, role } = useAuth();
@@ -77,10 +69,6 @@ function RequireTracker({ children }) {
 
   return children;
 }
-
-/* =========================
-   PANEL SHELL
-========================= */
 
 function Shell() {
   const { isRootOwner } = useAuth();
@@ -131,24 +119,18 @@ function LoginShell() {
   );
 }
 
-/* =========================
-   SMART FALLBACK
-========================= */
-
 function SmartFallback() {
   const { loading, session, role } = useAuth();
   if (loading) return null;
   if (!session) return <Navigate to="/" replace />;
 
   const roleLower = String(role || "").toLowerCase();
-  return roleLower === "tracker"
-    ? <Navigate to="/tracker-gps" replace />
-    : <Navigate to="/inicio" replace />;
+  return roleLower === "tracker" ? (
+    <Navigate to="/tracker-gps" replace />
+  ) : (
+    <Navigate to="/inicio" replace />
+  );
 }
-
-/* =========================
-   ROUTES
-========================= */
 
 export default function App() {
   return (
