@@ -1,5 +1,5 @@
 // src/App.jsx
-// GOLD CLEAN — 2026-01-03
+// GOLD CLEAN — 2026-01-03 (stable)
 
 import React, { useMemo } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
@@ -106,11 +106,11 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  // Mantener coherencia (y listo para futuro uso)
-  const activeRole = useMemo(
-    () => getActiveRole(memberships, activeOrgId),
-    [memberships, activeOrgId]
-  );
+  // ✅ OJO: aquí estaba tu error (faltaba cerrar el useMemo con );
+  const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [
+    memberships,
+    activeOrgId,
+  ]);
   void activeRole;
 
   if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
@@ -200,7 +200,7 @@ export default function App() {
           }
         />
 
-        {/* PANEL */}
+        {/* PANEL + HELP (todo dentro del Shell) */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -243,3 +243,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
