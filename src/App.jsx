@@ -106,7 +106,7 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  // ✅ OJO: aquí estaba tu error (faltaba cerrar el useMemo con );
+  // ✅ Si no lo usas, igual lo calculamos y lo “tocamos” para evitar warnings
   const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [
     memberships,
     activeOrgId,
@@ -170,9 +170,11 @@ function SmartFallback() {
   if (!session) return <Navigate to="/" replace />;
 
   const r = normalizeRole(role);
-  return r === "tracker"
-    ? <Navigate to="/tracker-gps" replace />
-    : <Navigate to="/inicio" replace />;
+  return r === "tracker" ? (
+    <Navigate to="/tracker-gps" replace />
+  ) : (
+    <Navigate to="/inicio" replace />
+  );
 }
 
 /* =========================
@@ -200,7 +202,7 @@ export default function App() {
           }
         />
 
-        {/* PANEL + HELP (todo dentro del Shell) */}
+        {/* PANEL */}
         <Route
           element={
             <AuthGuard mode="panel">
