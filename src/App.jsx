@@ -1,7 +1,6 @@
 // src/App.jsx
-// GOLD CLEAN — stable (NO useMemo, NO activeRole)
+// GOLD CLEAN — NO FRAGILE
 
-import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import { useAuth } from "./context/AuthContext.jsx";
@@ -186,7 +185,7 @@ export default function App() {
           }
         />
 
-        {/* PANEL + HELP */}
+        {/* PANEL + HELP (todo queda DENTRO del panel, no suelto) */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -229,4 +228,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
