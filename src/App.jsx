@@ -9,12 +9,14 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
+/* Public */
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import AuthCallback from "./pages/AuthCallback";
 import Inicio from "./pages/Inicio.jsx";
 
+/* Panel */
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
@@ -26,13 +28,18 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import AdminsPage from "./pages/AdminsPage.jsx";
 
+/* Tracker */
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
+/* Help */
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
+/* =========================
+   HELPERS
+========================= */
 function normalizeRole(r) {
   const v = String(r || "").toLowerCase();
   if (v === "owner") return "owner";
@@ -52,6 +59,9 @@ function getActiveRole(memberships, orgId) {
 
 const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
 
+/* =========================
+   UI
+========================= */
 function FullScreenLoader({ text = "Cargando…" }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -62,6 +72,9 @@ function FullScreenLoader({ text = "Cargando…" }) {
   );
 }
 
+/* =========================
+   GATES (ÚNICA AUTORIDAD)
+========================= */
 function RequirePanel({ children }) {
   const { loading, session, role } = useAuth();
 
@@ -86,10 +99,14 @@ function RequireTracker({ children }) {
   return children;
 }
 
+/* =========================
+   PANEL SHELL
+========================= */
 function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
+  // Mantener coherencia (y listo para futuro uso)
   const activeRole = useMemo(
     () => getActiveRole(memberships, activeOrgId),
     [memberships, activeOrgId]
@@ -121,6 +138,7 @@ function Shell() {
       <div className="border-b border-slate-200 bg-white">
         <TopTabs tabs={tabs} />
       </div>
+
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
         <Outlet />
       </main>
@@ -143,6 +161,9 @@ function LoginShell() {
   );
 }
 
+/* =========================
+   SMART FALLBACK
+========================= */
 function SmartFallback() {
   const { loading, session, role } = useAuth();
   if (loading) return null;
@@ -154,15 +175,20 @@ function SmartFallback() {
     : <Navigate to="/inicio" replace />;
 }
 
+/* =========================
+   ROUTES
+========================= */
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
+        {/* TRACKER */}
         <Route
           path="/tracker-gps"
           element={
@@ -174,6 +200,7 @@ export default function App() {
           }
         />
 
+        {/* PANEL */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -203,12 +230,14 @@ export default function App() {
             }
           />
 
+          {/* HELP */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
+        {/* FALLBACK */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
