@@ -1,5 +1,5 @@
 // src/App.jsx
-// GOLD CLEAN — 2026-01-03 (stable)
+// GOLD CLEAN — stable
 
 import React, { useMemo } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
@@ -106,7 +106,7 @@ function Shell() {
   const { loading, memberships, currentOrg, isRootOwner } = useAuth();
   const activeOrgId = currentOrg?.id ?? null;
 
-  // ✅ Si no lo usas, igual lo calculamos y lo “tocamos” para evitar warnings
+  // ✅ CERRADO correctamente (aquí estaba tu error)
   const activeRole = useMemo(() => getActiveRole(memberships, activeOrgId), [
     memberships,
     activeOrgId,
@@ -202,7 +202,7 @@ export default function App() {
           }
         />
 
-        {/* PANEL */}
+        {/* PANEL + HELP */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -232,7 +232,6 @@ export default function App() {
             }
           />
 
-          {/* HELP */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
