@@ -1,172 +1,111 @@
-/* =========================================================
-   src/index.css
-   Solución universal de estilos (desktop + mobile + webview)
-   ========================================================= */
+/* src/index.css */
 
-/* Tailwind base */
+/* Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* =========================================================
-   BASE GLOBAL
-   ========================================================= */
+/* ---------- Base / Variables ---------- */
 @layer base {
   :root {
-    --app-bg: #020617;      /* slate-950 */
-    --app-fg: #e5e7eb;      /* slate-200 */
-    --card-bg: #020617;
-    --muted-fg: #94a3b8;    /* slate-400 */
+    --app-bg: #f8fafc;      /* slate-50 */
+    --app-fg: #0f172a;      /* slate-900 */
+    --card-bg: #ffffff;     /* blanco */
+    --muted-fg: #475569;    /* slate-600 */
+    --link: #2563eb;        /* azul */
   }
 
-  html,
-  body,
-  #root {
+  html, body, #root {
     height: 100%;
-  }
-
-  /* 🔒 FUERZA ESQUEMA OSCURO (evita override del navegador) */
-  html {
-    color-scheme: dark;
-  }
-
-  /* 🔒 BLOQUEA FORCED COLORS (Chrome Android / WebView) */
-  * {
-    forced-color-adjust: none;
   }
 
   body {
     margin: 0;
-    background-color: var(--app-bg);
-    color: var(--app-fg);
-    font-family: ui-sans-serif, system-ui, -apple-system,
-      BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-      "Apple Color Emoji", "Segoe UI Emoji";
+    /* IMPORTANTE:
+       NO forzamos color global aquí, para no romper Tailwind (text-white, text-slate-*, etc.)
+       Tailwind y tus clases deben mandar en el color final. */
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   }
 
-  /* =========================================================
-     LINKS – NORMALIZACIÓN UNIVERSAL
-     ========================================================= */
+  /* ===== Normalización universal de links (mobile + desktop + webview) ===== */
   a {
     color: inherit;
     text-decoration: none;
   }
-
   a:visited {
     color: inherit;
   }
-
   a:hover {
     text-decoration: underline;
   }
-
   a:focus-visible {
-    outline: 2px solid rgba(16, 185, 129, 0.8); /* emerald-500 */
+    outline: 2px solid rgba(14, 165, 233, 0.7); /* sky-500 */
     outline-offset: 2px;
     border-radius: 0.25rem;
   }
 
-  /* Compatibilidad legacy (no estorba) */
+  /* Mantengo tu regla del header (ya cubierta por lo global, pero no estorba) */
   header a {
     text-decoration: none;
   }
-
   header a:visited {
     color: inherit;
   }
 
-  /* =========================================================
-     FORM ELEMENTS
-     ========================================================= */
-  input,
-  select,
-  textarea,
-  button {
+  input, select, textarea, button {
     font: inherit;
   }
-
-  input,
-  select,
-  textarea {
-    background-color: #020617;
-    color: #e5e7eb;
-    border: 1px solid #334155; /* slate-700 */
+  input, select, textarea {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #cbd5e1;
     border-radius: 0.5rem;
     padding: 0.5rem 0.75rem;
   }
 
-  input::placeholder,
-  textarea::placeholder {
-    color: #64748b; /* slate-500 */
-  }
-
   button {
-    background-color: #10b981; /* emerald-500 */
-    color: #020617;
+    background: #0ea5e9;    /* sky-500 */
+    color: #fff;
     border: none;
     border-radius: 0.5rem;
     padding: 0.5rem 0.75rem;
     cursor: pointer;
-    font-weight: 600;
   }
+  button:hover { filter: brightness(0.95); }
+  button:disabled { background: #93c5fd; cursor: default; }
 
-  button:hover {
-    filter: brightness(1.05);
-  }
-
-  button:disabled {
-    background-color: #475569;
-    cursor: default;
-  }
-
-  /* =========================================================
-     TABLES
-     ========================================================= */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  thead {
-    background-color: #020617;
-  }
-
-  th,
-  td {
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #334155;
-  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: #f1f5f9; }
+  th, td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e2e8f0; }
 }
 
-/* =========================================================
-   COMPONENTS
-   ========================================================= */
+/* ---------- Componentes utilitarios ---------- */
 @layer components {
   .app-card {
-    background-color: #020617;
-    color: #e5e7eb;
-    border: 1px solid #334155;
+    background: var(--card-bg);
+    color: var(--app-fg);
+    border: 1px solid #e2e8f0;
     border-radius: 0.75rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   }
 
   .banner-success {
-    background-color: #34d399;
-    color: #020617;
+    background: #34d399;
+    color: #111827;
     border: 2px solid #059669;
     border-radius: 0.5rem;
     padding: 0.6rem 0.8rem;
     font-weight: 700;
-    box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+    box-shadow: 0 0 6px rgba(0,0,0,0.2);
   }
 
   .banner-error {
-    background-color: #f87171;
-    color: #020617;
+    background: #f87171;
+    color: #111827;
     border: 2px solid #b91c1c;
     border-radius: 0.5rem;
     padding: 0.6rem 0.8rem;
     font-weight: 700;
-    box-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
+    box-shadow: 0 0 6px rgba(0,0,0,0.25);
   }
 }
