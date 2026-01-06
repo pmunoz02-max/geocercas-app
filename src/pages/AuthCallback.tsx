@@ -1,190 +1,260 @@
-// src/pages/AuthCallback.tsx
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { useAuth } from "../context/AuthContext.jsx";
 
-type Status =
-  | { phase: "working"; message: string }
-  | { phase: "error"; message: string };
+// 🔁 AJUSTA ESTA RUTA A TU PROYECTO
+// Ejemplos típicos:
+// import { supabase } from "../lib/supabaseClient";
+// import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
-function safeMsg(err: unknown): string {
-  if (!err) return "Unknown error";
-  if (typeof err === "string") return err;
-  const anyErr = err as any;
-  if (anyErr?.message) return String(anyErr.message);
+type OtpType = "invite" | "magiclink" | "recovery" | "signup" | "email_change";
+
+function safeDecode(s: string) {
   try {
-    return JSON.stringify(err);
+    return decodeURIComponent(s.replace(/\+/g, " "));
   } catch {
-    return String(err);
+    return s;
   }
 }
 
-function parseHashParams(hash: string): Record<string, string> {
-  const clean = (hash || "").replace(/^#/, "");
-  const out: Record<string, string> = {};
-  if (!clean) return out;
-  for (const part of clean.split("&")) {
+function parseHashParams(hash: string) {
+  const out = new URLSearchParams();
+  const h = (hash || "").replace(/^#/, "");
+  if (!h) return out;
+  // Algunos providers devuelven fragment estilo querystring
+  for (const part of h.split("&")) {
     const [k, v] = part.split("=");
-    if (!k) continue;
-    out[decodeURIComponent(k)] = decodeURIComponent(v || "");
+    if (k) out.set(k, v ?? "");
   }
   return out;
 }
 
+function humanMessage(err: any) {
+  const msg = String(err?.message || err?.error_description || err?.error || "").toLowerCase();
+
+  if (msg.includes("invalid") || msg.includes("expired")) {
+    return "El link del correo es inválido o ya expiró. Pide que te reenvíen una nueva invitación y abre el link solo una vez.";
+  }
+  if (msg.includes("forbidden") || msg.includes("403")) {
+    return "Acceso denegado (403). Normalmente ocurre cuando el token ya fue usado o expiró.";
+  }
+  if (msg.includes("not found") || msg.includes("404")) {
+    return "La ruta de callback no existe o no está siendo servida (404). (Esto ya lo arreglaste con el rewrite).";
+  }
+  return "No se pudo completar el inicio de sesión con el link. Reintenta con un link nuevo.";
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const { reloadAuth } = useAuth();
 
-  const [status, setStatus] = useState<Status>({
-    phase: "working",
-    message: "Procesando autenticación...",
-  });
+  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [title, setTitle] = useState("Procesando autenticación…");
+  const [detail, setDetail] = useState<string>("Verificando tu enlace…");
+  const [tech, setTech] = useState<any>(null);
 
-  const ran = useRef(false);
-
-  async function decideNextPath(userId: string): Promise<string> {
-    // Decide basado en roles (si falla, vuelve al panel)
-    try {
-      const { data } = await supabase
-        .from("app_user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .limit(1)
-        .maybeSingle();
-
-      const role = String((data as any)?.role || "").toLowerCase();
-      if (role === "tracker") return "/tracker-gps";
-      return "/inicio";
-    } catch {
-      return "/inicio";
-    }
-  }
+  const url = useMemo(() => new URL(window.location.href), []);
+  const qs = useMemo(() => url.searchParams, [url]);
+  const hs = useMemo(() => parseHashParams(url.hash), [url]);
 
   useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
+    let cancelled = false;
 
-    (async () => {
+    async function run() {
       try {
-        setStatus({ phase: "working", message: "Validando enlace..." });
+        setStatus("loading");
+        setTitle("Auth Callback");
+        setDetail("Verificando token…");
 
-        const url = new URL(window.location.href);
-        const qp = url.searchParams;
-        const hash = parseHashParams(url.hash);
+        // 0) Si Supabase manda errores en query
+        const qpError = qs.get("error");
+        const qpErrorDesc = qs.get("error_description");
+        if (qpError || qpErrorDesc) {
+          throw new Error(`${qpError || "auth_error"}: ${safeDecode(qpErrorDesc || "")}`.trim());
+        }
 
-        const code = qp.get("code");
-        const token_hash = qp.get("token_hash");
-        const type = qp.get("type"); // invite | magiclink | recovery | signup | email_change
-
-        // 1) PKCE (?code=...)
+        // 1) PKCE / OAuth code
+        const code = qs.get("code");
         if (code) {
-          setStatus({ phase: "working", message: "Confirmando sesión (PKCE)..." });
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          setDetail("Intercambiando código por sesión…");
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
+
+          // Limpia query (evita re-procesar al refrescar)
+          window.history.replaceState({}, document.title, url.pathname);
+          if (cancelled) return;
+
+          setStatus("success");
+          setTitle("Listo ✅");
+          setDetail("Sesión creada correctamente. Redirigiendo…");
+          setTech({ flow: "exchangeCodeForSession", data });
+          setTimeout(() => navigate("/app", { replace: true }), 700);
+          return;
         }
 
-        // 2) Magic link / invite con token_hash (?token_hash=...&type=...)
-        else if (token_hash && type) {
-          setStatus({ phase: "working", message: "Verificando enlace (OTP)..." });
+        // 2) token_hash + type (magic links / invites / recovery)
+        const token_hash = qs.get("token_hash") || qs.get("token") || "";
+        const typeRaw = (qs.get("type") || "").toLowerCase();
+        const type = (typeRaw as OtpType) || null;
 
-          const { error } = await supabase.auth.verifyOtp({
+        if (token_hash && type) {
+          setDetail(`Validando enlace (${type})…`);
+          const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
-            type: type as any,
+            type,
           });
-
           if (error) throw error;
-        }
 
-        // 3) Legacy hash (#access_token=...&refresh_token=...)
-        else if (hash.access_token && hash.refresh_token) {
-          setStatus({ phase: "working", message: "Estableciendo sesión..." });
+          // Limpia query (evita re-procesar al refrescar)
+          window.history.replaceState({}, document.title, url.pathname);
+          if (cancelled) return;
 
-          const { error } = await supabase.auth.setSession({
-            access_token: hash.access_token,
-            refresh_token: hash.refresh_token,
-          });
-
-          if (error) throw error;
-        } else {
-          // Nada que procesar
-          setStatus({
-            phase: "error",
-            message:
-              "No se encontró información de autenticación en la URL (code / token_hash / access_token).",
-          });
+          setStatus("success");
+          setTitle("Listo ✅");
+          setDetail("Verificación exitosa. Redirigiendo…");
+          setTech({ flow: "verifyOtp", data, type });
+          setTimeout(() => navigate("/app", { replace: true }), 700);
           return;
         }
 
-        // Limpia la URL para evitar re-procesos / leaks
-        window.history.replaceState({}, document.title, "/auth/callback");
+        // 3) Fallback legacy: access_token en hash
+        const access_token = hs.get("access_token");
+        const refresh_token = hs.get("refresh_token");
 
-        // 4) Confirmar sesión
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-
-        const session = data?.session ?? null;
-        if (!session?.user?.id) {
-          setStatus({
-            phase: "error",
-            message: "No se pudo establecer la sesión. Intenta abrir el enlace nuevamente.",
+        if (access_token && refresh_token) {
+          setDetail("Estableciendo sesión…");
+          const { data, error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
           });
+          if (error) throw error;
+
+          window.history.replaceState({}, document.title, url.pathname);
+          if (cancelled) return;
+
+          setStatus("success");
+          setTitle("Listo ✅");
+          setDetail("Sesión establecida. Redirigiendo…");
+          setTech({ flow: "setSession", data });
+          setTimeout(() => navigate("/app", { replace: true }), 700);
           return;
         }
 
-        setStatus({ phase: "working", message: "Cargando perfil..." });
+        // 4) Si no hay nada, intenta ver si ya hay sesión
+        setDetail("Comprobando sesión existente…");
+        const { data: s } = await supabase.auth.getSession();
 
-        // 5) Refrescar contexto (org/roles/etc)
-        try {
-          await reloadAuth?.();
-        } catch {
-          // best-effort
+        if (s?.session) {
+          window.history.replaceState({}, document.title, url.pathname);
+          if (cancelled) return;
+
+          setStatus("success");
+          setTitle("Listo ✅");
+          setDetail("Ya estabas autenticado. Redirigiendo…");
+          setTech({ flow: "getSession", session: true });
+          setTimeout(() => navigate("/app", { replace: true }), 500);
+          return;
         }
 
-        const next = await decideNextPath(session.user.id);
+        throw new Error("No se encontraron parámetros de autenticación (token_hash/type/code) en el callback.");
+      } catch (err: any) {
+        if (cancelled) return;
 
-        setStatus({ phase: "working", message: "Redirigiendo..." });
-
-        navigate(next, { replace: true });
-      } catch (err) {
-        setStatus({ phase: "error", message: safeMsg(err) });
+        setStatus("error");
+        setTitle("Error");
+        setDetail(humanMessage(err));
+        setTech(err);
       }
-    })();
-  }, [navigate, reloadAuth]);
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, qs, hs, url.pathname]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-lg font-semibold text-slate-900">Auth Callback</h1>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        background: "#0b1020",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "min(860px, 96vw)",
+          background: "white",
+          borderRadius: 16,
+          padding: 24,
+          boxShadow: "0 20px 60px rgba(0,0,0,.35)",
+        }}
+      >
+        <h2 style={{ margin: 0, fontSize: 22 }}>{title}</h2>
 
-        {status.phase === "working" ? (
-          <div className="mt-4">
-            <p className="text-slate-700">{status.message}</p>
-            <div className="mt-4 h-2 w-full overflow-hidden rounded bg-slate-100">
-              <div className="h-full w-1/2 animate-pulse bg-slate-300" />
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4">
-            <p className="text-red-600 font-medium">Error</p>
-            <p className="mt-2 text-slate-700 whitespace-pre-wrap">{status.message}</p>
+        <div style={{ marginTop: 12 }}>
+          {status === "loading" && (
+            <p style={{ margin: 0, color: "#111827" }}>
+              <b>Procesando…</b> {detail}
+            </p>
+          )}
 
-            <div className="mt-6 flex gap-3">
-              <button
-                className="rounded-lg bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
-                onClick={() => navigate("/login", { replace: true })}
-              >
-                Ir a Login
-              </button>
-              <button
-                className="rounded-lg border border-slate-300 px-4 py-2 text-slate-800 hover:bg-slate-50"
-                onClick={() => navigate("/", { replace: true })}
-              >
-                Ir al inicio
-              </button>
-            </div>
-          </div>
-        )}
+          {status === "success" && (
+            <p style={{ margin: 0, color: "#065f46" }}>
+              <b>OK.</b> {detail}
+            </p>
+          )}
+
+          {status === "error" && (
+            <>
+              <p style={{ margin: 0, color: "#b91c1c" }}>
+                <b>Error</b>
+              </p>
+              <p style={{ marginTop: 6, color: "#111827" }}>{detail}</p>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => navigate("/login", { replace: true })}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e7eb",
+                    background: "#111827",
+                    color: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  Ir a Login
+                </button>
+
+                <button
+                  onClick={() => navigate("/", { replace: true })}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e7eb",
+                    background: "#10b981",
+                    color: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  Ir al inicio
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Debug técnico (útil en prod) */}
+        {tech ? (
+          <details style={{ marginTop: 16 }}>
+            <summary style={{ cursor: "pointer" }}>Detalle técnico</summary>
+            <pre style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
+              {JSON.stringify(tech, null, 2)}
+            </pre>
+          </details>
+        ) : null}
       </div>
     </div>
   );
