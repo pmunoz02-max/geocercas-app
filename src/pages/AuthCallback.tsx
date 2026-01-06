@@ -1,243 +1,169 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/pages/AuthCallback.tsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient"; // AJUSTA si tu path/export es distinto
 
-// 🔁 AJUSTA ESTA RUTA A TU PROYECTO
-// Ejemplos típicos:
-// import { supabase } from "../lib/supabaseClient";
-// import { supabase } from "../supabaseClient";
-import { supabase } from "../lib/supabaseClient";
-
-type OtpType = "invite" | "magiclink" | "recovery" | "signup" | "email_change";
-
-function safeDecode(s: string) {
-  try {
-    return decodeURIComponent(s.replace(/\+/g, " "));
-  } catch {
-    return s;
-  }
-}
+type UiStatus = "loading" | "ok" | "error";
 
 function parseHashParams(hash: string) {
-  const out = new URLSearchParams();
   const h = (hash || "").replace(/^#/, "");
-  if (!h) return out;
-  // Algunos providers devuelven fragment estilo querystring
-  for (const part of h.split("&")) {
-    const [k, v] = part.split("=");
-    if (k) out.set(k, v ?? "");
-  }
-  return out;
+  const sp = new URLSearchParams(h);
+  const obj: Record<string, string> = {};
+  for (const [k, v] of sp.entries()) obj[k] = v;
+  return obj;
 }
 
-function humanMessage(err: any) {
-  const msg = String(err?.message || err?.error_description || err?.error || "").toLowerCase();
-
-  if (msg.includes("invalid") || msg.includes("expired")) {
-    return "El link del correo es inválido o ya expiró. Pide que te reenvíen una nueva invitación y abre el link solo una vez.";
-  }
-  if (msg.includes("forbidden") || msg.includes("403")) {
-    return "Acceso denegado (403). Normalmente ocurre cuando el token ya fue usado o expiró.";
-  }
-  if (msg.includes("not found") || msg.includes("404")) {
-    return "La ruta de callback no existe o no está siendo servida (404). (Esto ya lo arreglaste con el rewrite).";
-  }
-  return "No se pudo completar el inicio de sesión con el link. Reintenta con un link nuevo.";
+function pickTargetByRoles(roles: string[]) {
+  const lower = new Set(roles.map((r) => String(r || "").toLowerCase()));
+  if (lower.has("owner") || lower.has("admin") || lower.has("viewer")) return "/inicio";
+  if (lower.has("tracker")) return "/tracker-gps";
+  return "/inicio";
 }
 
 export default function AuthCallback() {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [title, setTitle] = useState("Procesando autenticación…");
-  const [detail, setDetail] = useState<string>("Verificando tu enlace…");
-  const [tech, setTech] = useState<any>(null);
+  const ranRef = useRef(false);
 
-  const url = useMemo(() => new URL(window.location.href), []);
-  const qs = useMemo(() => url.searchParams, [url]);
-  const hs = useMemo(() => parseHashParams(url.hash), [url]);
+  const [status, setStatus] = useState<UiStatus>("loading");
+  const [message, setMessage] = useState<string>("Procesando enlace de acceso…");
+  const [details, setDetails] = useState<string>("");
+
+  const { searchParams, hashParams } = useMemo(() => {
+    const sp = new URLSearchParams(location.search || "");
+    const hp = parseHashParams(location.hash || "");
+    return { searchParams: sp, hashParams: hp };
+  }, [location.search, location.hash]);
 
   useEffect(() => {
-    let cancelled = false;
+    if (ranRef.current) return;
+    ranRef.current = true;
 
-    async function run() {
+    (async () => {
       try {
         setStatus("loading");
-        setTitle("Auth Callback");
-        setDetail("Verificando token…");
+        setMessage("Verificando enlace con Supabase…");
+        setDetails("");
 
-        // 0) Si Supabase manda errores en query
-        const qpError = qs.get("error");
-        const qpErrorDesc = qs.get("error_description");
-        if (qpError || qpErrorDesc) {
-          throw new Error(`${qpError || "auth_error"}: ${safeDecode(qpErrorDesc || "")}`.trim());
-        }
-
-        // 1) PKCE / OAuth code
-        const code = qs.get("code");
+        // 1) Si viene PKCE/OAuth: ?code=...
+        const code = searchParams.get("code");
         if (code) {
-          setDetail("Intercambiando código por sesión…");
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
+          if (!data?.session) throw new Error("No se pudo crear sesión (exchangeCodeForSession).");
+        } else {
+          // 2) Si viene token_hash: ?token_hash=...&type=...
+          const token_hash = searchParams.get("token_hash");
+          const type = searchParams.get("type"); // invite | magiclink | signup | recovery
 
-          // Limpia query (evita re-procesar al refrescar)
-          window.history.replaceState({}, document.title, url.pathname);
-          if (cancelled) return;
+          // 3) Legacy: #access_token=... (si existiera)
+          const access_token = hashParams["access_token"];
+          const refresh_token = hashParams["refresh_token"];
 
-          setStatus("success");
-          setTitle("Listo ✅");
-          setDetail("Sesión creada correctamente. Redirigiendo…");
-          setTech({ flow: "exchangeCodeForSession", data });
-          setTimeout(() => navigate("/app", { replace: true }), 700);
-          return;
+          if (access_token && refresh_token) {
+            const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+            if (error) throw error;
+          } else if (token_hash && type) {
+            // OJO: aquí está el punto crítico que te faltaba
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash,
+              type: type as any,
+            });
+            if (error) throw error;
+            if (!data?.session) {
+              // A veces verifyOtp devuelve user pero no session si algo falló
+              const { data: s2 } = await supabase.auth.getSession();
+              if (!s2?.session) throw new Error("Enlace verificado pero no se creó sesión.");
+            }
+          } else {
+            // Si no hay nada, intentamos ver si ya existe sesión
+            const { data } = await supabase.auth.getSession();
+            if (!data?.session) {
+              throw new Error("URL de callback sin parámetros válidos (code/token_hash).");
+            }
+          }
         }
 
-        // 2) token_hash + type (magic links / invites / recovery)
-        const token_hash = qs.get("token_hash") || qs.get("token") || "";
-        const typeRaw = (qs.get("type") || "").toLowerCase();
-        const type = (typeRaw as OtpType) || null;
+        setMessage("Cargando perfil y permisos…");
 
-        if (token_hash && type) {
-          setDetail(`Validando enlace (${type})…`);
-          const { data, error } = await supabase.auth.verifyOtp({
-            token_hash,
-            type,
-          });
-          if (error) throw error;
+        // Confirmar sesión
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = sessionData?.session;
+        if (!session?.user) throw new Error("No hay sesión activa después de verificar el enlace.");
 
-          // Limpia query (evita re-procesar al refrescar)
-          window.history.replaceState({}, document.title, url.pathname);
-          if (cancelled) return;
+        const userId = session.user.id;
 
-          setStatus("success");
-          setTitle("Listo ✅");
-          setDetail("Verificación exitosa. Redirigiendo…");
-          setTech({ flow: "verifyOtp", data, type });
-          setTimeout(() => navigate("/app", { replace: true }), 700);
-          return;
+        // Leer roles (RLS debería permitirlo al usuario autenticado)
+        const { data: rolesData, error: rolesErr } = await supabase
+          .from("app_user_roles")
+          .select("role")
+          .eq("user_id", userId);
+
+        if (rolesErr) {
+          // No bloqueamos: igual mandamos a /inicio y AuthGuard ordena
+          console.warn("[AuthCallback] roles query failed", rolesErr);
         }
 
-        // 3) Fallback legacy: access_token en hash
-        const access_token = hs.get("access_token");
-        const refresh_token = hs.get("refresh_token");
+        const roles = (rolesData || []).map((r: any) => String(r?.role || ""));
+        const target = roles.length ? pickTargetByRoles(roles) : "/inicio";
 
-        if (access_token && refresh_token) {
-          setDetail("Estableciendo sesión…");
-          const { data, error } = await supabase.auth.setSession({
-            access_token,
-            refresh_token,
-          });
-          if (error) throw error;
+        setStatus("ok");
+        setMessage("Listo. Redirigiendo…");
 
-          window.history.replaceState({}, document.title, url.pathname);
-          if (cancelled) return;
+        // Limpia query/hash para que no reintente verify en refresh
+        navigate(target, { replace: true });
+      } catch (e: any) {
+        console.error("[AuthCallback] error", e);
 
-          setStatus("success");
-          setTitle("Listo ✅");
-          setDetail("Sesión establecida. Redirigiendo…");
-          setTech({ flow: "setSession", data });
-          setTimeout(() => navigate("/app", { replace: true }), 700);
-          return;
-        }
-
-        // 4) Si no hay nada, intenta ver si ya hay sesión
-        setDetail("Comprobando sesión existente…");
-        const { data: s } = await supabase.auth.getSession();
-
-        if (s?.session) {
-          window.history.replaceState({}, document.title, url.pathname);
-          if (cancelled) return;
-
-          setStatus("success");
-          setTitle("Listo ✅");
-          setDetail("Ya estabas autenticado. Redirigiendo…");
-          setTech({ flow: "getSession", session: true });
-          setTimeout(() => navigate("/app", { replace: true }), 500);
-          return;
-        }
-
-        throw new Error("No se encontraron parámetros de autenticación (token_hash/type/code) en el callback.");
-      } catch (err: any) {
-        if (cancelled) return;
-
+        const msg = String(e?.message || e || "Error desconocido");
         setStatus("error");
-        setTitle("Error");
-        setDetail(humanMessage(err));
-        setTech(err);
-      }
-    }
 
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate, qs, hs, url.pathname]);
+        // Mensaje más humano cuando es típico “expiró / inválido”
+        if (msg.toLowerCase().includes("otp") || msg.toLowerCase().includes("expired") || msg.includes("403")) {
+          setMessage("El link del correo es inválido o ya expiró.");
+          setDetails("Pide que te reenvíen la invitación y abre el link solo una vez.");
+        } else {
+          setMessage("Error procesando el enlace de acceso.");
+          setDetails(msg);
+        }
+      }
+    })();
+  }, [navigate, searchParams, hashParams]);
+
+  const goLogin = () => navigate("/login", { replace: true });
+  const goHome = () => navigate("/", { replace: true });
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        background: "#0b1020",
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          width: "min(860px, 96vw)",
-          background: "white",
-          borderRadius: 16,
-          padding: 24,
-          boxShadow: "0 20px 60px rgba(0,0,0,.35)",
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 22 }}>{title}</h2>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-2xl bg-white border border-slate-200 shadow-sm rounded-2xl p-8">
+        <h1 className="text-2xl font-semibold text-slate-900">Auth Callback</h1>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="mt-4">
           {status === "loading" && (
-            <p style={{ margin: 0, color: "#111827" }}>
-              <b>Procesando…</b> {detail}
-            </p>
+            <p className="text-slate-600">{message}</p>
           )}
 
-          {status === "success" && (
-            <p style={{ margin: 0, color: "#065f46" }}>
-              <b>OK.</b> {detail}
-            </p>
+          {status === "ok" && (
+            <p className="text-emerald-700 font-medium">{message}</p>
           )}
 
           {status === "error" && (
             <>
-              <p style={{ margin: 0, color: "#b91c1c" }}>
-                <b>Error</b>
-              </p>
-              <p style={{ marginTop: 6, color: "#111827" }}>{detail}</p>
+              <p className="text-red-600 font-semibold">Error</p>
+              <p className="text-slate-700 mt-2">{message}</p>
+              {details ? <p className="text-slate-500 mt-2 text-sm">{details}</p> : null}
 
-              <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+              <div className="mt-6 flex gap-3">
                 <button
-                  onClick={() => navigate("/login", { replace: true })}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: 12,
-                    border: "1px solid #e5e7eb",
-                    background: "#111827",
-                    color: "white",
-                    cursor: "pointer",
-                  }}
+                  onClick={goLogin}
+                  className="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
                 >
                   Ir a Login
                 </button>
-
                 <button
-                  onClick={() => navigate("/", { replace: true })}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: 12,
-                    border: "1px solid #e5e7eb",
-                    background: "#10b981",
-                    color: "white",
-                    cursor: "pointer",
-                  }}
+                  onClick={goHome}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
                 >
                   Ir al inicio
                 </button>
@@ -245,16 +171,6 @@ export default function AuthCallback() {
             </>
           )}
         </div>
-
-        {/* Debug técnico (útil en prod) */}
-        {tech ? (
-          <details style={{ marginTop: 16 }}>
-            <summary style={{ cursor: "pointer" }}>Detalle técnico</summary>
-            <pre style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
-              {JSON.stringify(tech, null, 2)}
-            </pre>
-          </details>
-        ) : null}
       </div>
     </div>
   );
