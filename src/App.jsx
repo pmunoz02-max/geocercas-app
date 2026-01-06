@@ -1,6 +1,4 @@
 // src/App.jsx
-// GOLD CLEAN — ROUTER STABLE FOR MAGIC LINKS & TWA
-
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
@@ -11,7 +9,7 @@ import TopTabs from "./components/TopTabs.jsx";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
-import AuthCallback from "./pages/AuthCallback";
+import AuthCallback from "./pages/AuthCallback.tsx"; // ✅ recomendado (explícito)
 
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
@@ -125,26 +123,18 @@ function SmartFallback() {
   if (!session) return <Navigate to="/" replace />;
 
   const roleLower = String(role || "").toLowerCase();
-  return roleLower === "tracker" ? (
-    <Navigate to="/tracker-gps" replace />
-  ) : (
-    <Navigate to="/inicio" replace />
-  );
+  return roleLower === "tracker" ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-
-        {/* 🔐 AUTH CALLBACK (MAGIC LINK / INVITE) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* TRACKER ONLY */}
         <Route
           path="/tracker-gps"
           element={
@@ -156,7 +146,6 @@ export default function App() {
           }
         />
 
-        {/* PANEL (OWNER / ADMIN / VIEWER) */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -192,7 +181,6 @@ export default function App() {
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
-        {/* FALLBACK */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
