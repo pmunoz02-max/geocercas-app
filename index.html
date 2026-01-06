@@ -8,7 +8,8 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1"
     />
 
-    <meta name="color-scheme" content="light dark" />
+    <!-- ✅ Universal: app dark-first (evita heurísticas del navegador/WebView) -->
+    <meta name="color-scheme" content="dark" />
 
     <title>App Geocercas</title>
 
@@ -26,6 +27,9 @@
       href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css"
     />
 
+    <!-- ✅ Solo lo mínimo necesario en inline style.
+         NO definimos font-family ni color aquí para no interferir con Tailwind.
+    -->
     <style>
       html,
       body,
@@ -33,6 +37,12 @@
         height: 100%;
         margin: 0;
       }
+
+      /* Base dark segura */
+      html {
+        background: #0b1220;
+      }
+
       body {
         background: #0b1220;
       }
