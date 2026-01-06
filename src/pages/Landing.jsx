@@ -1,5 +1,5 @@
 // src/pages/Landing.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { useTranslation } from "react-i18next";
@@ -13,7 +13,6 @@ export default function Landing() {
 
   // Debug (antes del return)
   useEffect(() => {
-    // Nota: esto sí se ejecuta, a diferencia del console.log que estaba después del return
     console.log("LANDING JSX VERSION ACTIVA");
   }, []);
 
@@ -27,6 +26,7 @@ export default function Landing() {
         const {
           data: { session },
         } = await supabase.auth.getSession();
+
         if (!active) return;
         setHasSession(!!session);
       } catch (e) {
@@ -59,6 +59,24 @@ export default function Landing() {
 
   const currentYear = new Date().getFullYear();
 
+  // IMPORTANTE:
+  // Forzamos un "next" para que el flujo de login/magic termine en el panel (/inicio),
+  // y no caiga en /tracker-gps por redirects por defecto.
+  const nextAfterLogin = "/inicio";
+
+  const loginHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("next", nextAfterLogin);
+    return `/login?${params.toString()}`;
+  }, []);
+
+  const magicHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("mode", "magic");
+    params.set("next", nextAfterLogin);
+    return `/login?${params.toString()}`;
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col">
       {/* Barra superior propia de la landing */}
@@ -82,29 +100,38 @@ export default function Landing() {
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
 
-            {!hasSession && (
-              <Link
-                to="/login"
-                className="text-xs md:text-sm text-slate-200 hover:text-white transition-colors"
-              >
-                {t("landing.loginButton") || "Entrar"}
-              </Link>
-            )}
-
-            {hasSession && (
+            {/* Mientras verifica sesión, evita parpadeos */}
+            {checkingSession ? (
+              <span className="text-xs text-slate-400">
+                {t("landing.checkingSession") || "Verificando..."}
+              </span>
+            ) : (
               <>
-                <Link
-                  to="/inicio"
-                  className="text-xs md:text-sm text-emerald-300 hover:text-emerald-100 transition-colors"
-                >
-                  {t("landing.goToDashboard") || "Ir al panel"}
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors border border-slate-500/60 rounded-full px-3 py-1"
-                >
-                  {t("landing.logout") || "Salir"}
-                </button>
+                {!hasSession && (
+                  <Link
+                    to={loginHref}
+                    className="text-xs md:text-sm text-slate-200 hover:text-white transition-colors"
+                  >
+                    {t("landing.loginButton") || "Entrar"}
+                  </Link>
+                )}
+
+                {hasSession && (
+                  <>
+                    <Link
+                      to="/inicio"
+                      className="text-xs md:text-sm text-emerald-300 hover:text-emerald-100 transition-colors"
+                    >
+                      {t("landing.goToDashboard") || "Ir al panel"}
+                    </Link>
+                    <button
+                      onClick={handleLogout}
+                      className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors border border-slate-500/60 rounded-full px-3 py-1"
+                    >
+                      {t("landing.logout") || "Salir"}
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -137,8 +164,8 @@ export default function Landing() {
               </p>
             </div>
 
-            {/* Bloque de “acceso” (jerarquía + claridad para Play Review) */}
-            {!hasSession && (
+            {/* Bloque de “acceso” */}
+            {!hasSession && !checkingSession && (
               <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 space-y-2">
                 <p className="text-sm font-semibold text-slate-50">
                   {t("landing.accessTitle") || "Acceso con cuenta autorizada"}
@@ -154,25 +181,27 @@ export default function Landing() {
               </div>
             )}
 
-            {/* CTA principal (más claro) */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link
-                to="/login"
-                className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-400 transition-colors"
-              >
-                {t("landing.ctaLogin") || "Entrar a la plataforma"}
-              </Link>
+            {/* CTA principal */}
+            {!checkingSession && (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  to={loginHref}
+                  className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-400 transition-colors"
+                >
+                  {t("landing.ctaLogin") || "Entrar a la plataforma"}
+                </Link>
 
-              <Link
-                to="/login?mode=magic"
-                className="inline-flex items-center justify-center rounded-xl border border-emerald-400/60 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-emerald-200 hover:bg-slate-800/80 transition-colors"
-              >
-                {t("landing.ctaMagic") || "Enlace mágico (usuarios invitados)"}
-              </Link>
-            </div>
+                <Link
+                  to={magicHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-emerald-400/60 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-emerald-200 hover:bg-slate-800/80 transition-colors"
+                >
+                  {t("landing.ctaMagic") || "Enlace mágico (usuarios invitados)"}
+                </Link>
+              </div>
+            )}
 
-            {/* Nota discreta para revisión (no expone credenciales) */}
-            {!hasSession && (
+            {/* Nota discreta para revisión */}
+            {!hasSession && !checkingSession && (
               <div className="text-[11px] text-slate-400">
                 {t("landing.reviewNote") ||
                   "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access)."}
@@ -273,7 +302,6 @@ export default function Landing() {
                 </div>
               </div>
 
-              {/* Micro-copy de privacidad (sutil, útil para revisión) */}
               <div className="text-[10px] text-slate-400 pt-1">
                 {t("landing.privacyMiniNote") ||
                   "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."}
@@ -283,7 +311,6 @@ export default function Landing() {
         </div>
       </main>
 
-      {/* Footer simple */}
       <footer className="border-t border-white/10 bg-slate-950/80">
         <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
           <p>
@@ -299,7 +326,7 @@ export default function Landing() {
               className="hover:text-slate-200 transition-colors"
             >
               {t("landing.footerSupport") || "Soporte"}
-            </a>
+            </aitero/,
             <a
               href="#terminos"
               className="hover:text-slate-200 transition-colors"
