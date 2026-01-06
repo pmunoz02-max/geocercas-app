@@ -8,7 +8,7 @@
 /* ---------- Base / Variables ---------- */
 @layer base {
   :root {
-    --app-bg: #f8fafc;      /* slate-50 */
+    --app-bg: #020617;      /* slate-950 (base dark universal) */
     --app-fg: #0f172a;      /* slate-900 */
     --card-bg: #ffffff;     /* blanco */
     --muted-fg: #475569;    /* slate-600 */
@@ -19,12 +19,17 @@
     height: 100%;
   }
 
+  /* ✅ Fondo base universal (desktop + mobile + webview)
+     No forzamos color de texto aquí para no romper Tailwind (text-white, etc.) */
+  html,
   body {
     margin: 0;
-    /* IMPORTANTE:
-       NO forzamos color global aquí, para no romper Tailwind (text-white, text-slate-*, etc.)
-       Tailwind y tus clases deben mandar en el color final. */
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    background-color: var(--app-bg);
+  }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+      Arial, "Apple Color Emoji", "Segoe UI Emoji";
   }
 
   /* ===== Normalización universal de links (mobile + desktop + webview) ===== */
@@ -55,6 +60,8 @@
   input, select, textarea, button {
     font: inherit;
   }
+
+  /* Inputs con estilo neutro (si una pantalla usa inputs sin Tailwind) */
   input, select, textarea {
     background: #ffffff;
     color: #0f172a;
