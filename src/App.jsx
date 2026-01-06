@@ -1,5 +1,5 @@
 // src/App.jsx
-// GOLD CLEAN — NO FRAGILE (no JSX comments)
+// GOLD CLEAN — ROUTER STABLE FOR MAGIC LINKS & TWA
 
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
@@ -136,11 +136,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* PUBLIC */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* 🔐 AUTH CALLBACK (MAGIC LINK / INVITE) */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
+        {/* TRACKER ONLY */}
         <Route
           path="/tracker-gps"
           element={
@@ -152,6 +156,7 @@ export default function App() {
           }
         />
 
+        {/* PANEL (OWNER / ADMIN / VIEWER) */}
         <Route
           element={
             <AuthGuard mode="panel">
@@ -187,6 +192,7 @@ export default function App() {
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
+        {/* FALLBACK */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
