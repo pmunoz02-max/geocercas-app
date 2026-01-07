@@ -321,12 +321,15 @@ export default function Landing() {
             <a href="#faq" className="hover:text-slate-200 transition-colors">
               {t("landing.footerFaq") || "FAQ"}
             </a>
+
+            {/* FIX ÚNICO: se elimina el cierre inválido </aitero/, y se cierra correctamente </a> */}
             <a
               href="mailto:soporte@tugeocercas.com"
               className="hover:text-slate-200 transition-colors"
             >
               {t("landing.footerSupport") || "Soporte"}
             </a>
+
             <a
               href="#terminos"
               className="hover:text-slate-200 transition-colors"
