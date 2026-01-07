@@ -9,7 +9,7 @@ import TopTabs from "./components/TopTabs.jsx";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
-import AuthCallback from "./pages/AuthCallback.tsx"; // ✅ recomendado (explícito)
+import AuthCallback from "./pages/AuthCallback.tsx";
 
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
@@ -32,7 +32,8 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-const PANEL_ROLES = new Set(["owner", "admin", "viewer"]);
+// ✅ FIX: incluye root_owner y evita mandar a tracker por rol no cargado todavía
+const PANEL_ROLES = new Set(["root_owner", "owner", "admin", "viewer"]);
 
 function FullScreenLoader({ text = "Cargando..." }) {
   return (
@@ -51,6 +52,11 @@ function RequirePanel({ children }) {
   if (!session) return <Navigate to="/" replace />;
 
   const roleLower = String(role || "").toLowerCase();
+
+  // ✅ FIX: si todavía no hay rol (timing), no redirigir a tracker: espera.
+  if (!roleLower) return <FullScreenLoader text="Cargando permisos…" />;
+
+  // ✅ FIX: panel roles correctos (incluye root_owner)
   if (!PANEL_ROLES.has(roleLower)) return <Navigate to="/tracker-gps" replace />;
 
   return children;
@@ -63,6 +69,10 @@ function RequireTracker({ children }) {
   if (!session) return <Navigate to="/login" replace />;
 
   const roleLower = String(role || "").toLowerCase();
+
+  // ✅ FIX: si el rol aún no llegó, espera en vez de rebotar
+  if (!roleLower) return <FullScreenLoader text="Cargando permisos…" />;
+
   if (roleLower !== "tracker") return <Navigate to="/inicio" replace />;
 
   return children;
@@ -104,7 +114,7 @@ function Shell() {
 
 function RootOwnerRoute({ children }) {
   const { loading, isRootOwner } = useAuth();
-  if (loading) return null;
+  if (loading) return <FullScreenLoader text="Cargando permisos…" />;
   if (!isRootOwner) return <Navigate to="/inicio" replace />;
   return children;
 }
@@ -119,11 +129,20 @@ function LoginShell() {
 
 function SmartFallback() {
   const { loading, session, role } = useAuth();
-  if (loading) return null;
+
+  if (loading) return <FullScreenLoader text="Cargando…" />;
   if (!session) return <Navigate to="/" replace />;
 
   const roleLower = String(role || "").toLowerCase();
-  return roleLower === "tracker" ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
+
+  // ✅ FIX: si rol aún no llegó, espera antes de decidir tracker/panel
+  if (!roleLower) return <FullScreenLoader text="Cargando permisos…" />;
+
+  return roleLower === "tracker" ? (
+    <Navigate to="/tracker-gps" replace />
+  ) : (
+    <Navigate to="/inicio" replace />
+  );
 }
 
 export default function App() {
