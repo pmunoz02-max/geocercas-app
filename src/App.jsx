@@ -9,7 +9,7 @@ import TopTabs from "./components/TopTabs.jsx";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
-import AuthCallback from "./pages/AuthCallback.tsx";
+import AuthCallback from "./pages/AuthCallback.tsx"; // ✅ recomendado (explícito)
 
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
@@ -32,9 +32,6 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-// ✅ FIX: incluye root_owner y evita mandar a tracker por rol no cargado todavía
-const PANEL_ROLES = new Set(["root_owner", "owner", "admin", "viewer"]);
-
 function FullScreenLoader({ text = "Cargando..." }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -45,35 +42,36 @@ function FullScreenLoader({ text = "Cargando..." }) {
   );
 }
 
+/**
+ * ✅ CAMBIO 1:
+ * Antes: dependía de `role` (currentRole) y eso en tu AuthContext se carga en background.
+ * Ahora: usamos `bestRole` (más estable) SOLO para distinguir tracker vs no-tracker,
+ * y NO esperamos `role`.
+ */
 function RequirePanel({ children }) {
-  const { loading, session, role } = useAuth();
+  const { loading, session, bestRole } = useAuth();
 
-  if (loading) return <FullScreenLoader text="Cargando organización y permisos…" />;
+  if (loading) return <FullScreenLoader text="Cargando sesión…" />;
   if (!session) return <Navigate to="/" replace />;
 
-  const roleLower = String(role || "").toLowerCase();
-
-  // ✅ FIX: si todavía no hay rol (timing), no redirigir a tracker: espera.
-  if (!roleLower) return <FullScreenLoader text="Cargando permisos…" />;
-
-  // ✅ FIX: panel roles correctos (incluye root_owner)
-  if (!PANEL_ROLES.has(roleLower)) return <Navigate to="/tracker-gps" replace />;
+  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
+  if (isTracker) return <Navigate to="/tracker-gps" replace />;
 
   return children;
 }
 
+/**
+ * ✅ CAMBIO 2:
+ * Tracker route decide por `bestRole`, no por `role`.
+ */
 function RequireTracker({ children }) {
-  const { loading, session, role } = useAuth();
+  const { loading, session, bestRole } = useAuth();
 
-  if (loading) return <FullScreenLoader text="Cargando autenticación…" />;
+  if (loading) return <FullScreenLoader text="Cargando sesión…" />;
   if (!session) return <Navigate to="/login" replace />;
 
-  const roleLower = String(role || "").toLowerCase();
-
-  // ✅ FIX: si el rol aún no llegó, espera en vez de rebotar
-  if (!roleLower) return <FullScreenLoader text="Cargando permisos…" />;
-
-  if (roleLower !== "tracker") return <Navigate to="/inicio" replace />;
+  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
+  if (!isTracker) return <Navigate to="/inicio" replace />;
 
   return children;
 }
@@ -127,22 +125,17 @@ function LoginShell() {
   );
 }
 
+/**
+ * ✅ CAMBIO 3:
+ * SmartFallback decide por bestRole (no por role), evitando “Cargando permisos…” infinito.
+ */
 function SmartFallback() {
-  const { loading, session, role } = useAuth();
-
+  const { loading, session, bestRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando…" />;
   if (!session) return <Navigate to="/" replace />;
 
-  const roleLower = String(role || "").toLowerCase();
-
-  // ✅ FIX: si rol aún no llegó, espera antes de decidir tracker/panel
-  if (!roleLower) return <FullScreenLoader text="Cargando permisos…" />;
-
-  return roleLower === "tracker" ? (
-    <Navigate to="/tracker-gps" replace />
-  ) : (
-    <Navigate to="/inicio" replace />
-  );
+  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
+  return isTracker ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
 }
 
 export default function App() {
