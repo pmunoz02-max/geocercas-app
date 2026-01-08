@@ -41,6 +41,8 @@
   a:visited {
     color: inherit;
   }
+  /* Nota: el hover global subraya SOLO links de texto.
+     Los tabs/nav se controlan más abajo para NO subrayar. */
   a:hover {
     text-decoration: underline;
   }
@@ -140,6 +142,21 @@
     font-weight: 700;
     box-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
   }
-  nav a:hover {
+}
+
+/* ---------- Utilities ---------- */
+@layer utilities {
+  /* Oculta scrollbar horizontal (Windows/Chrome/Safari/Firefox) */
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* IE/Edge legacy */
+    scrollbar-width: none; /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+}
+
+/* 🔒 FIX: en navegación (tabs/menús) NO subrayar en hover */
+nav a:hover {
   text-decoration: none;
 }
