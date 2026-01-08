@@ -15,6 +15,8 @@
     },
     "noOrganizationTitle": "No tienes una organización activa",
     "noOrganizationDescription": "Para continuar necesitas crear o seleccionar una organización.",
+    "selectOrganization": "Seleccionar organización",
+    "refreshContext": "Refrescar",
     "createOrganization": "Crear organización",
     "orgNamePlaceholder": "Nombre de la organización",
     "orgNameRequired": "Debes ingresar un nombre.",

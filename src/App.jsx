@@ -6,10 +6,12 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 import TopTabs from "./components/TopTabs.jsx";
 
+import RequireOrg from "./components/org/RequireOrg.jsx";
+
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
-import AuthCallback from "./pages/AuthCallback.tsx"; // ✅ recomendado (explícito)
+import AuthCallback from "./pages/AuthCallback.tsx";
 
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
@@ -42,12 +44,6 @@ function FullScreenLoader({ text = "Cargando..." }) {
   );
 }
 
-/**
- * ✅ CAMBIO 1:
- * Antes: dependía de `role` (currentRole) y eso en tu AuthContext se carga en background.
- * Ahora: usamos `bestRole` (más estable) SOLO para distinguir tracker vs no-tracker,
- * y NO esperamos `role`.
- */
 function RequirePanel({ children }) {
   const { loading, session, bestRole } = useAuth();
 
@@ -60,10 +56,6 @@ function RequirePanel({ children }) {
   return children;
 }
 
-/**
- * ✅ CAMBIO 2:
- * Tracker route decide por `bestRole`, no por `role`.
- */
 function RequireTracker({ children }) {
   const { loading, session, bestRole } = useAuth();
 
@@ -102,7 +94,6 @@ function Shell() {
       <div className="border-b border-slate-200 bg-white">
         <TopTabs tabs={tabs} />
       </div>
-
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
         <Outlet />
       </main>
@@ -125,10 +116,6 @@ function LoginShell() {
   );
 }
 
-/**
- * ✅ CAMBIO 3:
- * SmartFallback decide por bestRole (no por role), evitando “Cargando permisos…” infinito.
- */
 function SmartFallback() {
   const { loading, session, bestRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando…" />;
@@ -168,22 +155,25 @@ export default function App() {
           }
         >
           <Route path="/inicio" element={<Inicio />} />
-          <Route path="/nueva-geocerca" element={<NuevaGeocerca />} />
-          <Route path="/geocercas" element={<GeocercasPage />} />
-          <Route path="/personal" element={<PersonalPage />} />
-          <Route path="/actividades" element={<ActividadesPage />} />
-          <Route path="/asignaciones" element={<AsignacionesPage />} />
-          <Route path="/costos" element={<CostosPage />} />
-          <Route path="/costos-dashboard" element={<CostosDashboardPage />} />
-          <Route path="/tracker-dashboard" element={<TrackerDashboard />} />
-          <Route path="/invitar-tracker" element={<InvitarTracker />} />
+
+          <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
+          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+          <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
+          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
+          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
+          <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
+          <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+          <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
           <Route
             path="/admins"
             element={
-              <RootOwnerRoute>
-                <AdminsPage />
-              </RootOwnerRoute>
+              <RequireOrg>
+                <RootOwnerRoute>
+                  <AdminsPage />
+                </RootOwnerRoute>
+              </RequireOrg>
             }
           />
 
