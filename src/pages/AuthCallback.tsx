@@ -5,6 +5,15 @@ import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 
+/**
+ * AuthCallback UNIVERSAL y permanente
+ * - Soporta PKCE: ?code=...
+ * - Soporta OTP links: ?token_hash=...&type=...
+ * - Robusto ante links mal tipados (p.ej. llega type=invite pero el token es magiclink):
+ *   intenta verifyOtp con varios tipos en fallback.
+ * - Nunca se queda colgado: timeout 15s + UI de error clara.
+ * - Redirige por rol (DB): tracker -> /tracker-gps, otros -> /inicio
+ */
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -17,9 +26,44 @@ export default function AuthCallback() {
   useEffect(() => {
     let timeoutId: number | undefined;
 
+    const verifyWithFallback = async (token_hash: string, typeFromUrl: string | null) => {
+      // Orden de fallback: primero el tipo de la URL (si existe), luego tipos comunes.
+      const candidates = [
+        typeFromUrl,
+        "magiclink",
+        "signup",
+        "recovery",
+        "invite",
+        "email",
+      ]
+        .filter(Boolean)
+        .map(String);
+
+      const tried = new Set<string>();
+      let lastErr: any = null;
+
+      for (const typ of candidates) {
+        if (tried.has(typ)) continue;
+        tried.add(typ);
+
+        try {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash,
+            type: typ as any,
+          });
+          if (!error) return; // ✅ éxito
+          lastErr = error;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+
+      throw lastErr || new Error("verifyOtp failed");
+    };
+
     const run = async () => {
       try {
-        // ⏱️ Timeout de seguridad (15s) para evitar “Autenticando…” infinito
+        // ⏱️ Timeout de seguridad
         timeoutId = window.setTimeout(() => {
           setError(t("auth.timeout"));
           setProcessing(false);
@@ -32,15 +76,12 @@ export default function AuthCallback() {
           if (error) throw error;
         }
 
-        // 2) Magic Link / Invite (OTP)
+        // 2) OTP links (token_hash + type)
         const token_hash = params.get("token_hash");
         const type = params.get("type");
-        if (token_hash && type) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash,
-            type: type as any,
-          });
-          if (error) throw error;
+
+        if (token_hash) {
+          await verifyWithFallback(token_hash, type);
         }
       } catch (e: any) {
         console.error("AuthCallback error:", e);
@@ -62,17 +103,14 @@ export default function AuthCallback() {
     if (loading || processing) return;
     if (!session) return;
 
-    const next = params.get("next");
     const roleLower = String(role || "").toLowerCase();
 
     if (roleLower === "tracker") {
       navigate("/tracker-gps", { replace: true });
-    } else if (next) {
-      navigate(next, { replace: true });
     } else {
       navigate("/inicio", { replace: true });
     }
-  }, [loading, processing, session, role, navigate, params]);
+  }, [loading, processing, session, role, navigate]);
 
   if (error) {
     return (
