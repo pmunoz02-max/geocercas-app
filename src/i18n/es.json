@@ -12,7 +12,13 @@
       "delete": "Eliminar",
       "edit": "Editar",
       "back": "Volver"
-    }
+    },
+    "noOrganizationTitle": "No tienes una organización activa",
+    "noOrganizationDescription": "Para continuar necesitas crear o seleccionar una organización.",
+    "createOrganization": "Crear organización",
+    "orgNamePlaceholder": "Nombre de la organización",
+    "orgNameRequired": "Debes ingresar un nombre.",
+    "creating": "Creando…"
   },
   "app": {
     "title": "App Geocercas",
@@ -254,7 +260,8 @@
     "yes": "Sí",
     "no": "No",
     "processing": "Procesando…",
-    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado."
+    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
+    "errorNoOrgSelected": "No tienes una organización activa."
   },
   "actividades": {
     "title": "Actividades",
@@ -885,4 +892,3 @@
     "backHome": "Ir a la landing",
     "tip": "Tip: vuelve a /login, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace."
   }
-}

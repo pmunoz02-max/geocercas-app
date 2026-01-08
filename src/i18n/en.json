@@ -15,7 +15,13 @@
       "yes": "Yes",
       "no": "No",
       "loading": "Loading..."
-    }
+    },
+    "noOrganizationTitle": "You don’t have an active organization",
+    "noOrganizationDescription": "To continue, you need to create or select an organization.",
+    "createOrganization": "Create organization",
+    "orgNamePlaceholder": "Organization name",
+    "orgNameRequired": "Please enter a name.",
+    "creating": "Creating…"
   },
   "app": {
     "title": "App Geocercas",
@@ -277,7 +283,8 @@
     "yes": "Yes",
     "no": "No",
     "processing": "Processing…",
-    "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted."
+    "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted.",
+    "errorNoOrgSelected": "You don’t have an active organization."
   },
   "actividades": {
     "title": "Activities",

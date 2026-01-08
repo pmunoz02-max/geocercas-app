@@ -12,7 +12,13 @@
       "delete": "Supprimer",
       "edit": "Modifier",
       "back": "Retour"
-    }
+    },
+    "noOrganizationTitle": "Vous n’avez pas d’organisation active",
+    "noOrganizationDescription": "Pour continuer, vous devez créer ou sélectionner une organisation.",
+    "createOrganization": "Créer une organisation",
+    "orgNamePlaceholder": "Nom de l’organisation",
+    "orgNameRequired": "Veuillez saisir un nom.",
+    "creating": "Création…"
   },
   "app": {
     "title": "App Geocercas",
@@ -252,7 +258,8 @@
     "tableNoResults": "Aucun résultat trouvé.",
     "yes": "Oui",
     "no": "Non",
-    "processing": "Traitement…"
+    "processing": "Traitement…",
+    "errorNoOrgSelected": "Vous n’avez pas d’organisation active."
   },
   "actividades": {
     "title": "Activités",
