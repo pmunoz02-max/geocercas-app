@@ -1,8 +1,14 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-export default function MainNav() {
+/**
+ * MainNav
+ * - Botones de cabecera con alto contraste (no “lavados”).
+ * - Scroll horizontal limpio en móvil (sin barra gris visible en Windows).
+ * - Soporta role opcional (admin/tracker/viewer/etc.).
+ */
+export default function MainNav({ role }) {
   const [userEmail, setUserEmail] = useState("");
   const navigate = useNavigate();
 
@@ -12,78 +18,93 @@ export default function MainNav() {
     });
   }, []);
 
+  const isAdmin = useMemo(() => {
+    const r = (role || "").toLowerCase();
+    return r === "admin" || r === "owner" || r === "root" || r === "root_owner";
+  }, [role]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
 
-  const linkBase =
-    "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100";
-  const linkActive = "bg-gray-200 text-gray-900";
-  const linkInactive = "text-gray-700";
+  const base =
+    "inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap border transition-all " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2";
+
+  const active =
+    "bg-emerald-600 text-white border-emerald-600 shadow-sm";
+  const inactive =
+    "bg-slate-50 text-slate-900 border-slate-300 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-800";
 
   return (
-    <nav className="w-full border-b bg-white">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <NavLink to="/" className="font-semibold">
-            App Geocercas
-          </NavLink>
+    <div className="flex items-center gap-3 w-full justify-end">
+      {/* LINKS */}
+      <div
+        className="
+          flex gap-2
+          overflow-x-auto
+          justify-end
+          [-ms-overflow-style:none]
+          [scrollbar-width:none]
+          [&::-webkit-scrollbar]:hidden
+        "
+      >
+        <NavLink
+          to="/mapa"
+          className={({ isActive }) => `${base} ${isActive ? active : inactive}`}
+        >
+          Mapa
+        </NavLink>
 
-          <div className="hidden md:flex items-center gap-1">
-            <NavLink
-              to="/geocercas"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? linkActive : linkInactive}`
-              }
-            >
-              Geocercas
-            </NavLink>
+        <NavLink
+          to="/geocercas"
+          className={({ isActive }) => `${base} ${isActive ? active : inactive}`}
+        >
+          Geocercas
+        </NavLink>
 
-            <NavLink
-              to="/asignaciones"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? linkActive : linkInactive}`
-              }
-            >
-              Asignaciones
-            </NavLink>
+        <NavLink
+          to="/personal"
+          className={({ isActive }) => `${base} ${isActive ? active : inactive}`}
+        >
+          Personal
+        </NavLink>
 
-            {/* NUEVO: PERSONAL */}
-            <NavLink
-              to="/personal"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? linkActive : linkInactive}`
-              }
-            >
-              Personal
-            </NavLink>
+        <NavLink
+          to="/tracker-dashboard"
+          className={({ isActive }) => `${base} ${isActive ? active : inactive}`}
+        >
+          Tracker
+        </NavLink>
 
-            <NavLink
-              to="/admin"
-              className={({ isActive }) =>
-                `${linkBase} ${isActive ? linkActive : linkInactive}`
-              }
-            >
-              Admin
-            </NavLink>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {userEmail && (
-            <span className="text-sm text-gray-600">{userEmail}</span>
-          )}
-          <button
-            onClick={handleSignOut}
-            className="text-sm px-3 py-1.5 rounded-md border hover:bg-gray-50"
+        {isAdmin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `${base} ${isActive ? active : inactive}`
+            }
           >
-            Salir
-          </button>
-        </div>
+            Admin
+          </NavLink>
+        )}
       </div>
-    </nav>
+
+      {/* USER + SALIR */}
+      <div className="flex items-center gap-2">
+        {userEmail && (
+          <span className="hidden sm:inline text-xs text-slate-600 max-w-[220px] truncate">
+            {userEmail}
+          </span>
+        )}
+
+        <button
+          onClick={handleSignOut}
+          className="inline-flex items-center justify-center px-3 py-2 rounded-full text-sm font-semibold border border-slate-300 bg-white hover:bg-slate-50 transition-all"
+        >
+          Salir
+        </button>
+      </div>
+    </div>
   );
 }
-
-
