@@ -12,7 +12,10 @@
       "delete": "Eliminar",
       "edit": "Editar",
       "back": "Volver"
-    }
+    },
+    "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
+    "createOrganization": "Crear organización",
+    "refreshContext": "Refrescar contexto"
   },
   "app": {
     "title": "App Geocercas",
