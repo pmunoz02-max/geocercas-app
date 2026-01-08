@@ -23,9 +23,7 @@
     "refreshContext": "Refresh",
     "orgNamePlaceholder": "Organization name",
     "orgNameRequired": "Please enter a name.",
-    "creating": "Creating…",
-    "loading": "Loading…",
-    "unexpectedError": "Unexpected error."
+    "creating": "Creating…"
   },
   "app": {
     "title": "App Geocercas",
@@ -918,5 +916,12 @@
     "backToLogin": "Back to login",
     "backHome": "Go to landing",
     "tip": "Tip: go back to /login, enter your email and use “Forgot your password?” to generate a new link."
+  },
+  "auth": {
+    "processing": "Authenticating…",
+    "timeout": "Authentication took too long. Please try again.",
+    "invalidOrExpiredLink": "The link is invalid, expired, or already used.",
+    "errorTitle": "Authentication failed",
+    "backToLogin": "Back to login"
   }
 }

@@ -20,9 +20,7 @@
     "refreshContext": "Refrescar",
     "orgNamePlaceholder": "Nombre de la organización",
     "orgNameRequired": "Debes ingresar un nombre.",
-    "creating": "Creando…",
-    "loading": "Cargando…",
-    "unexpectedError": "Error inesperado."
+    "creating": "Creando…"
   },
   "app": {
     "title": "App Geocercas",
@@ -895,5 +893,12 @@
     "backToLogin": "Volver a iniciar sesión",
     "backHome": "Ir a la landing",
     "tip": "Tip: vuelve a /login, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace."
+  },
+  "auth": {
+    "processing": "Autenticando…",
+    "timeout": "La autenticación tardó demasiado. Intenta nuevamente.",
+    "invalidOrExpiredLink": "El enlace es inválido, ya expiró o fue utilizado.",
+    "errorTitle": "No se pudo autenticar",
+    "backToLogin": "Volver al login"
   }
 }
