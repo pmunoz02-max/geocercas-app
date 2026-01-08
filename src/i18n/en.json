@@ -23,7 +23,9 @@
     "refreshContext": "Refresh",
     "orgNamePlaceholder": "Organization name",
     "orgNameRequired": "Please enter a name.",
-    "creating": "Creating…"
+    "creating": "Creating…",
+    "loading": "Loading…",
+    "unexpectedError": "Unexpected error."
   },
   "app": {
     "title": "App Geocercas",

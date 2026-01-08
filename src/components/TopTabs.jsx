@@ -15,12 +15,10 @@ export default function TopTabs({ tabs = [] }) {
   return (
     <div className="sticky top-0 z-40 bg-white border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-3 sm:px-4">
-        {/* Selector de organización */}
         <div className="flex justify-end py-2">
           <OrgSelector />
         </div>
 
-        {/* Tabs */}
         <nav
           className="
             flex gap-2

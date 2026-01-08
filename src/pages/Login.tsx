@@ -22,7 +22,7 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // 1) Si ya hay sesión, ir a /inicio (panel)
+  // 1) Si ya hay sesión, ir a /inicio
   useEffect(() => {
     if (!authReady) return;
     if (session?.user) {
@@ -56,13 +56,10 @@ const Login: React.FC = () => {
 
     if (!errorCode && !errorDesc) return;
 
-    let friendly =
-      t("login.errorMagicLink") || "No se pudo procesar el enlace mágico.";
+    let friendly = t("login.errorMagicLink");
 
     if ((errorCode || "").toLowerCase().includes("otp_expired")) {
-      friendly =
-        t("login.magicExpired") ||
-        "El enlace mágico expiró o ya fue usado. Solicita uno nuevo.";
+      friendly = t("login.magicExpired");
     }
 
     if (errorDesc) friendly += `\n${decodeURIComponent(errorDesc)}`;
@@ -78,7 +75,7 @@ const Login: React.FC = () => {
     setInfoMsg(null);
 
     if (!email || !password) {
-      setErrorMsg(t("login.errorMissingCredentials") || "Faltan credenciales.");
+      setErrorMsg(t("login.errorMissingCredentials"));
       return;
     }
 
@@ -91,33 +88,32 @@ const Login: React.FC = () => {
       });
 
       if (error) {
-        setErrorMsg(error.message || "Credenciales inválidas.");
+        setErrorMsg(error.message);
         return;
       }
 
       navigate("/inicio", { replace: true });
     } catch {
-      setErrorMsg("Error inesperado al iniciar sesión.");
+      setErrorMsg(t("common.unexpectedError"));
     } finally {
       setLoadingAction(false);
     }
   };
 
-  // LOGIN CON MAGIC LINK (solo envía correo)
+  // LOGIN CON MAGIC LINK
   const handleSubmitMagic = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
 
     if (!email) {
-      setErrorMsg(t("login.errorMissingEmail") || "Debes ingresar un correo.");
+      setErrorMsg(t("login.errorMissingEmail"));
       return;
     }
 
     try {
       setLoadingAction(true);
 
-      // ✅ Opción A: callback limpio, sin target
       const redirectTo = `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
@@ -126,16 +122,13 @@ const Login: React.FC = () => {
       });
 
       if (error) {
-        setErrorMsg(error.message || "No se pudo enviar el enlace mágico.");
+        setErrorMsg(error.message);
         return;
       }
 
-      setInfoMsg(
-        t("login.infoMagicLinkSent") ||
-          "Te enviamos un enlace mágico a tu correo."
-      );
+      setInfoMsg(t("login.infoMagicLinkSent"));
     } catch {
-      setErrorMsg("Error inesperado al enviar el enlace mágico.");
+      setErrorMsg(t("common.unexpectedError"));
     } finally {
       setLoadingAction(false);
     }
@@ -144,7 +137,7 @@ const Login: React.FC = () => {
   if (!authReady) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        Cargando…
+        {t("common.loading")}
       </div>
     );
   }
@@ -153,9 +146,7 @@ const Login: React.FC = () => {
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border rounded-2xl p-6 space-y-5">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-semibold">
-            {t("login.title") || "Iniciar sesión"}
-          </h1>
+          <h1 className="text-2xl font-semibold">{t("login.title")}</h1>
           <LanguageSwitcher />
         </div>
 
@@ -175,14 +166,14 @@ const Login: React.FC = () => {
           <form onSubmit={handleSubmitPassword} className="space-y-4">
             <input
               type="email"
-              placeholder="Correo"
+              placeholder={t("login.email")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border rounded-xl p-2"
             />
             <input
               type="password"
-              placeholder="Contraseña"
+              placeholder={t("login.password")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full border rounded-xl p-2"
@@ -192,20 +183,19 @@ const Login: React.FC = () => {
               disabled={loadingAction}
               className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-500 transition disabled:opacity-50"
             >
-              {loadingAction ? "Entrando…" : "Entrar"}
+              {loadingAction ? t("login.signingIn") : t("login.signIn")}
             </button>
           </form>
         ) : (
           <form onSubmit={handleSubmitMagic} className="space-y-4">
             <input
               type="email"
-              placeholder="Correo"
+              placeholder={t("login.email")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border rounded-xl p-2"
             />
 
-            {/* 🔥 CTA FUERTE */}
             <button
               type="submit"
               disabled={loadingAction}
@@ -226,8 +216,8 @@ const Login: React.FC = () => {
               "
             >
               {loadingAction
-                ? t("login.sending") || "Enviando…"
-                : t("login.sendMagic") || "Enviar link mágico"}
+                ? t("login.sending")
+                : t("login.magicLinkButton")}
             </button>
           </form>
         )}
@@ -239,7 +229,7 @@ const Login: React.FC = () => {
               mode === "password" ? "font-semibold" : ""
             }`}
           >
-            Contraseña
+            {t("login.passwordMode")}
           </button>
           <button
             onClick={() => setMode("magic")}
@@ -247,7 +237,7 @@ const Login: React.FC = () => {
               mode === "magic" ? "font-semibold" : ""
             }`}
           >
-            Link mágico
+            {t("login.magicMode")}
           </button>
         </div>
       </div>

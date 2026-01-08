@@ -17,10 +17,12 @@
     "noOrganizationDescription": "Pour continuer, vous devez créer ou sélectionner une organisation.",
     "createOrganization": "Créer une organisation",
     "selectOrganization": "Sélectionner une organisation",
-"refreshContext": "Rafraîchir",
-"orgNamePlaceholder": "Nom de l’organisation",
-"orgNameRequired": "Veuillez saisir un nom.",
-"creating": "Création…"
+    "refreshContext": "Rafraîchir",
+    "orgNamePlaceholder": "Nom de l’organisation",
+    "orgNameRequired": "Veuillez saisir un nom.",
+    "creating": "Création…",
+    "loading": "Chargement…",
+    "unexpectedError": "Erreur inattendue."
   },
   "app": {
     "title": "App Geocercas",
