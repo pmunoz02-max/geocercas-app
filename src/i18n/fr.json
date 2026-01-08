@@ -12,15 +12,7 @@
       "delete": "Supprimer",
       "edit": "Modifier",
       "back": "Retour"
-    },
-    "noOrganizationTitle": "Vous n’avez pas d’organisation active",
-    "noOrganizationDescription": "Pour continuer, vous devez créer ou sélectionner une organisation.",
-    "createOrganization": "Créer une organisation",
-    "selectOrganization": "Sélectionner une organisation",
-    "refreshContext": "Rafraîchir",
-    "orgNamePlaceholder": "Nom de l’organisation",
-    "orgNameRequired": "Veuillez saisir un nom.",
-    "creating": "Création…"
+    }
   },
   "app": {
     "title": "App Geocercas",
@@ -260,8 +252,7 @@
     "tableNoResults": "Aucun résultat trouvé.",
     "yes": "Oui",
     "no": "Non",
-    "processing": "Traitement…",
-    "errorNoOrgSelected": "Vous n’avez pas d’organisation active."
+    "processing": "Traitement…"
   },
   "actividades": {
     "title": "Activités",
@@ -891,6 +882,15 @@
     "backToLogin": "Retour à la connexion",
     "backHome": "Aller à la landing",
     "tip": "Astuce : retournez à /login, saisissez votre e-mail et utilisez « Mot de passe oublié ? » pour générer un nouveau lien."
+  },
+  "authInvite": {
+    "title": "Vous avez été invité",
+    "processing": "Validation de l’invitation…",
+    "notInviteLink": "Ce lien n’est pas une invitation valide. Utilisez le lien d’invitation reçu par e-mail.",
+    "expiredOrUsed": "L’invitation est invalide, expirée ou déjà utilisée.",
+    "continue": "Continuer",
+    "goToLogin": "Aller à la connexion",
+    "timeout": "La validation de l’invitation a pris trop de temps. Veuillez réessayer."
   },
   "auth": {
     "processing": "Authentification…",

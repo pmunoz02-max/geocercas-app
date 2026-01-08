@@ -12,15 +12,7 @@
       "delete": "Eliminar",
       "edit": "Editar",
       "back": "Volver"
-    },
-    "noOrganizationTitle": "No tienes una organización activa",
-    "noOrganizationDescription": "Para continuar necesitas crear o seleccionar una organización.",
-    "createOrganization": "Crear organización",
-    "selectOrganization": "Seleccionar organización",
-    "refreshContext": "Refrescar",
-    "orgNamePlaceholder": "Nombre de la organización",
-    "orgNameRequired": "Debes ingresar un nombre.",
-    "creating": "Creando…"
+    }
   },
   "app": {
     "title": "App Geocercas",
@@ -262,8 +254,7 @@
     "yes": "Sí",
     "no": "No",
     "processing": "Procesando…",
-    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
-    "errorNoOrgSelected": "No tienes una organización activa."
+    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado."
   },
   "actividades": {
     "title": "Actividades",
@@ -893,6 +884,15 @@
     "backToLogin": "Volver a iniciar sesión",
     "backHome": "Ir a la landing",
     "tip": "Tip: vuelve a /login, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace."
+  },
+  "authInvite": {
+    "title": "Has sido invitado",
+    "processing": "Validando invitación…",
+    "notInviteLink": "Este enlace no es una invitación válida. Usa el enlace de invitación que recibiste por correo.",
+    "expiredOrUsed": "La invitación es inválida, ya expiró o fue utilizada.",
+    "continue": "Continuar",
+    "goToLogin": "Ir al login",
+    "timeout": "La validación de la invitación tardó demasiado. Intenta nuevamente."
   },
   "auth": {
     "processing": "Autenticando…",
