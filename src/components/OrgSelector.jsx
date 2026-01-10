@@ -3,19 +3,27 @@ import { useAuth } from "../context/AuthContext";
 
 /**
  * Selector de organización (solo Admin/Owner)
- * - Usa organizations/currentOrg/selectOrg del AuthContext
- * - No se muestra si el usuario no es admin
- * - Si hay 0 o 1 organización, no muestra selector (no aporta)
+ * BLINDADO contra React #300
  */
+function safeText(v, fallback = "") {
+  if (v == null) return fallback;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function OrgSelector({ className = "" }) {
   const { organizations, currentOrg, selectOrg, isAdmin, loading } = useAuth();
 
   const orgOptions = useMemo(() => {
     const arr = Array.isArray(organizations) ? organizations : [];
-    // Orden estable por name; si no hay name, al final
     return [...arr].sort((a, b) => {
-      const an = String(a?.name || "").toLowerCase();
-      const bn = String(b?.name || "").toLowerCase();
+      const an = safeText(a?.name).toLowerCase();
+      const bn = safeText(b?.name).toLowerCase();
       if (!an && bn) return 1;
       if (an && !bn) return -1;
       return an.localeCompare(bn);
@@ -25,13 +33,13 @@ export default function OrgSelector({ className = "" }) {
   // Solo admins/owners
   if (!isAdmin) return null;
 
-  // Si está cargando o no hay organizaciones, no mostrar
+  // Mientras carga, no mostrar
   if (loading) return null;
 
-  // Si solo hay 1 org, no mostrar selector
+  // Si hay 0 o 1 org, no mostrar
   if (!orgOptions || orgOptions.length <= 1) return null;
 
-  const value = currentOrg?.id || "";
+  const value = safeText(currentOrg?.id);
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
@@ -43,11 +51,14 @@ export default function OrgSelector({ className = "" }) {
         onChange={(e) => selectOrg(e.target.value)}
         aria-label="Seleccionar organización"
       >
-        {orgOptions.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.name || "Organización"}
-          </option>
-        ))}
+        {orgOptions.map((o) => {
+          const label = safeText(o?.name, "Organización");
+          return (
+            <option key={safeText(o?.id)} value={safeText(o?.id)}>
+              {label || "Organización"}
+            </option>
+          );
+        })}
       </select>
     </div>
   );
