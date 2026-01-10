@@ -1,20 +1,7 @@
-// src/components/TopTabs.jsx
 import React, { useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import OrgSelector from "./OrgSelector";
-
-/**
- * TopTabs (ROBUSTO + TOGGLES)
- *
- * - ?notabs=1  -> desactiva completamente TopTabs (incluye OrgSelector)
- * - ?noorg=1   -> oculta solo OrgSelector
- * - ?debugTabs=1 -> loggea tabla de labels calculados
- *
- * Objetivo:
- * - Nunca renderizar objetos (evita React #300)
- * - Nunca tumbar la app por un fallo de OrgSelector o una tab
- */
 
 function safeText(v) {
   if (v == null) return "";
@@ -45,37 +32,26 @@ function fallbackFromPath(path) {
 }
 
 function getTabLabel(t, tab) {
-  // 1) label explícito
   if (typeof tab?.label === "string") {
     const s = tab.label.trim();
     if (s) return s;
   }
-
-  // 2) i18n labelKey
   const key = tab?.labelKey ? String(tab.labelKey).trim() : "";
   if (key) {
     const translated = t(key, { defaultValue: "" });
-
     if (typeof translated === "string") {
       const s = translated.trim();
       if (s) return s;
-
-      const hk = humanizeKey(key);
-      if (hk) return hk;
-    } else {
-      const s = safeText(translated).trim();
-      if (s && s !== "{}" && s !== "[]") return s;
-
-      const hk = humanizeKey(key);
-      if (hk) return hk;
+      return humanizeKey(key) || fallbackFromPath(tab?.path);
     }
+    const s = safeText(translated).trim();
+    if (s && s !== "{}" && s !== "[]") return s;
+    return humanizeKey(key) || fallbackFromPath(tab?.path);
   }
-
-  // 3) fallback final basado en path
   return fallbackFromPath(tab?.path);
 }
 
-/** ErrorBoundary local: evita que OrgSelector o un tab tumbe toda la UI */
+/** Airbag local para que TopTabs nunca tumbe la app */
 class LocalBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -85,7 +61,7 @@ class LocalBoundary extends React.Component {
     return { hasError: true, msg: safeText(err?.message || err) };
   }
   componentDidCatch(err) {
-    console.error("[TopTabs] LocalBoundary caught:", err);
+    console.error("[TopTabs] LocalBoundary:", err);
   }
   render() {
     if (this.state.hasError) {
@@ -105,7 +81,6 @@ export default function TopTabs({ tabs = [] }) {
   const { t } = useTranslation();
   const location = useLocation();
 
-  // ✅ Query flags REALES, reactivos a cambios de URL
   const flags = useMemo(() => {
     try {
       const params = new URLSearchParams(location.search || "");
@@ -119,32 +94,24 @@ export default function TopTabs({ tabs = [] }) {
     }
   }, [location.search]);
 
-  // ✅ Si pides notabs=1, NO renderiza nada (ideal para aislar culpables)
   if (flags.notabs) return null;
 
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
   const base =
-    "no-underline inline-flex items-center " +
-    "px-3 py-1.5 rounded-full " +
-    "text-xs sm:text-sm font-semibold " +
-    "whitespace-nowrap border " +
-    "transition-all duration-150 " +
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2";
+    "no-underline inline-flex items-center px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold " +
+    "whitespace-nowrap border transition-all duration-150 focus:outline-none focus-visible:ring-2 " +
+    "focus-visible:ring-emerald-500 focus-visible:ring-offset-2";
 
   const inactive =
-    "bg-white text-emerald-700 border-emerald-500 " +
-    "hover:bg-emerald-50 hover:text-emerald-800";
+    "bg-white text-emerald-700 border-emerald-500 hover:bg-emerald-50 hover:text-emerald-800";
 
   const active = "bg-emerald-600 text-white border-emerald-600 shadow-sm";
 
   const computed = useMemo(() => {
     const list = Array.isArray(tabs) ? tabs : [];
-    return list.map((tab) => ({
-      ...tab,
-      __label: getTabLabel(t, tab),
-    }));
+    return list.map((tab) => ({ ...tab, __label: getTabLabel(t, tab) }));
   }, [tabs, t]);
 
   if (flags.debugTabs) {
