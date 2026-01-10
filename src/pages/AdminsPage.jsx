@@ -22,6 +22,11 @@ function safeText(x) {
 
 /**
  * Llamada directa por fetch para NO perder el body en errores 4xx/5xx.
+ * Devuelve:
+ *  - ok: boolean
+ *  - status: number
+ *  - data: object|null (JSON parseado si aplica)
+ *  - raw: string|null (texto crudo)
  */
 async function callInviteAdminEdge(payload) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -59,7 +64,10 @@ async function callInviteAdminEdge(payload) {
     body: JSON.stringify(payload),
   });
 
+  // ⚠️ Importante: leer texto SIEMPRE (incluye 500)
   const raw = await res.text();
+
+  // Intentar parsear JSON
   let data = null;
   try {
     data = raw ? JSON.parse(raw) : null;
@@ -75,17 +83,17 @@ function extractEdgeError(fetchResp, fallback = "Error al enviar la invitación.
 
   const { status, data, raw } = fetchResp;
 
-  if (data && data.ok === false) {
+  if (data && typeof data === "object" && data.ok === false) {
     const step = data.step || "edge";
     const msg = data.message || data.error || fallback;
-    return `HTTP ${status} [${step}] ${msg}`;
+    return `HTTP ${status} [${step}] ${toSafeString(msg)}`;
   }
 
   if (!data) {
-    return `HTTP ${status} ${fallback}${raw ? ` | raw: ${String(raw).slice(0, 180)}` : ""}`;
+    return `HTTP ${status} ${fallback}${raw ? ` | raw: ${String(raw).slice(0, 220)}` : ""}`;
   }
 
-  return `HTTP ${status} ${fallback} | ${toSafeString(data).slice(0, 180)}`;
+  return `HTTP ${status} ${fallback} | ${toSafeString(data).slice(0, 220)}`;
 }
 
 /** ErrorBoundary simple para que nunca tumbe la página */
@@ -127,16 +135,24 @@ export default function AdminsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin"); // admin | owner
 
-  const [invitedVia, setInvitedVia] = useState(null);
-  const [actionLink, setActionLink] = useState(null);
-  const [lastInvitedEmail, setLastInvitedEmail] = useState(null);
+  const [invitedVia, setInvitedVia] = useState("");
+  const [actionLink, setActionLink] = useState("");
+  const [lastInvitedEmail, setLastInvitedEmail] = useState("");
+
+  // Debug (para que aunque la consola esté contaminada, puedas copiar el JSON)
+  const [inviteDebug, setInviteDebug] = useState({
+    status: "",
+    json: "",
+    raw: "",
+  });
 
   const orgName = useMemo(() => currentOrg?.name || "—", [currentOrg?.name]);
 
   const resetInviteResult = () => {
-    setInvitedVia(null);
-    setActionLink(null);
-    setLastInvitedEmail(null);
+    setInvitedVia("");
+    setActionLink("");
+    setLastInvitedEmail("");
+    setInviteDebug({ status: "", json: "", raw: "" });
   };
 
   if (!authReady || !orgsReady) {
@@ -228,10 +244,18 @@ export default function AdminsPage() {
 
       const resp = await callInviteAdminEdge(payload);
 
-      // 🔥 Log 100% copiable
-      console.log("[AdminsPage] INVITE fetch status:", resp.status);
-      console.log("[AdminsPage] INVITE fetch data JSON:", JSON.stringify(resp.data));
-      if (resp.raw) console.log("[AdminsPage] INVITE raw text:", String(resp.raw).slice(0, 500));
+      // 🔥 Logs 100% copiable (lo que tú vas a pegar en el chat)
+      console.log("INVITE fetch status:", resp.status);
+      console.log("INVITE fetch data JSON:", JSON.stringify(resp.data));
+
+      // Guardar también en UI como STRING (evita React #300)
+      setInviteDebug({
+        status: String(resp.status ?? ""),
+        json: String(JSON.stringify(resp.data)),
+        raw: String(resp.raw ?? ""),
+      });
+
+      if (resp.raw) console.log("INVITE raw response:", String(resp.raw).slice(0, 800));
 
       if (!resp.ok) {
         setError(String(extractEdgeError(resp, "Error al enviar la invitación.")));
@@ -239,17 +263,17 @@ export default function AdminsPage() {
       }
 
       const data = resp.data || {};
-      if (data.ok === false) {
+      if (data && typeof data === "object" && data.ok === false) {
         setError(String(extractEdgeError(resp, "La invitación no pudo ser enviada.")));
         return;
       }
 
-      const via = data.invited_via || (data.action_link ? "action_link" : null);
-      const link = data.action_link || null;
+      const via = (data && typeof data === "object" && data.invited_via) || (data?.action_link ? "action_link" : "");
+      const link = (data && typeof data === "object" && data.action_link) || "";
 
       setLastInvitedEmail(email);
-      setInvitedVia(via);
-      setActionLink(link);
+      setInvitedVia(String(via || ""));
+      setActionLink(String(link || ""));
 
       if (via === "email") {
         setSuccessMessage(`Invitación enviada por correo a ${email}. (Revisa Spam/Promociones)`);
@@ -349,7 +373,7 @@ export default function AdminsPage() {
                 Invitado: <b>{safeText(lastInvitedEmail)}</b>
               </div>
 
-              {actionLink && (
+              {!!actionLink && (
                 <div className="mt-2">
                   <div className="flex gap-2 items-center mb-2">
                     <button
@@ -374,6 +398,28 @@ export default function AdminsPage() {
               )}
             </div>
           )}
+
+          {/* Panel Debug para copiar el JSON aunque React/console se ensucie */}
+          {!!inviteDebug.status && (
+            <details className="mt-4">
+              <summary className="text-xs cursor-pointer text-slate-600">Debug (invite_admin)</summary>
+              <div className="mt-2 text-[11px] bg-slate-50 border rounded p-2 space-y-2">
+                <div>
+                  <b>INVITE fetch status:</b> <span className="font-mono">{safeText(inviteDebug.status)}</span>
+                </div>
+                <div>
+                  <b>INVITE fetch data JSON:</b>
+                  <div className="font-mono break-all select-all mt-1">{safeText(inviteDebug.json)}</div>
+                </div>
+                {!!inviteDebug.raw && (
+                  <div>
+                    <b>INVITE raw response:</b>
+                    <div className="font-mono break-all select-all mt-1">{safeText(inviteDebug.raw)}</div>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
         </section>
 
         {!!error && (
@@ -391,11 +437,7 @@ export default function AdminsPage() {
         <section className="border rounded-xl bg-white">
           <div className="flex justify-between items-center px-4 py-3 border-b">
             <h2 className="text-sm font-semibold">Administradores</h2>
-            <button
-              onClick={handleRefresh}
-              disabled={loading}
-              className="border rounded px-3 py-1.5 text-xs"
-            >
+            <button onClick={handleRefresh} disabled={loading} className="border rounded px-3 py-1.5 text-xs">
               Refrescar
             </button>
           </div>
