@@ -72,7 +72,7 @@ class GlobalErrorBoundary extends React.Component {
     if (this.props?.debugSnapshot) {
       console.error("[GlobalErrorBoundary] Debug snapshot:", this.props.debugSnapshot);
     }
-this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || null });
+    this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || null });
   }
 
   handleReload = () => window.location.reload();
@@ -100,7 +100,7 @@ this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || nu
                   {this.state.stack}
                 </pre>
                 {this.state.snapshot ? (
-                  <pre className=\"mt-2 font-mono whitespace-pre-wrap break-words text-slate-600\">
+                  <pre className="mt-2 font-mono whitespace-pre-wrap break-words text-slate-600">
                     {toSafeString(this.state.snapshot)}
                   </pre>
                 ) : null}
@@ -234,14 +234,12 @@ function pickOrgPreview(orgs) {
 }
 
 function GlobalErrorBoundaryWithSnapshot({ children }) {
-  // useAuth viene del AuthContext del proyecto
-  const auth = (typeof useAuth === "function" ? useAuth() : {}) || {};
-
+  const auth = useAuth?.() || {};
   const snapshot = {
     href: typeof window !== "undefined" ? window.location.href : "",
     user_email: auth?.user?.email || null,
     isAdmin: auth?.isAdmin ?? null,
-    isRootOwner: auth?.isRootOwner ?? null,
+    bestRole: auth?.bestRole ?? null,
     currentOrg: {
       id: auth?.currentOrg?.id || null,
       name: auth?.currentOrg?.name,
@@ -250,14 +248,8 @@ function GlobalErrorBoundaryWithSnapshot({ children }) {
     organizations_preview: pickOrgPreview(auth?.organizations),
   };
 
-  return (
-    <GlobalErrorBoundary debugSnapshot={snapshot}>
-      {children}
-    </GlobalErrorBoundaryWithSnapshot>
-  );
+  return <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundaryWithSnapshot>;
 }
-
-
 
 export default function App() {
   return (
@@ -325,7 +317,7 @@ export default function App() {
 
           <Route path="*" element={<SmartFallback />} />
         </Routes>
-      </GlobalErrorBoundary>
+      </GlobalErrorBoundaryWithSnapshot>
     </BrowserRouter>
   );
 }
