@@ -51,7 +51,6 @@ function getTabLabel(t, tab) {
   return fallbackFromPath(tab?.path);
 }
 
-/** Airbag local para que TopTabs nunca tumbe la app */
 class LocalBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -115,7 +114,6 @@ export default function TopTabs({ tabs = [] }) {
   }, [tabs, t]);
 
   if (flags.debugTabs) {
-    console.log("[TopTabs debug] tabs raw:", tabs);
     console.table(
       computed.map((x) => ({
         path: x.path,
@@ -148,12 +146,6 @@ export default function TopTabs({ tabs = [] }) {
                   key={tab.path}
                   to={tab.path}
                   className={`${base} ${activeTab ? active : inactive}`}
-                  style={
-                    activeTab
-                      ? { backgroundColor: "#059669", borderColor: "#059669", color: "#fff" }
-                      : { backgroundColor: "#fff", borderColor: "#10b981", color: "#047857" }
-                  }
-                  title={label}
                 >
                   {label}
                 </NavLink>
