@@ -1,27 +1,38 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
 
-export default defineConfig({
-  plugins: [react()],
+export default defineConfig(() => {
+  const DEBUG_BUILD = process.env.VITE_DEBUG_BUILD === "1";
 
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      // Shim de process completo para paquetes legacy
-      process: 'process/browser',
+  return {
+    plugins: [react()],
+
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+        process: "process/browser",
+      },
     },
-  },
 
-  define: {
-    // Evita crashes por lecturas a process.env en el navegador
-    'process.env': {},
-    // Algunos paquetes esperan global
-    global: 'window',
-  },
+    define: {
+      "process.env": {},
+      global: "window",
+    },
 
-  // 🔴 CLAVE PARA SALIR DEL BUCLE
-  build: {
-    sourcemap: true,
-  },
-})
+    build: {
+      sourcemap: true,
+
+      // 🔥 CLAVE: para un deploy diagnóstico
+      minify: DEBUG_BUILD ? false : "esbuild",
+
+      // ayuda a que nombres sobrevivan un poco más
+      target: "es2020",
+    },
+
+    esbuild: {
+      // mantiene nombres de funciones/clases en debug
+      keepNames: DEBUG_BUILD,
+    },
+  };
+});

@@ -19,6 +19,10 @@ import { supabase } from "../supabaseClient.js";
  * - Fuente primaria: RPC get_my_context()
  * - Fallback universal: ensure_user_org_context() + profiles.current_org_id + memberships + organizations
  * - NUNCA depender de vistas fantasma (ej: app_user_roles)
+ *
+ * Blindaje anti React #300:
+ * - Exponer orgs/currentOrg "safe" para UI: name siempre string (nunca objeto).
+ * - Mantener crudo internamente para lógica si hiciera falta.
  */
 
 const AuthContext = createContext(null);
@@ -67,6 +71,20 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
+/** =========================
+ * Blindaje universal de texto (anti #300)
+ * ========================= */
+function safeText(v, fallback = "") {
+  if (v == null) return fallback;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return fallback;
+  }
+}
+
 export function AuthProvider({ children }) {
   const client = supabase;
 
@@ -86,6 +104,7 @@ export function AuthProvider({ children }) {
   const [bestRole, setBestRole] = useState(null);
   const [currentRole, setCurrentRole] = useState(null);
 
+  // Interno (puede venir "legacy", pero NO debe romper UI)
   const [orgs, setOrgs] = useState([]); // [{id,name,..., role?}]
   const [currentOrg, setCurrentOrg] = useState(null);
 
@@ -164,7 +183,11 @@ export function AuthProvider({ children }) {
       if (!userId) return null;
       try {
         const { data, error } = await withTimeout(
-          client.from("profiles").select("current_org_id").eq("id", userId).single(),
+          client
+            .from("profiles")
+            .select("current_org_id")
+            .eq("id", userId)
+            .single(),
           12000,
           "loadProfileCurrentOrgId"
         );
@@ -327,7 +350,7 @@ export function AuthProvider({ children }) {
           role: normalizeRole(o.role) || "member",
         }));
 
-        // orgs para UI
+        // orgs para UI (interno)
         const orgRows = rpcOrgs.map((o) => ({
           id: o.org_id,
           name: o.name || "(sin nombre)",
@@ -340,7 +363,8 @@ export function AuthProvider({ children }) {
         }));
 
         setRoles(roleRows);
-        const best = normalizeRole(rpcCtx.role) || computeBestRole(roleRows) || "member";
+        const best =
+          normalizeRole(rpcCtx.role) || computeBestRole(roleRows) || "member";
         setBestRole(best);
         setCurrentRole(best);
 
@@ -461,6 +485,70 @@ export function AuthProvider({ children }) {
     };
   }, [client, hydrateContext, resetAllAuthState]);
 
+  /** =========================
+   * Derivados SAFE para UI (anti React #300)
+   * - name SIEMPRE string
+   * ========================= */
+  const orgsSafe = useMemo(() => {
+    const arr = Array.isArray(orgs) ? orgs : [];
+    return arr.map((o) => ({
+      ...o,
+      // blindaje: si name viene objeto/legacy => string seguro
+      name: safeText(o?.name, "Organización"),
+    }));
+  }, [orgs]);
+
+  const currentOrgSafe = useMemo(() => {
+    if (!currentOrg) return null;
+    return {
+      ...currentOrg,
+      name: safeText(currentOrg?.name, "Organización"),
+    };
+  }, [currentOrg]);
+
+  /** =========================
+   * Compatibilidad legacy (para pantallas existentes)
+   * ========================= */
+  const isAdmin = useMemo(() => {
+    const r = String(bestRole || currentRole || "").toLowerCase();
+    return r === "owner" || r === "admin";
+  }, [bestRole, currentRole]);
+
+  const persistCurrentOrgId = useCallback(
+    async (orgId) => {
+      // Tracker no persiste org
+      if (trackerDomain) return;
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      try {
+        const { error } = await withTimeout(
+          client.from("profiles").update({ current_org_id: orgId }).eq("id", userId),
+          12000,
+          "persistCurrentOrgId"
+        );
+        if (error) throw error;
+      } catch (e) {
+        console.warn("[AuthContext] persistCurrentOrgId error:", e);
+      }
+    },
+    [client, session, trackerDomain]
+  );
+
+  const selectOrg = useCallback(
+    async (orgId) => {
+      const id = orgId || null;
+
+      // Actualiza estado local con el objeto de orgs (crudo, pero luego se expone SAFE)
+      const found = (Array.isArray(orgs) ? orgs : []).find((o) => o?.id === id) || null;
+      setCurrentOrg(found);
+
+      // Persistir a profiles (fuente primaria)
+      if (id) await persistCurrentOrgId(id);
+    },
+    [orgs, persistCurrentOrgId]
+  );
+
   // Debug útil en consola
   useEffect(() => {
     window.__SUPABASE_AUTH_DEBUG = {
@@ -468,12 +556,13 @@ export function AuthProvider({ children }) {
       getError: () => authError ?? null,
       isTrackerDomain: () => !!trackerDomain,
       getRole: () => currentRole ?? bestRole ?? null,
-      getOrg: () => currentOrg ?? null,
+      getOrg: () => currentOrgSafe ?? null,
       getUser: () => user ?? null,
       getSession: () => session ?? null,
       rolesReady: () => !!rolesReady,
       orgsReady: () => !!orgsReady,
       ensuredOnce: () => !!ensuredOnceRef.current,
+      getOrgs: () => orgsSafe ?? [],
     };
   }, [
     authReady,
@@ -481,11 +570,12 @@ export function AuthProvider({ children }) {
     trackerDomain,
     currentRole,
     bestRole,
-    currentOrg,
+    currentOrgSafe,
     user,
     session,
     rolesReady,
     orgsReady,
+    orgsSafe,
   ]);
 
   const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
@@ -507,10 +597,10 @@ export function AuthProvider({ children }) {
       currentRole,
       isRootOwner,
 
-      // orgs
-      orgs,
-      currentOrg,
-      setCurrentOrg,
+      // orgs (SAFE para UI)
+      orgs: orgsSafe,
+      currentOrg: currentOrgSafe,
+      setCurrentOrg, // interno (evitar usar en UI si no hace falta)
 
       // domain
       trackerDomain,
@@ -519,9 +609,12 @@ export function AuthProvider({ children }) {
       rolesReady,
       orgsReady,
 
-      // legacy
+      // legacy aliases (para componentes viejos)
       loading,
       role,
+      isAdmin,
+      organizations: orgsSafe,
+      selectOrg,
     }),
     [
       authReady,
@@ -532,13 +625,15 @@ export function AuthProvider({ children }) {
       bestRole,
       currentRole,
       isRootOwner,
-      orgs,
-      currentOrg,
+      orgsSafe,
+      currentOrgSafe,
       trackerDomain,
       rolesReady,
       orgsReady,
       loading,
       role,
+      isAdmin,
+      selectOrg,
     ]
   );
 
