@@ -5,14 +5,15 @@ import { useTranslation } from "react-i18next";
 import OrgSelector from "./OrgSelector";
 
 /**
- * TopTabs (FINAL – robusto)
- * Objetivo:
- * - Nunca renderizar labels vacíos (ni romper por i18n)
- * - Mantener estilo compacto (píldoras)
- * - Debug opcional para ver qué label llega realmente
+ * TopTabs (ROBUSTO + TOGGLES)
  *
- * Debug:
- * - Agrega ?debugTabs=1 a la URL para ver en consola los labels calculados
+ * - ?notabs=1  -> desactiva completamente TopTabs (incluye OrgSelector)
+ * - ?noorg=1   -> oculta solo OrgSelector
+ * - ?debugTabs=1 -> loggea tabla de labels calculados
+ *
+ * Objetivo:
+ * - Nunca renderizar objetos (evita React #300)
+ * - Nunca tumbar la app por un fallo de OrgSelector o una tab
  */
 
 function safeText(v) {
@@ -53,19 +54,15 @@ function getTabLabel(t, tab) {
   // 2) i18n labelKey
   const key = tab?.labelKey ? String(tab.labelKey).trim() : "";
   if (key) {
-    // NOTA: defaultValue="" evita que muestre la key literal si no existe
-    // y nos permite controlar el fallback nosotros.
     const translated = t(key, { defaultValue: "" });
 
     if (typeof translated === "string") {
       const s = translated.trim();
       if (s) return s;
 
-      // Si la traducción existe pero quedó vacía, humanizamos la key.
       const hk = humanizeKey(key);
       if (hk) return hk;
     } else {
-      // Si i18n devuelve objeto (returnObjects), lo convertimos a string o fallback.
       const s = safeText(translated).trim();
       if (s && s !== "{}" && s !== "[]") return s;
 
@@ -78,18 +75,52 @@ function getTabLabel(t, tab) {
   return fallbackFromPath(tab?.path);
 }
 
+/** ErrorBoundary local: evita que OrgSelector o un tab tumbe toda la UI */
+class LocalBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, msg: "" };
+  }
+  static getDerivedStateFromError(err) {
+    return { hasError: true, msg: safeText(err?.message || err) };
+  }
+  componentDidCatch(err) {
+    console.error("[TopTabs] LocalBoundary caught:", err);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full px-3 py-2">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-2 text-xs">
+            Error en TopTabs (aislado): {safeText(this.state.msg)}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function TopTabs({ tabs = [] }) {
   const { t } = useTranslation();
   const location = useLocation();
 
-  const debugTabs = useMemo(() => {
+  // ✅ Query flags REALES, reactivos a cambios de URL
+  const flags = useMemo(() => {
     try {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("debugTabs") === "1";
+      const params = new URLSearchParams(location.search || "");
+      return {
+        notabs: params.get("notabs") === "1",
+        noorg: params.get("noorg") === "1",
+        debugTabs: params.get("debugTabs") === "1",
+      };
     } catch {
-      return false;
+      return { notabs: false, noorg: false, debugTabs: false };
     }
-  }, []);
+  }, [location.search]);
+
+  // ✅ Si pides notabs=1, NO renderiza nada (ideal para aislar culpables)
+  if (flags.notabs) return null;
 
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
@@ -116,8 +147,7 @@ export default function TopTabs({ tabs = [] }) {
     }));
   }, [tabs, t]);
 
-  if (debugTabs) {
-    // Log una sola vez por render
+  if (flags.debugTabs) {
     console.log("[TopTabs debug] tabs raw:", tabs);
     console.table(
       computed.map((x) => ({
@@ -130,35 +160,41 @@ export default function TopTabs({ tabs = [] }) {
   }
 
   return (
-    <div className="sticky top-0 z-40 bg-white border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4">
-        <div className="flex justify-end py-2">
-          <OrgSelector />
+    <LocalBoundary>
+      <div className="sticky top-0 z-40 bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4">
+          {!flags.noorg && (
+            <LocalBoundary>
+              <div className="flex justify-end py-2">
+                <OrgSelector />
+              </div>
+            </LocalBoundary>
+          )}
+
+          <nav className="flex gap-2 pb-3 justify-center flex-wrap">
+            {computed.map((tab) => {
+              const activeTab = isActive(tab.path);
+              const label = safeText(tab.__label).trim() || fallbackFromPath(tab.path);
+
+              return (
+                <NavLink
+                  key={tab.path}
+                  to={tab.path}
+                  className={`${base} ${activeTab ? active : inactive}`}
+                  style={
+                    activeTab
+                      ? { backgroundColor: "#059669", borderColor: "#059669", color: "#fff" }
+                      : { backgroundColor: "#fff", borderColor: "#10b981", color: "#047857" }
+                  }
+                  title={label}
+                >
+                  {label}
+                </NavLink>
+              );
+            })}
+          </nav>
         </div>
-
-        <nav className="flex gap-2 pb-3 justify-center flex-wrap">
-          {computed.map((tab) => {
-            const activeTab = isActive(tab.path);
-            const label = safeText(tab.__label).trim() || fallbackFromPath(tab.path);
-
-            return (
-              <NavLink
-                key={tab.path}
-                to={tab.path}
-                className={`${base} ${activeTab ? active : inactive}`}
-                style={
-                  activeTab
-                    ? { backgroundColor: "#059669", borderColor: "#059669", color: "#fff" }
-                    : { backgroundColor: "#fff", borderColor: "#10b981", color: "#047857" }
-                }
-                title={label}
-              >
-                {label}
-              </NavLink>
-            );
-          })}
-        </nav>
       </div>
-    </div>
+    </LocalBoundary>
   );
 }
