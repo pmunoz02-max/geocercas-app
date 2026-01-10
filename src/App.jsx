@@ -72,7 +72,7 @@ class GlobalErrorBoundary extends React.Component {
     if (this.props?.debugSnapshot) {
       console.error("[GlobalErrorBoundary] Debug snapshot:", this.props.debugSnapshot);
     }
-    this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || null });
+this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || null });
   }
 
   handleReload = () => window.location.reload();
@@ -100,7 +100,7 @@ class GlobalErrorBoundary extends React.Component {
                   {this.state.stack}
                 </pre>
                 {this.state.snapshot ? (
-                  <pre className="mt-2 font-mono whitespace-pre-wrap break-words text-slate-600">
+                  <pre className=\"mt-2 font-mono whitespace-pre-wrap break-words text-slate-600\">
                     {toSafeString(this.state.snapshot)}
                   </pre>
                 ) : null}
@@ -233,12 +233,10 @@ function pickOrgPreview(orgs) {
   }));
 }
 
-/**
- * Envía un "snapshot" de estado útil al ErrorBoundary sin depender de sourcemaps.
- * Esto rompe el bucle: nos dice qué dato es objeto (y en qué ruta).
- */
 function GlobalErrorBoundaryWithSnapshot({ children }) {
-  const auth = useAuth?.() || {};
+  // useAuth viene del AuthContext del proyecto
+  const auth = (typeof useAuth === "function" ? useAuth() : {}) || {};
+
   const snapshot = {
     href: typeof window !== "undefined" ? window.location.href : "",
     user_email: auth?.user?.email || null,
@@ -252,8 +250,14 @@ function GlobalErrorBoundaryWithSnapshot({ children }) {
     organizations_preview: pickOrgPreview(auth?.organizations),
   };
 
-  return <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundaryWithSnapshot>;
+  return (
+    <GlobalErrorBoundary debugSnapshot={snapshot}>
+      {children}
+    </GlobalErrorBoundaryWithSnapshot>
+  );
 }
+
+
 
 export default function App() {
   return (
@@ -321,7 +325,7 @@ export default function App() {
 
           <Route path="*" element={<SmartFallback />} />
         </Routes>
-      </GlobalErrorBoundaryWithSnapshot>
+      </GlobalErrorBoundary>
     </BrowserRouter>
   );
 }
