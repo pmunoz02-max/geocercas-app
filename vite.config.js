@@ -1,4 +1,3 @@
-// vite.config.js
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
@@ -19,5 +18,10 @@ export default defineConfig({
     'process.env': {},
     // Algunos paquetes esperan global
     global: 'window',
+  },
+
+  // 🔴 CLAVE PARA SALIR DEL BUCLE
+  build: {
+    sourcemap: true,
   },
 })
