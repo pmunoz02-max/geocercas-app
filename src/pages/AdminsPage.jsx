@@ -1,37 +1,91 @@
 // src/pages/AdminsPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { listAdmins, inviteAdmin, inviteIndependentOwner, deleteAdmin } from "../lib/adminsApi";
+import { supabase } from "../lib/supabase.js";
+import { listAdmins, deleteAdmin } from "../lib/adminsApi";
 
-// Helper robusto: extrae mensaje real del backend/edge
-function extractEdgeError(response, fallback = "Error al enviar la invitación.") {
-  if (!response) return fallback;
+/**
+ * Llamada directa por fetch para NO perder el body en errores 4xx/5xx.
+ * Supabase JS en functions.invoke() suele devolver:
+ *   Error: Edge Function returned a non-2xx status code
+ * ...y te oculta el JSON de respuesta.
+ */
+async function callInviteAdminEdge(payload) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  const { data, error } = response;
-
-  // Error de supabase-js (non-2xx / network / etc)
-  if (error) {
-    const step = error?.normalized?.step || error?.context?.step || error?.step || null;
-    const msg = error?.normalized?.message || error?.message || fallback;
-    if (step) return `[${step}] ${msg}`;
-    return msg;
+  const { data: sessData, error: sessErr } = await supabase.auth.getSession();
+  if (sessErr) {
+    return {
+      ok: false,
+      status: 0,
+      data: { ok: false, step: "get_session", message: sessErr.message, details: sessErr },
+      raw: null,
+    };
   }
 
-  // Backend ok:false
+  const token = sessData?.session?.access_token || "";
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      data: { ok: false, step: "no_token", message: "No hay token de sesión. Re-login." },
+      raw: null,
+    };
+  }
+
+  const url = `${supabaseUrl}/functions/v1/invite_admin`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const raw = await res.text();
+  let data = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = { ok: false, step: "parse_json", message: "La función no devolvió JSON válido", raw };
+  }
+
+  return { ok: res.ok, status: res.status, data, raw };
+}
+
+function toSafeString(x, fallback = "") {
+  if (x == null) return fallback;
+  if (typeof x === "string") return x;
+  if (typeof x === "number" || typeof x === "boolean") return String(x);
+  try {
+    return JSON.stringify(x);
+  } catch {
+    return String(x);
+  }
+}
+
+function extractEdgeError(fetchResp, fallback = "Error al enviar la invitación.") {
+  if (!fetchResp) return fallback;
+
+  const { status, data, raw } = fetchResp;
+
+  // Si vino JSON estándar { ok:false, step, message, details }
   if (data && data.ok === false) {
-    const step = data.step || "backend";
+    const step = data.step || "edge";
     const msg = data.message || data.error || fallback;
-    return `[${step}] ${msg}`;
+    return `HTTP ${status} [${step}] ${msg}`;
   }
 
-  // Backend devolvió {error:...}
-  if (data && data.error) {
-    const step = data.step || "backend";
-    const msg = typeof data.error === "string" ? data.error : fallback;
-    return `[${step}] ${msg}`;
+  // Si vino algo raro
+  if (!data) {
+    return `HTTP ${status} ${fallback}${raw ? ` | raw: ${raw.slice(0, 180)}` : ""}`;
   }
 
-  return fallback;
+  return `HTTP ${status} ${fallback} | ${toSafeString(data).slice(0, 180)}`;
 }
 
 export default function AdminsPage() {
@@ -41,15 +95,14 @@ export default function AdminsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
 
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin"); // admin | owner
 
-  // Resultado de invitación
-  const [invitedVia, setInvitedVia] = useState(null); // "email" | "action_link" | null
-  const [actionLink, setActionLink] = useState(null); // string | null
+  const [invitedVia, setInvitedVia] = useState(null);
+  const [actionLink, setActionLink] = useState(null);
   const [lastInvitedEmail, setLastInvitedEmail] = useState(null);
 
   const orgName = useMemo(() => currentOrg?.name || "—", [currentOrg?.name]);
@@ -60,7 +113,9 @@ export default function AdminsPage() {
     setLastInvitedEmail(null);
   };
 
-  // ✅ Esperar contexto real
+  // -------------------------
+  // Guardas de carga
+  // -------------------------
   if (!authReady || !orgsReady) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -71,7 +126,6 @@ export default function AdminsPage() {
     );
   }
 
-  // ✅ Bloqueo definitivo (root-owner only)
   if (!isRootOwner) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -83,7 +137,6 @@ export default function AdminsPage() {
     );
   }
 
-  // ✅ Panel admin requiere org actual para listar admins de esa org
   if (!currentOrg?.id) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -94,14 +147,14 @@ export default function AdminsPage() {
     );
   }
 
-  // ===========================================================
-  // Cargar administradores
-  // ===========================================================
+  // -------------------------
+  // Cargar admins
+  // -------------------------
   useEffect(() => {
     const fetchAdmins = async () => {
       setLoading(true);
-      setError(null);
-      setSuccessMessage(null);
+      setError("");
+      setSuccessMessage("");
 
       const resp = await listAdmins(currentOrg.id);
       const { data, error: fetchError } = resp || {};
@@ -112,7 +165,6 @@ export default function AdminsPage() {
       } else {
         setAdmins(data || []);
       }
-
       setLoading(false);
     };
 
@@ -121,29 +173,27 @@ export default function AdminsPage() {
 
   const handleRefresh = async () => {
     setLoading(true);
-    setError(null);
-    setSuccessMessage(null);
+    setError("");
+    setSuccessMessage("");
 
     const resp = await listAdmins(currentOrg.id);
     const { data, error: fetchError } = resp || {};
 
-    if (fetchError) {
-      setError(fetchError.message || "No se pudo actualizar la lista de administradores.");
-    } else {
-      setAdmins(data || []);
-    }
+    if (fetchError) setError(fetchError.message || "No se pudo actualizar la lista de administradores.");
+    else setAdmins(data || []);
+
     setLoading(false);
   };
 
-  // ===========================================================
-  // INVITAR
-  // ===========================================================
+  // -------------------------
+  // INVITE (fetch directo)
+  // -------------------------
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
 
     const email = inviteEmail.trim().toLowerCase();
-    setError(null);
-    setSuccessMessage(null);
+    setError("");
+    setSuccessMessage("");
     resetInviteResult();
 
     if (!email || !email.includes("@")) {
@@ -154,52 +204,42 @@ export default function AdminsPage() {
     setLoadingAction(true);
 
     try {
-      let response;
+      // Payload alineado con tu Edge Function
+      const payload =
+        inviteRole === "admin"
+          ? { email, role: "admin", org_id: currentOrg.id }
+          : { email, role: "owner", org_name: email };
 
-      console.log("[AdminsPage] INVITE start", {
-        inviteRole,
-        orgId: currentOrg.id,
-        email,
-      });
+      console.log("[AdminsPage] INVITE payload", payload);
 
-      if (inviteRole === "admin") {
-        // admin (misma org)
-        response = await inviteAdmin(currentOrg.id, { email, role: "admin", org_id: currentOrg.id });
-      } else {
-        // owner (nueva org)
-        // Mandamos org_name para que el backend cree una org “bonita”
-        response = await inviteIndependentOwner({ email, role: "owner", org_name: email });
-      }
+      const resp = await callInviteAdminEdge(payload);
 
-      console.log("[AdminsPage] INVITE raw response:", response);
-      console.log("[AdminsPage] INVITE raw data:", response?.data);
-      console.log("[AdminsPage] INVITE raw error:", response?.error);
+      // 🔥 Aquí por fin veremos el JSON real aunque sea 500
+      console.log("[AdminsPage] INVITE fetch status:", resp.status);
+      console.log("[AdminsPage] INVITE fetch data:", resp.data);
 
-      const { error: fnError, data } = response || {};
-
-      if (fnError) {
-        setError(extractEdgeError(response, "Error al enviar la invitación."));
+      if (!resp.ok) {
+        setError(extractEdgeError(resp, "Error al enviar la invitación."));
         return;
       }
 
-      if (data && data.ok === false) {
-        setError(extractEdgeError({ data, error: null }, "La invitación no pudo ser enviada."));
+      const data = resp.data || {};
+      if (data.ok === false) {
+        setError(extractEdgeError(resp, "La invitación no pudo ser enviada."));
         return;
       }
 
-      const via = data?.invited_via || (data?.action_link ? "action_link" : null);
-      const link = data?.action_link || null;
+      const via = data.invited_via || (data.action_link ? "action_link" : null);
+      const link = data.action_link || null;
 
       setLastInvitedEmail(email);
       setInvitedVia(via);
       setActionLink(link);
 
       if (via === "email") {
-        setSuccessMessage(`Invitación enviada por correo a ${email}. (Revisar Spam/Promociones)`);
+        setSuccessMessage(`Invitación enviada por correo a ${email}. (Revisa Spam/Promociones)`);
       } else if (via === "action_link") {
-        setSuccessMessage(
-          `No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo a ${email} (NO uses /inicio).`
-        );
+        setSuccessMessage(`Copia el Magic Link y envíalo a ${email} (abrir en Chrome/Safari).`);
       } else {
         setSuccessMessage(`Invitación procesada para ${email}.`);
       }
@@ -207,31 +247,28 @@ export default function AdminsPage() {
       setInviteEmail("");
       await handleRefresh();
     } catch (err) {
-      console.error("[AdminsPage] excepción:", err);
-      setError(err?.message || "Error inesperado al enviar la invitación.");
+      console.error("[AdminsPage] exception:", err);
+      setError(`Error inesperado: ${toSafeString(err?.message || err)}`);
     } finally {
       setLoadingAction(false);
     }
   };
 
-  // ===========================================================
+  // -------------------------
   // DELETE
-  // ===========================================================
+  // -------------------------
   const handleDelete = async (adm) => {
     if (!window.confirm("¿Eliminar este administrador?")) return;
 
     setLoadingAction(true);
-    setError(null);
-    setSuccessMessage(null);
+    setError("");
+    setSuccessMessage("");
 
     const resp = await deleteAdmin(currentOrg.id, adm.user_id);
     const { error: delErr } = resp || {};
 
-    if (delErr) {
-      setError(delErr.message || "No se pudo eliminar al administrador.");
-    } else {
-      setAdmins((prev) => prev.filter((a) => a.user_id !== adm.user_id));
-    }
+    if (delErr) setError(delErr.message || "No se pudo eliminar al administrador.");
+    else setAdmins((prev) => prev.filter((a) => a.user_id !== adm.user_id));
 
     setLoadingAction(false);
   };
@@ -246,9 +283,9 @@ export default function AdminsPage() {
     }
   };
 
-  // ===========================================================
+  // -------------------------
   // UI
-  // ===========================================================
+  // -------------------------
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-6">
@@ -267,7 +304,7 @@ export default function AdminsPage() {
         <div className="text-xs text-slate-600 mb-3">
           Importante: el acceso funciona solo con el <b>Magic Link real</b> (con tokens).{" "}
           <b>No</b> envíes links como <span className="font-mono">/inicio</span>. Si compartes por WhatsApp,
-          que lo abran en <b>Chrome/Safari</b> (no en el preview).
+          pide que lo abran en <b>Chrome/Safari</b> (no en el preview).
         </div>
 
         <form onSubmit={handleInviteSubmit} className="flex flex-col md:flex-row gap-3">
@@ -291,7 +328,7 @@ export default function AdminsPage() {
           <button
             type="submit"
             disabled={loadingAction}
-            className="bg-blue-600 text-white rounded px-4 py-2 text-sm"
+            className="bg-blue-600 text-white rounded px-4 py-2 text-sm disabled:opacity-60"
           >
             {loadingAction ? "Procesando..." : "Invitar"}
           </button>
@@ -340,22 +377,26 @@ export default function AdminsPage() {
         )}
       </section>
 
-      {error && (
+      {!!error && (
         <div className="bg-red-50 border border-red-300 text-red-700 p-2 rounded text-xs mb-3">
-          {error}
+          {toSafeString(error)}
         </div>
       )}
 
-      {successMessage && (
+      {!!successMessage && (
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-700 p-2 rounded text-xs mb-3">
-          {successMessage}
+          {toSafeString(successMessage)}
         </div>
       )}
 
       <section className="border rounded-xl bg-white">
         <div className="flex justify-between items-center px-4 py-3 border-b">
           <h2 className="text-sm font-semibold">Administradores</h2>
-          <button onClick={handleRefresh} disabled={loading} className="border rounded px-3 py-1.5 text-xs">
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="border rounded px-3 py-1.5 text-xs"
+          >
             Refrescar
           </button>
         </div>
