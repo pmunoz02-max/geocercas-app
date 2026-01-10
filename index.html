@@ -2,84 +2,31 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1"
-    />
-
-    <!-- ✅ Universal: app dark-first -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <meta name="color-scheme" content="dark" />
-
+    <meta name="theme-color" content="#10b981" />
     <title>App Geocercas</title>
 
-    <!-- PWA / Google Play -->
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#10b981" />
-
-    <!-- Leaflet / Geoman CSS -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css"
-    />
+    <!-- Leaflet / Geoman -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css" />
 
     <style>
-      html,
-      body,
-      #root {
-        height: 100%;
-        margin: 0;
-      }
-      html {
-        background: #0b1220;
-      }
-      body {
-        background: #0b1220;
-      }
+      html, body, #root { height: 100%; margin: 0; background: #0b1220; }
     </style>
 
-    <!-- Shim crítico: disponible ANTES del bundle -->
+    <!-- Shim crítico ANTES del bundle -->
     <script>
       (function () {
         if (!window.process) window.process = {};
         if (!window.process.env) window.process.env = {};
       })();
     </script>
-
-    <!-- ✅ Vercel Feedback: solo bajo demanda (?feedback=1) o en localhost -->
-    <script>
-      (function () {
-        try {
-          var host = window.location.hostname;
-          var params = new URLSearchParams(window.location.search);
-          var force = params.get("feedback") === "1";
-          var isLocal = host === "localhost" || host === "127.0.0.1";
-
-          // En producción NO lo cargamos salvo que tú lo pidas con ?feedback=1
-          if (!force && !isLocal) return;
-
-          var s = document.createElement("script");
-          s.async = true;
-          s.setAttribute("data-explicit-opt-in", "true");
-          s.setAttribute("data-cookie-opt-in", "true");
-          s.src = "https://vercel.live/_next-live/feedback/feedback.js";
-          document.head.appendChild(s);
-        } catch (e) {
-          // Nunca romper por esto
-          console.warn("[feedback-loader] skipped:", e);
-        }
-      })();
-    </script>
   </head>
-
   <body>
     <div id="root"></div>
 
-    <!-- ✅ Vite entry UNIVERSAL (sin hashes) -->
+    <!-- ✅ Entry correcto -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
