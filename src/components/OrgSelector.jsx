@@ -2,9 +2,10 @@ import React, { useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 
 /**
- * OrgSelector FINAL (blindado contra React #300)
+ * OrgSelector FINAL (anti React #300)
  * - Nunca renderiza objetos en <option>
  * - Tolera org.name corrupto/legacy (objeto/null)
+ * - Corrige el sort (usa [...arr])
  */
 function safeText(v, fallback = "") {
   if (v == null) return fallback;
