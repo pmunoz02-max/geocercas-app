@@ -26,7 +26,6 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import AdminsPage from "./pages/AdminsPage.jsx";
 
-// ✅ ESTE ES EL IMPORT CORRECTO (evita "./pages/TrackerGps" que no existe)
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
@@ -37,9 +36,7 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 
 /** =========================
- * Global Error Boundary
- * - Evita que React #300 tumbe toda la app
- * - Imprime el error real (no minificado) y el component stack
+ * Helpers
  * ========================= */
 function toSafeString(x) {
   if (x == null) return "";
@@ -52,73 +49,98 @@ function toSafeString(x) {
   }
 }
 
+/** =========================
+ * Global Error Boundary (airbag)
+ * ========================= */
 class GlobalErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, message: "", stack: "" };
   }
-
   static getDerivedStateFromError(error) {
     return { hasError: true, message: toSafeString(error?.message || error) };
   }
-
   componentDidCatch(error, info) {
     const componentStack = info?.componentStack || "";
     console.error("[GlobalErrorBoundary] Caught error:", error);
     console.error("[GlobalErrorBoundary] Component stack:", componentStack);
     this.setState({ stack: componentStack });
   }
-
-  handleReload = () => {
-    window.location.reload();
-  };
-
+  handleReload = () => window.location.reload();
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-          <div className="w-full max-w-3xl bg-white border border-red-200 rounded-2xl shadow-sm p-5">
-            <h1 className="text-lg font-semibold text-red-700">Error de render (capturado)</h1>
-            <p className="text-sm text-slate-700 mt-2">
-              Se capturó un error que antes tumbaba la app (React #300). Copia este bloque y pégalo en el chat:
-            </p>
-
-            <div className="mt-4 text-xs bg-slate-50 border rounded-xl p-3 space-y-2">
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-4xl bg-white border border-red-200 rounded-2xl shadow-sm p-5">
+          <h1 className="text-lg font-semibold text-red-700">Error de render (capturado)</h1>
+          <p className="text-sm text-slate-700 mt-2">
+            Copia este bloque y pégalo en el chat:
+          </p>
+          <div className="mt-4 text-xs bg-slate-50 border rounded-xl p-3 space-y-2">
+            <div>
+              <b>MESSAGE:</b> <span className="font-mono break-all">{this.state.message}</span>
+            </div>
+            {this.state.stack ? (
               <div>
-                <b>MESSAGE:</b> <span className="font-mono break-all">{this.state.message}</span>
+                <b>COMPONENT STACK:</b>
+                <pre className="mt-1 font-mono whitespace-pre-wrap break-words">{this.state.stack}</pre>
               </div>
-              {this.state.stack ? (
-                <div>
-                  <b>COMPONENT STACK:</b>
-                  <pre className="mt-1 font-mono whitespace-pre-wrap break-words">{this.state.stack}</pre>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                onClick={this.handleReload}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm"
-              >
-                Recargar
-              </button>
-              <a
-                href="/"
-                className="px-4 py-2 rounded-xl border border-slate-300 text-sm"
-              >
-                Ir al Landing
-              </a>
-            </div>
-
-            <p className="text-[11px] text-slate-500 mt-4">
-              Nota: esto no es la solución final; es un “airbag” para identificar el componente exacto que está
-              intentando renderizar un objeto como texto.
-            </p>
+            ) : null}
           </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button onClick={this.handleReload} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm">
+              Recargar
+            </button>
+            <a href="/" className="px-4 py-2 rounded-xl border border-slate-300 text-sm">
+              Ir al Landing
+            </a>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-4">
+            Este airbag es temporal: sirve para localizar el componente que está intentando renderizar un objeto como texto.
+          </p>
         </div>
-      );
-    }
-    return this.props.children;
+      </div>
+    );
+  }
+}
+
+/** =========================
+ * Component Boundary (para localizar EXACTAMENTE qué bloque cae)
+ * ========================= */
+class ComponentBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: "", stack: "" };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: toSafeString(error?.message || error) };
+  }
+  componentDidCatch(error, info) {
+    const componentStack = info?.componentStack || "";
+    console.error(`[ComponentBoundary:${this.props.name}] Caught error:`, error);
+    console.error(`[ComponentBoundary:${this.props.name}] Component stack:`, componentStack);
+    this.setState({ stack: componentStack });
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div className="w-full border border-amber-300 bg-amber-50 rounded-xl p-3 text-xs text-amber-900">
+        <div className="font-semibold">Bloque con error: {this.props.name}</div>
+        <div className="mt-1">
+          <b>MESSAGE:</b> <span className="font-mono break-all">{this.state.message}</span>
+        </div>
+        {this.state.stack ? (
+          <details className="mt-2">
+            <summary className="cursor-pointer">Ver stack</summary>
+            <pre className="mt-1 font-mono whitespace-pre-wrap break-words">{this.state.stack}</pre>
+          </details>
+        ) : null}
+        <div className="mt-2 text-[11px] text-amber-800">
+          Solución típica: se está intentando renderizar un objeto (ej. &#123;error&#125;) o i18n devuelve objeto. Convierte a string con JSON.stringify o safeText().
+        </div>
+      </div>
+    );
   }
 }
 
@@ -134,7 +156,6 @@ function FullScreenLoader({ text = "Cargando..." }) {
 
 function RequirePanel({ children }) {
   const { loading, session, bestRole } = useAuth();
-
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
   if (!session) return <Navigate to="/" replace />;
 
@@ -146,7 +167,6 @@ function RequirePanel({ children }) {
 
 function RequireTracker({ children }) {
   const { loading, session, bestRole } = useAuth();
-
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
   if (!session) return <Navigate to="/login" replace />;
 
@@ -154,6 +174,31 @@ function RequireTracker({ children }) {
   if (!isTracker) return <Navigate to="/inicio" replace />;
 
   return children;
+}
+
+function RootOwnerRoute({ children }) {
+  const { loading, isRootOwner } = useAuth();
+  if (loading) return <FullScreenLoader text="Cargando permisos…" />;
+  if (!isRootOwner) return <Navigate to="/inicio" replace />;
+  return children;
+}
+
+function LoginShell() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <ComponentBoundary name="Login">
+        <Login />
+      </ComponentBoundary>
+    </div>
+  );
+}
+
+function SmartFallback() {
+  const { loading, session, bestRole } = useAuth();
+  if (loading) return <FullScreenLoader text="Cargando…" />;
+  if (!session) return <Navigate to="/" replace />;
+  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
+  return isTracker ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
 }
 
 function Shell() {
@@ -178,39 +223,23 @@ function Shell() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <AppHeader />
+      <ComponentBoundary name="AppHeader">
+        <AppHeader />
+      </ComponentBoundary>
+
       <div className="border-b border-slate-200 bg-white">
-        <TopTabs tabs={tabs} />
+        <ComponentBoundary name="TopTabs">
+          <TopTabs tabs={tabs} />
+        </ComponentBoundary>
       </div>
+
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
-        <Outlet />
+        <ComponentBoundary name="Outlet (Page)">
+          <Outlet />
+        </ComponentBoundary>
       </main>
     </div>
   );
-}
-
-function RootOwnerRoute({ children }) {
-  const { loading, isRootOwner } = useAuth();
-  if (loading) return <FullScreenLoader text="Cargando permisos…" />;
-  if (!isRootOwner) return <Navigate to="/inicio" replace />;
-  return children;
-}
-
-function LoginShell() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Login />
-    </div>
-  );
-}
-
-function SmartFallback() {
-  const { loading, session, bestRole } = useAuth();
-  if (loading) return <FullScreenLoader text="Cargando…" />;
-  if (!session) return <Navigate to="/" replace />;
-
-  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
-  return isTracker ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
 }
 
 export default function App() {
@@ -218,20 +247,50 @@ export default function App() {
     <BrowserRouter>
       <GlobalErrorBoundary>
         <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<LoginShell />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route
+            path="/"
+            element={
+              <ComponentBoundary name="Landing">
+                <Landing />
+              </ComponentBoundary>
+            }
+          />
 
-          {/* ✅ Flujos auth separados */}
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/auth/invite" element={<InviteCallback />} />
+          <Route path="/login" element={<LoginShell />} />
+          <Route
+            path="/reset-password"
+            element={
+              <ComponentBoundary name="ResetPassword">
+                <ResetPassword />
+              </ComponentBoundary>
+            }
+          />
+
+          <Route
+            path="/auth/callback"
+            element={
+              <ComponentBoundary name="AuthCallback">
+                <AuthCallback />
+              </ComponentBoundary>
+            }
+          />
+          <Route
+            path="/auth/invite"
+            element={
+              <ComponentBoundary name="InviteCallback">
+                <InviteCallback />
+              </ComponentBoundary>
+            }
+          />
 
           <Route
             path="/tracker-gps"
             element={
               <AuthGuard mode="tracker">
                 <RequireTracker>
-                  <TrackerGpsPage />
+                  <ComponentBoundary name="TrackerGpsPage">
+                    <TrackerGpsPage />
+                  </ComponentBoundary>
                 </RequireTracker>
               </AuthGuard>
             }
@@ -246,33 +305,152 @@ export default function App() {
               </AuthGuard>
             }
           >
-            <Route path="/inicio" element={<Inicio />} />
-
-            <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
-            <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-            <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
-            <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
-            <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
-            <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
-            <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-            <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-            <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+            <Route
+              path="/inicio"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="Inicio">
+                    <Inicio />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/nueva-geocerca"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="NuevaGeocerca">
+                    <NuevaGeocerca />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/geocercas"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="GeocercasPage">
+                    <GeocercasPage />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/personal"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="PersonalPage">
+                    <PersonalPage />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/actividades"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="ActividadesPage">
+                    <ActividadesPage />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/asignaciones"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="AsignacionesPage">
+                    <AsignacionesPage />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/costos"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="CostosPage">
+                    <CostosPage />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/costos-dashboard"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="CostosDashboardPage">
+                    <CostosDashboardPage />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/tracker-dashboard"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="TrackerDashboard">
+                    <TrackerDashboard />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/invitar-tracker"
+              element={
+                <RequireOrg>
+                  <ComponentBoundary name="InvitarTracker">
+                    <InvitarTracker />
+                  </ComponentBoundary>
+                </RequireOrg>
+              }
+            />
 
             <Route
               path="/admins"
               element={
                 <RequireOrg>
                   <RootOwnerRoute>
-                    <AdminsPage />
+                    <ComponentBoundary name="AdminsPage">
+                      <AdminsPage />
+                    </ComponentBoundary>
                   </RootOwnerRoute>
                 </RequireOrg>
               }
             />
 
-            <Route path="/help/instructions" element={<InstructionsPage />} />
-            <Route path="/help/faq" element={<FaqPage />} />
-            <Route path="/help/support" element={<SupportPage />} />
-            <Route path="/help/changelog" element={<ChangelogPage />} />
+            <Route
+              path="/help/instructions"
+              element={
+                <ComponentBoundary name="InstructionsPage">
+                  <InstructionsPage />
+                </ComponentBoundary>
+              }
+            />
+            <Route
+              path="/help/faq"
+              element={
+                <ComponentBoundary name="FaqPage">
+                  <FaqPage />
+                </ComponentBoundary>
+              }
+            />
+            <Route
+              path="/help/support"
+              element={
+                <ComponentBoundary name="SupportPage">
+                  <SupportPage />
+                </ComponentBoundary>
+              }
+            />
+            <Route
+              path="/help/changelog"
+              element={
+                <ComponentBoundary name="ChangelogPage">
+                  <ChangelogPage />
+                </ComponentBoundary>
+              }
+            />
           </Route>
 
           <Route path="*" element={<SmartFallback />} />
