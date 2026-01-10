@@ -36,6 +36,92 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
+/** =========================
+ * Global Error Boundary
+ * - Evita que React #300 tumbe toda la app
+ * - Imprime el error real (no minificado) y el component stack
+ * ========================= */
+function toSafeString(x) {
+  if (x == null) return "";
+  if (typeof x === "string") return x;
+  if (typeof x === "number" || typeof x === "boolean") return String(x);
+  try {
+    return JSON.stringify(x);
+  } catch {
+    return String(x);
+  }
+}
+
+class GlobalErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: "", stack: "" };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: toSafeString(error?.message || error) };
+  }
+
+  componentDidCatch(error, info) {
+    const componentStack = info?.componentStack || "";
+    console.error("[GlobalErrorBoundary] Caught error:", error);
+    console.error("[GlobalErrorBoundary] Component stack:", componentStack);
+    this.setState({ stack: componentStack });
+  }
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+          <div className="w-full max-w-3xl bg-white border border-red-200 rounded-2xl shadow-sm p-5">
+            <h1 className="text-lg font-semibold text-red-700">Error de render (capturado)</h1>
+            <p className="text-sm text-slate-700 mt-2">
+              Se capturó un error que antes tumbaba la app (React #300). Copia este bloque y pégalo en el chat:
+            </p>
+
+            <div className="mt-4 text-xs bg-slate-50 border rounded-xl p-3 space-y-2">
+              <div>
+                <b>MESSAGE:</b> <span className="font-mono break-all">{this.state.message}</span>
+              </div>
+              {this.state.stack ? (
+                <div>
+                  <b>COMPONENT STACK:</b>
+                  <pre className="mt-1 font-mono whitespace-pre-wrap break-words">{this.state.stack}</pre>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={this.handleReload}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm"
+              >
+                Recargar
+              </button>
+              <a
+                href="/"
+                className="px-4 py-2 rounded-xl border border-slate-300 text-sm"
+              >
+                Ir al Landing
+              </a>
+            </div>
+
+            <p className="text-[11px] text-slate-500 mt-4">
+              Nota: esto no es la solución final; es un “airbag” para identificar el componente exacto que está
+              intentando renderizar un objeto como texto.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function FullScreenLoader({ text = "Cargando..." }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -130,66 +216,68 @@ function SmartFallback() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<LoginShell />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+      <GlobalErrorBoundary>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<LoginShell />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* ✅ Flujos auth separados */}
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/auth/invite" element={<InviteCallback />} />
-
-        <Route
-          path="/tracker-gps"
-          element={
-            <AuthGuard mode="tracker">
-              <RequireTracker>
-                <TrackerGpsPage />
-              </RequireTracker>
-            </AuthGuard>
-          }
-        />
-
-        <Route
-          element={
-            <AuthGuard mode="panel">
-              <RequirePanel>
-                <Shell />
-              </RequirePanel>
-            </AuthGuard>
-          }
-        >
-          <Route path="/inicio" element={<Inicio />} />
-
-          <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
-          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-          <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
-          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
-          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
-          <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
-          <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-          <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+          {/* ✅ Flujos auth separados */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/invite" element={<InviteCallback />} />
 
           <Route
-            path="/admins"
+            path="/tracker-gps"
             element={
-              <RequireOrg>
-                <RootOwnerRoute>
-                  <AdminsPage />
-                </RootOwnerRoute>
-              </RequireOrg>
+              <AuthGuard mode="tracker">
+                <RequireTracker>
+                  <TrackerGpsPage />
+                </RequireTracker>
+              </AuthGuard>
             }
           />
 
-          <Route path="/help/instructions" element={<InstructionsPage />} />
-          <Route path="/help/faq" element={<FaqPage />} />
-          <Route path="/help/support" element={<SupportPage />} />
-          <Route path="/help/changelog" element={<ChangelogPage />} />
-        </Route>
+          <Route
+            element={
+              <AuthGuard mode="panel">
+                <RequirePanel>
+                  <Shell />
+                </RequirePanel>
+              </AuthGuard>
+            }
+          >
+            <Route path="/inicio" element={<Inicio />} />
 
-        <Route path="*" element={<SmartFallback />} />
-      </Routes>
+            <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
+            <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+            <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
+            <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
+            <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
+            <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
+            <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+            <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+            <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+
+            <Route
+              path="/admins"
+              element={
+                <RequireOrg>
+                  <RootOwnerRoute>
+                    <AdminsPage />
+                  </RootOwnerRoute>
+                </RequireOrg>
+              }
+            />
+
+            <Route path="/help/instructions" element={<InstructionsPage />} />
+            <Route path="/help/faq" element={<FaqPage />} />
+            <Route path="/help/support" element={<SupportPage />} />
+            <Route path="/help/changelog" element={<ChangelogPage />} />
+          </Route>
+
+          <Route path="*" element={<SmartFallback />} />
+        </Routes>
+      </GlobalErrorBoundary>
     </BrowserRouter>
   );
 }
