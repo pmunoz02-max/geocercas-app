@@ -4,9 +4,14 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import OrgSelector from "./OrgSelector";
 
-/** =========================
- * Helpers (a prueba de i18n)
- * ========================= */
+/**
+ * TopTabs – COMPACT (a prueba de i18n)
+ * - Todos los botones estilo "Invitar tracker"
+ * - Tamaño reducido
+ * - Sin scroll horizontal (como lo tenías)
+ * - Si una traducción devuelve "" u objeto, se usa un fallback visible.
+ */
+
 function safeText(v) {
   if (v == null) return "";
   if (typeof v === "string") return v;
@@ -22,7 +27,6 @@ function humanizeKey(key) {
   const raw = String(key || "").trim();
   if (!raw) return "";
   const last = raw.split(".").pop() || raw;
-  // camelCase / snake_case / kebab-case -> "Title Case"
   const spaced = last
     .replace(/[_-]+/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -31,26 +35,30 @@ function humanizeKey(key) {
   return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : last;
 }
 
-/** Devuelve SIEMPRE un string visible */
 function getTabLabel(t, tab) {
-  // 1) Si viene label explícito, úsalo
+  // 1) label explícito
   if (typeof tab?.label === "string" && tab.label.trim()) return tab.label.trim();
 
-  // 2) Si viene labelKey, intenta traducir, pero con fallback robusto
+  // 2) labelKey con fallback
   const key = tab?.labelKey ? String(tab.labelKey) : "";
   if (key) {
-    // defaultValue hace que i18next NO devuelva null
-    const translated = t(key, { defaultValue: key });
+    // defaultValue evita null, pero puede seguir devolviendo ""
+    const translated = t(key, { defaultValue: "" });
 
-    // Si es string y no es vacío, úsalo
-    if (typeof translated === "string" && translated.trim()) return translated.trim();
+    if (typeof translated === "string") {
+      const trimmed = translated.trim();
+      if (trimmed) return trimmed;
+      return humanizeKey(key);
+    }
 
-    // Si devolvió objeto (returnObjects) o string vacío, humaniza la key
-    return humanizeKey(key);
+    // Si es objeto u otro tipo
+    const asString = safeText(translated).trim();
+    return asString ? asString : humanizeKey(key);
   }
 
-  // 3) Último recurso
-  return "Tab";
+  // 3) último recurso: del path
+  const p = String(tab?.path || "").split("/").filter(Boolean).pop() || "Tab";
+  return humanizeKey(p);
 }
 
 export default function TopTabs({ tabs = [] }) {
@@ -61,14 +69,18 @@ export default function TopTabs({ tabs = [] }) {
     location.pathname === path || location.pathname.startsWith(path + "/");
 
   const base =
-    "no-underline inline-flex items-center px-3 py-1.5 rounded-full " +
-    "text-xs sm:text-sm font-semibold whitespace-nowrap border transition-all";
+    "no-underline inline-flex items-center " +
+    "px-3 py-1.5 rounded-full " +
+    "text-xs sm:text-sm font-semibold " +
+    "whitespace-nowrap border " +
+    "transition-all duration-150 " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2";
 
   const inactive =
-    "bg-white text-emerald-700 border-emerald-500 hover:bg-emerald-50";
+    "bg-white text-emerald-700 border-emerald-500 " +
+    "hover:bg-emerald-50 hover:text-emerald-800";
 
-  const active =
-    "bg-emerald-600 text-white border-emerald-600 shadow-sm";
+  const active = "bg-emerald-600 text-white border-emerald-600 shadow-sm";
 
   return (
     <div className="sticky top-0 z-40 bg-white border-b border-slate-200">
@@ -77,31 +89,27 @@ export default function TopTabs({ tabs = [] }) {
           <OrgSelector />
         </div>
 
-        {/* IMPORTANTE:
-            - overflow-x-auto evita que se “rompa” la línea en pantallas pequeñas
-            - gap + pb para mantener estética */}
-        <nav className="flex gap-1.5 pb-2 justify-center overflow-x-auto scrollbar-thin">
-          {Array.isArray(tabs) && tabs.length ? (
-            tabs.map((tab) => {
-              const label = getTabLabel(t, tab);
-              const activeTab = isActive(tab.path);
+        <nav className="flex gap-2 pb-3 justify-center flex-wrap">
+          {tabs.map((tab) => {
+            const label = getTabLabel(t, tab);
+            const activeTab = isActive(tab.path);
 
-              return (
-                <NavLink
-                  key={tab.path}
-                  to={tab.path}
-                  className={`${base} ${activeTab ? active : inactive}`}
-                  title={safeText(label)}
-                >
-                  {safeText(label)}
-                </NavLink>
-              );
-            })
-          ) : (
-            <span className="text-xs text-slate-500 py-2">
-              {safeText(t("app.tabs.empty", { defaultValue: "Sin pestañas" }))}
-            </span>
-          )}
+            return (
+              <NavLink
+                key={tab.path}
+                to={tab.path}
+                className={`${base} ${activeTab ? active : inactive}`}
+                style={
+                  activeTab
+                    ? { backgroundColor: "#059669", borderColor: "#059669", color: "#fff" }
+                    : { backgroundColor: "#fff", borderColor: "#10b981", color: "#047857" }
+                }
+                title={safeText(label)}
+              >
+                {safeText(label)}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
     </div>
