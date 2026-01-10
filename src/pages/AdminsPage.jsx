@@ -4,11 +4,13 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../supabaseClient.js";
 
 /**
- * AdminsPage — Blindaje definitivo contra React #300
- * Regla: NUNCA renderizar valores externos sin normalizarlos a string.
- * - Todos los textos pasan por safeText()
- * - Todas las condiciones JSX usan Boolean(...)
- * - Nunca renderizamos objetos (ni de i18n, ni de fetch, ni de errores)
+ * AdminsPage — v2
+ * Objetivo:
+ * 1) Eliminar el join postgREST "profiles:profiles(email)" que falla por schema cache
+ *    ("Could not find a relationship between 'memberships' and 'profiles'").
+ * 2) Evitar 404 si no existe org_admins (no dependemos de esa vista).
+ * 3) Blindaje anti React #300: NUNCA renderizar objetos crudos.
+ * 4) Aislar render en un componente hijo para que SafeBoundary sí atrape #300 y no tumbe toda la app.
  */
 
 /** =========================
@@ -18,10 +20,8 @@ function safeText(v, fallback = "") {
   if (v == null) return fallback;
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
-  // Evita reventar por circular refs
   try {
     const s = JSON.stringify(v);
-    // Si viene "{}" o "[]" por objetos vacíos, mejor usar fallback
     if (s === "{}" || s === "[]") return fallback;
     return s;
   } catch {
@@ -38,10 +38,48 @@ function isValidEmail(email) {
   return s.includes("@") && s.length >= 6;
 }
 
-/**
- * Llama Edge Function invite_admin sin depender de helper libs.
- * Devuelve { ok, status, data, raw } donde data ES JSON o null.
- */
+/** =========================
+ * SafeBoundary (SÍ atrapa errores del hijo)
+ * ========================= */
+class SafeBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, msg: "", info: "" };
+  }
+  static getDerivedStateFromError(err) {
+    return { hasError: true, msg: safeText(err?.message || err, "Error de render") };
+  }
+  componentDidCatch(err, info) {
+    const stack = safeText(info?.componentStack || "", "");
+    this.setState({ info: stack });
+    console.error("[AdminsPage] Render error caught by SafeBoundary:", err, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+            <div className="font-semibold">Error de render aislado (AdminsPage)</div>
+            <div className="mt-2 break-words">{safeText(this.state.msg)}</div>
+            {this.state.info ? (
+              <pre className="mt-3 whitespace-pre-wrap text-[11px] text-red-700 bg-white/60 border border-red-200 rounded p-2">
+                {safeText(this.state.info)}
+              </pre>
+            ) : null}
+            <div className="mt-3 text-[11px] text-red-700">
+              Consejo: esto evita que GlobalErrorBoundary tumbe toda la app mientras depuramos.
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/** =========================
+ * Edge invite_admin (sin libs externas)
+ * ========================= */
 async function callInviteAdminEdge(payload) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -101,18 +139,54 @@ function edgeErrorMessage(resp, fallback = "Error al enviar la invitación.") {
 }
 
 /** =========================
- * Página
+ * Loader de admins (SIN join)
+ * - memberships: org_id, user_id, role
+ * - profiles: id, email (consulta separada)
  * ========================= */
-export default function AdminsPage() {
+async function loadAdminsForOrg(orgId) {
+  // 1) memberships (owner/admin)
+  const r1 = await supabase
+    .from("memberships")
+    .select("user_id, role, created_at")
+    .eq("org_id", orgId)
+    .in("role", ["owner", "admin"]);
+
+  if (r1?.error) throw r1.error;
+
+  const memberships = Array.isArray(r1.data) ? r1.data : [];
+  const userIds = Array.from(new Set(memberships.map((m) => m.user_id).filter(Boolean)));
+
+  // 2) profiles (consulta separada) — NO depende de relación en schema cache
+  let emailById = new Map();
+  if (userIds.length) {
+    const r2 = await supabase.from("profiles").select("id, email").in("id", userIds);
+    if (r2?.error) throw r2.error;
+    for (const p of r2.data || []) {
+      emailById.set(p.id, p.email);
+    }
+  }
+
+  // 3) Merge para UI (siempre strings)
+  return memberships.map((m) => ({
+    user_id: m.user_id,
+    role: m.role,
+    email: emailById.get(m.user_id) || "",
+    created_at: m.created_at,
+  }));
+}
+
+/** =========================
+ * Componente interno (para que SafeBoundary lo capture)
+ * ========================= */
+function AdminsPageInner() {
   const { authReady, orgsReady, currentOrg, user, isRootOwner } = useAuth();
 
-  // UI state — SIEMPRE strings o arrays
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [error, setError] = useState(""); // SIEMPRE string
+  const [success, setSuccess] = useState(""); // SIEMPRE string
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin"); // admin | owner
@@ -121,12 +195,8 @@ export default function AdminsPage() {
   const [actionLink, setActionLink] = useState("");
   const [lastInvitedEmail, setLastInvitedEmail] = useState("");
 
-  // Debug strings (jamás objetos)
-  const [inviteDebug, setInviteDebug] = useState({
-    status: "",
-    data: "",
-    raw: "",
-  });
+  // debug strings
+  const [inviteDebug, setInviteDebug] = useState({ status: "", data: "", raw: "" });
 
   const orgName = useMemo(() => safeText(currentOrg?.name, "—"), [currentOrg?.name]);
   const orgId = useMemo(() => safeText(currentOrg?.id, ""), [currentOrg?.id]);
@@ -136,7 +206,7 @@ export default function AdminsPage() {
   const showSuccess = Boolean(success);
   const showInviteResult = Boolean(invitedVia || actionLink);
 
-  // Guard: sesión/org listos
+  // Guards
   if (!authReady || !orgsReady) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -147,7 +217,6 @@ export default function AdminsPage() {
     );
   }
 
-  // Guard: solo root owner
   if (!isRootOwner) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -157,7 +226,6 @@ export default function AdminsPage() {
     );
   }
 
-  // Guard: org requerida
   if (!orgId) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -168,73 +236,27 @@ export default function AdminsPage() {
     );
   }
 
-  /** =========================
-   * Cargar admins
-   * ========================= */
-  async function fetchAdmins() {
-    // IMPORTANTE: aquí usa tu fuente real.
-    // En tu proyecto original esto venía de un helper listAdmins().
-    // Para universalidad, lo hacemos directo sobre la tabla/view que ya uses.
-    // ✅ Ajusta el nombre si tu tabla es distinta.
-    //
-    // Por defecto intentamos una vista/tabla típica: org_admins (si existe),
-    // y si no, intentamos memberships filtrando role owner/admin.
+  const fetchAdmins = async () => {
     setLoading(true);
     setError("");
     setSuccess("");
-
     try {
-      // 1) Intenta org_admins (si existe)
-      let data = null;
-      let error1 = null;
-
-      const r1 = await supabase
-        .from("org_admins")
-        .select("user_id, email, role, created_at")
-        .eq("org_id", orgId);
-
-      if (r1?.error) {
-        error1 = r1.error;
-      } else {
-        data = r1.data || [];
-      }
-
-      // 2) Fallback a memberships + profiles (si org_admins no existe)
-      if (error1) {
-        const r2 = await supabase
-          .from("memberships")
-          .select("user_id, role, created_at, profiles:profiles(email)")
-          .eq("org_id", orgId)
-          .in("role", ["owner", "admin"]);
-
-        if (r2?.error) throw r2.error;
-
-        data = (r2.data || []).map((m) => ({
-          user_id: m.user_id,
-          role: m.role,
-          email: m.profiles?.email,
-          created_at: m.created_at,
-        }));
-      }
-
-      setAdmins(Array.isArray(data) ? data : []);
+      const rows = await loadAdminsForOrg(orgId);
+      setAdmins(Array.isArray(rows) ? rows : []);
     } catch (e) {
       console.error("[AdminsPage] fetchAdmins error:", e);
-      setError(safeText(e?.message, "No se pudo cargar la lista de administradores."));
+      setError(safeText(e?.message || e, "No se pudo cargar la lista de administradores."));
       setAdmins([]);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
     fetchAdmins();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
-  /** =========================
-   * Invitar admin/owner
-   * ========================= */
   const handleInvite = async (e) => {
     e.preventDefault();
     setError("");
@@ -259,7 +281,6 @@ export default function AdminsPage() {
 
       const resp = await callInviteAdminEdge(payload);
 
-      // Guardar debug siempre string
       setInviteDebug({
         status: safeText(resp.status, ""),
         data: safeText(resp.data, ""),
@@ -302,13 +323,9 @@ export default function AdminsPage() {
     }
   };
 
-  /** =========================
-   * Eliminar admin (membership)
-   * ========================= */
   const handleDelete = async (row) => {
     const uid = safeText(row?.user_id, "");
     if (!uid) return;
-
     if (!window.confirm("¿Eliminar este administrador?")) return;
 
     setLoadingAction(true);
@@ -316,8 +333,6 @@ export default function AdminsPage() {
     setSuccess("");
 
     try {
-      // ✅ Ajusta si tu backend usa otra función.
-      // Aquí eliminamos membership org_id + user_id (admin).
       const { error: delErr } = await supabase
         .from("memberships")
         .delete()
@@ -332,7 +347,7 @@ export default function AdminsPage() {
       setSuccess("Administrador eliminado.");
     } catch (e) {
       console.error("[AdminsPage] delete error:", e);
-      setError(safeText(e?.message, "No se pudo eliminar al administrador."));
+      setError(safeText(e?.message || e, "No se pudo eliminar al administrador."));
     } finally {
       setLoadingAction(false);
     }
@@ -423,7 +438,6 @@ export default function AdminsPage() {
           </div>
         ) : null}
 
-        {/* Debug (solo texto) */}
         {Boolean(inviteDebug.status) ? (
           <details className="mt-4">
             <summary className="text-xs cursor-pointer text-slate-600">Debug (invite_admin)</summary>
@@ -464,7 +478,7 @@ export default function AdminsPage() {
           <h2 className="text-sm font-semibold">Administradores</h2>
           <button
             type="button"
-            onClick={() => fetchAdmins()}
+            onClick={fetchAdmins}
             disabled={loading}
             className="border rounded px-3 py-1.5 text-xs"
           >
@@ -491,7 +505,7 @@ export default function AdminsPage() {
                 return (
                   <tr key={key} className="border-t">
                     <td className="px-3 py-2">{safeText(adm?.role, "—")}</td>
-                    <td className="px-3 py-2">{safeText(adm?.email, "—")}</td>
+                    <td className="px-3 py-2">{safeText(adm?.email, "—") || "—"}</td>
                     <td className="px-3 py-2 text-right">
                       <button
                         type="button"
@@ -510,5 +524,16 @@ export default function AdminsPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/** =========================
+ * Export default (boundary wrapper)
+ * ========================= */
+export default function AdminsPage() {
+  return (
+    <SafeBoundary>
+      <AdminsPageInner />
+    </SafeBoundary>
   );
 }
