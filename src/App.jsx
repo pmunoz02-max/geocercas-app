@@ -57,7 +57,7 @@ function toSafeString(x) {
 class GlobalErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, message: "", stack: "" };
+    this.state = { hasError: false, message: "", stack: "", snapshot: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -69,7 +69,10 @@ class GlobalErrorBoundary extends React.Component {
     // Logs para diagnóstico (no rompe producción)
     console.error("[GlobalErrorBoundary] Caught error:", error);
     console.error("[GlobalErrorBoundary] Component stack:", componentStack);
-    this.setState({ stack: componentStack });
+    if (this.props?.debugSnapshot) {
+      console.error("[GlobalErrorBoundary] Debug snapshot:", this.props.debugSnapshot);
+    }
+    this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || null });
   }
 
   handleReload = () => window.location.reload();
@@ -96,6 +99,11 @@ class GlobalErrorBoundary extends React.Component {
                 <pre className="mt-1 font-mono whitespace-pre-wrap break-words text-slate-600">
                   {this.state.stack}
                 </pre>
+                {this.state.snapshot ? (
+                  <pre className="mt-2 font-mono whitespace-pre-wrap break-words text-slate-600">
+                    {toSafeString(this.state.snapshot)}
+                  </pre>
+                ) : null}
               </details>
             ) : null}
           </div>
@@ -215,10 +223,42 @@ function Shell() {
   );
 }
 
+
+function pickOrgPreview(orgs) {
+  const arr = Array.isArray(orgs) ? orgs : [];
+  return arr.slice(0, 8).map((o) => ({
+    id: o?.id || null,
+    name: o?.name,
+    name_type: typeof o?.name,
+  }));
+}
+
+/**
+ * Envía un "snapshot" de estado útil al ErrorBoundary sin depender de sourcemaps.
+ * Esto rompe el bucle: nos dice qué dato es objeto (y en qué ruta).
+ */
+function GlobalErrorBoundaryWithSnapshot({ children }) {
+  const auth = useAuth?.() || {};
+  const snapshot = {
+    href: typeof window !== "undefined" ? window.location.href : "",
+    user_email: auth?.user?.email || null,
+    isAdmin: auth?.isAdmin ?? null,
+    isRootOwner: auth?.isRootOwner ?? null,
+    currentOrg: {
+      id: auth?.currentOrg?.id || null,
+      name: auth?.currentOrg?.name,
+      name_type: typeof auth?.currentOrg?.name,
+    },
+    organizations_preview: pickOrgPreview(auth?.organizations),
+  };
+
+  return <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundaryWithSnapshot>;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <GlobalErrorBoundary>
+      <GlobalErrorBoundaryWithSnapshot>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<LoginShell />} />
@@ -281,7 +321,7 @@ export default function App() {
 
           <Route path="*" element={<SmartFallback />} />
         </Routes>
-      </GlobalErrorBoundary>
+      </GlobalErrorBoundaryWithSnapshot>
     </BrowserRouter>
   );
 }
