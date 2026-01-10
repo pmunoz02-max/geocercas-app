@@ -5,21 +5,15 @@ import { supabase } from "../supabaseClient";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
-/**
- * Render seguro:
- * - Evita React #300 cuando i18n devuelve objetos (keys mal definidas)
- * - Garantiza que TODO lo que se renderiza sea string
- */
-function safeText(v, fallback = "") {
+
+/** ========= Helpers 100% seguros ========= */
+function safeT(v, fallback = "") {
   if (v == null) return fallback;
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
+  try { return JSON.stringify(v); } catch { return String(v); }
 }
+
 
 export default function Landing() {
   const { t } = useTranslation();
@@ -93,9 +87,6 @@ export default function Landing() {
     return `/login?${params.toString()}`;
   }, []);
 
-  // Wrapper seguro para i18n
-  const T = (key, fallback = "") => safeText(t(key), fallback);
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col">
       {/* Barra superior propia de la landing */}
@@ -107,10 +98,10 @@ export default function Landing() {
             </div>
             <div className="flex flex-col leading-none">
               <span className="text-sm font-semibold tracking-tight">
-                {T("landing.brandName", "App Geocercas")}
+                {safeT(t("landing.brandName"))}
               </span>
               <span className="text-[11px] text-slate-400">
-                {T("landing.brandTagline", "Control de personal por geocercas")}
+                {safeT(t("landing.brandTagline"))}
               </span>
             </div>
           </div>
@@ -122,7 +113,7 @@ export default function Landing() {
             {/* Mientras verifica sesión, evita parpadeos */}
             {checkingSession ? (
               <span className="text-xs text-slate-400">
-                {T("landing.checkingSession", "Verificando...")}
+                {safeT(t("landing.checkingSession") || "Verificando..."}
               </span>
             ) : (
               <>
@@ -131,9 +122,9 @@ export default function Landing() {
                     to={loginHref}
                     className="text-xs md:text-sm text-slate-200 hover:text-white transition-colors"
                   >
-                    {T("landing.loginButton", "Entrar")}
+                    {safeT(t("landing.loginButton")) || "Entrar"}
                   </Link>
-                )}
+                ))}
 
                 {hasSession && (
                   <>
@@ -141,16 +132,16 @@ export default function Landing() {
                       to="/inicio"
                       className="text-xs md:text-sm text-emerald-300 hover:text-emerald-100 transition-colors"
                     >
-                      {T("landing.goToDashboard", "Ir al panel")}
+                      {safeT(t("landing.goToDashboard") || "Ir al panel"}
                     </Link>
                     <button
                       onClick={handleLogout}
                       className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors border border-slate-500/60 rounded-full px-3 py-1"
                     >
-                      {T("landing.logout", "Salir")}
+                      {safeT(t("landing.logout")) || "Salir"}
                     </button>
                   </>
-                )}
+                ))}
               </>
             )}
           </div>
@@ -165,23 +156,21 @@ export default function Landing() {
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-[11px] font-medium text-emerald-300">
-                {T("landing.heroBadge", "Plataforma operativa en tiempo real")}
+                {safeT(t("landing.heroBadge") || "Plataforma operativa en tiempo real"}
               </span>
             </div>
 
             <div className="space-y-3">
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-tight text-white">
-                {T("landing.heroTitlePrefix", "Controla")}{" "}
+                {safeT(t("landing.heroTitlePrefix")) || "Controla"}{" "}
                 <span className="text-emerald-400">
-                  {T("landing.heroTitleHighlight", "geocercas")}
+                  {safeT(t("landing.heroTitleHighlight")) || "geocercas"}
                 </span>{" "}
-                {T("landing.heroTitleSuffix", "y asistencia con precisión")}
+                {safeT(t("landing.heroTitleSuffix")) || "y asistencia con precisión"}
               </h1>
               <p className="text-sm md:text-base text-slate-300 max-w-xl">
-                {T(
-                  "landing.heroSubtitle",
-                  "Gestiona personal, zonas, actividad y reportes. Diseñado para operaciones con múltiples organizaciones."
-                )}
+                {safeT(t("landing.heroSubtitle")) ||
+                  "Gestiona personal, zonas, actividad y reportes. Diseñado para operaciones con múltiples organizaciones."}
               </p>
             </div>
 
@@ -189,22 +178,18 @@ export default function Landing() {
             {!hasSession && !checkingSession && (
               <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 space-y-2">
                 <p className="text-sm font-semibold text-slate-50">
-                  {T("landing.accessTitle", "Acceso con cuenta autorizada")}
+                  {safeT(t("landing.accessTitle")) || "Acceso con cuenta autorizada"}
                 </p>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  {T(
-                    "landing.accessBody",
-                    "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización."
-                  )}
+                  {safeT(t("landing.accessBody")) ||
+                    "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización."}
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  {T(
-                    "landing.accessHint",
-                    "Consejo: usa “Enlace mágico” si tu administrador te invitó con correo."
-                  )}
+                  {safeT(t("landing.accessHint")) ||
+                    "Consejo: usa “Enlace mágico” si tu administrador te invitó con correo."}
                 </p>
               </div>
-            )}
+            ))}
 
             {/* CTA principal */}
             {!checkingSession && (
@@ -213,52 +198,53 @@ export default function Landing() {
                   to={loginHref}
                   className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-400 transition-colors"
                 >
-                  {T("landing.ctaLogin", "Entrar a la plataforma")}
+                  {safeT(t("landing.ctaLogin") || "Entrar a la plataforma"}
                 </Link>
 
                 <Link
                   to={magicHref}
                   className="inline-flex items-center justify-center rounded-xl border border-emerald-400/60 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-emerald-200 hover:bg-slate-800/80 transition-colors"
                 >
-                  {T("landing.ctaMagic", "Enlace mágico (usuarios invitados)")}
+                  {safeT(t("landing.ctaMagic")) || "Enlace mágico (usuarios invitados)"}
                 </Link>
               </div>
-            )}
+            ))}
 
             {/* Nota discreta para revisión */}
             {!hasSession && !checkingSession && (
               <div className="text-[11px] text-slate-400">
-                {T(
-                  "landing.reviewNote",
-                  "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access)."
-                )}
+                {safeT(t("landing.reviewNote") ||
+                  "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access)."}
               </div>
-            )}
+            ))}
 
             {/* Bullets de valor */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs md:text-sm text-slate-300">
               <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3 space-y-1">
                 <div className="text-[11px] font-medium text-emerald-300">
-                  {T("landing.bulletGeocercasTitle", "Geocercas")}
+                  {safeT(t("landing.bulletGeocercasTitle") || "Geocercas"}
                 </div>
                 <p className="text-[11px] md:text-xs text-slate-300">
-                  {T("landing.bulletGeocercasBody", "Zonas, alertas y control por ubicación.")}
+                  {safeT(t("landing.bulletGeocercasBody")) ||
+                    "Zonas, alertas y control por ubicación."}
                 </p>
               </div>
               <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3 space-y-1">
                 <div className="text-[11px] font-medium text-emerald-300">
-                  {T("landing.bulletPersonalTitle", "Personal")}
+                  {safeT(t("landing.bulletPersonalTitle")) || "Personal"}
                 </div>
                 <p className="text-[11px] md:text-xs text-slate-300">
-                  {T("landing.bulletPersonalBody", "Asignaciones, actividades y seguimiento.")}
+                  {safeT(t("landing.bulletPersonalBody")) ||
+                    "Asignaciones, actividades y seguimiento."}
                 </p>
               </div>
               <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3 space-y-1">
                 <div className="text-[11px] font-medium text-emerald-300">
-                  {T("landing.bulletCostsTitle", "Reportes / Costos")}
+                  {safeT(t("landing.bulletCostsTitle")) || "Reportes / Costos"}
                 </div>
                 <p className="text-[11px] md:text-xs text-slate-300">
-                  {T("landing.bulletCostsBody", "Tablas, métricas y control operativo.")}
+                  {safeT(t("landing.bulletCostsBody")) ||
+                    "Tablas, métricas y control operativo."}
                 </p>
               </div>
             </div>
@@ -273,10 +259,10 @@ export default function Landing() {
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                    {T("landing.livePanelLabel", "Panel en vivo")}
+                    {safeT(t("landing.livePanelLabel")) || "Panel en vivo"}
                   </p>
                   <p className="text-sm font-medium text-slate-50">
-                    {T("landing.livePanelTitle", "Operación y monitoreo")}
+                    {safeT(t("landing.livePanelTitle")) || "Operación y monitoreo"}
                   </p>
                 </div>
                 <div className="flex -space-x-2">
@@ -288,10 +274,10 @@ export default function Landing() {
 
               <div className="rounded-xl border border-emerald-500/30 bg-slate-950/70 p-3 space-y-3">
                 <div className="flex items-center justify-between text-[11px] text-slate-300">
-                  <span>{T("landing.zonesActive", "Zonas activas")}</span>
+                  <span>{safeT(t("landing.zonesActive")) || "Zonas activas"}</span>
                   <span className="inline-flex items-center gap-1 text-emerald-300">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {T("landing.statusOnline", "Online")}
+                    {safeT(t("landing.statusOnline")) || "Online"}
                   </span>
                 </div>
                 <div className="relative h-40 rounded-lg bg-[radial-gradient(circle_at_top,_#22c55e33,_transparent_55%),radial-gradient(circle_at_bottom,_#0ea5e933,_transparent_55%),linear-gradient(135deg,_#020617,_#020617)] overflow-hidden">
@@ -306,24 +292,29 @@ export default function Landing() {
 
               <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-200">
                 <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 space-y-0.5">
-                  <p className="font-medium">{T("landing.assistanceControlTitle", "Control de asistencia")}</p>
+                  <p className="font-medium">
+                    {safeT(t("landing.assistanceControlTitle")) ||
+                      "Control de asistencia"}
+                  </p>
                   <p className="text-[10px] text-slate-400">
-                    {T("landing.assistanceControlBody", "Eventos por zona y actividad.")}
+                    {safeT(t("landing.assistanceControlBody")) ||
+                      "Eventos por zona y actividad."}
                   </p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 space-y-0.5">
-                  <p className="font-medium">{T("landing.multiOrgTitle", "Multi-organización")}</p>
+                  <p className="font-medium">
+                    {safeT(t("landing.multiOrgTitle")) || "Multi-organización"}
+                  </p>
                   <p className="text-[10px] text-slate-400">
-                    {T("landing.multiOrgBody", "Aislamiento por empresa y roles.")}
+                    {safeT(t("landing.multiOrgBody")) ||
+                      "Aislamiento por empresa y roles."}
                   </p>
                 </div>
               </div>
 
               <div className="text-[10px] text-slate-400 pt-1">
-                {T(
-                  "landing.privacyMiniNote",
-                  "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."
-                )}
+                {safeT(t("landing.privacyMiniNote")) ||
+                  "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."}
               </div>
             </div>
           </section>
@@ -333,23 +324,33 @@ export default function Landing() {
       <footer className="border-t border-white/10 bg-slate-950/80">
         <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
           <p>
-            © {currentYear} {T("landing.brandName", "App Geocercas")}.{" "}
-            {T("landing.rightsReserved", "Todos los derechos reservados.")}
+            © {currentYear} {safeT(t("landing.brandName"))}.{" "}
+            {t("landing.rightsReserved")) || "Todos los derechos reservados."}
           </p>
           <div className="flex flex-wrap items-center gap-4">
             <a href="#faq" className="hover:text-slate-200 transition-colors">
-              {T("landing.footerFaq", "FAQ")}
+              {safeT(t("landing.footerFaq")) || "FAQ"}
             </a>
 
-            <a href="mailto:soporte@tugeocercas.com" className="hover:text-slate-200 transition-colors">
-              {T("landing.footerSupport", "Soporte")}
+            {/* FIX ÚNICO: se elimina el cierre inválido </aitero/, y se cierra correctamente </a> */}
+            <a
+              href="mailto:soporte@tugeocercas.com"
+              className="hover:text-slate-200 transition-colors"
+            >
+              {safeT(t("landing.footerSupport")) || "Soporte"}
             </a>
 
-            <a href="#terminos" className="hover:text-slate-200 transition-colors">
-              {T("landing.footerTerms", "Términos")}
+            <a
+              href="#terminos"
+              className="hover:text-slate-200 transition-colors"
+            >
+              {safeT(t("landing.footerTerms")) || "Términos"}
             </a>
-            <a href="#privacidad" className="hover:text-slate-200 transition-colors">
-              {T("landing.footerPrivacy", "Privacidad")}
+            <a
+              href="#privacidad"
+              className="hover:text-slate-200 transition-colors"
+            >
+              {safeT(t("landing.footerPrivacy")) || "Privacidad"}
             </a>
           </div>
         </div>
