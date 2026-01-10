@@ -36,18 +36,22 @@ function getTabLabel(t, tab) {
     const s = tab.label.trim();
     if (s) return s;
   }
+
   const key = tab?.labelKey ? String(tab.labelKey).trim() : "";
   if (key) {
     const translated = t(key, { defaultValue: "" });
+
     if (typeof translated === "string") {
       const s = translated.trim();
       if (s) return s;
       return humanizeKey(key) || fallbackFromPath(tab?.path);
     }
+
     const s = safeText(translated).trim();
     if (s && s !== "{}" && s !== "[]") return s;
     return humanizeKey(key) || fallbackFromPath(tab?.path);
   }
+
   return fallbackFromPath(tab?.path);
 }
 
