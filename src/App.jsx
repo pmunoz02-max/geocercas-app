@@ -69,9 +69,6 @@ class GlobalErrorBoundary extends React.Component {
     // Logs para diagnóstico (no rompe producción)
     console.error("[GlobalErrorBoundary] Caught error:", error);
     console.error("[GlobalErrorBoundary] Component stack:", componentStack);
-    if (this.props?.debugSnapshot) {
-      console.error("[GlobalErrorBoundary] Debug snapshot:", this.props.debugSnapshot);
-    }
     this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || null });
   }
 
@@ -99,12 +96,11 @@ class GlobalErrorBoundary extends React.Component {
                 <pre className="mt-1 font-mono whitespace-pre-wrap break-words text-slate-600">
                   {this.state.stack}
                 </pre>
-              {this.state.snapshot ? (
-                <pre className="mt-2 font-mono whitespace-pre-wrap break-words text-slate-600">
-                  {toSafeString(this.state.snapshot)}
-                </pre>
-              ) : null}
-
+                {this.state.snapshot ? (
+                  <pre className="mt-3 font-mono whitespace-pre-wrap break-words text-slate-600">
+                    {toSafeString(this.state.snapshot)}
+                  </pre>
+                ) : null}
               </details>
             ) : null}
           </div>
@@ -235,8 +231,7 @@ function pickOrgPreview(orgs) {
 }
 
 function GlobalErrorBoundaryWithSnapshot({ children }) {
-  const auth = (typeof useAuth === "function" ? useAuth() : {}) || {};
-
+  const auth = useAuth?.() || {};
   const snapshot = {
     href: typeof window !== "undefined" ? window.location.href : "",
     user_email: auth?.user?.email || null,
@@ -250,11 +245,7 @@ function GlobalErrorBoundaryWithSnapshot({ children }) {
     organizations_preview: pickOrgPreview(auth?.organizations),
   };
 
-  return (
-    <GlobalErrorBoundary debugSnapshot={snapshot}>
-      {children}
-    </GlobalErrorBoundary>
-  );
+  return <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundary>;
 }
 
 export default function App() {
@@ -323,7 +314,7 @@ export default function App() {
 
           <Route path="*" element={<SmartFallback />} />
         </Routes>
-      </GlobalErrorBoundary>
+      </GlobalErrorBoundaryWithSnapshot>
     </BrowserRouter>
   );
 }
