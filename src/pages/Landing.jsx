@@ -1,9 +1,9 @@
 // src/pages/Landing.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "../components/LanguageSwitcher";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 
 /** =========================
  * Helpers (a prueba de i18n)
@@ -23,336 +23,406 @@ function safeT(value, fallback = "") {
   }
 }
 
-
 export default function Landing() {
   const { t } = useTranslation();
-  const [hasSession, setHasSession] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { session } = useAuth();
 
-  // Debug (antes del return)
-  useEffect(() => {
-    console.log("LANDING JSX VERSION ACTIVA");
-  }, []);
+  const [email, setEmail] = useState("");
+  const [statusMsg, setStatusMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
-  // Detectar si ya hay sesión activa al cargar la Landing
+  const isLogged = !!session;
+
+  const mode = useMemo(() => {
+    const m = (searchParams.get("mode") || "").toLowerCase();
+    return m; // "magic" | "" etc
+  }, [searchParams]);
+
   useEffect(() => {
     let active = true;
-
-    const checkSession = async () => {
-      setCheckingSession(true);
+    (async () => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const { data } = await supabase.auth.getSession();
+        if (!active) return;
 
-        if (!active) return;
-        setHasSession(!!session);
-      } catch (e) {
-        console.error("[Landing] error getSession:", e);
-        if (!active) return;
-        setHasSession(false);
+        // Si ya hay sesión, redirigimos a inicio (pero NO forzamos si estás solo viendo landing)
+        if (data?.session) {
+          setCheckingSession(false);
+          return;
+        }
+      } catch {
+        // ignore
       } finally {
-        if (!active) return;
-        setCheckingSession(false);
+        if (active) setCheckingSession(false);
       }
-    };
-
-    checkSession();
+    })();
 
     return () => {
       active = false;
     };
   }, []);
 
-  const handleLogout = async () => {
+  const normEmail = (v) => String(v || "").trim().toLowerCase();
+  const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+  const handleSendMagicLink = async (e) => {
+    e.preventDefault();
+    setStatusMsg("");
+    setErrorMsg("");
+
+    const em = normEmail(email);
+    if (!em || !isValidEmail(em)) {
+      setErrorMsg(
+        safeT(t("landing.invalidEmail", { defaultValue: "Correo inválido." })) ||
+          "Correo inválido."
+      );
+      return;
+    }
+
+    setLoading(true);
     try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.error("[Landing] error signOut:", e);
+      const redirectTo = `${window.location.origin}/auth/callback`;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: em,
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+      });
+
+      if (error) {
+        setErrorMsg(
+          safeT(t("landing.magicLinkError", { defaultValue: "No se pudo enviar el link." })) ||
+            "No se pudo enviar el link."
+        );
+        return;
+      }
+
+      setStatusMsg(
+        safeT(
+          t("landing.magicLinkSent", {
+            defaultValue: "Te enviamos un enlace de acceso. Revisa tu correo.",
+          })
+        )
+      );
+    } catch (err) {
+      console.error("[Landing] magic link exception", err);
+      setErrorMsg(
+        safeT(
+          t("landing.magicLinkError", { defaultValue: "No se pudo enviar el link." })
+        ) || "No se pudo enviar el link."
+      );
     } finally {
-      setHasSession(false);
-      navigate("/", { replace: true });
+      setLoading(false);
     }
   };
 
-  const currentYear = new Date().getFullYear();
-
-  // IMPORTANTE:
-  // Forzamos un "next" para que el flujo de login/magic termine en el panel (/inicio),
-  // y no caiga en /tracker-gps por redirects por defecto.
-  const nextAfterLogin = "/inicio";
-
-  const loginHref = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set("next", nextAfterLogin);
-    return `/login?${params.toString()}`;
-  }, []);
-
-  const magicHref = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set("mode", "magic");
-    params.set("next", nextAfterLogin);
-    return `/login?${params.toString()}`;
-  }, []);
+  const goToPanel = () => navigate("/inicio");
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col">
-      {/* Barra superior propia de la landing */}
-      <header className="w-full border-b border-white/10 bg-slate-950/60 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-emerald-500/90 flex items-center justify-center shadow-lg shadow-emerald-500/40">
-              <span className="text-xs font-bold tracking-tight">AG</span>
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Header */}
+      <header className="w-full border-b border-white/10">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center font-bold">
+              AG
             </div>
-            <div className="flex flex-col leading-none">
-              <span className="text-sm font-semibold tracking-tight">
-                {safeT(t("landing.brandName"))}
-              </span>
-              <span className="text-[11px] text-slate-400">
-                {safeT(t("landing.brandTagline"))}
-              </span>
+            <div className="leading-tight">
+              <div className="font-semibold">
+                {safeT(t("landing.brandName", { defaultValue: "App Geocercas" }))}
+              </div>
+              <div className="text-xs text-white/60">
+                {safeT(
+                  t("landing.brandTagline", {
+                    defaultValue: "Control de personal por geocercas",
+                  })
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Zona derecha: idioma SIEMPRE visible + acciones */}
           <div className="flex items-center gap-3">
-            <LanguageSwitcher />
-
-            {/* Mientras verifica sesión, evita parpadeos */}
-            {checkingSession ? (
-              <span className="text-xs text-slate-400">
-                {safeT(t("landing.checkingSession"), "Verificando...")}
-              </span>
-            ) : (
+            {/* Idiomas los manejas en tu AppHeader/LanguageSwitcher si aplica */}
+            {isLogged ? (
               <>
-                {!hasSession && (
-                  <Link
-                    to={loginHref}
-                    className="text-xs md:text-sm text-slate-200 hover:text-white transition-colors"
-                  >
-                    {safeT(t("landing.loginButton"), "Entrar")}
-                  </Link>
-                )}
-
-                {hasSession && (
-                  <>
-                    <Link
-                      to="/inicio"
-                      className="text-xs md:text-sm text-emerald-300 hover:text-emerald-100 transition-colors"
-                    >
-                      {safeT(t("landing.goToDashboard"), "Ir al panel")}
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="text-xs md:text-sm text-slate-300 hover:text-white transition-colors border border-slate-500/60 rounded-full px-3 py-1"
-                    >
-                      {safeT(t("landing.logout"), "Salir")}
-                    </button>
-                  </>
-                )}
+                <button
+                  type="button"
+                  onClick={goToPanel}
+                  className="px-3 py-1.5 rounded-full text-sm font-semibold bg-white/10 hover:bg-white/15 border border-white/10"
+                >
+                  {safeT(t("landing.goToPanel", { defaultValue: "Ir al panel" }))}
+                </button>
               </>
+            ) : (
+              <Link
+                to="/login"
+                className="px-3 py-1.5 rounded-full text-sm font-semibold bg-white/10 hover:bg-white/15 border border-white/10"
+              >
+                {safeT(t("landing.login", { defaultValue: "Entrar" }))}
+              </Link>
             )}
           </div>
         </div>
       </header>
 
-      {/* Contenido principal */}
-      <main className="flex-1">
-        <div className="max-w-6xl mx-auto px-4 py-10 md:py-16 grid md:grid-cols-2 gap-10 md:gap-16 items-center">
-          {/* Columna izquierda: Hero / texto */}
-          <section className="space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-medium text-emerald-300">
-                {safeT(t("landing.heroBadge"), "Plataforma operativa en tiempo real")}
-              </span>
-            </div>
+      {/* Hero */}
+      <main className="max-w-6xl mx-auto px-4 py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+          <div>
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+              {safeT(
+                t("landing.heroTitle", {
+                  defaultValue:
+                    "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo",
+                })
+              )}
+            </h1>
 
-            <div className="space-y-3">
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-tight text-white">
-                {safeT(t("landing.heroTitlePrefix"), "Controla")}{" "}
-                <span className="text-emerald-400">
-                  {safeT(t("landing.heroTitleHighlight"), "geocercas")}
-                </span>{" "}
-                {safeT(t("landing.heroTitleSuffix"), "y asistencia con precisión")}
-              </h1>
-              <p className="text-sm md:text-base text-slate-300 max-w-xl">
-                {safeT(t("landing.heroSubtitle"), "Gestiona personal, zonas, actividad y reportes. Diseñado para operaciones con múltiples organizaciones.")}
-              </p>
-            </div>
+            <p className="mt-5 text-white/70 text-base sm:text-lg leading-relaxed">
+              {safeT(
+                t("landing.heroSubtitle", {
+                  defaultValue:
+                    "App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real.",
+                })
+              )}
+            </p>
 
-            {/* Bloque de “acceso” */}
-            {!hasSession && !checkingSession && (
-              <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 space-y-2">
-                <p className="text-sm font-semibold text-slate-50">
-                  {safeT(t("landing.accessTitle"), "Acceso con cuenta autorizada")}
-                </p>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  {safeT(t("landing.accessBody"), "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.")}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  {safeT(t("landing.accessHint"), "Consejo: usa “Enlace mágico” si tu administrador te invitó con correo.")}
-                </p>
-              </div>
-            )}
-
-            {/* CTA principal */}
-            {!checkingSession && (
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link
-                  to={loginHref}
-                  className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 hover:bg-emerald-400 transition-colors"
+            <div className="mt-8 flex flex-wrap gap-3">
+              {isLogged ? (
+                <button
+                  type="button"
+                  onClick={goToPanel}
+                  className="px-5 py-2.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-500"
                 >
-                  {safeT(t("landing.ctaLogin"), "Entrar a la plataforma")}
-                </Link>
+                  {safeT(
+                    t("landing.ctaGoPanel", { defaultValue: "Ir al panel" })
+                  )}
+                </button>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="px-5 py-2.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-500"
+                  >
+                    {safeT(
+                      t("landing.ctaLogin", { defaultValue: "Ingresar" })
+                    )}
+                  </Link>
 
-                <Link
-                  to={magicHref}
-                  className="inline-flex items-center justify-center rounded-xl border border-emerald-400/60 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-emerald-200 hover:bg-slate-800/80 transition-colors"
+                  <Link
+                    to="/login?mode=magic"
+                    className="px-5 py-2.5 rounded-full font-semibold bg-white/10 hover:bg-white/15 border border-white/10"
+                  >
+                    {safeT(
+                      t("landing.ctaMagic", { defaultValue: "Magic Link" })
+                    )}
+                  </Link>
+                </>
+              )}
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                <div className="font-semibold">
+                  {safeT(
+                    t("landing.feature1Title", { defaultValue: "Geocercas" })
+                  )}
+                </div>
+                <div className="text-sm text-white/70 mt-1">
+                  {safeT(
+                    t("landing.feature1Desc", {
+                      defaultValue:
+                        "Crea zonas en el mapa y asigna personal por organización.",
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                <div className="font-semibold">
+                  {safeT(
+                    t("landing.feature2Title", {
+                      defaultValue: "Tracker GPS",
+                    })
+                  )}
+                </div>
+                <div className="text-sm text-white/70 mt-1">
+                  {safeT(
+                    t("landing.feature2Desc", {
+                      defaultValue:
+                        "Registro de posiciones y actividad con sincronización.",
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                <div className="font-semibold">
+                  {safeT(
+                    t("landing.feature3Title", {
+                      defaultValue: "Asignaciones",
+                    })
+                  )}
+                </div>
+                <div className="text-sm text-white/70 mt-1">
+                  {safeT(
+                    t("landing.feature3Desc", {
+                      defaultValue:
+                        "Asignación de personas a geocercas y seguimiento operativo.",
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                <div className="font-semibold">
+                  {safeT(
+                    t("landing.feature4Title", {
+                      defaultValue: "Costos y reportes",
+                    })
+                  )}
+                </div>
+                <div className="text-sm text-white/70 mt-1">
+                  {safeT(
+                    t("landing.feature4Desc", {
+                      defaultValue:
+                        "Dashboard de costos, reportes por persona, zona y fechas.",
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Panel derecho: Magic link rápido (opcional) */}
+          <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
+            <h2 className="text-xl font-bold">
+              {safeT(
+                t("landing.quickAccessTitle", {
+                  defaultValue: "Acceso rápido",
+                })
+              )}
+            </h2>
+
+            <p className="mt-2 text-sm text-white/70">
+              {safeT(
+                t("landing.quickAccessDesc", {
+                  defaultValue:
+                    "Si prefieres, puedes ingresar con Magic Link (sin contraseña).",
+                })
+              )}
+            </p>
+
+            {checkingSession ? (
+              <div className="mt-6 text-xs text-white/60">
+                {safeT(
+                  t("landing.checkingSession", { defaultValue: "Verificando..." }),
+                  "Verificando..."
+                )}
+              </div>
+            ) : isLogged ? (
+              <div className="mt-6">
+                <div className="text-sm text-white/70">
+                  {safeT(
+                    t("landing.alreadyLogged", {
+                      defaultValue: "Ya tienes sesión activa.",
+                    })
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={goToPanel}
+                  className="mt-3 w-full px-4 py-2.5 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500"
                 >
-                  {safeT(t("landing.ctaMagic"), "Enlace mágico (usuarios invitados)")}
-                </Link>
+                  {safeT(
+                    t("landing.goToPanel", { defaultValue: "Ir al panel" })
+                  )}
+                </button>
               </div>
+            ) : (
+              <>
+                <form onSubmit={handleSendMagicLink} className="mt-6">
+                  <label className="block text-xs text-white/70 mb-2">
+                    {safeT(
+                      t("landing.emailLabel", { defaultValue: "Correo" })
+                    )}
+                  </label>
+
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    type="email"
+                    placeholder={safeT(
+                      t("landing.emailPlaceholder", {
+                        defaultValue: "correo@ejemplo.com",
+                      })
+                    )}
+                    className="w-full rounded-xl bg-white/10 border border-white/10 px-4 py-2.5 text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="mt-4 w-full px-4 py-2.5 rounded-xl font-semibold bg-white text-slate-900 hover:bg-white/90 disabled:opacity-60"
+                  >
+                    {loading
+                      ? safeT(
+                          t("landing.sending", { defaultValue: "Enviando..." })
+                        )
+                      : safeT(
+                          t("landing.sendMagicLink", {
+                            defaultValue: "Enviar Magic Link",
+                          })
+                        )}
+                  </button>
+
+                  {statusMsg && (
+                    <div className="mt-4 text-sm text-emerald-300">
+                      {safeT(statusMsg)}
+                    </div>
+                  )}
+                  {errorMsg && (
+                    <div className="mt-4 text-sm text-red-300">
+                      {safeT(errorMsg)}
+                    </div>
+                  )}
+                </form>
+
+                <div className="mt-6 text-xs text-white/60">
+                  {safeT(
+                    t("landing.securityNote", {
+                      defaultValue:
+                        "Importante: el acceso funciona solo con el Magic Link real.",
+                    })
+                  )}
+                </div>
+              </>
             )}
 
-            {/* Nota discreta para revisión */}
-            {!hasSession && !checkingSession && (
-              <div className="text-[11px] text-slate-400">
-                {safeT(t("landing.reviewNote"), "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).")}
-              </div>
-            )}
-
-            {/* Bullets de valor */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs md:text-sm text-slate-300">
-              <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3 space-y-1">
-                <div className="text-[11px] font-medium text-emerald-300">
-                  {safeT(t("landing.bulletGeocercasTitle"), "Geocercas")}
-                </div>
-                <p className="text-[11px] md:text-xs text-slate-300">
-                  {safeT(t("landing.bulletGeocercasBody"), "Zonas, alertas y control por ubicación.")}
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3 space-y-1">
-                <div className="text-[11px] font-medium text-emerald-300">
-                  {safeT(t("landing.bulletPersonalTitle"), "Personal")}
-                </div>
-                <p className="text-[11px] md:text-xs text-slate-300">
-                  {safeT(t("landing.bulletPersonalBody"), "Asignaciones, actividades y seguimiento.")}
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/5 bg-slate-900/60 p-3 space-y-1">
-                <div className="text-[11px] font-medium text-emerald-300">
-                  {safeT(t("landing.bulletCostsTitle"), "Reportes / Costos")}
-                </div>
-                <p className="text-[11px] md:text-xs text-slate-300">
-                  {safeT(t("landing.bulletCostsBody"), "Tablas, métricas y control operativo.")}
-                </p>
-              </div>
+            {/* Link a soporte si existe */}
+            <div className="mt-6 text-xs text-white/50">
+              <Link to="/soporte" className="underline hover:text-white/80">
+                {safeT(t("landing.support", { defaultValue: "Soporte" }))}
+              </Link>
             </div>
-          </section>
-
-          {/* Columna derecha: mock de app */}
-          <section className="relative">
-            <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-emerald-500/20 blur-3xl" />
-            <div className="absolute -bottom-6 -left-8 h-32 w-32 rounded-full bg-emerald-400/10 blur-3xl" />
-
-            <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 shadow-2xl shadow-black/40 backdrop-blur-sm p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                    {safeT(t("landing.livePanelLabel"), "Panel en vivo")}
-                  </p>
-                  <p className="text-sm font-medium text-slate-50">
-                    {safeT(t("landing.livePanelTitle"), "Operación y monitoreo")}
-                  </p>
-                </div>
-                <div className="flex -space-x-2">
-                  <div className="h-6 w-6 rounded-full border border-slate-900 bg-emerald-500/90" />
-                  <div className="h-6 w-6 rounded-full border border-slate-900 bg-emerald-300/90" />
-                  <div className="h-6 w-6 rounded-full border border-slate-900 bg-slate-500/90" />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-emerald-500/30 bg-slate-950/70 p-3 space-y-3">
-                <div className="flex items-center justify-between text-[11px] text-slate-300">
-                  <span>{safeT(t("landing.zonesActive"), "Zonas activas")}</span>
-                  <span className="inline-flex items-center gap-1 text-emerald-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {safeT(t("landing.statusOnline"), "Online")}
-                  </span>
-                </div>
-                <div className="relative h-40 rounded-lg bg-[radial-gradient(circle_at_top,_#22c55e33,_transparent_55%),radial-gradient(circle_at_bottom,_#0ea5e933,_transparent_55%),linear-gradient(135deg,_#020617,_#020617)] overflow-hidden">
-                  <div className="absolute inset-4 border border-emerald-500/30 rounded-xl" />
-                  <div className="absolute left-4 top-6 h-10 w-16 border border-emerald-400/60 rounded-md" />
-                  <div className="absolute right-6 bottom-5 h-12 w-20 border border-emerald-500/40 rounded-lg" />
-                  <div className="absolute left-10 top-10 h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_2px_rgba(52,211,153,0.8)]" />
-                  <div className="absolute left-16 top-20 h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_10px_2px_rgba(52,211,153,0.7)]" />
-                  <div className="absolute right-10 bottom-10 h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_2px_rgba(56,189,248,0.7)]" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-200">
-                <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 space-y-0.5">
-                  <p className="font-medium">
-                    {safeT(t("landing.assistanceControlTitle"), "Control de asistencia")}
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    {safeT(t("landing.assistanceControlBody"), "Eventos por zona y actividad.")}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 space-y-0.5">
-                  <p className="font-medium">
-                    {safeT(t("landing.multiOrgTitle"), "Multi-organización")}
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    {safeT(t("landing.multiOrgBody"), "Aislamiento por empresa y roles.")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="text-[10px] text-slate-400 pt-1">
-                {safeT(t("landing.privacyMiniNote"), "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.")}
-              </div>
-            </div>
-          </section>
-        </div>
-      </main>
-
-      <footer className="border-t border-white/10 bg-slate-950/80">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
-          <p>
-            © {currentYear} {safeT(t("landing.brandName"))}.{" "}
-            {safeT(t("landing.rightsReserved"), "Todos los derechos reservados.")}
-          </p>
-          <div className="flex flex-wrap items-center gap-4">
-            <a href="#faq" className="hover:text-slate-200 transition-colors">
-              {safeT(t("landing.footerFaq"), "FAQ")}
-            </a>
-
-            {/* FIX ÚNICO: se elimina el cierre inválido </aitero/, y se cierra correctamente </a> */}
-            <a
-              href="mailto:soporte@tugeocercas.com"
-              className="hover:text-slate-200 transition-colors"
-            >
-              {safeT(t("landing.footerSupport"), "Soporte")}
-            </a>
-
-            <a
-              href="#terminos"
-              className="hover:text-slate-200 transition-colors"
-            >
-              {safeT(t("landing.footerTerms"), "Términos")}
-            </a>
-            <a
-              href="#privacidad"
-              className="hover:text-slate-200 transition-colors"
-            >
-              {safeT(t("landing.footerPrivacy"), "Privacidad")}
-            </a>
           </div>
         </div>
-      </footer>
+
+        {/* Footer */}
+        <footer className="mt-14 pt-6 border-t border-white/10 text-xs text-white/50 flex items-center justify-between">
+          <span>© {new Date().getFullYear()} App Geocercas</span>
+          <span>
+            {safeT(
+              t("landing.footerNote", { defaultValue: "Fenice Ecuador S.A.S." })
+            )}
+          </span>
+        </footer>
+      </main>
     </div>
   );
 }
