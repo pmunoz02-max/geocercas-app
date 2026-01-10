@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabase.js";
 import { listAdmins, deleteAdmin } from "../lib/adminsApi";
+import { useLocation } from "react-router-dom";
 
 /** ========= Helpers 100% seguros ========= */
 function toSafeString(x, fallback = "") {
@@ -18,6 +19,18 @@ function toSafeString(x, fallback = "") {
 function safeText(x) {
   // Para render: NUNCA objeto
   return typeof x === "string" ? x : toSafeString(x, "");
+}
+
+function useDebugFlag() {
+  const location = useLocation();
+  return useMemo(() => {
+    try {
+      const params = new URLSearchParams(location.search || "");
+      return params.get("debug") === "1";
+    } catch {
+      return false;
+    }
+  }, [location.search]);
 }
 
 /**
@@ -124,6 +137,11 @@ class SafeBoundary extends React.Component {
 
 export default function AdminsPage() {
   const { authReady, orgsReady, currentOrg, user, isRootOwner } = useAuth();
+  const debug = useDebugFlag();
+
+  const dlog = (...args) => {
+    if (debug) console.log(...args);
+  };
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -240,13 +258,9 @@ export default function AdminsPage() {
           ? { email, role: "admin", org_id: currentOrg.id }
           : { email, role: "owner", org_name: email };
 
-      console.log("[AdminsPage] INVITE payload:", JSON.stringify(payload));
+      dlog("[AdminsPage] INVITE payload:", JSON.stringify(payload));
 
       const resp = await callInviteAdminEdge(payload);
-
-      // 🔥 Logs 100% copiable (lo que tú vas a pegar en el chat)
-      console.log("INVITE fetch status:", resp.status);
-      console.log("INVITE fetch data JSON:", JSON.stringify(resp.data));
 
       // Guardar también en UI como STRING (evita React #300)
       setInviteDebug({
@@ -255,7 +269,10 @@ export default function AdminsPage() {
         raw: String(resp.raw ?? ""),
       });
 
-      if (resp.raw) console.log("INVITE raw response:", String(resp.raw).slice(0, 800));
+      // Logs solo si debug=1
+      dlog("INVITE fetch status:", resp.status);
+      dlog("INVITE fetch data JSON:", JSON.stringify(resp.data));
+      if (resp.raw) dlog("INVITE raw response:", String(resp.raw).slice(0, 800));
 
       if (!resp.ok) {
         setError(String(extractEdgeError(resp, "Error al enviar la invitación.")));
@@ -330,6 +347,12 @@ export default function AdminsPage() {
           <p className="text-xs text-slate-500 mt-1">
             Usuario: <span className="font-mono">{safeText(user?.email)}</span>
           </p>
+
+          {debug && (
+            <p className="text-[11px] text-amber-700 mt-2">
+              Debug ON (por <span className="font-mono">?debug=1</span>)
+            </p>
+          )}
         </header>
 
         <section className="mb-8 border rounded-xl p-4 bg-white">
@@ -399,7 +422,7 @@ export default function AdminsPage() {
             </div>
           )}
 
-          {/* Panel Debug para copiar el JSON aunque React/console se ensucie */}
+          {/* Panel Debug para copiar el JSON aunque la consola esté apagada */}
           {!!inviteDebug.status && (
             <details className="mt-4">
               <summary className="text-xs cursor-pointer text-slate-600">Debug (invite_admin)</summary>
