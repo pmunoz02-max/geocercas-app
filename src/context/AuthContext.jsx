@@ -1,30 +1,24 @@
 // src/context/AuthContext.jsx
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
-  useCallback,
 } from "react";
 import { supabase } from "../supabaseClient.js";
 
 /**
- * AuthContext UNIVERSAL (Panel + Tracker) — Optimizado rendimiento
+ * AuthContext UNIVERSAL (Panel + Tracker) — Fuente única de verdad (Backend-first)
  *
- * Objetivos:
- * - UI rápida: authReady TRUE apenas hay session (no espera roles/orgs)
- * - Roles/Orgs se cargan en background (no bloquea /inicio)
- * - Orgs: NO se carga "todas las activas"; solo las orgs de los roles del usuario
- * - Si roles/orgs fallan (RLS/red), NO tumba sesión, solo deja "pendiente"
- *
- * ✅ FIX PERMANENTE (Org Context)
- * - Si el usuario entra al PANEL (no tracker) y no tiene org/roles,
- *   el backend debe auto-crear/asignar org + membership + current_org_id.
- * - Para eso llamamos a RPC: ensure_user_org_context()
- * - Luego re-hidratamos roles/orgs.
- *
- * Esto evita la pantalla “(sin org aún)” y vuelve el sistema auto-reparable.
+ * Principios:
+ * - authReady TRUE apenas hay session (UI no se cuelga)
+ * - El contexto (org/role/orgs) se hidrata en background desde backend
+ * - Fuente primaria: RPC get_my_context()
+ * - Fallback universal: ensure_user_org_context() + profiles.current_org_id + memberships + organizations
+ * - NUNCA depender de vistas fantasma (ej: app_user_roles)
  */
 
 const AuthContext = createContext(null);
@@ -36,15 +30,17 @@ function isTrackerHostname(hostname) {
 
 function normalizeRole(r) {
   const s = String(r || "").toLowerCase().trim();
-  if (["owner", "admin", "viewer", "tracker"].includes(s)) return s;
+  if (["owner", "admin", "viewer", "tracker", "member"].includes(s)) return s;
   return null;
 }
 
 function roleRank(r) {
-  if (r === "owner") return 3;
-  if (r === "admin") return 2;
-  if (r === "viewer") return 1;
-  if (r === "tracker") return 0;
+  // Ajusta si tu jerarquía cambia
+  if (r === "owner") return 4;
+  if (r === "admin") return 3;
+  if (r === "viewer") return 2;
+  if (r === "tracker") return 1;
+  if (r === "member") return 0;
   return -1;
 }
 
@@ -62,7 +58,6 @@ function uniq(arr) {
   return Array.from(new Set((arr || []).filter(Boolean)));
 }
 
-// Timeout SOLO para queries REST (no para getSession)
 function withTimeout(promise, ms, label) {
   return Promise.race([
     promise,
@@ -73,12 +68,12 @@ function withTimeout(promise, ms, label) {
 }
 
 export function AuthProvider({ children }) {
+  const client = supabase;
+
   const trackerDomain = useMemo(
     () => isTrackerHostname(window.location.hostname),
     []
   );
-
-  const client = supabase;
 
   const [authReady, setAuthReady] = useState(false);
   const [authError, setAuthError] = useState(null);
@@ -86,19 +81,20 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
 
-  const [roles, setRoles] = useState([]);
+  // Para compatibilidad con pantallas existentes
+  const [roles, setRoles] = useState([]); // [{org_id, role}]
   const [bestRole, setBestRole] = useState(null);
   const [currentRole, setCurrentRole] = useState(null);
 
-  const [orgs, setOrgs] = useState([]);
+  const [orgs, setOrgs] = useState([]); // [{id,name,..., role?}]
   const [currentOrg, setCurrentOrg] = useState(null);
 
-  // Estados de carga “finos” (para UI/diagnóstico)
+  // Estados finos
   const [rolesReady, setRolesReady] = useState(false);
   const [orgsReady, setOrgsReady] = useState(false);
 
-  // Evita loops de auto-reparación por sesión
-  const [orgContextEnsured, setOrgContextEnsured] = useState(false);
+  // Evita bucles por sesión
+  const ensuredOnceRef = useRef(false);
 
   const resetNonSessionState = useCallback(() => {
     setRoles([]);
@@ -108,7 +104,7 @@ export function AuthProvider({ children }) {
     setCurrentOrg(null);
     setRolesReady(false);
     setOrgsReady(false);
-    setOrgContextEnsured(false);
+    ensuredOnceRef.current = false;
   }, []);
 
   const resetAllAuthState = useCallback(() => {
@@ -118,6 +114,7 @@ export function AuthProvider({ children }) {
   }, [resetNonSessionState]);
 
   const applyTrackerDefaults = useCallback(() => {
+    // Tracker-only: sin org obligatoria
     setRoles([]);
     setBestRole("tracker");
     setCurrentRole("tracker");
@@ -125,99 +122,183 @@ export function AuthProvider({ children }) {
     setCurrentOrg(null);
     setRolesReady(true);
     setOrgsReady(true);
-    setOrgContextEnsured(true);
-  }, []);
-
-  const loadRoles = useCallback(
-    async (userId) => {
-      if (!userId) return [];
-      const q = client
-        .from("app_user_roles")
-        .select("org_id, role, created_at")
-        .eq("user_id", userId);
-
-      const { data, error } = await withTimeout(q, 12000, "loadRoles");
-      if (error) throw error;
-      return data || [];
-    },
-    [client]
-  );
-
-  // ✅ Solo orgs que el usuario realmente usa (por roles)
-  const loadOrgsByIds = useCallback(
-    async (orgIds) => {
-      const ids = uniq(orgIds);
-      if (!ids.length) return [];
-
-      const q = client
-        .from("organizations")
-        .select("id, name, active, plan, owner_id, created_at")
-        .in("id", ids)
-        .eq("active", true);
-
-      const { data, error } = await withTimeout(q, 12000, "loadOrgsByIds");
-      if (error) throw error;
-      return data || [];
-    },
-    [client]
-  );
-
-  const resolveCurrentOrg = useCallback((rolesRows, orgRows) => {
-    if (!Array.isArray(orgRows) || orgRows.length === 0) return null;
-
-    const best = computeBestRole(rolesRows);
-    if (best && Array.isArray(rolesRows) && rolesRows.length) {
-      const row = rolesRows
-        .map((r) => ({ ...r, role: normalizeRole(r.role) }))
-        .filter((r) => r.role === best)
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-
-      if (row?.org_id) {
-        const found = orgRows.find((o) => o.id === row.org_id);
-        if (found) return found;
-      }
-    }
-
-    return orgRows[0] || null;
+    ensuredOnceRef.current = true;
   }, []);
 
   /**
-   * ✅ Backend "auto-repair" del contexto de organización.
-   * Se ejecuta solo en PANEL (no tracker) y solo 1 vez por sesión.
+   * Fallback universal: asegurar org y leer current_org_id desde profiles
    */
   const ensureOrgContext = useCallback(
     async (sess) => {
       if (trackerDomain) return null;
       if (!sess?.user?.id) return null;
-      if (orgContextEnsured) return null;
+      if (ensuredOnceRef.current) return null;
+
+      ensuredOnceRef.current = true;
 
       try {
-        // prevenimos loops aunque falle
-        setOrgContextEnsured(true);
-
-        const { data, error } = await client.rpc("ensure_user_org_context", {
-          p_user_id: sess.user.id,
-        });
+        const { data, error } = await withTimeout(
+          client.rpc("ensure_user_org_context", { p_user_id: sess.user.id }),
+          12000,
+          "ensure_user_org_context"
+        );
 
         if (error) {
           console.warn("[AuthContext] ensure_user_org_context error:", error);
           return null;
         }
-
-        return data || null; // suele ser UUID org_id
+        return data || null; // UUID org_id (según tu implementación)
       } catch (e) {
         console.warn("[AuthContext] ensureOrgContext exception:", e);
         return null;
       }
     },
-    [client, trackerDomain, orgContextEnsured]
+    [client, trackerDomain]
   );
 
   /**
-   * Carga roles + orgs en BACKGROUND.
-   * No toca session/user. No bloquea authReady.
+   * Leer profiles.current_org_id (fuente real persistida)
    */
-  const hydrateNonSessionData = useCallback(
+  const loadProfileCurrentOrgId = useCallback(
+    async (userId) => {
+      if (!userId) return null;
+      try {
+        const { data, error } = await withTimeout(
+          client.from("profiles").select("current_org_id").eq("id", userId).single(),
+          12000,
+          "loadProfileCurrentOrgId"
+        );
+        if (error) throw error;
+        return data?.current_org_id ?? null;
+      } catch (e) {
+        console.warn("[AuthContext] loadProfileCurrentOrgId error:", e);
+        return null;
+      }
+    },
+    [client]
+  );
+
+  /**
+   * Cargar memberships (roles reales) y organizations asociadas (fallback universal)
+   */
+  const loadMembershipsAndOrgs = useCallback(
+    async (userId) => {
+      if (!userId) return { memberships: [], orgRows: [] };
+
+      // 1) memberships
+      let memberships = [];
+      try {
+        const { data, error } = await withTimeout(
+          client
+            .from("memberships")
+            .select("org_id, role, is_default, created_at")
+            .eq("user_id", userId),
+          12000,
+          "loadMemberships"
+        );
+        if (error) throw error;
+        memberships = data || [];
+      } catch (e) {
+        console.warn("[AuthContext] loadMemberships error:", e);
+        memberships = [];
+      }
+
+      // 2) organizations por ids
+      const orgIds = uniq(memberships.map((m) => m.org_id));
+      if (!orgIds.length) return { memberships, orgRows: [] };
+
+      let orgRows = [];
+      try {
+        const { data, error } = await withTimeout(
+          client
+            .from("organizations")
+            .select("id, name, active, plan, owner_id, created_at")
+            .in("id", orgIds),
+          12000,
+          "loadOrganizationsByMemberships"
+        );
+        if (error) throw error;
+        orgRows = data || [];
+      } catch (e) {
+        console.warn("[AuthContext] loadOrganizations error:", e);
+        orgRows = [];
+      }
+
+      // 3) fusionar rol en orgRows (útil para UI)
+      const roleByOrg = new Map();
+      for (const m of memberships) {
+        const r = normalizeRole(m?.role) || "member";
+        roleByOrg.set(m.org_id, r);
+      }
+      orgRows = (orgRows || []).map((o) => ({
+        ...o,
+        role: roleByOrg.get(o.id) || "member",
+      }));
+
+      return { memberships, orgRows };
+    },
+    [client]
+  );
+
+  /**
+   * Intentar RPC get_my_context() (fuente limpia definitiva)
+   */
+  const tryGetMyContextRpc = useCallback(async () => {
+    try {
+      const { data, error } = await withTimeout(
+        client.rpc("get_my_context"),
+        12000,
+        "get_my_context"
+      );
+      if (error) {
+        // Si el RPC no existe o falla por permisos, caemos a fallback
+        console.warn("[AuthContext] get_my_context error:", error);
+        return null;
+      }
+      if (!data || data.ok === false) return null;
+      return data;
+    } catch (e) {
+      console.warn("[AuthContext] get_my_context exception:", e);
+      return null;
+    }
+  }, [client]);
+
+  /**
+   * Resolver currentOrg de forma robusta:
+   * - si tenemos current_org_id => elegir esa
+   * - si no => org donde el bestRole sea mejor
+   * - si no => primera org disponible
+   */
+  const resolveCurrentOrg = useCallback((orgRows, currentOrgId, roleRows) => {
+    const rows = Array.isArray(orgRows) ? orgRows : [];
+    if (!rows.length) return null;
+
+    if (currentOrgId) {
+      const found = rows.find((o) => o.id === currentOrgId);
+      if (found) return found;
+    }
+
+    const best = computeBestRole(roleRows);
+    if (best && roleRows?.length) {
+      const candidateOrgId = roleRows
+        .filter((r) => normalizeRole(r.role) === best)
+        .map((r) => r.org_id)[0];
+      if (candidateOrgId) {
+        const found = rows.find((o) => o.id === candidateOrgId);
+        if (found) return found;
+      }
+    }
+
+    return rows[0] || null;
+  }, []);
+
+  /**
+   * Hidratación principal del contexto (background)
+   * - Tracker: defaults
+   * - Panel: get_my_context() => OK
+   * - Si falla: ensure_user_org_context() + profiles + memberships + orgs
+   */
+  const hydrateContext = useCallback(
     async (sess) => {
       if (!sess?.user?.id) {
         resetNonSessionState();
@@ -229,73 +310,89 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      // 1) Roles
       setRolesReady(false);
-      let rolesRows = [];
-      try {
-        rolesRows = await loadRoles(sess.user.id);
+      setOrgsReady(false);
 
-        // ✅ Si no hay roles, auto-reparar contexto y reintentar 1 vez
-        if ((!rolesRows || rolesRows.length === 0) && !orgContextEnsured) {
-          await ensureOrgContext(sess);
-          rolesRows = await loadRoles(sess.user.id);
-        }
+      const userId = sess.user.id;
 
-        setRoles(rolesRows);
+      // 1) Intentar RPC definitivo
+      const rpcCtx = await tryGetMyContextRpc();
+      if (rpcCtx?.ok) {
+        const currentOrgId = rpcCtx.current_org_id || null;
 
-        const best = computeBestRole(rolesRows);
+        // roles compatibles (por org)
+        const rpcOrgs = Array.isArray(rpcCtx.orgs) ? rpcCtx.orgs : [];
+        const roleRows = rpcOrgs.map((o) => ({
+          org_id: o.org_id,
+          role: normalizeRole(o.role) || "member",
+        }));
+
+        // orgs para UI
+        const orgRows = rpcOrgs.map((o) => ({
+          id: o.org_id,
+          name: o.name || "(sin nombre)",
+          active: true,
+          plan: o.plan ?? null,
+          owner_id: o.owner_id ?? null,
+          created_at: o.created_at ?? null,
+          role: normalizeRole(o.role) || "member",
+          is_default: !!o.is_default,
+        }));
+
+        setRoles(roleRows);
+        const best = normalizeRole(rpcCtx.role) || computeBestRole(roleRows) || "member";
         setBestRole(best);
         setCurrentRole(best);
-      } catch (e) {
-        console.warn("[AuthContext] roles not ready:", e);
-        setRoles([]);
-        setBestRole(null);
-        setCurrentRole(null);
-      } finally {
-        setRolesReady(true);
-      }
-
-      // 2) Orgs (solo por org_ids de roles)
-      setOrgsReady(false);
-      try {
-        const orgIds = uniq((rolesRows || []).map((r) => r.org_id));
-        let orgRows = await loadOrgsByIds(orgIds);
-
-        // ✅ Si no hay orgs, auto-reparar contexto y reintentar 1 vez
-        if ((!orgRows || orgRows.length === 0) && !orgContextEnsured) {
-          await ensureOrgContext(sess);
-
-          const rolesAgain = await loadRoles(sess.user.id);
-          const idsAgain = uniq((rolesAgain || []).map((r) => r.org_id));
-          orgRows = await loadOrgsByIds(idsAgain);
-
-          setRoles(rolesAgain || []);
-          const best = computeBestRole(rolesAgain);
-          setBestRole(best);
-          setCurrentRole(best);
-
-          rolesRows = rolesAgain || rolesRows;
-        }
 
         setOrgs(orgRows);
-        setCurrentOrg(resolveCurrentOrg(rolesRows, orgRows));
-      } catch (e) {
-        console.warn("[AuthContext] orgs not ready:", e);
-        setOrgs([]);
-        setCurrentOrg(null);
-      } finally {
+        setCurrentOrg(resolveCurrentOrg(orgRows, currentOrgId, roleRows));
+
+        setRolesReady(true);
         setOrgsReady(true);
+        return;
       }
+
+      // 2) Fallback universal (sin depender de vistas)
+      //    2.1 asegurar contexto (crea org si falta)
+      const ensuredOrgId = await ensureOrgContext(sess);
+
+      //    2.2 leer profiles.current_org_id (fuente primaria persistida)
+      const profileOrgId = await loadProfileCurrentOrgId(userId);
+
+      //    2.3 memberships + orgs
+      const { memberships, orgRows } = await loadMembershipsAndOrgs(userId);
+
+      // roles compatibles
+      const roleRows = (memberships || []).map((m) => ({
+        org_id: m.org_id,
+        role: normalizeRole(m.role) || "member",
+      }));
+
+      // Best role
+      const best = computeBestRole(roleRows) || "member";
+
+      setRoles(roleRows);
+      setBestRole(best);
+      setCurrentRole(best);
+
+      setOrgs(orgRows || []);
+
+      // Resolver org actual: prioridad profiles.current_org_id, luego ensured, luego lo que haya
+      const chosenOrgId = profileOrgId || ensuredOrgId || null;
+      setCurrentOrg(resolveCurrentOrg(orgRows, chosenOrgId, roleRows));
+
+      setRolesReady(true);
+      setOrgsReady(true);
     },
     [
       trackerDomain,
       applyTrackerDefaults,
-      loadRoles,
-      loadOrgsByIds,
-      resolveCurrentOrg,
       resetNonSessionState,
+      tryGetMyContextRpc,
       ensureOrgContext,
-      orgContextEnsured,
+      loadProfileCurrentOrgId,
+      loadMembershipsAndOrgs,
+      resolveCurrentOrg,
     ]
   );
 
@@ -307,17 +404,17 @@ export function AuthProvider({ children }) {
       setAuthError(null);
 
       try {
-        // ✅ Sin timeout: no queremos “auto-logout” por latencias
         const { data, error } = await client.auth.getSession();
         if (error) throw error;
 
         const sess = data?.session ?? null;
 
         if (!mounted) return;
+
         setSession(sess);
         setUser(sess?.user ?? null);
 
-        // ✅ IMPORTANTE: authReady TRUE lo antes posible
+        // UI rápida
         setAuthReady(true);
 
         if (!sess?.user?.id) {
@@ -325,8 +422,8 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        // ✅ Roles/orgs en background (no bloquea UI)
-        hydrateNonSessionData(sess);
+        // Contexto en background
+        hydrateContext(sess);
       } catch (e) {
         console.error("[AuthContext] bootstrap error:", e);
         if (!mounted) return;
@@ -346,7 +443,7 @@ export function AuthProvider({ children }) {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
-        // ✅ Auth listo ya (la UI no debe colgarse)
+        // UI rápida
         setAuthReady(true);
 
         if (!newSession?.user?.id) {
@@ -354,7 +451,7 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        hydrateNonSessionData(newSession);
+        hydrateContext(newSession);
       }
     );
 
@@ -362,9 +459,9 @@ export function AuthProvider({ children }) {
       mounted = false;
       sub?.subscription?.unsubscribe?.();
     };
-  }, [client, hydrateNonSessionData, resetAllAuthState]);
+  }, [client, hydrateContext, resetAllAuthState]);
 
-  // Debug
+  // Debug útil en consola
   useEffect(() => {
     window.__SUPABASE_AUTH_DEBUG = {
       getReady: () => !!authReady,
@@ -376,7 +473,7 @@ export function AuthProvider({ children }) {
       getSession: () => session ?? null,
       rolesReady: () => !!rolesReady,
       orgsReady: () => !!orgsReady,
-      orgContextEnsured: () => !!orgContextEnsured,
+      ensuredOnce: () => !!ensuredOnceRef.current,
     };
   }, [
     authReady,
@@ -389,7 +486,6 @@ export function AuthProvider({ children }) {
     session,
     rolesReady,
     orgsReady,
-    orgContextEnsured,
   ]);
 
   const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
@@ -404,19 +500,24 @@ export function AuthProvider({ children }) {
       authError,
       session,
       user,
+
+      // roles
       roles,
       bestRole,
       currentRole,
       isRootOwner,
+
+      // orgs
       orgs,
       currentOrg,
       setCurrentOrg,
+
+      // domain
       trackerDomain,
 
-      // extras útiles
+      // extras
       rolesReady,
       orgsReady,
-      orgContextEnsured,
 
       // legacy
       loading,
@@ -436,7 +537,6 @@ export function AuthProvider({ children }) {
       trackerDomain,
       rolesReady,
       orgsReady,
-      orgContextEnsured,
       loading,
       role,
     ]
