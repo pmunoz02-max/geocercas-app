@@ -1,12 +1,9 @@
 // src/pages/CostosDashboardPage.jsx
 // Dashboard de Costos — Versión PRO (roles centralizados + más métricas + export)
+// ✅ Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id
+// ✅ FIX: activities por org_id (fallback legacy tenant_id)
 
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useRef,
-} from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useModuleAccess } from "../hooks/useModuleAccess";
@@ -192,8 +189,7 @@ function aggregateBy(rows, { groupKey, labelField }) {
   const result = Array.from(map.values());
 
   for (const item of result) {
-    item.avgRate =
-      item.totalHours > 0 ? item.totalCost / item.totalHours : 0;
+    item.avgRate = item.totalHours > 0 ? item.totalCost / item.totalHours : 0;
   }
 
   result.sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0));
@@ -249,27 +245,13 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel }) {
   if (chartType === "line") {
     return (
       <ResponsiveContainer width="100%" height={320}>
-        <LineChart
-          data={trimmedData}
-          margin={{ top: 10, right: 20, bottom: 40 }}
-        >
+        <LineChart data={trimmedData} margin={{ top: 10, right: 20, bottom: 40 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis
-            dataKey="label"
-            angle={-30}
-            textAnchor="end"
-            interval={0}
-            height={60}
-          />
+          <XAxis dataKey="label" angle={-30} textAnchor="end" interval={0} height={60} />
           <YAxis />
           <Tooltip formatter={(v) => formatNumber(v, 2)} />
           <Legend />
-          <Line
-            type="monotone"
-            dataKey={metricKey}
-            stroke="#6366F1"
-            dot={false}
-          />
+          <Line type="monotone" dataKey={metricKey} stroke="#6366F1" dot={false} />
         </LineChart>
       </ResponsiveContainer>
     );
@@ -277,26 +259,13 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel }) {
 
   return (
     <ResponsiveContainer width="100%" height={320}>
-      <BarChart
-        data={trimmedData}
-        margin={{ top: 10, right: 20, bottom: 40 }}
-      >
+      <BarChart data={trimmedData} margin={{ top: 10, right: 20, bottom: 40 }}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="label"
-          angle={-30}
-          textAnchor="end"
-          interval={0}
-          height={60}
-        />
+        <XAxis dataKey="label" angle={-30} textAnchor="end" interval={0} height={60} />
         <YAxis />
         <Tooltip formatter={(v) => formatNumber(v, 2)} />
         <Legend />
-        <Bar
-          dataKey={metricKey}
-          name={valueLabel}
-          radius={[4, 4, 0, 0]}
-        >
+        <Bar dataKey={metricKey} name={valueLabel} radius={[4, 4, 0, 0]}>
           {trimmedData.map((entry, index) => (
             <Cell
               key={`bar-${entry.key}-${index}`}
@@ -310,16 +279,49 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel }) {
 }
 
 /* -----------------------------------------
+   HELPERS DE CARGA (org_id primero)
+----------------------------------------- */
+
+async function loadActivitiesForOrg(orgId) {
+  if (!orgId) return [];
+
+  // ✅ Intento 1: org_id (modelo actual)
+  const q1 = await supabase
+    .from("activities")
+    .select("id, name, org_id")
+    .eq("org_id", orgId)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  if (!q1.error && Array.isArray(q1.data) && q1.data.length > 0) return q1.data;
+
+  // 🟡 Fallback legacy: tenant_id (por compatibilidad)
+  const q2 = await supabase
+    .from("activities")
+    .select("id, name, tenant_id")
+    .eq("tenant_id", orgId)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  if (q2.error) throw q2.error;
+  return q2.data || [];
+}
+
+/* -----------------------------------------
    PÁGINA PRINCIPAL
 ----------------------------------------- */
 
 const CostosDashboardPage = () => {
-  const { currentOrg } = useAuth();
+  const { t } = useTranslation();
+  const chartRef = useRef(null);
+
+  // ✅ Nuevo contrato
+  const { authReady, orgsReady, currentOrg } = useAuth();
+
+  // Permisos (se mantiene tu hook)
   const { role, canView, loading: loadingAccess } = useModuleAccess(
     MODULE_KEYS.DASHBOARD_COSTOS
   );
-  const { t } = useTranslation();
-  const chartRef = useRef(null);
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -338,6 +340,23 @@ const CostosDashboardPage = () => {
   const [selectedChartType, setSelectedChartType] = useState("bar");
   const [selectedMetric, setSelectedMetric] = useState("cost");
 
+  // ✅ Loading correcto del contexto (antes de decidir nada)
+  if (!authReady || !orgsReady) {
+    return (
+      <div className="p-4 text-sm text-gray-600">
+        {t("dashboardCostos.loadingAuth", "Cargando tu sesión y organización actual…")}
+      </div>
+    );
+  }
+
+  if (!currentOrg?.id) {
+    return (
+      <div className="p-4 text-sm text-red-600">
+        {t("dashboardCostos.noOrgAssigned", "No hay organización activa para este usuario.")}
+      </div>
+    );
+  }
+
   if (loadingAccess) {
     return (
       <div className="p-4 text-sm text-gray-600">
@@ -350,41 +369,42 @@ const CostosDashboardPage = () => {
     return (
       <div className="p-4 text-red-600">
         {t("dashboardCostos.noAccess")}
-        <p className="mt-2 text-xs text-gray-400">
-          (Rol actual: {role || "sin rol"})
-        </p>
+        <p className="mt-2 text-xs text-gray-400">(Rol actual: {role || "sin rol"})</p>
       </div>
     );
   }
 
+  // ------------------------------
+  // Cargar filtros por org
+  // ------------------------------
   useEffect(() => {
     if (!currentOrg?.id) return;
 
     async function loadFilters() {
       try {
-        const { data: personasData } = await supabase
-          .from("personal")
-          .select("id, nombre, email")
-          .eq("org_id", currentOrg.id)
-          .eq("is_deleted", false)
-          .order("nombre", { ascending: true });
+        const [personasRes, actData, geoRes] = await Promise.all([
+          supabase
+            .from("personal")
+            .select("id, nombre, email")
+            .eq("org_id", currentOrg.id)
+            .eq("is_deleted", false)
+            .order("nombre", { ascending: true }),
 
-        const { data: actData } = await supabase
-          .from("activities")
-          .select("id, name")
-          .eq("tenant_id", currentOrg.id)
-          .eq("active", true)
-          .order("name", { ascending: true });
+          loadActivitiesForOrg(currentOrg.id),
 
-        const { data: geoData } = await supabase
-          .from("geocercas")
-          .select("id, nombre")
-          .eq("org_id", currentOrg.id)
-          .order("nombre", { ascending: true });
+          supabase
+            .from("geocercas")
+            .select("id, nombre")
+            .eq("org_id", currentOrg.id)
+            .order("nombre", { ascending: true }),
+        ]);
 
-        setPersonas(personasData || []);
+        if (personasRes.error) throw personasRes.error;
+        if (geoRes.error) throw geoRes.error;
+
+        setPersonas(personasRes.data || []);
         setActividades(actData || []);
-        setGeocercas(geoData || []);
+        setGeocercas(geoRes.data || []);
       } catch (e) {
         console.error("[CostosDashboard] loadFilters error:", e);
       }
@@ -393,15 +413,15 @@ const CostosDashboardPage = () => {
     loadFilters();
   }, [currentOrg?.id]);
 
+  // ------------------------------
+  // Fetch principal
+  // ------------------------------
   const fetchReport = async () => {
     if (!currentOrg?.id) return;
     setLoading(true);
 
     try {
-      const { fromIso, toIsoExclusive } = buildDateRange(
-        fromDate,
-        toDate
-      );
+      const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
 
       let query = supabase
         .from("v_costos_detalle")
@@ -410,14 +430,13 @@ const CostosDashboardPage = () => {
 
       if (fromIso) query = query.gte("start_time", fromIso);
       if (toIsoExclusive) query = query.lt("start_time", toIsoExclusive);
-      if (selectedPersonaId)
-        query = query.eq("personal_id", selectedPersonaId);
-      if (selectedActividadId)
-        query = query.eq("actividad_id", selectedActividadId);
-      if (selectedGeocercaId)
-        query = query.eq("geocerca_id", selectedGeocercaId);
+      if (selectedPersonaId) query = query.eq("personal_id", selectedPersonaId);
+      if (selectedActividadId) query = query.eq("actividad_id", selectedActividadId);
+      if (selectedGeocercaId) query = query.eq("geocerca_id", selectedGeocercaId);
 
-      const { data } = await query;
+      const { data, error } = await query;
+      if (error) throw error;
+
       setRows(data || []);
     } catch (e) {
       console.error("[CostosDashboard] fetchReport error:", e);
@@ -431,10 +450,7 @@ const CostosDashboardPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id]);
 
-  const resumenMoneda = useMemo(
-    () => summarizeByCurrency(rows),
-    [rows]
-  );
+  const resumenMoneda = useMemo(() => summarizeByCurrency(rows), [rows]);
 
   const totalGlobal = useMemo(() => {
     let totalCost = 0;
@@ -447,9 +463,7 @@ const CostosDashboardPage = () => {
   }, [rows]);
 
   const globalAvgRate =
-    totalGlobal.totalHours > 0
-      ? totalGlobal.totalCost / totalGlobal.totalHours
-      : 0;
+    totalGlobal.totalHours > 0 ? totalGlobal.totalCost / totalGlobal.totalHours : 0;
 
   const aggregatedData = useMemo(() => {
     const dim = DIMENSIONS[selectedDimension];
@@ -461,21 +475,16 @@ const CostosDashboardPage = () => {
 
   const metricConfig = METRICS[selectedMetric];
 
+  // ------------------------------
+  // Exporters
+  // ------------------------------
   const handleExportDataCSV = () => {
     if (!aggregatedData.length) {
-      alert(
-        t("dashboardCostos.exportNoData") || "Sin datos que exportar."
-      );
+      alert(t("dashboardCostos.exportNoData") || "Sin datos que exportar.");
       return;
     }
 
-    const header = [
-      "categoria",
-      "total_horas",
-      "total_costo",
-      "tarifa_promedio",
-      "registros",
-    ];
+    const header = ["categoria", "total_horas", "total_costo", "tarifa_promedio", "registros"];
 
     const lines = aggregatedData.map((row) =>
       [
@@ -488,9 +497,7 @@ const CostosDashboardPage = () => {
     );
 
     const csv = [header.join(";"), ...lines].join("\n");
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const today = new Date().toISOString().slice(0, 10);
@@ -505,8 +512,7 @@ const CostosDashboardPage = () => {
   const handleExportChartPNG = async () => {
     if (!chartRef.current) {
       alert(
-        t("dashboardCostos.exportChartError") ||
-          "No se encontró el contenedor de la gráfica."
+        t("dashboardCostos.exportChartError") || "No se encontró el contenedor de la gráfica."
       );
       return;
     }
@@ -527,23 +533,23 @@ const CostosDashboardPage = () => {
       document.body.removeChild(link);
     } catch (e) {
       console.error("[CostosDashboard] exportChart error:", e);
-      alert(
-        t("dashboardCostos.exportChartError") ||
-          "No se pudo exportar la gráfica."
-      );
+      alert(t("dashboardCostos.exportChartError") || "No se pudo exportar la gráfica.");
     }
   };
 
+  // ------------------------------
+  // Render
+  // ------------------------------
   return (
     <div className="p-4 space-y-4">
       {/* Encabezado */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">
-            {t("dashboardCostos.title")}
-          </h1>
-          <p className="text-sm text-gray-600">
-            {t("dashboardCostos.subtitle")}
+          <h1 className="text-2xl font-bold">{t("dashboardCostos.title")}</h1>
+          <p className="text-sm text-gray-600">{t("dashboardCostos.subtitle")}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            {t("dashboardCostos.currentOrgLabel", "Organización actual")}:{" "}
+            <span className="font-medium">{currentOrg?.name || "—"}</span>
           </p>
         </div>
 
@@ -553,25 +559,21 @@ const CostosDashboardPage = () => {
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700"
             disabled={loading}
           >
-            {loading
-              ? t("dashboardCostos.refreshing") || "Actualizando…"
-              : t("dashboardCostos.refreshButton")}
+            {loading ? t("dashboardCostos.refreshing") || "Actualizando…" : t("dashboardCostos.refreshButton")}
           </button>
 
           <button
             onClick={handleExportDataCSV}
             className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
           >
-            {t("dashboardCostos.exportDataButton") ||
-              "Exportar datos (CSV)"}
+            {t("dashboardCostos.exportDataButton") || "Exportar datos (CSV)"}
           </button>
 
           <button
             onClick={handleExportChartPNG}
             className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
           >
-            {t("dashboardCostos.exportChartButton") ||
-              "Exportar gráfica (PNG)"}
+            {t("dashboardCostos.exportChartButton") || "Exportar gráfica (PNG)"}
           </button>
         </div>
       </div>
@@ -579,27 +581,17 @@ const CostosDashboardPage = () => {
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-emerald-500">
-          <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiTotalHours")}
-          </p>
-          <p className="text-xl font-bold">
-            {formatNumber(totalGlobal.totalHours)}
-          </p>
+          <p className="text-xs text-gray-500 uppercase">{t("dashboardCostos.kpiTotalHours")}</p>
+          <p className="text-xl font-bold">{formatNumber(totalGlobal.totalHours)}</p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-indigo-500">
-          <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiTotalCost")}
-          </p>
-          <p className="text-xl font-bold">
-            {formatNumber(totalGlobal.totalCost)}
-          </p>
+          <p className="text-xs text-gray-500 uppercase">{t("dashboardCostos.kpiTotalCost")}</p>
+          <p className="text-xl font-bold">{formatNumber(totalGlobal.totalCost)}</p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-amber-500">
-          <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiRecords")}
-          </p>
+          <p className="text-xs text-gray-500 uppercase">{t("dashboardCostos.kpiRecords")}</p>
           <p className="text-xl font-bold">{rows.length}</p>
         </div>
 
@@ -607,9 +599,7 @@ const CostosDashboardPage = () => {
           <p className="text-xs text-gray-500 uppercase">
             {t("dashboardCostos.kpiAvgRate") || "Tarifa promedio"}
           </p>
-          <p className="text-xl font-bold">
-            {formatNumber(globalAvgRate)}
-          </p>
+          <p className="text-xl font-bold">{formatNumber(globalAvgRate)}</p>
         </div>
       </div>
 
@@ -617,8 +607,7 @@ const CostosDashboardPage = () => {
       {resumenMoneda.length > 0 && (
         <div className="bg-white rounded-xl p-3 shadow">
           <h2 className="text-xs font-semibold text-gray-700 mb-2">
-            {t("dashboardCostos.currenciesSummaryTitle") ||
-              "Resumen por moneda"}
+            {t("dashboardCostos.currenciesSummaryTitle") || "Resumen por moneda"}
           </h2>
           <div className="flex flex-wrap gap-2 text-xs">
             {resumenMoneda.map((m, idx) => (
@@ -628,17 +617,11 @@ const CostosDashboardPage = () => {
               >
                 <span
                   className="inline-block h-2 w-2 rounded-full"
-                  style={{
-                    backgroundColor:
-                      COLOR_PALETTE[idx % COLOR_PALETTE.length],
-                  }}
+                  style={{ backgroundColor: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}
                 />
-                <span className="font-semibold">
-                  {m.currency || "N/A"}
-                </span>
+                <span className="font-semibold">{m.currency || "N/A"}</span>
                 <span className="text-gray-500">
-                  {formatNumber(m.totalCost)} /{" "}
-                  {formatNumber(m.totalHours)}{" "}
+                  {formatNumber(m.totalCost)} / {formatNumber(m.totalHours)}{" "}
                   {t("dashboardCostos.labelHours") || "horas"}
                 </span>
               </div>
@@ -649,15 +632,11 @@ const CostosDashboardPage = () => {
 
       {/* Filtros */}
       <div className="bg-white shadow rounded-xl p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">
-          {t("dashboardCostos.filtersTitle")}
-        </h2>
+        <h2 className="text-sm font-semibold text-gray-700">{t("dashboardCostos.filtersTitle")}</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
-            <label className="text-xs text-gray-600">
-              {t("dashboardCostos.filtersFrom")}
-            </label>
+            <label className="text-xs text-gray-600">{t("dashboardCostos.filtersFrom")}</label>
             <input
               type="date"
               value={fromDate}
@@ -667,9 +646,7 @@ const CostosDashboardPage = () => {
           </div>
 
           <div>
-            <label className="text-xs text-gray-600">
-              {t("dashboardCostos.filtersTo")}
-            </label>
+            <label className="text-xs text-gray-600">{t("dashboardCostos.filtersTo")}</label>
             <input
               type="date"
               value={toDate}
@@ -679,17 +656,13 @@ const CostosDashboardPage = () => {
           </div>
 
           <div>
-            <label className="text-xs text-gray-600">
-              {t("dashboardCostos.filtersPerson")}
-            </label>
+            <label className="text-xs text-gray-600">{t("dashboardCostos.filtersPerson")}</label>
             <select
               value={selectedPersonaId}
               onChange={(e) => setSelectedPersonaId(e.target.value)}
               className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value="">
-                {t("dashboardCostos.filtersAll")}
-              </option>
+              <option value="">{t("dashboardCostos.filtersAll")}</option>
               {personas.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre || p.email}
@@ -699,19 +672,13 @@ const CostosDashboardPage = () => {
           </div>
 
           <div>
-            <label className="text-xs text-gray-600">
-              {t("dashboardCostos.filtersActivity")}
-            </label>
+            <label className="text-xs text-gray-600">{t("dashboardCostos.filtersActivity")}</label>
             <select
               value={selectedActividadId}
-              onChange={(e) =>
-                setSelectedActividadId(e.target.value)
-              }
+              onChange={(e) => setSelectedActividadId(e.target.value)}
               className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value="">
-                {t("dashboardCostos.filtersAll")}
-              </option>
+              <option value="">{t("dashboardCostos.filtersAll")}</option>
               {actividades.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -721,19 +688,13 @@ const CostosDashboardPage = () => {
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-xs text-gray-600">
-              {t("dashboardCostos.filtersGeofence")}
-            </label>
+            <label className="text-xs text-gray-600">{t("dashboardCostos.filtersGeofence")}</label>
             <select
               value={selectedGeocercaId}
-              onChange={(e) =>
-                setSelectedGeocercaId(e.target.value)
-              }
+              onChange={(e) => setSelectedGeocercaId(e.target.value)}
               className="border rounded-lg px-2 py-1 text-sm w-full"
             >
-              <option value="">
-                {t("dashboardCostos.filtersAll")}
-              </option>
+              <option value="">{t("dashboardCostos.filtersAll")}</option>
               {geocercas.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre}
@@ -769,20 +730,14 @@ const CostosDashboardPage = () => {
       {/* Gráfico principal */}
       <div className="bg-white rounded-xl p-4 shadow space-y-3">
         <div className="flex flex-wrap items-end gap-3 justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">
-            {t("dashboardCostos.chartTitle")}
-          </h2>
+          <h2 className="text-sm font-semibold text-gray-700">{t("dashboardCostos.chartTitle")}</h2>
 
           <div className="flex flex-wrap gap-3 text-xs">
             <div>
-              <label className="text-[11px] text-gray-600">
-                {t("dashboardCostos.chartDimension")}
-              </label>
+              <label className="text-[11px] text-gray-600">{t("dashboardCostos.chartDimension")}</label>
               <select
                 value={selectedDimension}
-                onChange={(e) =>
-                  setSelectedDimension(e.target.value)
-                }
+                onChange={(e) => setSelectedDimension(e.target.value)}
                 className="border rounded-lg px-2 py-1 ml-1"
               >
                 {Object.values(DIMENSIONS).map((d) => (
@@ -794,14 +749,10 @@ const CostosDashboardPage = () => {
             </div>
 
             <div>
-              <label className="text-[11px] text-gray-600">
-                {t("dashboardCostos.chartMetric")}
-              </label>
+              <label className="text-[11px] text-gray-600">{t("dashboardCostos.chartMetric")}</label>
               <select
                 value={selectedMetric}
-                onChange={(e) =>
-                  setSelectedMetric(e.target.value)
-                }
+                onChange={(e) => setSelectedMetric(e.target.value)}
                 className="border rounded-lg px-2 py-1 ml-1"
               >
                 {Object.values(METRICS).map((m) => (
@@ -813,14 +764,10 @@ const CostosDashboardPage = () => {
             </div>
 
             <div>
-              <label className="text-[11px] text-gray-600">
-                {t("dashboardCostos.chartType")}
-              </label>
+              <label className="text-[11px] text-gray-600">{t("dashboardCostos.chartType")}</label>
               <select
                 value={selectedChartType}
-                onChange={(e) =>
-                  setSelectedChartType(e.target.value)
-                }
+                onChange={(e) => setSelectedChartType(e.target.value)}
                 className="border rounded-lg px-2 py-1 ml-1"
               >
                 {Object.values(CHART_TYPES).map((ct) => (
@@ -845,62 +792,37 @@ const CostosDashboardPage = () => {
 
       {/* Tabla resumen */}
       <div className="bg-white rounded-xl p-4 shadow">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">
-          {t("dashboardCostos.tableTitle")}
-        </h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">{t("dashboardCostos.tableTitle")}</h2>
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-2 py-1 text-left">
-                  {t("dashboardCostos.colCategoria")}
-                </th>
+                <th className="px-2 py-1 text-left">{t("dashboardCostos.colCategoria")}</th>
+                <th className="px-2 py-1 text-right">{t("dashboardCostos.colHoras")}</th>
+                <th className="px-2 py-1 text-right">{t("dashboardCostos.colCosto")}</th>
                 <th className="px-2 py-1 text-right">
-                  {t("dashboardCostos.colHoras")}
+                  {t("dashboardCostos.colTarifaPromedio") || "Tarifa prom."}
                 </th>
-                <th className="px-2 py-1 text-right">
-                  {t("dashboardCostos.colCosto")}
-                </th>
-                <th className="px-2 py-1 text-right">
-                  {t("dashboardCostos.colTarifaPromedio") ||
-                    "Tarifa prom."}
-                </th>
-                <th className="px-2 py-1 text-right">
-                  {t("dashboardCostos.colRegistros")}
-                </th>
+                <th className="px-2 py-1 text-right">{t("dashboardCostos.colRegistros")}</th>
               </tr>
             </thead>
             <tbody>
               {aggregatedData.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-2 py-4 text-center text-gray-500"
-                  >
+                  <td colSpan={5} className="px-2 py-4 text-center text-gray-500">
                     {t("dashboardCostos.tableEmpty")}
                   </td>
                 </tr>
               )}
 
               {aggregatedData.slice(0, 30).map((row) => (
-                <tr
-                  key={row.key}
-                  className="border-t border-gray-100"
-                >
+                <tr key={row.key} className="border-t border-gray-100">
                   <td className="px-2 py-1">{row.label}</td>
-                  <td className="px-2 py-1 text-right">
-                    {formatNumber(row.totalHours)}
-                  </td>
-                  <td className="px-2 py-1 text-right">
-                    {formatNumber(row.totalCost)}
-                  </td>
-                  <td className="px-2 py-1 text-right">
-                    {formatNumber(row.avgRate)}
-                  </td>
-                  <td className="px-2 py-1 text-right">
-                    {row.registros}
-                  </td>
+                  <td className="px-2 py-1 text-right">{formatNumber(row.totalHours)}</td>
+                  <td className="px-2 py-1 text-right">{formatNumber(row.totalCost)}</td>
+                  <td className="px-2 py-1 text-right">{formatNumber(row.avgRate)}</td>
+                  <td className="px-2 py-1 text-right">{row.registros}</td>
                 </tr>
               ))}
             </tbody>

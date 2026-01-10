@@ -1,5 +1,6 @@
 // src/pages/AsignacionesPage.jsx
 // VERSION CANONICA: usa org_people_id y activity_id OBLIGATORIO
+// ✅ Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id como fuente única
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,7 +27,9 @@ const ESTADOS = ["todos", "activa", "inactiva"];
 
 export default function AsignacionesPage() {
   const { t } = useTranslation();
-  const { currentOrg } = useAuth();
+
+  // ✅ Nuevo contrato AuthContext
+  const { authReady, orgsReady, currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
 
   const [asignaciones, setAsignaciones] = useState([]);
@@ -41,7 +44,7 @@ export default function AsignacionesPage() {
   // FORM
   const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
-  const [selectedActivityId, setSelectedActivityId] = useState(""); // ✅ ahora OBLIGATORIO
+  const [selectedActivityId, setSelectedActivityId] = useState(""); // ✅ OBLIGATORIO
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [frecuenciaEnvioMin, setFrecuenciaEnvioMin] = useState(5);
@@ -56,32 +59,45 @@ export default function AsignacionesPage() {
   async function loadAsignaciones() {
     setLoadingAsignaciones(true);
     setError(null);
-    const { data, error } = await getAsignaciones();
-    if (error) {
-      console.error("[AsignacionesPage] getAsignaciones error:", error);
+
+    try {
+      // ⚠️ No asumo firma del API: si internamente filtra por org vía RLS/vistas, OK.
+      // Si tu API acepta orgId, en el siguiente paso la ajustamos con el archivo asignacionesApi.jsx
+      const { data, error } = await getAsignaciones();
+
+      if (error) {
+        console.error("[AsignacionesPage] getAsignaciones error:", error);
+        setError(t("asignaciones.messages.loadError"));
+        setAsignaciones([]);
+      } else {
+        setAsignaciones(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("[AsignacionesPage] loadAsignaciones exception:", e);
       setError(t("asignaciones.messages.loadError"));
       setAsignaciones([]);
-    } else {
-      setAsignaciones(Array.isArray(data) ? data : []);
+    } finally {
+      setLoadingAsignaciones(false);
     }
-    setLoadingAsignaciones(false);
   }
 
   async function loadActivitiesWithFallback(activeOrgId) {
-    // Intento 1: tenant_id
+    if (!activeOrgId) return [];
+
+    // ✅ Intento 1 (recomendado): org_id
     const q1 = await supabase
       .from("activities")
-      .select("id,name,tenant_id")
-      .eq("tenant_id", activeOrgId)
+      .select("id,name,org_id")
+      .eq("org_id", activeOrgId)
       .order("name", { ascending: true });
 
     if (!q1.error && Array.isArray(q1.data) && q1.data.length > 0) return q1.data;
 
-    // Intento 2: org_id
+    // 🟡 Fallback legacy: tenant_id (solo por compatibilidad con datos antiguos)
     const q2 = await supabase
       .from("activities")
-      .select("id,name,org_id")
-      .eq("org_id", activeOrgId)
+      .select("id,name,tenant_id")
+      .eq("tenant_id", activeOrgId)
       .order("name", { ascending: true });
 
     if (q2.error) throw q2.error;
@@ -102,11 +118,13 @@ export default function AsignacionesPage() {
           .eq("org_id", orgId)
           .eq("is_deleted", false)
           .order("nombre", { ascending: true }),
+
         supabase
           .from("geocercas")
           .select("id,nombre,org_id")
           .eq("org_id", orgId)
           .order("nombre", { ascending: true }),
+
         loadActivitiesWithFallback(orgId),
       ]);
 
@@ -132,12 +150,14 @@ export default function AsignacionesPage() {
     }
   }
 
+  // ✅ Solo dispara cargas cuando el contexto está realmente listo
   useEffect(() => {
-    if (!orgId) return;
+    if (!authReady || !orgsReady || !orgId) return;
+
     loadAsignaciones();
     loadCatalogos();
-    // eslint-disable-next-line
-  }, [orgId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authReady, orgsReady, orgId]);
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
@@ -149,7 +169,7 @@ export default function AsignacionesPage() {
   function resetForm() {
     setSelectedOrgPeopleId("");
     setSelectedGeocercaId("");
-    // NO limpiamos selectedActivityId si quieres mantenerlo como default
+    // NO limpiamos selectedActivityId para mantenerlo como default
     setStartTime("");
     setEndTime("");
     setFrecuenciaEnvioMin(5);
@@ -200,44 +220,76 @@ export default function AsignacionesPage() {
       status,
     };
 
-    const resp = editingId
-      ? await updateAsignacion(editingId, payload)
-      : await createAsignacion(payload);
+    try {
+      const resp = editingId
+        ? await updateAsignacion(editingId, payload)
+        : await createAsignacion(payload);
 
-    if (resp.error) {
-      console.error("[AsignacionesPage] save error:", resp.error);
-      setError(resp.error.message || "Error guardando asignación.");
-      return;
+      if (resp?.error) {
+        console.error("[AsignacionesPage] save error:", resp.error);
+        setError(resp.error.message || "Error guardando asignación.");
+        return;
+      }
+
+      setSuccessMessage(
+        editingId
+          ? t("asignaciones.messages.updateSuccess")
+          : t("asignaciones.messages.createSuccess")
+      );
+
+      resetForm();
+      await loadAsignaciones();
+    } catch (e) {
+      console.error("[AsignacionesPage] handleSubmit exception:", e);
+      setError(e?.message || "Error guardando asignación.");
     }
-
-    setSuccessMessage(
-      editingId ? t("asignaciones.messages.updateSuccess") : t("asignaciones.messages.createSuccess")
-    );
-
-    resetForm();
-    await loadAsignaciones();
   }
 
-  if (!orgId) {
+  // ------------------------------
+  // Estados de carga correctos (nuevo contrato)
+  // ------------------------------
+  if (!authReady || !orgsReady) {
     return (
-      <div className="w-full">
-        <h1 className="text-2xl font-bold mb-2">{t("asignaciones.title")}</h1>
-        <p className="text-sm text-slate-600">
-          {t("asignaciones.messages.noOrg") || "No hay organización activa."}
-        </p>
+      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          {t("asignaciones.messages.loadingAuth", "Cargando tu sesión y organización actual…")}
+        </div>
       </div>
     );
   }
 
+  if (!currentOrg) {
+    return (
+      <div className="p-4 md:p-6 max-w-3xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {t("asignaciones.messages.noOrg") || "No hay organización activa."}
+        </div>
+      </div>
+    );
+  }
+
+  // ------------------------------
+  // Render normal
+  // ------------------------------
   return (
     <div className="w-full">
-      <h1 className="text-2xl font-bold mb-4">{t("asignaciones.title")}</h1>
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold">{t("asignaciones.title")}</h1>
+        <p className="text-xs text-gray-500 mt-1">
+          {t("asignaciones.currentOrgLabel", "Organización actual")}:{" "}
+          <span className="font-medium">{currentOrg?.name || "—"}</span>
+        </p>
+      </div>
 
       {/* Filtro estado */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <label className="font-medium">{t("asignaciones.filters.statusLabel")}</label>
-          <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+          <select
+            className="border rounded px-3 py-2"
+            value={estadoFilter}
+            onChange={(e) => setEstadoFilter(e.target.value)}
+          >
             {ESTADOS.map((v) => (
               <option key={v} value={v}>
                 {t(`asignaciones.filters.status.${v}`)}
@@ -268,7 +320,12 @@ export default function AsignacionesPage() {
           {/* Persona */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">{t("asignaciones.form.personLabel")}</label>
-            <select className="border rounded px-3 py-2" value={selectedOrgPeopleId} onChange={(e) => setSelectedOrgPeopleId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedOrgPeopleId}
+              onChange={(e) => setSelectedOrgPeopleId(e.target.value)}
+              required
+            >
               <option value="">{t("asignaciones.form.personPlaceholder")}</option>
               {peopleOptions.map((p) => (
                 <option key={p.org_people_id} value={p.org_people_id}>
@@ -281,7 +338,12 @@ export default function AsignacionesPage() {
           {/* Geocerca */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">{t("asignaciones.form.geofenceLabel")}</label>
-            <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedGeocercaId}
+              onChange={(e) => setSelectedGeocercaId(e.target.value)}
+              required
+            >
               <option value="">{t("asignaciones.form.geofencePlaceholder")}</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -313,19 +375,35 @@ export default function AsignacionesPage() {
           {/* Inicio */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">{t("asignaciones.form.startLabel")}</label>
-            <input type="datetime-local" className="border rounded px-3 py-2" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+            <input
+              type="datetime-local"
+              className="border rounded px-3 py-2"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              required
+            />
           </div>
 
           {/* Fin */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">{t("asignaciones.form.endLabel")}</label>
-            <input type="datetime-local" className="border rounded px-3 py-2" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+            <input
+              type="datetime-local"
+              className="border rounded px-3 py-2"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              required
+            />
           </div>
 
           {/* Estado */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">{t("asignaciones.form.statusLabel")}</label>
-            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select
+              className="border rounded px-3 py-2"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
               <option value="activa">{t("asignaciones.form.statusActive")}</option>
               <option value="inactiva">{t("asignaciones.form.statusInactive")}</option>
             </select>
@@ -334,7 +412,13 @@ export default function AsignacionesPage() {
           {/* Frecuencia */}
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">{t("asignaciones.form.frequencyLabel")}</label>
-            <input type="number" className="border rounded px-3 py-2" min={5} value={frecuenciaEnvioMin} onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)} />
+            <input
+              type="number"
+              className="border rounded px-3 py-2"
+              min={5}
+              value={frecuenciaEnvioMin}
+              onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
+            />
           </div>
 
           {/* Botones */}

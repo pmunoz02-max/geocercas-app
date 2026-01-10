@@ -1,53 +1,30 @@
 // src/pages/AdminsPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import {
-  listAdmins,
-  inviteAdmin,
-  inviteIndependentOwner,
-  deleteAdmin,
-} from "../lib/adminsApi";
+import { listAdmins, inviteAdmin, inviteIndependentOwner, deleteAdmin } from "../lib/adminsApi";
 
-// Helper: intenta sacar el mensaje real (step/message) del backend o del wrapper
+// Helper robusto: extrae mensaje real del backend/edge
 function extractEdgeError(response, fallback = "Error al enviar la invitación.") {
   if (!response) return fallback;
 
-  // Formato típico: { data, error }
   const { data, error } = response;
 
-  // 1) Si supabase-js devolvió error (non-2xx, network, etc.)
+  // Error de supabase-js (non-2xx / network / etc)
   if (error) {
-    // A veces el wrapper mete info en error.normalized o error.context
-    const step =
-      error?.normalized?.step ||
-      error?.context?.step ||
-      error?.step ||
-      null;
-
-    const msg =
-      error?.normalized?.message ||
-      error?.message ||
-      fallback;
-
-    const details =
-      error?.normalized?.details ||
-      error?.details ||
-      error?.context ||
-      null;
-
-    // Si hay step, lo mostramos con más señal
+    const step = error?.normalized?.step || error?.context?.step || error?.step || null;
+    const msg = error?.normalized?.message || error?.message || fallback;
     if (step) return `[${step}] ${msg}`;
     return msg;
   }
 
-  // 2) Si el backend respondió JSON con ok:false
+  // Backend ok:false
   if (data && data.ok === false) {
     const step = data.step || "backend";
     const msg = data.message || data.error || fallback;
     return `[${step}] ${msg}`;
   }
 
-  // 3) Si el backend respondió un payload distinto con "error"
+  // Backend devolvió {error:...}
   if (data && data.error) {
     const step = data.step || "backend";
     const msg = typeof data.error === "string" ? data.error : fallback;
@@ -58,8 +35,7 @@ function extractEdgeError(response, fallback = "Error al enviar la invitación."
 }
 
 export default function AdminsPage() {
-  // ROOT OWNER global
-  const { currentOrg, user, isRootOwner } = useAuth();
+  const { authReady, orgsReady, currentOrg, user, isRootOwner } = useAuth();
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +45,7 @@ export default function AdminsPage() {
   const [successMessage, setSuccessMessage] = useState(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("admin");
+  const [inviteRole, setInviteRole] = useState("admin"); // admin | owner
 
   // Resultado de invitación
   const [invitedVia, setInvitedVia] = useState(null); // "email" | "action_link" | null
@@ -78,21 +54,50 @@ export default function AdminsPage() {
 
   const orgName = useMemo(() => currentOrg?.name || "—", [currentOrg?.name]);
 
+  const resetInviteResult = () => {
+    setInvitedVia(null);
+    setActionLink(null);
+    setLastInvitedEmail(null);
+  };
+
+  // ✅ Esperar contexto real
+  if (!authReady || !orgsReady) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          Cargando tu sesión y organización actual…
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Bloqueo definitivo (root-owner only)
+  if (!isRootOwner) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <h1 className="text-xl font-semibold text-slate-900 mb-2">Administradores</h1>
+        <p className="text-sm text-slate-600">
+          Este módulo es de uso exclusivo del propietario de la aplicación.
+        </p>
+      </div>
+    );
+  }
+
+  // ✅ Panel admin requiere org actual para listar admins de esa org
+  if (!currentOrg?.id) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          No se encontró la organización actual.
+        </div>
+      </div>
+    );
+  }
+
   // ===========================================================
-  // Cargar administradores (SOLO ROOT OWNER)
+  // Cargar administradores
   // ===========================================================
   useEffect(() => {
-    if (!isRootOwner) {
-      setLoading(false);
-      return;
-    }
-
-    if (!currentOrg?.id) {
-      setError("No se encontró la organización actual.");
-      setLoading(false);
-      return;
-    }
-
     const fetchAdmins = async () => {
       setLoading(true);
       setError(null);
@@ -112,14 +117,9 @@ export default function AdminsPage() {
     };
 
     fetchAdmins();
-  }, [currentOrg?.id, isRootOwner]);
+  }, [currentOrg.id]);
 
-  // ===========================================================
-  // Refresh manual
-  // ===========================================================
   const handleRefresh = async () => {
-    if (!currentOrg?.id || !isRootOwner) return;
-
     setLoading(true);
     setError(null);
     setSuccessMessage(null);
@@ -135,29 +135,16 @@ export default function AdminsPage() {
     setLoading(false);
   };
 
-  const resetInviteResult = () => {
-    setInvitedVia(null);
-    setActionLink(null);
-    setLastInvitedEmail(null);
-  };
-
   // ===========================================================
-  // INVITAR NUEVO ADMINISTRADOR
+  // INVITAR
   // ===========================================================
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
-    if (!isRootOwner) return;
 
     const email = inviteEmail.trim().toLowerCase();
-
     setError(null);
     setSuccessMessage(null);
     resetInviteResult();
-
-    if (!currentOrg?.id) {
-      setError("No se encontró la organización actual.");
-      return;
-    }
 
     if (!email || !email.includes("@")) {
       setError("Ingresa un correo electrónico válido.");
@@ -169,7 +156,6 @@ export default function AdminsPage() {
     try {
       let response;
 
-      // DEBUG (puedes dejarlo, no molesta en prod; si quieres lo quitamos luego)
       console.log("[AdminsPage] INVITE start", {
         inviteRole,
         orgId: currentOrg.id,
@@ -178,30 +164,29 @@ export default function AdminsPage() {
 
       if (inviteRole === "admin") {
         // admin (misma org)
-        // OJO: manda role en lowercase para evitar ambigüedad
-        response = await inviteAdmin(currentOrg.id, { email, role: "admin" });
-      } else if (inviteRole === "owner") {
+        response = await inviteAdmin(currentOrg.id, { email, role: "admin", org_id: currentOrg.id });
+      } else {
         // owner (nueva org)
-        response = await inviteIndependentOwner({ email, full_name: null });
+        // Mandamos org_name para que el backend cree una org “bonita”
+        response = await inviteIndependentOwner({ email, role: "owner", org_name: email });
       }
 
       console.log("[AdminsPage] INVITE raw response:", response);
+      console.log("[AdminsPage] INVITE raw data:", response?.data);
+      console.log("[AdminsPage] INVITE raw error:", response?.error);
 
       const { error: fnError, data } = response || {};
 
       if (fnError) {
-        const msg = extractEdgeError(response, "Error al enviar la invitación.");
-        setError(msg);
+        setError(extractEdgeError(response, "Error al enviar la invitación."));
         return;
       }
 
       if (data && data.ok === false) {
-        const msg = extractEdgeError({ data, error: null }, "La invitación no pudo ser enviada.");
-        setError(msg);
+        setError(extractEdgeError({ data, error: null }, "La invitación no pudo ser enviada."));
         return;
       }
 
-      // Contrato: invited_via + action_link
       const via = data?.invited_via || (data?.action_link ? "action_link" : null);
       const link = data?.action_link || null;
 
@@ -209,11 +194,8 @@ export default function AdminsPage() {
       setInvitedVia(via);
       setActionLink(link);
 
-      // Mensaje UX
       if (via === "email") {
-        setSuccessMessage(
-          `Invitación enviada por correo a ${email}. (Si no llega, revisa Spam/Promociones)`
-        );
+        setSuccessMessage(`Invitación enviada por correo a ${email}. (Revisar Spam/Promociones)`);
       } else if (via === "action_link") {
         setSuccessMessage(
           `No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo a ${email} (NO uses /inicio).`
@@ -236,7 +218,6 @@ export default function AdminsPage() {
   // DELETE
   // ===========================================================
   const handleDelete = async (adm) => {
-    if (!currentOrg?.id || !isRootOwner) return;
     if (!window.confirm("¿Eliminar este administrador?")) return;
 
     setLoadingAction(true);
@@ -260,25 +241,14 @@ export default function AdminsPage() {
     try {
       await navigator.clipboard.writeText(actionLink);
       setSuccessMessage("Magic Link copiado. Envíalo por WhatsApp/Email (abrir en Chrome/Safari).");
-    } catch (e) {
+    } catch {
       setError("No se pudo copiar el link. Copia manualmente desde el recuadro.");
     }
   };
 
   // ===========================================================
-  // UI – BLOQUEO DEFINITIVO
+  // UI
   // ===========================================================
-  if (!isRootOwner) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-xl font-semibold text-slate-900 mb-2">Administradores</h1>
-        <p className="text-sm text-slate-600">
-          Este módulo es de uso exclusivo del propietario de la aplicación.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-6">
@@ -291,14 +261,13 @@ export default function AdminsPage() {
         </p>
       </header>
 
-      {/* INVITAR */}
       <section className="mb-8 border rounded-xl p-4 bg-white">
         <h2 className="text-sm font-semibold mb-2">Invitar nuevo administrador</h2>
 
         <div className="text-xs text-slate-600 mb-3">
           Importante: el acceso funciona solo con el <b>Magic Link real</b> (con tokens).{" "}
           <b>No</b> envíes links como <span className="font-mono">/inicio</span>. Si compartes por WhatsApp,
-          pide que lo abran en <b>Chrome/Safari</b> (no en el preview).
+          que lo abran en <b>Chrome/Safari</b> (no en el preview).
         </div>
 
         <form onSubmit={handleInviteSubmit} className="flex flex-col md:flex-row gap-3">
@@ -328,7 +297,6 @@ export default function AdminsPage() {
           </button>
         </form>
 
-        {/* Resultado: correo o link */}
         {(invitedVia || actionLink) && (
           <div className="mt-4 border rounded-lg p-3 bg-slate-50">
             <div className="text-xs text-slate-700">
@@ -363,9 +331,6 @@ export default function AdminsPage() {
                     Probar link
                   </button>
                 </div>
-                <div className="text-[11px] text-slate-500 mb-2">
-                  Si lo envías por WhatsApp: que lo abran en navegador (Chrome/Safari), no en el preview.
-                </div>
                 <div className="bg-white border rounded p-2 text-[11px] break-all select-all">
                   {actionLink}
                 </div>
@@ -387,15 +352,10 @@ export default function AdminsPage() {
         </div>
       )}
 
-      {/* LISTA */}
       <section className="border rounded-xl bg-white">
         <div className="flex justify-between items-center px-4 py-3 border-b">
           <h2 className="text-sm font-semibold">Administradores</h2>
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="border rounded px-3 py-1.5 text-xs"
-          >
+          <button onClick={handleRefresh} disabled={loading} className="border rounded px-3 py-1.5 text-xs">
             Refrescar
           </button>
         </div>
