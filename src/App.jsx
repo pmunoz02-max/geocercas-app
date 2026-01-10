@@ -233,13 +233,18 @@ function pickOrgPreview(orgs) {
   }));
 }
 
+/**
+ * Wrapper que adjunta un snapshot de estado útil al GlobalErrorBoundary,
+ * para identificar rápidamente qué dato (objeto) está rompiendo el render (#300).
+ */
 function GlobalErrorBoundaryWithSnapshot({ children }) {
   const auth = useAuth?.() || {};
+
   const snapshot = {
     href: typeof window !== "undefined" ? window.location.href : "",
     user_email: auth?.user?.email || null,
     isAdmin: auth?.isAdmin ?? null,
-    bestRole: auth?.bestRole ?? null,
+    isRootOwner: auth?.isRootOwner ?? null,
     currentOrg: {
       id: auth?.currentOrg?.id || null,
       name: auth?.currentOrg?.name,
@@ -248,8 +253,11 @@ function GlobalErrorBoundaryWithSnapshot({ children }) {
     organizations_preview: pickOrgPreview(auth?.organizations),
   };
 
-  return <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundaryWithSnapshot>;
+  return (
+    <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundaryWithSnapshot>
+  );
 }
+
 
 export default function App() {
   return (
