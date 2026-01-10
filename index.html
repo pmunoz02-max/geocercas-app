@@ -8,7 +8,7 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1"
     />
 
-    <!-- ✅ Universal: app dark-first (evita heurísticas del navegador/WebView) -->
+    <!-- ✅ Universal: app dark-first -->
     <meta name="color-scheme" content="dark" />
 
     <title>App Geocercas</title>
@@ -49,48 +49,37 @@
         if (!window.process.env) window.process.env = {};
       })();
     </script>
+
+    <!-- ✅ Vercel Feedback: solo bajo demanda (?feedback=1) o en localhost -->
+    <script>
+      (function () {
+        try {
+          var host = window.location.hostname;
+          var params = new URLSearchParams(window.location.search);
+          var force = params.get("feedback") === "1";
+          var isLocal = host === "localhost" || host === "127.0.0.1";
+
+          // En producción NO lo cargamos salvo que tú lo pidas con ?feedback=1
+          if (!force && !isLocal) return;
+
+          var s = document.createElement("script");
+          s.async = true;
+          s.setAttribute("data-explicit-opt-in", "true");
+          s.setAttribute("data-cookie-opt-in", "true");
+          s.src = "https://vercel.live/_next-live/feedback/feedback.js";
+          document.head.appendChild(s);
+        } catch (e) {
+          // Nunca romper por esto
+          console.warn("[feedback-loader] skipped:", e);
+        }
+      })();
+    </script>
   </head>
 
   <body>
     <div id="root"></div>
 
-    <!-- ✅ Cargar Vercel Feedback SOLO si tú lo pides:
-         - En localhost (dev)
-         - O si agregas ?feedback=1
-         - O si NO estás en tu dominio de producción
-    -->
-    <script type="module">
-      (function () {
-        try {
-          const host = window.location.hostname;
-          const params = new URLSearchParams(window.location.search);
-          const force = params.get("feedback") === "1";
-
-          const isLocal = host === "localhost" || host === "127.0.0.1";
-          const isProdDomain = host === "www.tugeocercas.com" || host === "tugeocercas.com";
-
-          // Activo en dev/preview o bajo demanda
-          const shouldLoad = force || isLocal || !isProdDomain;
-
-          if (!shouldLoad) return;
-
-          const s = document.createElement("script");
-          s.async = true;
-          s.setAttribute("data-explicit-opt-in", "true");
-          s.setAttribute("data-cookie-opt-in", "true");
-          // opcional: si lo quieres fijo, déjalo; si no, quítalo
-          s.setAttribute("data-deployment-id", "dpl_AioyQVyGHzqvpdFFs4Bwgsvvj82N");
-          s.src = "https://vercel.live/_next-live/feedback/feedback.js";
-          document.head.appendChild(s);
-        } catch (e) {
-          // nunca romper por esto
-          console.warn("[feedback-loader] skipped:", e);
-        }
-      })();
-    </script>
-
-    <!-- Vite entry -->
-    <script type="module" crossorigin src="/assets/index-BMEvrOl6.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-U9V-HtFP.css" />
+    <!-- ✅ Vite entry UNIVERSAL (sin hashes) -->
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
