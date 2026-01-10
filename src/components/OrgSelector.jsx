@@ -1,3 +1,4 @@
+// src/components/OrgSelector.jsx
 import React, { useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 
@@ -6,9 +7,15 @@ function safeText(v, fallback = "") {
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   try {
-    return JSON.stringify(v);
+    const s = JSON.stringify(v);
+    if (s === "{}" || s === "[]") return fallback;
+    return s;
   } catch {
-    return fallback;
+    try {
+      return String(v);
+    } catch {
+      return fallback;
+    }
   }
 }
 
@@ -17,6 +24,7 @@ export default function OrgSelector({ className = "" }) {
 
   const orgOptions = useMemo(() => {
     const arr = Array.isArray(organizations) ? organizations : [];
+    // ✅ BUG FIX: era [.arr] (mal). Debe ser [...arr]
     return [...arr].sort((a, b) => {
       const an = safeText(a?.name).toLowerCase();
       const bn = safeText(b?.name).toLowerCase();
@@ -42,11 +50,11 @@ export default function OrgSelector({ className = "" }) {
         onChange={(e) => selectOrg(e.target.value)}
         aria-label="Seleccionar organización"
       >
-        {orgOptions.map((o) => {
+        {orgOptions.map((o, idx) => {
           const id = safeText(o?.id, "");
           const label = safeText(o?.name, "Organización");
           return (
-            <option key={id || `org-${Math.random()}`} value={id}>
+            <option key={id || `org-${idx}`} value={id}>
               {label || "Organización"}
             </option>
           );

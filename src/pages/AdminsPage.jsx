@@ -1,3 +1,4 @@
+// src/pages/AdminsPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabase.js";
@@ -12,13 +13,20 @@ function toSafeString(x, fallback = "") {
   try {
     return JSON.stringify(x);
   } catch {
-    return String(x);
+    try {
+      return String(x);
+    } catch {
+      return fallback;
+    }
   }
 }
 
-function safeText(x) {
-  // Para render: NUNCA objeto
-  return typeof x === "string" ? x : toSafeString(x, "");
+/** Para render en JSX: NUNCA retorna objeto */
+function safeText(x, fallback = "") {
+  const s = toSafeString(x, fallback);
+  // Evita mostrar "{}" o "[]" si viene de stringify de cosas raras tipo ReactElement
+  if (s === "{}" || s === "[]") return fallback;
+  return s;
 }
 
 function useDebugFlag() {
@@ -77,10 +85,8 @@ async function callInviteAdminEdge(payload) {
     body: JSON.stringify(payload),
   });
 
-  // ⚠️ Importante: leer texto SIEMPRE (incluye 500)
   const raw = await res.text();
 
-  // Intentar parsear JSON
   let data = null;
   try {
     data = raw ? JSON.parse(raw) : null;
@@ -99,24 +105,24 @@ function extractEdgeError(fetchResp, fallback = "Error al enviar la invitación.
   if (data && typeof data === "object" && data.ok === false) {
     const step = data.step || "edge";
     const msg = data.message || data.error || fallback;
-    return `HTTP ${status} [${step}] ${toSafeString(msg)}`;
+    return `HTTP ${status} [${safeText(step)}] ${safeText(msg, fallback)}`;
   }
 
   if (!data) {
-    return `HTTP ${status} ${fallback}${raw ? ` | raw: ${String(raw).slice(0, 220)}` : ""}`;
+    return `HTTP ${status} ${fallback}${raw ? ` | raw: ${safeText(raw).slice(0, 220)}` : ""}`;
   }
 
-  return `HTTP ${status} ${fallback} | ${toSafeString(data).slice(0, 220)}`;
+  return `HTTP ${status} ${fallback} | ${safeText(data).slice(0, 220)}`;
 }
 
-/** ErrorBoundary simple para que nunca tumbe la página */
+/** ErrorBoundary local para que NUNCA tumbe la app (pero ojo: no atrapa errores del MISMO componente) */
 class SafeBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, msg: "" };
   }
   static getDerivedStateFromError(err) {
-    return { hasError: true, msg: toSafeString(err?.message || err) };
+    return { hasError: true, msg: safeText(err?.message || err) };
   }
   componentDidCatch(err) {
     console.error("[AdminsPage] Render error boundary:", err);
@@ -126,7 +132,7 @@ class SafeBoundary extends React.Component {
       return (
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="bg-red-50 border border-red-300 text-red-700 p-3 rounded text-sm">
-            Error de render (bloqueado para no tumbar la app): {safeText(this.state.msg)}
+            Error de render (aislado): {safeText(this.state.msg)}
           </div>
         </div>
       );
@@ -157,14 +163,15 @@ export default function AdminsPage() {
   const [actionLink, setActionLink] = useState("");
   const [lastInvitedEmail, setLastInvitedEmail] = useState("");
 
-  // Debug (para que aunque la consola esté contaminada, puedas copiar el JSON)
+  // Debug (para copiar aunque consola esté contaminada)
   const [inviteDebug, setInviteDebug] = useState({
     status: "",
     json: "",
     raw: "",
   });
 
-  const orgName = useMemo(() => currentOrg?.name || "—", [currentOrg?.name]);
+  // ⚠️ Clave: orgName SIEMPRE string (no objeto)
+  const orgName = useMemo(() => safeText(currentOrg?.name, "—"), [currentOrg?.name]);
 
   const resetInviteResult = () => {
     setInvitedVia("");
@@ -213,7 +220,7 @@ export default function AdminsPage() {
 
       if (fetchError) {
         console.error("[AdminsPage] listAdmins error:", fetchError, resp);
-        setError(String(fetchError.message || "No se pudo cargar la lista de administradores."));
+        setError(safeText(fetchError?.message, "No se pudo cargar la lista de administradores."));
       } else {
         setAdmins(Array.isArray(data) ? data : []);
       }
@@ -231,7 +238,7 @@ export default function AdminsPage() {
     const resp = await listAdmins(currentOrg.id);
     const { data, error: fetchError } = resp || {};
 
-    if (fetchError) setError(String(fetchError.message || "No se pudo actualizar la lista de administradores."));
+    if (fetchError) setError(safeText(fetchError?.message, "No se pudo actualizar la lista de administradores."));
     else setAdmins(Array.isArray(data) ? data : []);
 
     setLoading(false);
@@ -262,26 +269,25 @@ export default function AdminsPage() {
 
       const resp = await callInviteAdminEdge(payload);
 
-      // Guardar también en UI como STRING (evita React #300)
+      // Guardar en UI como STRING (anti #300)
       setInviteDebug({
-        status: String(resp.status ?? ""),
-        json: String(JSON.stringify(resp.data)),
-        raw: String(resp.raw ?? ""),
+        status: safeText(resp.status ?? ""),
+        json: safeText(resp.data ?? ""),
+        raw: safeText(resp.raw ?? ""),
       });
 
-      // Logs solo si debug=1
       dlog("INVITE fetch status:", resp.status);
       dlog("INVITE fetch data JSON:", JSON.stringify(resp.data));
-      if (resp.raw) dlog("INVITE raw response:", String(resp.raw).slice(0, 800));
+      if (resp.raw) dlog("INVITE raw response:", safeText(resp.raw).slice(0, 800));
 
       if (!resp.ok) {
-        setError(String(extractEdgeError(resp, "Error al enviar la invitación.")));
+        setError(safeText(extractEdgeError(resp, "Error al enviar la invitación.")));
         return;
       }
 
       const data = resp.data || {};
       if (data && typeof data === "object" && data.ok === false) {
-        setError(String(extractEdgeError(resp, "La invitación no pudo ser enviada.")));
+        setError(safeText(extractEdgeError(resp, "La invitación no pudo ser enviada.")));
         return;
       }
 
@@ -289,8 +295,8 @@ export default function AdminsPage() {
       const link = (data && typeof data === "object" && data.action_link) || "";
 
       setLastInvitedEmail(email);
-      setInvitedVia(String(via || ""));
-      setActionLink(String(link || ""));
+      setInvitedVia(safeText(via || ""));
+      setActionLink(safeText(link || ""));
 
       if (via === "email") {
         setSuccessMessage(`Invitación enviada por correo a ${email}. (Revisa Spam/Promociones)`);
@@ -304,7 +310,7 @@ export default function AdminsPage() {
       await handleRefresh();
     } catch (err) {
       console.error("[AdminsPage] exception:", err);
-      setError(`Error inesperado: ${toSafeString(err?.message || err)}`);
+      setError(`Error inesperado: ${safeText(err?.message || err)}`);
     } finally {
       setLoadingAction(false);
     }
@@ -317,11 +323,11 @@ export default function AdminsPage() {
     setError("");
     setSuccessMessage("");
 
-    const resp = await deleteAdmin(currentOrg.id, adm.user_id);
+    const resp = await deleteAdmin(currentOrg.id, adm?.user_id);
     const { error: delErr } = resp || {};
 
-    if (delErr) setError(String(delErr.message || "No se pudo eliminar al administrador."));
-    else setAdmins((prev) => prev.filter((a) => a.user_id !== adm.user_id));
+    if (delErr) setError(safeText(delErr?.message, "No se pudo eliminar al administrador."));
+    else setAdmins((prev) => prev.filter((a) => safeText(a?.user_id) !== safeText(adm?.user_id)));
 
     setLoadingAction(false);
   };
@@ -336,23 +342,31 @@ export default function AdminsPage() {
     }
   };
 
+  // ✅ CLAVE anti-#300: condiciones SIEMPRE boolean (no objetos truthy)
+  const showInviteResult = Boolean(invitedVia || actionLink);
+  const showInviteDebug = Boolean(inviteDebug?.status);
+  const showError = Boolean(error);
+  const showSuccess = Boolean(successMessage);
+
   return (
     <SafeBoundary>
       <div className="max-w-6xl mx-auto px-4 py-8">
         <header className="mb-6">
           <h1 className="text-2xl font-semibold text-slate-900">Administradores actuales</h1>
+
           <p className="text-sm text-slate-600 mt-1">
-            Organización: <b>{safeText(orgName)}</b>
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Usuario: <span className="font-mono">{safeText(user?.email)}</span>
+            Organización: <b>{orgName}</b>
           </p>
 
-          {debug && (
+          <p className="text-xs text-slate-500 mt-1">
+            Usuario: <span className="font-mono">{safeText(user?.email, "—")}</span>
+          </p>
+
+          {debug ? (
             <p className="text-[11px] text-amber-700 mt-2">
               Debug ON (por <span className="font-mono">?debug=1</span>)
             </p>
-          )}
+          ) : null}
         </header>
 
         <section className="mb-8 border rounded-xl p-4 bg-white">
@@ -390,13 +404,13 @@ export default function AdminsPage() {
             </button>
           </form>
 
-          {(invitedVia || actionLink) && (
+          {showInviteResult ? (
             <div className="mt-4 border rounded-lg p-3 bg-slate-50">
               <div className="text-xs text-slate-700">
-                Invitado: <b>{safeText(lastInvitedEmail)}</b>
+                Invitado: <b>{safeText(lastInvitedEmail, "—")}</b>
               </div>
 
-              {!!actionLink && (
+              {actionLink ? (
                 <div className="mt-2">
                   <div className="flex gap-2 items-center mb-2">
                     <button
@@ -418,12 +432,11 @@ export default function AdminsPage() {
                     {safeText(actionLink)}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
-          )}
+          ) : null}
 
-          {/* Panel Debug para copiar el JSON aunque la consola esté apagada */}
-          {!!inviteDebug.status && (
+          {showInviteDebug ? (
             <details className="mt-4">
               <summary className="text-xs cursor-pointer text-slate-600">Debug (invite_admin)</summary>
               <div className="mt-2 text-[11px] bg-slate-50 border rounded p-2 space-y-2">
@@ -434,28 +447,28 @@ export default function AdminsPage() {
                   <b>INVITE fetch data JSON:</b>
                   <div className="font-mono break-all select-all mt-1">{safeText(inviteDebug.json)}</div>
                 </div>
-                {!!inviteDebug.raw && (
+                {inviteDebug.raw ? (
                   <div>
                     <b>INVITE raw response:</b>
                     <div className="font-mono break-all select-all mt-1">{safeText(inviteDebug.raw)}</div>
                   </div>
-                )}
+                ) : null}
               </div>
             </details>
-          )}
+          ) : null}
         </section>
 
-        {!!error && (
+        {showError ? (
           <div className="bg-red-50 border border-red-300 text-red-700 p-2 rounded text-xs mb-3">
             {safeText(error)}
           </div>
-        )}
+        ) : null}
 
-        {!!successMessage && (
+        {showSuccess ? (
           <div className="bg-emerald-50 border border-emerald-300 text-emerald-700 p-2 rounded text-xs mb-3">
             {safeText(successMessage)}
           </div>
-        )}
+        ) : null}
 
         <section className="border rounded-xl bg-white">
           <div className="flex justify-between items-center px-4 py-3 border-b">
@@ -479,20 +492,23 @@ export default function AdminsPage() {
                 </tr>
               </thead>
               <tbody>
-                {admins.map((adm) => (
-                  <tr key={adm.user_id} className="border-t">
-                    <td className="px-3 py-2">{safeText(adm.role)}</td>
-                    <td className="px-3 py-2">{safeText(adm.email)}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        onClick={() => handleDelete(adm)}
-                        className="text-red-600 border border-red-500 rounded px-2 py-1 text-xs"
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {admins.map((adm, idx) => {
+                  const key = safeText(adm?.user_id, `adm-${idx}`);
+                  return (
+                    <tr key={key} className="border-t">
+                      <td className="px-3 py-2">{safeText(adm?.role, "—")}</td>
+                      <td className="px-3 py-2">{safeText(adm?.email, "—")}</td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => handleDelete(adm)}
+                          className="text-red-600 border border-red-500 rounded px-2 py-1 text-xs"
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
