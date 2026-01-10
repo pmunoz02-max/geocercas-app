@@ -27,9 +27,6 @@
       href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css"
     />
 
-    <!-- ✅ Solo lo mínimo necesario en inline style.
-         NO definimos font-family ni color aquí para no interferir con Tailwind.
-    -->
     <style>
       html,
       body,
@@ -37,12 +34,9 @@
         height: 100%;
         margin: 0;
       }
-
-      /* Base dark segura */
       html {
         background: #0b1220;
       }
-
       body {
         background: #0b1220;
       }
@@ -60,7 +54,43 @@
   <body>
     <div id="root"></div>
 
+    <!-- ✅ Cargar Vercel Feedback SOLO si tú lo pides:
+         - En localhost (dev)
+         - O si agregas ?feedback=1
+         - O si NO estás en tu dominio de producción
+    -->
+    <script type="module">
+      (function () {
+        try {
+          const host = window.location.hostname;
+          const params = new URLSearchParams(window.location.search);
+          const force = params.get("feedback") === "1";
+
+          const isLocal = host === "localhost" || host === "127.0.0.1";
+          const isProdDomain = host === "www.tugeocercas.com" || host === "tugeocercas.com";
+
+          // Activo en dev/preview o bajo demanda
+          const shouldLoad = force || isLocal || !isProdDomain;
+
+          if (!shouldLoad) return;
+
+          const s = document.createElement("script");
+          s.async = true;
+          s.setAttribute("data-explicit-opt-in", "true");
+          s.setAttribute("data-cookie-opt-in", "true");
+          // opcional: si lo quieres fijo, déjalo; si no, quítalo
+          s.setAttribute("data-deployment-id", "dpl_AioyQVyGHzqvpdFFs4Bwgsvvj82N");
+          s.src = "https://vercel.live/_next-live/feedback/feedback.js";
+          document.head.appendChild(s);
+        } catch (e) {
+          // nunca romper por esto
+          console.warn("[feedback-loader] skipped:", e);
+        }
+      })();
+    </script>
+
     <!-- Vite entry -->
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" crossorigin src="/assets/index-BMEvrOl6.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-U9V-HtFP.css" />
   </body>
 </html>
