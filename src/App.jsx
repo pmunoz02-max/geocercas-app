@@ -99,11 +99,12 @@ class GlobalErrorBoundary extends React.Component {
                 <pre className="mt-1 font-mono whitespace-pre-wrap break-words text-slate-600">
                   {this.state.stack}
                 </pre>
-                {this.state.snapshot ? (
-                  <pre className="mt-2 font-mono whitespace-pre-wrap break-words text-slate-600">
-                    {toSafeString(this.state.snapshot)}
-                  </pre>
-                ) : null}
+              {this.state.snapshot ? (
+                <pre className="mt-2 font-mono whitespace-pre-wrap break-words text-slate-600">
+                  {toSafeString(this.state.snapshot)}
+                </pre>
+              ) : null}
+
               </details>
             ) : null}
           </div>
@@ -233,12 +234,8 @@ function pickOrgPreview(orgs) {
   }));
 }
 
-/**
- * Wrapper que adjunta un snapshot de estado útil al GlobalErrorBoundary,
- * para identificar rápidamente qué dato (objeto) está rompiendo el render (#300).
- */
 function GlobalErrorBoundaryWithSnapshot({ children }) {
-  const auth = useAuth?.() || {};
+  const auth = (typeof useAuth === "function" ? useAuth() : {}) || {};
 
   const snapshot = {
     href: typeof window !== "undefined" ? window.location.href : "",
@@ -254,10 +251,11 @@ function GlobalErrorBoundaryWithSnapshot({ children }) {
   };
 
   return (
-    <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundaryWithSnapshot>
+    <GlobalErrorBoundary debugSnapshot={snapshot}>
+      {children}
+    </GlobalErrorBoundary>
   );
 }
-
 
 export default function App() {
   return (
@@ -325,7 +323,7 @@ export default function App() {
 
           <Route path="*" element={<SmartFallback />} />
         </Routes>
-      </GlobalErrorBoundaryWithSnapshot>
+      </GlobalErrorBoundary>
     </BrowserRouter>
   );
 }
