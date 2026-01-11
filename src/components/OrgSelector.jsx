@@ -1,6 +1,10 @@
-// src/components/OrgSelector.jsx
 import React, { useMemo } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.jsx";
+
+/**
+ * OrgSelector — FIX React #300
+ * Nunca renderizar objetos en JSX. Normaliza cualquier valor a string.
+ */
 
 function safeText(v, fallback = "") {
   if (v == null) return fallback;
@@ -24,41 +28,49 @@ export default function OrgSelector({ className = "" }) {
 
   const orgOptions = useMemo(() => {
     const arr = Array.isArray(organizations) ? organizations : [];
-    // ✅ BUG FIX: era [.arr] (mal). Debe ser [...arr]
-    return [...arr].sort((a, b) => {
-      const an = safeText(a?.name).toLowerCase();
-      const bn = safeText(b?.name).toLowerCase();
-      if (!an && bn) return 1;
-      if (an && !bn) return -1;
-      return an.localeCompare(bn);
+    return arr.map((o) => {
+      const id = safeText(o?.id, "");
+      const name = safeText(o?.name, "");
+      // Si name viene raro (objeto/null), mostramos fallback seguro
+      const label = name || "Organización";
+      return { id, label };
     });
   }, [organizations]);
 
-  if (!isAdmin) return null;
-  if (loading) return null;
-  if (!orgOptions || orgOptions.length <= 1) return null;
-
   const value = safeText(currentOrg?.id, "");
 
-  return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <span className="text-xs text-gray-500 hidden sm:inline">Org</span>
+  // Si está cargando o no hay orgs, no renderiza cosas raras
+  if (loading) {
+    return (
+      <div className={safeText(className)}>
+        <select className="border rounded px-2 py-1 text-xs opacity-70" disabled value="">
+          <option value="">Cargando…</option>
+        </select>
+      </div>
+    );
+  }
 
+  // Si no es admin/owner, puedes decidir ocultarlo (mantengo tu lógica original probable)
+  if (!isAdmin) {
+    return null;
+  }
+
+  return (
+    <div className={safeText(className)}>
       <select
-        className="h-9 max-w-[220px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        className="border rounded px-2 py-1 text-xs"
         value={value}
         onChange={(e) => selectOrg(e.target.value)}
-        aria-label="Seleccionar organización"
       >
-        {orgOptions.map((o, idx) => {
-          const id = safeText(o?.id, "");
-          const label = safeText(o?.name, "Organización");
-          return (
-            <option key={id || `org-${idx}`} value={id}>
-              {label || "Organización"}
+        {orgOptions.length === 0 ? (
+          <option value="">Organización</option>
+        ) : (
+          orgOptions.map(({ id, label }) => (
+            <option key={id || `org-${label}`} value={id}>
+              {safeText(label, "Organización")}
             </option>
-          );
-        })}
+          ))
+        )}
       </select>
     </div>
   );
