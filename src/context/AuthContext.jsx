@@ -11,6 +11,22 @@ import React, {
 import { supabase } from "../supabaseClient.js";
 
 /**
+ * Root Owner (App-level) — superadmin
+ * Solo estos emails pueden ver el módulo /admins (Administrador global).
+ * Configurable vía VITE_APP_ROOT_EMAILS="a@b.com,c@d.com"
+ */
+const APP_ROOT_EMAILS = String(import.meta?.env?.VITE_APP_ROOT_EMAILS || "fenice.ecuador@gmail.com")
+  .split(",")
+  .map((s) => String(s || "").trim().toLowerCase())
+  .filter(Boolean);
+
+function isAppRootEmail(email) {
+  const e = String(email || "").trim().toLowerCase();
+  return !!e && APP_ROOT_EMAILS.includes(e);
+}
+
+
+/**
  * AuthContext UNIVERSAL (Panel + Tracker) — Fuente única de verdad (Backend-first)
  *
  * Principios:
@@ -579,6 +595,7 @@ export function AuthProvider({ children }) {
   ]);
 
   const isRootOwner = useMemo(() => bestRole === "owner", [bestRole]);
+  const isAppRoot = useMemo(() => isAppRootEmail(user?.email), [user?.email]);
 
   // legacy
   const loading = !authReady;
@@ -596,6 +613,7 @@ export function AuthProvider({ children }) {
       bestRole,
       currentRole,
       isRootOwner,
+      isAppRoot,
 
       // orgs (SAFE para UI)
       orgs: orgsSafe,
@@ -625,6 +643,7 @@ export function AuthProvider({ children }) {
       bestRole,
       currentRole,
       isRootOwner,
+      isAppRoot,
       orgsSafe,
       currentOrgSafe,
       trackerDomain,

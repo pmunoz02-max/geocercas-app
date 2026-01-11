@@ -159,7 +159,7 @@ async function loadAdminsForOrg(orgId) {
 }
 
 function AdminsPageInner() {
-  const { authReady, orgsReady, currentOrg, user, isRootOwner } = useAuth();
+  const { authReady, orgsReady, currentOrg, user, isRootOwner, isAppRoot } = useAuth();
 
   const orgId = typeof currentOrg?.id === "string" ? currentOrg.id : "";
   const orgName = typeof currentOrg?.name === "string" ? currentOrg.name : "";
@@ -212,11 +212,11 @@ function AdminsPageInner() {
     );
   }
 
-  if (!isRootOwner) {
+  if (!isAppRoot) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-semibold text-slate-900">Administradores</h1>
-        <p className="mt-2 text-sm text-slate-600">Este módulo es exclusivo del propietario.</p>
+        <p className="mt-2 text-sm text-slate-600">Este módulo es exclusivo del owner raíz de la app (Fenice).</p>
       </div>
     );
   }
