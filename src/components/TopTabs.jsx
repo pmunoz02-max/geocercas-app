@@ -5,72 +5,62 @@ import { useTranslation } from "react-i18next";
 import OrgSelector from "./OrgSelector";
 
 /**
- * TopTabs — FIX v2 (tabs visibles SIEMPRE)
+ * TopTabs — FIX v3 (forzar texto visible + marca de versión)
  *
- * Síntoma reportado:
- * - Se ven los "cuadros" de tabs pero SIN texto (en blanco), excepto la tab activa.
- *
- * Causa típica:
- * - i18n devuelve "" o valores raros; safeText("") no cae a fallback.
- *
- * Solución:
- * - Si el label resultante es vacío/espacios, forzar fallback humano por path o por key.
- * - Mantener estilos con contraste alto.
+ * Qué arregla:
+ * - Si por cualquier razón el label llega vacío (i18n/key), SIEMPRE cae a fallback por ruta.
+ * - Fuerza color de texto por inline-style para evitar CSS externo que lo vuelva transparente.
+ * - Incluye una marca discreta "tabs:v3" para confirmar que este archivo está cargado en producción.
  */
 
-function safeText(v, fallback = "") {
-  if (v == null) return fallback;
+function safeText(v) {
+  if (v == null) return "";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   try {
-    const s = JSON.stringify(v);
-    if (s === "{}" || s === "[]") return fallback;
-    return s;
+    return JSON.stringify(v);
   } catch {
     try {
       return String(v);
     } catch {
-      return fallback;
+      return "";
     }
   }
 }
 
-function humanizeKey(key) {
-  const s = String(key || "").trim();
-  if (!s) return "";
-  const cleaned = s.replace(/^(app\.)?(tabs|menu|nav)\./i, "");
-  const parts = cleaned.split(/[._-]+/).filter(Boolean);
-  if (!parts.length) return cleaned;
-  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+function humanize(s) {
+  const str = String(s || "").trim();
+  if (!str) return "";
+  return str
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
 }
 
 function fallbackFromPath(path) {
   const p = String(path || "").split("/").filter(Boolean).pop() || "";
-  return humanizeKey(p) || "Tab";
+  return humanize(p) || "Tab";
 }
 
 function resolveLabel(t, tab) {
-  // 1) label directo
-  if (typeof tab?.label === "string") {
-    const s = tab.label.trim();
-    if (s) return s;
-  }
-
-  // 2) labelKey
-  const key = safeText(tab?.labelKey, "").trim();
+  const key = safeText(tab?.labelKey).trim();
   if (key) {
     const translated = t(key, { defaultValue: "" });
-    const s = safeText(translated, "").trim();
-
-    // Si i18n devuelve algo útil
+    const s = safeText(translated).trim();
     if (s && s !== key && s !== "{}" && s !== "[]") return s;
 
-    // Si i18n devuelve el MISMO key o vacío -> humanize
-    const hk = humanizeKey(key).trim();
+    // si i18n devuelve el key, humanizamos el key (quita prefijos)
+    const cleaned = key.replace(/^(app\.)?(tabs|menu|nav)\./i, "");
+    const hk = humanize(cleaned).trim();
     if (hk) return hk;
   }
 
-  // 3) fallback por ruta
+  // label directo
+  const direct = safeText(tab?.label).trim();
+  if (direct) return direct;
+
+  // fallback final
   return fallbackFromPath(tab?.path);
 }
 
@@ -92,20 +82,21 @@ export default function TopTabs({ tabs = [] }) {
   const items = Array.isArray(tabs) ? tabs : [];
 
   const isActive = (path) => {
-    const p = safeText(path, "").trim();
+    const p = safeText(path).trim();
     if (!p) return false;
     return location.pathname === p || location.pathname.startsWith(p + "/");
   };
 
   const base =
     "no-underline inline-flex items-center justify-center px-4 py-2 rounded-md text-sm " +
-    "font-semibold border transition-colors whitespace-nowrap min-w-[88px]";
+    "font-semibold border transition-colors whitespace-nowrap min-w-[92px]";
 
-  const active = "bg-slate-900 text-white border-slate-900 shadow-sm";
-  const inactive = "bg-white text-slate-800 border-slate-300 hover:bg-slate-50 hover:border-slate-400";
+  // (clases de layout; colores se fuerzan por style)
+  const activeCls = "shadow-sm border-slate-900";
+  const inactiveCls = "border-slate-300 hover:bg-slate-50 hover:border-slate-400";
 
   return (
-    <div className="w-full">
+    <div className="w-full" data-top-tabs="v3">
       <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
@@ -117,20 +108,23 @@ export default function TopTabs({ tabs = [] }) {
           <nav className="flex-1 overflow-x-auto">
             <div className="flex gap-2 min-w-max">
               {items.map((tab, idx) => {
-                const path = safeText(tab?.path, "").trim();
+                const path = safeText(tab?.path).trim();
                 if (!path) return null;
 
                 const on = isActive(path);
+                const label = safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
 
-                // 🔥 FIX CRÍTICO: si label queda vacío, SIEMPRE fallback
-                const rawLabel = resolveLabel(t, tab);
-                const label = safeText(rawLabel, "").trim() || fallbackFromPath(path);
+                // Fuerza visibilidad incluso si hay CSS externo raro
+                const style = on
+                  ? { background: "#0f172a", color: "#ffffff" } // slate-900
+                  : { background: "#ffffff", color: "#0f172a" }; // slate-900
 
                 return (
                   <NavLink
                     key={path || `tab-${idx}`}
                     to={path}
-                    className={`${base} ${on ? active : inactive}`}
+                    className={`${base} ${on ? activeCls : inactiveCls}`}
+                    style={style}
                     title={label}
                   >
                     {label}
@@ -139,6 +133,9 @@ export default function TopTabs({ tabs = [] }) {
               })}
             </div>
           </nav>
+
+          {/* Marca discreta para confirmar versión */}
+          <div className="ml-2 text-[10px] text-slate-400 select-none">tabs:v3</div>
         </div>
       </div>
     </div>
