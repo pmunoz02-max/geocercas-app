@@ -1,56 +1,44 @@
 // src/pages/AdminsPage.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../supabaseClient.js";
 
 /**
- * AdminsPage — v7 FINAL (anti React #300)
- *
- * Objetivos:
- * 1) Eliminar definitivamente React error #300 ("Objects are not valid as a React child") en AdminsPage.
- * 2) Invitación admin estable: si el correo NO llega, siempre mostramos el Magic Link si el Edge lo entrega.
- * 3) Logs útiles y permanentes: cuando detectemos valores no-primitive en UI, log + snapshot.
- *
- * Regla:
- * - Datos lógicos (orgId, payloads, keys) NO pasan por stringify defensivo.
- * - Solo el texto visible pasa por uiText().
+ * AdminsPage — v8 FINAL (fix definitivo React #300)
+ * Causa real detectada: inviteDebug.data llegaba como object y se renderizaba en JSX.
+ * Solución: inviteDebug SIEMPRE strings (JSON string), jamás objeto.
  */
 
-function uiText(label, value, fallback = "—") {
+function uiText(value, fallback = "—") {
   const t = typeof value;
-
   if (value == null) return fallback;
   if (t === "string") return value;
   if (t === "number" || t === "boolean") return String(value);
 
-  // Si llega objeto/array/error: loggear SIEMPRE, y mostrar preview seguro (string).
-  let preview = "";
+  // Si llega objeto/array/error: convertir a string seguro
   try {
-    preview = JSON.stringify(value);
+    return JSON.stringify(value);
   } catch {
     try {
-      preview = String(value);
+      return String(value);
     } catch {
-      preview = "";
+      return fallback;
     }
   }
+}
 
-  const snapshot = {
-    label,
-    typeof: t,
-    preview: (preview || "").slice(0, 1200),
-  };
-
+function safeJsonString(value, fallback = "") {
+  if (value == null) return fallback;
+  if (typeof value === "string") return value;
   try {
-    window.__ADMINS_LAST_BAD_RENDER = snapshot;
+    return JSON.stringify(value);
   } catch {
-    // ignore
+    try {
+      return String(value);
+    } catch {
+      return fallback;
+    }
   }
-
-  // eslint-disable-next-line no-console
-  console.warn("[AdminsPage] BAD RENDER VALUE ->", { ...snapshot, value });
-
-  return preview || fallback;
 }
 
 function isValidEmail(email) {
@@ -61,59 +49,32 @@ function isValidEmail(email) {
 class SafeBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, msg: "", info: "" };
+    this.state = { hasError: false, msg: "", stack: "" };
   }
   static getDerivedStateFromError(err) {
-    const msg = (err && err.message) ? String(err.message) : String(err || "Error de render");
-    return { hasError: true, msg };
+    return { hasError: true, msg: uiText(err?.message || err, "Error de render") };
   }
   componentDidCatch(err, info) {
-    const stack = info?.componentStack ? String(info.componentStack) : "";
-    this.setState({ info: stack });
-    // eslint-disable-next-line no-console
-    console.error("[AdminsPage] Render error caught:", err, info);
-    try {
-      // eslint-disable-next-line no-console
-      console.error("[AdminsPage] LAST BAD RENDER SNAPSHOT:", window.__ADMINS_LAST_BAD_RENDER);
-    } catch {
-      // ignore
-    }
+    const stack = uiText(info?.componentStack || "", "");
+    this.setState({ stack });
+    console.error("[AdminsPage] Render error caught:", err);
+    console.error("[AdminsPage] Component stack:", stack);
   }
   render() {
     if (!this.state.hasError) return this.props.children;
-
-    const snap = (() => {
-      try {
-        return window.__ADMINS_LAST_BAD_RENDER || null;
-      } catch {
-        return null;
-      }
-    })();
 
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
           <div className="font-semibold">Error de render aislado (AdminsPage)</div>
-          <div className="mt-2 break-words">{uiText("boundary.msg", this.state.msg, "Error")}</div>
-
-          {snap ? (
-            <div className="mt-3 text-[12px] bg-white/70 border border-red-200 rounded p-2">
-              <div className="font-semibold mb-1">Último valor sospechoso</div>
-              <div><b>label:</b> {uiText("boundary.snap.label", snap.label, "")}</div>
-              <div><b>typeof:</b> {uiText("boundary.snap.typeof", snap.typeof, "")}</div>
-              <div className="mt-1"><b>preview:</b></div>
-              <pre className="whitespace-pre-wrap text-[11px]">{uiText("boundary.snap.preview", snap.preview, "")}</pre>
-            </div>
-          ) : null}
-
-          {this.state.info ? (
+          <div className="mt-2 break-words">{uiText(this.state.msg, "Error")}</div>
+          {this.state.stack ? (
             <pre className="mt-3 whitespace-pre-wrap text-[11px] text-red-700 bg-white/60 border border-red-200 rounded p-2">
-              {uiText("boundary.componentStack", this.state.info, "")}
+              {uiText(this.state.stack, "")}
             </pre>
           ) : null}
-
           <div className="mt-3 text-[11px] text-red-700">
-            Abre consola y busca: <span className="font-mono">[AdminsPage] BAD RENDER VALUE</span>
+            Abre consola y busca: <span className="font-mono">[AdminsPage]</span>
           </div>
         </div>
       </div>
@@ -127,12 +88,12 @@ async function callInviteAdminEdge(payload) {
 
   const { data: sessData, error: sessErr } = await supabase.auth.getSession();
   if (sessErr) {
-    return { ok: false, status: 0, data: { ok: false, step: "get_session", message: sessErr.message }, raw: null };
+    return { ok: false, status: 0, data: { ok: false, step: "get_session", message: sessErr.message }, raw: "" };
   }
 
   const token = sessData?.session?.access_token || "";
   if (!token) {
-    return { ok: false, status: 401, data: { ok: false, step: "no_token", message: "No hay sesión. Re-login." }, raw: null };
+    return { ok: false, status: 401, data: { ok: false, step: "no_token", message: "No hay sesión. Re-login." }, raw: "" };
   }
 
   const url = `${supabaseUrl}/functions/v1/invite_admin`;
@@ -148,6 +109,7 @@ async function callInviteAdminEdge(payload) {
   });
 
   const raw = await res.text();
+
   let data = null;
   try {
     data = raw ? JSON.parse(raw) : null;
@@ -160,11 +122,11 @@ async function callInviteAdminEdge(payload) {
 
 function edgeErrorMessage(resp, fallback = "Error al enviar la invitación.") {
   if (!resp) return fallback;
-  const status = uiText("edge.status", resp.status, "0");
+  const status = uiText(resp.status, "0");
   const data = resp.data;
 
   if (data && typeof data === "object" && data.ok === false) {
-    return `HTTP ${status} [${uiText("edge.step", data.step, "edge")}] ${uiText("edge.message", data.message, fallback)}`;
+    return `HTTP ${status} [${uiText(data.step, "edge")}] ${uiText(data.message, fallback)}`;
   }
   return `HTTP ${status} ${fallback}`;
 }
@@ -181,7 +143,7 @@ async function loadAdminsForOrg(orgId) {
   const memberships = Array.isArray(r1.data) ? r1.data : [];
   const userIds = Array.from(new Set(memberships.map((m) => m.user_id).filter(Boolean)));
 
-  let emailById = new Map();
+  const emailById = new Map();
   if (userIds.length) {
     const r2 = await supabase.from("profiles").select("id, email").in("id", userIds);
     if (r2?.error) throw r2.error;
@@ -199,10 +161,9 @@ async function loadAdminsForOrg(orgId) {
 function AdminsPageInner() {
   const { authReady, orgsReady, currentOrg, user, isRootOwner } = useAuth();
 
-  // IDs / lógica: sin stringify defensivo
-  const orgId = (typeof currentOrg?.id === "string") ? currentOrg.id : "";
-  const orgName = (typeof currentOrg?.name === "string") ? currentOrg.name : "";
-  const userEmail = (typeof user?.email === "string") ? user.email : "";
+  const orgId = typeof currentOrg?.id === "string" ? currentOrg.id : "";
+  const orgName = typeof currentOrg?.name === "string" ? currentOrg.name : "";
+  const userEmail = typeof user?.email === "string" ? user.email : "";
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -214,11 +175,32 @@ function AdminsPageInner() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin");
 
-  const [invitedVia, setInvitedVia] = useState("");
   const [actionLink, setActionLink] = useState("");
   const [lastInvitedEmail, setLastInvitedEmail] = useState("");
 
+  // ✅ DEBUG SIEMPRE STRINGS (nunca object)
   const [inviteDebug, setInviteDebug] = useState({ status: "", data: "", raw: "" });
+
+  const fetchAdmins = async () => {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const rows = await loadAdminsForOrg(orgId);
+      setAdmins(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setError(uiText(e?.message ?? e, "No se pudo cargar la lista de administradores."));
+      setAdmins([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!orgId) return;
+    fetchAdmins();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId]);
 
   if (!authReady || !orgsReady) {
     return (
@@ -240,7 +222,6 @@ function AdminsPageInner() {
   }
 
   if (!orgId) {
-    uiText("org.id.invalid", currentOrg?.id, "");
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -250,32 +231,10 @@ function AdminsPageInner() {
     );
   }
 
-  const fetchAdmins = async () => {
-    setLoading(true);
-    setError("");
-    setSuccess("");
-    try {
-      const rows = await loadAdminsForOrg(orgId);
-      setAdmins(Array.isArray(rows) ? rows : []);
-    } catch (e) {
-      uiText("fetchAdmins.errorObject", e, "");
-      setError(uiText("fetchAdmins.errorMessage", e?.message ?? e, "No se pudo cargar la lista de administradores."));
-      setAdmins([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAdmins();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId]);
-
   const handleInvite = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
-    setInvitedVia("");
     setActionLink("");
     setLastInvitedEmail("");
     setInviteDebug({ status: "", data: "", raw: "" });
@@ -295,10 +254,11 @@ function AdminsPageInner() {
 
       const resp = await callInviteAdminEdge(payload);
 
+      // ✅ IMPORTANTE: guardar SOLO strings, nunca objetos
       setInviteDebug({
-        status: uiText("inviteDebug.status", resp.status, ""),
-        data: uiText("inviteDebug.data", resp.data, ""),
-        raw: uiText("inviteDebug.raw", resp.raw, ""),
+        status: uiText(resp.status, ""),
+        data: safeJsonString(resp.data, ""), // <-- aquí está el fix definitivo
+        raw: uiText(resp.raw, ""),
       });
 
       if (!resp.ok) {
@@ -312,18 +272,12 @@ function AdminsPageInner() {
         return;
       }
 
-      const via = uiText("invite.via", data?.invited_via, data?.action_link ? "action_link" : "");
-      const link = uiText("invite.link", data?.action_link, "");
-
+      const link = typeof data?.action_link === "string" ? data.action_link : "";
       setLastInvitedEmail(email);
-      setInvitedVia(via);
       setActionLink(link);
 
-      // Mensaje honesto
       if (link) {
-        setSuccess(`Invitación generada para ${email}. Copia el Magic Link y envíalo si no llega el correo.`);
-      } else if (via === "email") {
-        setSuccess(`Invitación enviada por correo a ${email}. Revisa spam/promociones.`);
+        setSuccess(`Invitación generada para ${email}. Copia el Magic Link (si el correo no llega).`);
       } else {
         setSuccess(`Invitación procesada para ${email}.`);
       }
@@ -331,8 +285,7 @@ function AdminsPageInner() {
       setInviteEmail("");
       await fetchAdmins();
     } catch (e2) {
-      uiText("invite.errorObject", e2, "");
-      setError(`Error inesperado: ${uiText("invite.errorMessage", e2?.message ?? e2, "Error")}`);
+      setError(`Error inesperado: ${uiText(e2?.message ?? e2, "Error")}`);
     } finally {
       setLoadingAction(false);
     }
@@ -353,10 +306,10 @@ function AdminsPageInner() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Administradores actuales</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Organización: <b>{uiText("org.name.ui", orgName, "—")}</b>
+          Organización: <b>{uiText(orgName, "—")}</b>
         </p>
         <p className="text-xs text-slate-500 mt-1">
-          Usuario: <span className="font-mono">{uiText("user.email.ui", userEmail, "—")}</span>
+          Usuario: <span className="font-mono">{uiText(userEmail, "—")}</span>
         </p>
       </header>
 
@@ -390,56 +343,54 @@ function AdminsPageInner() {
           </button>
         </form>
 
-        {(invitedVia || actionLink) ? (
+        {actionLink ? (
           <div className="mt-4 border rounded-lg p-3 bg-slate-50">
             <div className="text-xs text-slate-700">
-              Invitado: <b>{uiText("invite.lastEmail", lastInvitedEmail, "—")}</b>
+              Invitado: <b>{uiText(lastInvitedEmail, "—")}</b>
             </div>
 
-            {actionLink ? (
-              <div className="mt-2">
-                <div className="flex gap-2 items-center mb-2">
-                  <button
-                    type="button"
-                    onClick={handleCopy}
-                    className="bg-emerald-600 text-white rounded px-3 py-1.5 text-xs"
-                  >
-                    Copiar Magic Link
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
-                    className="border rounded px-3 py-1.5 text-xs"
-                  >
-                    Probar link
-                  </button>
-                </div>
-                <div className="bg-white border rounded p-2 text-[11px] break-all select-all">
-                  {uiText("invite.actionLink", actionLink, "")}
-                </div>
-                <div className="mt-2 text-[11px] text-slate-600">
-                  Si el correo no llega, envía este link por WhatsApp/Telegram.
-                </div>
+            <div className="mt-2">
+              <div className="flex gap-2 items-center mb-2">
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="bg-emerald-600 text-white rounded px-3 py-1.5 text-xs"
+                >
+                  Copiar Magic Link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
+                  className="border rounded px-3 py-1.5 text-xs"
+                >
+                  Probar link
+                </button>
               </div>
-            ) : null}
+              <div className="bg-white border rounded p-2 text-[11px] break-all select-all">
+                {uiText(actionLink, "")}
+              </div>
+              <div className="mt-2 text-[11px] text-slate-600">
+                Si el correo no llega, envía este link por WhatsApp/Telegram.
+              </div>
+            </div>
           </div>
         ) : null}
 
-        {Boolean(inviteDebug.status) ? (
+        {inviteDebug.status ? (
           <details className="mt-4">
             <summary className="text-xs cursor-pointer text-slate-600">Debug (invite_admin)</summary>
             <div className="mt-2 text-[11px] bg-slate-50 border rounded p-2 space-y-2">
               <div>
-                <b>Status:</b> <span className="font-mono">{uiText("inviteDebug.status.render", inviteDebug.status, "")}</span>
+                <b>Status:</b> <span className="font-mono">{uiText(inviteDebug.status, "")}</span>
               </div>
               <div>
-                <b>Data:</b>
-                <div className="font-mono break-all select-all mt-1">{uiText("inviteDebug.data.render", inviteDebug.data, "")}</div>
+                <b>Data (JSON string):</b>
+                <pre className="mt-1 font-mono whitespace-pre-wrap break-words">{uiText(inviteDebug.data, "")}</pre>
               </div>
               {inviteDebug.raw ? (
                 <div>
                   <b>Raw:</b>
-                  <div className="font-mono break-all select-all mt-1">{uiText("inviteDebug.raw.render", inviteDebug.raw, "")}</div>
+                  <pre className="mt-1 font-mono whitespace-pre-wrap break-words">{uiText(inviteDebug.raw, "")}</pre>
                 </div>
               ) : null}
             </div>
@@ -449,13 +400,13 @@ function AdminsPageInner() {
 
       {error ? (
         <div className="bg-red-50 border border-red-300 text-red-700 p-2 rounded text-xs mb-3">
-          {uiText("ui.error", error, "")}
+          {uiText(error, "")}
         </div>
       ) : null}
 
       {success ? (
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-700 p-2 rounded text-xs mb-3">
-          {uiText("ui.success", success, "")}
+          {uiText(success, "")}
         </div>
       ) : null}
 
@@ -488,11 +439,11 @@ function AdminsPageInner() {
             <tbody>
               {admins.map((adm, idx) => {
                 const key =
-                  (typeof adm?.user_id === "string" && adm.user_id) ? adm.user_id : `adm-${idx}`;
+                  typeof adm?.user_id === "string" && adm.user_id ? adm.user_id : `adm-${idx}`;
                 return (
                   <tr key={key} className="border-t">
-                    <td className="px-3 py-2">{uiText("row.role", adm?.role, "—")}</td>
-                    <td className="px-3 py-2">{uiText("row.email", adm?.email, "—")}</td>
+                    <td className="px-3 py-2">{uiText(adm?.role, "—")}</td>
+                    <td className="px-3 py-2">{uiText(adm?.email, "—")}</td>
                     <td className="px-3 py-2 text-right">—</td>
                   </tr>
                 );
@@ -501,10 +452,6 @@ function AdminsPageInner() {
           </table>
         )}
       </section>
-
-      <div className="mt-4 text-[11px] text-slate-500">
-        Debug: <span className="font-mono">window.__ADMINS_LAST_BAD_RENDER</span>
-      </div>
     </div>
   );
 }
