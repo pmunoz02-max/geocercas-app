@@ -1,30 +1,45 @@
 // src/tracker/registerServiceWorker.js
-export async function registerSW() {
-  if ("serviceWorker" in navigator) {
-    try {
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      // Programa un sync cada vez que vuelvas a tener conexión
-      window.addEventListener("online", async () => {
-        try {
-          const ready = await navigator.serviceWorker.ready;
-          if ("sync" in ready) {
-            await ready.sync.register("geo-sync");
-          }
-        } catch (e) {}
-      });
 
-      // Escucha al SW pidiendo un flush:
-      navigator.serviceWorker.addEventListener("message", (evt) => {
-        if (evt?.data?.type === "SW_SYNC_REQUEST") {
-          // Puedes importar tu sync y dispararlo:
-          import("./initTracker").then(({ initTrackerSyncLayer }) => {
-            const sync = initTrackerSyncLayer();
-            sync.flushQueue().catch(() => {});
-          });
-        }
-      });
-    } catch (e) {
-      console.warn("SW no pudo registrarse:", e);
+function isTrackerContext() {
+  // Universal: define dónde SI queremos SW
+  // Ajusta si tu tracker usa otra ruta principal.
+  const p = window.location.pathname || "";
+  return p.startsWith("/tracker-gps") || p.startsWith("/tracker");
+}
+
+export async function registerSW() {
+  // Solo en tracker, nunca en login/shell general
+  if (!isTrackerContext()) return;
+
+  if (!("serviceWorker" in navigator)) return;
+
+  try {
+    // Si ya está controlando, no re-registrar
+    const existing = await navigator.serviceWorker.getRegistration("/");
+    if (!existing) {
+      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
     }
+
+    // Programa sync al volver online
+    window.addEventListener("online", async () => {
+      try {
+        const ready = await navigator.serviceWorker.ready;
+        if (ready && "sync" in ready) {
+          await ready.sync.register("geo-sync");
+        }
+      } catch (_) {}
+    });
+
+    // Escucha al SW pidiendo flush
+    navigator.serviceWorker.addEventListener("message", (evt) => {
+      if (evt?.data?.type === "SW_SYNC_REQUEST") {
+        import("./initTracker").then(({ initTrackerSyncLayer }) => {
+          const sync = initTrackerSyncLayer();
+          sync.flushQueue().catch(() => {});
+        });
+      }
+    });
+  } catch (e) {
+    console.warn("SW no pudo registrarse:", e);
   }
 }
