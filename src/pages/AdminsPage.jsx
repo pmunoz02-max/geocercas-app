@@ -4,20 +4,21 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../supabaseClient.js";
 
 /**
- * AdminsPage — v4 FINAL (anti React #300)
+ * AdminsPage — v5 DEBUG (cazador definitivo de React #300)
  *
- * Causa confirmada del #300:
- * - Se estaba intentando renderizar un objeto como hijo de React (ej: inviteDebug.data).
+ * Situación:
+ * - Sigue ocurriendo React #300 en producción y el stack marca AdminsPage.
+ * - Necesitamos identificar exactamente QUÉ valor (y en qué label) está llegando como objeto al JSX.
  *
- * Garantías de este archivo:
- * - Ningún estado que vaya a JSX guarda objetos: TODO se normaliza a string con safeText().
- * - Ningún render usa valores crudos: TODO pasa por safeText().
- * - Listado de admins: sin joins PostgREST (consultas separadas).
+ * Este archivo:
+ * - Envuelve AdminsPageInner en SafeBoundary (para no tumbar toda la app).
+ * - Fuerza que TODO texto que vaya al JSX pase por renderText(label, value).
+ * - Guarda el último valor sospechoso en window.__ADMINS_LAST_BAD_RENDER y lo muestra en el panel rojo.
+ *
+ * IMPORTANTE:
+ * - En cuanto identifiquemos el label culpable, hacemos v6 FINAL sin debug.
  */
 
-/* =========================
-   Helpers 100% seguros
-   ========================= */
 function safeText(v, fallback = "") {
   if (v == null) return fallback;
   if (typeof v === "string") return v;
@@ -35,14 +36,114 @@ function safeText(v, fallback = "") {
   }
 }
 
+function renderText(label, value, fallback = "—") {
+  const t = typeof value;
+
+  if (value == null) return fallback;
+  if (t === "string") return value;
+  if (t === "number" || t === "boolean") return String(value);
+
+  let preview = "";
+  try {
+    preview = JSON.stringify(value);
+  } catch {
+    preview = safeText(value, "");
+  }
+
+  const snapshot = {
+    label,
+    typeof: t,
+    preview: (preview || "").slice(0, 800),
+  };
+
+  try {
+    window.__ADMINS_LAST_BAD_RENDER = snapshot;
+  } catch {
+    // ignore
+  }
+
+  try {
+    window.__ADMINS_BAD_LABELS = window.__ADMINS_BAD_LABELS || {};
+    if (!window.__ADMINS_BAD_LABELS[label]) {
+      window.__ADMINS_BAD_LABELS[label] = 1;
+      // eslint-disable-next-line no-console
+      console.warn("[AdminsPage] BAD RENDER VALUE ->", { ...snapshot, value });
+    }
+  } catch {
+    // ignore
+  }
+
+  return safeText(preview, fallback) || fallback;
+}
+
 function isValidEmail(email) {
   const s = String(email || "").trim();
   return s.includes("@") && s.length >= 6;
 }
 
-/* =========================
-   Edge invite_admin
-   ========================= */
+class SafeBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, msg: "", info: "" };
+  }
+  static getDerivedStateFromError(err) {
+    return { hasError: true, msg: safeText(err?.message || err, "Error de render") };
+  }
+  componentDidCatch(err, info) {
+    const stack = safeText(info?.componentStack || "", "");
+    this.setState({ info: stack });
+    // eslint-disable-next-line no-console
+    console.error("[AdminsPage] Render error caught:", err, info);
+    try {
+      // eslint-disable-next-line no-console
+      console.error("[AdminsPage] LAST BAD RENDER SNAPSHOT:", window.__ADMINS_LAST_BAD_RENDER);
+    } catch {
+      // ignore
+    }
+  }
+  render() {
+    if (this.state.hasError) {
+      const snap = (() => {
+        try {
+          return window.__ADMINS_LAST_BAD_RENDER || null;
+        } catch {
+          return null;
+        }
+      })();
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+            <div className="font-semibold">Error de render aislado (AdminsPage)</div>
+            <div className="mt-2 break-words">{renderText("boundary.msg", this.state.msg, "Error")}</div>
+
+            {snap ? (
+              <div className="mt-3 text-[12px] bg-white/70 border border-red-200 rounded p-2">
+                <div className="font-semibold mb-1">Último valor sospechoso (debug)</div>
+                <div><b>label:</b> {renderText("boundary.snap.label", snap.label, "")}</div>
+                <div><b>typeof:</b> {renderText("boundary.snap.typeof", snap.typeof, "")}</div>
+                <div className="mt-1"><b>preview:</b></div>
+                <pre className="whitespace-pre-wrap text-[11px]">{renderText("boundary.snap.preview", snap.preview, "")}</pre>
+              </div>
+            ) : null}
+
+            {this.state.info ? (
+              <pre className="mt-3 whitespace-pre-wrap text-[11px] text-red-700 bg-white/60 border border-red-200 rounded p-2">
+                {renderText("boundary.componentStack", this.state.info, "")}
+              </pre>
+            ) : null}
+
+            <div className="mt-3 text-[11px] text-red-700">
+              Abre consola y busca: <span className="font-mono">[AdminsPage] BAD RENDER VALUE</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 async function callInviteAdminEdge(payload) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -58,6 +159,7 @@ async function callInviteAdminEdge(payload) {
   }
 
   const url = `${supabaseUrl}/functions/v1/invite_admin`;
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -81,19 +183,15 @@ async function callInviteAdminEdge(payload) {
 
 function edgeErrorMessage(resp, fallback = "Error al enviar la invitación.") {
   if (!resp) return fallback;
-  const status = safeText(resp.status, "0");
+  const status = renderText("edge.status", resp.status, "0");
   const data = resp.data;
 
   if (data && typeof data === "object" && data.ok === false) {
-    return `HTTP ${status} [${safeText(data.step, "edge")}] ${safeText(data.message, fallback)}`;
+    return `HTTP ${status} [${renderText("edge.step", data.step, "edge")}] ${renderText("edge.message", data.message, fallback)}`;
   }
   return `HTTP ${status} ${fallback}`;
 }
 
-/* =========================
-   Loader de admins (SIN join)
-   memberships + profiles (separado)
-   ========================= */
 async function loadAdminsForOrg(orgId) {
   const r1 = await supabase
     .from("memberships")
@@ -106,7 +204,7 @@ async function loadAdminsForOrg(orgId) {
   const memberships = Array.isArray(r1.data) ? r1.data : [];
   const userIds = Array.from(new Set(memberships.map((m) => m.user_id).filter(Boolean)));
 
-  const emailById = new Map();
+  let emailById = new Map();
   if (userIds.length) {
     const r2 = await supabase.from("profiles").select("id, email").in("id", userIds);
     if (r2?.error) throw r2.error;
@@ -121,36 +219,29 @@ async function loadAdminsForOrg(orgId) {
   }));
 }
 
-/* =========================
-   Page
-   ========================= */
-export default function AdminsPage() {
+function AdminsPageInner() {
   const { authReady, orgsReady, currentOrg, user, isRootOwner } = useAuth();
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
 
-  const [error, setError] = useState("");     // string
-  const [success, setSuccess] = useState(""); // string
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("admin"); // admin | owner
+  const [inviteRole, setInviteRole] = useState("admin");
 
-  const [invitedVia, setInvitedVia] = useState("");      // string
-  const [actionLink, setActionLink] = useState("");      // string
-  const [lastInvitedEmail, setLastInvitedEmail] = useState(""); // string
+  const [invitedVia, setInvitedVia] = useState("");
+  const [actionLink, setActionLink] = useState("");
+  const [lastInvitedEmail, setLastInvitedEmail] = useState("");
 
-  // IMPORTANT: debug siempre strings (NUNCA objeto)
+  // SIEMPRE strings (v4 fix)
   const [inviteDebug, setInviteDebug] = useState({ status: "", data: "", raw: "" });
 
-  const orgName = useMemo(() => safeText(currentOrg?.name, "—"), [currentOrg?.name]);
-  const orgId = useMemo(() => safeText(currentOrg?.id, ""), [currentOrg?.id]);
-  const userEmail = useMemo(() => safeText(user?.email, "—"), [user?.email]);
-
-  const showError = Boolean(error);
-  const showSuccess = Boolean(success);
-  const showInviteResult = Boolean(invitedVia || actionLink);
+  const orgName = useMemo(() => renderText("org.name", currentOrg?.name, "—"), [currentOrg?.name]);
+  const orgId = useMemo(() => renderText("org.id", currentOrg?.id, ""), [currentOrg?.id]);
+  const userEmail = useMemo(() => renderText("user.email", user?.email, "—"), [user?.email]);
 
   if (!authReady || !orgsReady) {
     return (
@@ -189,8 +280,8 @@ export default function AdminsPage() {
       const rows = await loadAdminsForOrg(orgId);
       setAdmins(Array.isArray(rows) ? rows : []);
     } catch (e) {
-      console.error("[AdminsPage] fetchAdmins error:", e);
-      setError(safeText(e?.message ?? e, "No se pudo cargar la lista de administradores."));
+      renderText("fetchAdmins.errorObject", e, "");
+      setError(renderText("fetchAdmins.errorMessage", e?.message ?? e, "No se pudo cargar la lista de administradores."));
       setAdmins([]);
     } finally {
       setLoading(false);
@@ -226,11 +317,11 @@ export default function AdminsPage() {
 
       const resp = await callInviteAdminEdge(payload);
 
-      // IMPORTANT: guardar SIEMPRE strings (evita #300)
+      // Guardar SIEMPRE strings
       setInviteDebug({
-        status: safeText(resp.status, ""),
-        data: safeText(resp.data, ""), // <- aquí estaba el objeto en tu debug anterior
-        raw: safeText(resp.raw, ""),
+        status: renderText("inviteDebug.status", resp.status, ""),
+        data: safeText(resp.data, ""), // aquí estuvo el culpable antes
+        raw: renderText("inviteDebug.raw", resp.raw, ""),
       });
 
       if (!resp.ok) {
@@ -244,8 +335,8 @@ export default function AdminsPage() {
         return;
       }
 
-      const via = safeText(data?.invited_via, data?.action_link ? "action_link" : "");
-      const link = safeText(data?.action_link, "");
+      const via = renderText("invite.via", data?.invited_via, data?.action_link ? "action_link" : "");
+      const link = renderText("invite.link", data?.action_link, "");
 
       setLastInvitedEmail(email);
       setInvitedVia(via);
@@ -258,36 +349,8 @@ export default function AdminsPage() {
       setInviteEmail("");
       await fetchAdmins();
     } catch (e2) {
-      console.error("[AdminsPage] invite error:", e2);
-      setError(`Error inesperado: ${safeText(e2?.message ?? e2, "Error")}`);
-    } finally {
-      setLoadingAction(false);
-    }
-  };
-
-  const handleDelete = async (row) => {
-    const uid = safeText(row?.user_id, "");
-    if (!uid) return;
-    if (!window.confirm("¿Eliminar este administrador?")) return;
-
-    setLoadingAction(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      const { error: delErr } = await supabase
-        .from("memberships")
-        .delete()
-        .eq("org_id", orgId)
-        .eq("user_id", uid);
-
-      if (delErr) throw delErr;
-
-      setAdmins((prev) => (Array.isArray(prev) ? prev.filter((a) => safeText(a?.user_id) !== uid) : []));
-      setSuccess("Administrador eliminado.");
-    } catch (e3) {
-      console.error("[AdminsPage] delete error:", e3);
-      setError(safeText(e3?.message ?? e3, "No se pudo eliminar al administrador."));
+      renderText("invite.errorObject", e2, "");
+      setError(`Error inesperado: ${renderText("invite.errorMessage", e2?.message ?? e2, "Error")}`);
     } finally {
       setLoadingAction(false);
     }
@@ -308,10 +371,10 @@ export default function AdminsPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Administradores actuales</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Organización: <b>{safeText(orgName)}</b>
+          Organización: <b>{orgName}</b>
         </p>
         <p className="text-xs text-slate-500 mt-1">
-          Usuario: <span className="font-mono">{safeText(userEmail)}</span>
+          Usuario: <span className="font-mono">{userEmail}</span>
         </p>
       </header>
 
@@ -345,10 +408,10 @@ export default function AdminsPage() {
           </button>
         </form>
 
-        {showInviteResult ? (
+        {Boolean(invitedVia || actionLink) ? (
           <div className="mt-4 border rounded-lg p-3 bg-slate-50">
             <div className="text-xs text-slate-700">
-              Invitado: <b>{safeText(lastInvitedEmail, "—")}</b>
+              Invitado: <b>{renderText("invite.lastEmail", lastInvitedEmail, "—")}</b>
             </div>
 
             {actionLink ? (
@@ -370,7 +433,7 @@ export default function AdminsPage() {
                   </button>
                 </div>
                 <div className="bg-white border rounded p-2 text-[11px] break-all select-all">
-                  {safeText(actionLink, "")}
+                  {renderText("invite.actionLink", actionLink, "")}
                 </div>
               </div>
             ) : null}
@@ -382,16 +445,16 @@ export default function AdminsPage() {
             <summary className="text-xs cursor-pointer text-slate-600">Debug (invite_admin)</summary>
             <div className="mt-2 text-[11px] bg-slate-50 border rounded p-2 space-y-2">
               <div>
-                <b>Status:</b> <span className="font-mono">{safeText(inviteDebug.status)}</span>
+                <b>Status:</b> <span className="font-mono">{renderText("inviteDebug.status.render", inviteDebug.status, "")}</span>
               </div>
               <div>
                 <b>Data:</b>
-                <div className="font-mono break-all select-all mt-1">{safeText(inviteDebug.data)}</div>
+                <div className="font-mono break-all select-all mt-1">{renderText("inviteDebug.data.render", inviteDebug.data, "")}</div>
               </div>
               {inviteDebug.raw ? (
                 <div>
                   <b>Raw:</b>
-                  <div className="font-mono break-all select-all mt-1">{safeText(inviteDebug.raw)}</div>
+                  <div className="font-mono break-all select-all mt-1">{renderText("inviteDebug.raw.render", inviteDebug.raw, "")}</div>
                 </div>
               ) : null}
             </div>
@@ -399,15 +462,15 @@ export default function AdminsPage() {
         ) : null}
       </section>
 
-      {showError ? (
+      {Boolean(error) ? (
         <div className="bg-red-50 border border-red-300 text-red-700 p-2 rounded text-xs mb-3">
-          {safeText(error)}
+          {renderText("ui.error", error, "")}
         </div>
       ) : null}
 
-      {showSuccess ? (
+      {Boolean(success) ? (
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-700 p-2 rounded text-xs mb-3">
-          {safeText(success)}
+          {renderText("ui.success", success, "")}
         </div>
       ) : null}
 
@@ -439,21 +502,12 @@ export default function AdminsPage() {
             </thead>
             <tbody>
               {admins.map((adm, idx) => {
-                const key = safeText(adm?.user_id, `adm-${idx}`);
+                const key = renderText("row.key", adm?.user_id, `adm-${idx}`);
                 return (
                   <tr key={key} className="border-t">
-                    <td className="px-3 py-2">{safeText(adm?.role, "—")}</td>
-                    <td className="px-3 py-2">{safeText(adm?.email, "—")}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(adm)}
-                        disabled={loadingAction}
-                        className="text-red-600 border border-red-500 rounded px-2 py-1 text-xs disabled:opacity-60"
-                      >
-                        Eliminar
-                      </button>
-                    </td>
+                    <td className="px-3 py-2">{renderText("row.role", adm?.role, "—")}</td>
+                    <td className="px-3 py-2">{renderText("row.email", adm?.email, "—")}</td>
+                    <td className="px-3 py-2 text-right">—</td>
                   </tr>
                 );
               })}
@@ -461,6 +515,18 @@ export default function AdminsPage() {
           </table>
         )}
       </section>
+
+      <div className="mt-4 text-[11px] text-slate-500">
+        Debug: <span className="font-mono">window.__ADMINS_LAST_BAD_RENDER</span>
+      </div>
     </div>
+  );
+}
+
+export default function AdminsPage() {
+  return (
+    <SafeBoundary>
+      <AdminsPageInner />
+    </SafeBoundary>
   );
 }
