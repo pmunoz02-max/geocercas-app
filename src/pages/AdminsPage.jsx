@@ -4,48 +4,41 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../supabaseClient.js";
 
 /**
- * AdminsPage — v6 FINAL
- * - Mantiene invitación vía Edge Function invite_admin
- * - Nunca renderiza objetos crudos en JSX
- * - Siempre loggea BAD RENDER VALUE cuando detecta valor no-primitive
+ * AdminsPage — v7 FINAL (anti React #300)
+ *
+ * Objetivos:
+ * 1) Eliminar definitivamente React error #300 ("Objects are not valid as a React child") en AdminsPage.
+ * 2) Invitación admin estable: si el correo NO llega, siempre mostramos el Magic Link si el Edge lo entrega.
+ * 3) Logs útiles y permanentes: cuando detectemos valores no-primitive en UI, log + snapshot.
+ *
+ * Regla:
+ * - Datos lógicos (orgId, payloads, keys) NO pasan por stringify defensivo.
+ * - Solo el texto visible pasa por uiText().
  */
 
-function safeText(v, fallback = "") {
-  if (v == null) return fallback;
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  try {
-    const s = JSON.stringify(v);
-    if (s === "{}" || s === "[]") return fallback;
-    return s;
-  } catch {
-    try {
-      return String(v);
-    } catch {
-      return fallback;
-    }
-  }
-}
-
-function renderText(label, value, fallback = "—") {
+function uiText(label, value, fallback = "—") {
   const t = typeof value;
 
   if (value == null) return fallback;
   if (t === "string") return value;
   if (t === "number" || t === "boolean") return String(value);
 
-  // Log SIEMPRE (no “solo una vez por label”)
+  // Si llega objeto/array/error: loggear SIEMPRE, y mostrar preview seguro (string).
   let preview = "";
   try {
     preview = JSON.stringify(value);
   } catch {
-    preview = safeText(value, "");
+    try {
+      preview = String(value);
+    } catch {
+      preview = "";
+    }
   }
 
   const snapshot = {
     label,
     typeof: t,
-    preview: (preview || "").slice(0, 800),
+    preview: (preview || "").slice(0, 1200),
   };
 
   try {
@@ -57,7 +50,7 @@ function renderText(label, value, fallback = "—") {
   // eslint-disable-next-line no-console
   console.warn("[AdminsPage] BAD RENDER VALUE ->", { ...snapshot, value });
 
-  return safeText(preview, fallback) || fallback;
+  return preview || fallback;
 }
 
 function isValidEmail(email) {
@@ -71,10 +64,11 @@ class SafeBoundary extends React.Component {
     this.state = { hasError: false, msg: "", info: "" };
   }
   static getDerivedStateFromError(err) {
-    return { hasError: true, msg: safeText(err?.message || err, "Error de render") };
+    const msg = (err && err.message) ? String(err.message) : String(err || "Error de render");
+    return { hasError: true, msg };
   }
   componentDidCatch(err, info) {
-    const stack = safeText(info?.componentStack || "", "");
+    const stack = info?.componentStack ? String(info.componentStack) : "";
     this.setState({ info: stack });
     // eslint-disable-next-line no-console
     console.error("[AdminsPage] Render error caught:", err, info);
@@ -86,47 +80,44 @@ class SafeBoundary extends React.Component {
     }
   }
   render() {
-    if (this.state.hasError) {
-      const snap = (() => {
-        try {
-          return window.__ADMINS_LAST_BAD_RENDER || null;
-        } catch {
-          return null;
-        }
-      })();
+    if (!this.state.hasError) return this.props.children;
 
-      return (
-        <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-            <div className="font-semibold">Error de render aislado (AdminsPage)</div>
-            <div className="mt-2 break-words">{renderText("boundary.msg", this.state.msg, "Error")}</div>
+    const snap = (() => {
+      try {
+        return window.__ADMINS_LAST_BAD_RENDER || null;
+      } catch {
+        return null;
+      }
+    })();
 
-            {snap ? (
-              <div className="mt-3 text-[12px] bg-white/70 border border-red-200 rounded p-2">
-                <div className="font-semibold mb-1">Último valor sospechoso</div>
-                <div><b>label:</b> {renderText("boundary.snap.label", snap.label, "")}</div>
-                <div><b>typeof:</b> {renderText("boundary.snap.typeof", snap.typeof, "")}</div>
-                <div className="mt-1"><b>preview:</b></div>
-                <pre className="whitespace-pre-wrap text-[11px]">
-                  {renderText("boundary.snap.preview", snap.preview, "")}
-                </pre>
-              </div>
-            ) : null}
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+          <div className="font-semibold">Error de render aislado (AdminsPage)</div>
+          <div className="mt-2 break-words">{uiText("boundary.msg", this.state.msg, "Error")}</div>
 
-            {this.state.info ? (
-              <pre className="mt-3 whitespace-pre-wrap text-[11px] text-red-700 bg-white/60 border border-red-200 rounded p-2">
-                {renderText("boundary.componentStack", this.state.info, "")}
-              </pre>
-            ) : null}
-
-            <div className="mt-3 text-[11px] text-red-700">
-              Abre consola y busca: <span className="font-mono">[AdminsPage] BAD RENDER VALUE</span>
+          {snap ? (
+            <div className="mt-3 text-[12px] bg-white/70 border border-red-200 rounded p-2">
+              <div className="font-semibold mb-1">Último valor sospechoso</div>
+              <div><b>label:</b> {uiText("boundary.snap.label", snap.label, "")}</div>
+              <div><b>typeof:</b> {uiText("boundary.snap.typeof", snap.typeof, "")}</div>
+              <div className="mt-1"><b>preview:</b></div>
+              <pre className="whitespace-pre-wrap text-[11px]">{uiText("boundary.snap.preview", snap.preview, "")}</pre>
             </div>
+          ) : null}
+
+          {this.state.info ? (
+            <pre className="mt-3 whitespace-pre-wrap text-[11px] text-red-700 bg-white/60 border border-red-200 rounded p-2">
+              {uiText("boundary.componentStack", this.state.info, "")}
+            </pre>
+          ) : null}
+
+          <div className="mt-3 text-[11px] text-red-700">
+            Abre consola y busca: <span className="font-mono">[AdminsPage] BAD RENDER VALUE</span>
           </div>
         </div>
-      );
-    }
-    return this.props.children;
+      </div>
+    );
   }
 }
 
@@ -169,11 +160,11 @@ async function callInviteAdminEdge(payload) {
 
 function edgeErrorMessage(resp, fallback = "Error al enviar la invitación.") {
   if (!resp) return fallback;
-  const status = renderText("edge.status", resp.status, "0");
+  const status = uiText("edge.status", resp.status, "0");
   const data = resp.data;
 
   if (data && typeof data === "object" && data.ok === false) {
-    return `HTTP ${status} [${renderText("edge.step", data.step, "edge")}] ${renderText("edge.message", data.message, fallback)}`;
+    return `HTTP ${status} [${uiText("edge.step", data.step, "edge")}] ${uiText("edge.message", data.message, fallback)}`;
   }
   return `HTTP ${status} ${fallback}`;
 }
@@ -208,6 +199,11 @@ async function loadAdminsForOrg(orgId) {
 function AdminsPageInner() {
   const { authReady, orgsReady, currentOrg, user, isRootOwner } = useAuth();
 
+  // IDs / lógica: sin stringify defensivo
+  const orgId = (typeof currentOrg?.id === "string") ? currentOrg.id : "";
+  const orgName = (typeof currentOrg?.name === "string") ? currentOrg.name : "";
+  const userEmail = (typeof user?.email === "string") ? user.email : "";
+
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState(false);
@@ -223,11 +219,6 @@ function AdminsPageInner() {
   const [lastInvitedEmail, setLastInvitedEmail] = useState("");
 
   const [inviteDebug, setInviteDebug] = useState({ status: "", data: "", raw: "" });
-
-  // ⚠️ orgId para lógica NO debe venir de renderText (solo string real)
-  const orgIdRaw = currentOrg?.id ?? "";
-  const orgName = useMemo(() => renderText("org.name", currentOrg?.name, "—"), [currentOrg?.name]);
-  const userEmail = useMemo(() => renderText("user.email", user?.email, "—"), [user?.email]);
 
   if (!authReady || !orgsReady) {
     return (
@@ -248,9 +239,8 @@ function AdminsPageInner() {
     );
   }
 
-  if (!orgIdRaw || typeof orgIdRaw !== "string") {
-    // log para cazar casos raros
-    renderText("org.id.nonstring", orgIdRaw, "");
+  if (!orgId) {
+    uiText("org.id.invalid", currentOrg?.id, "");
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -265,11 +255,11 @@ function AdminsPageInner() {
     setError("");
     setSuccess("");
     try {
-      const rows = await loadAdminsForOrg(orgIdRaw);
+      const rows = await loadAdminsForOrg(orgId);
       setAdmins(Array.isArray(rows) ? rows : []);
     } catch (e) {
-      renderText("fetchAdmins.errorObject", e, "");
-      setError(renderText("fetchAdmins.errorMessage", e?.message ?? e, "No se pudo cargar la lista de administradores."));
+      uiText("fetchAdmins.errorObject", e, "");
+      setError(uiText("fetchAdmins.errorMessage", e?.message ?? e, "No se pudo cargar la lista de administradores."));
       setAdmins([]);
     } finally {
       setLoading(false);
@@ -279,7 +269,7 @@ function AdminsPageInner() {
   useEffect(() => {
     fetchAdmins();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgIdRaw]);
+  }, [orgId]);
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -301,14 +291,14 @@ function AdminsPageInner() {
       const payload =
         inviteRole === "owner"
           ? { email, role: "owner", org_name: email }
-          : { email, role: "admin", org_id: orgIdRaw };
+          : { email, role: "admin", org_id: orgId };
 
       const resp = await callInviteAdminEdge(payload);
 
       setInviteDebug({
-        status: renderText("inviteDebug.status", resp.status, ""),
-        data: safeText(resp.data, ""),
-        raw: renderText("inviteDebug.raw", resp.raw, ""),
+        status: uiText("inviteDebug.status", resp.status, ""),
+        data: uiText("inviteDebug.data", resp.data, ""),
+        raw: uiText("inviteDebug.raw", resp.raw, ""),
       });
 
       if (!resp.ok) {
@@ -322,15 +312,14 @@ function AdminsPageInner() {
         return;
       }
 
-      const via = renderText("invite.via", data?.invited_via, data?.action_link ? "action_link" : "");
-      const link = renderText("invite.link", data?.action_link, "");
+      const via = uiText("invite.via", data?.invited_via, data?.action_link ? "action_link" : "");
+      const link = uiText("invite.link", data?.action_link, "");
 
       setLastInvitedEmail(email);
       setInvitedVia(via);
       setActionLink(link);
 
-      // ✅ Mensaje honesto:
-      // - Si hay action_link, SIEMPRE mostrarlo (aunque diga “email”) para evitar “no llega nada”
+      // Mensaje honesto
       if (link) {
         setSuccess(`Invitación generada para ${email}. Copia el Magic Link y envíalo si no llega el correo.`);
       } else if (via === "email") {
@@ -342,8 +331,8 @@ function AdminsPageInner() {
       setInviteEmail("");
       await fetchAdmins();
     } catch (e2) {
-      renderText("invite.errorObject", e2, "");
-      setError(`Error inesperado: ${renderText("invite.errorMessage", e2?.message ?? e2, "Error")}`);
+      uiText("invite.errorObject", e2, "");
+      setError(`Error inesperado: ${uiText("invite.errorMessage", e2?.message ?? e2, "Error")}`);
     } finally {
       setLoadingAction(false);
     }
@@ -364,10 +353,10 @@ function AdminsPageInner() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Administradores actuales</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Organización: <b>{orgName}</b>
+          Organización: <b>{uiText("org.name.ui", orgName, "—")}</b>
         </p>
         <p className="text-xs text-slate-500 mt-1">
-          Usuario: <span className="font-mono">{userEmail}</span>
+          Usuario: <span className="font-mono">{uiText("user.email.ui", userEmail, "—")}</span>
         </p>
       </header>
 
@@ -404,7 +393,7 @@ function AdminsPageInner() {
         {(invitedVia || actionLink) ? (
           <div className="mt-4 border rounded-lg p-3 bg-slate-50">
             <div className="text-xs text-slate-700">
-              Invitado: <b>{renderText("invite.lastEmail", lastInvitedEmail, "—")}</b>
+              Invitado: <b>{uiText("invite.lastEmail", lastInvitedEmail, "—")}</b>
             </div>
 
             {actionLink ? (
@@ -426,7 +415,7 @@ function AdminsPageInner() {
                   </button>
                 </div>
                 <div className="bg-white border rounded p-2 text-[11px] break-all select-all">
-                  {renderText("invite.actionLink", actionLink, "")}
+                  {uiText("invite.actionLink", actionLink, "")}
                 </div>
                 <div className="mt-2 text-[11px] text-slate-600">
                   Si el correo no llega, envía este link por WhatsApp/Telegram.
@@ -441,16 +430,16 @@ function AdminsPageInner() {
             <summary className="text-xs cursor-pointer text-slate-600">Debug (invite_admin)</summary>
             <div className="mt-2 text-[11px] bg-slate-50 border rounded p-2 space-y-2">
               <div>
-                <b>Status:</b> <span className="font-mono">{renderText("inviteDebug.status.render", inviteDebug.status, "")}</span>
+                <b>Status:</b> <span className="font-mono">{uiText("inviteDebug.status.render", inviteDebug.status, "")}</span>
               </div>
               <div>
                 <b>Data:</b>
-                <div className="font-mono break-all select-all mt-1">{renderText("inviteDebug.data.render", inviteDebug.data, "")}</div>
+                <div className="font-mono break-all select-all mt-1">{uiText("inviteDebug.data.render", inviteDebug.data, "")}</div>
               </div>
               {inviteDebug.raw ? (
                 <div>
                   <b>Raw:</b>
-                  <div className="font-mono break-all select-all mt-1">{renderText("inviteDebug.raw.render", inviteDebug.raw, "")}</div>
+                  <div className="font-mono break-all select-all mt-1">{uiText("inviteDebug.raw.render", inviteDebug.raw, "")}</div>
                 </div>
               ) : null}
             </div>
@@ -460,13 +449,13 @@ function AdminsPageInner() {
 
       {error ? (
         <div className="bg-red-50 border border-red-300 text-red-700 p-2 rounded text-xs mb-3">
-          {renderText("ui.error", error, "")}
+          {uiText("ui.error", error, "")}
         </div>
       ) : null}
 
       {success ? (
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-700 p-2 rounded text-xs mb-3">
-          {renderText("ui.success", success, "")}
+          {uiText("ui.success", success, "")}
         </div>
       ) : null}
 
@@ -498,11 +487,12 @@ function AdminsPageInner() {
             </thead>
             <tbody>
               {admins.map((adm, idx) => {
-                const key = (typeof adm?.user_id === "string" && adm.user_id) ? adm.user_id : `adm-${idx}`;
+                const key =
+                  (typeof adm?.user_id === "string" && adm.user_id) ? adm.user_id : `adm-${idx}`;
                 return (
                   <tr key={key} className="border-t">
-                    <td className="px-3 py-2">{renderText("row.role", adm?.role, "—")}</td>
-                    <td className="px-3 py-2">{renderText("row.email", adm?.email, "—")}</td>
+                    <td className="px-3 py-2">{uiText("row.role", adm?.role, "—")}</td>
+                    <td className="px-3 py-2">{uiText("row.email", adm?.email, "—")}</td>
                     <td className="px-3 py-2 text-right">—</td>
                   </tr>
                 );
