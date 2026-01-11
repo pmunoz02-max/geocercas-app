@@ -10,8 +10,40 @@ export default function ProtectedShell() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const role = (currentRole || "").toLowerCase();
+  const role = String(currentRole || "").toLowerCase();
 
+  // ✅ Hooks SIEMPRE se ejecutan (no condicionales)
+  useEffect(() => {
+    if (!user) return;
+    if (role === "tracker" && location.pathname !== "/tracker-gps") {
+      navigate("/tracker-gps", { replace: true });
+    }
+  }, [user, role, location.pathname, navigate]);
+
+  // ✅ TABS con i18n usando memo (siempre se ejecuta)
+  const tabs = useMemo(() => {
+    const base = [
+      { path: "/inicio", labelKey: "app.tabs.inicio" },
+      { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
+      { path: "/personal", labelKey: "app.tabs.personal" },
+      { path: "/actividades", labelKey: "app.tabs.actividades" },
+      { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
+      { path: "/costos", labelKey: "app.tabs.reportes" },
+      { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
+    ];
+
+    if (role === "owner" || role === "admin") {
+      base.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
+    }
+
+    if (role === "owner") {
+      base.push({ path: "/admins", labelKey: "app.tabs.admins" });
+    }
+
+    return base;
+  }, [role]);
+
+  // ✅ returns tempranos DESPUÉS de hooks
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center text-slate-600">
@@ -24,44 +56,10 @@ export default function ProtectedShell() {
     return <Navigate to="/login" replace />;
   }
 
-  useEffect(() => {
-    if (role === "tracker" && location.pathname !== "/tracker-gps") {
-      navigate("/tracker-gps", { replace: true });
-    }
-  }, [role, location.pathname, navigate]);
-
+  // Si tracker, solo dejamos pasar /tracker-gps
   if (role === "tracker" && location.pathname !== "/tracker-gps") {
     return null;
   }
-
-  // 🔥 TABS con i18n usando memo
-  const tabs = useMemo(() => {
-    const base = [
-      { path: "/inicio", labelKey: "app.tabs.inicio" },
-      { path: "/nueva-geocerca", labelKey: "app.tabs.nuevaGeocerca" },
-      { path: "/personal", labelKey: "app.tabs.personal" },
-      { path: "/actividades", labelKey: "app.tabs.actividades" },
-      { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
-      { path: "/costos", labelKey: "app.tabs.reportes" },
-      { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" }
-    ];
-
-    if (role === "owner" || role === "admin") {
-      base.push({
-        path: "/invitar-tracker",
-        labelKey: "app.tabs.invitarTracker",
-      });
-    }
-
-    if (role === "owner") {
-      base.push({
-        path: "/admins",
-        labelKey: "app.tabs.admins",
-      });
-    }
-
-    return base;
-  }, [role]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
