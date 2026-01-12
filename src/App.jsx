@@ -9,8 +9,6 @@ import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
-import InviteCallback from "./pages/InviteCallback.tsx";
-
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
@@ -101,7 +99,6 @@ export default function App() {
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/auth/invite" element={<InviteCallback />} />
 
         {/* Tracker-only */}
         <Route
