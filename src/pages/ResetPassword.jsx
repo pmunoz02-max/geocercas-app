@@ -1,271 +1,154 @@
-// src/pages/ResetPassword.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "../components/LanguageSwitcher";
 
+/**
+ * ResetPassword
+ * - Llegas aquí DESPUÉS de /auth/callback con type=recovery
+ * - Debe existir session (usuario autenticado temporalmente)
+ */
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
 
-  const [loadingInit, setLoadingInit] = useState(true);
-  const [loadingAction, setLoadingAction] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hasSession, setHasSession] = useState(false);
 
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [infoMsg, setInfoMsg] = useState(null);
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
 
-  const [newPassword, setNewPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
 
-  const urlInfo = useMemo(() => {
-    try {
-      const u = new URL(window.location.href);
-      const type = u.searchParams.get("type") || "";
-      // Supabase puede traer "code" en query (PKCE)
-      const code = u.searchParams.get("code") || "";
-      const hash = window.location.hash || "";
-      return { type, code, hash };
-    } catch {
-      return { type: "", code: "", hash: "" };
-    }
-  }, []);
-
-  // 1) Al llegar desde el email: intercambiar code → sesión (si aplica)
-  // Nota: Si ya vienes desde /auth/callback, normalmente ya hay sesión y esto no hace nada.
   useEffect(() => {
     let alive = true;
 
-    const init = async () => {
-      setLoadingInit(true);
-      setErrorMsg(null);
-      setInfoMsg(null);
-
+    async function init() {
+      setLoading(true);
+      setErr("");
       try {
-        // Si viene con code (PKCE), lo intercambiamos por sesión
-        if (urlInfo.code) {
-          const { error: exError } = await supabase.auth.exchangeCodeForSession(
-            window.location.href
-          );
-          if (exError) {
-            console.error("[ResetPassword] exchangeCodeForSession error:", exError);
-            if (!alive) return;
-            setErrorMsg(
-              t("resetPassword.invalidOrExpired") ||
-                "El enlace de recuperación es inválido o expiró. Solicita uno nuevo."
-            );
-            setLoadingInit(false);
-            return;
-          }
-        }
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session ?? null;
 
-        // Verificar que exista sesión
-        const { data: sessData, error: sessErr } = await supabase.auth.getSession();
-
-        if (sessErr) {
-          console.error("[ResetPassword] getSession error:", sessErr);
-        }
-
-        const user = sessData?.session?.user || null;
-
-        if (!user) {
-          if (!alive) return;
-          setErrorMsg(
-            t("resetPassword.noSession") ||
-              "No hay una sesión válida para restablecer la contraseña. Vuelve a solicitar el enlace."
-          );
-          setLoadingInit(false);
-          return;
-        }
-
-        // Opcional: si el type viene distinto, no bloqueamos (varía por proveedor/config)
         if (!alive) return;
-        if (urlInfo.type && urlInfo.type !== "recovery") {
-          setInfoMsg(
-            t("resetPassword.noticeType") ||
-              "Sesión detectada. Si este enlace no era de recuperación, vuelve a iniciar sesión normalmente."
-          );
-        }
 
-        setLoadingInit(false);
+        if (session?.user) {
+          setHasSession(true);
+        } else {
+          setHasSession(false);
+          setErr("No hay sesión de recuperación. Solicita un nuevo correo de recuperación e inténtalo otra vez.");
+        }
       } catch (e) {
-        console.error("[ResetPassword] init exception:", e);
+        console.error("[ResetPassword] init error", e);
         if (!alive) return;
-        setErrorMsg(
-          t("resetPassword.unexpected") ||
-            "Ocurrió un error al preparar el restablecimiento de contraseña."
-        );
-        setLoadingInit(false);
+        setHasSession(false);
+        setErr("No se pudo verificar la sesión. Intenta solicitar un nuevo correo.");
+      } finally {
+        if (alive) setLoading(false);
       }
-    };
+    }
 
     init();
-
     return () => {
       alive = false;
     };
-  }, [t, urlInfo.code, urlInfo.type]);
+  }, []);
 
-  const validatePassword = () => {
-    // Regla simple y universal (puedes endurecer luego)
-    if (!newPassword || newPassword.length < 8) {
-      return (
-        t("resetPassword.passwordMin") ||
-        "La contraseña debe tener al menos 8 caracteres."
-      );
-    }
-    if (newPassword !== confirm) {
-      return (
-        t("resetPassword.passwordMismatch") ||
-        "Las contraseñas no coinciden."
-      );
-    }
-    return null;
-  };
-
-  // 2) Actualizar contraseña (AUTO-LOGIN)
-  const handleUpdatePassword = async (e) => {
+  async function onSave(e) {
     e.preventDefault();
-    setErrorMsg(null);
-    setInfoMsg(null);
+    setErr("");
+    setMsg("");
 
-    const err = validatePassword();
-    if (err) {
-      setErrorMsg(err);
+    if (!password || password.length < 8) {
+      setErr("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (password !== password2) {
+      setErr("Las contraseñas no coinciden.");
       return;
     }
 
+    setBusy(true);
     try {
-      setLoadingAction(true);
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
 
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      setMsg("Contraseña actualizada. Ahora puedes ingresar con tu nueva contraseña.");
 
-      if (error) {
-        console.error("[ResetPassword] updateUser error:", error);
-        setErrorMsg(
-          error.message ||
-            (t("resetPassword.updateError") || "No se pudo actualizar la contraseña.")
-        );
-        setLoadingAction(false);
-        return;
-      }
-
-      // ✅ Auto-login: NO hacemos signOut. La sesión actual queda válida.
-      setInfoMsg(
-        t("resetPassword.updatedOkAutoLogin") ||
-          "Contraseña actualizada. Entrando a tu cuenta…"
-      );
-
-      // Limpieza visual: evita que el usuario refresquee y se confunda con parámetros viejos
-      try {
-        const clean = `${window.location.origin}${window.location.pathname}`;
-        window.history.replaceState({}, document.title, clean);
-      } catch {
-        // ignore
-      }
-
-      // Redirigir al inicio (tu app redirigirá por rol si aplica)
-      navigate("/inicio", { replace: true });
-    } catch (e) {
-      console.error("[ResetPassword] exception:", e);
-      setErrorMsg(
-        t("resetPassword.unexpected") ||
-          "Ocurrió un error al actualizar la contraseña."
-      );
+      await supabase.auth.signOut();
+      setTimeout(() => navigate("/login", { replace: true }), 600);
+    } catch (e2) {
+      console.error("[ResetPassword] update error", e2);
+      setErr(e2?.message || "No se pudo actualizar la contraseña.");
     } finally {
-      setLoadingAction(false);
+      setBusy(false);
     }
-  };
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200 p-4">
+        <div className="text-sm opacity-80">Cargando…</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <Link to="/" className="text-sm text-slate-600 hover:underline">
-            {t("resetPassword.backHome") || "Volver"}
-          </Link>
-          <LanguageSwitcher />
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200 p-4">
+      <div className="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow">
+        <h1 className="text-lg font-semibold">Restablecer contraseña</h1>
 
-        <h1 className="text-xl font-bold text-slate-900">
-          {t("resetPassword.title") || "Restablecer contraseña"}
-        </h1>
-        <p className="text-sm text-slate-600 mt-1">
-          {t("resetPassword.subtitle") ||
-            "Crea una nueva contraseña para tu cuenta."}
-        </p>
-
-        {loadingInit ? (
-          <div className="mt-6 text-sm text-slate-600">
-            {t("resetPassword.loading") || "Preparando…"}
-          </div>
-        ) : (
+        {!hasSession ? (
           <>
-            {errorMsg ? (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 whitespace-pre-line">
-                {errorMsg}
-              </div>
-            ) : null}
+            <p className="text-sm opacity-85 whitespace-pre-line">{err}</p>
+            <button
+              onClick={() => navigate("/login", { replace: true })}
+              className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium"
+            >
+              Ir a Login
+            </button>
+          </>
+        ) : (
+          <form onSubmit={onSave} className="space-y-4">
+            <div>
+              <label className="block text-sm mb-2 opacity-80">Nueva contraseña</label>
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                className="w-full px-4 py-3 rounded-xl bg-slate-800/70 border border-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
 
-            {infoMsg ? (
-              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 whitespace-pre-line">
-                {infoMsg}
-              </div>
-            ) : null}
+            <div>
+              <label className="block text-sm mb-2 opacity-80">Confirmar contraseña</label>
+              <input
+                value={password2}
+                onChange={(e) => setPassword2(e.target.value)}
+                type="password"
+                className="w-full px-4 py-3 rounded-xl bg-slate-800/70 border border-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
 
-            <form className="mt-6 space-y-4" onSubmit={handleUpdatePassword}>
+            {(err || msg) && (
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  {t("resetPassword.newPassword") || "Nueva contraseña"}
-                </label>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder={t("resetPassword.newPlaceholder") || "Mínimo 8 caracteres"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  disabled={loadingAction}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  {t("resetPassword.confirmPassword") || "Confirmar contraseña"}
-                </label>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder={t("resetPassword.confirmPlaceholder") || "Repite"}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  disabled={loadingAction}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loadingAction}
-                className="w-full inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loadingAction
-                  ? t("resetPassword.saving") || "Guardando…"
-                  : t("resetPassword.saveButton") || "Guardar nueva contraseña"}
-              </button>
-            </form>
-
-            {/* Ayuda visual si el usuario cae sin sesión */}
-            {!loadingInit && errorMsg && (
-              <div className="mt-4 text-[11px] text-slate-500">
-                {t("resetPassword.tip") ||
-                  "Tip: vuelve a /login, escribe tu correo y usa “¿Olvidaste tu contraseña?” para generar un nuevo enlace."}
+                {err ? <div className="text-sm text-red-300">{err}</div> : null}
+                {msg ? <div className="text-sm text-emerald-300">{msg}</div> : null}
               </div>
             )}
-          </>
+
+            <button
+              disabled={busy}
+              className="w-full py-3 rounded-xl bg-white text-slate-900 font-semibold hover:opacity-95 disabled:opacity-60"
+            >
+              {busy ? "Guardando…" : "Guardar nueva contraseña"}
+            </button>
+          </form>
         )}
+
+        <div className="text-[11px] opacity-60">
+          Tip: abre el correo de recuperación en Chrome/Safari. Si falló antes, intenta en incógnito y solicita un link nuevo.
+        </div>
       </div>
     </div>
   );

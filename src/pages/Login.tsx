@@ -1,260 +1,196 @@
-import React, { useEffect, useState } from "react";
-import { useLocation, useNavigate, Link } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext.jsx";
-import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "../components/LanguageSwitcher";
 
-type Mode = "password" | "magic";
-
-const Login: React.FC = () => {
+export default function Login() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { session, authReady } = useAuth();
-  const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
 
+  const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
+
+  const [mode, setMode] = useState<"password" | "magic">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<Mode>("password");
-  const [loadingAction, setLoadingAction] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
 
-  // Lee mode de query (?mode=magic)
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const m = params.get("mode");
-    if (m === "magic") setMode("magic");
-    else setMode("password");
-  }, [location.search]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
 
-  // Si ya hay sesión, no mostrar login
-  useEffect(() => {
-    if (!authReady) return;
-    if (session) navigate("/inicio", { replace: true });
-  }, [authReady, session, navigate]);
+  const redirectTo = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}/auth/callback`;
+  }, []);
 
-  const normEmail = (v: string) => String(v || "").trim().toLowerCase();
-  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-
-  // ---------------- PASSWORD LOGIN ----------------
-  const onPasswordLogin = async (e: React.FormEvent) => {
+  async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
-    setErrorMsg(null);
-    setOkMsg(null);
-
-    const em = normEmail(email);
-    if (!em || !isValidEmail(em)) {
-      setErrorMsg(t("login.invalidEmail", { defaultValue: "Correo inválido." }));
-      return;
-    }
-    if (!password) {
-      setErrorMsg(t("login.invalidPassword", { defaultValue: "Contraseña requerida." }));
-      return;
-    }
-
+    setErr("");
+    setMsg("");
+    setBusy(true);
     try {
-      setLoadingAction(true);
-      const { error } = await supabase.auth.signInWithPassword({ email: em, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
       if (error) throw error;
-      navigate("/inicio", { replace: true });
-    } catch (err: any) {
-      console.error("[Login] password error", err);
-      setErrorMsg(err?.message || t("login.error", { defaultValue: "No se pudo ingresar." }));
+
+      navigate(next, { replace: true });
+    } catch (e2: any) {
+      console.error("[Login] password error", e2);
+      setErr(e2?.message || "Credenciales inválidas.");
     } finally {
-      setLoadingAction(false);
+      setBusy(false);
     }
-  };
+  }
 
-  // ---------------- MAGIC LINK ----------------
-  const onMagicLink = async (e: React.FormEvent) => {
+  async function onSendMagicLink(e: React.FormEvent) {
     e.preventDefault();
-    setErrorMsg(null);
-    setOkMsg(null);
-
-    const em = normEmail(email);
-    if (!em || !isValidEmail(em)) {
-      setErrorMsg(t("login.invalidEmail", { defaultValue: "Correo inválido." }));
-      return;
-    }
-
+    setErr("");
+    setMsg("");
+    setBusy(true);
     try {
-      setLoadingAction(true);
-      const redirectTo = `${window.location.origin}/auth/callback`;
-
       const { error } = await supabase.auth.signInWithOtp({
-        email: em,
+        email: email.trim(),
         options: { emailRedirectTo: redirectTo },
       });
-
       if (error) throw error;
-
-      setOkMsg(
-        t("login.magicSent", {
-          defaultValue: "Te enviamos un enlace de acceso. Revisa tu correo.",
-        })
-      );
-    } catch (err: any) {
-      console.error("[Login] magic error", err);
-      setErrorMsg(err?.message || t("login.error", { defaultValue: "No se pudo enviar el enlace." }));
+      setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
+    } catch (e2: any) {
+      console.error("[Login] magiclink error", e2);
+      setErr(e2?.message || "No se pudo enviar el Magic Link.");
     } finally {
-      setLoadingAction(false);
+      setBusy(false);
     }
-  };
+  }
 
-  // ---------------- RECUPERAR CONTRASEÑA ----------------
-  const onRecoverPassword = async () => {
-    setErrorMsg(null);
-    setOkMsg(null);
-
-    const em = normEmail(email);
-    if (!em || !isValidEmail(em)) {
-      setErrorMsg(
-        t("login.invalidEmail", {
-          defaultValue: "Ingresa un correo válido para recuperar la contraseña.",
-        })
-      );
+  async function onForgotPassword() {
+    setErr("");
+    setMsg("");
+    if (!email.trim()) {
+      setErr("Escribe tu correo primero para recuperar contraseña.");
       return;
     }
-
+    setBusy(true);
     try {
-      setLoadingAction(true);
-      const redirectTo = `${window.location.origin}/auth/callback`;
-
-      const { error } = await supabase.auth.resetPasswordForEmail(em, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
       });
-
       if (error) throw error;
-
-      setOkMsg(
-        t("login.recoverySent", {
-          defaultValue:
-            "Te enviamos un correo para recuperar tu contraseña. Revisa tu bandeja de entrada.",
-        })
-      );
-    } catch (err: any) {
-      console.error("[Login] recovery error", err);
-      setErrorMsg(
-        err?.message ||
-          t("login.recoveryError", { defaultValue: "No se pudo enviar el correo de recuperación." })
-      );
+      setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa tu bandeja de entrada (y spam).");
+    } catch (e2: any) {
+      console.error("[Login] recovery error", e2);
+      setErr(e2?.message || "No se pudo enviar el correo de recuperación.");
     } finally {
-      setLoadingAction(false);
+      setBusy(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
-      <div className="w-full max-w-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <Link to="/" className="text-white/70 hover:text-white text-sm underline">
-            {t("login.backHome", { defaultValue: "Volver" })}
+    <div className="min-h-screen bg-slate-950 text-slate-200">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between">
+          <Link to="/" className="text-sm underline opacity-80 hover:opacity-100">
+            Volver
           </Link>
-          <LanguageSwitcher />
         </div>
 
-        <div className="rounded-3xl bg-white/5 border border-white/10 p-6">
-          <h1 className="text-xl font-bold">
-            {mode === "magic"
-              ? t("login.magicTitle", { defaultValue: "Entrar con Magic Link" })
-              : t("login.passwordTitle", { defaultValue: "Entrar" })}
-          </h1>
+        <div className="mt-8 flex justify-center">
+          <div className="w-full max-w-3xl bg-slate-900/70 border border-slate-800 rounded-3xl p-8 shadow-xl">
+            <h1 className="text-2xl font-semibold">Entrar</h1>
 
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => setMode("password")}
-              className={`px-3 py-1.5 rounded-full text-sm border transition ${
-                mode === "password"
-                  ? "bg-white text-slate-900 border-white"
-                  : "bg-white/10 text-white border-white/10 hover:bg-white/15"
-              }`}
-              type="button"
-            >
-              {t("login.passwordMode", { defaultValue: "Contraseña" })}
-            </button>
+            <div className="mt-4 inline-flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("password")}
+                className={
+                  "px-4 py-2 rounded-full text-sm font-medium border " +
+                  (mode === "password"
+                    ? "bg-white text-slate-900 border-white"
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
+                }
+              >
+                Contraseña
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("magic")}
+                className={
+                  "px-4 py-2 rounded-full text-sm font-medium border " +
+                  (mode === "magic"
+                    ? "bg-white text-slate-900 border-white"
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
+                }
+              >
+                Magic Link
+              </button>
+            </div>
 
-            <button
-              onClick={() => setMode("magic")}
-              className={`px-3 py-1.5 rounded-full text-sm border transition ${
-                mode === "magic"
-                  ? "bg-white text-slate-900 border-white"
-                  : "bg-white/10 text-white border-white/10 hover:bg-white/15"
-              }`}
-              type="button"
-            >
-              {t("login.magicMode", { defaultValue: "Magic Link" })}
-            </button>
-          </div>
+            <div className="mt-6">
+              <label className="block text-sm mb-2 opacity-80">Correo</label>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                autoComplete="email"
+                placeholder="tu@correo.com"
+                className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
 
-          <form className="mt-6" onSubmit={mode === "magic" ? onMagicLink : onPasswordLogin}>
-            <label className="block text-xs text-white/70 mb-2">
-              {t("login.email", { defaultValue: "Correo" })}
-            </label>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              className="w-full rounded-xl bg-white/10 border border-white/10 px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="correo@ejemplo.com"
-            />
+            {mode === "password" ? (
+              <form onSubmit={onPasswordLogin} className="mt-5 space-y-5">
+                <div>
+                  <label className="block text-sm mb-2 opacity-80">Contraseña</label>
+                  <input
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
+                    autoComplete="current-password"
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+                  />
 
-            {mode === "password" && (
-              <>
-                <label className="block text-xs text-white/70 mb-2 mt-4">
-                  {t("login.password", { defaultValue: "Contraseña" })}
-                </label>
-                <input
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  type="password"
-                  className="w-full rounded-xl bg-white/10 border border-white/10 px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="••••••••"
-                />
-
-                {/* 🔐 Recuperar contraseña — versión FINAL */}
-                <div className="mt-3 text-right">
-                  <button
-                    type="button"
-                    onClick={onRecoverPassword}
-                    disabled={loadingAction}
-                    className="
-                      text-sm
-                      text-white
-                      underline
-                      underline-offset-4
-                      hover:text-sky-300
-                      transition
-                      disabled:opacity-50
-                    "
-                  >
-                    {t("login.forgotPassword", {
-                      defaultValue: "¿Olvidaste tu contraseña?",
-                    })}
-                  </button>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={onForgotPassword}
+                      disabled={busy}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold border border-emerald-400/50 text-emerald-200 bg-emerald-500/15 hover:bg-emerald-500/25 hover:text-white focus:ring-2 focus:ring-emerald-400/60 disabled:opacity-50"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  </div>
                 </div>
-              </>
+
+                <button
+                  disabled={busy}
+                  className="w-full py-3 rounded-2xl bg-white text-slate-900 font-semibold hover:opacity-95 disabled:opacity-60"
+                >
+                  {busy ? "Procesando…" : "Entrar"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={onSendMagicLink} className="mt-5 space-y-5">
+                <button
+                  disabled={busy}
+                  className="w-full py-3 rounded-2xl bg-white text-slate-900 font-semibold hover:opacity-95 disabled:opacity-60"
+                >
+                  {busy ? "Enviando…" : "Enviar Magic Link"}
+                </button>
+              </form>
             )}
 
-            <button
-              type="submit"
-              disabled={loadingAction}
-              className="mt-5 w-full px-4 py-2.5 rounded-xl font-semibold bg-white text-slate-900 hover:bg-white/90 disabled:opacity-60 transition"
-            >
-              {loadingAction
-                ? t("login.working", { defaultValue: "Procesando…" })
-                : mode === "magic"
-                ? t("login.sendMagic", { defaultValue: "Enviar Magic Link" })
-                : t("login.signIn", { defaultValue: "Entrar" })}
-            </button>
+            {(err || msg) && (
+              <div className="mt-4">
+                {err ? <div className="text-sm text-red-300">{err}</div> : null}
+                {msg ? <div className="text-sm text-emerald-300">{msg}</div> : null}
+              </div>
+            )}
 
-            {okMsg && <div className="mt-4 text-sm text-emerald-300">{okMsg}</div>}
-            {errorMsg && <div className="mt-4 text-sm text-red-300">{errorMsg}</div>}
-          </form>
+            <div className="mt-4 text-xs opacity-60">
+              Tip: si un enlace falla, abre el correo en Chrome/Safari o intenta en incógnito y solicita un link nuevo.
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default Login;
+}
