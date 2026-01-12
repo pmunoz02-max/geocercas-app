@@ -5,29 +5,31 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Faltan variables de entorno Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)");
+  throw new Error(
+    "Faltan variables de entorno Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)"
+  );
 }
 
 /**
- * ✅ Cliente ÚNICO de Supabase para toda la SPA.
- * - persistSession: true  -> guarda tokens en storage
- * - autoRefreshToken: true -> refresca tokens
- * - detectSessionInUrl: true -> captura sesiones provenientes de links (magiclink/recovery)
+ * Cliente ÚNICO y BLINDADO de Supabase para la SPA.
  *
- * Nota: mantenemos tu storageKey actual para NO romper sesiones existentes.
+ * Decisiones clave:
+ * - flowType: "pkce"        -> obligatorio para SPAs modernas
+ * - storageKey: DEFAULT     -> evita desincronización (NO custom)
+ * - persistSession: true    -> guarda sesión
+ * - autoRefreshToken: true  -> mantiene sesión viva
+ * - detectSessionInUrl: true-> magic link / recovery
+ * - storage: localStorage   -> explícito
  */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Para links con token_hash / verify (compat con tu flujo actual)
-    flowType: "implicit",
+    flowType: "pkce",
+
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
 
-    // Mantener EXACTO el storageKey actual (no romper sesiones existentes)
-    storageKey: "sb-tugeocercas-auth-token-panel-authA",
-
-    // Guardar en localStorage (safe-guard por si algún bundler evalúa antes de window)
+    // ⚠️ NO definir storageKey → usar el estándar sb-<project-ref>-auth-token
     storage: typeof window !== "undefined" ? window.localStorage : undefined,
   },
 });
