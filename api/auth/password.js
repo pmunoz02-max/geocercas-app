@@ -1,45 +1,69 @@
 export default async function handler(req, res) {
+  const version = "auth-password-v3-2026-01-12";
+  const debug = process.env.AUTH_DEBUG === "1";
+
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return res.status(405).json({ error: "Method Not Allowed" });
+      return res.status(405).json({ error: "Method Not Allowed", version });
     }
 
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return res.status(500).json({ error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
+      return res.status(500).json({
+        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY",
+        version,
+      });
     }
 
-    const { email, password } = req.body || {};
-    const emailClean = String(email || "").trim().toLowerCase();
-    const passwordClean = String(password || "");
-
-    if (!emailClean || !passwordClean) {
-      return res.status(400).json({ error: "Email and password required" });
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        body = {};
+      }
     }
 
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    const email = String(body?.email || "").trim().toLowerCase();
+    const password = String(body?.password || "");
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required", version });
+    }
+
+    const url = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
+
+    const r = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      body: JSON.stringify({ email: emailClean, password: passwordClean }),
+      body: JSON.stringify({ email, password }),
     });
 
-    const data = await r.json().catch(() => ({}));
+    const text = await r.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw: text };
+    }
 
     if (!r.ok) {
-      // Propagar error legible sin filtrar demasiado
       return res.status(r.status).json({
-        error: data?.error_description || data?.msg || data?.error || "Invalid login credentials",
+        error: data?.error_description || data?.msg || data?.error || "Auth error",
+        version,
+        ...(debug ? { debug: { status: r.status, url, response: data } } : {}),
       });
     }
 
-    // Devuelve tokens para que el frontend haga supabase.auth.setSession()
     return res.status(200).json({
+      version,
       access_token: data.access_token,
       refresh_token: data.refresh_token,
       expires_in: data.expires_in,
@@ -47,7 +71,11 @@ export default async function handler(req, res) {
       user: data.user,
     });
   } catch (e) {
-    console.error("[api/auth/password] error:", e);
-    return res.status(500).json({ error: "Server error" });
+    console.error("[api/auth/password] fatal:", e);
+    return res.status(500).json({
+      error: "Server error",
+      version,
+      ...(debug ? { debug: { message: String(e?.message || e), stack: String(e?.stack || "") } } : {}),
+    });
   }
 }
