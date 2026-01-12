@@ -13,7 +13,7 @@ import AuthCallback from "./pages/AuthCallback.tsx";
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
-import PersonalPage from "./pages/PersonalPage.jsx";
+import PersonalPage from "./components/personal/PersonalPage.jsx"; // ✅ FIX
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
@@ -47,6 +47,7 @@ function RequirePanel({ children }) {
 
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
 
+  // ✅ Antes mandaba a "/" (Landing). Ahora manda a login con next.
   if (!user) {
     const next = encodeURIComponent(location.pathname + location.search || "/inicio");
     return <Navigate to={`/login?next=${next}`} replace />;
@@ -95,6 +96,8 @@ function LoginShell() {
 function SmartFallback() {
   const { loading, user, currentRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando…" />;
+
+  // ✅ Antes mandaba a "/". Ahora manda a login.
   if (!user) return <Navigate to="/login" replace />;
 
   const role = String(currentRole || "").toLowerCase();
@@ -144,14 +147,77 @@ export default function App() {
             }
           />
 
-          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-          <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
-          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
-          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
-          <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
-          <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-          <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+          <Route
+            path="/geocercas"
+            element={
+              <RequireOrg>
+                <GeocercasPage />
+              </RequireOrg>
+            }
+          />
+
+          <Route
+            path="/personal"
+            element={
+              <RequireOrg>
+                <PersonalPage />
+              </RequireOrg>
+            }
+          />
+
+          <Route
+            path="/actividades"
+            element={
+              <RequireOrg>
+                <ActividadesPage />
+              </RequireOrg>
+            }
+          />
+
+          <Route
+            path="/asignaciones"
+            element={
+              <RequireOrg>
+                <AsignacionesPage />
+              </RequireOrg>
+            }
+          />
+
+          <Route
+            path="/costos"
+            element={
+              <RequireOrg>
+                <CostosPage />
+              </RequireOrg>
+            }
+          />
+
+          <Route
+            path="/costos-dashboard"
+            element={
+              <RequireOrg>
+                <CostosDashboardPage />
+              </RequireOrg>
+            }
+          />
+
+          <Route
+            path="/tracker-dashboard"
+            element={
+              <RequireOrg>
+                <TrackerDashboard />
+              </RequireOrg>
+            }
+          />
+
+          <Route
+            path="/invitar-tracker"
+            element={
+              <RequireOrg>
+                <InvitarTracker />
+              </RequireOrg>
+            }
+          />
 
           <Route
             path="/admins"
