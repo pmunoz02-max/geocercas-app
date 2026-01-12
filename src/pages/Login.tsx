@@ -1,29 +1,29 @@
 import React, { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label = "Operación") {
   let timeoutId: any;
   const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(`${label}: tiempo de espera agotado (${ms / 1000}s).`));
-    }, ms);
+    timeoutId = setTimeout(() => reject(new Error(`${label}: tiempo de espera agotado (${ms / 1000}s).`)), ms);
   });
-
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-async function waitForSession(maxMs = 4000) {
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    const { data } = await supabase.auth.getSession();
-    if (data?.session) return data.session;
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  return null;
+async function postJson(path: string, body: any) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || "Request failed");
+  return data;
 }
 
 export default function Login() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
@@ -55,30 +55,26 @@ export default function Login() {
         return;
       }
 
-      const { error } = await withTimeout(
-        supabase.auth.signInWithPassword({ email: emailClean, password }),
-        12000,
+      // Llamada a TU dominio (no a supabase.co)
+      const data = await withTimeout(
+        postJson("/api/auth/password", { email: emailClean, password }),
+        15000,
         "Login"
       );
 
-      if (error) throw error;
+      // Persistir sesión en Supabase client (localStorage del browser)
+      await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
 
-      // Espera a que la sesión esté lista (evita rebote por lectura prematura)
-      await waitForSession(4000);
-
-      // Hard redirect: garantiza que AuthContext/ProtectedRoute lean sesión desde cero
-      window.location.replace(next);
+      navigate(next, { replace: true });
     } catch (e2: any) {
       console.error("[Login] password error", e2);
       const m = String(e2?.message || "");
-
-      if (m.includes("Invalid login credentials")) {
-        setErr("Correo o contraseña incorrectos.");
-      } else if (m.includes("tiempo de espera")) {
-        setErr("Se tardó demasiado en responder. Revisa tu internet/extensiones (adblock) y vuelve a intentar.");
-      } else {
-        setErr("No se pudo iniciar sesión. Intenta nuevamente.");
-      }
+      if (m.toLowerCase().includes("invalid")) setErr("Correo o contraseña incorrectos.");
+      else if (m.includes("tiempo de espera")) setErr("Se tardó demasiado en responder. Intenta otra vez.");
+      else setErr(m || "No se pudo iniciar sesión.");
     } finally {
       setBusy(false);
     }
@@ -99,21 +95,17 @@ export default function Login() {
         return;
       }
 
-      const { error } = await withTimeout(
-        supabase.auth.signInWithOtp({
-          email: emailClean,
-          options: { emailRedirectTo: redirectTo },
-        }),
-        12000,
+      await withTimeout(
+        postJson("/api/auth/magic", { email: emailClean, redirectTo }),
+        15000,
         "Magic Link"
       );
 
-      if (error) throw error;
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e2: any) {
       console.error("[Login] magiclink error", e2);
       const m = String(e2?.message || "");
-      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : "No se pudo enviar el Magic Link.");
+      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el Magic Link.");
     } finally {
       setBusy(false);
     }
@@ -133,18 +125,16 @@ export default function Login() {
 
     setBusy(true);
     try {
-      const { error } = await withTimeout(
-        supabase.auth.resetPasswordForEmail(emailClean, { redirectTo }),
-        12000,
+      await withTimeout(
+        postJson("/api/auth/recover", { email: emailClean, redirectTo }),
+        15000,
         "Recuperación"
       );
-
-      if (error) throw error;
       setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa inbox o spam.");
     } catch (e2: any) {
       console.error("[Login] recovery error", e2);
       const m = String(e2?.message || "");
-      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta nuevamente." : "No se pudo enviar el correo de recuperación.");
+      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el correo de recuperación.");
     } finally {
       setBusy(false);
     }
@@ -171,7 +161,6 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setMode("password")}
-                disabled={busy}
                 className={
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "password"
@@ -184,7 +173,6 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setMode("magic")}
-                disabled={busy}
                 className={
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "magic"
