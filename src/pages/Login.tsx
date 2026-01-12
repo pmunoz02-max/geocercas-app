@@ -6,7 +6,10 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
+  const next = useMemo(
+    () => searchParams.get("next") || "/inicio",
+    [searchParams]
+  );
 
   const [mode, setMode] = useState<"password" | "magic">("password");
   const [email, setEmail] = useState("");
@@ -26,17 +29,21 @@ export default function Login() {
     setErr("");
     setMsg("");
     setBusy(true);
+
     try {
+      const emailClean = email.trim().toLowerCase();
+
       const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: emailClean,
         password,
       });
+
       if (error) throw error;
 
       navigate(next, { replace: true });
     } catch (e2: any) {
       console.error("[Login] password error", e2);
-      setErr(e2?.message || "Credenciales inválidas.");
+      setErr("Correo o contraseña incorrectos.");
     } finally {
       setBusy(false);
     }
@@ -47,16 +54,21 @@ export default function Login() {
     setErr("");
     setMsg("");
     setBusy(true);
+
     try {
+      const emailClean = email.trim().toLowerCase();
+
       const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
+        email: emailClean,
         options: { emailRedirectTo: redirectTo },
       });
+
       if (error) throw error;
+
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e2: any) {
       console.error("[Login] magiclink error", e2);
-      setErr(e2?.message || "No se pudo enviar el Magic Link.");
+      setErr("No se pudo enviar el Magic Link.");
     } finally {
       setBusy(false);
     }
@@ -65,20 +77,28 @@ export default function Login() {
   async function onForgotPassword() {
     setErr("");
     setMsg("");
+
     if (!email.trim()) {
-      setErr("Escribe tu correo primero para recuperar contraseña.");
+      setErr("Escribe tu correo primero.");
       return;
     }
+
     setBusy(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      const emailClean = email.trim().toLowerCase();
+
+      const { error } = await supabase.auth.resetPasswordForEmail(emailClean, {
         redirectTo,
       });
+
       if (error) throw error;
-      setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa tu bandeja de entrada (y spam).");
+
+      setMsg(
+        "Te enviamos un correo para recuperar tu contraseña. Revisa tu bandeja de entrada o spam."
+      );
     } catch (e2: any) {
       console.error("[Login] recovery error", e2);
-      setErr(e2?.message || "No se pudo enviar el correo de recuperación.");
+      setErr("No se pudo enviar el correo de recuperación.");
     } finally {
       setBusy(false);
     }
@@ -132,20 +152,22 @@ export default function Login() {
                 type="email"
                 autoComplete="email"
                 placeholder="tu@correo.com"
-                className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+                className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-sky-500"
               />
             </div>
 
             {mode === "password" ? (
               <form onSubmit={onPasswordLogin} className="mt-5 space-y-5">
                 <div>
-                  <label className="block text-sm mb-2 opacity-80">Contraseña</label>
+                  <label className="block text-sm mb-2 opacity-80">
+                    Contraseña
+                  </label>
                   <input
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     type="password"
                     autoComplete="current-password"
-                    className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-sky-500"
                   />
 
                   <div className="mt-3 flex justify-end">
@@ -179,14 +201,15 @@ export default function Login() {
             )}
 
             {(err || msg) && (
-              <div className="mt-4">
-                {err ? <div className="text-sm text-red-300">{err}</div> : null}
-                {msg ? <div className="text-sm text-emerald-300">{msg}</div> : null}
+              <div className="mt-4 text-sm">
+                {err && <div className="text-red-300">{err}</div>}
+                {msg && <div className="text-emerald-300">{msg}</div>}
               </div>
             )}
 
             <div className="mt-4 text-xs opacity-60">
-              Tip: si un enlace falla, abre el correo en Chrome/Safari o intenta en incógnito y solicita un link nuevo.
+              Tip: si un enlace falla, abre el correo en Chrome/Safari o intenta
+              en incógnito y solicita un link nuevo.
             </div>
           </div>
         </div>
