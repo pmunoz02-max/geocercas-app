@@ -2,54 +2,85 @@ import React, { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-type ApiOk = {
+type FetchDiag = {
+  at: string;
+  url: string;
+  status: number | null;
+  ok: boolean | null;
+  ms: number | null;
   version?: string;
-  access_token: string;
-  refresh_token: string;
-  expires_in?: number;
-  token_type?: string;
-  user?: any;
+  message?: string;
+  rawText?: string;
 };
 
-async function postJsonWithAbort(path: string, payload: any, timeoutMs = 20000) {
+async function fetchJsonDiag(
+  url: string,
+  payload: any,
+  timeoutMs = 20000
+): Promise<{ data: any; diag: FetchDiag }> {
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
+  const t0 = performance.now();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const diag: FetchDiag = {
+    at: new Date().toISOString(),
+    url,
+    status: null,
+    ok: null,
+    ms: null,
+  };
 
   try {
-    const r = await fetch(path, {
+    const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "Cache-Control": "no-store",
+      },
+      cache: "no-store",
       credentials: "same-origin",
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
 
-    const text = await r.text();
+    diag.status = r.status;
+    diag.ok = r.ok;
+
+    const rawText = await r.text();
+    diag.rawText = rawText;
+
     let data: any = {};
     try {
-      data = text ? JSON.parse(text) : {};
+      data = rawText ? JSON.parse(rawText) : {};
     } catch {
-      data = { raw: text };
+      data = { raw: rawText };
     }
+
+    diag.version = data?.version;
+    diag.message = data?.error || data?.message;
 
     if (!r.ok) {
-      const message = data?.error || data?.message || `Request failed (${r.status})`;
-      const err: any = new Error(message);
-      err.status = r.status;
+      const err: any = new Error(diag.message || `Request failed (${r.status})`);
       err.data = data;
+      err.status = r.status;
       throw err;
     }
 
-    return data;
+    return { data, diag };
   } catch (e: any) {
     if (e?.name === "AbortError") {
-      const err: any = new Error(`Tiempo de espera agotado (${Math.round(timeoutMs / 1000)}s).`);
-      err.status = 0;
-      throw err;
+      diag.status = 0;
+      diag.ok = false;
+      diag.message = `Timeout ${Math.round(timeoutMs / 1000)}s (AbortController)`;
+      throw Object.assign(new Error(diag.message), { status: 0, diag });
     }
-    throw e;
+    // errores tipo "Failed to fetch" / bloqueos
+    if (!diag.message) diag.message = String(e?.message || e);
+    throw Object.assign(e, { diag });
   } finally {
-    clearTimeout(t);
+    clearTimeout(timer);
+    diag.ms = Math.round(performance.now() - t0);
   }
 }
 
@@ -74,12 +105,34 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  const [debugInfo, setDebugInfo] = useState<string>("");
+
+  const [diag, setDiag] = useState<FetchDiag | null>(null);
 
   const redirectTo = useMemo(() => {
     if (typeof window === "undefined") return "";
     return `${window.location.origin}/auth/callback`;
   }, []);
+
+  async function testApi() {
+    if (busy) return;
+    setBusy(true);
+    setErr("");
+    setMsg("");
+    setDiag(null);
+
+    try {
+      // ⚠️ payload controlado (NO usa tu password)
+      await fetchJsonDiag("/api/auth/password", { email: "test@example.com", password: "badpass" }, 12000);
+      // Si llegara aquí sería raro (debería fallar 400/401)
+      setMsg("La API respondió OK (inesperado).");
+    } catch (e: any) {
+      const d: FetchDiag | undefined = e?.diag;
+      if (d) setDiag(d);
+      setMsg("Prueba API ejecutada. Revisa Diagnóstico abajo.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -96,53 +149,37 @@ export default function Login() {
 
     setErr("");
     setMsg("");
-    setDebugInfo("");
+    setDiag(null);
     setBusy(true);
 
     try {
-      // 1) Llamada a tu API (same-origin)
-      const data = (await postJsonWithAbort(
+      const { data, diag: d } = await fetchJsonDiag(
         "/api/auth/password",
         { email: emailClean, password: passwordClean },
         20000
-      )) as ApiOk;
+      );
+      setDiag(d);
 
-      // 2) Guardar sesión en supabase-js
       await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
 
-      // 3) Verificar que quedó sesión local
       await ensureSessionOrThrow(4000);
 
-      // 4) Hard redirect para evitar rebotes por carga temprana (AuthContext/guards)
+      // ✅ recarga limpia para que AuthContext/guards lo lean sin rebote
       window.location.replace(next);
     } catch (e2: any) {
-      console.error("[Login] password error:", e2);
+      const d: FetchDiag | undefined = e2?.diag;
+      if (d) setDiag(d);
 
-      const status = e2?.status;
-      const serverVersion = e2?.data?.version ? ` (api: ${e2.data.version})` : "";
       const message = String(e2?.message || "");
-
-      // Mostrar debug mínimo útil (sin secretos)
-      setDebugInfo(
-        `status=${status ?? "?"}${serverVersion}` +
-          (e2?.data?.debug?.message ? ` | debug=${String(e2.data.debug.message)}` : "")
-      );
-
       const ml = message.toLowerCase();
-      if (ml.includes("invalid") || ml.includes("credentials")) {
-        setErr("Correo o contraseña incorrectos.");
-      } else if (ml.includes("tiempo de espera")) {
-        setErr("Se tardó demasiado en responder. Revisa extensiones/antivirus/VPN y vuelve a intentar.");
-      } else if (ml.includes("missing supabase_url") || ml.includes("missing supabase_anon_key")) {
-        setErr("Faltan variables en Vercel: SUPABASE_URL / SUPABASE_ANON_KEY.");
-      } else if (ml.includes("invalid json")) {
-        setErr("La API recibió JSON inválido. (Esto ya no debería pasar; revisa deployment).");
-      } else {
-        setErr(message || "No se pudo iniciar sesión.");
-      }
+
+      if (ml.includes("invalid") || ml.includes("credentials")) setErr("Correo o contraseña incorrectos.");
+      else if (ml.includes("timeout")) setErr("Timeout. Algo está bloqueando el request o la Function está colgada.");
+      else if (ml.includes("failed to fetch")) setErr("Failed to fetch. Bloqueo/extensión/antivirus o error de red.");
+      else setErr(message || "No se pudo iniciar sesión.");
     } finally {
       setBusy(false);
     }
@@ -161,17 +198,17 @@ export default function Login() {
 
     setErr("");
     setMsg("");
-    setDebugInfo("");
+    setDiag(null);
     setBusy(true);
 
     try {
-      await postJsonWithAbort("/api/auth/magic", { email: emailClean, redirectTo }, 20000);
+      const { diag: d } = await fetchJsonDiag("/api/auth/magic", { email: emailClean, redirectTo }, 20000);
+      setDiag(d);
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e2: any) {
-      console.error("[Login] magiclink error:", e2);
-      const message = String(e2?.message || "");
-      setErr(message.includes("Tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : message || "No se pudo enviar el Magic Link.");
-      setDebugInfo(`status=${e2?.status ?? "?"}${e2?.data?.version ? ` (api: ${e2.data.version})` : ""}`);
+      const d: FetchDiag | undefined = e2?.diag;
+      if (d) setDiag(d);
+      setErr(String(e2?.message || "No se pudo enviar el Magic Link."));
     } finally {
       setBusy(false);
     }
@@ -189,17 +226,17 @@ export default function Login() {
 
     setErr("");
     setMsg("");
-    setDebugInfo("");
+    setDiag(null);
     setBusy(true);
 
     try {
-      await postJsonWithAbort("/api/auth/recover", { email: emailClean, redirectTo }, 20000);
-      setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa inbox o spam.");
+      const { diag: d } = await fetchJsonDiag("/api/auth/recover", { email: emailClean, redirectTo }, 20000);
+      setDiag(d);
+      setMsg("Te enviamos un correo para recuperar tu contraseña.");
     } catch (e2: any) {
-      console.error("[Login] recovery error:", e2);
-      const message = String(e2?.message || "");
-      setErr(message.includes("Tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : message || "No se pudo enviar el correo de recuperación.");
-      setDebugInfo(`status=${e2?.status ?? "?"}${e2?.data?.version ? ` (api: ${e2.data.version})` : ""}`);
+      const d: FetchDiag | undefined = e2?.diag;
+      if (d) setDiag(d);
+      setErr(String(e2?.message || "No se pudo enviar el correo de recuperación."));
     } finally {
       setBusy(false);
     }
@@ -216,6 +253,16 @@ export default function Login() {
           <Link to="/" className="text-sm underline opacity-80 hover:opacity-100">
             Volver
           </Link>
+
+          <button
+            type="button"
+            onClick={testApi}
+            disabled={busy}
+            className="px-4 py-2 rounded-xl text-xs font-semibold border border-white/15 bg-white/5 hover:bg-white/10 disabled:opacity-50"
+            title="Ejecuta una prueba controlada (sin tu contraseña) para ver si el browser puede llamar a /api/auth/password"
+          >
+            {busy ? "Probando…" : "Probar API"}
+          </button>
         </div>
 
         <div className="mt-8 flex justify-center">
@@ -309,11 +356,27 @@ export default function Login() {
               </form>
             )}
 
-            {(err || msg || debugInfo) && (
+            {(err || msg) && (
               <div className="mt-4 text-sm space-y-2">
                 {err ? <div className="text-red-300">{err}</div> : null}
                 {msg ? <div className="text-emerald-300">{msg}</div> : null}
-                {debugInfo ? <div className="text-xs text-white/50">debug: {debugInfo}</div> : null}
+              </div>
+            )}
+
+            {/* Diagnóstico visible SIEMPRE */}
+            {diag && (
+              <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70">
+                <div className="font-semibold text-white/80 mb-2">Diagnóstico</div>
+                <div>url: {diag.url}</div>
+                <div>status: {String(diag.status)}</div>
+                <div>ok: {String(diag.ok)}</div>
+                <div>ms: {String(diag.ms)}</div>
+                <div>version: {diag.version || "-"}</div>
+                <div>message: {diag.message || "-"}</div>
+                <div className="mt-2 break-words">
+                  raw: {diag.rawText ? diag.rawText.slice(0, 220) : "-"}
+                  {diag.rawText && diag.rawText.length > 220 ? "…" : ""}
+                </div>
               </div>
             )}
 
