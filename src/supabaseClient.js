@@ -6,30 +6,27 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    "Faltan variables de entorno Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)"
+    "Faltan variables Supabase: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY"
   );
 }
 
 /**
- * Cliente ÚNICO y BLINDADO de Supabase para la SPA.
+ * ✅ Cliente ÚNICO, estable para SPA:
+ * - flowType: "pkce" (correcto para SPAs modernas)
+ * - persistSession: true
+ * - autoRefreshToken: true
+ * - detectSessionInUrl: true (magiclink / recovery)
+ * - storage: localStorage explícito
  *
- * Decisiones clave:
- * - flowType: "pkce"        -> obligatorio para SPAs modernas
- * - storageKey: DEFAULT     -> evita desincronización (NO custom)
- * - persistSession: true    -> guarda sesión
- * - autoRefreshToken: true  -> mantiene sesión viva
- * - detectSessionInUrl: true-> magic link / recovery
- * - storage: localStorage   -> explícito
+ * ⚠️ Importante: NO usar storageKey custom. El estándar evita desync.
  */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     flowType: "pkce",
-
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-
-    // ⚠️ NO definir storageKey → usar el estándar sb-<project-ref>-auth-token
     storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    // NO storageKey: usa sb-<project-ref>-auth-token
   },
 });

@@ -15,12 +15,9 @@ function FullScreenLoader({ text = "Cargando…" }) {
 
 /**
  * AuthGuard estable:
- * - Espera `loading`
- * - Decide por `user` (no por session)
- * - Redirige a /login con next
- * - NO hace signOut, NO re-lee getSession
- *
- * Nota: La lógica de roles (tracker/panel) ya la manejan RequirePanel/RequireTracker en App.jsx.
+ * - espera loading
+ * - valida por user (NO session)
+ * - redirige a /login con next
  */
 export default function AuthGuard({ children }) {
   const { loading, user } = useAuth();

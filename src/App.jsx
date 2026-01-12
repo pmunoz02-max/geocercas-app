@@ -1,12 +1,6 @@
 // src/App.jsx
 import React from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
 import RequireOrg from "./components/org/RequireOrg.jsx";
@@ -19,7 +13,7 @@ import AuthCallback from "./pages/AuthCallback.tsx";
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
-import PersonalPage from "./components/personal/PersonalPage.jsx";
+import PersonalPage from "./pages/PersonalPage.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
@@ -27,7 +21,6 @@ import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import AdminsPage from "./pages/AdminsPage.jsx";
-
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
@@ -54,7 +47,6 @@ function RequirePanel({ children }) {
 
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
 
-  // 🔥 Antes mandaba a "/" (Landing) y parecía “volver al inicio”
   if (!user) {
     const next = encodeURIComponent(location.pathname + location.search || "/inicio");
     return <Navigate to={`/login?next=${next}`} replace />;
@@ -90,7 +82,6 @@ function AppRootRoute({ children }) {
   return children;
 }
 
-// LoginShell (si ya tienes Login con su propio layout, esto no estorba)
 function LoginShell() {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
@@ -104,21 +95,17 @@ function LoginShell() {
 function SmartFallback() {
   const { loading, user, currentRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando…" />;
-
-  // 🔥 Antes mandaba a "/" (Landing). Ahora manda a login.
   if (!user) return <Navigate to="/login" replace />;
 
   const role = String(currentRole || "").toLowerCase();
-  return role === "tracker"
-    ? <Navigate to="/tracker-gps" replace />
-    : <Navigate to="/inicio" replace />;
+  return role === "tracker" ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public */}
+        {/* Públicas */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -128,7 +115,7 @@ export default function App() {
         <Route
           path="/tracker-gps"
           element={
-            <AuthGuard mode="tracker">
+            <AuthGuard>
               <RequireTracker>
                 <TrackerGpsPage />
               </RequireTracker>
@@ -139,7 +126,7 @@ export default function App() {
         {/* Panel */}
         <Route
           element={
-            <AuthGuard mode="panel">
+            <AuthGuard>
               <RequirePanel>
                 <ProtectedShell />
               </RequirePanel>
@@ -157,61 +144,23 @@ export default function App() {
             }
           />
 
-          <Route path="/geocercas" element={<GeocercasPage />} />
-          <Route path="/personal" element={<PersonalPage />} />
-          <Route path="/actividades" element={<ActividadesPage />} />
-
-          <Route
-            path="/asignaciones"
-            element={
-              <RequireOrg>
-                <AsignacionesPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/costos"
-            element={
-              <RequireOrg>
-                <CostosPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/costos-dashboard"
-            element={
-              <RequireOrg>
-                <CostosDashboardPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/tracker-dashboard"
-            element={
-              <RequireOrg>
-                <TrackerDashboard />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/invitar-tracker"
-            element={
-              <RequireOrg>
-                <InvitarTracker />
-              </RequireOrg>
-            }
-          />
+          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+          <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
+          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
+          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
+          <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
+          <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+          <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
           <Route
             path="/admins"
             element={
-              <AppRootRoute>
-                <AdminsPage />
-              </AppRootRoute>
+              <RequireOrg>
+                <AppRootRoute>
+                  <AdminsPage />
+                </AppRootRoute>
+              </RequireOrg>
             }
           />
 
@@ -226,3 +175,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
