@@ -1,8 +1,17 @@
 import React, { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-async function postJson(path: string, body: any, timeoutMs = 20000) {
+type ApiOk = {
+  version?: string;
+  access_token: string;
+  refresh_token: string;
+  expires_in?: number;
+  token_type?: string;
+  user?: any;
+};
+
+async function postJsonWithAbort(path: string, payload: any, timeoutMs = 20000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -11,16 +20,32 @@ async function postJson(path: string, body: any, timeoutMs = 20000) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
 
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data?.error || `Request failed (${r.status})`);
+    const text = await r.text();
+    let data: any = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!r.ok) {
+      const message = data?.error || data?.message || `Request failed (${r.status})`;
+      const err: any = new Error(message);
+      err.status = r.status;
+      err.data = data;
+      throw err;
+    }
+
     return data;
   } catch (e: any) {
     if (e?.name === "AbortError") {
-      throw new Error(`Tiempo de espera agotado (${Math.round(timeoutMs / 1000)}s).`);
+      const err: any = new Error(`Tiempo de espera agotado (${Math.round(timeoutMs / 1000)}s).`);
+      err.status = 0;
+      throw err;
     }
     throw e;
   } finally {
@@ -28,8 +53,17 @@ async function postJson(path: string, body: any, timeoutMs = 20000) {
   }
 }
 
+async function ensureSessionOrThrow(timeoutMs = 4000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) return data.session;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error("No se pudo establecer sesión local (tokens no persistieron).");
+}
+
 export default function Login() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
@@ -40,6 +74,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [debugInfo, setDebugInfo] = useState<string>("");
 
   const redirectTo = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -61,30 +96,52 @@ export default function Login() {
 
     setErr("");
     setMsg("");
+    setDebugInfo("");
     setBusy(true);
 
     try {
-      const data = await postJson("/api/auth/password", { email: emailClean, password: passwordClean }, 20000);
+      // 1) Llamada a tu API (same-origin)
+      const data = (await postJsonWithAbort(
+        "/api/auth/password",
+        { email: emailClean, password: passwordClean },
+        20000
+      )) as ApiOk;
 
+      // 2) Guardar sesión en supabase-js
       await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
 
-      navigate(next, { replace: true });
-    } catch (e2: any) {
-      console.error("[Login] password error", e2);
-      const m = String(e2?.message || "");
-      const ml = m.toLowerCase();
+      // 3) Verificar que quedó sesión local
+      await ensureSessionOrThrow(4000);
 
+      // 4) Hard redirect para evitar rebotes por carga temprana (AuthContext/guards)
+      window.location.replace(next);
+    } catch (e2: any) {
+      console.error("[Login] password error:", e2);
+
+      const status = e2?.status;
+      const serverVersion = e2?.data?.version ? ` (api: ${e2.data.version})` : "";
+      const message = String(e2?.message || "");
+
+      // Mostrar debug mínimo útil (sin secretos)
+      setDebugInfo(
+        `status=${status ?? "?"}${serverVersion}` +
+          (e2?.data?.debug?.message ? ` | debug=${String(e2.data.debug.message)}` : "")
+      );
+
+      const ml = message.toLowerCase();
       if (ml.includes("invalid") || ml.includes("credentials")) {
         setErr("Correo o contraseña incorrectos.");
       } else if (ml.includes("tiempo de espera")) {
         setErr("Se tardó demasiado en responder. Revisa extensiones/antivirus/VPN y vuelve a intentar.");
       } else if (ml.includes("missing supabase_url") || ml.includes("missing supabase_anon_key")) {
         setErr("Faltan variables en Vercel: SUPABASE_URL / SUPABASE_ANON_KEY.");
+      } else if (ml.includes("invalid json")) {
+        setErr("La API recibió JSON inválido. (Esto ya no debería pasar; revisa deployment).");
       } else {
-        setErr(m || "No se pudo iniciar sesión.");
+        setErr(message || "No se pudo iniciar sesión.");
       }
     } finally {
       setBusy(false);
@@ -104,15 +161,17 @@ export default function Login() {
 
     setErr("");
     setMsg("");
+    setDebugInfo("");
     setBusy(true);
 
     try {
-      await postJson("/api/auth/magic", { email: emailClean, redirectTo }, 20000);
+      await postJsonWithAbort("/api/auth/magic", { email: emailClean, redirectTo }, 20000);
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e2: any) {
-      console.error("[Login] magiclink error", e2);
-      const m = String(e2?.message || "");
-      setErr(m.toLowerCase().includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el Magic Link.");
+      console.error("[Login] magiclink error:", e2);
+      const message = String(e2?.message || "");
+      setErr(message.includes("Tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : message || "No se pudo enviar el Magic Link.");
+      setDebugInfo(`status=${e2?.status ?? "?"}${e2?.data?.version ? ` (api: ${e2.data.version})` : ""}`);
     } finally {
       setBusy(false);
     }
@@ -130,15 +189,17 @@ export default function Login() {
 
     setErr("");
     setMsg("");
+    setDebugInfo("");
     setBusy(true);
 
     try {
-      await postJson("/api/auth/recover", { email: emailClean, redirectTo }, 20000);
+      await postJsonWithAbort("/api/auth/recover", { email: emailClean, redirectTo }, 20000);
       setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa inbox o spam.");
     } catch (e2: any) {
-      console.error("[Login] recovery error", e2);
-      const m = String(e2?.message || "");
-      setErr(m.toLowerCase().includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el correo de recuperación.");
+      console.error("[Login] recovery error:", e2);
+      const message = String(e2?.message || "");
+      setErr(message.includes("Tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : message || "No se pudo enviar el correo de recuperación.");
+      setDebugInfo(`status=${e2?.status ?? "?"}${e2?.data?.version ? ` (api: ${e2.data.version})` : ""}`);
     } finally {
       setBusy(false);
     }
@@ -248,10 +309,11 @@ export default function Login() {
               </form>
             )}
 
-            {(err || msg) && (
-              <div className="mt-4 text-sm">
+            {(err || msg || debugInfo) && (
+              <div className="mt-4 text-sm space-y-2">
                 {err ? <div className="text-red-300">{err}</div> : null}
                 {msg ? <div className="text-emerald-300">{msg}</div> : null}
+                {debugInfo ? <div className="text-xs text-white/50">debug: {debugInfo}</div> : null}
               </div>
             )}
 
