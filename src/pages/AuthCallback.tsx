@@ -1,38 +1,19 @@
 // src/pages/AuthCallback.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
 
-/**
- * AuthCallback (UNIVERSAL)
- * ✅ Soporta:
- *  - Magic Link moderno (PKCE): ?code=... (exchangeCodeForSession)
- *  - Magic Link clásico: ?token_hash=...&type=magiclink (verifyOtp)
- *
- * ❌ Rechaza explícitamente:
- *  - type=invite (flujo legacy) -> mensaje claro, no intenta verify
- *
- * Protecciones:
- *  - Lock por token/code en sessionStorage para evitar reintentos/refresh
- *  - Limpieza de URL después de procesar
- *  - Timeout + UI clara
- *
- * Redirección final por rol (desde AuthContext):
- *  - tracker -> /tracker-gps
- *  - admin/owner/otros -> /inicio
- */
-
-const LOCK_PREFIX = "authcb_lock_v1:";
-const DONE_PREFIX = "authcb_done_v1:";
+const LOCK_PREFIX = "authcb_lock_v2:";
+const DONE_PREFIX = "authcb_done_v2:";
 
 function safeKey(s: string) {
   return s.replace(/[^a-zA-Z0-9:_-]/g, "_").slice(0, 220);
 }
 
-function stripUrl() {
-  // limpia query + hash sin recargar
+function stripUrlAll() {
+  // Limpia query + hash sin recargar (evita re-ejecución por refresh)
   try {
     const clean = `${window.location.origin}${window.location.pathname}`;
     window.history.replaceState({}, document.title, clean);
@@ -41,26 +22,67 @@ function stripUrl() {
   }
 }
 
+function parseQueryParams(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    const usp = new URLSearchParams(window.location.search || "");
+    for (const [k, v] of usp.entries()) out[k] = v;
+  } catch {
+    // ignore
+  }
+  return out;
+}
+
+function parseHashParams(): Record<string, string> {
+  // Supabase recovery clásico usa #access_token=...&refresh_token=...&type=recovery
+  const out: Record<string, string> = {};
+  try {
+    const raw = (window.location.hash || "").replace(/^#/, "");
+    if (!raw) return out;
+    const usp = new URLSearchParams(raw);
+    for (const [k, v] of usp.entries()) out[k] = v;
+  } catch {
+    // ignore
+  }
+  return out;
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
   const { session, role, loading } = useAuth();
   const { t } = useTranslation();
 
   const [error, setError] = useState<string | null>(null);
-  const [processing, setProcessing] = useState(true);
   const [detail, setDetail] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(true);
 
   const ranRef = useRef(false);
 
   const input = useMemo(() => {
-    const type = String(params.get("type") || "").toLowerCase();
-    const token_hash = params.get("token_hash") || "";
-    const code = params.get("code") || "";
-    const error_description = params.get("error_description") || "";
-    const error_code = params.get("error_code") || "";
-    return { type, token_hash, code, error_description, error_code };
-  }, [params]);
+    const q = parseQueryParams();
+    const h = parseHashParams();
+
+    // Preferimos query para PKCE (code) y OTP (token_hash)
+    // Preferimos hash para recovery clásico (access_token/refresh_token)
+    const type = String(q.type || h.type || "").toLowerCase();
+
+    return {
+      // Query
+      code: q.code || "",
+      token_hash: q.token_hash || "",
+      q_type: String(q.type || "").toLowerCase(),
+
+      // Hash
+      access_token: h.access_token || "",
+      refresh_token: h.refresh_token || "",
+      h_type: String(h.type || "").toLowerCase(),
+
+      // Unified
+      type,
+      error_description: q.error_description || h.error_description || "",
+      error_code: q.error_code || h.error_code || "",
+    };
+  }, []);
 
   useEffect(() => {
     if (ranRef.current) return;
@@ -70,14 +92,15 @@ export default function AuthCallback() {
 
     const run = async () => {
       try {
-        // Si Supabase manda error en query, mostrarlo.
+        // Si Supabase manda error en query/hash, mostrarlo
         if (input.error_description) {
           setError(input.error_description);
           setProcessing(false);
+          stripUrlAll();
           return;
         }
 
-        // ❌ Bloqueo explícito de legacy
+        // ❌ Bloqueo explícito de legacy INVITE
         if (input.type === "invite") {
           setError(
             t("authCallback.inviteLegacy", {
@@ -86,17 +109,19 @@ export default function AuthCallback() {
             })
           );
           setProcessing(false);
-          // Limpieza para evitar reintentos con refresh
-          stripUrl();
+          stripUrlAll();
           return;
         }
 
-        // Determinar “clave” de protección (code o token_hash)
-        const keyRaw = input.code
-          ? `code:${input.code}`
-          : input.token_hash
-          ? `token_hash:${input.token_hash}:${input.type || "unknown"}`
-          : "";
+        // Determinar clave para lock/anti-reintento
+        const keyRaw =
+          input.code
+            ? `code:${input.code}`
+            : input.token_hash
+            ? `token_hash:${input.token_hash}:${input.q_type || input.type || "unknown"}`
+            : input.access_token
+            ? `access_token:${input.access_token.slice(0, 24)}:${input.type || "hash"}`
+            : "";
 
         if (!keyRaw) {
           setError(
@@ -106,27 +131,25 @@ export default function AuthCallback() {
             })
           );
           setProcessing(false);
-          stripUrl();
+          stripUrlAll();
           return;
         }
 
-        const key = safeKey(`${LOCK_PREFIX}${keyRaw}`);
+        const lockKey = safeKey(`${LOCK_PREFIX}${keyRaw}`);
         const doneKey = safeKey(`${DONE_PREFIX}${keyRaw}`);
 
-        // Si ya se procesó antes, no reintentar (evita loops por refresh)
         if (sessionStorage.getItem(doneKey) === "1") {
           setProcessing(false);
-          stripUrl();
+          stripUrlAll();
           return;
         }
 
-        // Lock (si ya está lockeado, no duplicar)
-        if (sessionStorage.getItem(key) === "1") {
+        if (sessionStorage.getItem(lockKey) === "1") {
           setProcessing(false);
-          stripUrl();
+          stripUrlAll();
           return;
         }
-        sessionStorage.setItem(key, "1");
+        sessionStorage.setItem(lockKey, "1");
 
         timeoutId = window.setTimeout(() => {
           setError(
@@ -138,46 +161,100 @@ export default function AuthCallback() {
           setProcessing(false);
         }, 15000);
 
-        // ✅ Caso A: Magic Link PKCE (moderno) -> code
+        // ✅ CASO 1: PKCE moderno -> ?code=...
         if (input.code) {
           const { error } = await supabase.auth.exchangeCodeForSession(input.code);
           if (error) {
-            // Supabase suele dar mensajes como "Email link is invalid or has expired"
             setDetail(`${error.status || ""} ${error.message || ""}`.trim());
             throw error;
           }
 
           sessionStorage.setItem(doneKey, "1");
-          sessionStorage.removeItem(key);
+          sessionStorage.removeItem(lockKey);
 
-          // Limpieza URL para no re-ejecutar con refresh
-          stripUrl();
+          // Si es recovery por PKCE, redirigir a reset-password
+          if (input.type === "recovery" || input.q_type === "recovery") {
+            stripUrlAll();
+            setProcessing(false);
+            navigate("/reset-password", { replace: true });
+            return;
+          }
+
+          stripUrlAll();
           setProcessing(false);
           return;
         }
 
-        // ✅ Caso B: Magic Link clásico -> token_hash + type (magiclink / recovery / signup)
-        // Solo aceptamos magiclink/recovery/signup por seguridad.
-        const allowed = ["magiclink", "recovery", "signup", "email_change"];
-        const otpType = allowed.includes(input.type) ? (input.type as any) : ("magiclink" as any);
+        // ✅ CASO 2: OTP clásico -> ?token_hash=...&type=magiclink|recovery|signup|email_change
+        if (input.token_hash) {
+          const allowed = ["magiclink", "recovery", "signup", "email_change"];
+          const otpType = allowed.includes(input.q_type || input.type)
+            ? (input.q_type || input.type)
+            : "magiclink";
 
-        const { error } = await supabase.auth.verifyOtp({
-          token_hash: input.token_hash,
-          type: otpType,
-        });
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: input.token_hash,
+            type: otpType as any,
+          });
 
-        if (error) {
-          setDetail(`${error.status || ""} ${error.message || ""}`.trim());
-          throw error;
+          if (error) {
+            setDetail(`${error.status || ""} ${error.message || ""}`.trim());
+            throw error;
+          }
+
+          sessionStorage.setItem(doneKey, "1");
+          sessionStorage.removeItem(lockKey);
+
+          if (otpType === "recovery") {
+            stripUrlAll();
+            setProcessing(false);
+            navigate("/reset-password", { replace: true });
+            return;
+          }
+
+          stripUrlAll();
+          setProcessing(false);
+          return;
         }
 
-        sessionStorage.setItem(doneKey, "1");
-        sessionStorage.removeItem(key);
+        // ✅ CASO 3: Recovery clásico por HASH -> #access_token=...&refresh_token=...&type=recovery
+        if (input.access_token && input.refresh_token) {
+          const { error } = await supabase.auth.setSession({
+            access_token: input.access_token,
+            refresh_token: input.refresh_token,
+          });
 
-        stripUrl();
+          if (error) {
+            setDetail(`${error.status || ""} ${error.message || ""}`.trim());
+            throw error;
+          }
+
+          sessionStorage.setItem(doneKey, "1");
+          sessionStorage.removeItem(lockKey);
+
+          // En recovery siempre vamos a reset-password
+          if (input.type === "recovery" || input.h_type === "recovery") {
+            stripUrlAll();
+            setProcessing(false);
+            navigate("/reset-password", { replace: true });
+            return;
+          }
+
+          stripUrlAll();
+          setProcessing(false);
+          return;
+        }
+
+        // Si llega aquí, algo raro
+        setError(
+          t("authCallback.missingParams", {
+            defaultValue:
+              "Faltan parámetros de autenticación.\nSolicita un nuevo Magic Link e inténtalo nuevamente.",
+          })
+        );
         setProcessing(false);
+        stripUrlAll();
       } catch (e: any) {
-        // error típico: "Email link is invalid or has expired"
         const msg =
           e?.message ||
           t("authCallback.invalidOrExpired", {
@@ -187,16 +264,16 @@ export default function AuthCallback() {
 
         setError(msg);
         setProcessing(false);
-        stripUrl();
+        stripUrlAll();
       } finally {
         if (timeoutId) window.clearTimeout(timeoutId);
       }
     };
 
     run();
-  }, [input, t]);
+  }, [input, navigate, t]);
 
-  // ✅ Redirección final por rol (cuando ya exista sesión y AuthContext haya cargado)
+  // ✅ Redirección final por rol cuando ya hay sesión (no recovery)
   useEffect(() => {
     if (processing) return;
     if (loading) return;
@@ -204,11 +281,8 @@ export default function AuthCallback() {
     if (error) return;
 
     const r = String(role || "").toLowerCase();
-    if (r === "tracker") {
-      navigate("/tracker-gps", { replace: true });
-    } else {
-      navigate("/inicio", { replace: true });
-    }
+    if (r === "tracker") navigate("/tracker-gps", { replace: true });
+    else navigate("/inicio", { replace: true });
   }, [processing, loading, session, role, error, navigate]);
 
   if (error) {
