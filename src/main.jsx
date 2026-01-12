@@ -1,5 +1,6 @@
 // src/main.jsx
-import "./index.css"; // ✅ Primero: asegura estilos desde el inicio
+
+import "./index.css"; // ✅ estilos primero
 
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -7,16 +8,17 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 
-// i18n ya configurado
+// i18n
 import i18n from "./i18n/i18n.js";
 import { I18nextProvider } from "react-i18next";
 
-/**
- * Nota:
- * El shim de `process` debe estar en index.html (antes del bundle),
- * no aquí, para evitar efectos raros en ESM y asegurar compatibilidad
- * con vendors que leen process durante el import.
- */
+// 🔐 Service Worker policy UNIVERSAL
+// - Tracker: permite SW
+// - Login / resto de la app: elimina cualquier SW
+import { applyServiceWorkerPolicy } from "./tracker/registerServiceWorker.js";
+
+// ⚠️ CRÍTICO: aplicar política ANTES de montar React
+applyServiceWorkerPolicy();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
