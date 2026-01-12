@@ -45,7 +45,7 @@ function RequirePanel({ children }) {
 
   // ✅ No decidir nada mientras loading=true (evita rebotes)
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent("/inicio")}`} replace />;
 
   const role = String(currentRole || "").toLowerCase();
   if (role === "tracker") return <Navigate to="/tracker-gps" replace />;
