@@ -101,10 +101,7 @@ class GlobalErrorBoundary extends React.Component {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              onClick={this.handleReload}
-              className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm"
-            >
+            <button onClick={this.handleReload} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm">
               Recargar
             </button>
             <a href="/" className="px-4 py-2 rounded-xl border border-slate-300 text-sm">
@@ -121,28 +118,17 @@ class GlobalErrorBoundary extends React.Component {
   }
 }
 
-function pickOrgPreview(orgs) {
-  const arr = Array.isArray(orgs) ? orgs : [];
-  return arr.slice(0, 8).map((o) => ({
-    id: o?.id || null,
-    name: o?.name,
-    name_type: typeof o?.name,
-  }));
-}
-
 function GlobalErrorBoundaryWithSnapshot({ children }) {
   const auth = useAuth?.() || {};
   const snapshot = {
     href: typeof window !== "undefined" ? window.location.href : "",
     user_email: auth?.user?.email || null,
-    isAdmin: auth?.isAdmin ?? null,
-    isRootOwner: auth?.isRootOwner ?? null,
+    currentRole: auth?.currentRole || null,
+    isAppRoot: !!auth?.isAppRoot,
     currentOrg: {
       id: auth?.currentOrg?.id || null,
-      name: auth?.currentOrg?.name,
-      name_type: typeof auth?.currentOrg?.name,
+      name: auth?.currentOrg?.name || null,
     },
-    organizations_preview: pickOrgPreview(auth?.organizations),
   };
 
   return <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundary>;
@@ -162,37 +148,36 @@ function FullScreenLoader({ text = "Cargando..." }) {
 }
 
 function RequirePanel({ children }) {
-  const { loading, session, bestRole } = useAuth();
-
+  const { loading, user, currentRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
-  if (!session) return <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/" replace />;
 
-  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
-  if (isTracker) return <Navigate to="/tracker-gps" replace />;
+  const role = String(currentRole || "").toLowerCase();
+  if (role === "tracker") return <Navigate to="/tracker-gps" replace />;
 
   return children;
 }
 
 function RequireTracker({ children }) {
-  const { loading, session, bestRole } = useAuth();
-
+  const { loading, user, currentRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
-  if (!session) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
 
-  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
-  if (!isTracker) return <Navigate to="/inicio" replace />;
+  const role = String(currentRole || "").toLowerCase();
+  if (role !== "tracker") return <Navigate to="/inicio" replace />;
 
   return children;
 }
 
-function RootOwnerRoute({ children }) {
-  const { loading, isRootOwner } = useAuth();
+function AppRootRoute({ children }) {
+  const { loading, isAppRoot } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando permisos…" />;
-  if (!isRootOwner) return <Navigate to="/inicio" replace />;
+  if (!isAppRoot) return <Navigate to="/inicio" replace />;
   return children;
 }
 
 function LoginShell() {
+  // Importante: siempre renderiza algo
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <Login />
@@ -201,12 +186,12 @@ function LoginShell() {
 }
 
 function SmartFallback() {
-  const { loading, session, bestRole } = useAuth();
+  const { loading, user, currentRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando…" />;
-  if (!session) return <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/" replace />;
 
-  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
-  return isTracker ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
+  const role = String(currentRole || "").toLowerCase();
+  return role === "tracker" ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
 }
 
 export default function App() {
@@ -214,10 +199,10 @@ export default function App() {
     <BrowserRouter>
       <GlobalErrorBoundaryWithSnapshot>
         <Routes>
+          {/* Public */}
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<LoginShell />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/auth/invite" element={<InviteCallback />} />
 
@@ -245,23 +230,87 @@ export default function App() {
           >
             <Route path="/inicio" element={<Inicio />} />
 
-            <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
-            <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-            <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
-            <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
-            <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
-            <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
-            <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-            <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-            <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+            <Route
+              path="/nueva-geocerca"
+              element={
+                <RequireOrg>
+                  <NuevaGeocerca />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/geocercas"
+              element={
+                <RequireOrg>
+                  <GeocercasPage />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/personal"
+              element={
+                <RequireOrg>
+                  <PersonalPage />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/actividades"
+              element={
+                <RequireOrg>
+                  <ActividadesPage />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/asignaciones"
+              element={
+                <RequireOrg>
+                  <AsignacionesPage />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/costos"
+              element={
+                <RequireOrg>
+                  <CostosPage />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/costos-dashboard"
+              element={
+                <RequireOrg>
+                  <CostosDashboardPage />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/tracker-dashboard"
+              element={
+                <RequireOrg>
+                  <TrackerDashboard />
+                </RequireOrg>
+              }
+            />
+            <Route
+              path="/invitar-tracker"
+              element={
+                <RequireOrg>
+                  <InvitarTracker />
+                </RequireOrg>
+              }
+            />
 
+            {/* Admins: SOLO root app-level */}
             <Route
               path="/admins"
               element={
                 <RequireOrg>
-                  <RootOwnerRoute>
+                  <AppRootRoute>
                     <AdminsPage />
-                  </RootOwnerRoute>
+                  </AppRootRoute>
                 </RequireOrg>
               }
             />
