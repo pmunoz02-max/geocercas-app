@@ -1,4 +1,3 @@
-// src/pages/Login.tsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -104,21 +103,19 @@ const Login: React.FC = () => {
   };
 
   // ---------------- RECUPERAR CONTRASEÑA ----------------
- <button
-  type="button"
-  onClick={onRecoverPassword}
-  disabled={loadingAction}
-  className="
-    text-sm
-    text-sky-300
-    hover:text-sky-200
-    hover:underline
-    transition
-    disabled:opacity-50
-  "
->
-  ¿Olvidaste tu contraseña?
-</button>
+  const onRecoverPassword = async () => {
+    setErrorMsg(null);
+    setOkMsg(null);
+
+    const em = normEmail(email);
+    if (!em || !isValidEmail(em)) {
+      setErrorMsg(
+        t("login.invalidEmail", {
+          defaultValue: "Ingresa un correo válido para recuperar la contraseña.",
+        })
+      );
+      return;
+    }
 
     try {
       setLoadingAction(true);
@@ -215,13 +212,21 @@ const Login: React.FC = () => {
                   placeholder="••••••••"
                 />
 
-                {/* 🔐 Recuperar contraseña */}
+                {/* 🔐 Recuperar contraseña — versión FINAL */}
                 <div className="mt-3 text-right">
                   <button
                     type="button"
                     onClick={onRecoverPassword}
                     disabled={loadingAction}
-                    className="text-xs text-sky-400 hover:underline disabled:opacity-60"
+                    className="
+                      text-sm
+                      text-white
+                      underline
+                      underline-offset-4
+                      hover:text-sky-300
+                      transition
+                      disabled:opacity-50
+                    "
                   >
                     {t("login.forgotPassword", {
                       defaultValue: "¿Olvidaste tu contraseña?",
