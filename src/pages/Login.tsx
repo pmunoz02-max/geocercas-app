@@ -2,31 +2,35 @@ import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label = "Operación") {
-  let timeoutId: any;
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`${label}: tiempo de espera agotado (${ms / 1000}s).`)), ms);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
-}
+async function postJson(path: string, body: any, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
 
-async function postJson(path: string, body: any) {
-  const r = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify(body),
-  });
+  try {
+    const r = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
 
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error || `Request failed (${r.status})`);
-  return data;
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data?.error || `Request failed (${r.status})`);
+    return data;
+  } catch (e: any) {
+    if (e?.name === "AbortError") {
+      throw new Error(`Tiempo de espera agotado (${Math.round(timeoutMs / 1000)}s).`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
   const [mode, setMode] = useState<"password" | "magic">("password");
@@ -46,7 +50,6 @@ export default function Login() {
     e.preventDefault();
     if (busy) return;
 
-    // ✅ Validar ANTES de setBusy(true) para evitar "Procesando..." infinito
     const emailClean = email.trim().toLowerCase();
     const passwordClean = String(password || "");
 
@@ -61,14 +64,8 @@ export default function Login() {
     setBusy(true);
 
     try {
-      // ✅ Llamada same-origin (no supabase.co directo)
-      const data = await withTimeout(
-        postJson("/api/auth/password", { email: emailClean, password: passwordClean }),
-        15000,
-        "Login"
-      );
+      const data = await postJson("/api/auth/password", { email: emailClean, password: passwordClean }, 20000);
 
-      // ✅ Persistir sesión en el cliente Supabase
       await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
@@ -77,14 +74,13 @@ export default function Login() {
       navigate(next, { replace: true });
     } catch (e2: any) {
       console.error("[Login] password error", e2);
-
       const m = String(e2?.message || "");
       const ml = m.toLowerCase();
 
-      if (ml.includes("invalid") || ml.includes("credentials") || ml.includes("correo o contraseña")) {
+      if (ml.includes("invalid") || ml.includes("credentials")) {
         setErr("Correo o contraseña incorrectos.");
-      } else if (m.includes("tiempo de espera")) {
-        setErr("Se tardó demasiado en responder. Intenta otra vez.");
+      } else if (ml.includes("tiempo de espera")) {
+        setErr("Se tardó demasiado en responder. Revisa extensiones/antivirus/VPN y vuelve a intentar.");
       } else if (ml.includes("missing supabase_url") || ml.includes("missing supabase_anon_key")) {
         setErr("Faltan variables en Vercel: SUPABASE_URL / SUPABASE_ANON_KEY.");
       } else {
@@ -111,17 +107,12 @@ export default function Login() {
     setBusy(true);
 
     try {
-      await withTimeout(
-        postJson("/api/auth/magic", { email: emailClean, redirectTo }),
-        15000,
-        "Magic Link"
-      );
-
+      await postJson("/api/auth/magic", { email: emailClean, redirectTo }, 20000);
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e2: any) {
       console.error("[Login] magiclink error", e2);
       const m = String(e2?.message || "");
-      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el Magic Link.");
+      setErr(m.toLowerCase().includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el Magic Link.");
     } finally {
       setBusy(false);
     }
@@ -142,17 +133,12 @@ export default function Login() {
     setBusy(true);
 
     try {
-      await withTimeout(
-        postJson("/api/auth/recover", { email: emailClean, redirectTo }),
-        15000,
-        "Recuperación"
-      );
-
+      await postJson("/api/auth/recover", { email: emailClean, redirectTo }, 20000);
       setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa inbox o spam.");
     } catch (e2: any) {
       console.error("[Login] recovery error", e2);
       const m = String(e2?.message || "");
-      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el correo de recuperación.");
+      setErr(m.toLowerCase().includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : m || "No se pudo enviar el correo de recuperación.");
     } finally {
       setBusy(false);
     }
