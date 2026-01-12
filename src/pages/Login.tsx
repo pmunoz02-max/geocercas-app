@@ -17,14 +17,16 @@ async function postJson(path: string, body: any) {
     credentials: "same-origin",
     body: JSON.stringify(body),
   });
+
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error || "Request failed");
+  if (!r.ok) throw new Error(data?.error || `Request failed (${r.status})`);
   return data;
 }
 
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
   const [mode, setMode] = useState<"password" | "magic">("password");
@@ -44,25 +46,29 @@ export default function Login() {
     e.preventDefault();
     if (busy) return;
 
+    // ✅ Validar ANTES de setBusy(true) para evitar "Procesando..." infinito
+    const emailClean = email.trim().toLowerCase();
+    const passwordClean = String(password || "");
+
+    if (!emailClean || !passwordClean) {
+      setMsg("");
+      setErr("Escribe tu correo y contraseña.");
+      return;
+    }
+
     setErr("");
     setMsg("");
     setBusy(true);
 
     try {
-      const emailClean = email.trim().toLowerCase();
-      if (!emailClean || !password) {
-        setErr("Escribe tu correo y contraseña.");
-        return;
-      }
-
-      // Llamada a TU dominio (no a supabase.co)
+      // ✅ Llamada same-origin (no supabase.co directo)
       const data = await withTimeout(
-        postJson("/api/auth/password", { email: emailClean, password }),
+        postJson("/api/auth/password", { email: emailClean, password: passwordClean }),
         15000,
         "Login"
       );
 
-      // Persistir sesión en Supabase client (localStorage del browser)
+      // ✅ Persistir sesión en el cliente Supabase
       await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
@@ -71,10 +77,19 @@ export default function Login() {
       navigate(next, { replace: true });
     } catch (e2: any) {
       console.error("[Login] password error", e2);
+
       const m = String(e2?.message || "");
-      if (m.toLowerCase().includes("invalid")) setErr("Correo o contraseña incorrectos.");
-      else if (m.includes("tiempo de espera")) setErr("Se tardó demasiado en responder. Intenta otra vez.");
-      else setErr(m || "No se pudo iniciar sesión.");
+      const ml = m.toLowerCase();
+
+      if (ml.includes("invalid") || ml.includes("credentials") || ml.includes("correo o contraseña")) {
+        setErr("Correo o contraseña incorrectos.");
+      } else if (m.includes("tiempo de espera")) {
+        setErr("Se tardó demasiado en responder. Intenta otra vez.");
+      } else if (ml.includes("missing supabase_url") || ml.includes("missing supabase_anon_key")) {
+        setErr("Faltan variables en Vercel: SUPABASE_URL / SUPABASE_ANON_KEY.");
+      } else {
+        setErr(m || "No se pudo iniciar sesión.");
+      }
     } finally {
       setBusy(false);
     }
@@ -84,17 +99,18 @@ export default function Login() {
     e.preventDefault();
     if (busy) return;
 
+    const emailClean = email.trim().toLowerCase();
+    if (!emailClean) {
+      setMsg("");
+      setErr("Escribe tu correo.");
+      return;
+    }
+
     setErr("");
     setMsg("");
     setBusy(true);
 
     try {
-      const emailClean = email.trim().toLowerCase();
-      if (!emailClean) {
-        setErr("Escribe tu correo.");
-        return;
-      }
-
       await withTimeout(
         postJson("/api/auth/magic", { email: emailClean, redirectTo }),
         15000,
@@ -114,22 +130,24 @@ export default function Login() {
   async function onForgotPassword() {
     if (busy) return;
 
-    setErr("");
-    setMsg("");
-
     const emailClean = email.trim().toLowerCase();
     if (!emailClean) {
+      setMsg("");
       setErr("Escribe tu correo primero.");
       return;
     }
 
+    setErr("");
+    setMsg("");
     setBusy(true);
+
     try {
       await withTimeout(
         postJson("/api/auth/recover", { email: emailClean, redirectTo }),
         15000,
         "Recuperación"
       );
+
       setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa inbox o spam.");
     } catch (e2: any) {
       console.error("[Login] recovery error", e2);
@@ -161,23 +179,28 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setMode("password")}
+                disabled={busy}
                 className={
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "password"
                     ? "bg-white text-slate-900 border-white"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700") +
+                  (busy ? " opacity-70" : "")
                 }
               >
                 Contraseña
               </button>
+
               <button
                 type="button"
                 onClick={() => setMode("magic")}
+                disabled={busy}
                 className={
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "magic"
                     ? "bg-white text-slate-900 border-white"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700") +
+                  (busy ? " opacity-70" : "")
                 }
               >
                 Magic Link
@@ -205,6 +228,7 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     type="password"
                     autoComplete="current-password"
+                    placeholder="••••••••"
                     className={inputClass}
                   />
 
