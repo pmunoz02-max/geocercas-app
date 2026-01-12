@@ -104,19 +104,21 @@ const Login: React.FC = () => {
   };
 
   // ---------------- RECUPERAR CONTRASEÑA ----------------
-  const onRecoverPassword = async () => {
-    setErrorMsg(null);
-    setOkMsg(null);
-
-    const em = normEmail(email);
-    if (!em || !isValidEmail(em)) {
-      setErrorMsg(
-        t("login.invalidEmail", {
-          defaultValue: "Ingresa un correo válido para recuperar la contraseña.",
-        })
-      );
-      return;
-    }
+ <button
+  type="button"
+  onClick={onRecoverPassword}
+  disabled={loadingAction}
+  className="
+    text-sm
+    text-sky-300
+    hover:text-sky-200
+    hover:underline
+    transition
+    disabled:opacity-50
+  "
+>
+  ¿Olvidaste tu contraseña?
+</button>
 
     try {
       setLoadingAction(true);
