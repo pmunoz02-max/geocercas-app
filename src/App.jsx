@@ -2,7 +2,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import AuthGuard from "./components/AuthGuard.jsx";
 import RequireOrg from "./components/org/RequireOrg.jsx";
 
 import Landing from "./pages/Landing.jsx";
@@ -43,8 +42,10 @@ function FullScreenLoader({ text = "Cargando..." }) {
 
 function RequirePanel({ children }) {
   const { loading, user, currentRole } = useAuth();
+
+  // ✅ No decidir nada mientras loading=true (evita rebotes)
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/login" replace />;
 
   const role = String(currentRole || "").toLowerCase();
   if (role === "tracker") return <Navigate to="/tracker-gps" replace />;
@@ -54,6 +55,8 @@ function RequirePanel({ children }) {
 
 function RequireTracker({ children }) {
   const { loading, user, currentRole } = useAuth();
+
+  // ✅ No decidir nada mientras loading=true (evita rebotes)
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
   if (!user) return <Navigate to="/login" replace />;
 
@@ -70,7 +73,7 @@ function AppRootRoute({ children }) {
   return children;
 }
 
-// ✅ LoginShell con el MISMO fondo del landing => sin parpadeo
+// ✅ LoginShell con fondo consistente (sin parpadeo)
 function LoginShell() {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
@@ -87,7 +90,11 @@ function SmartFallback() {
   if (!user) return <Navigate to="/" replace />;
 
   const role = String(currentRole || "").toLowerCase();
-  return role === "tracker" ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
+  return role === "tracker" ? (
+    <Navigate to="/tracker-gps" replace />
+  ) : (
+    <Navigate to="/inicio" replace />
+  );
 }
 
 export default function App() {
@@ -104,22 +111,18 @@ export default function App() {
         <Route
           path="/tracker-gps"
           element={
-            <AuthGuard mode="tracker">
-              <RequireTracker>
-                <TrackerGpsPage />
-              </RequireTracker>
-            </AuthGuard>
+            <RequireTracker>
+              <TrackerGpsPage />
+            </RequireTracker>
           }
         />
 
         {/* Panel */}
         <Route
           element={
-            <AuthGuard mode="panel">
-              <RequirePanel>
-                <ProtectedShell />
-              </RequirePanel>
-            </AuthGuard>
+            <RequirePanel>
+              <ProtectedShell />
+            </RequirePanel>
           }
         >
           <Route path="/inicio" element={<Inicio />} />
