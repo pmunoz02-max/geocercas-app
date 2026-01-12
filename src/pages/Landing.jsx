@@ -1,23 +1,23 @@
 // src/pages/Landing.jsx
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 /**
  * Landing UNIVERSAL:
- * - Público (NO consulta sesión, NO usa useAuth)
- * - Navegación interna con <Link> (sin recarga)
- * - i18n robusto: si falta traducción, usa fallback (no muestra la key)
+ * - Público: NO consulta sesión, NO usa useAuth
+ * - ES/EN/FR visibles (LanguageSwitcher)
+ * - Navegación interna SPA (Link)
+ * - i18n robusto: si falta key => fallback real
  */
 export default function Landing() {
   const { t } = useTranslation();
 
   const tt = useMemo(() => {
     return (key, fallback) => {
-      // i18next: defaultValue asegura fallback
       const v = t(key, { defaultValue: fallback });
-      // si por config devuelve la key literal, forzamos fallback
       return !v || v === key ? fallback : v;
     };
   }, [t]);
@@ -65,12 +65,12 @@ export default function Landing() {
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
       <header className="w-full border-b border-white/10">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center font-bold">
               AG
             </div>
-            <div>
+            <div className="leading-tight">
               <div className="font-semibold">{tt("landing.brandName", "App Geocercas")}</div>
               <div className="text-xs text-white/60">
                 {tt("landing.brandTagline", "Control de personal por geocercas")}
@@ -78,13 +78,16 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* ✅ Link interno (sin parpadeo por recarga) */}
-          <Link
-            to="/login"
-            className="px-3 py-1.5 rounded-full text-sm font-semibold bg-white/10 hover:bg-white/15 border border-white/10 transition"
-          >
-            {tt("landing.login", "Entrar")}
-          </Link>
+          {/* ✅ ES/EN/FR + Entrar */}
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <Link
+              to="/login"
+              className="px-3 py-1.5 rounded-full text-sm font-semibold bg-white/10 hover:bg-white/15 border border-white/10 transition"
+            >
+              {tt("landing.login", "Entrar")}
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -107,7 +110,6 @@ export default function Landing() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              {/* ✅ Link interno */}
               <Link
                 to="/login"
                 className="px-5 py-2.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-500 transition"
@@ -115,7 +117,6 @@ export default function Landing() {
                 {tt("landing.goPanel", "Ir al panel de control")}
               </Link>
 
-              {/* ✅ Link interno */}
               <Link
                 to="/login?mode=magic"
                 className="px-5 py-2.5 rounded-full font-semibold bg-white/10 hover:bg-white/15 border border-white/10 transition"
@@ -127,9 +128,7 @@ export default function Landing() {
 
           {/* Quick Access */}
           <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
-            <h2 className="text-xl font-bold">
-              {tt("landing.quickAccessTitle", "Acceso rápido")}
-            </h2>
+            <h2 className="text-xl font-bold">{tt("landing.quickAccessTitle", "Acceso rápido")}</h2>
             <p className="mt-2 text-sm text-white/70">
               {tt("landing.quickAccessDesc", "Si prefieres, puedes ingresar con Magic Link (sin contraseña).")}
             </p>
@@ -160,9 +159,9 @@ export default function Landing() {
                 {tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real.")}
               </p>
 
-              <a className="mt-2 inline-block text-xs text-white/60 underline" href="/support">
+              <Link className="mt-2 inline-block text-xs text-white/60 underline" to="/help/support">
                 {tt("landing.support", "Soporte")}
-              </a>
+              </Link>
             </form>
           </div>
         </div>

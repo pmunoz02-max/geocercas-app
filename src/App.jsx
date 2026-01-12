@@ -33,114 +33,10 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 
-/** =========================
- * Helpers
- * ========================= */
-function toSafeString(x) {
-  if (x == null) return "";
-  if (typeof x === "string") return x;
-  if (typeof x === "number" || typeof x === "boolean") return String(x);
-  try {
-    return JSON.stringify(x);
-  } catch {
-    return String(x);
-  }
-}
-
-/** =========================
- * Global Error Boundary (airbag)
- * ========================= */
-class GlobalErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, message: "", stack: "", snapshot: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, message: toSafeString(error?.message || error) };
-  }
-
-  componentDidCatch(error, info) {
-    const componentStack = info?.componentStack || "";
-    console.error("[GlobalErrorBoundary] Caught error:", error);
-    console.error("[GlobalErrorBoundary] Component stack:", componentStack);
-    this.setState({ stack: componentStack, snapshot: this.props?.debugSnapshot || null });
-  }
-
-  handleReload = () => window.location.reload();
-
-  render() {
-    if (!this.state.hasError) return this.props.children;
-
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="w-full max-w-3xl bg-white border border-red-200 rounded-2xl shadow-sm p-5">
-          <h1 className="text-lg font-semibold text-red-700">Ocurrió un error en la interfaz</h1>
-          <p className="text-sm text-slate-700 mt-2">
-            Recarga la página. Si el problema persiste, copia el mensaje y envíalo a soporte.
-          </p>
-
-          <div className="mt-4 text-xs bg-slate-50 border rounded-xl p-3 space-y-2">
-            <div>
-              <b>Mensaje:</b> <span className="font-mono break-all">{this.state.message}</span>
-            </div>
-
-            {this.state.stack ? (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-slate-600">Detalles técnicos</summary>
-                <pre className="mt-1 font-mono whitespace-pre-wrap break-words text-slate-600">
-                  {this.state.stack}
-                </pre>
-                {this.state.snapshot ? (
-                  <pre className="mt-3 font-mono whitespace-pre-wrap break-words text-slate-600">
-                    {toSafeString(this.state.snapshot)}
-                  </pre>
-                ) : null}
-              </details>
-            ) : null}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button onClick={this.handleReload} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm">
-              Recargar
-            </button>
-            <a href="/" className="px-4 py-2 rounded-xl border border-slate-300 text-sm">
-              Ir al inicio
-            </a>
-          </div>
-
-          <p className="text-[11px] text-slate-500 mt-4">
-            Nota: Este panel aparece solo cuando ocurre un error de render. En condiciones normales no se muestra.
-          </p>
-        </div>
-      </div>
-    );
-  }
-}
-
-function GlobalErrorBoundaryWithSnapshot({ children }) {
-  const auth = useAuth?.() || {};
-  const snapshot = {
-    href: typeof window !== "undefined" ? window.location.href : "",
-    user_email: auth?.user?.email || null,
-    currentRole: auth?.currentRole || null,
-    isAppRoot: !!auth?.isAppRoot,
-    currentOrg: {
-      id: auth?.currentOrg?.id || null,
-      name: auth?.currentOrg?.name || null,
-    },
-  };
-
-  return <GlobalErrorBoundary debugSnapshot={snapshot}>{children}</GlobalErrorBoundary>;
-}
-
-/** =========================
- * UI helpers
- * ========================= */
 function FullScreenLoader({ text = "Cargando..." }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+      <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70">
         {text}
       </div>
     </div>
@@ -176,11 +72,13 @@ function AppRootRoute({ children }) {
   return children;
 }
 
+// ✅ LoginShell con el MISMO fondo del landing => sin parpadeo
 function LoginShell() {
-  // Importante: siempre renderiza algo
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Login />
+    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
+      <div className="w-full max-w-2xl">
+        <Login />
+      </div>
     </div>
   );
 }
@@ -197,133 +95,130 @@ function SmartFallback() {
 export default function App() {
   return (
     <BrowserRouter>
-      <GlobalErrorBoundaryWithSnapshot>
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<LoginShell />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/auth/invite" element={<InviteCallback />} />
+      <Routes>
+        {/* Public */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<LoginShell />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/auth/invite" element={<InviteCallback />} />
 
-          {/* Tracker-only */}
+        {/* Tracker-only */}
+        <Route
+          path="/tracker-gps"
+          element={
+            <AuthGuard mode="tracker">
+              <RequireTracker>
+                <TrackerGpsPage />
+              </RequireTracker>
+            </AuthGuard>
+          }
+        />
+
+        {/* Panel */}
+        <Route
+          element={
+            <AuthGuard mode="panel">
+              <RequirePanel>
+                <ProtectedShell />
+              </RequirePanel>
+            </AuthGuard>
+          }
+        >
+          <Route path="/inicio" element={<Inicio />} />
+
           <Route
-            path="/tracker-gps"
+            path="/nueva-geocerca"
             element={
-              <AuthGuard mode="tracker">
-                <RequireTracker>
-                  <TrackerGpsPage />
-                </RequireTracker>
-              </AuthGuard>
+              <RequireOrg>
+                <NuevaGeocerca />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/geocercas"
+            element={
+              <RequireOrg>
+                <GeocercasPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/personal"
+            element={
+              <RequireOrg>
+                <PersonalPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/actividades"
+            element={
+              <RequireOrg>
+                <ActividadesPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/asignaciones"
+            element={
+              <RequireOrg>
+                <AsignacionesPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/costos"
+            element={
+              <RequireOrg>
+                <CostosPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/costos-dashboard"
+            element={
+              <RequireOrg>
+                <CostosDashboardPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/tracker-dashboard"
+            element={
+              <RequireOrg>
+                <TrackerDashboard />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/invitar-tracker"
+            element={
+              <RequireOrg>
+                <InvitarTracker />
+              </RequireOrg>
             }
           />
 
-          {/* Panel */}
           <Route
+            path="/admins"
             element={
-              <AuthGuard mode="panel">
-                <RequirePanel>
-                  <ProtectedShell />
-                </RequirePanel>
-              </AuthGuard>
+              <RequireOrg>
+                <AppRootRoute>
+                  <AdminsPage />
+                </AppRootRoute>
+              </RequireOrg>
             }
-          >
-            <Route path="/inicio" element={<Inicio />} />
+          />
 
-            <Route
-              path="/nueva-geocerca"
-              element={
-                <RequireOrg>
-                  <NuevaGeocerca />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/geocercas"
-              element={
-                <RequireOrg>
-                  <GeocercasPage />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/personal"
-              element={
-                <RequireOrg>
-                  <PersonalPage />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/actividades"
-              element={
-                <RequireOrg>
-                  <ActividadesPage />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/asignaciones"
-              element={
-                <RequireOrg>
-                  <AsignacionesPage />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/costos"
-              element={
-                <RequireOrg>
-                  <CostosPage />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/costos-dashboard"
-              element={
-                <RequireOrg>
-                  <CostosDashboardPage />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/tracker-dashboard"
-              element={
-                <RequireOrg>
-                  <TrackerDashboard />
-                </RequireOrg>
-              }
-            />
-            <Route
-              path="/invitar-tracker"
-              element={
-                <RequireOrg>
-                  <InvitarTracker />
-                </RequireOrg>
-              }
-            />
+          <Route path="/help/instructions" element={<InstructionsPage />} />
+          <Route path="/help/faq" element={<FaqPage />} />
+          <Route path="/help/support" element={<SupportPage />} />
+          <Route path="/help/changelog" element={<ChangelogPage />} />
+        </Route>
 
-            {/* Admins: SOLO root app-level */}
-            <Route
-              path="/admins"
-              element={
-                <RequireOrg>
-                  <AppRootRoute>
-                    <AdminsPage />
-                  </AppRootRoute>
-                </RequireOrg>
-              }
-            />
-
-            <Route path="/help/instructions" element={<InstructionsPage />} />
-            <Route path="/help/faq" element={<FaqPage />} />
-            <Route path="/help/support" element={<SupportPage />} />
-            <Route path="/help/changelog" element={<ChangelogPage />} />
-          </Route>
-
-          <Route path="*" element={<SmartFallback />} />
-        </Routes>
-      </GlobalErrorBoundaryWithSnapshot>
+        <Route path="*" element={<SmartFallback />} />
+      </Routes>
     </BrowserRouter>
   );
 }
