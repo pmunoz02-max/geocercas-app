@@ -1,92 +1,69 @@
-// src/components/AuthGuard.jsx
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
 /**
- * AuthGuard UNIVERSAL
+ * AuthGuard ESTABLE (sin loops)
  *
- * Objetivo:
- * - NO colgar la UI esperando roles/orgs (porque AuthContext los hidrata en background).
- * - Decidir acceso solo por:
- *   - authReady (loading legacy)
- *   - session
- *   - bestRole (tracker vs no-tracker)
- *   - trackerDomain (si aplica)
- *
- * Uso:
- * <AuthGuard mode="panel"> ... </AuthGuard>
- * <AuthGuard mode="tracker"> ... </AuthGuard>
+ * Principios:
+ * - ESPERA a que AuthContext termine (authReady / loading)
+ * - Decide por `user` (no por `session`)
+ * - NO redirige mientras se está hidratando
+ * - NO hace signOut
  */
 export default function AuthGuard({ mode = "panel", children }) {
   const location = useLocation();
   const {
     authReady,
+    loading,
     authError,
-    loading, // legacy: !authReady
-    session,
+    user,          // 🔑 USAR user, no session
     bestRole,
     trackerDomain,
   } = useAuth();
 
-  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
   const isReady = authReady === true || loading === false;
+  const isTracker = String(bestRole || "").toLowerCase() === "tracker";
 
-  // Loader SOLO por sesión, no por permisos/roles
+  // 1️⃣ Esperar SIEMPRE a que AuthContext termine
   if (!isReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm text-sm text-slate-600">
-          Cargando…
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70">
+          Cargando sesión…
         </div>
       </div>
     );
   }
 
-  // Error de auth: mostrar algo visible (no colgar)
+  // 2️⃣ Error explícito de auth
   if (authError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="max-w-md w-full mx-4 rounded-xl bg-white border border-slate-200 shadow-sm p-4">
-          <div className="text-sm font-semibold text-slate-800">Error de autenticación</div>
-          <div className="mt-2 text-xs text-slate-600 break-words">{authError}</div>
-          <div className="mt-4 text-xs text-slate-500">
-            Recomendación: vuelve a iniciar sesión desde el enlace o desde la Landing.
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <div className="max-w-md w-full mx-4 rounded-xl bg-white/5 border border-white/10 p-4">
+          <div className="text-sm font-semibold">Error de autenticación</div>
+          <div className="mt-2 text-xs opacity-70 break-words">{authError}</div>
         </div>
       </div>
     );
   }
 
-  // Sin sesión
-  if (!session) {
-    if (mode === "tracker") {
-      // trackers normalmente entran por magic link → si no hay sesión, manda a login
-      const next = encodeURIComponent("/tracker-gps");
-      return <Navigate to={`/login?mode=magic&next=${next}`} replace />;
-    }
-
-    // panel: manda a landing (o login si prefieres)
-    return <Navigate to="/" replace />;
+  // 3️⃣ NO HAY USER → login (con next)
+  if (!user) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  // Con sesión: decide acceso por modo
+  // 4️⃣ Lógica por modo
   if (mode === "tracker") {
-    // Permitir tracker si:
-    // - bestRole es tracker, o
-    // - estás en subdominio tracker (si lo usas)
     if (isTracker || trackerDomain) return children;
-
-    // Usuario de panel cayó aquí: reenvíalo al panel
     return <Navigate to="/inicio" replace />;
   }
 
-  // mode === "panel"
-  // Si es tracker, no entra al panel
+  // mode === panel
   if (isTracker || trackerDomain) {
     return <Navigate to="/tracker-gps" replace />;
   }
 
-  // Usuario panel OK
   return children;
 }
