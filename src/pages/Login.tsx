@@ -29,7 +29,7 @@ const Login: React.FC = () => {
     else setMode("password");
   }, [location.search]);
 
-  // Si ya hay sesión, no mostrar login (evita flicker post-login)
+  // Si ya hay sesión, no mostrar login
   useEffect(() => {
     if (!authReady) return;
     if (session) navigate("/inicio", { replace: true });
@@ -38,6 +38,7 @@ const Login: React.FC = () => {
   const normEmail = (v: string) => String(v || "").trim().toLowerCase();
   const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
+  // ---------------- PASSWORD LOGIN ----------------
   const onPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -66,6 +67,7 @@ const Login: React.FC = () => {
     }
   };
 
+  // ---------------- MAGIC LINK ----------------
   const onMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -88,7 +90,11 @@ const Login: React.FC = () => {
 
       if (error) throw error;
 
-      setOkMsg(t("login.magicSent", { defaultValue: "Te enviamos un enlace de acceso. Revisa tu correo." }));
+      setOkMsg(
+        t("login.magicSent", {
+          defaultValue: "Te enviamos un enlace de acceso. Revisa tu correo.",
+        })
+      );
     } catch (err: any) {
       console.error("[Login] magic error", err);
       setErrorMsg(err?.message || t("login.error", { defaultValue: "No se pudo enviar el enlace." }));
@@ -97,8 +103,49 @@ const Login: React.FC = () => {
     }
   };
 
+  // ---------------- RECUPERAR CONTRASEÑA ----------------
+  const onRecoverPassword = async () => {
+    setErrorMsg(null);
+    setOkMsg(null);
+
+    const em = normEmail(email);
+    if (!em || !isValidEmail(em)) {
+      setErrorMsg(
+        t("login.invalidEmail", {
+          defaultValue: "Ingresa un correo válido para recuperar la contraseña.",
+        })
+      );
+      return;
+    }
+
+    try {
+      setLoadingAction(true);
+      const redirectTo = `${window.location.origin}/auth/callback`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(em, {
+        redirectTo,
+      });
+
+      if (error) throw error;
+
+      setOkMsg(
+        t("login.recoverySent", {
+          defaultValue:
+            "Te enviamos un correo para recuperar tu contraseña. Revisa tu bandeja de entrada.",
+        })
+      );
+    } catch (err: any) {
+      console.error("[Login] recovery error", err);
+      setErrorMsg(
+        err?.message ||
+          t("login.recoveryError", { defaultValue: "No se pudo enviar el correo de recuperación." })
+      );
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
   return (
-    // ✅ Fondo oscuro propio => NO flash aunque venga desde Landing
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
       <div className="w-full max-w-2xl">
         <div className="flex items-center justify-between mb-4">
@@ -165,6 +212,20 @@ const Login: React.FC = () => {
                   className="w-full rounded-xl bg-white/10 border border-white/10 px-4 py-2.5 text-white outline-none focus:ring-2 focus:ring-emerald-500"
                   placeholder="••••••••"
                 />
+
+                {/* 🔐 Recuperar contraseña */}
+                <div className="mt-3 text-right">
+                  <button
+                    type="button"
+                    onClick={onRecoverPassword}
+                    disabled={loadingAction}
+                    className="text-xs text-sky-400 hover:underline disabled:opacity-60"
+                  >
+                    {t("login.forgotPassword", {
+                      defaultValue: "¿Olvidaste tu contraseña?",
+                    })}
+                  </button>
+                </div>
               </>
             )}
 
@@ -176,8 +237,8 @@ const Login: React.FC = () => {
               {loadingAction
                 ? t("login.working", { defaultValue: "Procesando…" })
                 : mode === "magic"
-                  ? t("login.sendMagic", { defaultValue: "Enviar Magic Link" })
-                  : t("login.signIn", { defaultValue: "Entrar" })}
+                ? t("login.sendMagic", { defaultValue: "Enviar Magic Link" })
+                : t("login.signIn", { defaultValue: "Entrar" })}
             </button>
 
             {okMsg && <div className="mt-4 text-sm text-emerald-300">{okMsg}</div>}
