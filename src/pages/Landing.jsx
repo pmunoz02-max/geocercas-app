@@ -1,53 +1,48 @@
 // src/pages/Landing.jsx
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 
-/** =========================
- * Helpers seguros i18n
- * ========================= */
-function safeT(value, fallback = "") {
-  if (value == null) return fallback;
-  if (typeof value === "string") {
-    const s = value.trim();
-    return s ? s : fallback;
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return fallback;
-  }
-}
-
+/**
+ * Landing UNIVERSAL:
+ * - Público (NO consulta sesión, NO usa useAuth)
+ * - Navegación interna con <Link> (sin recarga)
+ * - i18n robusto: si falta traducción, usa fallback (no muestra la key)
+ */
 export default function Landing() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
 
-  // ⚠️ Landing NO depende de AuthContext
+  const tt = useMemo(() => {
+    return (key, fallback) => {
+      // i18next: defaultValue asegura fallback
+      const v = t(key, { defaultValue: fallback });
+      // si por config devuelve la key literal, forzamos fallback
+      return !v || v === key ? fallback : v;
+    };
+  }, [t]);
+
   const [email, setEmail] = useState("");
-  const [statusMsg, setStatusMsg] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [okMsg, setOkMsg] = useState("");
+  const [errMsg, setErrMsg] = useState("");
 
   const normEmail = (v) => String(v || "").trim().toLowerCase();
   const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-  const handleSendMagicLink = async (e) => {
+  const sendMagic = async (e) => {
     e.preventDefault();
-    setStatusMsg("");
-    setErrorMsg("");
+    setOkMsg("");
+    setErrMsg("");
 
     const em = normEmail(email);
     if (!em || !isValidEmail(em)) {
-      setErrorMsg(
-        safeT(t("landing.invalidEmail"), "Correo inválido.")
-      );
+      setErrMsg(tt("landing.invalidEmail", "Correo inválido."));
       return;
     }
 
-    setLoading(true);
     try {
+      setLoading(true);
       const redirectTo = `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
@@ -57,17 +52,10 @@ export default function Landing() {
 
       if (error) throw error;
 
-      setStatusMsg(
-        safeT(
-          t("landing.magicLinkSent"),
-          "Te enviamos un enlace de acceso. Revisa tu correo."
-        )
-      );
+      setOkMsg(tt("landing.magicLinkSent", "Te enviamos un enlace de acceso. Revisa tu correo."));
     } catch (err) {
-      console.error("[Landing] magic link error", err);
-      setErrorMsg(
-        safeT(t("landing.magicLinkError"), "No se pudo enviar el enlace.")
-      );
+      console.error("[Landing] signInWithOtp error:", err);
+      setErrMsg(tt("landing.magicLinkError", "No se pudo enviar el enlace. Intenta nuevamente."));
     } finally {
       setLoading(false);
     }
@@ -83,79 +71,71 @@ export default function Landing() {
               AG
             </div>
             <div>
-              <div className="font-semibold">
-                {safeT(t("landing.brandName"), "App Geocercas")}
-              </div>
+              <div className="font-semibold">{tt("landing.brandName", "App Geocercas")}</div>
               <div className="text-xs text-white/60">
-                {safeT(
-                  t("landing.brandTagline"),
-                  "Control de personal por geocercas"
-                )}
+                {tt("landing.brandTagline", "Control de personal por geocercas")}
               </div>
             </div>
           </div>
 
+          {/* ✅ Link interno (sin parpadeo por recarga) */}
           <Link
             to="/login"
             className="px-3 py-1.5 rounded-full text-sm font-semibold bg-white/10 hover:bg-white/15 border border-white/10 transition"
           >
-            {safeT(t("landing.login"), "Entrar")}
+            {tt("landing.login", "Entrar")}
           </Link>
         </div>
       </header>
 
       {/* Hero */}
       <main className="max-w-6xl mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
           <div>
             <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
-              {safeT(
-                t("landing.heroTitle"),
+              {tt(
+                "landing.heroTitle",
                 "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo"
               )}
             </h1>
 
-            <p className="mt-5 text-white/70 text-lg">
-              {safeT(
-                t("landing.heroSubtitle"),
-                "Asigna personas, registra actividades y calcula costos en tiempo real."
+            <p className="mt-5 text-white/70 text-base sm:text-lg leading-relaxed">
+              {tt(
+                "landing.heroSubtitle",
+                "App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real."
               )}
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
+              {/* ✅ Link interno */}
               <Link
                 to="/login"
                 className="px-5 py-2.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-500 transition"
               >
-                Ir al panel de control
+                {tt("landing.goPanel", "Ir al panel de control")}
               </Link>
 
+              {/* ✅ Link interno */}
               <Link
                 to="/login?mode=magic"
                 className="px-5 py-2.5 rounded-full font-semibold bg-white/10 hover:bg-white/15 border border-white/10 transition"
               >
-                Entrar con link mágico
+                {tt("landing.magicEnter", "Entrar con link mágico")}
               </Link>
             </div>
           </div>
 
-          {/* Magic Link rápido */}
+          {/* Quick Access */}
           <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
             <h2 className="text-xl font-bold">
-              {safeT(t("landing.quickAccessTitle"), "Acceso rápido")}
+              {tt("landing.quickAccessTitle", "Acceso rápido")}
             </h2>
-
             <p className="mt-2 text-sm text-white/70">
-              {safeT(
-                t("landing.quickAccessDesc"),
-                "Ingresa con Magic Link (sin contraseña)."
-              )}
+              {tt("landing.quickAccessDesc", "Si prefieres, puedes ingresar con Magic Link (sin contraseña).")}
             </p>
 
-            <form onSubmit={handleSendMagicLink} className="mt-6">
-              <label className="block text-xs text-white/70 mb-2">
-                Correo
-              </label>
+            <form onSubmit={sendMagic} className="mt-6">
+              <label className="block text-xs text-white/70 mb-2">{tt("landing.email", "Correo")}</label>
 
               <input
                 value={email}
@@ -170,25 +150,25 @@ export default function Landing() {
                 disabled={loading}
                 className="mt-4 w-full px-4 py-2.5 rounded-xl font-semibold bg-white text-slate-900 hover:bg-white/90 disabled:opacity-60 transition"
               >
-                {loading ? "Enviando..." : "Enviar Magic Link"}
+                {loading ? tt("landing.sending", "Enviando…") : tt("landing.sendMagic", "Enviar Magic Link")}
               </button>
 
-              {statusMsg && (
-                <div className="mt-4 text-sm text-emerald-300">
-                  {statusMsg}
-                </div>
-              )}
-              {errorMsg && (
-                <div className="mt-4 text-sm text-red-300">
-                  {errorMsg}
-                </div>
-              )}
+              {okMsg && <div className="mt-4 text-sm text-emerald-300">{okMsg}</div>}
+              {errMsg && <div className="mt-4 text-sm text-red-300">{errMsg}</div>}
+
+              <p className="mt-4 text-xs text-white/50">
+                {tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real.")}
+              </p>
+
+              <a className="mt-2 inline-block text-xs text-white/60 underline" href="/support">
+                {tt("landing.support", "Soporte")}
+              </a>
             </form>
           </div>
         </div>
 
-        <footer className="mt-14 pt-6 border-t border-white/10 text-xs text-white/50 flex justify-between">
-          <span>© {new Date().getFullYear()} App Geocercas</span>
+        <footer className="mt-14 pt-6 border-t border-white/10 text-xs text-white/50 flex items-center justify-between">
+          <span>© {new Date().getFullYear()} {tt("landing.brandName", "App Geocercas")}</span>
           <span>Fenice Ecuador S.A.S.</span>
         </footer>
       </main>
