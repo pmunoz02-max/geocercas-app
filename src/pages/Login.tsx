@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label = "Operación") {
@@ -13,10 +13,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label = "Operación") {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
-export default function Login() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+async function waitForSession(maxMs = 4000) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session) return data.session;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return null;
+}
 
+export default function Login() {
+  const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
   const [mode, setMode] = useState<"password" | "magic">("password");
@@ -55,17 +63,19 @@ export default function Login() {
 
       if (error) throw error;
 
-      navigate(next, { replace: true });
+      // Espera a que la sesión esté lista (evita rebote por lectura prematura)
+      await waitForSession(4000);
+
+      // Hard redirect: garantiza que AuthContext/ProtectedRoute lean sesión desde cero
+      window.location.replace(next);
     } catch (e2: any) {
       console.error("[Login] password error", e2);
-
       const m = String(e2?.message || "");
+
       if (m.includes("Invalid login credentials")) {
         setErr("Correo o contraseña incorrectos.");
       } else if (m.includes("tiempo de espera")) {
-        setErr(
-          "Se tardó demasiado en responder. Revisa tu internet, extensiones (adblock) y vuelve a intentar."
-        );
+        setErr("Se tardó demasiado en responder. Revisa tu internet/extensiones (adblock) y vuelve a intentar.");
       } else {
         setErr("No se pudo iniciar sesión. Intenta nuevamente.");
       }
@@ -99,17 +109,11 @@ export default function Login() {
       );
 
       if (error) throw error;
-
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e2: any) {
       console.error("[Login] magiclink error", e2);
-
       const m = String(e2?.message || "");
-      if (m.includes("tiempo de espera")) {
-        setErr("Se tardó demasiado en responder. Intenta otra vez o en incógnito.");
-      } else {
-        setErr("No se pudo enviar el Magic Link.");
-      }
+      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta otra vez." : "No se pudo enviar el Magic Link.");
     } finally {
       setBusy(false);
     }
@@ -136,17 +140,11 @@ export default function Login() {
       );
 
       if (error) throw error;
-
       setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa inbox o spam.");
     } catch (e2: any) {
       console.error("[Login] recovery error", e2);
-
       const m = String(e2?.message || "");
-      if (m.includes("tiempo de espera")) {
-        setErr("Se tardó demasiado en responder. Intenta nuevamente en unos segundos.");
-      } else {
-        setErr("No se pudo enviar el correo de recuperación.");
-      }
+      setErr(m.includes("tiempo de espera") ? "Se tardó demasiado en responder. Intenta nuevamente." : "No se pudo enviar el correo de recuperación.");
     } finally {
       setBusy(false);
     }
@@ -178,8 +176,7 @@ export default function Login() {
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "password"
                     ? "bg-white text-slate-900 border-white"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700") +
-                  (busy ? " opacity-70" : "")
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
                 }
               >
                 Contraseña
@@ -192,8 +189,7 @@ export default function Login() {
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "magic"
                     ? "bg-white text-slate-900 border-white"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700") +
-                  (busy ? " opacity-70" : "")
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
                 }
               >
                 Magic Link
