@@ -2,14 +2,22 @@ import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label = "Operación") {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label}: tiempo de espera agotado (${ms / 1000}s).`));
+    }, ms);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const next = useMemo(
-    () => searchParams.get("next") || "/inicio",
-    [searchParams]
-  );
+  const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
   const [mode, setMode] = useState<"password" | "magic">("password");
   const [email, setEmail] = useState("");
@@ -26,24 +34,41 @@ export default function Login() {
 
   async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
+
     setErr("");
     setMsg("");
     setBusy(true);
 
     try {
       const emailClean = email.trim().toLowerCase();
+      if (!emailClean || !password) {
+        setErr("Escribe tu correo y contraseña.");
+        return;
+      }
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email: emailClean,
-        password,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email: emailClean, password }),
+        12000,
+        "Login"
+      );
 
       if (error) throw error;
 
       navigate(next, { replace: true });
     } catch (e2: any) {
       console.error("[Login] password error", e2);
-      setErr("Correo o contraseña incorrectos.");
+
+      const m = String(e2?.message || "");
+      if (m.includes("Invalid login credentials")) {
+        setErr("Correo o contraseña incorrectos.");
+      } else if (m.includes("tiempo de espera")) {
+        setErr(
+          "Se tardó demasiado en responder. Revisa tu internet, extensiones (adblock) y vuelve a intentar."
+        );
+      } else {
+        setErr("No se pudo iniciar sesión. Intenta nuevamente.");
+      }
     } finally {
       setBusy(false);
     }
@@ -51,58 +76,85 @@ export default function Login() {
 
   async function onSendMagicLink(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
+
     setErr("");
     setMsg("");
     setBusy(true);
 
     try {
       const emailClean = email.trim().toLowerCase();
+      if (!emailClean) {
+        setErr("Escribe tu correo.");
+        return;
+      }
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email: emailClean,
-        options: { emailRedirectTo: redirectTo },
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithOtp({
+          email: emailClean,
+          options: { emailRedirectTo: redirectTo },
+        }),
+        12000,
+        "Magic Link"
+      );
 
       if (error) throw error;
 
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e2: any) {
       console.error("[Login] magiclink error", e2);
-      setErr("No se pudo enviar el Magic Link.");
+
+      const m = String(e2?.message || "");
+      if (m.includes("tiempo de espera")) {
+        setErr("Se tardó demasiado en responder. Intenta otra vez o en incógnito.");
+      } else {
+        setErr("No se pudo enviar el Magic Link.");
+      }
     } finally {
       setBusy(false);
     }
   }
 
   async function onForgotPassword() {
+    if (busy) return;
+
     setErr("");
     setMsg("");
 
-    if (!email.trim()) {
+    const emailClean = email.trim().toLowerCase();
+    if (!emailClean) {
       setErr("Escribe tu correo primero.");
       return;
     }
 
     setBusy(true);
     try {
-      const emailClean = email.trim().toLowerCase();
-
-      const { error } = await supabase.auth.resetPasswordForEmail(emailClean, {
-        redirectTo,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(emailClean, { redirectTo }),
+        12000,
+        "Recuperación"
+      );
 
       if (error) throw error;
 
-      setMsg(
-        "Te enviamos un correo para recuperar tu contraseña. Revisa tu bandeja de entrada o spam."
-      );
+      setMsg("Te enviamos un correo para recuperar tu contraseña. Revisa inbox o spam.");
     } catch (e2: any) {
       console.error("[Login] recovery error", e2);
-      setErr("No se pudo enviar el correo de recuperación.");
+
+      const m = String(e2?.message || "");
+      if (m.includes("tiempo de espera")) {
+        setErr("Se tardó demasiado en responder. Intenta nuevamente en unos segundos.");
+      } else {
+        setErr("No se pudo enviar el correo de recuperación.");
+      }
     } finally {
       setBusy(false);
     }
   }
+
+  const inputClass =
+    "w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 " +
+    "text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-sky-500";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -121,11 +173,13 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setMode("password")}
+                disabled={busy}
                 className={
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "password"
                     ? "bg-white text-slate-900 border-white"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700") +
+                  (busy ? " opacity-70" : "")
                 }
               >
                 Contraseña
@@ -133,11 +187,13 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setMode("magic")}
+                disabled={busy}
                 className={
                   "px-4 py-2 rounded-full text-sm font-medium border " +
                   (mode === "magic"
                     ? "bg-white text-slate-900 border-white"
-                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700")
+                    : "bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700") +
+                  (busy ? " opacity-70" : "")
                 }
               >
                 Magic Link
@@ -152,22 +208,20 @@ export default function Login() {
                 type="email"
                 autoComplete="email"
                 placeholder="tu@correo.com"
-                className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-sky-500"
+                className={inputClass}
               />
             </div>
 
             {mode === "password" ? (
               <form onSubmit={onPasswordLogin} className="mt-5 space-y-5">
                 <div>
-                  <label className="block text-sm mb-2 opacity-80">
-                    Contraseña
-                  </label>
+                  <label className="block text-sm mb-2 opacity-80">Contraseña</label>
                   <input
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     type="password"
                     autoComplete="current-password"
-                    className="w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-sky-500"
+                    className={inputClass}
                   />
 
                   <div className="mt-3 flex justify-end">
@@ -202,14 +256,13 @@ export default function Login() {
 
             {(err || msg) && (
               <div className="mt-4 text-sm">
-                {err && <div className="text-red-300">{err}</div>}
-                {msg && <div className="text-emerald-300">{msg}</div>}
+                {err ? <div className="text-red-300">{err}</div> : null}
+                {msg ? <div className="text-emerald-300">{msg}</div> : null}
               </div>
             )}
 
             <div className="mt-4 text-xs opacity-60">
-              Tip: si un enlace falla, abre el correo en Chrome/Safari o intenta
-              en incógnito y solicita un link nuevo.
+              Tip: si un enlace falla, abre el correo en Chrome/Safari o intenta en incógnito y solicita un link nuevo.
             </div>
           </div>
         </div>
