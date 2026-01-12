@@ -9,20 +9,18 @@ import LanguageSwitcher from "../components/LanguageSwitcher";
 type Mode = "password" | "magic";
 
 /**
- * Login universal:
- * - Password login: navega a /inicio (tu flujo actual).
- * - Magic link: SIEMPRE redirige a /auth/callback (sin hardcodear rol).
- *   Luego AuthCallback + AuthContext (rpc my_context) resuelven el rol real en DB
- *   y redirigen:
- *     - tracker -> /tracker-gps
- *     - otros -> /inicio
- *
- * Esto es permanente y multi-tenant: la DB es la fuente de verdad.
+ * Login universal y permanente:
+ * - Fuente de verdad: AuthContext (loading + user).
+ * - Password login: navega a /inicio.
+ * - Magic link: SIEMPRE redirige a /auth/callback.
+ *   Luego AuthCallback + AuthContext resuelven rol en DB y redirigen (tracker/panel).
  */
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { session, authReady } = useAuth();
+
+  // ✅ Contrato universal: loading + user
+  const { loading, user } = useAuth();
   const { t } = useTranslation();
 
   const [email, setEmail] = useState("");
@@ -33,15 +31,15 @@ const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
-  // Si ya hay sesión, ir al panel (AuthCallback redirige según rol cuando entra por link)
+  // Si ya hay user, ir al panel
   useEffect(() => {
-    if (!authReady) return;
-    if (session?.user) {
+    if (loading) return;
+    if (user) {
       navigate("/inicio", { replace: true });
     }
-  }, [session, authReady, navigate]);
+  }, [loading, user, navigate]);
 
-  // Reset mensajes al cambiar de URL
+  // Reset mensajes al cambiar URL
   useEffect(() => {
     setErrorMsg(null);
     setInfoMsg(null);
@@ -67,14 +65,10 @@ const Login: React.FC = () => {
 
     if (!errorCode && !errorDesc) return;
 
-    let friendly =
-      t("login.errorMagicLink", "No se pudo validar el enlace. Intenta nuevamente.");
+    let friendly = t("login.errorMagicLink", "No se pudo validar el enlace. Intenta nuevamente.");
 
     if ((errorCode || "").toLowerCase().includes("otp_expired")) {
-      friendly = t(
-        "login.magicExpired",
-        "El enlace ya expiró. Genera uno nuevo desde /login."
-      );
+      friendly = t("login.magicExpired", "El enlace ya expiró. Genera uno nuevo desde /login.");
     }
 
     if (errorDesc) friendly += `\n${decodeURIComponent(errorDesc)}`;
@@ -90,19 +84,14 @@ const Login: React.FC = () => {
     setInfoMsg(null);
 
     if (!email || !password) {
-      setErrorMsg(
-        t("login.errorMissingCredentials", "Debes ingresar correo y contraseña.")
-      );
+      setErrorMsg(t("login.errorMissingCredentials", "Debes ingresar correo y contraseña."));
       return;
     }
 
     try {
       setLoadingAction(true);
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
         setErrorMsg(error.message);
@@ -131,16 +120,11 @@ const Login: React.FC = () => {
     try {
       setLoadingAction(true);
 
-      // ✅ UNIVERSAL Y PERMANENTE:
-      // Siempre volver a /auth/callback.
-      // AuthCallback + AuthContext resuelven el rol en DB y redirigen.
       const redirectTo = `${window.location.origin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
+        options: { emailRedirectTo: redirectTo },
       });
 
       if (error) {
@@ -149,10 +133,7 @@ const Login: React.FC = () => {
       }
 
       setInfoMsg(
-        t(
-          "login.infoMagicLinkSent",
-          "Te enviamos un enlace a tu correo. Ábrelo para iniciar sesión."
-        )
+        t("login.infoMagicLinkSent", "Te enviamos un enlace a tu correo. Ábrelo para iniciar sesión.")
       );
     } catch {
       setErrorMsg(t("common.unexpectedError", "Error inesperado."));
@@ -161,7 +142,8 @@ const Login: React.FC = () => {
     }
   };
 
-  if (!authReady) {
+  // ✅ Siempre renderiza algo (nunca “pantalla vacía”)
+  if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         {t("common.loading", "Cargando…")}
@@ -212,9 +194,7 @@ const Login: React.FC = () => {
               disabled={loadingAction}
               className="w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-500 transition disabled:opacity-50"
             >
-              {loadingAction
-                ? t("login.signingIn", "Entrando…")
-                : t("login.signIn", "Entrar")}
+              {loadingAction ? t("login.signingIn", "Entrando…") : t("login.signIn", "Entrar")}
             </button>
           </form>
         ) : (
@@ -247,9 +227,7 @@ const Login: React.FC = () => {
                 transition
               "
             >
-              {loadingAction
-                ? t("login.sending", "Enviando…")
-                : t("login.magicLinkButton", "Enviar enlace mágico")}
+              {loadingAction ? t("login.sending", "Enviando…") : t("login.magicLinkButton", "Enviar enlace mágico")}
             </button>
           </form>
         )}
@@ -257,17 +235,13 @@ const Login: React.FC = () => {
         <div className="flex gap-4 justify-center pt-2">
           <button
             onClick={() => setMode("password")}
-            className={`text-sm underline ${
-              mode === "password" ? "font-semibold" : ""
-            }`}
+            className={`text-sm underline ${mode === "password" ? "font-semibold" : ""}`}
           >
             {t("login.passwordMode", "Contraseña")}
           </button>
           <button
             onClick={() => setMode("magic")}
-            className={`text-sm underline ${
-              mode === "magic" ? "font-semibold" : ""
-            }`}
+            className={`text-sm underline ${mode === "magic" ? "font-semibold" : ""}`}
           >
             {t("login.magicMode", "Link mágico")}
           </button>
