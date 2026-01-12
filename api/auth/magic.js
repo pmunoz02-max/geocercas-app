@@ -1,20 +1,39 @@
 // api/auth/magic.js
 export default async function handler(req, res) {
-  const version = "auth-magic-v4-rawjson-2026-01-12";
+  const version = "auth-magic-v5-safe-body-2026-01-12";
   const debug = process.env.AUTH_DEBUG === "1";
+  const send = (status, payload) => res.status(status).json({ version, ...payload });
 
-  function send(status, payload) {
-    return res.status(status).json({ version, ...payload });
-  }
-
-  async function readRawBody(req) {
-    return await new Promise((resolve, reject) => {
+  const safeGetBody = async () => {
+    try {
+      if (req.body && typeof req.body === "object") return req.body;
+      if (typeof req.body === "string" && req.body.trim()) return JSON.parse(req.body);
+    } catch (e) {
+      if (debug) console.log("[magic] req.body parse failed:", String(e?.message || e));
+    }
+    if (req.readableEnded || req.complete) return {};
+    const raw = await new Promise((resolve) => {
       let data = "";
+      const timer = setTimeout(() => resolve("__TIMEOUT__"), 2500);
       req.on("data", (chunk) => (data += chunk));
-      req.on("end", () => resolve(data));
-      req.on("error", (err) => reject(err));
+      req.on("end", () => {
+        clearTimeout(timer);
+        resolve(data);
+      });
+      req.on("error", () => {
+        clearTimeout(timer);
+        resolve("__ERROR__");
+      });
     });
-  }
+    if (raw === "__TIMEOUT__") throw new Error("Body read timeout");
+    if (raw === "__ERROR__") throw new Error("Body read error");
+    if (!raw || !String(raw).trim()) return {};
+    try {
+      return JSON.parse(String(raw));
+    } catch {
+      throw new Error("Invalid JSON body");
+    }
+  };
 
   try {
     if (req.method !== "POST") {
@@ -24,27 +43,15 @@ export default async function handler(req, res) {
 
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       return send(500, { error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
     }
 
-    const raw = await readRawBody(req);
-    let body = {};
-    try {
-      body = raw ? JSON.parse(raw) : {};
-    } catch {
-      return send(400, { error: "Invalid JSON body", ...(debug ? { debug: { raw } } : {}) });
-    }
-
+    const body = await safeGetBody();
     const email = String(body?.email || "").trim().toLowerCase();
     const redirectTo = String(body?.redirectTo || "").trim();
+    if (!email || !redirectTo) return send(400, { error: "Email and redirectTo required" });
 
-    if (!email || !redirectTo) {
-      return send(400, { error: "Email and redirectTo required" });
-    }
-
-    // ✅ Endpoint correcto para OTP / magic link en GoTrue
     const url = `${SUPABASE_URL}/auth/v1/otp`;
 
     const r = await fetch(url, {
@@ -54,11 +61,7 @@ export default async function handler(req, res) {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      body: JSON.stringify({
-        email,
-        create_user: true,
-        email_redirect_to: redirectTo,
-      }),
+      body: JSON.stringify({ email, create_user: true, email_redirect_to: redirectTo }),
     });
 
     const text = await r.text();
