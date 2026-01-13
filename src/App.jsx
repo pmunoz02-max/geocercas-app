@@ -1,17 +1,31 @@
 // src/App.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 
+import { useAuth } from "./context/AuthContext.jsx";
+
+/* Guards */
 import AuthGuard from "./components/AuthGuard.jsx";
 
+/* Layout */
+import ProtectedShell from "./layouts/ProtectedShell.jsx";
+
+/* Public pages */
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 
+/* Panel pages */
 import Inicio from "./pages/Inicio.jsx";
-import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
+import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import PersonalPage from "./components/personal/PersonalPage.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
@@ -19,17 +33,23 @@ import CostosPage from "./pages/CostosPage.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
-import AdminsPage from "./pages/AdminsPage.jsx";
+
+/* Admin (SaaS) */
+import InvitarAdmin from "./pages/InvitarAdmin.jsx";
+
+/* Tracker */
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
+/* Help */
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
+/* Org guard */
 import RequireOrg from "./components/org/RequireOrg.jsx";
-import { useAuth } from "./context/AuthContext.jsx";
-import ProtectedShell from "./layouts/ProtectedShell.jsx";
+
+/* -------------------- helpers -------------------- */
 
 function FullScreenLoader({ text = "Cargando…" }) {
   return (
@@ -48,7 +68,9 @@ function RequirePanel({ children }) {
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
 
   if (!user) {
-    const next = encodeURIComponent((location.pathname + location.search) || "/inicio");
+    const next = encodeURIComponent(
+      (location.pathname + location.search) || "/inicio"
+    );
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
@@ -65,7 +87,9 @@ function RequireTracker({ children }) {
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
 
   if (!user) {
-    const next = encodeURIComponent((location.pathname + location.search) || "/tracker-gps");
+    const next = encodeURIComponent(
+      (location.pathname + location.search) || "/tracker-gps"
+    );
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
@@ -75,10 +99,7 @@ function RequireTracker({ children }) {
   return children;
 }
 
-/**
- * ✅ AdminRoute: permite /admins a ROOT o OWNER/ADMIN
- * (NO depende de RequireOrg)
- */
+/* ADMIN GUARD (root / owner / admin) */
 function AdminRoute({ children }) {
   const { loading, user, currentRole, isAppRoot } = useAuth();
   const location = useLocation();
@@ -86,15 +107,18 @@ function AdminRoute({ children }) {
   if (loading) return <FullScreenLoader text="Cargando permisos…" />;
 
   if (!user) {
-    const next = encodeURIComponent((location.pathname + location.search) || "/admins");
+    const next = encodeURIComponent(
+      (location.pathname + location.search) || "/admins"
+    );
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
   if (isAppRoot) return children;
 
   const role = String(currentRole || "").toLowerCase().trim();
-  const ok = role === "owner" || role === "admin";
-  if (!ok) return <Navigate to="/inicio" replace />;
+  if (role !== "owner" && role !== "admin") {
+    return <Navigate to="/inicio" replace />;
+  }
 
   return children;
 }
@@ -111,27 +135,37 @@ function LoginShell() {
 
 function SmartFallback() {
   const { loading, user, currentRole } = useAuth();
+
   if (loading) return <FullScreenLoader text="Cargando…" />;
   if (!user) return <Navigate to="/login" replace />;
 
   const role = String(currentRole || "").toLowerCase().trim();
-  return role === "tracker" ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
+  return role === "tracker" ? (
+    <Navigate to="/tracker-gps" replace />
+  ) : (
+    <Navigate to="/inicio" replace />
+  );
 }
+
+/* -------------------- APP -------------------- */
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Públicas */}
+        {/* ---------- Public ---------- */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* ✅ Alias por compatibilidad */}
-        <Route path="/administrador" element={<Navigate to="/admins" replace />} />
+        {/* Alias legacy */}
+        <Route
+          path="/administrador"
+          element={<Navigate to="/admins" replace />}
+        />
 
-        {/* Tracker-only */}
+        {/* ---------- Tracker ---------- */}
         <Route
           path="/tracker-gps"
           element={
@@ -143,7 +177,7 @@ export default function App() {
           }
         />
 
-        {/* Panel */}
+        {/* ---------- Panel ---------- */}
         <Route
           element={
             <AuthGuard>
@@ -155,33 +189,98 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
 
-          {/* Rutas que sí requieren org */}
-          <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
-          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-          <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
-          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
-          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
-          <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
-          <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-          <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+          {/* Requieren organización */}
+          <Route
+            path="/nueva-geocerca"
+            element={
+              <RequireOrg>
+                <NuevaGeocerca />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/geocercas"
+            element={
+              <RequireOrg>
+                <GeocercasPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/personal"
+            element={
+              <RequireOrg>
+                <PersonalPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/actividades"
+            element={
+              <RequireOrg>
+                <ActividadesPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/asignaciones"
+            element={
+              <RequireOrg>
+                <AsignacionesPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/costos"
+            element={
+              <RequireOrg>
+                <CostosPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/costos-dashboard"
+            element={
+              <RequireOrg>
+                <CostosDashboardPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/tracker-dashboard"
+            element={
+              <RequireOrg>
+                <TrackerDashboard />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/invitar-tracker"
+            element={
+              <RequireOrg>
+                <InvitarTracker />
+              </RequireOrg>
+            }
+          />
 
-          {/* ✅ Admin module: SIN RequireOrg para evitar rebote a /inicio */}
+          {/* ---------- ADMIN (SaaS) ---------- */}
           <Route
             path="/admins"
             element={
               <AdminRoute>
-                <AdminsPage />
+                <InvitarAdmin />
               </AdminRoute>
             }
           />
 
+          {/* Help */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
           <Route path="/help/changelog" element={<ChangelogPage />} />
         </Route>
 
+        {/* Fallback */}
         <Route path="*" element={<SmartFallback />} />
       </Routes>
     </BrowserRouter>
