@@ -4,32 +4,58 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const isProd = import.meta.env.PROD === true;
+function testStorage(storage) {
+  try {
+    if (!storage) return false;
+    const k = "__sb_storage_test__";
+    storage.setItem(k, "1");
+    storage.removeItem(k);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-// En SaaS: si falta config en PROD, fallamos fuerte (para no “romper en silencio”)
-if ((!SUPABASE_URL || !SUPABASE_ANON_KEY) && isProd) {
-  // Esto evita que la app “parezca” loguear pero rebote.
+function createMemoryStorage() {
+  const mem = new Map();
+  return {
+    getItem: (key) => (mem.has(key) ? mem.get(key) : null),
+    setItem: (key, value) => mem.set(key, String(value)),
+    removeItem: (key) => mem.delete(key),
+  };
+}
+
+function pickStorage() {
+  if (typeof window === "undefined") return undefined;
+
+  // Prefer localStorage
+  if (testStorage(window.localStorage)) return window.localStorage;
+
+  // Fallback a sessionStorage (muy típico cuando localStorage está bloqueado por políticas)
+  if (testStorage(window.sessionStorage)) return window.sessionStorage;
+
+  // Último recurso: memoria (no persiste, pero permite entrar sin rebotes)
+  return createMemoryStorage();
+}
+
+const chosenStorage = pickStorage();
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  // En SaaS: que falle evidente en vez de romper en silencio
   throw new Error(
-    "[supabaseClient] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in production build. " +
-      "Fix Vercel env vars and redeploy."
+    "[supabaseClient] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Fix env vars and redeploy."
   );
 }
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn("[supabaseClient] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY");
-}
-
-// ✅ SINGLETON real
-export const supabase = createClient(SUPABASE_URL || "", SUPABASE_ANON_KEY || "", {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    storage: chosenStorage,
   },
 });
 
-// ✅ Compatibilidad con imports legacy
 export function getSupabase() {
   return supabase;
 }

@@ -1,10 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-/* =========================
-   Tipos
-========================= */
 type FetchDiag = {
   at: string;
   url: string;
@@ -21,19 +18,62 @@ type SessionDebug = {
   sessionUserId: string;
   hasAccessToken: boolean;
   canWriteLocalStorage: boolean;
+  canWriteSessionStorage: boolean;
   viteHasUrl: boolean;
   viteHasAnon: boolean;
 };
-
-/* =========================
-   Utilidades
-========================= */
 
 function redactTokens(text = "") {
   return text
     .replace(/"access_token"\s*:\s*"[^"]+"/gi, '"access_token":"[redacted]"')
     .replace(/"refresh_token"\s*:\s*"[^"]+"/gi, '"refresh_token":"[redacted]"')
     .replace(/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted_jwt]");
+}
+
+function canWrite(storage?: Storage): boolean {
+  try {
+    if (!storage) return false;
+    const k = "__ls_test__";
+    storage.setItem(k, "1");
+    storage.removeItem(k);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasSbAuthTokenKey(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    const keys = [
+      ...(Object.keys(window.localStorage || {}) || []),
+      ...(Object.keys(window.sessionStorage || {}) || []),
+    ];
+    return keys.some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
+  } catch {
+    return false;
+  }
+}
+
+async function readSessionDebug(): Promise<SessionDebug> {
+  const { data } = await supabase.auth.getSession();
+  const session = data?.session || null;
+
+  const viteHasUrl = !!import.meta.env.VITE_SUPABASE_URL;
+  const viteHasAnon = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const canLS = typeof window !== "undefined" ? canWrite(window.localStorage) : false;
+  const canSS = typeof window !== "undefined" ? canWrite(window.sessionStorage) : false;
+
+  return {
+    hasSbTokenKey: hasSbAuthTokenKey(),
+    sessionUserId: session?.user?.id ? String(session.user.id) : "",
+    hasAccessToken: !!session?.access_token,
+    canWriteLocalStorage: canLS,
+    canWriteSessionStorage: canSS,
+    viteHasUrl,
+    viteHasAnon,
+  };
 }
 
 async function fetchJsonDiag(
@@ -111,74 +151,21 @@ async function fetchJsonDiag(
   }
 }
 
-function hasSbAuthTokenKey(): boolean {
-  try {
-    if (typeof window === "undefined") return false;
-    return Object.keys(window.localStorage || {}).some(
-      (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
-    );
-  } catch {
-    return false;
-  }
-}
-
-function canWriteLocalStorage(): boolean {
-  try {
-    if (typeof window === "undefined") return false;
-    const k = "__ls_test__";
-    window.localStorage.setItem(k, "1");
-    window.localStorage.removeItem(k);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function readSessionDebug(): Promise<SessionDebug> {
-  const hasKey = hasSbAuthTokenKey();
-  const { data } = await supabase.auth.getSession();
-  const session = data?.session || null;
-
-  const viteHasUrl = !!import.meta.env.VITE_SUPABASE_URL;
-  const viteHasAnon = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  return {
-    hasSbTokenKey: hasKey,
-    sessionUserId: session?.user?.id ? String(session.user.id) : "",
-    hasAccessToken: !!session?.access_token,
-    canWriteLocalStorage: canWriteLocalStorage(),
-    viteHasUrl,
-    viteHasAnon,
-  };
-}
-
-/**
- * ✅ Espera a que la sesión exista realmente.
- */
 async function ensureSessionOrThrow(timeoutMs = 8000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const { data } = await supabase.auth.getSession();
     if (data?.session?.access_token) return data.session;
-
-    if (hasSbAuthTokenKey()) {
-      const { data: s2 } = await supabase.auth.getSession();
-      if (s2?.session?.access_token) return s2.session;
-    }
-
     await new Promise((r) => setTimeout(r, 180));
   }
   throw new Error(
-    "Tokens recibidos pero NO se pudo establecer sesión local (sb-*-auth-token). " +
-      "Causas típicas: VITE_SUPABASE_URL/KEY faltantes en el build, storage bloqueado, o PWA/Service Worker sirviendo bundle viejo."
+    "Tokens recibidos pero no se pudo observar sesión con getSession(). " +
+      "Si localStorage está bloqueado, usa sessionStorage (ya aplicado) o revisa políticas del navegador/WebView."
   );
 }
 
-/* =========================
-   Componente
-========================= */
-
 export default function Login() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
@@ -198,19 +185,8 @@ export default function Login() {
   }, []);
 
   async function refreshSessionDebug() {
-    try {
-      const d = await readSessionDebug();
-      setSdbg(d);
-    } catch {
-      setSdbg({
-        hasSbTokenKey: false,
-        sessionUserId: "",
-        hasAccessToken: false,
-        canWriteLocalStorage: false,
-        viteHasUrl: !!import.meta.env.VITE_SUPABASE_URL,
-        viteHasAnon: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
-      });
-    }
+    const d = await readSessionDebug();
+    setSdbg(d);
   }
 
   async function onPasswordLogin(e: React.FormEvent) {
@@ -230,14 +206,6 @@ export default function Login() {
     setSdbg(null);
 
     try {
-      // Pre-check duro: si falta config del frontend, abortamos con mensaje claro
-      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-        throw new Error(
-          "Configuración faltante en el FRONTEND: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. " +
-            "En Vercel deben existir como Environment Variables del build (Production/Preview)."
-        );
-      }
-
       const { data, diag: d } = await fetchJsonDiag(
         "/api/auth/password",
         { email: emailClean, password },
@@ -251,24 +219,19 @@ export default function Login() {
       });
       if (setSessionErr) throw setSessionErr;
 
-      await refreshSessionDebug();
-
-      if (sdbg && !sdbg.canWriteLocalStorage) {
-        throw new Error(
-          "Tu navegador está bloqueando localStorage. Sin storage, Supabase no puede persistir sesión en SPA. " +
-            "Prueba sin extensiones, en incógnito o revisa políticas de privacidad."
-        );
-      }
-
       await ensureSessionOrThrow(8000);
       await refreshSessionDebug();
 
       setMsg("✅ Sesión creada. Entrando…");
-      window.location.assign(next);
+
+      // ✅ SPA navigation (no hard reload)
+      navigate(next, { replace: true });
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
       setErr(String(e?.message || "No se pudo iniciar sesión."));
-      await refreshSessionDebug();
+      try {
+        await refreshSessionDebug();
+      } catch {}
     } finally {
       setBusy(false);
     }
@@ -337,7 +300,7 @@ export default function Login() {
         <div className="mt-8 flex justify-center">
           <div className="w-full max-w-3xl bg-slate-900/70 border border-slate-800 rounded-3xl p-8 shadow-xl">
             <h1 className="text-2xl font-semibold">
-              Entrar <span className="text-xs opacity-60">(LOGIN-V9)</span>
+              Entrar <span className="text-xs opacity-60">(LOGIN-V10)</span>
             </h1>
 
             <div className="mt-4 inline-flex gap-2">
@@ -428,7 +391,6 @@ export default function Login() {
               </div>
             )}
 
-            {/* Debug de sesión + ENV (mata el “silencio”) */}
             <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
               <div className="font-semibold text-white/80 mb-1">Debug sesión</div>
               <div>href: {typeof window !== "undefined" ? window.location.href : "-"}</div>
@@ -436,6 +398,7 @@ export default function Login() {
               <div>VITE_SUPABASE_URL: {String(!!import.meta.env.VITE_SUPABASE_URL)}</div>
               <div>VITE_SUPABASE_ANON_KEY: {String(!!import.meta.env.VITE_SUPABASE_ANON_KEY)}</div>
               <div>localStorage writable: {String(sdbg?.canWriteLocalStorage ?? false)}</div>
+              <div>sessionStorage writable: {String(sdbg?.canWriteSessionStorage ?? false)}</div>
               <div>sb-*-auth-token: {String(sdbg?.hasSbTokenKey ?? false)}</div>
               <div>session user id: {sdbg?.sessionUserId || "-"}</div>
               <div>has access_token: {String(sdbg?.hasAccessToken ?? false)}</div>
