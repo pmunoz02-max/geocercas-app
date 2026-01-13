@@ -20,6 +20,9 @@ type SessionDebug = {
   hasSbTokenKey: boolean;
   sessionUserId: string;
   hasAccessToken: boolean;
+  canWriteLocalStorage: boolean;
+  viteHasUrl: boolean;
+  viteHasAnon: boolean;
 };
 
 /* =========================
@@ -119,14 +122,33 @@ function hasSbAuthTokenKey(): boolean {
   }
 }
 
+function canWriteLocalStorage(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    const k = "__ls_test__";
+    window.localStorage.setItem(k, "1");
+    window.localStorage.removeItem(k);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function readSessionDebug(): Promise<SessionDebug> {
   const hasKey = hasSbAuthTokenKey();
   const { data } = await supabase.auth.getSession();
   const session = data?.session || null;
+
+  const viteHasUrl = !!import.meta.env.VITE_SUPABASE_URL;
+  const viteHasAnon = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+
   return {
     hasSbTokenKey: hasKey,
     sessionUserId: session?.user?.id ? String(session.user.id) : "",
     hasAccessToken: !!session?.access_token,
+    canWriteLocalStorage: canWriteLocalStorage(),
+    viteHasUrl,
+    viteHasAnon,
   };
 }
 
@@ -148,7 +170,7 @@ async function ensureSessionOrThrow(timeoutMs = 8000) {
   }
   throw new Error(
     "Tokens recibidos pero NO se pudo establecer sesión local (sb-*-auth-token). " +
-      "Causa típica: cache/PWA viejo, extensiones que bloquean storage, o que /login no está usando este Login.tsx."
+      "Causas típicas: VITE_SUPABASE_URL/KEY faltantes en el build, storage bloqueado, o PWA/Service Worker sirviendo bundle viejo."
   );
 }
 
@@ -180,7 +202,14 @@ export default function Login() {
       const d = await readSessionDebug();
       setSdbg(d);
     } catch {
-      setSdbg({ hasSbTokenKey: false, sessionUserId: "", hasAccessToken: false });
+      setSdbg({
+        hasSbTokenKey: false,
+        sessionUserId: "",
+        hasAccessToken: false,
+        canWriteLocalStorage: false,
+        viteHasUrl: !!import.meta.env.VITE_SUPABASE_URL,
+        viteHasAnon: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+      });
     }
   }
 
@@ -201,6 +230,14 @@ export default function Login() {
     setSdbg(null);
 
     try {
+      // Pre-check duro: si falta config del frontend, abortamos con mensaje claro
+      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        throw new Error(
+          "Configuración faltante en el FRONTEND: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. " +
+            "En Vercel deben existir como Environment Variables del build (Production/Preview)."
+        );
+      }
+
       const { data, diag: d } = await fetchJsonDiag(
         "/api/auth/password",
         { email: emailClean, password },
@@ -214,14 +251,19 @@ export default function Login() {
       });
       if (setSessionErr) throw setSessionErr;
 
-      // Debug visible (para confirmar si el browser realmente guardó sesión)
       await refreshSessionDebug();
+
+      if (sdbg && !sdbg.canWriteLocalStorage) {
+        throw new Error(
+          "Tu navegador está bloqueando localStorage. Sin storage, Supabase no puede persistir sesión en SPA. " +
+            "Prueba sin extensiones, en incógnito o revisa políticas de privacidad."
+        );
+      }
 
       await ensureSessionOrThrow(8000);
       await refreshSessionDebug();
 
       setMsg("✅ Sesión creada. Entrando…");
-      // ✅ redirect duro: elimina rebotes por guards/state del SPA
       window.location.assign(next);
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
@@ -295,7 +337,7 @@ export default function Login() {
         <div className="mt-8 flex justify-center">
           <div className="w-full max-w-3xl bg-slate-900/70 border border-slate-800 rounded-3xl p-8 shadow-xl">
             <h1 className="text-2xl font-semibold">
-              Entrar <span className="text-xs opacity-60">(LOGIN-V8)</span>
+              Entrar <span className="text-xs opacity-60">(LOGIN-V9)</span>
             </h1>
 
             <div className="mt-4 inline-flex gap-2">
@@ -386,11 +428,14 @@ export default function Login() {
               </div>
             )}
 
-            {/* Debug de sesión (para cortar el “silencio”) */}
+            {/* Debug de sesión + ENV (mata el “silencio”) */}
             <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
               <div className="font-semibold text-white/80 mb-1">Debug sesión</div>
               <div>href: {typeof window !== "undefined" ? window.location.href : "-"}</div>
               <div>next: {next}</div>
+              <div>VITE_SUPABASE_URL: {String(!!import.meta.env.VITE_SUPABASE_URL)}</div>
+              <div>VITE_SUPABASE_ANON_KEY: {String(!!import.meta.env.VITE_SUPABASE_ANON_KEY)}</div>
+              <div>localStorage writable: {String(sdbg?.canWriteLocalStorage ?? false)}</div>
               <div>sb-*-auth-token: {String(sdbg?.hasSbTokenKey ?? false)}</div>
               <div>session user id: {sdbg?.sessionUserId || "-"}</div>
               <div>has access_token: {String(sdbg?.hasAccessToken ?? false)}</div>
