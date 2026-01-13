@@ -1,8 +1,6 @@
 // src/components/Header.jsx
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-// ✅ SIEMPRE así (ajusta el número de ../ según el nivel):
 import { useAuth } from "../context/AuthContext.jsx";
- // ✅ usa el AuthContext centralizado
 
 function NavItem({ to, children }) {
   const base =
@@ -23,40 +21,66 @@ function NavItem({ to, children }) {
 }
 
 export default function Header() {
-  const { user, profile, loading, signOut } = useAuth();
+  const {
+    user,
+    loading,
+    currentOrg,
+    currentRole,
+    isAppRoot,
+    supabase,
+  } = useAuth();
+
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleLogout = async () => {
-    await signOut();
-    if (location.pathname !== "/") navigate("/", { replace: true });
+    await supabase.auth.signOut();
+    if (location.pathname !== "/login") {
+      navigate("/login", { replace: true });
+    }
   };
+
+  const roleLabel = isAppRoot
+    ? "ROOT"
+    : currentRole
+    ? currentRole.toUpperCase()
+    : "SIN ROL";
 
   return (
     <header className="w-full border-b bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
         {/* ---------- LOGO / NAV PRINCIPAL ---------- */}
         <div className="flex items-center gap-4">
-          <Link to="/" className="text-lg font-semibold text-gray-900">
+          <Link to="/inicio" className="text-lg font-semibold text-gray-900">
             App Geocercas
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
-            <NavItem to="/asignaciones">Asignaciones</NavItem>
-            <NavItem to="/personal">Personal</NavItem>
-            <NavItem to="/geocercas">Geocercas</NavItem>
-            <NavItem to="/tracker">Tracker</NavItem>
-          </nav>
+          {user && (
+            <nav className="hidden md:flex items-center gap-1">
+              <NavItem to="/inicio">Inicio</NavItem>
+              <NavItem to="/geocercas">Geocercas</NavItem>
+              <NavItem to="/personal">Personal</NavItem>
+              <NavItem to="/actividades">Actividades</NavItem>
+              <NavItem to="/asignaciones">Asignaciones</NavItem>
+              <NavItem to="/reportes">Reportes</NavItem>
+              <NavItem to="/tracker">Tracker</NavItem>
+            </nav>
+          )}
         </div>
 
-        {/* ---------- PERFIL / SESIÓN ---------- */}
+        {/* ---------- CONTEXTO / SESIÓN ---------- */}
         <div className="flex items-center gap-2">
           {!loading && user ? (
             <>
-              <span className="hidden sm:inline text-xs text-gray-600 px-2 py-1 rounded bg-gray-100">
-                {user.email ?? "Sin email"}
-                {profile?.role ? ` · ${profile.role}` : ""}
-              </span>
+              <div className="hidden sm:flex flex-col text-right text-xs px-2 py-1 rounded bg-gray-100">
+                <span className="font-medium text-gray-800">
+                  {currentOrg?.name ?? "Sin organización"}
+                </span>
+                <span className="text-gray-600">
+                  {roleLabel}
+                </span>
+              </div>
+
               <button
                 onClick={handleLogout}
                 className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
@@ -67,7 +91,7 @@ export default function Header() {
             </>
           ) : (
             <Link
-              to="/login?redirectTo=/"
+              to="/login"
               className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
             >
               Iniciar sesión
@@ -77,14 +101,16 @@ export default function Header() {
       </div>
 
       {/* ---------- NAV SECUNDARIA (MÓVIL) ---------- */}
-      <div className="md:hidden border-t bg-white">
-        <div className="max-w-6xl mx-auto px-4 py-2 flex gap-1">
-          <NavItem to="/asignaciones">Asignaciones</NavItem>
-          <NavItem to="/personal">Personal</NavItem>
-          <NavItem to="/geocercas">Geocercas</NavItem>
-          <NavItem to="/tracker">Tracker</NavItem>
+      {user && (
+        <div className="md:hidden border-t bg-white">
+          <div className="max-w-6xl mx-auto px-4 py-2 flex gap-1 overflow-x-auto">
+            <NavItem to="/inicio">Inicio</NavItem>
+            <NavItem to="/geocercas">Geocercas</NavItem>
+            <NavItem to="/personal">Personal</NavItem>
+            <NavItem to="/tracker">Tracker</NavItem>
+          </div>
         </div>
-      </div>
+      )}
     </header>
   );
 }
