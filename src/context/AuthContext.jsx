@@ -28,7 +28,10 @@ export function AuthProvider({ children }) {
         }
       }
 
-      const { data, error } = await supabase.rpc("is_app_root", { p_uid: uid });
+      // IMPORTANT: parameter name must match SQL function
+      const { data, error } = await supabase.rpc("is_app_root", {
+        p_user_id: uid,
+      });
       if (error) throw error;
 
       const val = !!data;
@@ -79,7 +82,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         const u = session?.user ?? null;
 
         setUser(u);
