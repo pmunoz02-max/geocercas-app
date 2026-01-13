@@ -1,4 +1,3 @@
-// src/pages/Login.tsx
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -21,7 +20,6 @@ type FetchDiag = {
    Utilidades
 ========================= */
 
-// Oculta JWTs y tokens si llegan a colarse en respuestas
 function redactTokens(text = "") {
   return text
     .replace(/"access_token"\s*:\s*"[^"]+"/gi, '"access_token":"[redacted]"')
@@ -107,15 +105,53 @@ async function fetchJsonDiag(
 /**
  * ✅ UNIVERSAL: confirma que la sesión quedó persistida localmente
  * antes de permitir navegación a rutas protegidas (evita loader infinito).
+ *
+ * Señales:
+ * 1) supabase.auth.getSession()
+ * 2) supabase.auth.getUser()
+ * 3) localStorage: "sb-*-auth-token"
  */
-async function ensureSessionOrThrow(timeoutMs = 6000) {
+async function ensureSessionOrThrow(timeoutMs = 8000) {
   const start = Date.now();
+
+  const hasSbTokenInLocalStorage = () => {
+    try {
+      if (typeof window === "undefined") return false;
+      const keys = Object.keys(window.localStorage || {});
+      return keys.some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
+    } catch {
+      return false;
+    }
+  };
+
   while (Date.now() - start < timeoutMs) {
-    const { data } = await supabase.auth.getSession();
-    if (data?.session?.access_token) return data.session;
-    await new Promise((r) => setTimeout(r, 150));
+    // 1) getSession
+    const { data: s } = await supabase.auth.getSession();
+    if (s?.session?.access_token) return s.session;
+
+    // 2) getUser (a veces estabiliza antes)
+    const { data: u } = await supabase.auth.getUser();
+    if (u?.user?.id && hasSbTokenInLocalStorage()) {
+      // intentar getSession una vez más para devolver session completa
+      const { data: s2 } = await supabase.auth.getSession();
+      if (s2?.session?.access_token) return s2.session as any;
+      // si no, igual consideramos "establecida" a nivel de storage + user
+      return { user: u.user } as any;
+    }
+
+    // 3) storage key (señal de persistencia)
+    if (hasSbTokenInLocalStorage()) {
+      const { data: s3 } = await supabase.auth.getSession();
+      if (s3?.session?.access_token) return s3.session;
+    }
+
+    await new Promise((r) => setTimeout(r, 180));
   }
-  throw new Error("No se pudo establecer la sesión local.");
+
+  throw new Error(
+    "Tokens recibidos pero NO se pudo persistir la sesión local (sb-*-auth-token). " +
+      "Prueba en incógnito/otro navegador y revisa si alguna extensión bloquea Storage."
+  );
 }
 
 /* =========================
@@ -141,10 +177,6 @@ export default function Login() {
     return `${window.location.origin}/auth/callback`;
   }, []);
 
-  /* =========================
-     Acciones
-  ========================= */
-
   async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
@@ -161,7 +193,6 @@ export default function Login() {
     setDiag(null);
 
     try {
-      // 1) API password grant
       const { data, diag: d } = await fetchJsonDiag(
         "/api/auth/password",
         { email: emailClean, password },
@@ -169,17 +200,15 @@ export default function Login() {
       );
       setDiag(d);
 
-      // 2) Crear sesión Supabase en el navegador
-      const { error: setErrSession } = await supabase.auth.setSession({
+      const { error: setSessionErr } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
-      if (setErrSession) throw setErrSession;
+      if (setSessionErr) throw setSessionErr;
 
-      // ✅ 3) Confirmar persistencia antes de navegar (evita loader infinito)
-      await ensureSessionOrThrow(6000);
+      await ensureSessionOrThrow(8000);
 
-      // ✅ 4) Navegar dentro de la SPA (evita “race” con localStorage)
+      // ✅ navegación SPA (evita “race” por hard reload)
       navigate(next, { replace: true });
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
@@ -258,10 +287,6 @@ export default function Login() {
   const inputClass =
     "w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 " +
     "text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-sky-500";
-
-  /* =========================
-     Render
-  ========================= */
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
