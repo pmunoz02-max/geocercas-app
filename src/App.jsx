@@ -1,16 +1,18 @@
-// src/App.jsx
 import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-// ✅ RUTA REAL (según tu archivo previo): src/layouts/ProtectedShell.jsx
+// ✅ path correcto
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 
-// ✅ Existe porque lo usas en tu app (y tú lo subiste antes)
-import RequireOrg from "./components/org/RequireOrg.jsx";
+// ✅ USAR el RequireOrg real (el que acabas de subir)
+import RequireOrg from "./components/RequireOrg.jsx";
 
-// Páginas (según tu listado real en src/pages)
+// ✅ usar tu AuthGuard como componente (el que subiste)
+import AuthGuard from "./components/AuthGuard.jsx";
+
+// Páginas
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
@@ -24,14 +26,12 @@ import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
-
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 
 /**
- * ✅ HashTokenCatcher (UNIVERSAL)
+ * HashTokenCatcher (UNIVERSAL)
  * Si Supabase redirige con tokens en el HASH (#access_token=...),
- * y el usuario cae en "/", reenviamos a /auth/callback preservando hash+query.
- * Esto hace que AuthCallback procese la sesión y redirija (recovery → /reset-password).
+ * reenviamos a /auth/callback preservando hash+query.
  */
 function HashTokenCatcher() {
   const location = useLocation();
@@ -49,27 +49,14 @@ function HashTokenCatcher() {
 }
 
 /**
- * ✅ Guard universal
- * - Si no hay user → manda a /login
- */
-function AuthGuard({ children }) {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-  return children;
-}
-
-/**
- * ✅ AdminRoute: solo App Root entra a /admins
+ * AdminRoute: solo App Root entra a /admins
  */
 function AdminRoute({ children }) {
-  const { user, loading, isAppRoot } = useAuth();
+  const { loading, user, isAppRoot } = useAuth();
   const location = useLocation();
 
   if (loading) return null;
-  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
   if (!isAppRoot) return <Navigate to="/inicio" replace />;
 
   return children;

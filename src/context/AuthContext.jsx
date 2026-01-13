@@ -7,12 +7,11 @@ const safeText = (v) =>
   typeof v === "string" || typeof v === "number" ? String(v) : "";
 
 /**
- * AuthContext — vOrgStable-1
- * - Mantiene login estable
- * - Detecta App Root via RPC is_app_root(p_user_id)
+ * AuthContext — vOrgStable-2 (FIX LOADER INFINITO)
+ * - Inicializa con getSession() (NO depende solo de onAuthStateChange)
  * - Carga organizations desde memberships (fallback app_user_roles)
  * - Selección de org persistida en localStorage por usuario
- * - Expone API esperada por OrgSelector: organizations, selectOrg, isAdmin, loading
+ * - Expone: loading, user, organizations, currentOrg, currentRole, selectOrg, isAppRoot, isAdmin
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -43,10 +42,7 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Parameter name MUST match SQL function signature: is_app_root(p_user_id uuid)
-      const { data, error } = await supabase.rpc("is_app_root", {
-        p_user_id: uid,
-      });
+      const { data, error } = await supabase.rpc("is_app_root", { p_user_id: uid });
       if (error) throw error;
 
       const val = !!data;
@@ -84,7 +80,7 @@ export function AuthProvider({ children }) {
   async function loadOrganizationsAndRole(uid, preferredOrgId = null) {
     setLoadingOrg(true);
     try {
-      // 1) memberships first (new architecture)
+      // 1) memberships first
       const { data: mems, error: memErr } = await supabase
         .from("memberships")
         .select("org_id, role, is_default, organizations:org_id (id,name,slug)")
@@ -110,7 +106,7 @@ export function AuthProvider({ children }) {
         orgs = orgs.filter((o) => !!o.id);
       }
 
-      // Dedup by org id (keep first occurrence which is newest due to ordering)
+      // Dedup by org id
       const seen = new Set();
       const deduped = [];
       for (const o of orgs) {
@@ -141,7 +137,6 @@ export function AuthProvider({ children }) {
       );
       setCurrentRole(picked?._role ?? null);
 
-      // persist selection
       localStorage.setItem(orgStorageKey(uid), targetId);
     } catch (e) {
       console.warn("[AuthContext] loadOrganizationsAndRole error:", e);
@@ -158,44 +153,73 @@ export function AuthProvider({ children }) {
     const id = safeText(orgId).trim();
     if (!uid || !id) return;
 
-    // Persist immediately and update state from already loaded list
     localStorage.setItem(orgStorageKey(uid), id);
 
-    const picked = (Array.isArray(organizations) ? organizations : []).find(
-      (o) => o?.id === id
-    );
+    const picked = (Array.isArray(organizations) ? organizations : []).find((o) => o?.id === id);
 
     setCurrentOrg(
-      picked ? { id: picked.id, name: picked.name ?? null, slug: picked.slug ?? null } : { id }
+      picked
+        ? { id: picked.id, name: picked.name ?? null, slug: picked.slug ?? null }
+        : { id }
     );
     setCurrentRole(picked?._role ?? null);
 
-    // Safety: re-load in case memberships changed
-    // (no await to keep UI snappy)
+    // Re-load to stay consistent with backend changes
     loadOrganizationsAndRole(uid, id);
   }
 
+  // ✅ FIX: initialize from getSession FIRST, then subscribe
   useEffect(() => {
+    let cancelled = false;
+
+    async function init() {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) console.warn("[AuthContext] getSession error:", error);
+
+        const u = data?.session?.user ?? null;
+        if (cancelled) return;
+
+        setUser(u);
+
+        if (u?.id) {
+          // load root + orgs in parallel (no await needed for root)
+          loadIsAppRoot(u.id);
+          await loadOrganizationsAndRole(u.id);
+        } else {
+          setIsAppRoot(false);
+          setOrganizations([]);
+          setCurrentOrg(null);
+          setCurrentRole(null);
+        }
+      } finally {
+        if (!cancelled) setLoadingAuth(false);
+      }
+    }
+
+    init();
+
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const u = session?.user ?? null;
       setUser(u);
-      setLoadingAuth(false);
 
       if (u?.id) {
+        setLoadingAuth(false);
         loadIsAppRoot(u.id);
-        loadOrganizationsAndRole(u.id);
+        await loadOrganizationsAndRole(u.id);
       } else {
         setIsAppRoot(false);
         setOrganizations([]);
         setCurrentOrg(null);
         setCurrentRole(null);
+        setLoadingAuth(false);
       }
     });
 
     return () => {
+      cancelled = true;
       sub?.subscription?.unsubscribe?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const roleLower = String(currentRole || "").toLowerCase().trim();
@@ -203,16 +227,14 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      // unified loading (Auth + Org)
       loading: loadingAuth || loadingOrg,
 
       user,
-
       organizations,
       currentOrg,
       currentRole,
 
-      setCurrentOrg, // keep for backward compat (some pages might set manually)
+      setCurrentOrg, // backward compat
       setCurrentRole,
 
       selectOrg,
@@ -223,16 +245,7 @@ export function AuthProvider({ children }) {
       safeText,
       supabase,
     }),
-    [
-      loadingAuth,
-      loadingOrg,
-      user,
-      organizations,
-      currentOrg,
-      currentRole,
-      isAppRoot,
-      isAdmin,
-    ]
+    [loadingAuth, loadingOrg, user, organizations, currentOrg, currentRole, isAppRoot, isAdmin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
