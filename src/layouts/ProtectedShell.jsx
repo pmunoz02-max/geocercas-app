@@ -1,33 +1,4 @@
-// Enforcer universal: /admins solo para root app-level
-useEffect(() => {
-  if (!user) return;
-  if (location.pathname === "/admins" && !isAppRoot) {
-    navigate("/inicio", { replace: true });
-  }
-}, [user, isAppRoot, location.pathname, navigate]);
-``` :contentReference[oaicite:0]{index=0}
-
-👉 O sea: aunque seas **OWNER**, si **no eres isAppRoot**, **SIEMPRE** te manda a `/inicio`.  
-Por eso el click en ADMINISTRADOR siempre termina en `/inicio`. ✅
-
-Además, `tabs` en `ProtectedShell` agrega `/admins` **solo si isAppRoot**, pero tu `TopTabs` lo inyecta para owner/admin, creando inconsistencia. 
-
----
-
-# ✅ Solución final (universal): unificar la regla en un solo lugar
-Regla correcta según tu requerimiento:
-- Mostrar/permitir **Administrador** para: `isAppRoot || role in (owner, admin)`
-- Eliminar el enforcer root-only.
-- Dejar que el módulo admin exista como `/admins` (route real).
-
-Te devuelvo **ProtectedShell.jsx completo y corregido**, y además ajusto TopTabs para que **NO inyecte admin** (porque ya lo controla el `tabs` del shell). Esto evita duplicados y conflictos.
-
----
-
-## 1) `src/layouts/ProtectedShell.jsx` — COMPLETO CORREGIDO
-Reemplaza TODO por esto:
-
-```jsx
+// src/layouts/ProtectedShell.jsx
 import React, { useEffect, useMemo } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -49,12 +20,8 @@ export default function ProtectedShell() {
     }
   }, [user, role, location.pathname, navigate]);
 
-  /**
-   * ✅ Regla universal para /admins:
-   * - ROOT app-level (isAppRoot) ✅
-   * - OWNER/ADMIN ✅
-   * - otros → /inicio
-   */
+  // /admins access rule:
+  // ROOT (isAppRoot) OR role in (owner, admin)
   useEffect(() => {
     if (!user) return;
     if (location.pathname !== "/admins") return;
@@ -76,6 +43,7 @@ export default function ProtectedShell() {
       { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
     ];
 
+    // Admin area visible for owner/admin/root
     if (role === "owner" || role === "admin" || isAppRoot) {
       base.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
       base.push({ path: "/admins", labelKey: "app.tabs.admins" });
@@ -94,6 +62,7 @@ export default function ProtectedShell() {
 
   if (!user) return <Navigate to="/login" replace />;
 
+  // When user is tracker, panel shell shouldn't render.
   if (role === "tracker" && location.pathname !== "/tracker-gps") return null;
 
   return (
