@@ -94,7 +94,7 @@ async function fetchJsonDiag(
       throw err;
     }
     if (!diag.message) diag.message = String(e?.message || e);
-    e.diag = diag;
+    (e as any).diag = diag;
     throw e;
   } finally {
     clearTimeout(timer);
@@ -103,54 +103,59 @@ async function fetchJsonDiag(
 }
 
 /**
- * ✅ UNIVERSAL: confirma que la sesión quedó persistida localmente
- * antes de permitir navegación a rutas protegidas (evita loader infinito).
- *
- * Señales:
- * 1) supabase.auth.getSession()
- * 2) supabase.auth.getUser()
- * 3) localStorage: "sb-*-auth-token"
+ * ✅ Blindaje: esperar evento real de auth (SIGNED_IN / TOKEN_REFRESHED)
+ * Esto evita el race condition donde setSession() todavía no terminó de persistir.
  */
+async function waitForAuthEvent(timeoutMs = 8000) {
+  return await new Promise<void>((resolve, reject) => {
+    const t = setTimeout(() => {
+      sub?.subscription?.unsubscribe?.();
+      reject(
+        new Error(
+          "Tokens recibidos, pero Supabase no emitió SIGNED_IN/TOKEN_REFRESHED. " +
+            "Esto suele pasar si el navegador/extensión bloquea Local Storage o si hay 2 clientes Supabase distintos en la app."
+        )
+      );
+    }, timeoutMs);
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        clearTimeout(t);
+        sub?.subscription?.unsubscribe?.();
+        resolve();
+      }
+    });
+  });
+}
+
+function hasSbAuthTokenKey(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    return Object.keys(window.localStorage || {}).some(
+      (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function ensureSessionOrThrow(timeoutMs = 8000) {
   const start = Date.now();
-
-  const hasSbTokenInLocalStorage = () => {
-    try {
-      if (typeof window === "undefined") return false;
-      const keys = Object.keys(window.localStorage || {});
-      return keys.some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
-    } catch {
-      return false;
-    }
-  };
-
   while (Date.now() - start < timeoutMs) {
-    // 1) getSession
-    const { data: s } = await supabase.auth.getSession();
-    if (s?.session?.access_token) return s.session;
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) return data.session;
 
-    // 2) getUser (a veces estabiliza antes)
-    const { data: u } = await supabase.auth.getUser();
-    if (u?.user?.id && hasSbTokenInLocalStorage()) {
-      // intentar getSession una vez más para devolver session completa
+    // Señal secundaria: key en localStorage
+    if (hasSbAuthTokenKey()) {
       const { data: s2 } = await supabase.auth.getSession();
-      if (s2?.session?.access_token) return s2.session as any;
-      // si no, igual consideramos "establecida" a nivel de storage + user
-      return { user: u.user } as any;
-    }
-
-    // 3) storage key (señal de persistencia)
-    if (hasSbTokenInLocalStorage()) {
-      const { data: s3 } = await supabase.auth.getSession();
-      if (s3?.session?.access_token) return s3.session;
+      if (s2?.session?.access_token) return s2.session;
     }
 
     await new Promise((r) => setTimeout(r, 180));
   }
-
   throw new Error(
-    "Tokens recibidos pero NO se pudo persistir la sesión local (sb-*-auth-token). " +
-      "Prueba en incógnito/otro navegador y revisa si alguna extensión bloquea Storage."
+    "No se pudo establecer la sesión local (sb-*-auth-token). " +
+      "Revisa bloqueadores/extensiones o múltiples clientes Supabase."
   );
 }
 
@@ -193,6 +198,7 @@ export default function Login() {
     setDiag(null);
 
     try {
+      // 1) API password grant
       const { data, diag: d } = await fetchJsonDiag(
         "/api/auth/password",
         { email: emailClean, password },
@@ -200,15 +206,20 @@ export default function Login() {
       );
       setDiag(d);
 
+      // 2) Crear sesión local Supabase
       const { error: setSessionErr } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
       if (setSessionErr) throw setSessionErr;
 
+      // 3) Esperar evento real (blindaje)
+      await waitForAuthEvent(8000);
+
+      // 4) Confirmar que getSession ya ve la sesión (doble blindaje)
       await ensureSessionOrThrow(8000);
 
-      // ✅ navegación SPA (evita “race” por hard reload)
+      // 5) Navegar SPA
       navigate(next, { replace: true });
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
