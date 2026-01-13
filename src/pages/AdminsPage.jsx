@@ -9,30 +9,34 @@ export default function AdminsPage() {
   const { user, currentOrg, currentRole, isAppRoot } = useAuth();
 
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("admin");
+  const [mode, setMode] = useState("new_org_owner"); // ✅ default: nueva org
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
   const orgId = currentOrg?.id || null;
-
-  useEffect(() => {
-    setMsg("");
-    setErr("");
-  }, []);
-
   const roleLower = String(currentRole || "").toLowerCase().trim();
 
-  /**
-   * ✅ Reglas de acceso CORRECTAS
-   * - ROOT → acceso total
-   * - OWNER / ADMIN → acceso limitado a su org
-   */
+  // ✅ Permisos:
+  // - ROOT puede todo
+  // - OWNER puede crear "nueva org" (viral/crecimiento)
+  // - ADMIN solo puede invitar admins a su org (si habilitas ese modo)
   const canAccess = useMemo(() => {
     if (!user) return false;
     if (isAppRoot) return true;
     return roleLower === "owner" || roleLower === "admin";
   }, [user, isAppRoot, roleLower]);
+
+  const canCreateNewOrgOwner = useMemo(() => {
+    if (!user) return false;
+    if (isAppRoot) return true;
+    return roleLower === "owner"; // ✅ según tu nota: solo owner invita nuevos admins con org propia
+  }, [user, isAppRoot, roleLower]);
+
+  useEffect(() => {
+    setMsg("");
+    setErr("");
+  }, []);
 
   if (!canAccess) {
     return (
@@ -48,54 +52,74 @@ export default function AdminsPage() {
     setMsg("");
     setErr("");
 
-    if (!email.trim()) {
+    const inviteEmail = email.trim().toLowerCase();
+    if (!inviteEmail) {
       setErr("Email requerido.");
       return;
     }
 
-    // OWNER / ADMIN NO pueden invitar owners
-    if (!isAppRoot && role === "owner") {
-      setErr("Solo el ROOT puede invitar owners.");
+    // ✅ En modo "nueva org", solo root/owner
+    if (mode === "new_org_owner" && !canCreateNewOrgOwner) {
+      setErr("Solo el propietario (OWNER) o el ROOT puede crear administradores con organización propia.");
       return;
     }
 
-    if (role === "admin" && !orgId) {
+    // ✅ En modo "admin en org actual" necesitas org activa
+    if (mode === "org_admin" && !orgId) {
       setErr("No hay organización activa.");
       return;
     }
 
     setSending(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
+      if (sessErr) throw sessErr;
+
       const jwt = sessionData?.session?.access_token;
+      if (!jwt) throw new Error("No hay sesión activa.");
 
-      const payload = {
-        email: email.trim().toLowerCase(),
-        role: role === "owner" ? "owner" : "admin",
-        org_id: role === "admin" ? orgId : null,
-        org_name: role === "owner" ? email.trim().toLowerCase() : null,
-      };
+      // ✅ Payload correcto:
+      // - new_org_owner => role: 'owner' + org_id: null (Edge Function crea org propia)
+      // - org_admin     => role: 'admin' + org_id: currentOrg.id (admin dentro de la org actual)
+      const payload =
+        mode === "new_org_owner"
+          ? {
+              email: inviteEmail,
+              role: "owner",
+              org_id: null,
+              org_name: inviteEmail, // nombre determinístico, como en la nota técnica
+            }
+          : {
+              email: inviteEmail,
+              role: "admin",
+              org_id: orgId,
+              org_name: null,
+            };
 
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/invite_admin`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${jwt}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const base = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL;
+      if (!base) throw new Error("Falta VITE_SUPABASE_FUNCTIONS_URL en env.");
+
+      const res = await fetch(`${base}/invite_admin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
       const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json?.ok) {
-        throw new Error(safeText(json?.message) || "Error invitando admin.");
+      if (!res.ok || json?.ok === false) {
+        throw new Error(safeText(json?.message) || `Error invitando (${res.status}).`);
       }
 
-      setMsg(
-        `Invitación enviada correctamente: ${safeText(json?.invited_email)}`
-      );
+      // Mensaje claro según modo
+      if (mode === "new_org_owner") {
+        setMsg(`✅ Invitación enviada. El usuario nacerá con su propia organización y rol OWNER: ${inviteEmail}`);
+      } else {
+        setMsg(`✅ Invitación enviada. El usuario será ADMIN en tu organización: ${safeText(currentOrg?.name)}`);
+      }
+
       setEmail("");
     } catch (e2) {
       setErr(safeText(e2?.message) || "Error.");
@@ -109,9 +133,9 @@ export default function AdminsPage() {
       <h1 className="text-xl font-semibold">Administrador</h1>
 
       <p className="text-slate-600 mt-2">
-        {isAppRoot
-          ? "Modo ROOT: puedes crear owners (nuevas organizaciones) o admins."
-          : "Modo organización: puedes invitar admins a tu organización."}
+        {mode === "new_org_owner"
+          ? "Este flujo crea un nuevo administrador con ORGANIZACIÓN PROPIA (rol OWNER)."
+          : "Este flujo invita un ADMIN dentro de tu organización actual."}
       </p>
 
       <form onSubmit={onInvite} className="mt-4 space-y-3">
@@ -121,32 +145,37 @@ export default function AdminsPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full border border-slate-300 rounded-lg px-3 py-2"
-            placeholder="admin@empresa.com"
+            placeholder="nuevo@cliente.com"
             type="email"
           />
         </div>
 
         <div>
-          <label className="block text-sm text-slate-700 mb-1">Rol</label>
+          <label className="block text-sm text-slate-700 mb-1">Tipo de invitación</label>
           <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
+            value={mode}
+            onChange={(e) => setMode(e.target.value)}
             className="w-full border border-slate-300 rounded-lg px-3 py-2"
           >
-            <option value="admin">admin (en org actual)</option>
-            {isAppRoot && <option value="owner">owner (crea org propia)</option>}
+            <option value="new_org_owner">Administrador con organización propia (OWNER)</option>
+            <option value="org_admin">Admin dentro de mi organización actual</option>
           </select>
         </div>
 
-        {role === "admin" && (
+        {mode === "org_admin" && (
           <div className="text-xs text-slate-500">
-            Se invitará como admin en la org actual:{" "}
-            <b>{safeText(currentOrg?.name)}</b>
+            Org actual: <b>{safeText(currentOrg?.name)}</b>
+          </div>
+        )}
+
+        {mode === "new_org_owner" && !canCreateNewOrgOwner && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+            Nota: tu usuario actual no es OWNER/ROOT, por lo que no puede crear admins con organización propia.
           </div>
         )}
 
         <button
-          disabled={sending}
+          disabled={sending || (mode === "new_org_owner" && !canCreateNewOrgOwner)}
           className="w-full bg-slate-900 text-white rounded-lg px-3 py-2 disabled:opacity-60"
         >
           {sending ? "Enviando..." : "Invitar"}
