@@ -1,5 +1,6 @@
+// src/pages/Login.tsx
 import React, { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 /* =========================
@@ -103,7 +104,11 @@ async function fetchJsonDiag(
   }
 }
 
-async function ensureSessionOrThrow(timeoutMs = 4000) {
+/**
+ * ✅ UNIVERSAL: confirma que la sesión quedó persistida localmente
+ * antes de permitir navegación a rutas protegidas (evita loader infinito).
+ */
+async function ensureSessionOrThrow(timeoutMs = 6000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const { data } = await supabase.auth.getSession();
@@ -118,6 +123,7 @@ async function ensureSessionOrThrow(timeoutMs = 4000) {
 ========================= */
 
 export default function Login() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
@@ -155,23 +161,26 @@ export default function Login() {
     setDiag(null);
 
     try {
+      // 1) API password grant
       const { data, diag: d } = await fetchJsonDiag(
         "/api/auth/password",
         { email: emailClean, password },
         20000
       );
-
       setDiag(d);
 
-      await supabase.auth.setSession({
+      // 2) Crear sesión Supabase en el navegador
+      const { error: setErrSession } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
+      if (setErrSession) throw setErrSession;
 
-      await ensureSessionOrThrow(4000);
+      // ✅ 3) Confirmar persistencia antes de navegar (evita loader infinito)
+      await ensureSessionOrThrow(6000);
 
-      // 🔒 Redirección dura: evita rebotes por guards/context
-      window.location.replace(next);
+      // ✅ 4) Navegar dentro de la SPA (evita “race” con localStorage)
+      navigate(next, { replace: true });
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
       const m = String(e?.message || "");
