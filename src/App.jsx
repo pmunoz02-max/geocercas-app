@@ -99,9 +99,9 @@ function RequireTracker({ children }) {
   return children;
 }
 
-/* ADMIN GUARD (root / owner / admin) */
+/* ADMIN GUARD (SaaS): ONLY root */
 function AdminRoute({ children }) {
-  const { loading, user, currentRole, isAppRoot } = useAuth();
+  const { loading, user, isAppRoot } = useAuth();
   const location = useLocation();
 
   if (loading) return <FullScreenLoader text="Cargando permisos…" />;
@@ -113,12 +113,7 @@ function AdminRoute({ children }) {
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  if (isAppRoot) return children;
-
-  const role = String(currentRole || "").toLowerCase().trim();
-  if (role !== "owner" && role !== "admin") {
-    return <Navigate to="/inicio" replace />;
-  }
+  if (!isAppRoot) return <Navigate to="/inicio" replace />;
 
   return children;
 }
@@ -160,10 +155,7 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* Alias legacy */}
-        <Route
-          path="/administrador"
-          element={<Navigate to="/admins" replace />}
-        />
+        <Route path="/administrador" element={<Navigate to="/admins" replace />} />
 
         {/* ---------- Tracker ---------- */}
         <Route

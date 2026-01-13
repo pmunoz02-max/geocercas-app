@@ -20,17 +20,21 @@ export default function ProtectedShell() {
     }
   }, [user, role, location.pathname, navigate]);
 
-  // /admins access rule:
-  // ROOT (isAppRoot) OR role in (owner, admin)
+  /**
+   * /admins access rule (SaaS Administrator module):
+   * ✅ ONLY App Root (global superadmin)
+   * ❌ Owners (clients) must NOT enter
+   * ❌ Admins (org) must NOT enter
+   */
   useEffect(() => {
     if (!user) return;
     if (location.pathname !== "/admins") return;
 
-    const canEnterAdmins = isAppRoot || role === "owner" || role === "admin";
+    const canEnterAdmins = Boolean(isAppRoot);
     if (!canEnterAdmins) {
       navigate("/inicio", { replace: true });
     }
-  }, [user, isAppRoot, role, location.pathname, navigate]);
+  }, [user, isAppRoot, location.pathname, navigate]);
 
   const tabs = useMemo(() => {
     const base = [
@@ -43,9 +47,13 @@ export default function ProtectedShell() {
       { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
     ];
 
-    // Admin area visible for owner/admin/root
+    // Org-scoped invite tracker: owner/admin/root (within current org)
     if (role === "owner" || role === "admin" || isAppRoot) {
       base.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
+    }
+
+    // SaaS admin area: ONLY root
+    if (isAppRoot) {
       base.push({ path: "/admins", labelKey: "app.tabs.admins" });
     }
 
