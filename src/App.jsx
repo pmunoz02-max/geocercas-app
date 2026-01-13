@@ -13,7 +13,7 @@ import AuthCallback from "./pages/AuthCallback.tsx";
 import Inicio from "./pages/Inicio.jsx";
 import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
-import PersonalPage from "./components/personal/PersonalPage.jsx"; // ✅ FIX
+import PersonalPage from "./components/personal/PersonalPage.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import CostosPage from "./pages/CostosPage.jsx";
@@ -47,7 +47,6 @@ function RequirePanel({ children }) {
 
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
 
-  // ✅ Antes mandaba a "/" (Landing). Ahora manda a login con next.
   if (!user) {
     const next = encodeURIComponent(location.pathname + location.search || "/inicio");
     return <Navigate to={`/login?next=${next}`} replace />;
@@ -83,6 +82,31 @@ function AppRootRoute({ children }) {
   return children;
 }
 
+/**
+ * ✅ NUEVO: Permite entrar al módulo Admin a:
+ * - ROOT (isAppRoot)
+ * - OWNER / ADMIN (por currentRole)
+ */
+function AdminRoute({ children }) {
+  const { loading, user, currentRole, isAppRoot } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <FullScreenLoader text="Cargando permisos…" />;
+
+  if (!user) {
+    const next = encodeURIComponent(location.pathname + location.search || "/admins");
+    return <Navigate to={`/login?next=${next}`} replace />;
+  }
+
+  if (isAppRoot) return children;
+
+  const role = String(currentRole || "").toLowerCase();
+  const ok = role === "owner" || role === "admin";
+  if (!ok) return <Navigate to="/inicio" replace />;
+
+  return children;
+}
+
 function LoginShell() {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
@@ -97,7 +121,6 @@ function SmartFallback() {
   const { loading, user, currentRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando…" />;
 
-  // ✅ Antes mandaba a "/". Ahora manda a login.
   if (!user) return <Navigate to="/login" replace />;
 
   const role = String(currentRole || "").toLowerCase();
@@ -219,13 +242,14 @@ export default function App() {
             }
           />
 
+          {/* ✅ Admin module (ahora funciona para OWNER/ADMIN/ROOT) */}
           <Route
             path="/admins"
             element={
               <RequireOrg>
-                <AppRootRoute>
+                <AdminRoute>
                   <AdminsPage />
-                </AppRootRoute>
+                </AdminRoute>
               </RequireOrg>
             }
           />
