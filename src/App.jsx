@@ -1,57 +1,46 @@
 // src/App.jsx
 import React, { useEffect } from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-/* Guards */
-import AuthGuard from "./components/AuthGuard.jsx";
-
-/* Layout */
+// ✅ RUTA REAL (según tu archivo previo): src/layouts/ProtectedShell.jsx
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
+
+// ✅ Existe porque lo usas en tu app (y tú lo subiste antes)
 import RequireOrg from "./components/org/RequireOrg.jsx";
 
-/* Public pages */
+// Páginas (según tu listado real en src/pages)
 import Landing from "./pages/Landing.jsx";
-import LoginShell from "./pages/LoginShell.jsx";
-import ResetPassword from "./pages/ResetPassword.jsx";
+import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 
-/* Panel pages */
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
-import NuevaGeocerca from "./components/geocercas/NuevaGeocerca.jsx";
-import PersonalPage from "./components/personal/PersonalPage.jsx";
+import Personal from "./pages/Personal.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
-import CostosPage from "./pages/CostosPage.jsx";
-import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
+import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 
-/* Admin (SaaS) */
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 
 /**
- * HashTokenCatcher (UNIVERSAL)
- * - Si Supabase redirige con tokens en el HASH (#access_token=...),
- *   y el usuario cae en "/" (Landing), reenviamos a /auth/callback
- *   preservando hash+query para que AuthCallback guarde sesión y redirija.
+ * ✅ HashTokenCatcher (UNIVERSAL)
+ * Si Supabase redirige con tokens en el HASH (#access_token=...),
+ * y el usuario cae en "/", reenviamos a /auth/callback preservando hash+query.
+ * Esto hace que AuthCallback procese la sesión y redirija (recovery → /reset-password).
  */
 function HashTokenCatcher() {
   const location = useLocation();
 
   useEffect(() => {
-    const hasAccessToken =
-      typeof location.hash === "string" && location.hash.includes("access_token=");
+    const hash = typeof location.hash === "string" ? location.hash : "";
+    const hasAccessToken = hash.includes("access_token=");
     if (hasAccessToken && location.pathname !== "/auth/callback") {
-      const target = `/auth/callback${location.search || ""}${location.hash || ""}`;
+      const target = `/auth/callback${location.search || ""}${hash || ""}`;
       window.location.replace(target);
     }
   }, [location.pathname, location.search, location.hash]);
@@ -60,10 +49,23 @@ function HashTokenCatcher() {
 }
 
 /**
- * AdminRoute: solo App Root puede entrar a /admins
+ * ✅ Guard universal
+ * - Si no hay user → manda a /login
+ */
+function AuthGuard({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  return children;
+}
+
+/**
+ * ✅ AdminRoute: solo App Root entra a /admins
  */
 function AdminRoute({ children }) {
-  const { loading, user, isAppRoot } = useAuth();
+  const { user, loading, isAppRoot } = useAuth();
   const location = useLocation();
 
   if (loading) return null;
@@ -73,7 +75,7 @@ function AdminRoute({ children }) {
   return children;
 }
 
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <HashTokenCatcher />
@@ -81,16 +83,12 @@ function App() {
       <Routes>
         {/* ---------- Public ---------- */}
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<LoginShell />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Alias legacy */}
-        <Route path="/administrador" element={<Navigate to="/admins" replace />} />
-
-        {/* ---------- Protected ---------- */}
+        {/* ---------- Protected shell ---------- */}
         <Route
-          path="/"
           element={
             <AuthGuard>
               <ProtectedShell />
@@ -98,15 +96,6 @@ function App() {
           }
         >
           <Route path="/inicio" element={<Inicio />} />
-
-          <Route
-            path="/nueva-geocerca"
-            element={
-              <RequireOrg>
-                <NuevaGeocerca />
-              </RequireOrg>
-            }
-          />
 
           <Route
             path="/geocercas"
@@ -121,7 +110,7 @@ function App() {
             path="/personal"
             element={
               <RequireOrg>
-                <PersonalPage />
+                <Personal />
               </RequireOrg>
             }
           />
@@ -148,16 +137,7 @@ function App() {
             path="/reportes"
             element={
               <RequireOrg>
-                <CostosPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/costos-dashboard"
-            element={
-              <RequireOrg>
-                <CostosDashboardPage />
+                <Reports />
               </RequireOrg>
             }
           />
@@ -197,5 +177,3 @@ function App() {
     </BrowserRouter>
   );
 }
-
-export default App;
