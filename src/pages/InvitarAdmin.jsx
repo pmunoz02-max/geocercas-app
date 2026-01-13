@@ -13,24 +13,52 @@ async function callInviteAdmin(payload) {
   } = await supabase.auth.getSession();
 
   if (!session?.access_token) {
-    return { ok: false, status: 401, data: { error: "No session token" } };
+    return { ok: false, status: 401, data: { ok: false, message: "No session token" } };
   }
 
-  const res = await fetch(
-    `${String(supabaseUrl || "").replace(/\/$/, "")}/functions/v1/invite_admin`,
-    {
-      method: "POST",
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
+  const base = String(supabaseUrl || "").replace(/\/$/, "");
+  const res = await fetch(`${base}/functions/v1/invite_admin`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 
   const json = await res.json().catch(() => null);
   return { ok: res.ok, status: res.status, data: json };
+}
+
+async function copyToClipboard(text) {
+  // Intento moderno
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return { ok: true, method: "clipboard" };
+    }
+  } catch (e) {
+    // seguimos al fallback
+  }
+
+  // Fallback universal
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "true");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.left = "-1000px";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return { ok, method: "execCommand" };
+  } catch (e) {
+    return { ok: false, method: "none" };
+  }
 }
 
 export default function InvitarAdmin() {
@@ -38,14 +66,13 @@ export default function InvitarAdmin() {
   const { t } = useTranslation();
 
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("admin"); // "admin" | "owner"
+  const [role, setRole] = useState("owner"); // ✅ default: owner (nace con org propia)
   const [orgName, setOrgName] = useState("");
 
   const [sending, setSending] = useState(false);
-  const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text: string }
+  const [message, setMessage] = useState(null); // { type, text }
   const [actionLink, setActionLink] = useState("");
 
-  // Opcional: lista de people (igual que tracker), para elegir rápido correos existentes
   const [peopleList, setPeopleList] = useState([]);
   const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
 
@@ -64,14 +91,12 @@ export default function InvitarAdmin() {
 
       if (!error) setPeopleList(data || []);
     }
-
     loadPeople();
   }, [currentOrg?.id]);
 
   function handleSelectPerson(e) {
     const id = e.target.value;
     setSelectedOrgPeopleId(id);
-
     const p = peopleList.find((x) => x.org_people_id === id);
     if (p?.email) setEmail(String(p.email).toLowerCase());
   }
@@ -82,7 +107,7 @@ export default function InvitarAdmin() {
     setActionLink("");
 
     const cleanEmail = String(email || "").trim().toLowerCase();
-    const cleanRole = String(role || "").toLowerCase() === "owner" ? "owner" : "admin";
+    const cleanRole = String(role || "").toLowerCase() === "admin" ? "admin" : "owner";
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
       setMessage({
@@ -92,7 +117,6 @@ export default function InvitarAdmin() {
       return;
     }
 
-    // Para invitar ADMIN, tu función requiere org_id. Usaremos currentOrg.id.
     if (cleanRole === "admin" && !currentOrg?.id) {
       setMessage({
         type: "error",
@@ -107,21 +131,14 @@ export default function InvitarAdmin() {
       const payload =
         cleanRole === "admin"
           ? { email: cleanEmail, role: "admin", org_id: currentOrg.id }
-          : {
-              email: cleanEmail,
-              role: "owner",
-              // org_name opcional: si no envías, el backend usa email como fallback
-              org_name: String(orgName || "").trim() || cleanEmail,
-            };
+          : { email: cleanEmail, role: "owner", org_name: String(orgName || "").trim() || cleanEmail };
 
       const resp = await callInviteAdmin(payload);
 
       if (!resp.ok || !resp.data) {
         setMessage({
           type: "error",
-          text:
-            t?.("inviteAdmin.messages.serverProblem") ||
-            "Problema con el servidor. Intenta nuevamente.",
+          text: t?.("inviteAdmin.messages.serverProblem") || "Problema con el servidor. Intenta nuevamente.",
         });
         return;
       }
@@ -136,22 +153,22 @@ export default function InvitarAdmin() {
       if (!link) {
         setMessage({
           type: "error",
-          text:
-            t?.("inviteAdmin.messages.noLink") ||
-            "Se generó respuesta pero no llegó action_link.",
+          text: t?.("inviteAdmin.messages.noLink") || "Se generó respuesta pero no llegó action_link.",
         });
         return;
       }
 
       setActionLink(link);
 
-      // En el estándar nuevo, siempre devolvemos action_link (no enviamos email desde Supabase).
+      // ✅ Si el backend envía email (Resend), lo reportará como email_status="sent"
+      const emailStatus = String(resp.data.email_status || "").toLowerCase();
+      const sent = emailStatus === "sent";
+
       setMessage({
-        type: "warn",
-        text:
-          cleanRole === "admin"
-            ? `✅ Magic Link generado para ADMIN: ${cleanEmail}. Cópialo y envíalo por tu canal.`
-            : `✅ Magic Link generado para OWNER: ${cleanEmail}. Cópialo y envíalo por tu canal.`,
+        type: sent ? "success" : "warn",
+        text: sent
+          ? `✅ Email enviado a ${cleanEmail} con el Magic Link (${cleanRole.toUpperCase()}).`
+          : `✅ Magic Link generado para ${cleanRole.toUpperCase()}: ${cleanEmail}. Cópialo y envíalo por tu canal.`,
       });
 
       setEmail("");
@@ -161,9 +178,7 @@ export default function InvitarAdmin() {
       console.error("[InvitarAdmin] unexpected:", err);
       setMessage({
         type: "error",
-        text:
-          t?.("inviteAdmin.messages.unexpectedError") ||
-          "Error inesperado. Revisa consola/logs.",
+        text: t?.("inviteAdmin.messages.unexpectedError") || "Error inesperado. Revisa consola/logs.",
       });
     } finally {
       setSending(false);
@@ -177,20 +192,29 @@ export default function InvitarAdmin() {
       ? "text-amber-700"
       : "text-red-600";
 
-  const roleLabel =
-    role === "owner"
-      ? t?.("inviteAdmin.roles.owner") || "owner"
-      : t?.("inviteAdmin.roles.admin") || "admin";
+  const roleLabel = role === "admin" ? "admin" : "owner";
+
+  async function handleCopy() {
+    if (!actionLink) return;
+    const r = await copyToClipboard(actionLink);
+    if (r.ok) {
+      setMessage({ type: "success", text: "✅ Copiado al portapapeles." });
+    } else {
+      setMessage({
+        type: "warn",
+        text:
+          "⚠️ El navegador bloqueó el copiado automático. Selecciona el link (abajo) y copia manualmente (Ctrl+C).",
+      });
+    }
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-4">
-        <h1 className="text-2xl font-semibold">
-          {t?.("inviteAdmin.title") || "Invitar Administrador / Owner"}
-        </h1>
+        <h1 className="text-2xl font-semibold">{t?.("inviteAdmin.title") || "Invitar Administrador"}</h1>
         <p className="text-sm text-slate-600 mt-1">
           {t?.("inviteAdmin.subtitle") ||
-            "Se genera un Magic Link (action_link). Cópialo y envíalo por tu canal (WhatsApp/Email)."}
+            "Genera un Magic Link. Si el backend tiene email habilitado, también se enviará por correo."}
         </p>
       </div>
 
@@ -203,10 +227,10 @@ export default function InvitarAdmin() {
             <select
               className="w-full border rounded px-3 py-2 text-sm"
               value={role}
-              onChange={(e) => setRole(e.target.value === "owner" ? "owner" : "admin")}
+              onChange={(e) => setRole(e.target.value === "admin" ? "admin" : "owner")}
             >
-              <option value="admin">admin</option>
-              <option value="owner">owner</option>
+              <option value="owner">owner (nueva org)</option>
+              <option value="admin">admin (en org actual)</option>
             </select>
           </div>
 
@@ -245,10 +269,9 @@ export default function InvitarAdmin() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          {!canInviteAdmin && role === "admin" ? (
+          {role === "admin" && !canInviteAdmin ? (
             <div className="text-xs text-red-600 mt-2">
-              {t?.("inviteAdmin.errors.noOrg") ||
-                "Para invitar ADMIN debe existir currentOrg (org activa)."}
+              {t?.("inviteAdmin.errors.noOrg") || "Para invitar ADMIN debe existir org activa."}
             </div>
           ) : null}
         </div>
@@ -266,17 +289,13 @@ export default function InvitarAdmin() {
               onChange={(e) => setOrgName(e.target.value)}
             />
             <div className="text-[11px] text-slate-500 mt-2">
-              {t?.("inviteAdmin.form.orgNameHelp") ||
-                "Si lo dejas vacío, se usa el email como nombre por defecto."}
+              {t?.("inviteAdmin.form.orgNameHelp") || "Si lo dejas vacío, se usa el email por defecto."}
             </div>
           </div>
         ) : (
           <div className="text-xs text-slate-600 bg-slate-50 border rounded p-3">
             <span className="font-semibold">Org destino:</span>{" "}
             {currentOrg?.name || currentOrg?.org_name || currentOrg?.id || "—"}
-            <span className="ml-2 opacity-70">
-              ({t?.("inviteAdmin.form.orgHelp") || "admin se asigna a la org activa"})
-            </span>
           </div>
         )}
 
@@ -298,7 +317,7 @@ export default function InvitarAdmin() {
             <div className="flex flex-wrap gap-2 mb-2">
               <button
                 type="button"
-                onClick={() => navigator.clipboard.writeText(actionLink)}
+                onClick={handleCopy}
                 className="bg-blue-600 text-white rounded px-3 py-2 text-xs"
               >
                 {t?.("inviteAdmin.actions.copy") || "Copiar link"}
@@ -314,10 +333,9 @@ export default function InvitarAdmin() {
             </div>
 
             <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
-
             <div className="text-[11px] text-slate-500 mt-2">
               {t?.("inviteAdmin.hints.bestPractice") ||
-                "Recomendación: abrir en Chrome/Safari. Si falló antes, intentar en incógnito."}
+                "Tip: si el copiado automático falla, selecciona el link y copia manualmente (Ctrl+C)."}
             </div>
           </div>
         ) : null}
