@@ -48,7 +48,7 @@ function RequirePanel({ children }) {
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
 
   if (!user) {
-    const next = encodeURIComponent(location.pathname + location.search || "/inicio");
+    const next = encodeURIComponent((location.pathname + location.search) || "/inicio");
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
@@ -65,7 +65,7 @@ function RequireTracker({ children }) {
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
 
   if (!user) {
-    const next = encodeURIComponent(location.pathname + location.search || "/tracker-gps");
+    const next = encodeURIComponent((location.pathname + location.search) || "/tracker-gps");
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
@@ -82,11 +82,7 @@ function AppRootRoute({ children }) {
   return children;
 }
 
-/**
- * ✅ NUEVO: Permite entrar al módulo Admin a:
- * - ROOT (isAppRoot)
- * - OWNER / ADMIN (por currentRole)
- */
+/** ✅ NUEVO: permite /admins a ROOT o a roles OWNER/ADMIN */
 function AdminRoute({ children }) {
   const { loading, user, currentRole, isAppRoot } = useAuth();
   const location = useLocation();
@@ -94,7 +90,7 @@ function AdminRoute({ children }) {
   if (loading) return <FullScreenLoader text="Cargando permisos…" />;
 
   if (!user) {
-    const next = encodeURIComponent(location.pathname + location.search || "/admins");
+    const next = encodeURIComponent((location.pathname + location.search) || "/admins");
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
@@ -120,7 +116,6 @@ function LoginShell() {
 function SmartFallback() {
   const { loading, user, currentRole } = useAuth();
   if (loading) return <FullScreenLoader text="Cargando…" />;
-
   if (!user) return <Navigate to="/login" replace />;
 
   const role = String(currentRole || "").toLowerCase();
@@ -242,7 +237,7 @@ export default function App() {
             }
           />
 
-          {/* ✅ Admin module (ahora funciona para OWNER/ADMIN/ROOT) */}
+          {/* ✅ Admin module: OWNER/ADMIN/ROOT */}
           <Route
             path="/admins"
             element={
