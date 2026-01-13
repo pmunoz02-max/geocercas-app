@@ -1,5 +1,5 @@
-// LOGIN-V18 – NO usa supabase.auth.setSession (evita el hang)
-import React, { useMemo, useState } from "react";
+// LOGIN-V19 – submit garantizado + diagnóstico desde el click
+import React, { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import supabase, { setMemoryAccessToken } from "../supabaseClient";
 
@@ -23,33 +23,40 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string) {
 }
 
 export default function Login() {
+  const formRef = useRef<HTMLFormElement | null>(null);
+
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
-  const [diag, setDiag] = useState<Diag>({ step: "-" });
+  const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
 
-    const emailClean = email.trim().toLowerCase();
-    if (!emailClean || !password) {
-      setErr("Escribe tu correo y contraseña.");
-      return;
-    }
-
     setBusy(true);
     setErr("");
     setMsg("");
-    setDiag({ step: "fetching" });
+    setDiag({ step: "handler_entered" });
+
+    const emailClean = email.trim().toLowerCase();
+    if (!emailClean || !password) {
+      setDiag({ step: "validation_error", message: "Falta correo o contraseña" });
+      setErr("Escribe tu correo y contraseña.");
+      setBusy(false);
+      return;
+    }
 
     try {
+      setDiag({ step: "fetching" });
+
       const res = await withTimeout(
         fetch("/api/auth/password", {
           method: "POST",
@@ -61,30 +68,39 @@ export default function Login() {
       );
 
       const text = await withTimeout(res.text(), 8000, "read response text");
-      const data = JSON.parse(text);
 
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { raw: text };
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      }
 
       setDiag({ step: "token_received", status: res.status });
 
-      // ✅ Guardamos token en memoria (NO setSession)
+      // ✅ Sin setSession: token en memoria
       setMemoryAccessToken(data.access_token);
 
-      // ✅ (Opcional) Validar token haciendo una llamada simple (si falla, lo veremos)
+      // ✅ Probe ligero (si falla, lo veremos)
       setDiag({ step: "probe_supabase" });
       const probe = await withTimeout(
-        supabase.from("profiles").select("id").limit(1),
+        supabase.from("organizations").select("id").limit(1),
         8000,
-        "probe supabase query"
+        "probe supabase query (organizations)"
       );
+
       if (probe.error) throw new Error(`Probe error: ${probe.error.message}`);
 
-      setMsg("✅ Sesión en memoria activa. Entrando…");
       setDiag({ step: "navigate" });
+      setMsg("✅ Sesión en memoria activa. Entrando…");
       navigate(next, { replace: true });
     } catch (e: any) {
-      setErr(String(e?.message || "No se pudo iniciar sesión."));
       setDiag({ step: "error", message: String(e?.message || e) });
+      setErr(String(e?.message || "No se pudo iniciar sesión."));
     } finally {
       setBusy(false);
     }
@@ -99,11 +115,12 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
       <form
+        ref={formRef}
         onSubmit={onLogin}
         className="w-full max-w-xl bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl"
       >
         <h1 className="text-3xl font-semibold mb-8">
-          Entrar <span className="text-xs opacity-60">(LOGIN-V18)</span>
+          Entrar <span className="text-xs opacity-60">(LOGIN-V19)</span>
         </h1>
 
         <label className="block mb-2 text-sm text-slate-300">Correo</label>
@@ -131,7 +148,17 @@ export default function Login() {
         />
 
         <button
+          type="submit"
           disabled={busy}
+          onClick={() => {
+            // ✅ Si el click llega, esto cambia de inmediato
+            setDiag({ step: "clicked_submit" });
+
+            // ✅ Fuerza submit incluso si algo bloquea el submit normal
+            try {
+              formRef.current?.requestSubmit();
+            } catch {}
+          }}
           className="w-full mt-8 py-4 rounded-2xl bg-white text-slate-900 font-semibold disabled:opacity-60"
         >
           {busy ? "Procesando…" : "Entrar"}
