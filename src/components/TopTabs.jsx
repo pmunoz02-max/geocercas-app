@@ -6,12 +6,11 @@ import OrgSelector from "./OrgSelector";
 import { useAuth } from "../context/AuthContext.jsx";
 
 /**
- * TopTabs — v4
- *
- * Agrega:
- * - Visualización de Organización + Rol activo
- * - Mantiene fallback de labels y forzado de visibilidad
- * - Conserva marca tabs:v4 para verificación en prod
+ * TopTabs — v5
+ * - Muestra email + rol (OWNER/ADMIN/ROOT) como pediste
+ * - Agrega tab "Administrador" automáticamente para roles con permiso
+ * - Mantiene fallback de labels y visibilidad forzada
+ * - Marca "tabs:v5" para confirmar prod
  */
 
 function safeText(v) {
@@ -65,7 +64,7 @@ function resolveLabel(t, tab) {
 export default function TopTabs({ tabs = [] }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const { user, currentOrg, currentRole, isAppRoot } = useAuth();
+  const { user, currentRole, isAppRoot } = useAuth();
 
   const flags = useMemo(() => {
     try {
@@ -81,7 +80,23 @@ export default function TopTabs({ tabs = [] }) {
 
   if (flags.notabs) return null;
 
-  const items = Array.isArray(tabs) ? tabs : [];
+  const roleRaw = safeText(currentRole).trim().toLowerCase();
+  const roleLabel = isAppRoot ? "ROOT" : (roleRaw ? roleRaw.toUpperCase() : "SIN ROL");
+
+  const canSeeAdmin =
+    !!user && (isAppRoot || roleRaw === "owner" || roleRaw === "admin");
+
+  // tabs efectivos (inyecta Administrador si aplica y no existe)
+  const items = useMemo(() => {
+    const base = Array.isArray(tabs) ? [...tabs] : [];
+    if (canSeeAdmin) {
+      const exists = base.some((x) => safeText(x?.path).trim() === "/administrador");
+      if (!exists) {
+        base.push({ path: "/administrador", label: "Administrador" });
+      }
+    }
+    return base;
+  }, [tabs, canSeeAdmin]);
 
   const isActive = (path) => {
     const p = safeText(path).trim();
@@ -89,21 +104,15 @@ export default function TopTabs({ tabs = [] }) {
     return location.pathname === p || location.pathname.startsWith(p + "/");
   };
 
-  const base =
+  const baseCls =
     "no-underline inline-flex items-center justify-center px-4 py-2 rounded-md text-sm " +
     "font-semibold border transition-colors whitespace-nowrap min-w-[92px]";
 
   const activeCls = "shadow-sm border-slate-900";
   const inactiveCls = "border-slate-300 hover:bg-slate-50 hover:border-slate-400";
 
-  const roleLabel = isAppRoot
-    ? "ROOT"
-    : currentRole
-    ? String(currentRole).toUpperCase()
-    : "SIN ROL";
-
   return (
-    <div className="w-full" data-top-tabs="v4">
+    <div className="w-full" data-top-tabs="v5">
       <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
@@ -121,9 +130,9 @@ export default function TopTabs({ tabs = [] }) {
 
                 const on = isActive(path);
                 const label =
-                  safeText(resolveLabel(t, tab)).trim() ||
-                  fallbackFromPath(path);
+                  safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
 
+                // Fuerza visibilidad incluso si hay CSS externo raro
                 const style = on
                   ? { background: "#0f172a", color: "#ffffff" }
                   : { background: "#ffffff", color: "#0f172a" };
@@ -132,7 +141,7 @@ export default function TopTabs({ tabs = [] }) {
                   <NavLink
                     key={path || `tab-${idx}`}
                     to={path}
-                    className={`${base} ${on ? activeCls : inactiveCls}`}
+                    className={`${baseCls} ${on ? activeCls : inactiveCls}`}
                     style={style}
                     title={label}
                   >
@@ -143,20 +152,18 @@ export default function TopTabs({ tabs = [] }) {
             </div>
           </nav>
 
-          {/* ---------- CONTEXTO USUARIO ---------- */}
+          {/* ---------- EMAIL + ROL (pedido #1) ---------- */}
           {user && (
             <div className="hidden md:flex flex-col text-right text-xs px-2 py-1 rounded bg-slate-100">
               <span className="font-medium text-slate-800">
-                {currentOrg?.name ?? "Sin organización"}
+                {user.email ?? "Sin email"}
               </span>
               <span className="text-slate-600">{roleLabel}</span>
             </div>
           )}
 
-          {/* Marca de versión */}
-          <div className="ml-2 text-[10px] text-slate-400 select-none">
-            tabs:v4
-          </div>
+          {/* Marca discreta para confirmar versión */}
+          <div className="ml-2 text-[10px] text-slate-400 select-none">tabs:v5</div>
         </div>
       </div>
     </div>
