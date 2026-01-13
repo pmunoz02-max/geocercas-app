@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 /* =========================
@@ -94,38 +94,12 @@ async function fetchJsonDiag(
       throw err;
     }
     if (!diag.message) diag.message = String(e?.message || e);
-    (e as any).diag = diag;
+    e.diag = diag;
     throw e;
   } finally {
     clearTimeout(timer);
     diag.ms = Math.round(performance.now() - t0);
   }
-}
-
-/**
- * ✅ Blindaje: esperar evento real de auth (SIGNED_IN / TOKEN_REFRESHED)
- * Esto evita el race condition donde setSession() todavía no terminó de persistir.
- */
-async function waitForAuthEvent(timeoutMs = 8000) {
-  return await new Promise<void>((resolve, reject) => {
-    const t = setTimeout(() => {
-      sub?.subscription?.unsubscribe?.();
-      reject(
-        new Error(
-          "Tokens recibidos, pero Supabase no emitió SIGNED_IN/TOKEN_REFRESHED. " +
-            "Esto suele pasar si el navegador/extensión bloquea Local Storage o si hay 2 clientes Supabase distintos en la app."
-        )
-      );
-    }, timeoutMs);
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        clearTimeout(t);
-        sub?.subscription?.unsubscribe?.();
-        resolve();
-      }
-    });
-  });
 }
 
 function hasSbAuthTokenKey(): boolean {
@@ -139,13 +113,15 @@ function hasSbAuthTokenKey(): boolean {
   }
 }
 
+/**
+ * ✅ Espera a que la sesión exista realmente (y preferiblemente que se vea el storage).
+ */
 async function ensureSessionOrThrow(timeoutMs = 8000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const { data } = await supabase.auth.getSession();
     if (data?.session?.access_token) return data.session;
 
-    // Señal secundaria: key en localStorage
     if (hasSbAuthTokenKey()) {
       const { data: s2 } = await supabase.auth.getSession();
       if (s2?.session?.access_token) return s2.session;
@@ -154,8 +130,8 @@ async function ensureSessionOrThrow(timeoutMs = 8000) {
     await new Promise((r) => setTimeout(r, 180));
   }
   throw new Error(
-    "No se pudo establecer la sesión local (sb-*-auth-token). " +
-      "Revisa bloqueadores/extensiones o múltiples clientes Supabase."
+    "Tokens recibidos pero NO se pudo establecer sesión local (sb-*-auth-token). " +
+      "Revisa extensiones/bloqueadores o políticas del navegador."
   );
 }
 
@@ -164,7 +140,6 @@ async function ensureSessionOrThrow(timeoutMs = 8000) {
 ========================= */
 
 export default function Login() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
@@ -198,7 +173,6 @@ export default function Login() {
     setDiag(null);
 
     try {
-      // 1) API password grant
       const { data, diag: d } = await fetchJsonDiag(
         "/api/auth/password",
         { email: emailClean, password },
@@ -206,21 +180,18 @@ export default function Login() {
       );
       setDiag(d);
 
-      // 2) Crear sesión local Supabase
       const { error: setSessionErr } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
       if (setSessionErr) throw setSessionErr;
 
-      // 3) Esperar evento real (blindaje)
-      await waitForAuthEvent(8000);
-
-      // 4) Confirmar que getSession ya ve la sesión (doble blindaje)
+      // ✅ Confirmar sesión antes del redirect
       await ensureSessionOrThrow(8000);
 
-      // 5) Navegar SPA
-      navigate(next, { replace: true });
+      // ✅ REDIRECT DURO: corta rebotes de guards/context en SPA
+      setMsg("✅ Sesión creada. Entrando…");
+      window.location.assign(next);
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
       const m = String(e?.message || "");
