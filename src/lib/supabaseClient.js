@@ -10,23 +10,63 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-// ✅ Memory-only storage: funciona incluso si el navegador bloquea localStorage/sessionStorage.
-// ⚠️ Limitación: al recargar la página se pierde la sesión (porque no hay persistencia).
-function createMemoryStorage() {
+// Storage que NUNCA bloquea y NUNCA lanza errores
+function createNoopMemoryStorage() {
   const mem = new Map();
   return {
-    getItem: (key) => (mem.has(key) ? mem.get(key) : null),
-    setItem: (key, value) => mem.set(key, String(value)),
-    removeItem: (key) => mem.delete(key),
+    getItem: (key) => {
+      try {
+        return mem.has(key) ? mem.get(key) : null;
+      } catch {
+        return null;
+      }
+    },
+    setItem: (key, value) => {
+      try {
+        mem.set(key, String(value));
+      } catch {}
+    },
+    removeItem: (key) => {
+      try {
+        mem.delete(key);
+      } catch {}
+    },
   };
 }
 
+function canWrite(storage) {
+  try {
+    if (!storage) return false;
+    const k = "__tg_storage_test__";
+    storage.setItem(k, "1");
+    storage.removeItem(k);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const hasLocal = typeof window !== "undefined" && canWrite(window.localStorage);
+const hasSession = typeof window !== "undefined" && canWrite(window.sessionStorage);
+
+// 🔥 Clave: si el device bloquea storage, NO persistimos sesión (evita hang en setSession)
+const storageBlocked = !hasLocal && !hasSession;
+
+const chosenStorage = storageBlocked
+  ? createNoopMemoryStorage()
+  : hasLocal
+    ? window.localStorage
+    : window.sessionStorage;
+
+// persistSession false cuando storage está bloqueado → setSession deja de colgarse
+const persistSession = !storageBlocked;
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    persistSession: true,
+    persistSession,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storage: createMemoryStorage(),
+    storage: chosenStorage,
   },
 });
 
