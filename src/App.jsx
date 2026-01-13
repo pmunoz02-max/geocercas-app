@@ -3,7 +3,6 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import AuthGuard from "./components/AuthGuard.jsx";
-import RequireOrg from "./components/org/RequireOrg.jsx";
 
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
@@ -28,6 +27,7 @@ import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
+import RequireOrg from "./components/org/RequireOrg.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 
@@ -75,43 +75,9 @@ function RequireTracker({ children }) {
   return children;
 }
 
-function AdminDeniedScreen({ reason }) {
-  const { user, currentOrg, currentRole, isAppRoot } = useAuth();
-
-  return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
-        <h1 className="text-xl font-semibold text-slate-900">Acceso denegado a Administrador</h1>
-        <p className="text-sm text-slate-600">
-          No se permitió el acceso a <code>/admins</code>. Esto explica por qué al hacer click vuelves a <code>/inicio</code>.
-        </p>
-
-        <div className="text-sm text-slate-700 space-y-1">
-          <div><b>Email:</b> {user?.email ?? "(sin user)"}</div>
-          <div><b>Org actual:</b> {currentOrg?.name ?? currentOrg?.id ?? "(sin org)"}</div>
-          <div><b>Role actual:</b> {String(currentRole ?? "(vacío)")}</div>
-          <div><b>isAppRoot:</b> {String(!!isAppRoot)}</div>
-          <div><b>Motivo:</b> {reason}</div>
-        </div>
-
-        <div className="flex flex-wrap gap-3 pt-2">
-          <a
-            href="/inicio"
-            className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
-          >
-            Volver a Inicio
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /**
- * ✅ AdminRoute EXPLICATIVO:
- * - ROOT (isAppRoot) entra
- * - OWNER/ADMIN entra
- * - Si no, muestra pantalla con el motivo (no rebote silencioso)
+ * ✅ AdminRoute: permite /admins a ROOT o OWNER/ADMIN
+ * (NO depende de RequireOrg)
  */
 function AdminRoute({ children }) {
   const { loading, user, currentRole, isAppRoot } = useAuth();
@@ -128,11 +94,7 @@ function AdminRoute({ children }) {
 
   const role = String(currentRole || "").toLowerCase().trim();
   const ok = role === "owner" || role === "admin";
-
-  if (!ok) {
-    // En vez de “rebotar” sin explicación:
-    return <AdminDeniedScreen reason={`role="${role || "(vacío)"}" no autorizado (se requiere owner/admin o isAppRoot=true)`} />;
-  }
+  if (!ok) return <Navigate to="/inicio" replace />;
 
   return children;
 }
@@ -166,7 +128,7 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* Alias por compatibilidad */}
+        {/* ✅ Alias por compatibilidad */}
         <Route path="/administrador" element={<Navigate to="/admins" replace />} />
 
         {/* Tracker-only */}
@@ -193,6 +155,7 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
 
+          {/* Rutas que sí requieren org */}
           <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
           <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
           <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
@@ -203,15 +166,13 @@ export default function App() {
           <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
-          {/* ✅ Admin module */}
+          {/* ✅ Admin module: SIN RequireOrg para evitar rebote a /inicio */}
           <Route
             path="/admins"
             element={
-              <RequireOrg>
-                <AdminRoute>
-                  <AdminsPage />
-                </AdminRoute>
-              </RequireOrg>
+              <AdminRoute>
+                <AdminsPage />
+              </AdminRoute>
             }
           />
 
