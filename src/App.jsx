@@ -14,7 +14,7 @@ import { useAuth } from "./context/AuthContext.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
 
 /* Layout */
-import ProtectedShell from "./components/ProtectedShell.jsx";
+import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/org/RequireOrg.jsx";
 
 /* Public pages */
