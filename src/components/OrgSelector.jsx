@@ -2,8 +2,10 @@ import React, { useMemo } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 
 /**
- * OrgSelector — FIX React #300
- * Nunca renderizar objetos en JSX. Normaliza cualquier valor a string.
+ * OrgSelector — vOrgStable-1
+ * - Usa organizations/currentOrg/selectOrg desde AuthContext
+ * - Visible para owner/admin/root (isAdmin)
+ * - Nunca renderiza objetos en JSX
  */
 
 function safeText(v, fallback = "") {
@@ -28,18 +30,18 @@ export default function OrgSelector({ className = "" }) {
 
   const orgOptions = useMemo(() => {
     const arr = Array.isArray(organizations) ? organizations : [];
-    return arr.map((o) => {
-      const id = safeText(o?.id, "");
-      const name = safeText(o?.name, "");
-      // Si name viene raro (objeto/null), mostramos fallback seguro
-      const label = name || "Organización";
-      return { id, label };
-    });
+    return arr
+      .map((o) => {
+        const id = safeText(o?.id, "");
+        const name = safeText(o?.name, "");
+        const label = name || "Organización";
+        return { id, label };
+      })
+      .filter((o) => !!o.id);
   }, [organizations]);
 
   const value = safeText(currentOrg?.id, "");
 
-  // Si está cargando o no hay orgs, no renderiza cosas raras
   if (loading) {
     return (
       <div className={safeText(className)}>
@@ -50,10 +52,8 @@ export default function OrgSelector({ className = "" }) {
     );
   }
 
-  // Si no es admin/owner, puedes decidir ocultarlo (mantengo tu lógica original probable)
-  if (!isAdmin) {
-    return null;
-  }
+  // Solo visible para owner/admin/root
+  if (!isAdmin) return null;
 
   return (
     <div className={safeText(className)}>
@@ -66,7 +66,7 @@ export default function OrgSelector({ className = "" }) {
           <option value="">Organización</option>
         ) : (
           orgOptions.map(({ id, label }) => (
-            <option key={id || `org-${label}`} value={id}>
+            <option key={id} value={id}>
               {safeText(label, "Organización")}
             </option>
           ))
