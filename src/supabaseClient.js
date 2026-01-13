@@ -1,3 +1,10 @@
 // src/supabaseClient.js
-export { supabase, getSupabase } from "./lib/supabaseClient.js";
-export { default } from "./lib/supabaseClient.js";
+export { default } from "./lib/supabaseClient";
+
+export {
+  supabase,
+  getSupabase,
+  setMemoryAccessToken,
+  getMemoryAccessToken,
+  clearMemoryAccessToken,
+} from "./lib/supabaseClient";
