@@ -52,7 +52,7 @@ function RequirePanel({ children }) {
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  const role = String(currentRole || "").toLowerCase();
+  const role = String(currentRole || "").toLowerCase().trim();
   if (role === "tracker") return <Navigate to="/tracker-gps" replace />;
 
   return children;
@@ -69,20 +69,50 @@ function RequireTracker({ children }) {
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  const role = String(currentRole || "").toLowerCase();
+  const role = String(currentRole || "").toLowerCase().trim();
   if (role !== "tracker") return <Navigate to="/inicio" replace />;
 
   return children;
 }
 
-function AppRootRoute({ children }) {
-  const { loading, isAppRoot } = useAuth();
-  if (loading) return <FullScreenLoader text="Cargando permisos…" />;
-  if (!isAppRoot) return <Navigate to="/inicio" replace />;
-  return children;
+function AdminDeniedScreen({ reason }) {
+  const { user, currentOrg, currentRole, isAppRoot } = useAuth();
+
+  return (
+    <div className="max-w-2xl mx-auto px-6 py-10">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+        <h1 className="text-xl font-semibold text-slate-900">Acceso denegado a Administrador</h1>
+        <p className="text-sm text-slate-600">
+          No se permitió el acceso a <code>/admins</code>. Esto explica por qué al hacer click vuelves a <code>/inicio</code>.
+        </p>
+
+        <div className="text-sm text-slate-700 space-y-1">
+          <div><b>Email:</b> {user?.email ?? "(sin user)"}</div>
+          <div><b>Org actual:</b> {currentOrg?.name ?? currentOrg?.id ?? "(sin org)"}</div>
+          <div><b>Role actual:</b> {String(currentRole ?? "(vacío)")}</div>
+          <div><b>isAppRoot:</b> {String(!!isAppRoot)}</div>
+          <div><b>Motivo:</b> {reason}</div>
+        </div>
+
+        <div className="flex flex-wrap gap-3 pt-2">
+          <a
+            href="/inicio"
+            className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
+          >
+            Volver a Inicio
+          </a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-/** ✅ Permite /admins a ROOT o a roles OWNER/ADMIN */
+/**
+ * ✅ AdminRoute EXPLICATIVO:
+ * - ROOT (isAppRoot) entra
+ * - OWNER/ADMIN entra
+ * - Si no, muestra pantalla con el motivo (no rebote silencioso)
+ */
 function AdminRoute({ children }) {
   const { loading, user, currentRole, isAppRoot } = useAuth();
   const location = useLocation();
@@ -96,9 +126,13 @@ function AdminRoute({ children }) {
 
   if (isAppRoot) return children;
 
-  const role = String(currentRole || "").toLowerCase();
+  const role = String(currentRole || "").toLowerCase().trim();
   const ok = role === "owner" || role === "admin";
-  if (!ok) return <Navigate to="/inicio" replace />;
+
+  if (!ok) {
+    // En vez de “rebotar” sin explicación:
+    return <AdminDeniedScreen reason={`role="${role || "(vacío)"}" no autorizado (se requiere owner/admin o isAppRoot=true)`} />;
+  }
 
   return children;
 }
@@ -118,7 +152,7 @@ function SmartFallback() {
   if (loading) return <FullScreenLoader text="Cargando…" />;
   if (!user) return <Navigate to="/login" replace />;
 
-  const role = String(currentRole || "").toLowerCase();
+  const role = String(currentRole || "").toLowerCase().trim();
   return role === "tracker" ? <Navigate to="/tracker-gps" replace /> : <Navigate to="/inicio" replace />;
 }
 
@@ -132,7 +166,7 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* ✅ Alias (por si TopTabs viejo apunta a /administrador) */}
+        {/* Alias por compatibilidad */}
         <Route path="/administrador" element={<Navigate to="/admins" replace />} />
 
         {/* Tracker-only */}
@@ -159,88 +193,17 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
 
-          <Route
-            path="/nueva-geocerca"
-            element={
-              <RequireOrg>
-                <NuevaGeocerca />
-              </RequireOrg>
-            }
-          />
+          <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
+          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+          <Route path="/personal" element={<RequireOrg><PersonalPage /></RequireOrg>} />
+          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
+          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
+          <Route path="/costos" element={<RequireOrg><CostosPage /></RequireOrg>} />
+          <Route path="/costos-dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+          <Route path="/tracker-dashboard" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
-          <Route
-            path="/geocercas"
-            element={
-              <RequireOrg>
-                <GeocercasPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/personal"
-            element={
-              <RequireOrg>
-                <PersonalPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/actividades"
-            element={
-              <RequireOrg>
-                <ActividadesPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/asignaciones"
-            element={
-              <RequireOrg>
-                <AsignacionesPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/costos"
-            element={
-              <RequireOrg>
-                <CostosPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/costos-dashboard"
-            element={
-              <RequireOrg>
-                <CostosDashboardPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/tracker-dashboard"
-            element={
-              <RequireOrg>
-                <TrackerDashboard />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/invitar-tracker"
-            element={
-              <RequireOrg>
-                <InvitarTracker />
-              </RequireOrg>
-            }
-          />
-
-          {/* ✅ Admin module: OWNER/ADMIN/ROOT */}
+          {/* ✅ Admin module */}
           <Route
             path="/admins"
             element={
