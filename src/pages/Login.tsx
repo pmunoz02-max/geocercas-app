@@ -33,7 +33,7 @@ function redactTokens(text = "") {
 function canWrite(storage?: Storage): boolean {
   try {
     if (!storage) return false;
-    const k = "__ls_test__";
+    const k = "__storage_test__";
     storage.setItem(k, "1");
     storage.removeItem(k);
     return true;
@@ -158,10 +158,7 @@ async function ensureSessionOrThrow(timeoutMs = 8000) {
     if (data?.session?.access_token) return data.session;
     await new Promise((r) => setTimeout(r, 180));
   }
-  throw new Error(
-    "Tokens recibidos pero no se pudo observar sesión con getSession(). " +
-      "Si localStorage está bloqueado, usa sessionStorage (ya aplicado) o revisa políticas del navegador/WebView."
-  );
+  throw new Error("Tokens recibidos pero no se pudo observar sesión con getSession().");
 }
 
 export default function Login() {
@@ -177,7 +174,13 @@ export default function Login() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [diag, setDiag] = useState<FetchDiag | null>(null);
+
+  // Debug: oculto por defecto
+  const [showDebug, setShowDebug] = useState(false);
   const [sdbg, setSdbg] = useState<SessionDebug | null>(null);
+
+  // Banner “amable”: solo aparece tras intento o al abrir debug
+  const [attemptedLogin, setAttemptedLogin] = useState(false);
 
   const redirectTo = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -188,6 +191,10 @@ export default function Login() {
     const d = await readSessionDebug();
     setSdbg(d);
   }
+
+  const storageBlocked =
+    (sdbg?.canWriteLocalStorage === false && sdbg?.canWriteSessionStorage === false) ||
+    false;
 
   async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -203,7 +210,7 @@ export default function Login() {
     setErr("");
     setMsg("");
     setDiag(null);
-    setSdbg(null);
+    setAttemptedLogin(true);
 
     try {
       const { data, diag: d } = await fetchJsonDiag(
@@ -220,18 +227,20 @@ export default function Login() {
       if (setSessionErr) throw setSessionErr;
 
       await ensureSessionOrThrow(8000);
-      await refreshSessionDebug();
+
+      // Si debug está abierto, lo refrescamos
+      if (showDebug) await refreshSessionDebug();
 
       setMsg("✅ Sesión creada. Entrando…");
-
-      // ✅ SPA navigation (no hard reload)
       navigate(next, { replace: true });
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
       setErr(String(e?.message || "No se pudo iniciar sesión."));
-      try {
-        await refreshSessionDebug();
-      } catch {}
+      if (showDebug) {
+        try {
+          await refreshSessionDebug();
+        } catch {}
+      }
     } finally {
       setBusy(false);
     }
@@ -251,6 +260,7 @@ export default function Login() {
     setErr("");
     setMsg("");
     setDiag(null);
+    setAttemptedLogin(true);
 
     try {
       await fetchJsonDiag("/api/auth/magic", { email: emailClean, redirectTo }, 20000);
@@ -275,6 +285,7 @@ export default function Login() {
     setErr("");
     setMsg("");
     setDiag(null);
+    setAttemptedLogin(true);
 
     try {
       await fetchJsonDiag("/api/auth/recover", { email: emailClean, redirectTo }, 20000);
@@ -283,6 +294,16 @@ export default function Login() {
       setErr(String(e?.message || "No se pudo enviar el correo."));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onToggleDebug() {
+    const nextState = !showDebug;
+    setShowDebug(nextState);
+    if (!showDebug && nextState) {
+      // Al abrir debug, refrescamos y habilitamos banner informativo
+      setAttemptedLogin(true);
+      await refreshSessionDebug();
     }
   }
 
@@ -299,9 +320,28 @@ export default function Login() {
 
         <div className="mt-8 flex justify-center">
           <div className="w-full max-w-3xl bg-slate-900/70 border border-slate-800 rounded-3xl p-8 shadow-xl">
-            <h1 className="text-2xl font-semibold">
-              Entrar <span className="text-xs opacity-60">(LOGIN-V10)</span>
-            </h1>
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="text-2xl font-semibold">
+                Entrar <span className="text-xs opacity-60">(LOGIN-V11)</span>
+              </h1>
+
+              <button
+                type="button"
+                onClick={onToggleDebug}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-700 bg-slate-800 hover:bg-slate-700"
+              >
+                {showDebug ? "Ocultar diagnóstico" : "Diagnóstico avanzado"}
+              </button>
+            </div>
+
+            {/* Banner informativo SOLO después de intento o si abres debug */}
+            {attemptedLogin && sdbg && storageBlocked && (
+              <div className="mt-4 p-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 text-amber-100 text-sm">
+                Este dispositivo está bloqueando el almacenamiento del sitio (localStorage y sessionStorage).
+                Puedes entrar, pero si cierras o recargas, la sesión puede no recordarse.
+                Recomendación: permite “datos del sitio/cookies” para <b>app.tugeocercas.com</b>.
+              </div>
+            )}
 
             <div className="mt-4 inline-flex gap-2">
               <button
@@ -391,27 +431,30 @@ export default function Login() {
               </div>
             )}
 
-            <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
-              <div className="font-semibold text-white/80 mb-1">Debug sesión</div>
-              <div>href: {typeof window !== "undefined" ? window.location.href : "-"}</div>
-              <div>next: {next}</div>
-              <div>VITE_SUPABASE_URL: {String(!!import.meta.env.VITE_SUPABASE_URL)}</div>
-              <div>VITE_SUPABASE_ANON_KEY: {String(!!import.meta.env.VITE_SUPABASE_ANON_KEY)}</div>
-              <div>localStorage writable: {String(sdbg?.canWriteLocalStorage ?? false)}</div>
-              <div>sessionStorage writable: {String(sdbg?.canWriteSessionStorage ?? false)}</div>
-              <div>sb-*-auth-token: {String(sdbg?.hasSbTokenKey ?? false)}</div>
-              <div>session user id: {sdbg?.sessionUserId || "-"}</div>
-              <div>has access_token: {String(sdbg?.hasAccessToken ?? false)}</div>
-              <button
-                type="button"
-                onClick={refreshSessionDebug}
-                className="mt-2 px-3 py-2 rounded-lg bg-slate-700 text-white"
-              >
-                Refrescar debug
-              </button>
-            </div>
+            {/* Debug escondido por defecto */}
+            {showDebug && (
+              <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
+                <div className="font-semibold text-white/80 mb-1">Debug sesión</div>
+                <div>href: {typeof window !== "undefined" ? window.location.href : "-"}</div>
+                <div>next: {next}</div>
+                <div>VITE_SUPABASE_URL: {String(!!import.meta.env.VITE_SUPABASE_URL)}</div>
+                <div>VITE_SUPABASE_ANON_KEY: {String(!!import.meta.env.VITE_SUPABASE_ANON_KEY)}</div>
+                <div>localStorage writable: {String(sdbg?.canWriteLocalStorage ?? false)}</div>
+                <div>sessionStorage writable: {String(sdbg?.canWriteSessionStorage ?? false)}</div>
+                <div>sb-*-auth-token: {String(sdbg?.hasSbTokenKey ?? false)}</div>
+                <div>session user id: {sdbg?.sessionUserId || "-"}</div>
+                <div>has access_token: {String(sdbg?.hasAccessToken ?? false)}</div>
+                <button
+                  type="button"
+                  onClick={refreshSessionDebug}
+                  className="mt-2 px-3 py-2 rounded-lg bg-slate-700 text-white"
+                >
+                  Refrescar debug
+                </button>
+              </div>
+            )}
 
-            {diag && (
+            {showDebug && diag && (
               <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70">
                 <div className="font-semibold text-white/80 mb-2">Diagnóstico</div>
                 <div>url: {diag.url}</div>
