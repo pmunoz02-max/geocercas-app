@@ -1,4 +1,4 @@
-// LOGIN-V15 – evita "Procesando..." infinito (timeout + diag)
+// LOGIN-V16 – hard-timeout (sin depender de Abort) + reset PWA/cache
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -6,9 +6,7 @@ import { supabase } from "../supabaseClient";
 type Diag = {
   at: string;
   step: string;
-  url?: string;
   status?: number | null;
-  ok?: boolean | null;
   ms?: number | null;
   message?: string;
   raw?: string;
@@ -21,21 +19,13 @@ function redactTokens(text = "") {
     .replace(/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted_jwt]");
 }
 
-async function postJsonWithTimeout(url: string, body: any, timeoutMs = 15000) {
-  const controller = new AbortController();
+// ✅ Hard timeout aunque fetch quede colgado
+async function postJsonHardTimeout(url: string, body: any, timeoutMs = 15000) {
   const t0 = performance.now();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const diag: Diag = { at: new Date().toISOString(), step: "start" };
 
-  const diag: Diag = {
-    at: new Date().toISOString(),
-    step: "fetch",
-    url,
-    status: null,
-    ok: null,
-    ms: null,
-  };
-
-  try {
+  const fetchPromise = (async () => {
+    diag.step = "fetch";
     const r = await fetch(url, {
       method: "POST",
       headers: {
@@ -46,15 +36,14 @@ async function postJsonWithTimeout(url: string, body: any, timeoutMs = 15000) {
       cache: "no-store",
       credentials: "same-origin",
       body: JSON.stringify(body),
-      signal: controller.signal,
     });
 
+    diag.step = "read_text";
+    const rawText = await r.text();
     diag.status = r.status;
-    diag.ok = r.ok;
+    diag.raw = rawText ? redactTokens(rawText).slice(0, 700) : "";
 
-    const rawText = await r.text(); // <-- evita bloqueo de r.json()
-    diag.raw = rawText ? redactTokens(rawText).slice(0, 600) : "";
-
+    diag.step = "parse";
     let data: any = {};
     try {
       data = rawText ? JSON.parse(rawText) : {};
@@ -65,27 +54,57 @@ async function postJsonWithTimeout(url: string, body: any, timeoutMs = 15000) {
     if (!r.ok) {
       diag.step = "http_error";
       diag.message = data?.error || data?.message || `HTTP ${r.status}`;
-      const err: any = new Error(diag.message);
-      err.diag = diag;
-      throw err;
+      throw new Error(diag.message);
     }
 
     diag.step = "ok";
     return { data, diag };
-  } catch (e: any) {
-    if (e?.name === "AbortError") {
+  })();
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
       diag.step = "timeout";
-      diag.message = `Timeout ${Math.round(timeoutMs / 1000)}s`;
-      const err: any = new Error(diag.message);
-      err.diag = diag;
-      throw err;
-    }
-    if (!diag.message) diag.message = String(e?.message || e);
+      diag.message = `Timeout ${Math.round(timeoutMs / 1000)}s esperando ${url}`;
+      reject(new Error(diag.message));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+    diag.ms = Math.round(performance.now() - t0);
+    return result;
+  } catch (e: any) {
+    diag.ms = Math.round(performance.now() - t0);
     e.diag = diag;
     throw e;
+  }
+}
+
+// ✅ Botón “Reset Cache/PWA” (para matar bundle viejo)
+async function resetSiteCache() {
+  try {
+    // Unregister SW
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+
+    // Clear Cache Storage
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+
+    // Try clear storages (puede fallar si están bloqueados)
+    try {
+      localStorage.clear();
+    } catch {}
+    try {
+      sessionStorage.clear();
+    } catch {}
   } finally {
-    clearTimeout(timer);
-    diag.ms = Math.round(performance.now() - t0);
+    // Hard reload
+    window.location.href = window.location.pathname + "?v=" + Date.now();
   }
 }
 
@@ -101,7 +120,7 @@ export default function Login() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [diag, setDiag] = useState<Diag | null>(null);
-  const [showDiag, setShowDiag] = useState(false);
+  const [showDiag, setShowDiag] = useState(true); // déjalo visible por ahora para cerrar el caso
 
   async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -116,18 +135,18 @@ export default function Login() {
     setBusy(true);
     setErr("");
     setMsg("");
-    setDiag(null);
+    setDiag({ at: new Date().toISOString(), step: "clicked" });
 
     try {
-      // 1) API
-      const { data, diag: d } = await postJsonWithTimeout(
+      // 1) API con hard-timeout
+      const { data, diag: d } = await postJsonHardTimeout(
         "/api/auth/password",
         { email: emailClean, password },
         15000
       );
       setDiag(d);
 
-      // 2) Sesión (en memoria, aunque storage esté bloqueado)
+      // 2) Set session (en memoria)
       const { error } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
@@ -142,13 +161,12 @@ export default function Login() {
         throw error;
       }
 
-      // 3) Entrar (no dependemos de getSession)
+      // 3) Entrar
       setMsg("✅ Sesión creada. Entrando…");
       navigate(next, { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || "No se pudo iniciar sesión."));
       if (e?.diag) setDiag(e.diag);
-      setShowDiag(true);
     } finally {
       setBusy(false);
     }
@@ -162,34 +180,33 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      <style>{`
-        input:-webkit-autofill,
-        input:-webkit-autofill:hover,
-        input:-webkit-autofill:focus {
-          -webkit-text-fill-color: #ffffff !important;
-          -webkit-box-shadow: 0 0 0px 1000px rgba(30,41,59,0.55) inset !important;
-          box-shadow: 0 0 0px 1000px rgba(30,41,59,0.55) inset !important;
-          transition: background-color 9999s ease-in-out 0s;
-          caret-color: #ffffff !important;
-        }
-      `}</style>
-
       <form
         onSubmit={onPasswordLogin}
         className="w-full max-w-xl bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl"
       >
         <div className="flex items-center justify-between gap-3 mb-8">
           <h1 className="text-3xl font-semibold">
-            Entrar <span className="text-xs opacity-60">(LOGIN-V15)</span>
+            Entrar <span className="text-xs opacity-60">(LOGIN-V16)</span>
           </h1>
 
-          <button
-            type="button"
-            onClick={() => setShowDiag((v) => !v)}
-            className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-700 bg-slate-800 hover:bg-slate-700"
-          >
-            {showDiag ? "Ocultar diagnóstico" : "Diagnóstico"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDiag((v) => !v)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-700 bg-slate-800 hover:bg-slate-700"
+            >
+              {showDiag ? "Ocultar diag" : "Ver diag"}
+            </button>
+
+            <button
+              type="button"
+              onClick={resetSiteCache}
+              className="px-4 py-2 rounded-xl text-sm font-semibold border border-amber-400/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-100"
+              title="Desregistra Service Worker y limpia caches"
+            >
+              Reset Cache/PWA
+            </button>
+          </div>
         </div>
 
         <label className="block mb-2 text-sm text-slate-300">Correo</label>
@@ -239,7 +256,6 @@ export default function Login() {
             <div>busy: {String(busy)}</div>
             <div>diag.step: {diag?.step || "-"}</div>
             <div>diag.status: {String(diag?.status ?? "-")}</div>
-            <div>diag.ok: {String(diag?.ok ?? "-")}</div>
             <div>diag.ms: {String(diag?.ms ?? "-")}</div>
             <div>diag.message: {diag?.message || "-"}</div>
             <div className="break-words">diag.raw: {diag?.raw || "-"}</div>
