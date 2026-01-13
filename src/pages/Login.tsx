@@ -1,4 +1,4 @@
-// LOGIN-V13 – inputs legibles (texto blanco + autofill control)
+// LOGIN-V14 – inputs legibles incluso en "Procesando..."
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -53,26 +53,19 @@ export default function Login() {
     }
   }
 
-  // ✅ Input class: texto siempre blanco + placeholder visible + focus ring
+  // ✅ CLAVE: NO usar disabled:opacity-60 en inputs
   const inputClass =
     "w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 " +
     "text-white placeholder:text-slate-400 caret-white " +
     "outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 " +
-    "disabled:opacity-60";
+    "disabled:opacity-100 disabled:text-white disabled:cursor-not-allowed";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      {/* ✅ Fix autofill (Chrome) */}
       <style>{`
         input:-webkit-autofill,
         input:-webkit-autofill:hover,
-        input:-webkit-autofill:focus,
-        textarea:-webkit-autofill,
-        textarea:-webkit-autofill:hover,
-        textarea:-webkit-autofill:focus,
-        select:-webkit-autofill,
-        select:-webkit-autofill:hover,
-        select:-webkit-autofill:focus {
+        input:-webkit-autofill:focus {
           -webkit-text-fill-color: #ffffff !important;
           -webkit-box-shadow: 0 0 0px 1000px rgba(30,41,59,0.55) inset !important;
           box-shadow: 0 0 0px 1000px rgba(30,41,59,0.55) inset !important;
@@ -86,7 +79,7 @@ export default function Login() {
         className="w-full max-w-xl bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl"
       >
         <h1 className="text-3xl font-semibold mb-8">
-          Entrar <span className="text-xs opacity-60">(LOGIN-V13)</span>
+          Entrar <span className="text-xs opacity-60">(LOGIN-V14)</span>
         </h1>
 
         <label className="block mb-2 text-sm text-slate-300">Correo</label>
