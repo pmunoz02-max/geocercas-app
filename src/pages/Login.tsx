@@ -16,6 +16,12 @@ type FetchDiag = {
   rawText?: string;
 };
 
+type SessionDebug = {
+  hasSbTokenKey: boolean;
+  sessionUserId: string;
+  hasAccessToken: boolean;
+};
+
 /* =========================
    Utilidades
 ========================= */
@@ -113,8 +119,19 @@ function hasSbAuthTokenKey(): boolean {
   }
 }
 
+async function readSessionDebug(): Promise<SessionDebug> {
+  const hasKey = hasSbAuthTokenKey();
+  const { data } = await supabase.auth.getSession();
+  const session = data?.session || null;
+  return {
+    hasSbTokenKey: hasKey,
+    sessionUserId: session?.user?.id ? String(session.user.id) : "",
+    hasAccessToken: !!session?.access_token,
+  };
+}
+
 /**
- * ✅ Espera a que la sesión exista realmente (y preferiblemente que se vea el storage).
+ * ✅ Espera a que la sesión exista realmente.
  */
 async function ensureSessionOrThrow(timeoutMs = 8000) {
   const start = Date.now();
@@ -131,7 +148,7 @@ async function ensureSessionOrThrow(timeoutMs = 8000) {
   }
   throw new Error(
     "Tokens recibidos pero NO se pudo establecer sesión local (sb-*-auth-token). " +
-      "Revisa extensiones/bloqueadores o políticas del navegador."
+      "Causa típica: cache/PWA viejo, extensiones que bloquean storage, o que /login no está usando este Login.tsx."
   );
 }
 
@@ -151,11 +168,21 @@ export default function Login() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [diag, setDiag] = useState<FetchDiag | null>(null);
+  const [sdbg, setSdbg] = useState<SessionDebug | null>(null);
 
   const redirectTo = useMemo(() => {
     if (typeof window === "undefined") return "";
     return `${window.location.origin}/auth/callback`;
   }, []);
+
+  async function refreshSessionDebug() {
+    try {
+      const d = await readSessionDebug();
+      setSdbg(d);
+    } catch {
+      setSdbg({ hasSbTokenKey: false, sessionUserId: "", hasAccessToken: false });
+    }
+  }
 
   async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -171,6 +198,7 @@ export default function Login() {
     setErr("");
     setMsg("");
     setDiag(null);
+    setSdbg(null);
 
     try {
       const { data, diag: d } = await fetchJsonDiag(
@@ -186,20 +214,19 @@ export default function Login() {
       });
       if (setSessionErr) throw setSessionErr;
 
-      // ✅ Confirmar sesión antes del redirect
-      await ensureSessionOrThrow(8000);
+      // Debug visible (para confirmar si el browser realmente guardó sesión)
+      await refreshSessionDebug();
 
-      // ✅ REDIRECT DURO: corta rebotes de guards/context en SPA
+      await ensureSessionOrThrow(8000);
+      await refreshSessionDebug();
+
       setMsg("✅ Sesión creada. Entrando…");
+      // ✅ redirect duro: elimina rebotes por guards/state del SPA
       window.location.assign(next);
     } catch (e: any) {
       if (e?.diag) setDiag(e.diag);
-      const m = String(e?.message || "");
-      if (m.toLowerCase().includes("invalid")) {
-        setErr("Correo o contraseña incorrectos.");
-      } else {
-        setErr(m || "No se pudo iniciar sesión.");
-      }
+      setErr(String(e?.message || "No se pudo iniciar sesión."));
+      await refreshSessionDebug();
     } finally {
       setBusy(false);
     }
@@ -221,15 +248,9 @@ export default function Login() {
     setDiag(null);
 
     try {
-      const { diag: d } = await fetchJsonDiag(
-        "/api/auth/magic",
-        { email: emailClean, redirectTo },
-        20000
-      );
-      setDiag(d);
+      await fetchJsonDiag("/api/auth/magic", { email: emailClean, redirectTo }, 20000);
       setMsg("Te enviamos un enlace de acceso. Revisa tu correo.");
     } catch (e: any) {
-      if (e?.diag) setDiag(e.diag);
       setErr(String(e?.message || "No se pudo enviar el Magic Link."));
     } finally {
       setBusy(false);
@@ -251,15 +272,9 @@ export default function Login() {
     setDiag(null);
 
     try {
-      const { diag: d } = await fetchJsonDiag(
-        "/api/auth/recover",
-        { email: emailClean, redirectTo },
-        20000
-      );
-      setDiag(d);
+      await fetchJsonDiag("/api/auth/recover", { email: emailClean, redirectTo }, 20000);
       setMsg("Te enviamos un correo para recuperar tu contraseña.");
     } catch (e: any) {
-      if (e?.diag) setDiag(e.diag);
       setErr(String(e?.message || "No se pudo enviar el correo."));
     } finally {
       setBusy(false);
@@ -279,7 +294,9 @@ export default function Login() {
 
         <div className="mt-8 flex justify-center">
           <div className="w-full max-w-3xl bg-slate-900/70 border border-slate-800 rounded-3xl p-8 shadow-xl">
-            <h1 className="text-2xl font-semibold">Entrar</h1>
+            <h1 className="text-2xl font-semibold">
+              Entrar <span className="text-xs opacity-60">(LOGIN-V8)</span>
+            </h1>
 
             <div className="mt-4 inline-flex gap-2">
               <button
@@ -368,6 +385,23 @@ export default function Login() {
                 {msg && <div className="text-emerald-300">{msg}</div>}
               </div>
             )}
+
+            {/* Debug de sesión (para cortar el “silencio”) */}
+            <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
+              <div className="font-semibold text-white/80 mb-1">Debug sesión</div>
+              <div>href: {typeof window !== "undefined" ? window.location.href : "-"}</div>
+              <div>next: {next}</div>
+              <div>sb-*-auth-token: {String(sdbg?.hasSbTokenKey ?? false)}</div>
+              <div>session user id: {sdbg?.sessionUserId || "-"}</div>
+              <div>has access_token: {String(sdbg?.hasAccessToken ?? false)}</div>
+              <button
+                type="button"
+                onClick={refreshSessionDebug}
+                className="mt-2 px-3 py-2 rounded-lg bg-slate-700 text-white"
+              >
+                Refrescar debug
+              </button>
+            </div>
 
             {diag && (
               <div className="mt-5 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70">
