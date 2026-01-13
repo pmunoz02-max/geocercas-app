@@ -1,13 +1,11 @@
-// LOGIN-V17 – diag por pasos + timeout también en setSession
+// LOGIN-V18 – NO usa supabase.auth.setSession (evita el hang)
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import supabase, { setMemoryAccessToken } from "../supabaseClient";
 
 type Diag = {
-  at: string;
   step: string;
-  status?: number | null;
-  ms?: number | null;
+  status?: number;
   message?: string;
 };
 
@@ -31,13 +29,12 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
-  const [diag, setDiag] = useState<Diag | null>(null);
+  const [diag, setDiag] = useState<Diag>({ step: "-" });
 
-  async function onPasswordLogin(e: React.FormEvent) {
+  async function onLogin(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
 
@@ -50,13 +47,9 @@ export default function Login() {
     setBusy(true);
     setErr("");
     setMsg("");
-    setDiag({ at: new Date().toISOString(), step: "clicked" });
-
-    const t0 = performance.now();
+    setDiag({ step: "fetching" });
 
     try {
-      setDiag({ at: new Date().toISOString(), step: "fetching" });
-
       const res = await withTimeout(
         fetch("/api/auth/password", {
           method: "POST",
@@ -72,40 +65,26 @@ export default function Login() {
 
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
-      setDiag({
-        at: new Date().toISOString(),
-        step: "setSession_start",
-        status: res.status,
-        ms: Math.round(performance.now() - t0),
-      });
+      setDiag({ step: "token_received", status: res.status });
 
-      // ✅ Timeout también en setSession (si se volviera a colgar, lo veremos)
-      await withTimeout(
-        supabase.auth.setSession({
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
-        }) as any,
+      // ✅ Guardamos token en memoria (NO setSession)
+      setMemoryAccessToken(data.access_token);
+
+      // ✅ (Opcional) Validar token haciendo una llamada simple (si falla, lo veremos)
+      setDiag({ step: "probe_supabase" });
+      const probe = await withTimeout(
+        supabase.from("profiles").select("id").limit(1),
         8000,
-        "supabase.auth.setSession"
+        "probe supabase query"
       );
+      if (probe.error) throw new Error(`Probe error: ${probe.error.message}`);
 
-      setDiag({
-        at: new Date().toISOString(),
-        step: "navigate",
-        status: res.status,
-        ms: Math.round(performance.now() - t0),
-      });
-
-      setMsg("✅ Sesión creada. Entrando…");
+      setMsg("✅ Sesión en memoria activa. Entrando…");
+      setDiag({ step: "navigate" });
       navigate(next, { replace: true });
     } catch (e: any) {
       setErr(String(e?.message || "No se pudo iniciar sesión."));
-      setDiag({
-        at: new Date().toISOString(),
-        step: "error",
-        ms: Math.round(performance.now() - t0),
-        message: String(e?.message || e),
-      });
+      setDiag({ step: "error", message: String(e?.message || e) });
     } finally {
       setBusy(false);
     }
@@ -120,11 +99,11 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
       <form
-        onSubmit={onPasswordLogin}
+        onSubmit={onLogin}
         className="w-full max-w-xl bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl"
       >
         <h1 className="text-3xl font-semibold mb-8">
-          Entrar <span className="text-xs opacity-60">(LOGIN-V17)</span>
+          Entrar <span className="text-xs opacity-60">(LOGIN-V18)</span>
         </h1>
 
         <label className="block mb-2 text-sm text-slate-300">Correo</label>
@@ -134,7 +113,6 @@ export default function Login() {
           onChange={(e) => setEmail(e.target.value)}
           type="email"
           autoComplete="email"
-          inputMode="email"
           placeholder="tu@correo.com"
           disabled={busy}
         />
@@ -169,10 +147,9 @@ export default function Login() {
         <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
           <div className="font-semibold text-white/80">Diagnóstico</div>
           <div>busy: {String(busy)}</div>
-          <div>step: {diag?.step || "-"}</div>
-          <div>status: {String(diag?.status ?? "-")}</div>
-          <div>ms: {String(diag?.ms ?? "-")}</div>
-          <div>message: {diag?.message || "-"}</div>
+          <div>step: {diag.step}</div>
+          <div>status: {String(diag.status ?? "-")}</div>
+          <div>message: {diag.message || "-"}</div>
         </div>
 
         <Link to="/" className="block mt-6 text-sm underline opacity-80 hover:opacity-100">

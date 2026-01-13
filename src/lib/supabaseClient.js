@@ -5,73 +5,50 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    "[supabaseClient] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Fix env vars and redeploy."
-  );
+  throw new Error("[supabaseClient] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY");
 }
 
-// Storage que NUNCA bloquea y NUNCA lanza errores
-function createNoopMemoryStorage() {
-  const mem = new Map();
-  return {
-    getItem: (key) => {
-      try {
-        return mem.has(key) ? mem.get(key) : null;
-      } catch {
-        return null;
-      }
-    },
-    setItem: (key, value) => {
-      try {
-        mem.set(key, String(value));
-      } catch {}
-    },
-    removeItem: (key) => {
-      try {
-        mem.delete(key);
-      } catch {}
-    },
-  };
-}
+// ✅ Token SOLO en memoria (porque tu entorno bloquea storage)
+let MEMORY_ACCESS_TOKEN = null;
 
-function canWrite(storage) {
+export function setMemoryAccessToken(token) {
+  MEMORY_ACCESS_TOKEN = token || null;
   try {
-    if (!storage) return false;
-    const k = "__tg_storage_test__";
-    storage.setItem(k, "1");
-    storage.removeItem(k);
-    return true;
-  } catch {
-    return false;
-  }
+    // realtime auth (si lo usas)
+    if (MEMORY_ACCESS_TOKEN && supabase?.realtime?.setAuth) {
+      supabase.realtime.setAuth(MEMORY_ACCESS_TOKEN);
+    }
+  } catch {}
 }
 
-const hasLocal = typeof window !== "undefined" && canWrite(window.localStorage);
-const hasSession = typeof window !== "undefined" && canWrite(window.sessionStorage);
+export function getMemoryAccessToken() {
+  return MEMORY_ACCESS_TOKEN;
+}
 
-// 🔥 Clave: si el device bloquea storage, NO persistimos sesión (evita hang en setSession)
-const storageBlocked = !hasLocal && !hasSession;
+export function clearMemoryAccessToken() {
+  setMemoryAccessToken(null);
+}
 
-const chosenStorage = storageBlocked
-  ? createNoopMemoryStorage()
-  : hasLocal
-    ? window.localStorage
-    : window.sessionStorage;
+// ✅ Fetch que inyecta Authorization si hay token en memoria
+async function injectedFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  headers.set("apikey", SUPABASE_ANON_KEY);
 
-// persistSession false cuando storage está bloqueado → setSession deja de colgarse
-const persistSession = !storageBlocked;
+  if (MEMORY_ACCESS_TOKEN) {
+    headers.set("Authorization", `Bearer ${MEMORY_ACCESS_TOKEN}`);
+  }
 
+  return fetch(url, { ...options, headers });
+}
+
+// 🔥 Importante: NO dependemos de persistSession ni de setSession
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { fetch: injectedFetch },
   auth: {
-    persistSession,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: chosenStorage,
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
   },
 });
-
-export function getSupabase() {
-  return supabase;
-}
 
 export default supabase;
