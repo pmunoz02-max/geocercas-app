@@ -82,7 +82,7 @@ function AppRootRoute({ children }) {
   return children;
 }
 
-/** ✅ NUEVO: permite /admins a ROOT o a roles OWNER/ADMIN */
+/** ✅ Permite /admins a ROOT o a roles OWNER/ADMIN */
 function AdminRoute({ children }) {
   const { loading, user, currentRole, isAppRoot } = useAuth();
   const location = useLocation();
@@ -131,6 +131,9 @@ export default function App() {
         <Route path="/login" element={<LoginShell />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+
+        {/* ✅ Alias (por si TopTabs viejo apunta a /administrador) */}
+        <Route path="/administrador" element={<Navigate to="/admins" replace />} />
 
         {/* Tracker-only */}
         <Route

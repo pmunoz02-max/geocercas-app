@@ -6,11 +6,10 @@ import OrgSelector from "./OrgSelector";
 import { useAuth } from "../context/AuthContext.jsx";
 
 /**
- * TopTabs — v5
- * - Muestra email + rol (OWNER/ADMIN/ROOT) como pediste
- * - Agrega tab "Administrador" automáticamente para roles con permiso
- * - Mantiene fallback de labels y visibilidad forzada
- * - Marca "tabs:v5" para confirmar prod
+ * TopTabs — v6
+ * - Email + rol visibles
+ * - Inyecta tab Administrador a /admins (ruta real)
+ * - Marca tabs:v6 para confirmar prod
  */
 
 function safeText(v) {
@@ -81,19 +80,15 @@ export default function TopTabs({ tabs = [] }) {
   if (flags.notabs) return null;
 
   const roleRaw = safeText(currentRole).trim().toLowerCase();
-  const roleLabel = isAppRoot ? "ROOT" : (roleRaw ? roleRaw.toUpperCase() : "SIN ROL");
+  const roleLabel = isAppRoot ? "ROOT" : roleRaw ? roleRaw.toUpperCase() : "SIN ROL";
 
-  const canSeeAdmin =
-    !!user && (isAppRoot || roleRaw === "owner" || roleRaw === "admin");
+  const canSeeAdmin = !!user && (isAppRoot || roleRaw === "owner" || roleRaw === "admin");
 
-  // tabs efectivos (inyecta Administrador si aplica y no existe)
   const items = useMemo(() => {
     const base = Array.isArray(tabs) ? [...tabs] : [];
     if (canSeeAdmin) {
-      const exists = base.some((x) => safeText(x?.path).trim() === "/administrador");
-      if (!exists) {
-        base.push({ path: "/administrador", label: "Administrador" });
-      }
+      const exists = base.some((x) => safeText(x?.path).trim() === "/admins");
+      if (!exists) base.push({ path: "/admins", label: "Administrador" });
     }
     return base;
   }, [tabs, canSeeAdmin]);
@@ -112,7 +107,7 @@ export default function TopTabs({ tabs = [] }) {
   const inactiveCls = "border-slate-300 hover:bg-slate-50 hover:border-slate-400";
 
   return (
-    <div className="w-full" data-top-tabs="v5">
+    <div className="w-full" data-top-tabs="v6">
       <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
@@ -121,7 +116,6 @@ export default function TopTabs({ tabs = [] }) {
             </div>
           ) : null}
 
-          {/* ---------- TABS ---------- */}
           <nav className="flex-1 overflow-x-auto">
             <div className="flex gap-2 min-w-max">
               {items.map((tab, idx) => {
@@ -129,10 +123,8 @@ export default function TopTabs({ tabs = [] }) {
                 if (!path) return null;
 
                 const on = isActive(path);
-                const label =
-                  safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
+                const label = safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
 
-                // Fuerza visibilidad incluso si hay CSS externo raro
                 const style = on
                   ? { background: "#0f172a", color: "#ffffff" }
                   : { background: "#ffffff", color: "#0f172a" };
@@ -152,18 +144,14 @@ export default function TopTabs({ tabs = [] }) {
             </div>
           </nav>
 
-          {/* ---------- EMAIL + ROL (pedido #1) ---------- */}
           {user && (
             <div className="hidden md:flex flex-col text-right text-xs px-2 py-1 rounded bg-slate-100">
-              <span className="font-medium text-slate-800">
-                {user.email ?? "Sin email"}
-              </span>
+              <span className="font-medium text-slate-800">{user.email ?? "Sin email"}</span>
               <span className="text-slate-600">{roleLabel}</span>
             </div>
           )}
 
-          {/* Marca discreta para confirmar versión */}
-          <div className="ml-2 text-[10px] text-slate-400 select-none">tabs:v5</div>
+          <div className="ml-2 text-[10px] text-slate-400 select-none">tabs:v6</div>
         </div>
       </div>
     </div>
