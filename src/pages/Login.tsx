@@ -1,4 +1,4 @@
-// LOGIN-V23 – Detector de overlay encima del botón (sin necesidad de click)
+// LOGIN-V24 – Diagnóstico definitivo de eventos (window + DOM onclick) + login token en memoria
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import supabase, { setMemoryAccessToken } from "../supabaseClient";
@@ -9,10 +9,15 @@ type Diag = {
   message?: string;
 };
 
-type Cover = {
-  tag: string;
-  id: string;
-  cls: string;
+type EventDiag = {
+  winPointerDown: number;
+  winClick: number;
+  winKeyDown: number;
+  btnPointerDown: number;
+  btnClick: number;
+  btnDomOnclick: number;
+  last: string;
+  lastTarget: string;
 };
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string) {
@@ -28,16 +33,20 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string) {
   });
 }
 
-function elInfo(el: Element | null): Cover {
-  if (!el) return { tag: "-", id: "-", cls: "-" };
-  const h = el as HTMLElement;
-  const tag = (h.tagName || "-").toLowerCase();
-  const id = (h.id || "-").slice(0, 60) || "-";
-  const cls =
-    (typeof h.className === "string" ? h.className : h.getAttribute("class") || "-")
-      .toString()
-      .slice(0, 160) || "-";
-  return { tag, id, cls };
+function describeTarget(t: any) {
+  try {
+    if (!t) return "-";
+    const el = t as HTMLElement;
+    const tag = (el.tagName || "-").toLowerCase();
+    const id = el.id ? `#${el.id}` : "";
+    const cls =
+      typeof el.className === "string" && el.className
+        ? "." + el.className.split(" ").slice(0, 4).join(".")
+        : "";
+    return `${tag}${id}${cls}`.slice(0, 120);
+  } catch {
+    return "-";
+  }
 }
 
 export default function Login() {
@@ -53,53 +62,36 @@ export default function Login() {
   const [msg, setMsg] = useState("");
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
-  // 👇 detector de “qué está encima del botón”
   const btnRef = useRef<HTMLButtonElement | null>(null);
-  const [cover, setCover] = useState<Cover>({ tag: "-", id: "-", cls: "-" });
-  const [isButtonTop, setIsButtonTop] = useState<boolean>(false);
+  const [ev, setEv] = useState<EventDiag>({
+    winPointerDown: 0,
+    winClick: 0,
+    winKeyDown: 0,
+    btnPointerDown: 0,
+    btnClick: 0,
+    btnDomOnclick: 0,
+    last: "-",
+    lastTarget: "-",
+  });
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      try {
-        const btn = btnRef.current;
-        if (!btn) return;
-
-        const r = btn.getBoundingClientRect();
-        const x = Math.floor(r.left + r.width / 2);
-        const y = Math.floor(r.top + r.height / 2);
-
-        const topEl = document.elementFromPoint(x, y);
-        setCover(elInfo(topEl));
-
-        // ¿el elemento top es el botón (o algo dentro del botón)?
-        const ok = !!topEl && (topEl === btn || btn.contains(topEl));
-        setIsButtonTop(ok);
-      } catch {
-        // ignore
-      }
-    }, 700);
-
-    return () => clearInterval(t);
-  }, []);
-
-  async function handleLogin() {
+  async function doLogin(origin: string) {
     if (busy) return;
 
-    setDiag({ step: "clicked" });
+    setDiag({ step: `login_start(${origin})` });
     setBusy(true);
     setErr("");
     setMsg("");
 
     const emailClean = email.trim().toLowerCase();
     if (!emailClean || !password) {
-      setDiag({ step: "validation_error", message: "Falta correo o contraseña" });
+      setDiag({ step: `validation_error(${origin})`, message: "Falta correo o contraseña" });
       setErr("Escribe tu correo y contraseña.");
       setBusy(false);
       return;
     }
 
     try {
-      setDiag({ step: "fetching" });
+      setDiag({ step: `fetching(${origin})` });
 
       const res = await withTimeout(
         fetch("/api/auth/password", {
@@ -116,30 +108,115 @@ export default function Login() {
 
       if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
 
-      setDiag({ step: "token_received", status: res.status });
+      setDiag({ step: `token_received(${origin})`, status: res.status });
 
-      // token en memoria (NO setSession)
+      // ✅ token en memoria (NO setSession)
       setMemoryAccessToken(data.access_token);
 
-      // probe (ajusta si tu tabla se llama distinto)
-      setDiag({ step: "probe_supabase" });
+      // ✅ probe: usa una tabla real (organizations normalmente existe)
+      setDiag({ step: `probe_supabase(${origin})` });
       const probe = await withTimeout(
         supabase.from("organizations").select("id").limit(1),
         8000,
         "probe organizations"
       );
+
       if (probe.error) throw new Error(`Probe error: ${probe.error.message}`);
 
-      setDiag({ step: "navigate" });
+      setDiag({ step: `navigate(${origin})` });
       setMsg("✅ Sesión activa. Entrando…");
       navigate(next, { replace: true });
     } catch (e: any) {
-      setDiag({ step: "error", message: String(e?.message || e) });
+      setDiag({ step: `error(${origin})`, message: String(e?.message || e) });
       setErr(String(e?.message || "No se pudo iniciar sesión."));
     } finally {
       setBusy(false);
     }
   }
+
+  // ✅ Instrumentación global y del botón (nativa, bypass React)
+  useEffect(() => {
+    const onWinPointerDown = (e: PointerEvent) => {
+      setEv((s) => ({
+        ...s,
+        winPointerDown: s.winPointerDown + 1,
+        last: "window:pointerdown",
+        lastTarget: describeTarget(e.target),
+      }));
+    };
+    const onWinClick = (e: MouseEvent) => {
+      setEv((s) => ({
+        ...s,
+        winClick: s.winClick + 1,
+        last: "window:click",
+        lastTarget: describeTarget(e.target),
+      }));
+    };
+    const onWinKeyDown = (e: KeyboardEvent) => {
+      setEv((s) => ({
+        ...s,
+        winKeyDown: s.winKeyDown + 1,
+        last: `window:keydown(${e.key})`,
+        lastTarget: describeTarget(e.target),
+      }));
+      // Plan B: Enter dispara login
+      if (e.key === "Enter") {
+        doLogin("enter_key");
+      }
+    };
+
+    window.addEventListener("pointerdown", onWinPointerDown, true);
+    window.addEventListener("click", onWinClick, true);
+    window.addEventListener("keydown", onWinKeyDown, true);
+
+    const btn = btnRef.current;
+
+    const onBtnPointerDown = (e: PointerEvent) => {
+      setEv((s) => ({
+        ...s,
+        btnPointerDown: s.btnPointerDown + 1,
+        last: "button:pointerdown",
+        lastTarget: describeTarget(e.target),
+      }));
+    };
+    const onBtnClick = (e: MouseEvent) => {
+      setEv((s) => ({
+        ...s,
+        btnClick: s.btnClick + 1,
+        last: "button:click",
+        lastTarget: describeTarget(e.target),
+      }));
+    };
+
+    if (btn) {
+      btn.addEventListener("pointerdown", onBtnPointerDown, true);
+      btn.addEventListener("click", onBtnClick, true);
+
+      // 🔥 Bypass absoluto: handler DOM directo
+      btn.onclick = () => {
+        setEv((s) => ({
+          ...s,
+          btnDomOnclick: s.btnDomOnclick + 1,
+          last: "button:DOM_onclick",
+          lastTarget: "button",
+        }));
+        doLogin("dom_onclick");
+      };
+    }
+
+    return () => {
+      window.removeEventListener("pointerdown", onWinPointerDown, true);
+      window.removeEventListener("click", onWinClick, true);
+      window.removeEventListener("keydown", onWinKeyDown, true);
+      if (btn) {
+        btn.removeEventListener("pointerdown", onBtnPointerDown, true);
+        btn.removeEventListener("click", onBtnClick, true);
+        // eslint-disable-next-line no-param-reassign
+        btn.onclick = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, email, password, next]);
 
   const inputClass =
     "w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 " +
@@ -148,28 +225,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      {/* Card encima de todo */}
       <div className="w-full max-w-xl relative z-[999999] pointer-events-auto">
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl relative z-[999999] pointer-events-auto">
           <h1 className="text-3xl font-semibold mb-8">
-            Entrar <span className="text-xs opacity-60">(LOGIN-V23)</span>
+            Entrar <span className="text-xs opacity-60">(LOGIN-V24)</span>
           </h1>
-
-          {/* Detector visible */}
-          <div
-            className={`mb-6 p-4 rounded-2xl border text-xs ${
-              isButtonTop
-                ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
-                : "border-red-400/30 bg-red-500/10 text-red-100"
-            }`}
-          >
-            <div className="font-semibold mb-1">
-              Overlay detector: {isButtonTop ? "✅ botón está arriba" : "❌ algo lo cubre"}
-            </div>
-            <div>Top element: {cover.tag}</div>
-            <div>id: {cover.id}</div>
-            <div>class: {cover.cls}</div>
-          </div>
 
           <label className="block mb-2 text-sm text-slate-300">Correo</label>
           <input
@@ -196,13 +256,27 @@ export default function Login() {
           <button
             ref={btnRef}
             type="button"
-            onClick={handleLogin}
             disabled={busy}
             style={{ position: "relative", zIndex: 2147483647, pointerEvents: "auto" }}
             className="w-full mt-8 py-4 rounded-2xl bg-white text-slate-900 font-semibold disabled:opacity-60"
           >
             {busy ? "Procesando…" : "Entrar"}
           </button>
+
+          <div className="mt-4 text-xs p-4 rounded-2xl border border-sky-400/30 bg-sky-500/10 text-sky-100">
+            <div className="font-semibold mb-1">Eventos (bypass React)</div>
+            <div>win:pointerdown = {ev.winPointerDown}</div>
+            <div>win:click = {ev.winClick}</div>
+            <div>win:keydown = {ev.winKeyDown}</div>
+            <div>btn:pointerdown = {ev.btnPointerDown}</div>
+            <div>btn:click = {ev.btnClick}</div>
+            <div>btn:DOM_onclick = {ev.btnDomOnclick}</div>
+            <div className="mt-1">last = {ev.last}</div>
+            <div>lastTarget = {ev.lastTarget}</div>
+            <div className="mt-2 opacity-90">
+              Plan B: presiona <b>Enter</b> en el campo contraseña.
+            </div>
+          </div>
 
           {(err || msg) && (
             <div className="mt-4 text-sm">
