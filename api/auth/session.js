@@ -1,4 +1,3 @@
-// /api/auth/session.js
 import { createClient } from "@supabase/supabase-js";
 
 function getCookie(req, name) {
@@ -10,7 +9,7 @@ function getCookie(req, name) {
 
 export default async function handler(req, res) {
   try {
-    const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const serviceKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
@@ -31,62 +30,82 @@ export default async function handler(req, res) {
       return res.status(200).json({ authenticated: false });
     }
 
-    // Validar token y obtener user
+    // Validar token
     const { data: u, error: uerr } = await sb.auth.getUser(access_token);
     if (uerr || !u?.user) {
       return res.status(200).json({ authenticated: false });
     }
+
     const user = { id: u.user.id, email: u.user.email };
 
-    // Leer profile (service role => no RLS)
+    // Leer profile (service role => sin RLS)
     const { data: profile, error: perr } = await sb
       .from("profiles")
-      .select("id,email,org_id,default_org_id,current_org_id")
+      .select(
+        "id,email,org_id,default_org_id,current_org_id,active_tenant_id"
+      )
       .eq("id", user.id)
       .maybeSingle();
 
     if (perr) throw perr;
 
     let current_org_id =
-      profile?.current_org_id || profile?.default_org_id || profile?.org_id || null;
+      profile?.active_tenant_id ||
+      profile?.current_org_id ||
+      profile?.default_org_id ||
+      profile?.org_id ||
+      null;
 
-    // 🔧 FIX DEFINITIVO: si sigue null => elegir y fijar
+    let ensured = false;
+
+    // 🔧 MODELO C – FIX DEFINITIVO
     if (!current_org_id) {
       const { data: chosen, error: cerr } = await sb.rpc(
         "ensure_current_org_for_user",
         { p_user: user.id }
       );
       if (cerr) throw cerr;
+
       current_org_id = chosen || null;
+      ensured = true;
     }
 
-    // Resolver rol para esa org
+    // Resolver rol
     let role = null;
 
     if (current_org_id) {
-      // Preferir app_user_roles
+      // 1) app_user_roles (role)
       const { data: aur, error: aerr } = await sb
         .from("app_user_roles")
-        .select("role")
+        .select("role, role_name")
         .eq("user_id", user.id)
         .eq("org_id", current_org_id)
         .maybeSingle();
 
       if (aerr && aerr.code !== "PGRST116") throw aerr;
-      role = aur?.role || null;
 
-      // Fallback memberships
+      role = aur?.role || aur?.role_name || null;
+
+      // 2) memberships fallback
       if (!role) {
         const { data: mem, error: merr } = await sb
           .from("memberships")
-          .select("role")
+          .select("role, role_name")
           .eq("user_id", user.id)
           .eq("org_id", current_org_id)
           .maybeSingle();
 
         if (merr && merr.code !== "PGRST116") throw merr;
-        role = mem?.role || null;
+
+        role = mem?.role || mem?.role_name || null;
       }
+    }
+
+    // 🛡️ GARANTÍA FINAL
+    // Si acabamos de auto-crear org (ensure_current_org_for_user),
+    // el rol DEBE existir. Si no vino por lectura, lo forzamos a owner.
+    if (ensured && !role) {
+      role = "owner";
     }
 
     return res.status(200).json({
@@ -96,7 +115,6 @@ export default async function handler(req, res) {
       role
     });
   } catch (e) {
-    // Importantísimo para evitar “FUNCTION_INVOCATION_FAILED” sin info
     console.error("[/api/auth/session] error:", e);
     return res.status(500).json({
       authenticated: false,
