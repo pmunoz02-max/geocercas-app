@@ -1,9 +1,10 @@
+// /api/auth/session.js
 import { createClient } from "@supabase/supabase-js";
 
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
-  const parts = raw.split(";").map(s => s.trim());
-  const hit = parts.find(p => p.startsWith(name + "="));
+  const parts = raw.split(";").map((s) => s.trim());
+  const hit = parts.find((p) => p.startsWith(name + "="));
   return hit ? decodeURIComponent(hit.split("=").slice(1).join("=")) : null;
 }
 
@@ -16,12 +17,12 @@ export default async function handler(req, res) {
     if (!url || !serviceKey) {
       return res.status(500).json({
         authenticated: false,
-        error: "Missing SUPABASE env vars (URL / SERVICE_ROLE_KEY)"
+        error: "Missing SUPABASE env vars (URL / SERVICE_ROLE_KEY)",
       });
     }
 
     const sb = createClient(url, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     // Cookies del login NO-JS
@@ -41,9 +42,7 @@ export default async function handler(req, res) {
     // Leer profile (service role => sin RLS)
     const { data: profile, error: perr } = await sb
       .from("profiles")
-      .select(
-        "id,email,org_id,default_org_id,current_org_id,active_tenant_id"
-      )
+      .select("id,email,org_id,default_org_id,current_org_id,active_tenant_id")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -58,7 +57,7 @@ export default async function handler(req, res) {
 
     let ensured = false;
 
-    // 🔧 MODELO C – FIX DEFINITIVO
+    // MODELO C: si sigue null => crear org + owner (vía SQL)
     if (!current_org_id) {
       const { data: chosen, error: cerr } = await sb.rpc(
         "ensure_current_org_for_user",
@@ -70,40 +69,36 @@ export default async function handler(req, res) {
       ensured = true;
     }
 
-    // Resolver rol
+    // Resolver rol para esa org
     let role = null;
 
     if (current_org_id) {
-      // 1) app_user_roles (role)
+      // 1) Preferir app_user_roles (solo columna 'role' porque role_name no existe)
       const { data: aur, error: aerr } = await sb
         .from("app_user_roles")
-        .select("role, role_name")
+        .select("role")
         .eq("user_id", user.id)
         .eq("org_id", current_org_id)
         .maybeSingle();
 
       if (aerr && aerr.code !== "PGRST116") throw aerr;
+      role = aur?.role || null;
 
-      role = aur?.role || aur?.role_name || null;
-
-      // 2) memberships fallback
+      // 2) Fallback memberships (solo 'role')
       if (!role) {
         const { data: mem, error: merr } = await sb
           .from("memberships")
-          .select("role, role_name")
+          .select("role")
           .eq("user_id", user.id)
           .eq("org_id", current_org_id)
           .maybeSingle();
 
         if (merr && merr.code !== "PGRST116") throw merr;
-
-        role = mem?.role || mem?.role_name || null;
+        role = mem?.role || null;
       }
     }
 
-    // 🛡️ GARANTÍA FINAL
-    // Si acabamos de auto-crear org (ensure_current_org_for_user),
-    // el rol DEBE existir. Si no vino por lectura, lo forzamos a owner.
+    // GARANTÍA: si acabamos de auto-crear org, el rol debe existir (owner)
     if (ensured && !role) {
       role = "owner";
     }
@@ -112,13 +107,13 @@ export default async function handler(req, res) {
       authenticated: true,
       user,
       current_org_id,
-      role
+      role,
     });
   } catch (e) {
     console.error("[/api/auth/session] error:", e);
     return res.status(500).json({
       authenticated: false,
-      error: e?.message || String(e)
+      error: e?.message || String(e),
     });
   }
 }
