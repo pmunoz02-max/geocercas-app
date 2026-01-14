@@ -1,5 +1,5 @@
-// LOGIN-V29.1 – WebView safe (DOM-ref + blur)
-import React, { useMemo, useRef, useState } from "react";
+// LOGIN-V29.2 – WebView/TWA FINAL (focusout capture)
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { setMemoryAccessToken } from "../supabaseClient";
 
@@ -32,10 +32,11 @@ export default function Login() {
   const [err, setErr] = useState("");
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
-  // 🔒 latch anti rate-limit
+  // 🔒 latch anti-rate-limit
   const firedRef = useRef(false);
 
-  // 🔐 refs DOM (CLAVE para WebView)
+  // 🔐 DOM refs
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const passwordRef = useRef<HTMLInputElement | null>(null);
 
   async function doLogin() {
@@ -87,16 +88,32 @@ export default function Login() {
     }
   }
 
+  // 🧠 CLAVE: focusout CAPTURE (WebView universal)
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const handler = () => {
+      doLogin();
+    };
+
+    el.addEventListener("focusout", handler, true); // 👈 capture
+    return () => el.removeEventListener("focusout", handler, true);
+  }, []);
+
   const inputClass =
     "w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 " +
     "text-white placeholder:text-slate-400 outline-none";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
+    <div
+      ref={rootRef}
+      className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4"
+    >
       <div className="w-full max-w-xl">
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
           <h1 className="text-3xl font-semibold mb-6">
-            Entrar <span className="text-xs opacity-60">(LOGIN-V29.1)</span>
+            Entrar <span className="text-xs opacity-60">(LOGIN-V29.2)</span>
           </h1>
 
           <div className="mb-6 text-xs p-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-100">
@@ -122,8 +139,7 @@ export default function Login() {
             type="password"
             autoComplete="current-password"
             disabled={busy}
-            onBlur={doLogin}          // 👈 disparo humano
-            onInput={() => {}}        // 👈 asegura captura en WebView
+            onInput={() => {}} // fuerza actualización interna WebView
           />
 
           <div className="w-full mt-8 py-4 rounded-2xl bg-white/90 text-slate-900 font-semibold text-center">
