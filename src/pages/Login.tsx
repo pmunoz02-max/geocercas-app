@@ -1,7 +1,7 @@
-// LOGIN-V27 – Auto-login inmediato (sin timers, sin eventos, WebView-safe)
+// LOGIN-V28 – FINAL: login inmediato, sin probe RLS
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import supabase, { setMemoryAccessToken } from "../supabaseClient";
+import { setMemoryAccessToken } from "../supabaseClient";
 
 type Diag = {
   step: string;
@@ -40,7 +40,7 @@ export default function Login() {
   const [msg, setMsg] = useState("");
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
-  // evita re-ejecución infinita
+  // evita loops
   const attemptedRef = useRef(false);
 
   async function doLogin() {
@@ -53,10 +53,10 @@ export default function Login() {
     setBusy(true);
     setErr("");
     setMsg("");
-    setDiag({ step: "login_start(auto_sync)" });
+    setDiag({ step: "login_start" });
 
     try {
-      setDiag({ step: "fetching(auto_sync)" });
+      setDiag({ step: "fetching" });
 
       const res = await withTimeout(
         fetch("/api/auth/password", {
@@ -84,16 +84,10 @@ export default function Login() {
       // 🔑 Token en memoria (NO setSession)
       setMemoryAccessToken(data.access_token);
 
-      setDiag({ step: "probe_supabase" });
-      const probe = await withTimeout(
-        supabase.from("organizations").select("id").limit(1),
-        8000,
-        "probe organizations"
-      );
-      if (probe.error) throw new Error(probe.error.message);
-
+      // ✅ ENTRAR DIRECTO
       setDiag({ step: "navigate" });
       setMsg("✅ Sesión activa. Entrando…");
+
       navigate(next, { replace: true });
     } catch (e: any) {
       attemptedRef.current = false;
@@ -103,7 +97,7 @@ export default function Login() {
     }
   }
 
-  // 🔥 AUTO-LOGIN INMEDIATO (sin timers)
+  // 🔥 Auto-login inmediato, sin timers
   useEffect(() => {
     doLogin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,15 +110,15 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      <div className="w-full max-w-xl relative z-[999999] pointer-events-auto">
+      <div className="w-full max-w-xl">
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
           <h1 className="text-3xl font-semibold mb-6">
-            Entrar <span className="text-xs opacity-60">(LOGIN-V27)</span>
+            Entrar <span className="text-xs opacity-60">(LOGIN-V28)</span>
           </h1>
 
-          <div className="mb-6 text-xs p-4 rounded-2xl border border-sky-400/30 bg-sky-500/10 text-sky-100">
-            <b>Modo compatibilidad WebView</b>
-            <div>Login automático inmediato al completar credenciales.</div>
+          <div className="mb-6 text-xs p-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-100">
+            <b>Login estable (modo producción)</b>
+            <div>Ingreso directo tras validar credenciales.</div>
           </div>
 
           <label className="block mb-2 text-sm text-slate-300">Correo</label>
@@ -150,7 +144,7 @@ export default function Login() {
           />
 
           <div className="w-full mt-8 py-4 rounded-2xl bg-white/90 text-slate-900 font-semibold text-center opacity-90">
-            Entrando automáticamente…
+            Entrando…
           </div>
 
           {(err || msg) && (
