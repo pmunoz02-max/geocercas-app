@@ -3,21 +3,20 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-// ✅ path correcto
+// Layout protegido
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 
-// ✅ USAR el RequireOrg real (el que acabas de subir)
+// Guards
 import RequireOrg from "./components/RequireOrg.jsx";
-
-// ✅ usar tu AuthGuard como componente (el que subiste)
 import AuthGuard from "./components/AuthGuard.jsx";
 
-// Páginas
+// Páginas públicas
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
+// Páginas protegidas
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 import Personal from "./pages/Personal.jsx";
@@ -27,6 +26,9 @@ import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
+
+// ✅ Dashboard (Costos)
+import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
 /**
  * HashTokenCatcher (UNIVERSAL)
@@ -147,6 +149,16 @@ export default function App() {
             }
           />
 
+          {/* ✅ Dashboard */}
+          <Route
+            path="/dashboard"
+            element={
+              <RequireOrg>
+                <CostosDashboardPage />
+              </RequireOrg>
+            }
+          />
+
           {/* ---------- Admin (App Root) ---------- */}
           <Route
             path="/admins"
@@ -158,8 +170,15 @@ export default function App() {
           />
         </Route>
 
-        {/* ---------- Fallback ---------- */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* ---------- Fallback UNIVERSAL (evita rebote al /) ---------- */}
+        <Route
+          path="*"
+          element={
+            <AuthGuard>
+              <Navigate to="/inicio" replace />
+            </AuthGuard>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
