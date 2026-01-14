@@ -1,137 +1,114 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+// src/pages/AuthCallback.tsx
+// CALLBACK-V31 – WebView/TWA safe: NO setSession(), solo token en memoria + redirect
+import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { setMemoryAccessToken } from "../supabaseClient";
 
-function parseQuery() {
-  const url = new URL(window.location.href);
-  const token_hash = url.searchParams.get("token_hash") || "";
-  const type = url.searchParams.get("type") || "";
-  const next = url.searchParams.get("next") || "";
-  const error = url.searchParams.get("error") || "";
-  const error_description = url.searchParams.get("error_description") || "";
-  return { url, token_hash, type, next, error, error_description };
-}
+type Diag = {
+  step: string;
+  next?: string;
+  hasAccessToken?: boolean;
+  error?: string;
+};
 
-function parseHash() {
-  const h = window.location.hash || "";
-  const params = new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
-  const access_token = params.get("access_token") || "";
-  const refresh_token = params.get("refresh_token") || "";
-  const type = params.get("type") || "";
-  return { access_token, refresh_token, type };
+function parseHashParams(hash: string) {
+  const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
+  const sp = new URLSearchParams(h);
+  const access_token = sp.get("access_token") || "";
+  const refresh_token = sp.get("refresh_token") || "";
+  const token_type = sp.get("token_type") || "";
+  const expires_in = sp.get("expires_in") || "";
+  const error = sp.get("error") || sp.get("error_description") || "";
+  return { access_token, refresh_token, token_type, expires_in, error };
 }
 
 export default function AuthCallback() {
-  const navigate = useNavigate();
-  const [status, setStatus] = useState("Procesando autenticación…");
-  const [errorMsg, setErrorMsg] = useState("");
+  const [searchParams] = useSearchParams();
+  const fired = useRef(false);
 
-  const info = useMemo(() => {
-    const q = parseQuery();
-    const h = parseHash();
-    return { ...q, ...h };
-  }, []);
+  const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
   useEffect(() => {
-    let alive = true;
+    if (fired.current) return;
+    fired.current = true;
 
-    async function run() {
-      try {
-        if (String(info.type || "").toLowerCase() === "invite") {
-          setErrorMsg(
-            "Este enlace pertenece al sistema antiguo (INVITE) y ya no es válido. Solicita un nuevo Magic Link."
-          );
-          setStatus("Error de autenticación");
-          return;
-        }
+    try {
+      setDiag({ step: "parse_url" });
 
-        const { data: existing } = await supabase.auth.getSession();
-        if (existing?.session?.user) {
-          const target = (info.type || "").toLowerCase() === "recovery" ? "/reset-password" : "/inicio";
-          navigate(target, { replace: true });
-          return;
-        }
+      const next = searchParams.get("next") || "/inicio";
+      const { access_token, error } = parseHashParams(window.location.hash || "");
 
-        if (info.access_token && info.refresh_token) {
-          setStatus("Creando sesión…");
-          const { error } = await supabase.auth.setSession({
-            access_token: info.access_token,
-            refresh_token: info.refresh_token,
-          });
-          if (error) throw error;
+      setDiag({
+        step: "hash_parsed",
+        next,
+        hasAccessToken: !!access_token,
+        error: error || undefined,
+      });
 
-          window.history.replaceState({}, document.title, info.url.pathname + info.url.search);
-
-          const target = (info.type || "").toLowerCase() === "recovery" ? "/reset-password" : "/inicio";
-          navigate(target, { replace: true });
-          return;
-        }
-
-        if (info.token_hash && info.type) {
-          const lockKey = `authcb_v1:${info.type}:${info.token_hash}`;
-          if (sessionStorage.getItem(lockKey)) {
-            setErrorMsg("Este enlace ya fue procesado. Si necesitas entrar, solicita un nuevo Magic Link.");
-            setStatus("Error de autenticación");
-            return;
-          }
-          sessionStorage.setItem(lockKey, "1");
-
-          setStatus("Verificando enlace…");
-          const { error } = await supabase.auth.verifyOtp({
-            type: info.type as any,
-            token_hash: info.token_hash,
-          });
-          if (error) throw error;
-
-          window.history.replaceState({}, document.title, "/auth/callback");
-
-          const t = (info.type || "").toLowerCase();
-          const target = t === "recovery" ? "/reset-password" : "/inicio";
-          navigate(target, { replace: true });
-          return;
-        }
-
-        setErrorMsg("Faltan parámetros de autenticación. Solicita un nuevo Magic Link e inténtalo nuevamente.");
-        setStatus("Error de autenticación");
-      } catch (e: any) {
-        console.error("[AuthCallback] error:", e);
-        if (!alive) return;
-        setStatus("Error de autenticación");
-        setErrorMsg(
-          e?.message || e?.error_description || "Email link inválido o expirado. Solicita un nuevo Magic Link."
-        );
+      // Si Supabase devolvió error
+      if (error) {
+        // Redirige a login con mensaje, sin loops
+        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
+        // Limpia hash para evitar re-proceso si el WebView reusa la URL
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        } catch {}
+        window.location.replace(target);
+        return;
       }
-    }
 
-    run();
-    return () => {
-      alive = false;
-    };
-  }, []);
+      if (!access_token) {
+        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        } catch {}
+        window.location.replace(target);
+        return;
+      }
+
+      // ✅ Fuente de verdad: token en memoria (NO setSession)
+      setDiag({ step: "set_memory_token", next, hasAccessToken: true });
+      setMemoryAccessToken(access_token);
+
+      // Limpia hash (evita repetir callback si la WebView re-renderiza)
+      try {
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname + window.location.search
+        );
+      } catch {}
+
+      // ✅ Redirección directa (sin navigate, sin timers)
+      setDiag({ step: "redirect", next, hasAccessToken: true });
+      window.location.replace(next);
+    } catch (e: any) {
+      const msg = String(e?.message || e || "callback_error");
+      setDiag({ step: "fatal", error: msg });
+
+      const next = searchParams.get("next") || "/inicio";
+      const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+      } catch {}
+      window.location.replace(target);
+    }
+  }, [searchParams]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200 p-4">
-      <div className="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow">
-        <h1 className="text-lg font-semibold">{status}</h1>
+    <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
+      <div className="w-full max-w-xl">
+        <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
+          <h1 className="text-2xl font-semibold">Creando sesión...</h1>
+          <p className="text-sm opacity-70 mt-2">Un momento...</p>
 
-        {errorMsg ? (
-          <>
-            <p className="text-sm opacity-85 whitespace-pre-line">{errorMsg}</p>
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => navigate("/login", { replace: true })}
-                className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium"
-              >
-                Ir a Login
-              </button>
-            </div>
-            <div className="text-[11px] opacity-60">
-              Tip: abre el Magic Link en Chrome/Safari. Si falló antes, intenta en incógnito y solicita un link nuevo.
-            </div>
-          </>
-        ) : (
-          <p className="text-sm opacity-70">Un momento…</p>
-        )}
+          <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 space-y-1">
+            <div>step: {diag.step}</div>
+            <div>next: {diag.next || "-"}</div>
+            <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
+            <div>error: {diag.error || "-"}</div>
+          </div>
+        </div>
       </div>
     </div>
   );
