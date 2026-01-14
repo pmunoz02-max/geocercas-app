@@ -6,7 +6,7 @@ import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
 export default function ProtectedShell() {
-  const { loading, user, currentRole, isAppRoot } = useAuth();
+  const { loading, ready, isLoggedIn, currentRole, isAppRoot } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -14,27 +14,28 @@ export default function ProtectedShell() {
 
   // Tracker-only redirect
   useEffect(() => {
-    if (!user) return;
+    if (loading || !ready) return;
+    if (!isLoggedIn) return;
+
     if (role === "tracker" && location.pathname !== "/tracker-gps") {
       navigate("/tracker-gps", { replace: true });
     }
-  }, [user, role, location.pathname, navigate]);
+  }, [loading, ready, isLoggedIn, role, location.pathname, navigate]);
 
   /**
-   * /admins access rule (SaaS Administrator module):
+   * /admins access rule:
    * ✅ ONLY App Root (global superadmin)
-   * ❌ Owners (clients) must NOT enter
-   * ❌ Admins (org) must NOT enter
    */
   useEffect(() => {
-    if (!user) return;
+    if (loading || !ready) return;
+    if (!isLoggedIn) return;
     if (location.pathname !== "/admins") return;
 
     const canEnterAdmins = Boolean(isAppRoot);
     if (!canEnterAdmins) {
       navigate("/inicio", { replace: true });
     }
-  }, [user, isAppRoot, location.pathname, navigate]);
+  }, [loading, ready, isLoggedIn, isAppRoot, location.pathname, navigate]);
 
   const tabs = useMemo(() => {
     const base = [
@@ -47,7 +48,7 @@ export default function ProtectedShell() {
       { path: "/tracker-dashboard", labelKey: "app.tabs.tracker" },
     ];
 
-    // Org-scoped invite tracker: owner/admin/root (within current org)
+    // Org-scoped invite tracker
     if (role === "owner" || role === "admin" || isAppRoot) {
       base.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
     }
@@ -60,7 +61,7 @@ export default function ProtectedShell() {
     return base;
   }, [role, isAppRoot]);
 
-  if (loading) {
+  if (loading || !ready) {
     return (
       <div className="w-full h-screen flex items-center justify-center text-slate-600">
         Cargando…
@@ -68,9 +69,12 @@ export default function ProtectedShell() {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!isLoggedIn) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?next=${next}`} replace />;
+  }
 
-  // When user is tracker, panel shell shouldn't render.
+  // Cuando user es tracker, el shell no debe renderizar panel
   if (role === "tracker" && location.pathname !== "/tracker-gps") return null;
 
   return (

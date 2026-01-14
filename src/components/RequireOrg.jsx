@@ -13,39 +13,52 @@ function FullScreenLoader({ text = "Cargando tu sesión y organización actual�
 }
 
 /**
- * RequireOrg (UNIVERSAL, sin loader infinito)
- * Estados:
- * - loading -> loader visible (no null)
- * - user null -> AuthGuard se encarga (retorna null)
- * - user con orgs pero currentOrg null -> intenta autocurar (selectOrg)
- * - sin orgs -> redirect onboarding
+ * RequireOrg (UNIVERSAL, sin loops)
+ *
+ * Reglas:
+ * - Si loading o no ready -> loader
+ * - Si no isLoggedIn -> redirect a /login con next
+ * - Si hay organizations pero falta currentOrg -> autocura con selectOrg(primera)
+ * - Si no hay org -> redirect onboarding
  */
 export default function RequireOrg({ children }) {
-  const { loading, user, currentOrg, organizations, selectOrg } = useAuth();
+  const {
+    loading,
+    ready,
+    isLoggedIn,
+    currentOrg,
+    organizations,
+    selectOrg,
+  } = useAuth();
+
   const location = useLocation();
 
+  // Autocuración: si está logueado y hay orgs pero falta currentOrg, selecciona la primera
   useEffect(() => {
-    if (loading) return;
-    if (!user?.id) return;
+    if (loading || !ready) return;
+    if (!isLoggedIn) return;
 
-    // Autocuración: si hay orgs pero no currentOrg, selecciona la primera
     if (!currentOrg?.id && Array.isArray(organizations) && organizations.length > 0) {
       const first = organizations.find((o) => o?.id)?.id;
       if (first) selectOrg(first);
     }
-  }, [loading, user?.id, currentOrg?.id, organizations, selectOrg]);
+  }, [loading, ready, isLoggedIn, currentOrg?.id, organizations, selectOrg]);
 
-  if (loading) return <FullScreenLoader />;
+  // 1) Mientras se hidrata el contexto
+  if (loading || !ready) return <FullScreenLoader />;
 
-  // No logueado → AuthGuard se encarga
-  if (!user) return null;
-
-  // Tiene orgs pero todavía no se asentó currentOrg (un render de diferencia)
-  if (!currentOrg?.id && Array.isArray(organizations) && organizations.length > 0) {
-    return <FullScreenLoader />;
+  // 2) Sin sesión -> login
+  if (!isLoggedIn) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  // Logueado pero sin organizaciones → onboarding obligatorio
+  // 3) Tiene orgs pero todavía no se asentó currentOrg (1 render)
+  if (!currentOrg?.id && Array.isArray(organizations) && organizations.length > 0) {
+    return <FullScreenLoader text="Resolviendo tu organización…" />;
+  }
+
+  // 4) Logueado pero sin organizaciones -> onboarding
   if (!currentOrg?.id) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/onboarding/create-org?next=${next}`} replace />;
