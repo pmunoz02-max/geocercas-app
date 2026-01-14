@@ -1,13 +1,20 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useMemo, useCallback, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useCallback,
+  useState,
+} from "react";
 
 /**
- * AuthContext (UNIVERSAL / TWA-safe)
- * Fuente de verdad: /api/auth/session (cookie HttpOnly tg_at)
+ * AuthContext UNIVERSAL (TWA/WebView safe)
+ * Fuente: /api/auth/session (cookie HttpOnly tg_at)
  *
- * Expone lo que esperan:
- * - ProtectedShell: loading, user, currentRole, isAppRoot
- * - RequireOrg: loading, user, currentOrg, organizations, selectOrg
+ * EXPONE:
+ * - Nuevo: currentRole, currentOrg, organizations, selectOrg, isAppRoot
+ * - Legacy: role, currentOrgId, orgId (para evitar loaders infinitos en páginas viejas)
  */
 
 const AuthContext = createContext(null);
@@ -17,10 +24,7 @@ const LS_ORG_KEY = "tg_current_org_id";
 async function fetchSession() {
   const res = await fetch("/api/auth/session", {
     credentials: "include",
-    headers: {
-      "cache-control": "no-cache",
-      pragma: "no-cache",
-    },
+    headers: { "cache-control": "no-cache", pragma: "no-cache" },
   });
 
   const raw = await res.text();
@@ -30,7 +34,6 @@ async function fetchSession() {
   } catch {
     data = null;
   }
-
   return { ok: res.ok, data };
 }
 
@@ -39,23 +42,41 @@ export function AuthProvider({ children }) {
 
   const [user, setUser] = useState(null);
 
+  // NEW API
   const [currentRole, setCurrentRole] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
 
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
 
-  const selectOrg = useCallback((orgId) => {
-    if (!orgId) return;
+  // Legacy aliases (computed)
+  const role = currentRole; // legacy alias
+  const currentOrgId = currentOrg?.id || null; // legacy alias
+  const orgId = currentOrgId; // another alias
+
+  const selectOrg = useCallback((orgIdToSelect) => {
+    if (!orgIdToSelect) return;
+
     try {
-      localStorage.setItem(LS_ORG_KEY, orgId);
+      localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
     } catch {}
-    setCurrentOrg((prev) => (prev?.id === orgId ? prev : { id: orgId }));
-    setOrganizations((prev) => {
-      if (Array.isArray(prev) && prev.some((o) => o?.id === orgId)) return prev;
-      return [{ id: orgId }, ...(Array.isArray(prev) ? prev : [])];
+
+    // si ya tenemos el objeto en organizations lo usamos
+    setCurrentOrg((prev) => {
+      if (prev?.id === orgIdToSelect) return prev;
+      const found = Array.isArray(organizations)
+        ? organizations.find((o) => o?.id === orgIdToSelect)
+        : null;
+      return found || { id: orgIdToSelect };
     });
-  }, []);
+
+    // asegurar que organizations contenga al menos ese id
+    setOrganizations((prev) => {
+      const arr = Array.isArray(prev) ? prev : [];
+      if (arr.some((o) => o?.id === orgIdToSelect)) return arr;
+      return [{ id: orgIdToSelect }, ...arr];
+    });
+  }, [organizations]);
 
   const bootstrap = useCallback(async () => {
     setLoading(true);
@@ -63,7 +84,6 @@ export function AuthProvider({ children }) {
     try {
       const { ok, data } = await fetchSession();
 
-      // no auth / backend error
       if (!ok || !data || data.authenticated !== true) {
         setUser(null);
         setCurrentRole(null);
@@ -73,23 +93,22 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      // user
       setUser(data.user ?? null);
 
-      // ✅ role: soporta varias llaves por compatibilidad
-      const role =
+      // role (tolerante a múltiples llaves)
+      const resolvedRole =
         data.currentRole ??
         data.current_role ??
         data.role ??
         data.app_role ??
         null;
 
-      setCurrentRole(role);
+      setCurrentRole(resolvedRole ? String(resolvedRole).toLowerCase() : null);
 
-      // ✅ is_app_root opcional si algún día lo mandas desde backend
+      // isAppRoot si algún día lo envías desde backend
       setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
 
-      // ✅ org_id
+      // org id (tolerante)
       const serverOrgId =
         data.current_org_id ??
         data.currentOrgId ??
@@ -97,7 +116,7 @@ export function AuthProvider({ children }) {
         data.orgId ??
         null;
 
-      // Si usuario había seleccionado org antes, mantenla si coincide con serverOrgId
+      // respetar org seleccionada anteriormente si existe, si no usar la del server
       let preferredOrgId = null;
       try {
         preferredOrgId = localStorage.getItem(LS_ORG_KEY);
@@ -105,21 +124,26 @@ export function AuthProvider({ children }) {
 
       const finalOrgId = preferredOrgId || serverOrgId || null;
 
-      // organizations: si backend no manda lista, construimos mínimo
+      // Si backend manda lista de orgs, úsala; si no, crea mínimo con id
       const orgsFromServer = Array.isArray(data.organizations) ? data.organizations : null;
+
       if (orgsFromServer && orgsFromServer.length > 0) {
         setOrganizations(orgsFromServer);
-        // si finalOrgId no está en la lista, cae al primero
-        const found = finalOrgId && orgsFromServer.find((o) => o?.id === finalOrgId);
-        const picked = found?.id || orgsFromServer.find((o) => o?.id)?.id || null;
-        setCurrentOrg(picked ? orgsFromServer.find((o) => o?.id === picked) : null);
+
+        const picked =
+          (finalOrgId && orgsFromServer.find((o) => o?.id === finalOrgId)?.id) ||
+          orgsFromServer.find((o) => o?.id)?.id ||
+          null;
+
+        const orgObj = picked ? orgsFromServer.find((o) => o?.id === picked) : null;
+        setCurrentOrg(orgObj || null);
+
         if (picked) {
           try {
             localStorage.setItem(LS_ORG_KEY, picked);
           } catch {}
         }
       } else {
-        // modo mínimo (suficiente para RequireOrg + filtros por currentOrg.id)
         if (finalOrgId) {
           setOrganizations([{ id: finalOrgId }]);
           setCurrentOrg({ id: finalOrgId });
@@ -144,6 +168,7 @@ export function AuthProvider({ children }) {
     try {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     } catch {}
+
     try {
       localStorage.removeItem(LS_ORG_KEY);
     } catch {}
@@ -153,28 +178,47 @@ export function AuthProvider({ children }) {
     setIsAppRoot(false);
     setOrganizations([]);
     setCurrentOrg(null);
+
     window.location.href = "/login";
   }, []);
 
   const value = useMemo(
     () => ({
+      // base
       loading,
       user,
+      isLoggedIn: Boolean(user),
 
-      // roles
+      // NEW
       currentRole,
       isAppRoot,
-
-      // org context
       organizations,
       currentOrg,
       selectOrg,
+
+      // LEGACY (para páginas viejas)
+      role,
+      currentOrgId,
+      orgId,
 
       // helpers
       refreshSession: bootstrap,
       logout,
     }),
-    [loading, user, currentRole, isAppRoot, organizations, currentOrg, selectOrg, bootstrap, logout]
+    [
+      loading,
+      user,
+      currentRole,
+      isAppRoot,
+      organizations,
+      currentOrg,
+      selectOrg,
+      role,
+      currentOrgId,
+      orgId,
+      bootstrap,
+      logout,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -182,6 +226,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
