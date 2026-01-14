@@ -3,20 +3,21 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 
 import { useAuth } from "./context/AuthContext.jsx";
 
-// Layout protegido
+// ✅ path correcto
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 
-// Guards
+// ✅ USAR el RequireOrg real (el que acabas de subir)
 import RequireOrg from "./components/RequireOrg.jsx";
+
+// ✅ usar tu AuthGuard como componente (el que subiste)
 import AuthGuard from "./components/AuthGuard.jsx";
 
-// Páginas públicas
+// Páginas
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Páginas protegidas
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 import Personal from "./pages/Personal.jsx";
@@ -26,9 +27,6 @@ import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
-
-// ✅ Dashboard (Costos)
-import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
 /**
  * HashTokenCatcher (UNIVERSAL)
@@ -149,16 +147,6 @@ export default function App() {
             }
           />
 
-          {/* ✅ Dashboard */}
-          <Route
-            path="/dashboard"
-            element={
-              <RequireOrg>
-                <CostosDashboardPage />
-              </RequireOrg>
-            }
-          />
-
           {/* ---------- Admin (App Root) ---------- */}
           <Route
             path="/admins"
@@ -170,15 +158,8 @@ export default function App() {
           />
         </Route>
 
-        {/* ---------- Fallback UNIVERSAL (evita rebote al /) ---------- */}
-        <Route
-          path="*"
-          element={
-            <AuthGuard>
-              <Navigate to="/inicio" replace />
-            </AuthGuard>
-          }
-        />
+        {/* ---------- Fallback ---------- */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

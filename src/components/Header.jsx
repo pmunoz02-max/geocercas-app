@@ -21,7 +21,14 @@ function NavItem({ to, children }) {
 }
 
 export default function Header() {
-  const { user, loading, currentOrg, currentRole, isAppRoot, supabase } = useAuth();
+  const {
+    user,
+    loading,
+    currentOrg,
+    currentRole,
+    isAppRoot,
+    supabase,
+  } = useAuth();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,9 +45,6 @@ export default function Header() {
     : currentRole
     ? currentRole.toUpperCase()
     : "SIN ROL";
-
-  // ✅ Permisos UI
-  const canManage = isAppRoot || currentRole === "owner" || currentRole === "admin";
 
   return (
     <header className="w-full border-b bg-white">
@@ -60,15 +64,6 @@ export default function Header() {
               <NavItem to="/asignaciones">Asignaciones</NavItem>
               <NavItem to="/reportes">Reportes</NavItem>
               <NavItem to="/tracker">Tracker</NavItem>
-
-              {/* ✅ Dashboard visible solo admin/owner/root */}
-              {canManage && <NavItem to="/dashboard">Dashboard</NavItem>}
-
-              {/* ✅ Invitar Tracker visible solo admin/owner/root */}
-              {canManage && <NavItem to="/invitar-tracker">Invitar Tracker</NavItem>}
-
-              {/* ✅ Admin Root-only */}
-              {isAppRoot && <NavItem to="/admins">Administrador</NavItem>}
             </nav>
           )}
         </div>
@@ -81,7 +76,9 @@ export default function Header() {
                 <span className="font-medium text-gray-800">
                   {currentOrg?.name ?? "Sin organización"}
                 </span>
-                <span className="text-gray-600">{roleLabel}</span>
+                <span className="text-gray-600">
+                  {roleLabel}
+                </span>
               </div>
 
               <button
@@ -110,14 +107,7 @@ export default function Header() {
             <NavItem to="/inicio">Inicio</NavItem>
             <NavItem to="/geocercas">Geocercas</NavItem>
             <NavItem to="/personal">Personal</NavItem>
-            <NavItem to="/actividades">Actividades</NavItem>
-            <NavItem to="/asignaciones">Asignaciones</NavItem>
-            <NavItem to="/reportes">Reportes</NavItem>
             <NavItem to="/tracker">Tracker</NavItem>
-
-            {canManage && <NavItem to="/dashboard">Dashboard</NavItem>}
-            {canManage && <NavItem to="/invitar-tracker">Invitar Tracker</NavItem>}
-            {isAppRoot && <NavItem to="/admins">Administrador</NavItem>}
           </div>
         </div>
       )}
