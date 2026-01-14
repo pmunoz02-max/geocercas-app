@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Cookies del login NO-JS
+    // Cookie HttpOnly del login
     const access_token = getCookie(req, "tg_at");
     if (!access_token) {
       return res.status(200).json({ authenticated: false });
@@ -39,74 +39,26 @@ export default async function handler(req, res) {
 
     const user = { id: u.user.id, email: u.user.email };
 
-    // Leer profile (service role => sin RLS)
-    const { data: profile, error: perr } = await sb
-      .from("profiles")
-      .select("id,email,org_id,default_org_id,current_org_id,active_tenant_id")
-      .eq("id", user.id)
-      .maybeSingle();
+    // 🔥 BOOTSTRAP UNIVERSAL (LA CLAVE)
+    const { data: boot, error: berr } = await sb.rpc(
+      "bootstrap_session_context"
+    );
 
-    if (perr) throw perr;
+    if (berr) throw berr;
 
-    let current_org_id =
-      profile?.active_tenant_id ||
-      profile?.current_org_id ||
-      profile?.default_org_id ||
-      profile?.org_id ||
-      null;
-
-    let ensured = false;
-
-    // MODELO C: si sigue null => crear org + owner (vía SQL)
-    if (!current_org_id) {
-      const { data: chosen, error: cerr } = await sb.rpc(
-        "ensure_current_org_for_user",
-        { p_user: user.id }
-      );
-      if (cerr) throw cerr;
-
-      current_org_id = chosen || null;
-      ensured = true;
+    if (!Array.isArray(boot) || !boot[0]) {
+      return res.status(500).json({
+        authenticated: false,
+        error: "bootstrap_session_context returned empty",
+      });
     }
 
-    // Resolver rol para esa org
-    let role = null;
-
-    if (current_org_id) {
-      // 1) Preferir app_user_roles (solo columna 'role' porque role_name no existe)
-      const { data: aur, error: aerr } = await sb
-        .from("app_user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("org_id", current_org_id)
-        .maybeSingle();
-
-      if (aerr && aerr.code !== "PGRST116") throw aerr;
-      role = aur?.role || null;
-
-      // 2) Fallback memberships (solo 'role')
-      if (!role) {
-        const { data: mem, error: merr } = await sb
-          .from("memberships")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("org_id", current_org_id)
-          .maybeSingle();
-
-        if (merr && merr.code !== "PGRST116") throw merr;
-        role = mem?.role || null;
-      }
-    }
-
-    // GARANTÍA: si acabamos de auto-crear org, el rol debe existir (owner)
-    if (ensured && !role) {
-      role = "owner";
-    }
+    const { org_id, role } = boot[0];
 
     return res.status(200).json({
       authenticated: true,
       user,
-      current_org_id,
+      current_org_id: org_id,
       role,
     });
   } catch (e) {
