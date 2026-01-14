@@ -3,104 +3,104 @@ import { createClient } from "@supabase/supabase-js";
 
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
-  const m = raw.match(new RegExp(`(?:^|; )${name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : null;
+  const parts = raw.split(";").map(s => s.trim());
+  const hit = parts.find(p => p.startsWith(name + "="));
+  return hit ? decodeURIComponent(hit.split("=").slice(1).join("=")) : null;
 }
 
 export default async function handler(req, res) {
   try {
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+    const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!url || !serviceKey) {
       return res.status(500).json({
-        error: "Missing env",
-        missing: {
-          SUPABASE_URL: !!SUPABASE_URL,
-          SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY,
-        },
+        authenticated: false,
+        error: "Missing SUPABASE env vars (URL / SERVICE_ROLE_KEY)"
       });
     }
 
-    // Cookies que ya viste en el browser: tg_at / tg_rt
-    const access_token = getCookie(req, "tg_at");
-    const refresh_token = getCookie(req, "tg_rt");
+    const sb = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
 
+    // Cookies del login NO-JS
+    const access_token = getCookie(req, "tg_at");
     if (!access_token) {
       return res.status(200).json({ authenticated: false });
     }
 
-    // Cliente "server" usando el JWT del usuario en headers (respeta RLS como el usuario)
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
-
-    // Validar token y obtener usuario
-    const { data: userData, error: userErr } = await supabase.auth.getUser(access_token);
-    if (userErr || !userData?.user) {
+    // Validar token y obtener user
+    const { data: u, error: uerr } = await sb.auth.getUser(access_token);
+    if (uerr || !u?.user) {
       return res.status(200).json({ authenticated: false });
     }
+    const user = { id: u.user.id, email: u.user.email };
 
-    const user = { id: userData.user.id, email: userData.user.email };
-
-    // Traer profile (current_org_id, default_org_id, etc.)
-    const { data: profile, error: profErr } = await supabase
+    // Leer profile (service role => no RLS)
+    const { data: profile, error: perr } = await sb
       .from("profiles")
-      .select("id,email,role,org_id,default_org_id,current_org_id,tenant_id,active_tenant_id")
+      .select("id,email,org_id,default_org_id,current_org_id")
       .eq("id", user.id)
       .maybeSingle();
 
-    // Si RLS impide leer profile, NO reventamos: devolvemos lo mínimo para debug
-    if (profErr) {
-      return res.status(200).json({
-        authenticated: true,
-        user,
-        profile_error: profErr.message,
-      });
-    }
+    if (perr) throw perr;
 
-    // Determinar org actual
-    const current_org_id =
+    let current_org_id =
       profile?.current_org_id || profile?.default_org_id || profile?.org_id || null;
 
-    // Determinar rol (preferimos app_user_roles si existe; si falla, usar profile.role)
-    let role = profile?.role || null;
+    // 🔧 FIX DEFINITIVO: si sigue null => elegir y fijar
+    if (!current_org_id) {
+      const { data: chosen, error: cerr } = await sb.rpc(
+        "ensure_current_org_for_user",
+        { p_user: user.id }
+      );
+      if (cerr) throw cerr;
+      current_org_id = chosen || null;
+    }
+
+    // Resolver rol para esa org
+    let role = null;
 
     if (current_org_id) {
-      const { data: aur, error: aurErr } = await supabase
+      // Preferir app_user_roles
+      const { data: aur, error: aerr } = await sb
         .from("app_user_roles")
         .select("role")
         .eq("user_id", user.id)
         .eq("org_id", current_org_id)
         .maybeSingle();
 
-      if (!aurErr && aur?.role) role = aur.role;
+      if (aerr && aerr.code !== "PGRST116") throw aerr;
+      role = aur?.role || null;
+
+      // Fallback memberships
+      if (!role) {
+        const { data: mem, error: merr } = await sb
+          .from("memberships")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("org_id", current_org_id)
+          .maybeSingle();
+
+        if (merr && merr.code !== "PGRST116") throw merr;
+        role = mem?.role || null;
+      }
     }
 
     return res.status(200).json({
-      version: "auth-session-v1",
       authenticated: true,
       user,
       current_org_id,
-      role,
-      profile: profile || null,
-      has_refresh_cookie: !!refresh_token,
+      role
     });
   } catch (e) {
-    // Esto evita "FUNCTION_INVOCATION_FAILED" sin info
+    // Importantísimo para evitar “FUNCTION_INVOCATION_FAILED” sin info
+    console.error("[/api/auth/session] error:", e);
     return res.status(500).json({
-      error: "session_handler_crash",
-      message: e?.message || String(e),
-      stack: e?.stack || null,
+      authenticated: false,
+      error: e?.message || String(e)
     });
   }
 }
