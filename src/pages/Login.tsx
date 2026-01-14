@@ -1,5 +1,5 @@
-// LOGIN-V24 – Diagnóstico definitivo de eventos (window + DOM onclick) + login token en memoria
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// LOGIN-V25 – Login por Enter robusto (keyCode/which) + listeners en window+document
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import supabase, { setMemoryAccessToken } from "../supabaseClient";
 
@@ -10,13 +10,15 @@ type Diag = {
 };
 
 type EventDiag = {
-  winPointerDown: number;
-  winClick: number;
   winKeyDown: number;
-  btnPointerDown: number;
-  btnClick: number;
-  btnDomOnclick: number;
+  docKeyDown: number;
+  winClick: number;
+  winPointerDown: number;
   last: string;
+  key?: any;
+  code?: any;
+  keyCode?: any;
+  which?: any;
   lastTarget: string;
 };
 
@@ -43,10 +45,20 @@ function describeTarget(t: any) {
       typeof el.className === "string" && el.className
         ? "." + el.className.split(" ").slice(0, 4).join(".")
         : "";
-    return `${tag}${id}${cls}`.slice(0, 120);
+    return `${tag}${id}${cls}`.slice(0, 140);
   } catch {
     return "-";
   }
+}
+
+function isEnterEvent(e: any) {
+  // Soporta entornos donde e.key viene undefined
+  const k = e?.key;
+  const c = e?.code;
+  const kc = e?.keyCode;
+  const w = e?.which;
+
+  return k === "Enter" || c === "Enter" || kc === 13 || w === 13;
 }
 
 export default function Login() {
@@ -62,15 +74,16 @@ export default function Login() {
   const [msg, setMsg] = useState("");
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
-  const btnRef = useRef<HTMLButtonElement | null>(null);
   const [ev, setEv] = useState<EventDiag>({
-    winPointerDown: 0,
-    winClick: 0,
     winKeyDown: 0,
-    btnPointerDown: 0,
-    btnClick: 0,
-    btnDomOnclick: 0,
+    docKeyDown: 0,
+    winClick: 0,
+    winPointerDown: 0,
     last: "-",
+    key: "-",
+    code: "-",
+    keyCode: "-",
+    which: "-",
     lastTarget: "-",
   });
 
@@ -110,17 +123,16 @@ export default function Login() {
 
       setDiag({ step: `token_received(${origin})`, status: res.status });
 
-      // ✅ token en memoria (NO setSession)
+      // ✅ Token en memoria (NO setSession)
       setMemoryAccessToken(data.access_token);
 
-      // ✅ probe: usa una tabla real (organizations normalmente existe)
+      // ✅ Probe: usa una tabla real
       setDiag({ step: `probe_supabase(${origin})` });
       const probe = await withTimeout(
         supabase.from("organizations").select("id").limit(1),
         8000,
         "probe organizations"
       );
-
       if (probe.error) throw new Error(`Probe error: ${probe.error.message}`);
 
       setDiag({ step: `navigate(${origin})` });
@@ -134,9 +146,8 @@ export default function Login() {
     }
   }
 
-  // ✅ Instrumentación global y del botón (nativa, bypass React)
   useEffect(() => {
-    const onWinPointerDown = (e: PointerEvent) => {
+    const onWinPointerDown = (e: any) => {
       setEv((s) => ({
         ...s,
         winPointerDown: s.winPointerDown + 1,
@@ -144,7 +155,8 @@ export default function Login() {
         lastTarget: describeTarget(e.target),
       }));
     };
-    const onWinClick = (e: MouseEvent) => {
+
+    const onWinClick = (e: any) => {
       setEv((s) => ({
         ...s,
         winClick: s.winClick + 1,
@@ -152,68 +164,47 @@ export default function Login() {
         lastTarget: describeTarget(e.target),
       }));
     };
-    const onWinKeyDown = (e: KeyboardEvent) => {
+
+    const onWinKeyDown = (e: any) => {
       setEv((s) => ({
         ...s,
         winKeyDown: s.winKeyDown + 1,
-        last: `window:keydown(${e.key})`,
+        last: "window:keydown",
+        key: e?.key,
+        code: e?.code,
+        keyCode: e?.keyCode,
+        which: e?.which,
         lastTarget: describeTarget(e.target),
       }));
-      // Plan B: Enter dispara login
-      if (e.key === "Enter") {
-        doLogin("enter_key");
-      }
+
+      if (isEnterEvent(e)) doLogin("enter(window)");
+    };
+
+    const onDocKeyDown = (e: any) => {
+      setEv((s) => ({
+        ...s,
+        docKeyDown: s.docKeyDown + 1,
+        last: "document:keydown",
+        key: e?.key,
+        code: e?.code,
+        keyCode: e?.keyCode,
+        which: e?.which,
+        lastTarget: describeTarget(e.target),
+      }));
+
+      if (isEnterEvent(e)) doLogin("enter(document)");
     };
 
     window.addEventListener("pointerdown", onWinPointerDown, true);
     window.addEventListener("click", onWinClick, true);
     window.addEventListener("keydown", onWinKeyDown, true);
-
-    const btn = btnRef.current;
-
-    const onBtnPointerDown = (e: PointerEvent) => {
-      setEv((s) => ({
-        ...s,
-        btnPointerDown: s.btnPointerDown + 1,
-        last: "button:pointerdown",
-        lastTarget: describeTarget(e.target),
-      }));
-    };
-    const onBtnClick = (e: MouseEvent) => {
-      setEv((s) => ({
-        ...s,
-        btnClick: s.btnClick + 1,
-        last: "button:click",
-        lastTarget: describeTarget(e.target),
-      }));
-    };
-
-    if (btn) {
-      btn.addEventListener("pointerdown", onBtnPointerDown, true);
-      btn.addEventListener("click", onBtnClick, true);
-
-      // 🔥 Bypass absoluto: handler DOM directo
-      btn.onclick = () => {
-        setEv((s) => ({
-          ...s,
-          btnDomOnclick: s.btnDomOnclick + 1,
-          last: "button:DOM_onclick",
-          lastTarget: "button",
-        }));
-        doLogin("dom_onclick");
-      };
-    }
+    document.addEventListener("keydown", onDocKeyDown, true);
 
     return () => {
       window.removeEventListener("pointerdown", onWinPointerDown, true);
       window.removeEventListener("click", onWinClick, true);
       window.removeEventListener("keydown", onWinKeyDown, true);
-      if (btn) {
-        btn.removeEventListener("pointerdown", onBtnPointerDown, true);
-        btn.removeEventListener("click", onBtnClick, true);
-        // eslint-disable-next-line no-param-reassign
-        btn.onclick = null;
-      }
+      document.removeEventListener("keydown", onDocKeyDown, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy, email, password, next]);
@@ -228,8 +219,14 @@ export default function Login() {
       <div className="w-full max-w-xl relative z-[999999] pointer-events-auto">
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl relative z-[999999] pointer-events-auto">
           <h1 className="text-3xl font-semibold mb-8">
-            Entrar <span className="text-xs opacity-60">(LOGIN-V24)</span>
+            Entrar <span className="text-xs opacity-60">(LOGIN-V25)</span>
           </h1>
+
+          <div className="mb-5 text-xs p-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 text-amber-100">
+            <div className="font-semibold mb-1">Modo entrada por teclado</div>
+            <div>👉 Presiona <b>Enter</b> en el campo contraseña para iniciar login.</div>
+            <div className="opacity-90 mt-1">Este modo evita clicks/taps si tu entorno los bloquea.</div>
+          </div>
 
           <label className="block mb-2 text-sm text-slate-300">Correo</label>
           <input
@@ -253,29 +250,9 @@ export default function Login() {
             disabled={busy}
           />
 
-          <button
-            ref={btnRef}
-            type="button"
-            disabled={busy}
-            style={{ position: "relative", zIndex: 2147483647, pointerEvents: "auto" }}
-            className="w-full mt-8 py-4 rounded-2xl bg-white text-slate-900 font-semibold disabled:opacity-60"
-          >
-            {busy ? "Procesando…" : "Entrar"}
-          </button>
-
-          <div className="mt-4 text-xs p-4 rounded-2xl border border-sky-400/30 bg-sky-500/10 text-sky-100">
-            <div className="font-semibold mb-1">Eventos (bypass React)</div>
-            <div>win:pointerdown = {ev.winPointerDown}</div>
-            <div>win:click = {ev.winClick}</div>
-            <div>win:keydown = {ev.winKeyDown}</div>
-            <div>btn:pointerdown = {ev.btnPointerDown}</div>
-            <div>btn:click = {ev.btnClick}</div>
-            <div>btn:DOM_onclick = {ev.btnDomOnclick}</div>
-            <div className="mt-1">last = {ev.last}</div>
-            <div>lastTarget = {ev.lastTarget}</div>
-            <div className="mt-2 opacity-90">
-              Plan B: presiona <b>Enter</b> en el campo contraseña.
-            </div>
+          {/* Botón solo visual; el login se dispara por Enter en este build */}
+          <div className="w-full mt-8 py-4 rounded-2xl bg-white/90 text-slate-900 font-semibold text-center opacity-90">
+            Entrar (usa Enter)
           </div>
 
           {(err || msg) && (
@@ -286,7 +263,21 @@ export default function Login() {
           )}
 
           <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
-            <div className="font-semibold text-white/80">Diagnóstico</div>
+            <div className="font-semibold text-white/80">Eventos</div>
+            <div>win:pointerdown = {ev.winPointerDown}</div>
+            <div>win:click = {ev.winClick}</div>
+            <div>win:keydown = {ev.winKeyDown}</div>
+            <div>doc:keydown = {ev.docKeyDown}</div>
+            <div className="mt-2">last = {ev.last}</div>
+            <div>key = {String(ev.key)}</div>
+            <div>code = {String(ev.code)}</div>
+            <div>keyCode = {String(ev.keyCode)}</div>
+            <div>which = {String(ev.which)}</div>
+            <div>target = {ev.lastTarget}</div>
+          </div>
+
+          <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 text-white/70 space-y-1">
+            <div className="font-semibold text-white/80">Diagnóstico login</div>
             <div>busy: {String(busy)}</div>
             <div>step: {diag.step}</div>
             <div>status: {String(diag.status ?? "-")}</div>
