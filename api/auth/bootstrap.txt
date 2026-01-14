@@ -1,0 +1,8 @@
+{
+  "authenticated": true,
+  "user": { ... },
+  "current_org_id": "c634...",
+  "orgs": [
+    { "id": "...", "name": "...", "role": "admin" }
+  ]
+}
