@@ -1,58 +1,61 @@
-// api/auth/session.js
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = createClient(
-  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 );
 
-function pickCookie(req, name) {
+function parseCookies(req) {
   const raw = req.headers.cookie || "";
-  const part = raw.split(";").map(s => s.trim()).find(s => s.startsWith(name + "="));
-  return part ? decodeURIComponent(part.split("=").slice(1).join("=")) : null;
-}
-
-// Normaliza roles (por si vienen "ADMIN" vs "admin")
-function normRole(r) {
-  if (!r) return null;
-  const x = String(r).toLowerCase();
-  if (x === "owner" || x === "admin" || x === "tracker" || x === "viewer") return x;
-  return x;
+  const out = {};
+  raw.split(";").map(v => v.trim()).filter(Boolean).forEach(kv => {
+    const i = kv.indexOf("=");
+    if (i > 0) out[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
+  });
+  return out;
 }
 
 export default async function handler(req, res) {
   try {
-    // Si estás usando cookies HttpOnly, normalmente guardas el access_token en una cookie
-    // Ajusta el nombre si el tuyo es otro:
-    const access_token = pickCookie(req, "sb-access-token") || pickCookie(req, "access_token");
+    const cookies = parseCookies(req);
+
+    // ✅ TU LOGIN NO-JS
+    const access_token = cookies.tg_at;
 
     if (!access_token) {
-      return res.status(200).json({ authenticated: false });
+      return res.json({ authenticated: false });
     }
 
-    // Validar token contra Supabase
-    const { data: u, error: uerr } = await supabaseAdmin.auth.getUser(access_token);
-    if (uerr || !u?.user) {
-      return res.status(200).json({ authenticated: false });
+    const { data, error } =
+      await supabaseAdmin.auth.getUser(access_token);
+
+    if (error || !data?.user) {
+      return res.json({ authenticated: false });
     }
 
-    const user = { id: u.user.id, email: u.user.email };
+    const user = {
+      id: data.user.id,
+      email: data.user.email,
+    };
 
-    // 1) Buscar org desde profiles (preferido)
-    const { data: prof } = await supabaseAdmin
+    // org actual
+    const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("current_org_id, default_org_id, org_id")
       .eq("id", user.id)
       .maybeSingle();
 
-    let current_org_id = prof?.current_org_id || prof?.default_org_id || prof?.org_id || null;
+    let current_org_id =
+      profile?.current_org_id ||
+      profile?.default_org_id ||
+      profile?.org_id ||
+      null;
 
-    // 2) Fallback: org default desde memberships
     if (!current_org_id) {
       const { data: ms } = await supabaseAdmin
         .from("memberships")
-        .select("org_id, role, is_default, created_at")
+        .select("org_id")
         .eq("user_id", user.id)
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: true })
@@ -61,39 +64,37 @@ export default async function handler(req, res) {
       current_org_id = ms?.[0]?.org_id || null;
     }
 
-    // 3) Resolver role para esa org (prefer app_user_roles)
     let role = null;
     if (current_org_id) {
-      const { data: aur } = await supabaseAdmin
+      const { data: r1 } = await supabaseAdmin
         .from("app_user_roles")
         .select("role")
         .eq("user_id", user.id)
         .eq("org_id", current_org_id)
         .maybeSingle();
 
-      role = normRole(aur?.role);
+      role = r1?.role || null;
 
       if (!role) {
-        const { data: m1 } = await supabaseAdmin
+        const { data: r2 } = await supabaseAdmin
           .from("memberships")
           .select("role")
           .eq("user_id", user.id)
           .eq("org_id", current_org_id)
           .maybeSingle();
 
-        role = normRole(m1?.role);
+        role = r2?.role || null;
       }
     }
 
-    return res.status(200).json({
+    return res.json({
       authenticated: true,
-      access_token,
       user,
       current_org_id,
       role,
     });
   } catch (e) {
     console.error(e);
-    return res.status(200).json({ authenticated: false });
+    return res.json({ authenticated: false });
   }
 }
