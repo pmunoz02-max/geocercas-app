@@ -1,100 +1,106 @@
+// /api/auth/session.js
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
-
-function parseCookies(req) {
+function getCookie(req, name) {
   const raw = req.headers.cookie || "";
-  const out = {};
-  raw.split(";").map(v => v.trim()).filter(Boolean).forEach(kv => {
-    const i = kv.indexOf("=");
-    if (i > 0) out[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
-  });
-  return out;
+  const m = raw.match(new RegExp(`(?:^|; )${name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
 export default async function handler(req, res) {
   try {
-    const cookies = parseCookies(req);
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-    // ✅ TU LOGIN NO-JS
-    const access_token = cookies.tg_at;
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return res.status(500).json({
+        error: "Missing env",
+        missing: {
+          SUPABASE_URL: !!SUPABASE_URL,
+          SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY,
+        },
+      });
+    }
+
+    // Cookies que ya viste en el browser: tg_at / tg_rt
+    const access_token = getCookie(req, "tg_at");
+    const refresh_token = getCookie(req, "tg_rt");
 
     if (!access_token) {
-      return res.json({ authenticated: false });
+      return res.status(200).json({ authenticated: false });
     }
 
-    const { data, error } =
-      await supabaseAdmin.auth.getUser(access_token);
+    // Cliente "server" usando el JWT del usuario en headers (respeta RLS como el usuario)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
 
-    if (error || !data?.user) {
-      return res.json({ authenticated: false });
+    // Validar token y obtener usuario
+    const { data: userData, error: userErr } = await supabase.auth.getUser(access_token);
+    if (userErr || !userData?.user) {
+      return res.status(200).json({ authenticated: false });
     }
 
-    const user = {
-      id: data.user.id,
-      email: data.user.email,
-    };
+    const user = { id: userData.user.id, email: userData.user.email };
 
-    // org actual
-    const { data: profile } = await supabaseAdmin
+    // Traer profile (current_org_id, default_org_id, etc.)
+    const { data: profile, error: profErr } = await supabase
       .from("profiles")
-      .select("current_org_id, default_org_id, org_id")
+      .select("id,email,role,org_id,default_org_id,current_org_id,tenant_id,active_tenant_id")
       .eq("id", user.id)
       .maybeSingle();
 
-    let current_org_id =
-      profile?.current_org_id ||
-      profile?.default_org_id ||
-      profile?.org_id ||
-      null;
-
-    if (!current_org_id) {
-      const { data: ms } = await supabaseAdmin
-        .from("memberships")
-        .select("org_id")
-        .eq("user_id", user.id)
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: true })
-        .limit(1);
-
-      current_org_id = ms?.[0]?.org_id || null;
+    // Si RLS impide leer profile, NO reventamos: devolvemos lo mínimo para debug
+    if (profErr) {
+      return res.status(200).json({
+        authenticated: true,
+        user,
+        profile_error: profErr.message,
+      });
     }
 
-    let role = null;
+    // Determinar org actual
+    const current_org_id =
+      profile?.current_org_id || profile?.default_org_id || profile?.org_id || null;
+
+    // Determinar rol (preferimos app_user_roles si existe; si falla, usar profile.role)
+    let role = profile?.role || null;
+
     if (current_org_id) {
-      const { data: r1 } = await supabaseAdmin
+      const { data: aur, error: aurErr } = await supabase
         .from("app_user_roles")
         .select("role")
         .eq("user_id", user.id)
         .eq("org_id", current_org_id)
         .maybeSingle();
 
-      role = r1?.role || null;
-
-      if (!role) {
-        const { data: r2 } = await supabaseAdmin
-          .from("memberships")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("org_id", current_org_id)
-          .maybeSingle();
-
-        role = r2?.role || null;
-      }
+      if (!aurErr && aur?.role) role = aur.role;
     }
 
-    return res.json({
+    return res.status(200).json({
+      version: "auth-session-v1",
       authenticated: true,
       user,
       current_org_id,
       role,
+      profile: profile || null,
+      has_refresh_cookie: !!refresh_token,
     });
   } catch (e) {
-    console.error(e);
-    return res.json({ authenticated: false });
+    // Esto evita "FUNCTION_INVOCATION_FAILED" sin info
+    return res.status(500).json({
+      error: "session_handler_crash",
+      message: e?.message || String(e),
+      stack: e?.stack || null,
+    });
   }
 }
