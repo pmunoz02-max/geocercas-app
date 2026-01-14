@@ -1,5 +1,6 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase, getMemoryAccessToken, clearMemoryAccessToken } from "../supabaseClient";
 
 const AuthContext = createContext(null);
 
@@ -7,8 +8,13 @@ const safeText = (v) =>
   typeof v === "string" || typeof v === "number" ? String(v) : "";
 
 /**
- * AuthContext — vOrgStable-2 (FIX LOADER INFINITO)
- * - Inicializa con getSession() (NO depende solo de onAuthStateChange)
+ * AuthContext — POSTLOGIN-V1 (WebView/TWA + Web)
+ * Fuente de verdad:
+ * 1) Web normal: supabase.auth.getSession()
+ * 2) WebView/TWA (LOGIN-V29): token en memoria -> supabase.auth.getUser(token)
+ *
+ * - NO depende de setSession()
+ * - Evita loader infinito
  * - Carga organizations desde memberships (fallback app_user_roles)
  * - Selección de org persistida en localStorage por usuario
  * - Expone: loading, user, organizations, currentOrg, currentRole, selectOrg, isAppRoot, isAdmin
@@ -168,30 +174,71 @@ export function AuthProvider({ children }) {
     loadOrganizationsAndRole(uid, id);
   }
 
-  // ✅ FIX: initialize from getSession FIRST, then subscribe
+  function resetAuthState() {
+    setUser(null);
+    setIsAppRoot(false);
+    setOrganizations([]);
+    setCurrentOrg(null);
+    setCurrentRole(null);
+  }
+
+  // ✅ POSTLOGIN: init robusto (sesión supabase o token en memoria)
   useEffect(() => {
     let cancelled = false;
 
+    async function hydrateFromUser(u) {
+      setUser(u);
+      if (u?.id) {
+        loadIsAppRoot(u.id);
+        await loadOrganizationsAndRole(u.id);
+      } else {
+        resetAuthState();
+      }
+    }
+
     async function init() {
       try {
+        // 1) Web normal (si existe)
         const { data, error } = await supabase.auth.getSession();
         if (error) console.warn("[AuthContext] getSession error:", error);
 
-        const u = data?.session?.user ?? null;
+        const sessionUser = data?.session?.user ?? null;
         if (cancelled) return;
 
-        setUser(u);
-
-        if (u?.id) {
-          // load root + orgs in parallel (no await needed for root)
-          loadIsAppRoot(u.id);
-          await loadOrganizationsAndRole(u.id);
-        } else {
-          setIsAppRoot(false);
-          setOrganizations([]);
-          setCurrentOrg(null);
-          setCurrentRole(null);
+        if (sessionUser?.id) {
+          await hydrateFromUser(sessionUser);
+          return;
         }
+
+        // 2) WebView/TWA (LOGIN-V29): token en memoria
+        const memToken = getMemoryAccessToken?.();
+        if (!memToken) {
+          resetAuthState();
+          return;
+        }
+
+        const { data: udata, error: uerr } = await supabase.auth.getUser(memToken);
+        if (cancelled) return;
+
+        if (uerr) {
+          console.warn("[AuthContext] getUser(token) error:", uerr);
+          clearMemoryAccessToken?.();
+          resetAuthState();
+          return;
+        }
+
+        const memUser = udata?.user ?? null;
+        if (!memUser?.id) {
+          clearMemoryAccessToken?.();
+          resetAuthState();
+          return;
+        }
+
+        await hydrateFromUser(memUser);
+      } catch (e) {
+        console.warn("[AuthContext] init error:", e);
+        // Si falla algo raro, evita loader infinito
+        resetAuthState();
       } finally {
         if (!cancelled) setLoadingAuth(false);
       }
@@ -199,19 +246,23 @@ export function AuthProvider({ children }) {
 
     init();
 
+    // Suscripción secundaria (útil en web normal / logout explícito)
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const u = session?.user ?? null;
-      setUser(u);
+      try {
+        const u = session?.user ?? null;
 
-      if (u?.id) {
+        if (!u?.id) {
+          // Si supabase dice signed-out, limpiamos estado y token memoria
+          clearMemoryAccessToken?.();
+          resetAuthState();
+          setLoadingAuth(false);
+          return;
+        }
+
         setLoadingAuth(false);
-        loadIsAppRoot(u.id);
-        await loadOrganizationsAndRole(u.id);
-      } else {
-        setIsAppRoot(false);
-        setOrganizations([]);
-        setCurrentOrg(null);
-        setCurrentRole(null);
+        await hydrateFromUser(u);
+      } catch (e) {
+        console.warn("[AuthContext] onAuthStateChange error:", e);
         setLoadingAuth(false);
       }
     });
