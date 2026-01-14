@@ -22,7 +22,10 @@ export default async function handler(req, res) {
 
     if (!url) {
       return res.status(500).json({ authenticated: false, error: "Missing SUPABASE_URL" });
-    }
+      build_tag: "session-v10",
+  authenticated: true,
+  ...
+});
 
     const access_token = getCookie(req, "tg_at");
     if (!access_token) return res.status(200).json({ authenticated: false });
