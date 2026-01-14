@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useCallback,
   useState,
+  useRef,
 } from "react";
 
 /**
@@ -14,7 +15,7 @@ import React, {
  *
  * EXPONE:
  * - Nuevo: currentRole, currentOrg, organizations, selectOrg, isAppRoot
- * - Legacy: role, currentOrgId, orgId (para evitar loaders infinitos en páginas viejas)
+ * - Legacy: role, currentOrgId, orgId, authenticated, ready (para páginas viejas)
  */
 
 const AuthContext = createContext(null);
@@ -39,7 +40,6 @@ async function fetchSession() {
 
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
-
   const [user, setUser] = useState(null);
 
   // NEW API
@@ -54,29 +54,37 @@ export function AuthProvider({ children }) {
   const currentOrgId = currentOrg?.id || null; // legacy alias
   const orgId = currentOrgId; // another alias
 
-  const selectOrg = useCallback((orgIdToSelect) => {
-    if (!orgIdToSelect) return;
+  // Legacy fields expected by páginas antiguas
+  const authenticated = Boolean(user); // legacy alias
+  const [ready, setReady] = useState(false); // legacy: "AuthContext ya hidrató al menos una vez"
+  const didBootstrapOnceRef = useRef(false);
 
-    try {
-      localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
-    } catch {}
+  const selectOrg = useCallback(
+    (orgIdToSelect) => {
+      if (!orgIdToSelect) return;
 
-    // si ya tenemos el objeto en organizations lo usamos
-    setCurrentOrg((prev) => {
-      if (prev?.id === orgIdToSelect) return prev;
-      const found = Array.isArray(organizations)
-        ? organizations.find((o) => o?.id === orgIdToSelect)
-        : null;
-      return found || { id: orgIdToSelect };
-    });
+      try {
+        localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
+      } catch {}
 
-    // asegurar que organizations contenga al menos ese id
-    setOrganizations((prev) => {
-      const arr = Array.isArray(prev) ? prev : [];
-      if (arr.some((o) => o?.id === orgIdToSelect)) return arr;
-      return [{ id: orgIdToSelect }, ...arr];
-    });
-  }, [organizations]);
+      // si ya tenemos el objeto en organizations lo usamos
+      setCurrentOrg((prev) => {
+        if (prev?.id === orgIdToSelect) return prev;
+        const found = Array.isArray(organizations)
+          ? organizations.find((o) => o?.id === orgIdToSelect)
+          : null;
+        return found || { id: orgIdToSelect };
+      });
+
+      // asegurar que organizations contenga al menos ese id
+      setOrganizations((prev) => {
+        const arr = Array.isArray(prev) ? prev : [];
+        if (arr.some((o) => o?.id === orgIdToSelect)) return arr;
+        return [{ id: orgIdToSelect }, ...arr];
+      });
+    },
+    [organizations]
+  );
 
   const bootstrap = useCallback(async () => {
     setLoading(true);
@@ -125,17 +133,22 @@ export function AuthProvider({ children }) {
       const finalOrgId = preferredOrgId || serverOrgId || null;
 
       // Si backend manda lista de orgs, úsala; si no, crea mínimo con id
-      const orgsFromServer = Array.isArray(data.organizations) ? data.organizations : null;
+      const orgsFromServer = Array.isArray(data.organizations)
+        ? data.organizations
+        : null;
 
       if (orgsFromServer && orgsFromServer.length > 0) {
         setOrganizations(orgsFromServer);
 
         const picked =
-          (finalOrgId && orgsFromServer.find((o) => o?.id === finalOrgId)?.id) ||
+          (finalOrgId &&
+            orgsFromServer.find((o) => o?.id === finalOrgId)?.id) ||
           orgsFromServer.find((o) => o?.id)?.id ||
           null;
 
-        const orgObj = picked ? orgsFromServer.find((o) => o?.id === picked) : null;
+        const orgObj = picked
+          ? orgsFromServer.find((o) => o?.id === picked)
+          : null;
         setCurrentOrg(orgObj || null);
 
         if (picked) {
@@ -157,6 +170,12 @@ export function AuthProvider({ children }) {
       }
     } finally {
       setLoading(false);
+
+      // ✅ Marca "ready" una vez que el primer bootstrap terminó (ok o no)
+      if (!didBootstrapOnceRef.current) {
+        didBootstrapOnceRef.current = true;
+        setReady(true);
+      }
     }
   }, []);
 
@@ -186,6 +205,8 @@ export function AuthProvider({ children }) {
     () => ({
       // base
       loading,
+      ready, // ✅ legacy
+      authenticated, // ✅ legacy
       user,
       isLoggedIn: Boolean(user),
 
@@ -207,6 +228,8 @@ export function AuthProvider({ children }) {
     }),
     [
       loading,
+      ready,
+      authenticated,
       user,
       currentRole,
       isAppRoot,
