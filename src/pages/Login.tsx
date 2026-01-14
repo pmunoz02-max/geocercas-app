@@ -1,4 +1,4 @@
-// LOGIN-V29 – Disparo único por intento (onBlur), rate-limit safe
+// LOGIN-V29.1 – WebView safe (DOM-ref + blur)
 import React, { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { setMemoryAccessToken } from "../supabaseClient";
@@ -28,8 +28,6 @@ export default function Login() {
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
   const [email, setEmail] = useState("pruebatugeo@gmail.com");
-  const [password, setPassword] = useState("");
-
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
@@ -37,11 +35,19 @@ export default function Login() {
   // 🔒 latch anti rate-limit
   const firedRef = useRef(false);
 
+  // 🔐 refs DOM (CLAVE para WebView)
+  const passwordRef = useRef<HTMLInputElement | null>(null);
+
   async function doLogin() {
     if (busy || firedRef.current) return;
 
     const emailClean = email.trim().toLowerCase();
-    if (!isValidEmail(emailClean) || !password) return;
+    const password = passwordRef.current?.value || "";
+
+    if (!isValidEmail(emailClean) || !password) {
+      setDiag({ step: "waiting_password" });
+      return;
+    }
 
     firedRef.current = true;
     setBusy(true);
@@ -68,13 +74,13 @@ export default function Login() {
 
       setDiag({ step: "token_received", status: res.status });
 
-      // token en memoria
+      // 🔐 token en memoria (LOGIN-V29)
       setMemoryAccessToken(data.access_token);
 
       setDiag({ step: "navigate" });
       navigate(next, { replace: true });
     } catch (e: any) {
-      firedRef.current = false; // permite reintento manual
+      firedRef.current = false;
       setBusy(false);
       setDiag({ step: "error", message: String(e?.message || e) });
       setErr(String(e?.message || "No se pudo iniciar sesión"));
@@ -90,7 +96,7 @@ export default function Login() {
       <div className="w-full max-w-xl">
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
           <h1 className="text-3xl font-semibold mb-6">
-            Entrar <span className="text-xs opacity-60">(LOGIN-V29)</span>
+            Entrar <span className="text-xs opacity-60">(LOGIN-V29.1)</span>
           </h1>
 
           <div className="mb-6 text-xs p-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-100">
@@ -111,13 +117,13 @@ export default function Login() {
 
           <label className="block mb-2 text-sm">Contraseña</label>
           <input
+            ref={passwordRef}
             className={inputClass}
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onBlur={doLogin}   // 👈 disparo humano único
             type="password"
             autoComplete="current-password"
             disabled={busy}
+            onBlur={doLogin}          // 👈 disparo humano
+            onInput={() => {}}        // 👈 asegura captura en WebView
           />
 
           <div className="w-full mt-8 py-4 rounded-2xl bg-white/90 text-slate-900 font-semibold text-center">
