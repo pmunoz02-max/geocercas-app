@@ -1,328 +1,312 @@
-// api/personal.js
-import { createClient } from "@supabase/supabase-js";
+// src/pages/Personal.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../context/AuthContext.jsx";
+import { listPersonal, upsertPersonal, toggleVigente, deletePersonal } from "../lib/personalApi.js";
 
-/* ───────────────── Helpers ───────────────── */
-function getCookie(req, name) {
-  const raw = req.headers.cookie || "";
-  const parts = raw.split(";").map((p) => p.trim());
-  const found = parts.find((p) => p.startsWith(name + "="));
-  if (!found) return null;
-  return decodeURIComponent(found.split("=").slice(1).join("="));
+function Modal({ open, title, children, onClose }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <button className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
 }
 
-function json(res, status, payload) {
-  res.statusCode = status;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(JSON.stringify(payload));
-}
+export default function Personal() {
+  const { loading, ready, isLoggedIn, currentOrg, currentRole } = useAuth();
 
-/** ✅ Universal: deja SOLO dígitos (quita +, espacios, guiones, paréntesis, etc.) */
-function normalizePhone(phone) {
-  if (!phone) return "";
-  return String(phone).replace(/[^\d]/g, "");
-}
+  const role = String(currentRole || "").toLowerCase();
+  const canEdit = role === "owner" || role === "admin";
 
-function requireWriteRole(role) {
-  const r = String(role || "").toLowerCase();
-  return r === "owner" || r === "admin";
-}
+  const [q, setQ] = useState("");
+  const [onlyActive, setOnlyActive] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [items, setItems] = useState([]);
 
-async function resolveContext(req) {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      ok: false,
-      status: 500,
-      error: "Missing env vars SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY",
-    };
-  }
-
-  const jwt = getCookie(req, "tg_at");
-  if (!jwt) return { ok: false, status: 401, error: "No authenticated cookie tg_at" };
-
-  const supaAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  const [openNew, setOpenNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    nombre: "",
+    apellido: "",
+    email: "",
+    telefono: "",
+    vigente: true,
   });
 
-  const { data: userData, error: userErr } = await supaAnon.auth.getUser();
-  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
+  async function load() {
+    if (!isLoggedIn) return;
+    if (!currentOrg?.id) return;
 
-  const { data: ctx, error: ctxErr } = await supaAnon.rpc("bootstrap_session_context");
-  if (ctxErr || !ctx?.org_id) {
-    return {
-      ok: false,
-      status: 400,
-      error: "bootstrap_session_context failed",
-      details: ctxErr?.message || null,
-    };
+    setBusy(true);
+    setMsg("");
+
+    try {
+      const rows = await listPersonal({
+        q,
+        onlyActive,
+        orgId: currentOrg.id, // compat (backend usa ctx.org_id)
+        limit: 500,
+      });
+      setItems(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setItems([]);
+      setMsg(e?.message || "No se pudo cargar personal.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
+  useEffect(() => {
+    if (!loading && ready && isLoggedIn && currentOrg?.id) {
+      load();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, ready, isLoggedIn, currentOrg?.id]);
 
-  return { ok: true, user: userData.user, ctx, supaSrv };
-}
+  const filtered = useMemo(() => {
+    if (!q) return items;
+    const ql = q.toLowerCase();
+    return items.filter((r) =>
+      `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${r?.telefono ?? ""}`
+        .toLowerCase()
+        .includes(ql)
+    );
+  }, [items, q]);
 
-async function readBody(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
+  async function onSaveNew(e) {
+    e.preventDefault();
+    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+
+    setSaving(true);
+    setMsg("");
+
+    try {
+      await upsertPersonal(
+        {
+          nombre: form.nombre,
+          apellido: form.apellido,
+          email: form.email,
+          telefono: form.telefono,
+          vigente: !!form.vigente,
+        },
+        currentOrg.id
+      );
+
+      setOpenNew(false);
+      setForm({ nombre: "", apellido: "", email: "", telefono: "", vigente: true });
+      await load();
+    } catch (e2) {
+      setMsg(e2?.message || "No se pudo guardar.");
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
-/* ───────────────── Handlers ───────────────── */
-async function handleList(req, res) {
-  const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  async function onToggle(row) {
+    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+    try {
+      setBusy(true);
+      await toggleVigente(row.id);
+      await load();
+    } catch (e) {
+      setMsg(e?.message || "No se pudo cambiar vigencia.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  const { ctx, supaSrv } = ctxRes;
+  async function onDelete(row) {
+    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+    if (!window.confirm("¿Eliminar este registro?")) return;
 
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const q = (url.searchParams.get("q") || "").trim();
-  const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "500", 10) || 500, 1), 2000);
+    try {
+      setBusy(true);
+      await deletePersonal(row.id);
+      await load();
+    } catch (e) {
+      setMsg(e?.message || "No se pudo eliminar.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  let query = supaSrv
-    .from("personal")
-    .select("*")
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
-    .order("nombre", { ascending: true })
-    .limit(limit);
+  // Estados correctos (cliente puro)
+  if (loading || !ready) return <div className="p-6 text-gray-500">Cargando sesión…</div>;
 
-  if (onlyActive) query = query.eq("vigente", true);
-
-  if (q) {
-    const pattern = `%${q}%`;
-    query = query.or(
-      [
-        `nombre.ilike.${pattern}`,
-        `apellido.ilike.${pattern}`,
-        `email.ilike.${pattern}`,
-        `telefono.ilike.${pattern}`,
-      ].join(",")
+  if (!isLoggedIn) {
+    return (
+      <div className="p-6 text-red-600">No hay sesión activa. Inicia sesión para continuar.</div>
     );
   }
 
-  const { data, error } = await query;
-  if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
-
-  return json(res, 200, { items: data || [] });
-}
-
-async function handleUpsert(req, res) {
-  const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
-
-  const { ctx, user, supaSrv } = ctxRes;
-
-  if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  if (!currentOrg?.id) {
+    return (
+      <div className="p-6 text-red-600">
+        No hay organización activa. Selecciona una organización para continuar.
+      </div>
+    );
   }
 
-  const body = await readBody(req);
-  const payload = body?.payload || body || {};
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold mb-1">Personal</h1>
+          <div className="text-sm text-gray-500">
+            Rol: <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
+            <span className="font-mono">{currentOrg.id}</span>
+          </div>
+        </div>
 
-  const nowIso = new Date().toISOString();
+        {canEdit ? (
+          <button
+            className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800"
+            onClick={() => setOpenNew(true)}
+          >
+            + Nuevo
+          </button>
+        ) : null}
+      </div>
 
-  const nombre = (payload.nombre || "").trim();
-  const apellido = (payload.apellido || "").trim();
-  const email = (payload.email || "").trim().toLowerCase();
-  const telefono = (payload.telefono || "").trim();
-  const telefonoNorm = normalizePhone(telefono);
-  const documento = payload.documento ? String(payload.documento).trim() : null;
+      <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
+        <input
+          className="w-full md:w-96 rounded-xl border border-gray-300 px-3 py-2"
+          placeholder="Buscar por nombre, apellido, email o teléfono…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
 
-  const fecha_inicio = payload.fecha_inicio || null;
-  const fecha_fin = payload.fecha_fin || null;
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
+          Solo vigentes
+        </label>
 
-  let intervalMin = Number(payload.position_interval_min ?? 5);
-  if (!Number.isFinite(intervalMin) || intervalMin < 5) intervalMin = 5;
-  const position_interval_sec = Math.round(intervalMin * 60);
+        <button
+          className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:opacity-50"
+          onClick={load}
+          disabled={busy}
+        >
+          {busy ? "Cargando…" : "Recargar"}
+        </button>
+      </div>
 
-  if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
-  if (!email) return json(res, 400, { error: "Email es obligatorio" });
+      {msg ? <div className="mt-4 text-sm text-red-600">{msg}</div> : null}
 
-  // ✅ Duplicados por (org, email, telefono_norm) si aplica
-  let dupQuery = supaSrv
-    .from("personal")
-    .select("id")
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
-    .eq("email", email);
+      <div className="mt-4 rounded-2xl border border-gray-200 bg-white overflow-hidden">
+        {busy && filtered.length === 0 ? (
+          <div className="p-4 text-gray-500">Cargando personal…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-4 text-gray-500">No hay registros.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="text-left font-medium p-3">Nombre</th>
+                <th className="text-left font-medium p-3">Apellido</th>
+                <th className="text-left font-medium p-3">Email</th>
+                <th className="text-left font-medium p-3">Teléfono</th>
+                <th className="text-left font-medium p-3">Vigente</th>
+                <th className="text-left font-medium p-3">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id} className="border-t border-gray-100">
+                  <td className="p-3">{r?.nombre ?? "-"}</td>
+                  <td className="p-3">{r?.apellido ?? "-"}</td>
+                  <td className="p-3">{r?.email ?? "-"}</td>
+                  <td className="p-3">{r?.telefono ?? "-"}</td>
+                  <td className="p-3">{r?.vigente ? "Sí" : "No"}</td>
+                  <td className="p-3">
+                    <div className="flex gap-2">
+                      <button
+                        className="rounded-lg border border-gray-300 px-3 py-1 hover:bg-gray-50 disabled:opacity-50"
+                        onClick={() => onToggle(r)}
+                        disabled={!canEdit || busy}
+                      >
+                        {r?.vigente ? "Desactivar" : "Activar"}
+                      </button>
+                      <button
+                        className="rounded-lg border border-red-200 text-red-700 px-3 py-1 hover:bg-red-50 disabled:opacity-50"
+                        onClick={() => onDelete(r)}
+                        disabled={!canEdit || busy}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-  if (telefonoNorm) dupQuery = dupQuery.eq("telefono_norm", telefonoNorm);
-  else dupQuery = dupQuery.is("telefono_norm", null);
+      <Modal open={openNew} title="Nuevo personal" onClose={() => setOpenNew(false)}>
+        <form className="space-y-3" onSubmit={onSaveNew}>
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Nombre"
+            value={form.nombre}
+            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+          />
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Apellido"
+            value={form.apellido}
+            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
+          />
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          />
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Teléfono (ej: +593...)"
+            value={form.telefono}
+            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+          />
 
-  if (payload.id) dupQuery = dupQuery.neq("id", payload.id);
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={!!form.vigente}
+              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
+            />
+            Vigente
+          </label>
 
-  const { data: dupRows, error: dupErr } = await dupQuery;
-  if (dupErr) return json(res, 500, { error: "No se pudo validar duplicados", details: dupErr.message });
-  if (dupRows && dupRows.length > 0) {
-    return json(res, 409, { error: "Duplicado: ya existe una persona con este email y teléfono en esta organización" });
-  }
-
-  const baseRow = {
-    nombre,
-    apellido: apellido || null,
-    email,
-    telefono: telefono || null,
-    telefono_norm: telefonoNorm || null,
-    documento,
-    fecha_inicio,
-    fecha_fin,
-    vigente: payload.vigente ?? true,
-    position_interval_sec,
-    updated_at: nowIso,
-  };
-
-  if (!payload.id) {
-    const insertRow = {
-      ...baseRow,
-      owner_id: user.id,
-      org_id: ctx.org_id,
-      created_at: nowIso,
-      is_deleted: false,
-    };
-
-    const { data, error } = await supaSrv.from("personal").insert(insertRow).select("*").maybeSingle();
-    if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
-
-    return json(res, 200, { item: data });
-  }
-
-  // Cross-org guard
-  const { data: existing, error: exErr } = await supaSrv
-    .from("personal")
-    .select("id, org_id, is_deleted")
-    .eq("id", payload.id)
-    .maybeSingle();
-
-  if (exErr) return json(res, 500, { error: "No se pudo leer registro", details: exErr.message });
-  if (!existing || existing.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
-  if (existing.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
-
-  const { data, error } = await supaSrv
-    .from("personal")
-    .update(baseRow)
-    .eq("id", payload.id)
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
-    .select("*")
-    .maybeSingle();
-
-  if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
-
-  return json(res, 200, { item: data });
-}
-
-async function handleToggle(req, res) {
-  const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
-
-  const { ctx, supaSrv } = ctxRes;
-
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
-
-  const body = await readBody(req);
-  const id = body?.id;
-  if (!id) return json(res, 400, { error: "Missing id" });
-
-  const nowIso = new Date().toISOString();
-
-  const { data: row, error: fetchErr } = await supaSrv
-    .from("personal")
-    .select("id, org_id, vigente, is_deleted")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (fetchErr) return json(res, 500, { error: "No se pudo leer vigente", details: fetchErr.message });
-  if (!row || row.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
-  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
-
-  const { data, error } = await supaSrv
-    .from("personal")
-    .update({ vigente: !row.vigente, updated_at: nowIso })
-    .eq("id", id)
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
-    .select("*")
-    .maybeSingle();
-
-  if (error) return json(res, 500, { error: "No se pudo actualizar vigente", details: error.message });
-
-  return json(res, 200, { item: data });
-}
-
-async function handleDelete(req, res) {
-  const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
-
-  const { ctx, supaSrv } = ctxRes;
-
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
-
-  const body = await readBody(req);
-  const id = body?.id;
-  if (!id) return json(res, 400, { error: "Missing id" });
-
-  const nowIso = new Date().toISOString();
-
-  const { data: row, error: fetchErr } = await supaSrv
-    .from("personal")
-    .select("id, org_id, is_deleted")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (fetchErr) return json(res, 500, { error: "No se pudo leer registro", details: fetchErr.message });
-  if (!row || row.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
-  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
-
-  const { data, error } = await supaSrv
-    .from("personal")
-    .update({ is_deleted: true, vigente: false, deleted_at: nowIso, updated_at: nowIso })
-    .eq("id", id)
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
-    .select("*")
-    .maybeSingle();
-
-  if (error) return json(res, 500, { error: "No se pudo eliminar personal", details: error.message });
-
-  return json(res, 200, { item: data });
-}
-
-/* ───────────────── Entry ───────────────── */
-export default async function handler(req, res) {
-  try {
-    // ✅ CORS correcto para cookies (NO wildcard con credentials)
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
-    }
-    res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
-
-    if (req.method === "OPTIONS") return json(res, 200, { ok: true });
-
-    if (req.method === "GET") return await handleList(req, res);
-    if (req.method === "POST") return await handleUpsert(req, res);
-    if (req.method === "PATCH") return await handleToggle(req, res);
-    if (req.method === "DELETE") return await handleDelete(req, res);
-
-    return json(res, 405, { error: "Method not allowed" });
-  } catch (e) {
-    return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
-  }
+          <div className="pt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50"
+              onClick={() => setOpenNew(false)}
+              disabled={saving}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800 disabled:opacity-50"
+              disabled={saving}
+            >
+              {saving ? "Guardando…" : "Guardar"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
 }
