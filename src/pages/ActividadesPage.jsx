@@ -15,16 +15,16 @@ import { useTranslation } from "react-i18next";
 
 // Lista de monedas
 const CURRENCIES = [
-  { code: "USD", labelKey: "actividades.currencies.USD" },
-  { code: "EUR", labelKey: "actividades.currencies.EUR" },
-  { code: "MXN", labelKey: "actividades.currencies.MXN" },
-  { code: "COP", labelKey: "actividades.currencies.COP" },
-  { code: "PEN", labelKey: "actividades.currencies.PEN" },
-  { code: "CLP", labelKey: "actividades.currencies.CLP" },
-  { code: "ARS", labelKey: "actividades.currencies.ARS" },
-  { code: "BRL", labelKey: "actividades.currencies.BRL" },
-  { code: "CAD", labelKey: "actividades.currencies.CAD" },
-  { code: "GBP", labelKey: "actividades.currencies.GBP" },
+  { code: "USD", labelKey: "USD" },
+  { code: "EUR", labelKey: "EUR" },
+  { code: "MXN", labelKey: "MXN" },
+  { code: "COP", labelKey: "COP" },
+  { code: "PEN", labelKey: "PEN" },
+  { code: "CLP", labelKey: "CLP" },
+  { code: "ARS", labelKey: "ARS" },
+  { code: "BRL", labelKey: "BRL" },
+  { code: "CAD", labelKey: "CAD" },
+  { code: "GBP", labelKey: "GBP" },
 ];
 
 export default function ActividadesPage() {
@@ -49,15 +49,13 @@ export default function ActividadesPage() {
   async function loadActividades() {
     setLoading(true);
     setErrorMsg("");
-
     try {
       const data = await listActividades({ includeInactive: true });
       setActividades(data || []);
     } catch (err) {
       console.error("[ActividadesPage] load error:", err);
-      setErrorMsg(err.message || t("actividades.errorLoad"));
+      setErrorMsg(err.message || "Error al cargar actividades");
     }
-
     setLoading(false);
   }
 
@@ -92,12 +90,12 @@ export default function ActividadesPage() {
     setErrorMsg("");
 
     if (!nombre.trim()) {
-      setErrorMsg(t("actividades.errorMissingName"));
+      setErrorMsg("El nombre es obligatorio");
       return;
     }
 
     if (!hourlyRate || Number(hourlyRate) <= 0) {
-      setErrorMsg(t("actividades.errorMissingRate"));
+      setErrorMsg("La tarifa por hora debe ser mayor a 0");
       return;
     }
 
@@ -123,7 +121,7 @@ export default function ActividadesPage() {
       await loadActividades();
     } catch (err) {
       console.error("[ActividadesPage] save error:", err);
-      setErrorMsg(err.message || t("actividades.errorSave"));
+      setErrorMsg(err.message || "Error al guardar la actividad");
     }
   }
 
@@ -131,7 +129,7 @@ export default function ActividadesPage() {
     return (
       <div className="p-4 max-w-5xl mx-auto">
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
-          {t("actividades.loadingAuth", "Cargando tu sesión y organización actual…")}
+          Cargando tu sesión y organización actual…
         </div>
       </div>
     );
@@ -141,7 +139,7 @@ export default function ActividadesPage() {
     return (
       <div className="p-4 max-w-3xl mx-auto">
         <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
-          {t("actividades.noOrgAssigned")}
+          No tienes una organización asignada
         </div>
       </div>
     );
@@ -149,9 +147,7 @@ export default function ActividadesPage() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">
-        {t("actividades.title")}
-      </h1>
+      <h1 className="text-2xl font-semibold mb-4">Actividades</h1>
 
       {errorMsg && (
         <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -159,20 +155,20 @@ export default function ActividadesPage() {
         </div>
       )}
 
-      {/* FORM */}
+      {/* FORMULARIO */}
       {canEdit && (
         <form onSubmit={handleSubmit} className="border rounded p-4 mb-6 bg-gray-50">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               className="border rounded px-3 py-2"
-              placeholder={t("actividades.name")}
+              placeholder="Nombre de la actividad"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
             />
 
             <input
               className="border rounded px-3 py-2"
-              placeholder={t("actividades.hourlyRate")}
+              placeholder="Tarifa por hora"
               type="number"
               value={hourlyRate}
               onChange={(e) => setHourlyRate(e.target.value)}
@@ -185,14 +181,14 @@ export default function ActividadesPage() {
             >
               {CURRENCIES.map((c) => (
                 <option key={c.code} value={c.code}>
-                  {t(c.labelKey)}
+                  {c.code}
                 </option>
               ))}
             </select>
 
             <input
               className="border rounded px-3 py-2"
-              placeholder={t("actividades.description")}
+              placeholder="Descripción (opcional)"
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
             />
@@ -200,9 +196,7 @@ export default function ActividadesPage() {
 
           <div className="mt-3 flex gap-2">
             <button className="px-4 py-2 rounded bg-blue-600 text-white text-sm">
-              {formMode === "create"
-                ? t("actividades.create")
-                : t("actividades.update")}
+              {formMode === "create" ? "Crear actividad" : "Guardar cambios"}
             </button>
             {formMode === "edit" && (
               <button
@@ -210,17 +204,17 @@ export default function ActividadesPage() {
                 onClick={resetForm}
                 className="px-4 py-2 rounded bg-gray-300 text-sm"
               >
-                {t("common.cancel")}
+                Cancelar
               </button>
             )}
           </div>
         </form>
       )}
 
-      {/* LIST */}
+      {/* LISTA */}
       {loading ? (
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
-          {t("actividades.loadingList", "Cargando actividades…")}
+          Cargando actividades…
         </div>
       ) : (
         <div className="space-y-2">
@@ -233,7 +227,7 @@ export default function ActividadesPage() {
                 <div className="font-medium">{a.name}</div>
                 <div className="text-xs text-gray-500">
                   {a.currency_code} · {a.hourly_rate} ·{" "}
-                  {a.active ? t("common.active") : t("common.inactive")}
+                  {a.active ? "Activa" : "Inactiva"}
                 </div>
                 {a.description && (
                   <div className="text-sm text-gray-600">{a.description}</div>
@@ -246,19 +240,21 @@ export default function ActividadesPage() {
                     onClick={() => startEdit(a)}
                     className="text-xs px-2 py-1 rounded bg-yellow-500 text-white"
                   >
-                    {t("common.edit")}
+                    Editar
                   </button>
                   <button
-                    onClick={() => toggleActividadActiva(a.id, !a.active).then(loadActividades)}
+                    onClick={() =>
+                      toggleActividadActiva(a.id, !a.active).then(loadActividades)
+                    }
                     className="text-xs px-2 py-1 rounded bg-blue-500 text-white"
                   >
-                    {a.active ? t("common.disable") : t("common.enable")}
+                    {a.active ? "Desactivar" : "Activar"}
                   </button>
                   <button
                     onClick={() => deleteActividad(a.id).then(loadActividades)}
                     className="text-xs px-2 py-1 rounded bg-red-600 text-white"
                   >
-                    {t("common.delete")}
+                    Eliminar
                   </button>
                 </div>
               )}
@@ -269,3 +265,4 @@ export default function ActividadesPage() {
     </div>
   );
 }
+
