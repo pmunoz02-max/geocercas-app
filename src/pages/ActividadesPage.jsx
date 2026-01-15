@@ -13,7 +13,7 @@ import {
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
-// Lista de monedas, nombres vía i18n (actividades.currencies.*)
+// Lista de monedas
 const CURRENCIES = [
   { code: "USD", labelKey: "actividades.currencies.USD" },
   { code: "EUR", labelKey: "actividades.currencies.EUR" },
@@ -28,17 +28,9 @@ const CURRENCIES = [
 ];
 
 export default function ActividadesPage() {
-  const {
-    authReady,
-    orgsReady,
-    currentOrg,
-    role,
-    currentRole,
-  } = useAuth();
-
+  const { ready, currentOrg, role, currentRole } = useAuth();
   const { t } = useTranslation();
 
-  // Rol efectivo del usuario en la organización actual
   const effectiveRole = (currentRole || role || "").toLowerCase();
   const canEdit = effectiveRole === "owner" || effectiveRole === "admin";
 
@@ -46,7 +38,7 @@ export default function ActividadesPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const [formMode, setFormMode] = useState("create"); // 'create' | 'edit'
+  const [formMode, setFormMode] = useState("create");
   const [editingId, setEditingId] = useState(null);
 
   const [nombre, setNombre] = useState("");
@@ -54,43 +46,34 @@ export default function ActividadesPage() {
   const [currency, setCurrency] = useState("USD");
   const [hourlyRate, setHourlyRate] = useState("");
 
-  // ------------------------------
-  // Carga de actividades por org
-  // ------------------------------
   async function loadActividades() {
     if (!currentOrg?.id) {
       setActividades([]);
+      setLoading(false);
       return;
     }
 
     setLoading(true);
     setErrorMsg("");
 
-    const { data, error } = await listActividades({
-      includeInactive: true,
-      orgId: currentOrg.id, // ✅ fuente única
-    });
-
-    if (error) {
-      console.error("[ActividadesPage] listActividades error:", error);
-      setErrorMsg(error.message || t("actividades.errorLoad"));
-    } else {
+    try {
+      const data = await listActividades({ includeInactive: true });
       setActividades(data || []);
+    } catch (err) {
+      console.error("[ActividadesPage] load error:", err);
+      setErrorMsg(err.message || t("actividades.errorLoad"));
     }
 
     setLoading(false);
   }
 
   useEffect(() => {
-    if (authReady && orgsReady && currentOrg?.id) {
+    if (ready) {
       loadActividades();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, orgsReady, currentOrg?.id]);
+  }, [ready, currentOrg?.id]);
 
-  // ------------------------------
-  // Helpers de formulario
-  // ------------------------------
   function resetForm() {
     setFormMode("create");
     setEditingId(null);
@@ -117,85 +100,35 @@ export default function ActividadesPage() {
 
     try {
       if (formMode === "create") {
-        const payload = {
+        await createActividad({
           name: nombre.trim(),
           description: descripcion.trim() || null,
           active: true,
           currency_code: currency,
           hourly_rate: Number(hourlyRate),
-        };
-
-        const { error } = await createActividad(payload, {
-          orgId: currentOrg.id,
         });
-        if (error) throw error;
-      } else if (formMode === "edit" && editingId) {
-        const { error } = await updateActividad(editingId, {
+      } else if (editingId) {
+        await updateActividad(editingId, {
           name: nombre.trim(),
           description: descripcion.trim() || null,
           currency_code: currency,
           hourly_rate: Number(hourlyRate),
         });
-        if (error) throw error;
       }
 
       resetForm();
       await loadActividades();
     } catch (err) {
-      console.error("[ActividadesPage] handleSubmit error:", err);
+      console.error("[ActividadesPage] save error:", err);
       setErrorMsg(err.message || t("actividades.errorSave"));
     }
   }
 
-  function handleEdit(act) {
-    setFormMode("edit");
-    setEditingId(act.id);
-    setNombre(act.name || "");
-    setDescripcion(act.description || "");
-    setCurrency(act.currency_code || "USD");
-    setHourlyRate(
-      act.hourly_rate !== null && act.hourly_rate !== undefined
-        ? String(act.hourly_rate)
-        : ""
-    );
-  }
-
-  async function handleToggle(act) {
-    try {
-      const { error } = await toggleActividadActiva(act.id, !act.active);
-      if (error) throw error;
-      await loadActividades();
-    } catch (err) {
-      console.error("[ActividadesPage] handleToggle error:", err);
-      setErrorMsg(err.message || t("actividades.errorToggle"));
-    }
-  }
-
-  async function handleDelete(act) {
-    if (!window.confirm(t("actividades.confirmDelete", { name: act.name }))) {
-      return;
-    }
-    try {
-      const { error } = await deleteActividad(act.id);
-      if (error) throw error;
-      await loadActividades();
-    } catch (err) {
-      console.error("[ActividadesPage] handleDelete error:", err);
-      setErrorMsg(err.message || t("actividades.errorDelete"));
-    }
-  }
-
-  // ------------------------------
-  // Estados de carga correctos
-  // ------------------------------
-  if (!authReady || !orgsReady) {
+  if (!ready) {
     return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
-        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
-          {t(
-            "actividades.loadingAuth",
-            "Cargando tu sesión y organización actual…"
-          )}
+      <div className="p-4 max-w-5xl mx-auto">
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">
+          {t("actividades.loadingAuth", "Cargando tu sesión y organización actual…")}
         </div>
       </div>
     );
@@ -203,42 +136,35 @@ export default function ActividadesPage() {
 
   if (!currentOrg) {
     return (
-      <div className="p-4 md:p-6 max-w-3xl mx-auto">
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {t(
-            "actividades.noOrgAssigned",
-            "No hay organización asignada para el usuario actual. Cierra sesión y vuelve a entrar o contacta con el administrador."
-          )}
+      <div className="p-4 max-w-3xl mx-auto">
+        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
+          {t("actividades.noOrgAssigned")}
         </div>
       </div>
     );
   }
 
-  // ------------------------------
-  // Render normal
-  // ------------------------------
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto">
-      <div className="flex flex-col gap-1 mb-4">
-        <h1 className="text-2xl font-semibold">
-          {t("actividades.title")}
-        </h1>
-        <p className="text-xs text-gray-500">
-          {t("actividades.currentOrgLabel", "Organización actual")}:{" "}
-          <span className="font-medium">
-            {currentOrg.name}
-          </span>
-        </p>
-      </div>
+    <div className="p-4 max-w-5xl mx-auto">
+      <h1 className="text-2xl font-semibold mb-2">
+        {t("actividades.title")}
+      </h1>
 
       {errorMsg && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">
+        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">
           {errorMsg}
         </div>
       )}
 
-      {/* resto del render SIN CAMBIOS */}
-      {/* … */}
+      {loading ? (
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">
+          {t("actividades.loadingList", "Cargando actividades…")}
+        </div>
+      ) : (
+        <pre className="text-xs bg-gray-50 p-3 rounded">
+          {JSON.stringify(actividades, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }

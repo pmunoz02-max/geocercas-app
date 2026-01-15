@@ -1,164 +1,67 @@
-// src/lib/actividadesApi.js
-// API de Actividades multi-tenant (usa tenant_id = organización actual)
+// src/lib/activitiesApi.js
+//
+// Cliente HTTP para Activities (NO Supabase directo).
+// NO manda org_id. El backend resuelve org/rol por cookie HttpOnly tg_at
+// Endpoint: /api/actividades
 
-import { supabase } from "../supabaseClient";
+async function http(path, { method = "GET", body } = {}) {
+  const res = await fetch(path, {
+    method,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "cache-control": "no-cache",
+      pragma: "no-cache",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
 
-// ✅ Todas las funciones requieren tenantId explícito desde AuthContext.
-// ✅ NO usamos RPCs antiguas (ensure_default_org_for_current_user).
-
-// ---------------------------------------------------------------------------
-// Listar actividades
-// ---------------------------------------------------------------------------
-export async function listActividades({
-  includeInactive = false,
-  tenantId = null,
-} = {}) {
-  if (!tenantId) {
-    // Esto solo debería pasar si AuthContext falló antes.
-    const error = new Error(
-      "Falta tenantId para listar actividades (revisa AuthContext)"
-    );
-    console.error("[actividadesApi] listActividades sin tenantId:", error);
-    return { data: null, error };
-  }
-
+  const raw = await res.text();
+  let json = null;
   try {
-    let query = supabase
-      .from("activities")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .order("name", { ascending: true });
-
-    if (!includeInactive) {
-      query = query.eq("active", true);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("[actividadesApi] listActividades error:", error);
-      return { data: null, error };
-    }
-
-    return { data: data || [], error: null };
-  } catch (err) {
-    console.error("[actividadesApi] listActividades exception:", err);
-    return { data: null, error: err };
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    json = null;
   }
+
+  if (!res.ok || !json?.ok) {
+    const msg = json?.error || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return json.data ?? null;
 }
 
-// ---------------------------------------------------------------------------
-// Crear actividad
-// ---------------------------------------------------------------------------
-export async function createActividad(payload = {}, opts = {}) {
-  const tenantId = opts.tenantId ?? payload.tenant_id ?? null;
-
-  if (!tenantId) {
-    const error = new Error(
-      "Falta tenantId para crear actividad (revisa AuthContext)"
-    );
-    console.error("[actividadesApi] createActividad sin tenantId:", error);
-    return { data: null, error };
-  }
-
-  try {
-    const body = {
-      tenant_id: tenantId,
-      name: payload.name,
-      description: payload.description ?? null,
-      active: payload.active ?? true,
-      currency_code: payload.currency_code,
-      hourly_rate: payload.hourly_rate,
-    };
-
-    const { data, error } = await supabase
-      .from("activities")
-      .insert(body)
-      .select("*")
-      .single();
-
-    if (error) {
-      console.error("[actividadesApi] createActividad error:", error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (err) {
-    console.error("[actividadesApi] createActividad exception:", err);
-    return { data: null, error: err };
-  }
+// Mantengo tus nombres de funciones actuales para compatibilidad:
+export async function listActivities({ includeInactive = false } = {}) {
+  const qs = new URLSearchParams();
+  if (includeInactive) qs.set("includeInactive", "true");
+  const url = `/api/actividades${qs.toString() ? `?${qs}` : ""}`;
+  return (await http(url, { method: "GET" })) || [];
 }
 
-// ---------------------------------------------------------------------------
-// Actualizar actividad
-// ---------------------------------------------------------------------------
-export async function updateActividad(id, updates = {}) {
-  if (!id) {
-    const error = new Error("updateActividad requiere id");
-    console.error("[actividadesApi] updateActividad sin id:", error);
-    return { data: null, error };
-  }
-
-  const patch = {
-    name: updates.name,
-    description: updates.description ?? null,
-    currency_code: updates.currency_code,
-    hourly_rate: updates.hourly_rate,
-  };
-
-  const { data, error } = await supabase
-    .from("activities")
-    .update(patch)
-    .eq("id", id)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("[actividadesApi] updateActividad error:", error);
-  }
-
-  return { data, error };
+export async function createActivity(payload) {
+  return await http("/api/actividades", { method: "POST", body: payload });
 }
 
-// ---------------------------------------------------------------------------
-// Activar / desactivar
-// ---------------------------------------------------------------------------
-export async function toggleActividadActiva(id, newActive) {
-  if (!id) {
-    const error = new Error("toggleActividadActiva requiere id");
-    console.error("[actividadesApi] toggleActividadActiva sin id:", error);
-    return { data: null, error };
-  }
-
-  const { data, error } = await supabase
-    .from("activities")
-    .update({ active: newActive })
-    .eq("id", id)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("[actividadesApi] toggleActividadActiva error:", error);
-  }
-
-  return { data, error };
+export async function updateActivity(id, payload) {
+  return await http(`/api/actividades?id=${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: payload,
+  });
 }
 
-// ---------------------------------------------------------------------------
-// Eliminar (soft o hard, según tu tabla)
-// ---------------------------------------------------------------------------
-export async function deleteActividad(id) {
-  if (!id) {
-    const error = new Error("deleteActividad requiere id");
-    console.error("[actividadesApi] deleteActividad sin id:", error);
-    return { error };
-  }
+export async function deleteActivity(id) {
+  await http(`/api/actividades?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  return true;
+}
 
-  const { error } = await supabase.from("activities").delete().eq("id", id);
-
-  if (error) {
-    console.error("[actividadesApi] deleteActividad error:", error);
-  }
-
-  return { error };
+// Extra opcional (por si lo usas en UI):
+export async function toggleActivityActive(id, active) {
+  return await http(`/api/actividades?id=${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: { active },
+  });
 }
