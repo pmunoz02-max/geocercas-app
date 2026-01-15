@@ -5,10 +5,10 @@ import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
 /**
- * ProtectedShell — vDef
- * - NO redirige por pathname (Router manda)
- * - Tabs definidos centralmente y filtrados por rol
- * - Incluye Dashboard e Invitar tracker
+ * ProtectedShell — vFinal
+ * - Router decide navegación
+ * - Shell solo muestra UI
+ * - Orden lógico de módulos
  */
 
 function buildTabs({ role, isAppRoot }) {
@@ -16,36 +16,36 @@ function buildTabs({ role, isAppRoot }) {
 
   const isTrackerOnly = r === "tracker";
   const isAdmin =
-    r === "admin" || r === "owner" || r === "root" || r === "root_owner" || isAppRoot;
+    r === "admin" ||
+    r === "owner" ||
+    r === "root" ||
+    r === "root_owner" ||
+    isAppRoot;
 
+  // Tracker-only
   if (isTrackerOnly) {
-    // Tracker-only: minimal
-    return [
-      { path: "/tracker", labelKey: "app.tabs.tracker" },
-    ];
+    return [{ path: "/tracker", labelKey: "app.tabs.tracker" }];
   }
 
-  // App normal (owner/admin/viewer/etc.)
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.home" },
-
-    // ✅ Dashboard (si tu ruta real es otra, cámbiala aquí)
-    { path: "/dashboard", labelKey: "app.tabs.dashboard" },
 
     { path: "/geocercas", labelKey: "app.tabs.geocercas" },
     { path: "/personal", labelKey: "app.tabs.personal" },
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
+
+    // 🔹 Reportes y su Dashboard juntos
     { path: "/reportes", labelKey: "app.tabs.reportes" },
+    { path: "/dashboard", labelKey: "app.tabs.dashboard" },
+
     { path: "/tracker", labelKey: "app.tabs.tracker" },
   ];
 
-  // ✅ Invitar tracker: solo para admin/owner/root
   if (isAdmin) {
     tabs.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitar_tracker" });
   }
 
-  // Root-only admin panel
   if (isAppRoot) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
