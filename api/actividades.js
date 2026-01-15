@@ -1,20 +1,13 @@
 // api/actividades.js
 //
 // Actividades API (multi-tenant estricto)
-// - Frontend NO usa Supabase directo
-// - Frontend NO envía org_id
-// - Auth por cookie HttpOnly: tg_at
-// - Contexto por RPC: public.bootstrap_session_context()
+// Auth por cookie HttpOnly: tg_at
+// Contexto por RPC: public.bootstrap_session_context()
+// NO org_id desde frontend.
 //
-// Endpoints:
-//   GET    /api/actividades?includeInactive=true
-//   POST   /api/actividades
-//   PUT    /api/actividades?id=UUID
-//   PATCH  /api/actividades?id=UUID   (body: { active: true/false })
-//   DELETE /api/actividades?id=UUID
-//
-// Debug (seguro, no expone token):
+// Debug seguro:
 //   GET /api/actividades?debug=1
+//   GET /api/actividades?debug_ctx=1  (muestra keys y extracción de org/rol sin exponer token)
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -26,7 +19,6 @@ function json(res, status, payload) {
 
 function getCookie(req, name) {
   const header = req.headers?.cookie || "";
-  // Cookie parsing simple y robusto
   const parts = header.split(";").map((p) => p.trim());
   const found = parts.find((p) => p.startsWith(`${name}=`));
   if (!found) return null;
@@ -46,25 +38,15 @@ function safeJson(x) {
 function buildSupabaseForUser(accessToken) {
   const url = process.env.SUPABASE_URL;
   const anon = process.env.SUPABASE_ANON_KEY;
-
-  if (!url || !anon) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars");
-  }
+  if (!url || !anon) throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars");
 
   return createClient(url, anon, {
-    global: {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-    },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
+    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }
 
 function extractOrgId(ctx) {
-  // Tolerante a variaciones de shape de retorno
   return (
     ctx?.org_id ??
     ctx?.current_org_id ??
@@ -86,44 +68,39 @@ function extractRole(ctx) {
   );
 }
 
+function sanitizeCtx(ctx) {
+  if (!ctx || typeof ctx !== "object") return ctx;
+  const out = {};
+  for (const k of Object.keys(ctx)) {
+    const v = ctx[k];
+    if (v === null || ["string", "number", "boolean"].includes(typeof v)) out[k] = v;
+    else if (Array.isArray(v)) out[k] = { type: "array", length: v.length };
+    else out[k] = { type: typeof v };
+  }
+  return out;
+}
+
 async function resolveContext(req) {
   const accessToken = getCookie(req, "tg_at");
-  if (!accessToken) {
-    return { ok: false, status: 401, error: "No session cookie (tg_at)" };
-  }
+  if (!accessToken) return { ok: false, status: 401, error: "No session cookie (tg_at)" };
 
   const supabase = buildSupabaseForUser(accessToken);
 
-  // Validar token -> usuario
   const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
-  if (userErr || !userData?.user) {
-    return { ok: false, status: 401, error: "Invalid session" };
-  }
+  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-  // Bootstrap contexto org/rol
   const { data: ctx, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
-  if (ctxErr) {
-    // Si tu función levanta "not authenticated", aquí lo verás
-    return { ok: false, status: 500, error: ctxErr.message || "bootstrap_session_context failed" };
-  }
+  if (ctxErr) return { ok: false, status: 500, error: ctxErr.message || "bootstrap_session_context failed" };
 
   const orgId = extractOrgId(ctx);
   const role = extractRole(ctx);
 
-  return {
-    ok: true,
-    status: 200,
-    supabase,
-    user: userData.user,
-    ctx,
-    orgId,
-    role,
-  };
+  return { ok: true, status: 200, supabase, user: userData.user, ctx, orgId, role };
 }
 
 export default async function handler(req, res) {
   try {
-    // --- Debug seguro (no expone el token) ---
+    // Debug básico: cookie llega y user valida
     if (req.method === "GET" && (req.query?.debug === "1" || req.query?.debug === "true")) {
       const accessToken = getCookie(req, "tg_at");
       let userOk = false;
@@ -143,22 +120,34 @@ export default async function handler(req, res) {
       });
     }
 
+    // Debug de contexto (CLAVE)
+    if (req.method === "GET" && (req.query?.debug_ctx === "1" || req.query?.debug_ctx === "true")) {
+      const ctx = await resolveContext(req);
+      if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error });
+
+      return json(res, 200, {
+        ok: true,
+        user_id: ctx.user?.id || null,
+        orgId_extracted: ctx.orgId,
+        role_extracted: ctx.role,
+        ctx_keys: ctx.ctx ? Object.keys(ctx.ctx) : [],
+        ctx_sanitized: sanitizeCtx(ctx.ctx),
+      });
+    }
+
     const ctx = await resolveContext(req);
     if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error });
 
     const { supabase, orgId } = ctx;
 
     if (!orgId) {
-      // 403 explícito para indicar que el usuario está autenticado pero sin org resoluble
       return json(res, 403, { ok: false, error: "No org resolved for current user" });
     }
 
     const id = typeof req.query?.id === "string" ? req.query.id : null;
 
-    // ------------- GET (listar) -------------
     if (req.method === "GET") {
-      const includeInactive =
-        req.query?.includeInactive === "true" || req.query?.includeInactive === "1";
+      const includeInactive = req.query?.includeInactive === "true" || req.query?.includeInactive === "1";
 
       let q = supabase
         .from("activities")
@@ -170,18 +159,16 @@ export default async function handler(req, res) {
 
       const { data, error } = await q;
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true, data: data || [] });
     }
 
-    // ------------- POST (crear) -------------
     if (req.method === "POST") {
       const body = safeJson(req.body);
       const name = String(body?.name || "").trim();
       if (!name) return json(res, 400, { ok: false, error: "Missing name" });
 
       const payload = {
-        org_id: orgId, // ✅ org desde servidor
+        org_id: orgId,
         name,
         description: body?.description ?? null,
         active: body?.active ?? true,
@@ -196,17 +183,13 @@ export default async function handler(req, res) {
         .single();
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 201, { ok: true, data });
     }
 
-    // De aquí en adelante, requiere id
     if (!id) return json(res, 400, { ok: false, error: "Missing id query param (?id=...)" });
 
-    // ------------- PUT (update) -------------
     if (req.method === "PUT") {
       const body = safeJson(req.body);
-
       const patch = {
         name: body?.name !== undefined ? String(body.name).trim() : undefined,
         description: body?.description !== undefined ? (body.description || null) : undefined,
@@ -215,9 +198,7 @@ export default async function handler(req, res) {
       };
       Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
 
-      if (patch.name !== undefined && !patch.name) {
-        return json(res, 400, { ok: false, error: "Invalid name" });
-      }
+      if (patch.name !== undefined && !patch.name) return json(res, 400, { ok: false, error: "Invalid name" });
 
       const { data, error } = await supabase
         .from("activities")
@@ -228,11 +209,9 @@ export default async function handler(req, res) {
         .single();
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true, data });
     }
 
-    // ------------- PATCH (toggle active) -------------
     if (req.method === "PATCH") {
       const body = safeJson(req.body);
       const active = Boolean(body?.active);
@@ -246,20 +225,12 @@ export default async function handler(req, res) {
         .single();
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true, data });
     }
 
-    // ------------- DELETE -------------
     if (req.method === "DELETE") {
-      const { error } = await supabase
-        .from("activities")
-        .delete()
-        .eq("id", id)
-        .eq("org_id", orgId);
-
+      const { error } = await supabase.from("activities").delete().eq("id", id).eq("org_id", orgId);
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true });
     }
 
