@@ -55,7 +55,14 @@ async function resolveContext(req) {
   }
 
   // ctx típicamente trae org_id / role; tolerante:
-  const orgId = ctx?.org_id ?? ctx?.current_org_id ?? null;
+  const orgId =
+  ctx?.org_id ??
+  ctx?.current_org_id ??
+  ctx?.currentOrgId ??
+  ctx?.current_org?.id ??
+  ctx?.org?.id ??
+  (Array.isArray(ctx?.orgs) && ctx.orgs[0]?.id) ??
+  null;
   const role = (ctx?.role ?? ctx?.current_role ?? ctx?.currentRole ?? null);
   return {
     ok: true,
