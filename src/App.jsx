@@ -2,14 +2,8 @@ import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "./context/AuthContext.jsx";
-
-// ✅ path correcto
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
-
-// ✅ USAR el RequireOrg real (el que acabas de subir)
 import RequireOrg from "./components/RequireOrg.jsx";
-
-// ✅ usar tu AuthGuard como componente (el que subiste)
 import AuthGuard from "./components/AuthGuard.jsx";
 
 // Páginas
@@ -62,6 +56,32 @@ function AdminRoute({ children }) {
   return children;
 }
 
+/**
+ * AliasRoutes (UNIVERSAL)
+ * Blindaje definitivo contra rutas legacy (links viejos, bookmarks, módulos antiguos).
+ * Regla: si una ruta antigua aparece en el código o en bookmarks de usuarios,
+ * aquí se redirige a la ruta canónica sin romper UX.
+ */
+function AliasRoutes() {
+  return (
+    <>
+      {/* Geocerca singular -> Geocercas plural (canónico actual en tu Router) */}
+      <Route path="/geocerca" element={<Navigate to="/geocercas" replace />} />
+      <Route path="/geocerca/:id" element={<Navigate to="/geocercas" replace />} />
+
+      {/* Tracker legacy */}
+      <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
+      <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
+
+      {/* Admin legacy */}
+      <Route path="/admin" element={<Navigate to="/admins" replace />} />
+
+      {/* Mapa legacy (ajusta destino si defines página /mapa real) */}
+      <Route path="/mapa" element={<Navigate to="/geocercas" replace />} />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -73,6 +93,9 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* ---------- Alias / Redirects (antes del shell protegido) ---------- */}
+        <AliasRoutes />
 
         {/* ---------- Protected shell ---------- */}
         <Route
