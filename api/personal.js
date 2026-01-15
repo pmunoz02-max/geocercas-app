@@ -36,18 +36,15 @@ async function readBody(req) {
   }
 }
 
-// RPC returns TABLE => often an array
 function normalizeCtx(data) {
   if (!data) return null;
   if (Array.isArray(data)) return data[0] || null;
   return data;
 }
 
-// ✅ NEW: accept alternative shapes / nesting
 function coerceSessionCtx(raw) {
   if (!raw) return null;
 
-  // common nesting patterns
   const candidate =
     raw?.ctx ||
     raw?.context ||
@@ -98,7 +95,9 @@ async function resolveContext(req) {
   });
 
   const { data: userData, error: userErr } = await supaAnon.auth.getUser();
-  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
+  if (userErr || !userData?.user) {
+    return { ok: false, status: 401, error: "Invalid session", details: userErr?.message || null };
+  }
 
   const { data: rpcData, error: ctxErr } = await supaAnon.rpc("bootstrap_session_context");
   if (ctxErr) {
@@ -114,6 +113,22 @@ async function resolveContext(req) {
     };
   }
 
+  // ✅ aquí diagnosticamos el caso que estás viendo: rpcData = []
+  if (Array.isArray(rpcData) && rpcData.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: "bootstrap_session_context returned 0 rows",
+      details: {
+        receivedType: "array",
+        length: 0,
+        rpcData, // será []
+        note:
+          "La función SQL está retornando TABLE pero no devuelve fila para este usuario. Debe garantizar 1 fila (org_id, role).",
+      },
+    };
+  }
+
   const rawCtx = normalizeCtx(rpcData);
   const ctx = coerceSessionCtx(rawCtx);
 
@@ -124,6 +139,8 @@ async function resolveContext(req) {
       error: "bootstrap_session_context returned unexpected shape",
       details: {
         receivedType: Array.isArray(rpcData) ? "array" : typeof rpcData,
+        arrayLength: Array.isArray(rpcData) ? rpcData.length : null,
+        rpcData, // ✅ ahora te devolvemos lo real
         rawCtx,
         keys: rawCtx && typeof rawCtx === "object" ? Object.keys(rawCtx) : null,
       },
