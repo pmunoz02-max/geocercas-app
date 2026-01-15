@@ -1,4 +1,3 @@
-@'
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { listPersonal, upsertPersonal, toggleVigente, deletePersonal } from "../lib/personalApi.js";
@@ -319,4 +318,3 @@ export default function Personal() {
     </div>
   );
 }
-'@ | Set-Content -Encoding UTF8 src\pages\Personal.jsx

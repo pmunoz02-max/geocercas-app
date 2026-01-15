@@ -1,4 +1,3 @@
-@'
 import { createClient } from "@supabase/supabase-js";
 
 function getCookie(req, name) {
@@ -318,4 +317,3 @@ export default async function handler(req, res) {
     return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
   }
 }
-'@ | Set-Content -Encoding UTF8 api\personal.js
