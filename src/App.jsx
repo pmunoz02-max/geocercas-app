@@ -1,16 +1,8 @@
 // src/App.jsx
 import React, { useEffect } from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-} from "react-router-dom";
-
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 
-// Layout / guards
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
@@ -32,11 +24,12 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 
-/**
- * HashTokenCatcher (UNIVERSAL)
- * Si Supabase redirige con tokens en el HASH (#access_token=...),
- * reenviamos a /auth/callback preservando hash+query.
- */
+// Help pages
+import InstructionsPage from "./pages/InstructionsPage.jsx";
+import FaqPage from "./pages/FaqPage.jsx";
+import SupportPage from "./pages/SupportPage.jsx";
+import ChangelogPage from "./pages/ChangelogPage.jsx";
+
 function HashTokenCatcher() {
   const location = useLocation();
 
@@ -52,24 +45,15 @@ function HashTokenCatcher() {
   return null;
 }
 
-/**
- * AdminRoute: solo App Root entra a /admins
- */
 function AdminRoute({ children }) {
   const { loading, user, isAppRoot } = useAuth();
   const location = useLocation();
 
   if (loading) return null;
   if (!user) {
-    return (
-      <Navigate
-        to={`/login?next=${encodeURIComponent(location.pathname)}`}
-        replace
-      />
-    );
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
   }
   if (!isAppRoot) return <Navigate to="/inicio" replace />;
-
   return children;
 }
 
@@ -79,37 +63,21 @@ export default function App() {
       <HashTokenCatcher />
 
       <Routes>
-        {/* ---------- Public ---------- */}
+        {/* Public */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* ---------- Redirects legacy (INLINE) ---------- */}
-        {/* singular -> plural (tu router usa /geocercas) */}
+        {/* Redirects legacy */}
         <Route path="/geocerca" element={<Navigate to="/geocercas" replace />} />
-        <Route
-          path="/geocerca/:id"
-          element={<Navigate to="/geocercas" replace />}
-        />
-
-        {/* tracker legacy */}
-        <Route
-          path="/tracker-dashboard"
-          element={<Navigate to="/tracker" replace />}
-        />
-        <Route
-          path="/tracker-gps"
-          element={<Navigate to="/tracker" replace />}
-        />
-
-        {/* admin legacy */}
+        <Route path="/geocerca/:id" element={<Navigate to="/geocercas" replace />} />
+        <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
+        <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
         <Route path="/admin" element={<Navigate to="/admins" replace />} />
-
-        {/* mapa legacy (ajústalo si defines /mapa real) */}
         <Route path="/mapa" element={<Navigate to="/geocercas" replace />} />
 
-        {/* ---------- Protected shell ---------- */}
+        {/* Protected */}
         <Route
           element={
             <AuthGuard>
@@ -119,68 +87,19 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
 
-          <Route
-            path="/geocercas"
-            element={
-              <RequireOrg>
-                <GeocercasPage />
-              </RequireOrg>
-            }
-          />
+          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+          <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
+          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
+          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
+          <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
+          <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
-          <Route
-            path="/personal"
-            element={
-              <RequireOrg>
-                <Personal />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/actividades"
-            element={
-              <RequireOrg>
-                <ActividadesPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/asignaciones"
-            element={
-              <RequireOrg>
-                <AsignacionesPage />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/reportes"
-            element={
-              <RequireOrg>
-                <Reports />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/tracker"
-            element={
-              <RequireOrg>
-                <TrackerDashboard />
-              </RequireOrg>
-            }
-          />
-
-          <Route
-            path="/invitar-tracker"
-            element={
-              <RequireOrg>
-                <InvitarTracker />
-              </RequireOrg>
-            }
-          />
+          {/* Help (no requiere org; solo login) */}
+          <Route path="/help/instructions" element={<InstructionsPage />} />
+          <Route path="/help/faq" element={<FaqPage />} />
+          <Route path="/help/support" element={<SupportPage />} />
+          <Route path="/help/changelog" element={<ChangelogPage />} />
 
           <Route
             path="/admins"
@@ -192,7 +111,7 @@ export default function App() {
           />
         </Route>
 
-        {/* ---------- Fallback ---------- */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

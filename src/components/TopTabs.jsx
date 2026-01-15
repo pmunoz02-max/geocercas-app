@@ -5,13 +5,6 @@ import { useTranslation } from "react-i18next";
 import OrgSelector from "./OrgSelector";
 import { useAuth } from "../context/AuthContext.jsx";
 
-/**
- * TopTabs — v9
- * - NO inyecta tabs (los controla ProtectedShell)
- * - Muestra email + rol
- * - Marca tabs:v9
- */
-
 function safeText(v) {
   if (v == null) return "";
   if (typeof v === "string") return v;
@@ -137,8 +130,6 @@ export default function TopTabs({ tabs = [] }) {
               <span className="text-slate-600">{roleLabel}</span>
             </div>
           )}
-
-          <div className="ml-2 text-[10px] text-slate-400 select-none">tabs:v9</div>
         </div>
       </div>
     </div>
