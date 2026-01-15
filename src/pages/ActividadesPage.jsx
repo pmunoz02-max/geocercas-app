@@ -47,12 +47,6 @@ export default function ActividadesPage() {
   const [hourlyRate, setHourlyRate] = useState("");
 
   async function loadActividades() {
-    if (!currentOrg?.id) {
-      setActividades([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setErrorMsg("");
 
@@ -68,7 +62,7 @@ export default function ActividadesPage() {
   }
 
   useEffect(() => {
-    if (ready) {
+    if (ready && currentOrg) {
       loadActividades();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -82,6 +76,15 @@ export default function ActividadesPage() {
     setCurrency("USD");
     setHourlyRate("");
     setErrorMsg("");
+  }
+
+  function startEdit(a) {
+    setFormMode("edit");
+    setEditingId(a.id);
+    setNombre(a.name);
+    setDescripcion(a.description || "");
+    setCurrency(a.currency_code || "USD");
+    setHourlyRate(a.hourly_rate || "");
   }
 
   async function handleSubmit(e) {
@@ -146,7 +149,7 @@ export default function ActividadesPage() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-2">
+      <h1 className="text-2xl font-semibold mb-4">
         {t("actividades.title")}
       </h1>
 
@@ -156,14 +159,112 @@ export default function ActividadesPage() {
         </div>
       )}
 
+      {/* FORM */}
+      {canEdit && (
+        <form onSubmit={handleSubmit} className="border rounded p-4 mb-6 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input
+              className="border rounded px-3 py-2"
+              placeholder={t("actividades.name")}
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+            />
+
+            <input
+              className="border rounded px-3 py-2"
+              placeholder={t("actividades.hourlyRate")}
+              type="number"
+              value={hourlyRate}
+              onChange={(e) => setHourlyRate(e.target.value)}
+            />
+
+            <select
+              className="border rounded px-3 py-2"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {t(c.labelKey)}
+                </option>
+              ))}
+            </select>
+
+            <input
+              className="border rounded px-3 py-2"
+              placeholder={t("actividades.description")}
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+            />
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <button className="px-4 py-2 rounded bg-blue-600 text-white text-sm">
+              {formMode === "create"
+                ? t("actividades.create")
+                : t("actividades.update")}
+            </button>
+            {formMode === "edit" && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-4 py-2 rounded bg-gray-300 text-sm"
+              >
+                {t("common.cancel")}
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+
+      {/* LIST */}
       {loading ? (
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
           {t("actividades.loadingList", "Cargando actividades…")}
         </div>
       ) : (
-        <pre className="text-xs bg-gray-50 p-3 rounded">
-          {JSON.stringify(actividades, null, 2)}
-        </pre>
+        <div className="space-y-2">
+          {actividades.map((a) => (
+            <div
+              key={a.id}
+              className="border rounded p-3 flex items-center justify-between"
+            >
+              <div>
+                <div className="font-medium">{a.name}</div>
+                <div className="text-xs text-gray-500">
+                  {a.currency_code} · {a.hourly_rate} ·{" "}
+                  {a.active ? t("common.active") : t("common.inactive")}
+                </div>
+                {a.description && (
+                  <div className="text-sm text-gray-600">{a.description}</div>
+                )}
+              </div>
+
+              {canEdit && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => startEdit(a)}
+                    className="text-xs px-2 py-1 rounded bg-yellow-500 text-white"
+                  >
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    onClick={() => toggleActividadActiva(a.id, !a.active).then(loadActividades)}
+                    className="text-xs px-2 py-1 rounded bg-blue-500 text-white"
+                  >
+                    {a.active ? t("common.disable") : t("common.enable")}
+                  </button>
+                  <button
+                    onClick={() => deleteActividad(a.id).then(loadActividades)}
+                    className="text-xs px-2 py-1 rounded bg-red-600 text-white"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
