@@ -7,7 +7,7 @@ function Modal({ open, title, children, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-xl">
+      <div className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-xl text-slate-900">
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <h3 className="text-lg font-semibold">{title}</h3>
           <button
@@ -54,12 +54,7 @@ export default function Personal() {
     setMsg("");
 
     try {
-      // ✅ NO mandamos orgId desde front (patrón oficial)
-      const rows = await listPersonal({
-        q,
-        onlyActive,
-        limit: 500,
-      });
+      const rows = await listPersonal({ q, onlyActive, limit: 500 });
       setItems(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setItems([]);
@@ -87,7 +82,6 @@ export default function Personal() {
   async function onSaveNew(e) {
     e.preventDefault();
 
-    // ✅ Esta línea debe verse SIEMPRE cuando aprietas Guardar
     console.log("[Personal] submit -> onSaveNew", { canEdit, form });
 
     if (!canEdit) {
@@ -99,7 +93,6 @@ export default function Personal() {
     setMsg("");
 
     try {
-      // ✅ NO pasamos orgId; el backend lo resuelve con bootstrap_session_context()
       await upsertPersonal({
         nombre: form.nombre,
         apellido: form.apellido,
@@ -148,15 +141,15 @@ export default function Personal() {
     }
   }
 
-  if (loading || !ready) return <div className="p-6 text-gray-500">Cargando sesión…</div>;
+  if (loading || !ready) return <div className="p-6 text-gray-300">Cargando sesión…</div>;
 
   if (!isLoggedIn) {
-    return <div className="p-6 text-red-600">No hay sesión activa. Inicia sesión para continuar.</div>;
+    return <div className="p-6 text-red-400">No hay sesión activa. Inicia sesión para continuar.</div>;
   }
 
   if (!currentOrg?.id) {
     return (
-      <div className="p-6 text-red-600">
+      <div className="p-6 text-red-400">
         No hay organización activa. Selecciona una organización para continuar.
       </div>
     );
@@ -166,8 +159,8 @@ export default function Personal() {
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold mb-1">Personal</h1>
-          <div className="text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold mb-1 text-white">Personal</h1>
+          <div className="text-sm text-gray-300">
             Rol: <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
             <span className="font-mono">{currentOrg.id}</span>
           </div>
@@ -195,7 +188,7 @@ export default function Personal() {
           onChange={(e) => setQ(e.target.value)}
         />
 
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-200">
           <input
             type="checkbox"
             checked={onlyActive}
@@ -214,13 +207,14 @@ export default function Personal() {
         </button>
       </div>
 
-      {msg ? <div className="mt-4 text-sm text-red-600">{msg}</div> : null}
+      {msg ? <div className="mt-4 text-sm text-yellow-200">{msg}</div> : null}
 
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white overflow-hidden">
+      {/* ✅ Aquí está el FIX: text-slate-900 para que se vea sobre fondo blanco */}
+      <div className="mt-4 rounded-2xl border border-gray-200 bg-white text-slate-900 overflow-hidden">
         {busy && filtered.length === 0 ? (
-          <div className="p-4 text-gray-500">Cargando personal…</div>
+          <div className="p-4 text-gray-600">Cargando personal…</div>
         ) : filtered.length === 0 ? (
-          <div className="p-4 text-gray-500">No hay registros.</div>
+          <div className="p-4 text-gray-600">No hay registros.</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
