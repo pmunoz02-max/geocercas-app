@@ -1,5 +1,5 @@
 // src/lib/asignacionesApi.js
-// CANONICO: NO usa Supabase directo. Solo /api/asignaciones (cookie tg_at)
+// CANONICO: solo /api/asignaciones (cookie tg_at)
 
 async function parseJsonSafe(res) {
   const txt = await res.text();
@@ -21,21 +21,16 @@ async function apiFetch(method, body) {
 
   const payload = await parseJsonSafe(res);
   if (!res.ok || payload?.ok === false) {
-    const msg =
-      payload?.error ||
-      `HTTP ${res.status} ${res.statusText}` ||
-      "Request failed";
+    const msg = payload?.error || `HTTP ${res.status} ${res.statusText}` || "Request failed";
     return { data: null, error: { message: msg } };
   }
   return { data: payload?.data ?? null, error: null };
 }
 
-// GET bundle
 export async function getAsignacionesBundle() {
   return apiFetch("GET");
 }
 
-// CRUD
 export async function createAsignacion(payload) {
   return apiFetch("POST", payload);
 }

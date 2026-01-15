@@ -1,5 +1,5 @@
 // src/pages/AsignacionesPage.jsx
-// CANONICO: respeta AuthContext (ready/currentOrg) y usa SOLO /api/asignaciones
+// DEFINITIVO: Asignaciones usa personal (personal_id) + /api/asignaciones
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,9 +25,7 @@ const ESTADOS = ["todos", "activa", "inactiva"];
 
 export default function AsignacionesPage() {
   const { t } = useTranslation();
-
-  // ✅ Contrato REAL de tu AuthContext
-  const { ready, currentOrg } = useAuth(); // :contentReference[oaicite:4]{index=4}
+  const { ready, currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
 
   const [asignaciones, setAsignaciones] = useState([]);
@@ -38,8 +36,8 @@ export default function AsignacionesPage() {
 
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
-  // FORM
-  const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
+  // FORM (✅ personal_id)
+  const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -49,7 +47,7 @@ export default function AsignacionesPage() {
   const [editingId, setEditingId] = useState(null);
 
   // CATALOGOS
-  const [peopleOptions, setPeopleOptions] = useState([]);
+  const [personalOptions, setPersonalOptions] = useState([]);
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
@@ -59,10 +57,10 @@ export default function AsignacionesPage() {
 
     const { data, error } = await getAsignacionesBundle();
     if (error) {
-      console.error("[AsignacionesPage] getAsignacionesBundle error:", error);
-      setError(error.message || t("asignaciones.messages.loadError"));
+      console.error("[AsignacionesPage] bundle error:", error);
+      setError(error.message || "Error cargando asignaciones.");
       setAsignaciones([]);
-      setPeopleOptions([]);
+      setPersonalOptions([]);
       setGeocercaOptions([]);
       setActivityOptions([]);
       setLoading(false);
@@ -74,7 +72,24 @@ export default function AsignacionesPage() {
     const catalogs = bundle.catalogs || {};
 
     setAsignaciones(Array.isArray(rows) ? rows : []);
-    setPeopleOptions(Array.isArray(catalogs.people) ? catalogs.people : []);
+
+    // ✅ Fuente de verdad
+    const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
+
+    // Fallback de compat: si por algún motivo llega vacío pero hay "people" (alias), lo usamos
+    const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
+    const normalizedPersonal =
+      personal.length > 0
+        ? personal
+        : fallback.map((p) => ({
+            id: p.org_people_id, // alias
+            nombre: p.nombre,
+            apellido: p.apellido,
+            email: p.email,
+          }));
+
+    setPersonalOptions(normalizedPersonal);
+
     setGeocercaOptions(Array.isArray(catalogs.geocercas) ? catalogs.geocercas : []);
     setActivityOptions(Array.isArray(catalogs.activities) ? catalogs.activities : []);
 
@@ -94,14 +109,13 @@ export default function AsignacionesPage() {
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
     if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
-    if (selectedOrgPeopleId) rows = rows.filter((a) => a.org_people_id === selectedOrgPeopleId);
+    if (selectedPersonalId) rows = rows.filter((a) => a.personal_id === selectedPersonalId);
     return rows;
-  }, [asignaciones, estadoFilter, selectedOrgPeopleId]);
+  }, [asignaciones, estadoFilter, selectedPersonalId]);
 
   function resetForm() {
-    setSelectedOrgPeopleId("");
+    setSelectedPersonalId("");
     setSelectedGeocercaId("");
-    // no limpiamos selectedActivityId para mantener default
     setStartTime("");
     setEndTime("");
     setFrecuenciaEnvioMin(5);
@@ -115,12 +129,12 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     if (!orgId) {
-      setError(t("asignaciones.messages.noOrg", "No hay organización activa."));
+      setError("No hay organización activa.");
       return;
     }
 
-    if (!selectedOrgPeopleId || !selectedGeocercaId) {
-      setError(t("asignaciones.messages.selectPersonAndFence", "Selecciona persona y geocerca."));
+    if (!selectedPersonalId || !selectedGeocercaId) {
+      setError("Selecciona persona y geocerca.");
       return;
     }
 
@@ -130,19 +144,18 @@ export default function AsignacionesPage() {
     }
 
     if (!startTime || !endTime) {
-      setError(t("asignaciones.messages.selectDates", "Selecciona inicio y fin."));
+      setError("Selecciona inicio y fin.");
       return;
     }
 
     const freqMin = Number(frecuenciaEnvioMin) || 0;
     if (freqMin < 5) {
-      setError(t("asignaciones.messages.frequencyTooLow", "Frecuencia mínima: 5 minutos."));
+      setError("Frecuencia mínima: 5 minutos.");
       return;
     }
 
     const payload = {
-      // org_id NO es fuente de verdad: el backend lo fuerza desde contexto
-      org_people_id: selectedOrgPeopleId,
+      personal_id: selectedPersonalId, // ✅ definitivo
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
       start_time: localDateTimeToISO(startTime),
@@ -161,17 +174,11 @@ export default function AsignacionesPage() {
       return;
     }
 
-    setSuccessMessage(
-      editingId
-        ? t("asignaciones.messages.updateSuccess", "Asignación actualizada.")
-        : t("asignaciones.messages.createSuccess", "Asignación creada.")
-    );
-
+    setSuccessMessage(editingId ? "Asignación actualizada." : "Asignación creada.");
     resetForm();
     await loadAll();
   }
 
-  // ---- estados de carga
   if (!ready) {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
@@ -221,32 +228,36 @@ export default function AsignacionesPage() {
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
         <h2 className="text-lg font-semibold mb-4">
-          {editingId ? t("asignaciones.form.editTitle", "Editar asignación") : t("asignaciones.form.newTitle", "Nueva asignación")}
+          {editingId ? "Editar asignación" : "Nueva asignación"}
         </h2>
 
-        {loading && (
-          <p className="text-sm text-gray-500 mb-3">{t("asignaciones.messages.loadingData", "Cargando datos...")}</p>
+        {loading && <p className="text-sm text-gray-500 mb-3">Cargando datos...</p>}
+
+        {personalOptions.length === 0 && (
+          <p className="text-red-600 font-semibold mb-3">
+            No hay personal vigente en esta organización. Reactiva o crea al menos una persona.
+          </p>
         )}
 
         {activityOptions.length === 0 && (
           <p className="text-red-600 font-semibold mb-3">
-            No hay actividades creadas para esta organización. Crea al menos una Actividad para poder asignar.
+            No hay actividades creadas. Crea al menos una Actividad para poder asignar.
           </p>
         )}
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Persona */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.personLabel", "Persona")}</label>
+            <label className="mb-1 font-medium text-sm">Persona</label>
             <select
               className="border rounded px-3 py-2"
-              value={selectedOrgPeopleId}
-              onChange={(e) => setSelectedOrgPeopleId(e.target.value)}
+              value={selectedPersonalId}
+              onChange={(e) => setSelectedPersonalId(e.target.value)}
               required
             >
-              <option value="">{t("asignaciones.form.personPlaceholder", "Selecciona una persona")}</option>
-              {peopleOptions.map((p) => (
-                <option key={p.org_people_id} value={p.org_people_id}>
+              <option value="">Selecciona una persona</option>
+              {personalOptions.map((p) => (
+                <option key={p.id} value={p.id}>
                   {`${p.nombre || ""} ${p.apellido || ""}`.trim()}
                 </option>
               ))}
@@ -255,14 +266,14 @@ export default function AsignacionesPage() {
 
           {/* Geocerca */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.geofenceLabel", "Geocerca")}</label>
+            <label className="mb-1 font-medium text-sm">Geocerca</label>
             <select
               className="border rounded px-3 py-2"
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
               required
             >
-              <option value="">{t("asignaciones.form.geofencePlaceholder", "Selecciona una geocerca")}</option>
+              <option value="">Selecciona una geocerca</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre || g.id}
@@ -273,7 +284,7 @@ export default function AsignacionesPage() {
 
           {/* Actividad */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.activityLabel", "Actividad")}</label>
+            <label className="mb-1 font-medium text-sm">Actividad</label>
             <select
               className="border rounded px-3 py-2"
               value={selectedActivityId}
@@ -281,7 +292,7 @@ export default function AsignacionesPage() {
               required
               disabled={activityOptions.length === 0}
             >
-              <option value="">{t("asignaciones.form.activityPlaceholder", "Selecciona una actividad")}</option>
+              <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name || a.id}
@@ -292,7 +303,7 @@ export default function AsignacionesPage() {
 
           {/* Inicio */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.startLabel", "Inicio")}</label>
+            <label className="mb-1 font-medium text-sm">Inicio</label>
             <input
               type="datetime-local"
               className="border rounded px-3 py-2"
@@ -304,7 +315,7 @@ export default function AsignacionesPage() {
 
           {/* Fin */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.endLabel", "Fin")}</label>
+            <label className="mb-1 font-medium text-sm">Fin</label>
             <input
               type="datetime-local"
               className="border rounded px-3 py-2"
@@ -316,16 +327,16 @@ export default function AsignacionesPage() {
 
           {/* Estado */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.statusLabel", "Estado")}</label>
+            <label className="mb-1 font-medium text-sm">Estado</label>
             <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="activa">{t("asignaciones.form.statusActive", "Activa")}</option>
-              <option value="inactiva">{t("asignaciones.form.statusInactive", "Inactiva")}</option>
+              <option value="activa">Activa</option>
+              <option value="inactiva">Inactiva</option>
             </select>
           </div>
 
           {/* Frecuencia */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.frequencyLabel", "Frecuencia (min)")}</label>
+            <label className="mb-1 font-medium text-sm">Frecuencia (min)</label>
             <input
               type="number"
               className="border rounded px-3 py-2"
@@ -335,19 +346,18 @@ export default function AsignacionesPage() {
             />
           </div>
 
-          {/* Botones */}
           <div className="md:col-span-2 flex flex-wrap gap-3 mt-2">
             <button
               type="submit"
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-              disabled={loading || activityOptions.length === 0}
+              disabled={loading || activityOptions.length === 0 || personalOptions.length === 0}
             >
-              {editingId ? t("asignaciones.form.updateButton", "Actualizar") : t("asignaciones.form.saveButton", "Guardar")}
+              {editingId ? "Actualizar" : "Guardar"}
             </button>
 
             {editingId && (
               <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
-                {t("asignaciones.form.cancelEditButton", "Cancelar")}
+                Cancelar
               </button>
             )}
           </div>
@@ -364,7 +374,7 @@ export default function AsignacionesPage() {
         loading={loading}
         onEdit={(a) => {
           setEditingId(a.id);
-          setSelectedOrgPeopleId(a.org_people_id || "");
+          setSelectedPersonalId(a.personal_id || "");
           setSelectedGeocercaId(a.geocerca_id || "");
           setSelectedActivityId(a.activity_id || "");
           setStartTime(a.start_time?.slice(0, 16) || "");
@@ -375,12 +385,12 @@ export default function AsignacionesPage() {
           setSuccessMessage(null);
         }}
         onDelete={async (id) => {
-          const ok = window.confirm(t("asignaciones.messages.confirmDelete", "¿Eliminar asignación?"));
+          const ok = window.confirm("¿Eliminar asignación?");
           if (!ok) return;
           const resp = await deleteAsignacion(id);
-          if (resp.error) setError(t("asignaciones.messages.deleteError", "Error eliminando."));
+          if (resp.error) setError("Error eliminando.");
           else {
-            setSuccessMessage(t("asignaciones.messages.deleteSuccess", "Asignación eliminada."));
+            setSuccessMessage("Asignación eliminada.");
             loadAll();
           }
         }}
