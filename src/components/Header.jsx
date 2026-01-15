@@ -1,4 +1,3 @@
-// src/components/Header.jsx
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -21,24 +20,9 @@ function NavItem({ to, children }) {
 }
 
 export default function Header() {
-  const {
-    user,
-    loading,
-    currentOrg,
-    currentRole,
-    isAppRoot,
-    supabase,
-  } = useAuth();
-
+  const { user, loading, currentOrg, currentRole, isAppRoot, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    if (location.pathname !== "/login") {
-      navigate("/login", { replace: true });
-    }
-  };
 
   const roleLabel = isAppRoot
     ? "ROOT"
@@ -46,10 +30,16 @@ export default function Header() {
     ? currentRole.toUpperCase()
     : "SIN ROL";
 
+  const handleLogout = async () => {
+    await logout();
+    if (location.pathname !== "/login") {
+      navigate("/login", { replace: true });
+    }
+  };
+
   return (
     <header className="w-full border-b bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-        {/* ---------- LOGO / NAV PRINCIPAL ---------- */}
         <div className="flex items-center gap-4">
           <Link to="/inicio" className="text-lg font-semibold text-gray-900">
             App Geocercas
@@ -58,7 +48,7 @@ export default function Header() {
           {user && (
             <nav className="hidden md:flex items-center gap-1">
               <NavItem to="/inicio">Inicio</NavItem>
-              <NavItem to="/geocercas">Geocercas</NavItem>
+              <NavItem to="/geocerca">Geocerca</NavItem>
               <NavItem to="/personal">Personal</NavItem>
               <NavItem to="/actividades">Actividades</NavItem>
               <NavItem to="/asignaciones">Asignaciones</NavItem>
@@ -68,7 +58,6 @@ export default function Header() {
           )}
         </div>
 
-        {/* ---------- CONTEXTO / SESIÓN ---------- */}
         <div className="flex items-center gap-2">
           {!loading && user ? (
             <>
@@ -76,15 +65,12 @@ export default function Header() {
                 <span className="font-medium text-gray-800">
                   {currentOrg?.name ?? "Sin organización"}
                 </span>
-                <span className="text-gray-600">
-                  {roleLabel}
-                </span>
+                <span className="text-gray-600">{roleLabel}</span>
               </div>
 
               <button
                 onClick={handleLogout}
                 className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
-                title="Cerrar sesión"
               >
                 Cerrar sesión
               </button>
@@ -99,18 +85,6 @@ export default function Header() {
           )}
         </div>
       </div>
-
-      {/* ---------- NAV SECUNDARIA (MÓVIL) ---------- */}
-      {user && (
-        <div className="md:hidden border-t bg-white">
-          <div className="max-w-6xl mx-auto px-4 py-2 flex gap-1 overflow-x-auto">
-            <NavItem to="/inicio">Inicio</NavItem>
-            <NavItem to="/geocercas">Geocercas</NavItem>
-            <NavItem to="/personal">Personal</NavItem>
-            <NavItem to="/tracker">Tracker</NavItem>
-          </div>
-        </div>
-      )}
     </header>
   );
 }
