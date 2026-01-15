@@ -94,16 +94,13 @@ export default function Personal() {
     setMsg("");
 
     try {
-      await upsertPersonal(
-        {
-          nombre: form.nombre,
-          apellido: form.apellido,
-          email: form.email,
-          telefono: form.telefono,
-          vigente: !!form.vigente,
-        },
-        currentOrg.id
-      );
+      await upsertPersonal({
+  nombre: form.nombre,
+  apellido: form.apellido,
+  email: form.email,
+  telefono: form.telefono,
+  vigente: !!form.vigente,
+});
 
       setOpenNew(false);
       setForm({ nombre: "", apellido: "", email: "", telefono: "", vigente: true });
