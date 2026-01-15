@@ -1,5 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
+/* =========================
+   Helpers
+========================= */
+
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
   const parts = raw.split(";").map((p) => p.trim());
@@ -15,8 +19,9 @@ function json(res, status, payload) {
 }
 
 function normalizePhone(phone) {
-  if (!phone) return "";
-  return String(phone).replace(/[^\d]/g, "");
+  if (!phone) return null;
+  const p = String(phone).replace(/[^\d]/g, "");
+  return p || null;
 }
 
 function requireWriteRole(role) {
@@ -42,6 +47,10 @@ function normalizeCtx(data) {
   return data;
 }
 
+/* =========================
+   Context resolution
+========================= */
+
 async function resolveContext(req) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
@@ -51,21 +60,25 @@ async function resolveContext(req) {
     return {
       ok: false,
       status: 500,
-      error: "Missing env vars SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY",
+      error: "Missing Supabase env vars",
     };
   }
 
   const jwt = getCookie(req, "tg_at");
-  if (!jwt) return { ok: false, status: 401, error: "No authenticated cookie tg_at" };
+  if (!jwt) {
+    return { ok: false, status: 401, error: "No authenticated cookie" };
+  }
 
-  // ✅ Cliente con JWT del usuario (auth.uid() existe en DB)
+  // Cliente con JWT del usuario (auth.uid() válido en DB)
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
-  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
+  if (userErr || !userData?.user) {
+    return { ok: false, status: 401, error: "Invalid session" };
+  }
 
   const { data: rpcData, error: ctxErr } = await supaUser.rpc("bootstrap_session_context");
   if (ctxErr) {
@@ -73,16 +86,7 @@ async function resolveContext(req) {
       ok: false,
       status: 400,
       error: "bootstrap_session_context failed",
-      details: { message: ctxErr?.message || null, hint: ctxErr?.hint || null, code: ctxErr?.code || null },
-    };
-  }
-
-  if (Array.isArray(rpcData) && rpcData.length === 0) {
-    return {
-      ok: false,
-      status: 400,
-      error: "bootstrap_session_context returned 0 rows",
-      details: { rpcData },
+      details: ctxErr.message,
     };
   }
 
@@ -91,29 +95,39 @@ async function resolveContext(req) {
     return {
       ok: false,
       status: 400,
-      error: "bootstrap_session_context returned unexpected shape",
-      details: { rpcData, ctx },
+      error: "Invalid session context",
+      details: rpcData,
     };
   }
 
-  // ✅ Cliente service role (para lecturas/queries complejas si RLS molesta)
+  // Cliente service role (lecturas / queries complejas)
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  return { ok: true, user: userData.user, ctx, supaUser, supaSrv };
+  return {
+    ok: true,
+    user: userData.user,
+    ctx,
+    supaUser,
+    supaSrv,
+  };
 }
+
+/* =========================
+   Handlers
+========================= */
 
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, ctxRes);
 
   const { ctx, supaSrv } = ctxRes;
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   const q = (url.searchParams.get("q") || "").trim();
   const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "500", 10) || 500, 1), 2000);
+  const limit = Math.min(Number(url.searchParams.get("limit") || 500), 2000);
 
   let query = supaSrv
     .from("personal")
@@ -138,18 +152,22 @@ async function handleList(req, res) {
   }
 
   const { data, error } = await query;
-  if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
+  if (error) {
+    return json(res, 500, { error: "No se pudo listar personal", details: error.message });
+  }
 
   return json(res, 200, { items: data || [] });
 }
 
 async function handleUpsert(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, ctxRes);
 
   const { ctx, user, supaUser } = ctxRes;
 
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  if (!requireWriteRole(ctx.role)) {
+    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  }
 
   const body = await readBody(req);
   const payload = body?.payload || body || {};
@@ -159,135 +177,139 @@ async function handleUpsert(req, res) {
   const apellido = (payload.apellido || "").trim();
   const email = (payload.email || "").trim().toLowerCase();
   const telefono = (payload.telefono || "").trim();
-  const telefonoNorm = normalizePhone(telefono);
-
-  let intervalMin = Number(payload.position_interval_min ?? 5);
-  if (!Number.isFinite(intervalMin) || intervalMin < 5) intervalMin = 5;
-  const position_interval_sec = Math.round(intervalMin * 60);
+  const telefono_norm = normalizePhone(telefono);
 
   if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
   if (!email) return json(res, 400, { error: "Email es obligatorio" });
 
-  // ✅ Writes con supaUser => auth.uid() NO es NULL en triggers
   const baseRow = {
     nombre,
     apellido: apellido || null,
     email,
     telefono: telefono || null,
-    telefono_norm: telefonoNorm || null,
+    telefono_norm,
     vigente: payload.vigente ?? true,
-    position_interval_sec,
     updated_at: nowIso,
   };
 
-  if (!payload.id) {
-    const insertRow = {
-      ...baseRow,
-      owner_id: user.id,
-      org_id: ctx.org_id,
-      created_at: nowIso,
-      is_deleted: false,
-    };
-
-    const { data, error } = await supaUser.from("personal").insert(insertRow).select("*").maybeSingle();
-    if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
-    return json(res, 200, { item: data });
-  }
-
-  const { data: existing, error: exErr } = await supaUser
+  // 1) Buscar existente por org + email (incluye borrados)
+  const { data: existing, error: findErr } = await supaUser
     .from("personal")
-    .select("id, org_id, is_deleted")
-    .eq("id", payload.id)
+    .select("*")
+    .eq("org_id", ctx.org_id)
+    .eq("email", email)
     .maybeSingle();
 
-  if (exErr) return json(res, 500, { error: "No se pudo leer registro", details: exErr.message });
-  if (!existing || existing.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
-  if (existing.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
+  if (findErr) {
+    return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
+  }
+
+  // 2) Existe → UPDATE / REVIVE
+  if (existing) {
+    const revive = {
+      ...baseRow,
+      is_deleted: false,
+      deleted_at: null,
+    };
+
+    const { data, error } = await supaUser
+      .from("personal")
+      .update(revive)
+      .eq("id", existing.id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
+    }
+
+    return json(res, 200, { item: data, revived: true });
+  }
+
+  // 3) No existe → INSERT
+  const insertRow = {
+    ...baseRow,
+    org_id: ctx.org_id,
+    owner_id: user.id,
+    created_at: nowIso,
+    is_deleted: false,
+  };
 
   const { data, error } = await supaUser
     .from("personal")
-    .update(baseRow)
-    .eq("id", payload.id)
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
+    .insert(insertRow)
     .select("*")
     .maybeSingle();
 
-  if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
-  return json(res, 200, { item: data });
+  if (error) {
+    return json(res, 500, { error: "No se pudo crear personal", details: error.message });
+  }
+
+  return json(res, 200, { item: data, created: true });
 }
 
 async function handleToggle(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, ctxRes);
 
   const { ctx, supaUser } = ctxRes;
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  if (!requireWriteRole(ctx.role)) {
+    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  }
 
   const body = await readBody(req);
-  const id = body?.id;
-  if (!id) return json(res, 400, { error: "Missing id" });
+  if (!body?.id) return json(res, 400, { error: "Missing id" });
 
   const nowIso = new Date().toISOString();
 
-  const { data: row, error: fetchErr } = await supaUser
-    .from("personal")
-    .select("id, org_id, vigente, is_deleted")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (fetchErr) return json(res, 500, { error: "No se pudo leer vigente", details: fetchErr.message });
-  if (!row || row.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
-  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
-
   const { data, error } = await supaUser
     .from("personal")
-    .update({ vigente: !row.vigente, updated_at: nowIso })
-    .eq("id", id)
+    .update({ vigente: supaUser.sql`not vigente`, updated_at: nowIso })
+    .eq("id", body.id)
     .eq("org_id", ctx.org_id)
     .eq("is_deleted", false)
     .select("*")
     .maybeSingle();
 
-  if (error) return json(res, 500, { error: "No se pudo actualizar vigente", details: error.message });
+  if (error) {
+    return json(res, 500, { error: "No se pudo cambiar vigencia", details: error.message });
+  }
+
   return json(res, 200, { item: data });
 }
 
 async function handleDelete(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, ctxRes);
 
   const { ctx, supaUser } = ctxRes;
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  if (!requireWriteRole(ctx.role)) {
+    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  }
 
   const body = await readBody(req);
-  const id = body?.id;
-  if (!id) return json(res, 400, { error: "Missing id" });
+  if (!body?.id) return json(res, 400, { error: "Missing id" });
 
   const nowIso = new Date().toISOString();
-
-  const { data: row, error: fetchErr } = await supaUser
-    .from("personal")
-    .select("id, org_id, is_deleted")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (fetchErr) return json(res, 500, { error: "No se pudo leer registro", details: fetchErr.message });
-  if (!row || row.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
-  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
 
   const { data, error } = await supaUser
     .from("personal")
     .update({ is_deleted: true, vigente: false, deleted_at: nowIso, updated_at: nowIso })
-    .eq("id", id)
+    .eq("id", body.id)
     .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
     .select("*")
     .maybeSingle();
 
-  if (error) return json(res, 500, { error: "No se pudo eliminar personal", details: error.message });
+  if (error) {
+    return json(res, 500, { error: "No se pudo eliminar personal", details: error.message });
+  }
+
   return json(res, 200, { item: data });
 }
+
+/* =========================
+   Main handler
+========================= */
 
 export default async function handler(req, res) {
   try {
@@ -307,6 +329,6 @@ export default async function handler(req, res) {
 
     return json(res, 405, { error: "Method not allowed" });
   } catch (e) {
-    return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
+    return json(res, 500, { error: "Unexpected error", details: String(e) });
   }
 }
