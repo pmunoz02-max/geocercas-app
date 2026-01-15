@@ -1,8 +1,15 @@
-// src/lib/activitiesApi.js
+// src/lib/actividadesApi.js
 //
-// Cliente HTTP para Activities (NO Supabase directo).
+// Cliente HTTP para Actividades (NO Supabase directo).
 // NO manda org_id. El backend resuelve org/rol por cookie HttpOnly tg_at
 // Endpoint: /api/actividades
+//
+// Exporta nombres en español para coincidir con ActividadesPage.jsx:
+//  - listActividades
+//  - createActividad
+//  - updateActividad
+//  - deleteActividad
+//  - toggleActividadActiva
 
 async function http(path, { method = "GET", body } = {}) {
   const res = await fetch(path, {
@@ -32,34 +39,32 @@ async function http(path, { method = "GET", body } = {}) {
   return json.data ?? null;
 }
 
-// Mantengo tus nombres de funciones actuales para compatibilidad:
-export async function listActivities({ includeInactive = false } = {}) {
+export async function listActividades({ includeInactive = false } = {}) {
   const qs = new URLSearchParams();
   if (includeInactive) qs.set("includeInactive", "true");
   const url = `/api/actividades${qs.toString() ? `?${qs}` : ""}`;
   return (await http(url, { method: "GET" })) || [];
 }
 
-export async function createActivity(payload) {
+export async function createActividad(payload) {
   return await http("/api/actividades", { method: "POST", body: payload });
 }
 
-export async function updateActivity(id, payload) {
+export async function updateActividad(id, payload) {
   return await http(`/api/actividades?id=${encodeURIComponent(id)}`, {
     method: "PUT",
     body: payload,
   });
 }
 
-export async function deleteActivity(id) {
+export async function deleteActividad(id) {
   await http(`/api/actividades?id=${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
   return true;
 }
 
-// Extra opcional (por si lo usas en UI):
-export async function toggleActivityActive(id, active) {
+export async function toggleActividadActiva(id, active) {
   return await http(`/api/actividades?id=${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: { active },
