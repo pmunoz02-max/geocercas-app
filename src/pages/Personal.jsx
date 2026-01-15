@@ -54,10 +54,10 @@ export default function Personal() {
     setMsg("");
 
     try {
+      // ✅ NO mandamos orgId desde front (patrón oficial)
       const rows = await listPersonal({
         q,
         onlyActive,
-        orgId: currentOrg.id,
         limit: 500,
       });
       setItems(Array.isArray(rows) ? rows : []);
@@ -70,9 +70,7 @@ export default function Personal() {
   }
 
   useEffect(() => {
-    if (!loading && ready && isLoggedIn && currentOrg?.id) {
-      load();
-    }
+    if (!loading && ready && isLoggedIn && currentOrg?.id) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, ready, isLoggedIn, currentOrg?.id]);
 
@@ -88,23 +86,33 @@ export default function Personal() {
 
   async function onSaveNew(e) {
     e.preventDefault();
-    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+
+    // ✅ Esta línea debe verse SIEMPRE cuando aprietas Guardar
+    console.log("[Personal] submit -> onSaveNew", { canEdit, form });
+
+    if (!canEdit) {
+      setMsg("No tienes permisos (solo admin/owner).");
+      return;
+    }
 
     setSaving(true);
     setMsg("");
 
     try {
+      // ✅ NO pasamos orgId; el backend lo resuelve con bootstrap_session_context()
       await upsertPersonal({
-  nombre: form.nombre,
-  apellido: form.apellido,
-  email: form.email,
-  telefono: form.telefono,
-  vigente: !!form.vigente,
-});
+        nombre: form.nombre,
+        apellido: form.apellido,
+        email: form.email,
+        telefono: form.telefono,
+        vigente: !!form.vigente,
+      });
 
       setOpenNew(false);
       setForm({ nombre: "", apellido: "", email: "", telefono: "", vigente: true });
+
       await load();
+      setMsg("Guardado ✅");
     } catch (e2) {
       setMsg(e2?.message || "No se pudo guardar.");
     } finally {
@@ -168,7 +176,10 @@ export default function Personal() {
         {canEdit ? (
           <button
             className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800"
-            onClick={() => setOpenNew(true)}
+            onClick={() => {
+              setMsg("");
+              setOpenNew(true);
+            }}
             type="button"
           >
             + Nuevo
