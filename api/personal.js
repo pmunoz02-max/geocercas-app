@@ -36,11 +36,44 @@ async function readBody(req) {
   }
 }
 
-// ✅ FIX: RPC returns TABLE => Supabase JS may return array
+// RPC returns TABLE => often an array
 function normalizeCtx(data) {
   if (!data) return null;
   if (Array.isArray(data)) return data[0] || null;
   return data;
+}
+
+// ✅ NEW: accept alternative shapes / nesting
+function coerceSessionCtx(raw) {
+  if (!raw) return null;
+
+  // common nesting patterns
+  const candidate =
+    raw?.ctx ||
+    raw?.context ||
+    raw?.data ||
+    raw?.result ||
+    raw?.session ||
+    raw;
+
+  const org_id =
+    candidate?.org_id ||
+    candidate?.orgId ||
+    candidate?.organization_id ||
+    candidate?.organizationId ||
+    candidate?.org?.id ||
+    candidate?.org?.org_id ||
+    null;
+
+  const role =
+    candidate?.role ||
+    candidate?.current_role ||
+    candidate?.user_role ||
+    candidate?.rol ||
+    null;
+
+  if (!org_id || !role) return null;
+  return { org_id, role };
 }
 
 async function resolveContext(req) {
@@ -67,23 +100,33 @@ async function resolveContext(req) {
   const { data: userData, error: userErr } = await supaAnon.auth.getUser();
   if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-  const { data: rawCtx, error: ctxErr } = await supaAnon.rpc("bootstrap_session_context");
+  const { data: rpcData, error: ctxErr } = await supaAnon.rpc("bootstrap_session_context");
   if (ctxErr) {
     return {
       ok: false,
       status: 400,
       error: "bootstrap_session_context failed",
-      details: ctxErr?.message || null,
+      details: {
+        message: ctxErr?.message || null,
+        hint: ctxErr?.hint || null,
+        code: ctxErr?.code || null,
+      },
     };
   }
 
-  const ctx = normalizeCtx(rawCtx);
-  if (!ctx?.org_id) {
+  const rawCtx = normalizeCtx(rpcData);
+  const ctx = coerceSessionCtx(rawCtx);
+
+  if (!ctx?.org_id || !ctx?.role) {
     return {
       ok: false,
       status: 400,
       error: "bootstrap_session_context returned unexpected shape",
-      details: { rawCtx },
+      details: {
+        receivedType: Array.isArray(rpcData) ? "array" : typeof rpcData,
+        rawCtx,
+        keys: rawCtx && typeof rawCtx === "object" ? Object.keys(rawCtx) : null,
+      },
     };
   }
 
