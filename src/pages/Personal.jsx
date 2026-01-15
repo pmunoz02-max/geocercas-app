@@ -1,375 +1,328 @@
-// src/pages/Personal.jsx
-import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext.jsx";
-import {
-  listPersonal,
-  toggleVigente,
-  deletePersonal,
-  upsertPersonal,
-} from "../lib/personalApi.js";
+// api/personal.js
+import { createClient } from "@supabase/supabase-js";
 
-/* ───────────────── Modal simple ───────────────── */
-function Modal({ open, title, children, onClose }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button
-            className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100"
-            onClick={onClose}
-          >
-            ✕
-          </button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
-  );
+/* ───────────────── Helpers ───────────────── */
+function getCookie(req, name) {
+  const raw = req.headers.cookie || "";
+  const parts = raw.split(";").map((p) => p.trim());
+  const found = parts.find((p) => p.startsWith(name + "="));
+  if (!found) return null;
+  return decodeURIComponent(found.split("=").slice(1).join("="));
 }
 
-export default function PersonalPageLite() {
-  const {
-    loading: authLoading,
-    ready,
-    user,
-    isLoggedIn,
-    currentRole,
-    role: legacyRole,
-    isAdmin,
-    isOwner,
-    currentOrg,
-  } = useAuth();
+function json(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(payload));
+}
 
-  const effectiveRole = (currentRole || legacyRole || "tracker").toLowerCase();
-  const canEdit =
-    Boolean(isAdmin) ||
-    Boolean(isOwner) ||
-    effectiveRole === "owner" ||
-    effectiveRole === "admin";
+/** ✅ Universal: deja SOLO dígitos (quita +, espacios, guiones, paréntesis, etc.) */
+function normalizePhone(phone) {
+  if (!phone) return "";
+  return String(phone).replace(/[^\d]/g, "");
+}
 
-  const [q, setQ] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true);
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+function requireWriteRole(role) {
+  const r = String(role || "").toLowerCase();
+  return r === "owner" || r === "admin";
+}
 
-  const [openNew, setOpenNew] = useState(false);
-  const [form, setForm] = useState({
-    nombre: "",
-    apellido: "",
-    email: "",
-    telefono: "",
-    vigente: true,
+async function resolveContext(req) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      ok: false,
+      status: 500,
+      error: "Missing env vars SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY",
+    };
+  }
+
+  const jwt = getCookie(req, "tg_at");
+  if (!jwt) return { ok: false, status: 401, error: "No authenticated cookie tg_at" };
+
+  const supaAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
-  const [saving, setSaving] = useState(false);
 
-  async function fetchRows() {
-    // ✅ Nueva arquitectura: NO usar session
-    if (!isLoggedIn || !user) {
-      setRows([]);
-      setMsg("No hay sesión activa");
-      setLoading(false);
-      return;
-    }
-    if (!currentOrg?.id) {
-      setRows([]);
-      setMsg("No hay organización activa");
-      setLoading(false);
-      return;
-    }
+  const { data: userData, error: userErr } = await supaAnon.auth.getUser();
+  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-    setLoading(true);
-    setMsg("");
-
-    // Si tu listPersonal filtra por org internamente, perfecto.
-    // Si NO, lo corregimos en personalApi.js (siguiente paso).
-    const { data, error } = await listPersonal({ q, onlyActive, limit: 500 });
-
-    if (error) setMsg(error.message || "Error al cargar personal");
-    setRows(Array.isArray(data) ? data.filter(Boolean) : []);
-    setLoading(false);
+  const { data: ctx, error: ctxErr } = await supaAnon.rpc("bootstrap_session_context");
+  if (ctxErr || !ctx?.org_id) {
+    return {
+      ok: false,
+      status: 400,
+      error: "bootstrap_session_context failed",
+      details: ctxErr?.message || null,
+    };
   }
 
-  useEffect(() => {
-    if (!authLoading && ready) fetchRows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, ready]);
+  const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
 
-  const filtered = useMemo(() => {
-    const source = rows.slice();
-    if (!q) return source;
-    const ql = q.toLowerCase();
-    return source.filter((r) =>
-      `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${
-        r?.telefono ?? ""
-      }`
-        .toLowerCase()
-        .includes(ql)
-    );
-  }, [rows, q]);
+  return { ok: true, user: userData.user, ctx, supaSrv };
+}
 
-  async function onToggle(row) {
-    if (!row?.id) return;
-    if (!canEdit) {
-      setMsg("No tienes permisos para cambiar vigencia (solo owner/admin).");
-      return;
-    }
-    setLoading(true);
-    const { error } = await toggleVigente(row.id, !row.vigente);
-    if (error) setMsg(error.message || "No se pudo cambiar estado.");
-    await fetchRows();
+async function readBody(req) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
   }
+}
 
-  async function onDelete(row) {
-    if (!row?.id) return;
-    if (!canEdit) {
-      setMsg("No tienes permisos para eliminar (solo owner/admin).");
-      return;
-    }
-    if (!window.confirm("¿Eliminar (soft) este registro?")) return;
-    setLoading(true);
-    try {
-      const deleted = await deletePersonal(row.id);
-      if (!deleted) {
-        setMsg(
-          "No se eliminó ningún registro (0 filas afectadas). Verifica permisos."
-        );
-      }
-    } catch (err) {
-      setMsg(err?.message || "No se pudo eliminar.");
-    } finally {
-      await fetchRows();
-      setLoading(false);
-    }
-  }
+/* ───────────────── Handlers ───────────────── */
+async function handleList(req, res) {
+  const ctxRes = await resolveContext(req);
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
-  async function onSaveNew(e) {
-    e?.preventDefault?.();
-    if (!canEdit) {
-      setMsg("No tienes permisos para crear (solo owner/admin).");
-      return;
-    }
-    setSaving(true);
-    setMsg("");
-    try {
-      if (!form.nombre.trim()) throw new Error("Nombre es requerido.");
-      if (!form.email.trim()) throw new Error("Email es requerido.");
+  const { ctx, supaSrv } = ctxRes;
 
-      const { error } = await upsertPersonal({
-        nombre: form.nombre,
-        apellido: form.apellido,
-        email: form.email,
-        telefono: form.telefono,
-        vigente: !!form.vigente,
-      });
-      if (error) throw error;
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const q = (url.searchParams.get("q") || "").trim();
+  const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "500", 10) || 500, 1), 2000);
 
-      setOpenNew(false);
-      setForm({
-        nombre: "",
-        apellido: "",
-        email: "",
-        telefono: "",
-        vigente: true,
-      });
-      await fetchRows();
-    } catch (err) {
-      setMsg(err?.message || "No se pudo guardar el personal.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  let query = supaSrv
+    .from("personal")
+    .select("*")
+    .eq("org_id", ctx.org_id)
+    .eq("is_deleted", false)
+    .order("nombre", { ascending: true })
+    .limit(limit);
 
-  // ✅ Estados correctos (sin session)
-  if (authLoading || !ready) {
-    return <div className="p-6 text-gray-500">Cargando sesión…</div>;
-  }
+  if (onlyActive) query = query.eq("vigente", true);
 
-  if (!isLoggedIn || !user) {
-    return (
-      <div className="p-6 text-red-600">
-        No hay sesión activa. Inicia sesión para continuar.
-      </div>
+  if (q) {
+    const pattern = `%${q}%`;
+    query = query.or(
+      [
+        `nombre.ilike.${pattern}`,
+        `apellido.ilike.${pattern}`,
+        `email.ilike.${pattern}`,
+        `telefono.ilike.${pattern}`,
+      ].join(",")
     );
   }
 
-  if (!currentOrg?.id) {
-    return (
-      <div className="p-6 text-red-600">
-        No hay organización activa. Selecciona una organización para continuar.
-      </div>
-    );
+  const { data, error } = await query;
+  if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
+
+  return json(res, 200, { items: data || [] });
+}
+
+async function handleUpsert(req, res) {
+  const ctxRes = await resolveContext(req);
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+
+  const { ctx, user, supaSrv } = ctxRes;
+
+  if (!requireWriteRole(ctx.role)) {
+    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
   }
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold mb-1">Personal</h1>
-          <div className="text-sm text-gray-500">
-            Rol: <span className="font-semibold">{effectiveRole.toUpperCase()}</span>{" "}
-            · Org: <span className="font-mono">{currentOrg.id}</span>
-          </div>
-        </div>
+  const body = await readBody(req);
+  const payload = body?.payload || body || {};
 
-        {canEdit ? (
-          <button
-            className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800"
-            onClick={() => setOpenNew(true)}
-          >
-            + Nuevo
-          </button>
-        ) : null}
-      </div>
+  const nowIso = new Date().toISOString();
 
-      {/* Controles */}
-      <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
-        <input
-          className="w-full md:w-96 rounded-xl border border-gray-300 px-3 py-2"
-          placeholder="Buscar por nombre, apellido, email o teléfono…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+  const nombre = (payload.nombre || "").trim();
+  const apellido = (payload.apellido || "").trim();
+  const email = (payload.email || "").trim().toLowerCase();
+  const telefono = (payload.telefono || "").trim();
+  const telefonoNorm = normalizePhone(telefono);
+  const documento = payload.documento ? String(payload.documento).trim() : null;
 
-        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={onlyActive}
-            onChange={(e) => setOnlyActive(e.target.checked)}
-          />
-          Solo vigentes
-        </label>
+  const fecha_inicio = payload.fecha_inicio || null;
+  const fecha_fin = payload.fecha_fin || null;
 
-        <button
-          className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:opacity-50"
-          onClick={fetchRows}
-          disabled={loading}
-        >
-          {loading ? "Cargando…" : "Recargar"}
-        </button>
-      </div>
+  let intervalMin = Number(payload.position_interval_min ?? 5);
+  if (!Number.isFinite(intervalMin) || intervalMin < 5) intervalMin = 5;
+  const position_interval_sec = Math.round(intervalMin * 60);
 
-      {msg ? <div className="mt-4 text-sm text-red-600">{msg}</div> : null}
+  if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
+  if (!email) return json(res, 400, { error: "Email es obligatorio" });
 
-      {/* Tabla */}
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white overflow-hidden">
-        {loading && filtered.length === 0 ? (
-          <div className="p-4 text-gray-500">Cargando personal…</div>
-        ) : filtered.length === 0 ? (
-          <div className="p-4 text-gray-500">No hay registros.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left font-medium p-3">Nombre</th>
-                <th className="text-left font-medium p-3">Apellido</th>
-                <th className="text-left font-medium p-3">Email</th>
-                <th className="text-left font-medium p-3">Teléfono</th>
-                <th className="text-left font-medium p-3">Vigente</th>
-                <th className="text-left font-medium p-3">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id} className="border-t border-gray-100">
-                  <td className="p-3">{r?.nombre ?? "-"}</td>
-                  <td className="p-3">{r?.apellido ?? "-"}</td>
-                  <td className="p-3">{r?.email ?? "-"}</td>
-                  <td className="p-3">{r?.telefono ?? "-"}</td>
-                  <td className="p-3">
-                    <span
-                      className={`inline-flex px-2 py-1 rounded-lg text-xs ${
-                        r?.vigente ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {r?.vigente ? "Sí" : "No"}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex gap-2">
-                      <button
-                        className="rounded-lg border border-gray-300 px-3 py-1 hover:bg-gray-50 disabled:opacity-50"
-                        onClick={() => onToggle(r)}
-                        disabled={!canEdit || loading}
-                      >
-                        {r?.vigente ? "Desactivar" : "Activar"}
-                      </button>
+  // ✅ Duplicados por (org, email, telefono_norm) si aplica
+  let dupQuery = supaSrv
+    .from("personal")
+    .select("id")
+    .eq("org_id", ctx.org_id)
+    .eq("is_deleted", false)
+    .eq("email", email);
 
-                      <button
-                        className="rounded-lg border border-red-200 text-red-700 px-3 py-1 hover:bg-red-50 disabled:opacity-50"
-                        onClick={() => onDelete(r)}
-                        disabled={!canEdit || loading}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+  if (telefonoNorm) dupQuery = dupQuery.eq("telefono_norm", telefonoNorm);
+  else dupQuery = dupQuery.is("telefono_norm", null);
 
-      {/* Modal Nuevo */}
-      <Modal open={openNew} title="Nuevo personal" onClose={() => setOpenNew(false)}>
-        <form className="space-y-3" onSubmit={onSaveNew}>
-          <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Nombre"
-            value={form.nombre}
-            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-          />
-          <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Apellido"
-            value={form.apellido}
-            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
-          />
-          <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
-          <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Teléfono"
-            value={form.telefono}
-            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
-          />
+  if (payload.id) dupQuery = dupQuery.neq("id", payload.id);
 
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={!!form.vigente}
-              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
-            />
-            Vigente
-          </label>
+  const { data: dupRows, error: dupErr } = await dupQuery;
+  if (dupErr) return json(res, 500, { error: "No se pudo validar duplicados", details: dupErr.message });
+  if (dupRows && dupRows.length > 0) {
+    return json(res, 409, { error: "Duplicado: ya existe una persona con este email y teléfono en esta organización" });
+  }
 
-          <div className="pt-2 flex justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50"
-              onClick={() => setOpenNew(false)}
-              disabled={saving}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800 disabled:opacity-50"
-              disabled={saving}
-            >
-              {saving ? "Guardando…" : "Guardar"}
-            </button>
-          </div>
-        </form>
-      </Modal>
-    </div>
-  );
+  const baseRow = {
+    nombre,
+    apellido: apellido || null,
+    email,
+    telefono: telefono || null,
+    telefono_norm: telefonoNorm || null,
+    documento,
+    fecha_inicio,
+    fecha_fin,
+    vigente: payload.vigente ?? true,
+    position_interval_sec,
+    updated_at: nowIso,
+  };
+
+  if (!payload.id) {
+    const insertRow = {
+      ...baseRow,
+      owner_id: user.id,
+      org_id: ctx.org_id,
+      created_at: nowIso,
+      is_deleted: false,
+    };
+
+    const { data, error } = await supaSrv.from("personal").insert(insertRow).select("*").maybeSingle();
+    if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
+
+    return json(res, 200, { item: data });
+  }
+
+  // Cross-org guard
+  const { data: existing, error: exErr } = await supaSrv
+    .from("personal")
+    .select("id, org_id, is_deleted")
+    .eq("id", payload.id)
+    .maybeSingle();
+
+  if (exErr) return json(res, 500, { error: "No se pudo leer registro", details: exErr.message });
+  if (!existing || existing.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
+  if (existing.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
+
+  const { data, error } = await supaSrv
+    .from("personal")
+    .update(baseRow)
+    .eq("id", payload.id)
+    .eq("org_id", ctx.org_id)
+    .eq("is_deleted", false)
+    .select("*")
+    .maybeSingle();
+
+  if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
+
+  return json(res, 200, { item: data });
+}
+
+async function handleToggle(req, res) {
+  const ctxRes = await resolveContext(req);
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+
+  const { ctx, supaSrv } = ctxRes;
+
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+
+  const body = await readBody(req);
+  const id = body?.id;
+  if (!id) return json(res, 400, { error: "Missing id" });
+
+  const nowIso = new Date().toISOString();
+
+  const { data: row, error: fetchErr } = await supaSrv
+    .from("personal")
+    .select("id, org_id, vigente, is_deleted")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchErr) return json(res, 500, { error: "No se pudo leer vigente", details: fetchErr.message });
+  if (!row || row.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
+  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
+
+  const { data, error } = await supaSrv
+    .from("personal")
+    .update({ vigente: !row.vigente, updated_at: nowIso })
+    .eq("id", id)
+    .eq("org_id", ctx.org_id)
+    .eq("is_deleted", false)
+    .select("*")
+    .maybeSingle();
+
+  if (error) return json(res, 500, { error: "No se pudo actualizar vigente", details: error.message });
+
+  return json(res, 200, { item: data });
+}
+
+async function handleDelete(req, res) {
+  const ctxRes = await resolveContext(req);
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+
+  const { ctx, supaSrv } = ctxRes;
+
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+
+  const body = await readBody(req);
+  const id = body?.id;
+  if (!id) return json(res, 400, { error: "Missing id" });
+
+  const nowIso = new Date().toISOString();
+
+  const { data: row, error: fetchErr } = await supaSrv
+    .from("personal")
+    .select("id, org_id, is_deleted")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchErr) return json(res, 500, { error: "No se pudo leer registro", details: fetchErr.message });
+  if (!row || row.is_deleted) return json(res, 404, { error: "Registro no encontrado" });
+  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
+
+  const { data, error } = await supaSrv
+    .from("personal")
+    .update({ is_deleted: true, vigente: false, deleted_at: nowIso, updated_at: nowIso })
+    .eq("id", id)
+    .eq("org_id", ctx.org_id)
+    .eq("is_deleted", false)
+    .select("*")
+    .maybeSingle();
+
+  if (error) return json(res, 500, { error: "No se pudo eliminar personal", details: error.message });
+
+  return json(res, 200, { item: data });
+}
+
+/* ───────────────── Entry ───────────────── */
+export default async function handler(req, res) {
+  try {
+    // ✅ CORS correcto para cookies (NO wildcard con credentials)
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+
+    if (req.method === "OPTIONS") return json(res, 200, { ok: true });
+
+    if (req.method === "GET") return await handleList(req, res);
+    if (req.method === "POST") return await handleUpsert(req, res);
+    if (req.method === "PATCH") return await handleToggle(req, res);
+    if (req.method === "DELETE") return await handleDelete(req, res);
+
+    return json(res, 405, { error: "Method not allowed" });
+  } catch (e) {
+    return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
+  }
 }
