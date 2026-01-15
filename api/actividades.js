@@ -7,7 +7,7 @@
 //
 // Debug seguro:
 //   GET /api/actividades?debug=1
-//   GET /api/actividades?debug_ctx=1  (muestra keys y extracción de org/rol sin exponer token)
+//   GET /api/actividades?debug_ctx=1  (muestra keys y extracción org/rol; soporta ctx como ARRAY)
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -46,33 +46,48 @@ function buildSupabaseForUser(accessToken) {
   });
 }
 
-function extractOrgId(ctx) {
-  return (
-    ctx?.org_id ??
-    ctx?.current_org_id ??
-    ctx?.currentOrgId ??
-    ctx?.current_org?.id ??
-    ctx?.org?.id ??
-    (Array.isArray(ctx?.orgs) && ctx.orgs[0]?.id) ??
-    null
-  );
+function normalizeCtx(ctx) {
+  // Si el RPC devuelve TABLE/SETOF, Supabase suele entregar array.
+  if (Array.isArray(ctx)) return ctx[0] ?? null;
+  return ctx ?? null;
 }
 
-function extractRole(ctx) {
-  return (
-    ctx?.role ??
-    ctx?.current_role ??
-    ctx?.currentRole ??
-    (ctx?.membership?.role ?? null) ??
-    null
-  );
+function asUuidOrNull(v) {
+  if (typeof v !== "string") return null;
+  // UUID simple check (no perfecto, pero evita booleans/numbers)
+  const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+  return ok ? v : null;
 }
 
-function sanitizeCtx(ctx) {
-  if (!ctx || typeof ctx !== "object") return ctx;
+function extractOrgId(ctxObj) {
+  const candidate =
+    ctxObj?.org_id ??
+    ctxObj?.current_org_id ??
+    ctxObj?.currentOrgId ??
+    ctxObj?.current_org?.id ??
+    ctxObj?.org?.id ??
+    (Array.isArray(ctxObj?.orgs) && ctxObj.orgs[0]?.id) ??
+    null;
+
+  return asUuidOrNull(candidate);
+}
+
+function extractRole(ctxObj) {
+  const r =
+    ctxObj?.role ??
+    ctxObj?.current_role ??
+    ctxObj?.currentRole ??
+    ctxObj?.membership?.role ??
+    null;
+
+  return typeof r === "string" ? r : null;
+}
+
+function sanitizeObjectShallow(obj) {
+  if (!obj || typeof obj !== "object") return obj;
   const out = {};
-  for (const k of Object.keys(ctx)) {
-    const v = ctx[k];
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
     if (v === null || ["string", "number", "boolean"].includes(typeof v)) out[k] = v;
     else if (Array.isArray(v)) out[k] = { type: "array", length: v.length };
     else out[k] = { type: typeof v };
@@ -89,13 +104,23 @@ async function resolveContext(req) {
   const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
   if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-  const { data: ctx, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
+  const { data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
   if (ctxErr) return { ok: false, status: 500, error: ctxErr.message || "bootstrap_session_context failed" };
 
-  const orgId = extractOrgId(ctx);
-  const role = extractRole(ctx);
+  const ctxObj = normalizeCtx(ctxRaw);
+  const orgId = extractOrgId(ctxObj);
+  const role = extractRole(ctxObj);
 
-  return { ok: true, status: 200, supabase, user: userData.user, ctx, orgId, role };
+  return {
+    ok: true,
+    status: 200,
+    supabase,
+    user: userData.user,
+    ctxRaw,
+    ctxObj,
+    orgId,
+    role,
+  };
 }
 
 export default async function handler(req, res) {
@@ -128,10 +153,12 @@ export default async function handler(req, res) {
       return json(res, 200, {
         ok: true,
         user_id: ctx.user?.id || null,
+        ctx_is_array: Array.isArray(ctx.ctxRaw),
+        ctx_raw_keys: ctx.ctxRaw && typeof ctx.ctxRaw === "object" ? Object.keys(ctx.ctxRaw) : [],
+        ctx_obj_keys: ctx.ctxObj && typeof ctx.ctxObj === "object" ? Object.keys(ctx.ctxObj) : [],
         orgId_extracted: ctx.orgId,
         role_extracted: ctx.role,
-        ctx_keys: ctx.ctx ? Object.keys(ctx.ctx) : [],
-        ctx_sanitized: sanitizeCtx(ctx.ctx),
+        ctx_obj_sanitized: sanitizeObjectShallow(ctx.ctxObj),
       });
     }
 
