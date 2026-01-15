@@ -1,14 +1,8 @@
-// src/pages/Personal.jsx
-import { useEffect, useMemo, useState } from "react";
+@'
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import {
-  listPersonal,
-  toggleVigente,
-  deletePersonal,
-  upsertPersonal,
-} from "../lib/personalApi.js";
+import { listPersonal, upsertPersonal, toggleVigente, deletePersonal } from "../lib/personalApi.js";
 
-/* ───────────────── Modal simple ───────────────── */
 function Modal({ open, title, children, onClose }) {
   if (!open) return null;
   return (
@@ -20,6 +14,7 @@ function Modal({ open, title, children, onClose }) {
           <button
             className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100"
             onClick={onClose}
+            type="button"
           >
             ✕
           </button>
@@ -30,29 +25,20 @@ function Modal({ open, title, children, onClose }) {
   );
 }
 
-export default function PersonalPageLite() {
-  const {
-    loading: authLoading,
-    user,
-    session,
-    currentRole,
-    isAdmin,
-    isOwner,
-    // compatibilidad por si algún día agregas role al contexto
-    role: legacyRole,
-  } = useAuth();
+export default function Personal() {
+  const { loading, ready, isLoggedIn, currentOrg, currentRole } = useAuth();
 
-  const effectiveRole = currentRole || legacyRole || "tracker";
-  const canEdit = isAdmin || isOwner || effectiveRole === "owner" || effectiveRole === "admin";
+  const role = String(currentRole || "").toLowerCase();
+  const canEdit = role === "owner" || role === "admin";
 
   const [q, setQ] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true); // Activos por defecto
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [onlyActive, setOnlyActive] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [items, setItems] = useState([]);
 
-  // Modal "Nuevo"
   const [openNew, setOpenNew] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     nombre: "",
     apellido: "",
@@ -60,315 +46,261 @@ export default function PersonalPageLite() {
     telefono: "",
     vigente: true,
   });
-  const [saving, setSaving] = useState(false);
 
-  async function fetchRows() {
-    if (!session || !user) {
-      setRows([]);
-      setMsg("No hay sesión activa");
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+  async function load() {
+    if (!isLoggedIn) return;
+    if (!currentOrg?.id) return;
+
+    setBusy(true);
     setMsg("");
-    const { data, error } = await listPersonal({ q, onlyActive, limit: 500 });
-    if (error) setMsg(error.message || "Error al cargar personal");
-    setRows(Array.isArray(data) ? data.filter(Boolean) : []);
-    setLoading(false);
+
+    try {
+      const rows = await listPersonal({
+        q,
+        onlyActive,
+        orgId: currentOrg.id,
+        limit: 500,
+      });
+      setItems(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setItems([]);
+      setMsg(e?.message || "No se pudo cargar personal.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   useEffect(() => {
-    if (!authLoading) fetchRows();
+    if (!loading && ready && isLoggedIn && currentOrg?.id) {
+      load();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading]);
+  }, [loading, ready, isLoggedIn, currentOrg?.id]);
 
   const filtered = useMemo(() => {
-    const source = rows.slice();
-    if (!q) return source;
+    if (!q) return items;
     const ql = q.toLowerCase();
-    return source.filter((r) =>
+    return items.filter((r) =>
       `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${r?.telefono ?? ""}`
         .toLowerCase()
         .includes(ql)
     );
-  }, [rows, q]);
+  }, [items, q]);
 
-  async function onToggle(row) {
-    if (!row?.id) return;
-    if (!canEdit) {
-      setMsg("No tienes permisos para cambiar vigencia (solo owner/admin).");
-      return;
-    }
-    setLoading(true);
-    const { error } = await toggleVigente(row.id, !row.vigente);
-    if (error) setMsg(error.message || "No se pudo cambiar estado.");
-    await fetchRows();
-  }
-
-  async function onDelete(row) {
-    if (!row?.id) return;
-    if (!canEdit) {
-      setMsg("No tienes permisos para eliminar (solo owner/admin).");
-      return;
-    }
-    if (!window.confirm("¿Eliminar (soft) este registro?")) return;
-    setLoading(true);
-    try {
-      const deleted = await deletePersonal(row.id);
-      if (!deleted) {
-        setMsg("No se eliminó ningún registro (0 filas afectadas). Verifica permisos (owner/admin) y que el registro esté vigente.");
-      }
-    } catch (err) {
-      setMsg(err?.message || "No se pudo eliminar.");
-    } finally {
-      await fetchRows();
-      setLoading(false);
-    }
-
-  // Guardar NUEVO
   async function onSaveNew(e) {
-    e?.preventDefault?.();
-    if (!canEdit) {
-      setMsg("No tienes permisos para crear (solo owner/admin).");
-      return;
-    }
+    e.preventDefault();
+    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+
     setSaving(true);
     setMsg("");
-    try {
-      // Validación mínima
-      if (!form.nombre.trim()) throw new Error("Nombre es requerido.");
-      if (!form.email.trim()) throw new Error("Email es requerido.");
 
-      const { error } = await upsertPersonal({
-        nombre: form.nombre,
-        apellido: form.apellido,
-        email: form.email,
-        telefono: form.telefono,
-        vigente: !!form.vigente,
-      });
-      if (error) throw error;
+    try {
+      await upsertPersonal(
+        {
+          nombre: form.nombre,
+          apellido: form.apellido,
+          email: form.email,
+          telefono: form.telefono,
+          vigente: !!form.vigente,
+        },
+        currentOrg.id
+      );
 
       setOpenNew(false);
       setForm({ nombre: "", apellido: "", email: "", telefono: "", vigente: true });
-      await fetchRows();
-    } catch (err) {
-      setMsg(err?.message || "No se pudo guardar el personal.");
+      await load();
+    } catch (e2) {
+      setMsg(e2?.message || "No se pudo guardar.");
     } finally {
       setSaving(false);
     }
   }
 
-  if (authLoading) return <div className="p-6 text-gray-500">Cargando sesión…</div>;
-  if (!session || !user)
+  async function onToggle(row) {
+    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+    try {
+      setBusy(true);
+      await toggleVigente(row.id);
+      await load();
+    } catch (e) {
+      setMsg(e?.message || "No se pudo cambiar vigencia.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDelete(row) {
+    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+    if (!window.confirm("¿Eliminar este registro?")) return;
+
+    try {
+      setBusy(true);
+      await deletePersonal(row.id);
+      await load();
+    } catch (e) {
+      setMsg(e?.message || "No se pudo eliminar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading || !ready) return <div className="p-6 text-gray-500">Cargando sesión…</div>;
+
+  if (!isLoggedIn) {
+    return <div className="p-6 text-red-600">No hay sesión activa. Inicia sesión para continuar.</div>;
+  }
+
+  if (!currentOrg?.id) {
     return (
       <div className="p-6 text-red-600">
-        No hay sesión activa. Inicia sesión para continuar.
+        No hay organización activa. Selecciona una organización para continuar.
       </div>
     );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <header className="mb-4 flex items-center justify-between">
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Personal</h1>
-          <p className="text-sm text-gray-500">
-            Gestione el personal por organización: activar/desactivar, editar y eliminar.
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            Rol actual: <span className="font-semibold">{effectiveRole}</span>{" "}
-            {canEdit ? "(con permisos de edición)" : "(solo lectura)"}
-          </p>
+          <h1 className="text-2xl font-semibold mb-1">Personal</h1>
+          <div className="text-sm text-gray-500">
+            Rol: <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
+            <span className="font-mono">{currentOrg.id}</span>
+          </div>
         </div>
-        <button
-          className="px-3 py-2 rounded-md bg-black text-white text-sm"
-          onClick={() => setOpenNew(true)}
-          disabled={!canEdit}
-        >
-          Nuevo
-        </button>
-      </header>
 
-      {/* Filtros */}
-      <div className="mt-3 mb-4 flex flex-wrap items-center gap-3">
+        {canEdit ? (
+          <button
+            className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800"
+            onClick={() => setOpenNew(true)}
+            type="button"
+          >
+            + Nuevo
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
         <input
-          type="text"
-          className="border rounded-md px-3 py-2 text-sm w-72"
-          placeholder="Buscar nombre, apellido o email…"
+          className="w-full md:w-96 rounded-xl border border-gray-300 px-3 py-2"
+          placeholder="Buscar por nombre, apellido, email o teléfono…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <label className="inline-flex items-center gap-2 text-sm">
+
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
           <input
             type="checkbox"
             checked={onlyActive}
             onChange={(e) => setOnlyActive(e.target.checked)}
           />
-          Mostrar solo activos
+          Solo vigentes
         </label>
+
         <button
-          className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
-          onClick={fetchRows}
-          disabled={loading}
+          className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:opacity-50"
+          onClick={load}
+          disabled={busy}
+          type="button"
         >
-          {loading ? "Actualizando…" : "Actualizar"}
+          {busy ? "Cargando…" : "Recargar"}
         </button>
       </div>
 
-      {msg && (
-        <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2">
-          {msg}
-        </div>
-      )}
+      {msg ? <div className="mt-4 text-sm text-red-600">{msg}</div> : null}
 
-      {/* Tabla */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm border-separate border-spacing-y-2">
-          <thead>
-            <tr className="text-left text-gray-600">
-              <th className="px-3">Nombre</th>
-              <th className="px-3">Email</th>
-              <th className="px-3">Teléfono</th>
-              <th className="px-3">Activo</th>
-              <th className="px-3">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      <div className="mt-4 rounded-2xl border border-gray-200 bg-white overflow-hidden">
+        {busy && filtered.length === 0 ? (
+          <div className="p-4 text-gray-500">Cargando personal…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-4 text-gray-500">No hay registros.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={5}>
-                  Cargando…
-                </td>
+                <th className="text-left font-medium p-3">Nombre</th>
+                <th className="text-left font-medium p-3">Apellido</th>
+                <th className="text-left font-medium p-3">Email</th>
+                <th className="text-left font-medium p-3">Teléfono</th>
+                <th className="text-left font-medium p-3">Vigente</th>
+                <th className="text-left font-medium p-3">Acciones</th>
               </tr>
-            ) : filtered.length ? (
-              filtered.map((r, idx) => (
-                <tr key={r?.id ?? `row-${idx}`} className="bg-white rounded-md shadow-sm">
-                  <td className="px-3 py-2">
-                    <div className="font-medium">
-                      {(r?.nombre || "").trim()} {(r?.apellido || "").trim()}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">{r?.email || "—"}</td>
-                  <td className="px-3 py-2">{r?.telefono || "—"}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-gray-100">
-                      {r?.vigente ? "sí" : "no"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id} className="border-t border-gray-100">
+                  <td className="p-3">{r?.nombre ?? "-"}</td>
+                  <td className="p-3">{r?.apellido ?? "-"}</td>
+                  <td className="p-3">{r?.email ?? "-"}</td>
+                  <td className="p-3">{r?.telefono ?? "-"}</td>
+                  <td className="p-3">{r?.vigente ? "Sí" : "No"}</td>
+                  <td className="p-3">
                     <div className="flex gap-2">
                       <button
-                        className="px-2 py-1 rounded-md bg-sky-600 text-white"
-                        onClick={() => alert("TODO: Editar")}
-                        disabled={!canEdit}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        className="px-2 py-1 rounded-md bg-indigo-600 text-white"
+                        className="rounded-lg border border-gray-300 px-3 py-1 hover:bg-gray-50 disabled:opacity-50"
                         onClick={() => onToggle(r)}
-                        disabled={!canEdit}
+                        disabled={!canEdit || busy}
+                        type="button"
                       >
                         {r?.vigente ? "Desactivar" : "Activar"}
                       </button>
                       <button
-                        className="px-2 py-1 rounded-md bg-rose-600 text-white"
+                        className="rounded-lg border border-red-200 text-red-700 px-3 py-1 hover:bg-red-50 disabled:opacity-50"
                         onClick={() => onDelete(r)}
-                        disabled={!canEdit}
+                        disabled={!canEdit || busy}
+                        type="button"
                       >
-                        Eliminar (soft)
+                        Eliminar
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={5}>
-                  Sin resultados
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* Modal NUEVO */}
       <Modal open={openNew} title="Nuevo personal" onClose={() => setOpenNew(false)}>
-        <form onSubmit={onSaveNew} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Nombre *</label>
-              <input
-                className="w-full border rounded-md px-3 py-2 text-sm"
-                value={form.nombre}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    nombre: e.target.value,
-                  }))
-                }
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Apellido</label>
-              <input
-                className="w-full border rounded-md px-3 py-2 text-sm"
-                value={form.apellido}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    apellido: e.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Email *</label>
-              <input
-                type="email"
-                className="w-full border rounded-md px-3 py-2 text-sm"
-                value={form.email}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    email: e.target.value,
-                  }))
-                }
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Teléfono</label>
-              <input
-                className="w-full border rounded-md px-3 py-2 text-sm"
-                value={form.telefono}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    telefono: e.target.value,
-                  }))
-                }
-              />
-            </div>
-          </div>
-          <label className="inline-flex items-center gap-2 text-sm">
+        <form className="space-y-3" onSubmit={onSaveNew}>
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Nombre"
+            value={form.nombre}
+            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+          />
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Apellido"
+            value={form.apellido}
+            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
+          />
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          />
+          <input
+            className="w-full rounded-xl border border-gray-300 px-3 py-2"
+            placeholder="Teléfono (ej: +593...)"
+            value={form.telefono}
+            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+          />
+
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"
-              checked={form.vigente}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  vigente: e.target.checked,
-                }))
-              }
+              checked={!!form.vigente}
+              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
             />
-            Activo
+            Vigente
           </label>
-          <div className="flex justify-end gap-2 pt-2">
+
+          <div className="pt-2 flex justify-end gap-2">
             <button
               type="button"
-              className="px-3 py-2 rounded-md bg-gray-200 text-gray-800 text-sm"
+              className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50"
               onClick={() => setOpenNew(false)}
               disabled={saving}
             >
@@ -376,8 +308,8 @@ export default function PersonalPageLite() {
             </button>
             <button
               type="submit"
-              className="px-3 py-2 rounded-md bg-black text-white text-sm"
-              disabled={saving || !canEdit}
+              className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800 disabled:opacity-50"
+              disabled={saving}
             >
               {saving ? "Guardando…" : "Guardar"}
             </button>
@@ -387,3 +319,4 @@ export default function PersonalPageLite() {
     </div>
   );
 }
+'@ | Set-Content -Encoding UTF8 src\pages\Personal.jsx
