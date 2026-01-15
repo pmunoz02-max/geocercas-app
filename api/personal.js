@@ -1,7 +1,6 @@
-// api/personal.js
+@'
 import { createClient } from "@supabase/supabase-js";
 
-/* ───────────────── Helpers ───────────────── */
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
   const parts = raw.split(";").map((p) => p.trim());
@@ -18,7 +17,7 @@ function json(res, status, payload) {
 
 function normalizePhone(phone) {
   if (!phone) return "";
-  return String(phone).replace(/[\s-]/g, "");
+  return String(phone).replace(/[^\d]/g, "");
 }
 
 function requireWriteRole(role) {
@@ -26,10 +25,25 @@ function requireWriteRole(role) {
   return r === "owner" || r === "admin";
 }
 
-/**
- * Espera que bootstrap_session_context() devuelva al menos:
- * { org_id, role }
- */
+async function readBody(req) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+// ✅ FIX: RPC returns TABLE => Supabase JS may return array
+function normalizeCtx(data) {
+  if (!data) return null;
+  if (Array.isArray(data)) return data[0] || null;
+  return data;
+}
+
 async function resolveContext(req) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
@@ -46,19 +60,16 @@ async function resolveContext(req) {
   const jwt = getCookie(req, "tg_at");
   if (!jwt) return { ok: false, status: 401, error: "No authenticated cookie tg_at" };
 
-  // Client ANON + Bearer JWT (valida usuario y ejecuta bootstrap con RLS)
   const supaAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
   const { data: userData, error: userErr } = await supaAnon.auth.getUser();
-  if (userErr || !userData?.user) {
-    return { ok: false, status: 401, error: "Invalid session" };
-  }
+  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-  const { data: ctx, error: ctxErr } = await supaAnon.rpc("bootstrap_session_context");
-  if (ctxErr || !ctx?.org_id) {
+  const { data: rawCtx, error: ctxErr } = await supaAnon.rpc("bootstrap_session_context");
+  if (ctxErr) {
     return {
       ok: false,
       status: 400,
@@ -67,7 +78,16 @@ async function resolveContext(req) {
     };
   }
 
-  // Service role para consultas/updates (pero SIEMPRE filtrando por org_id)
+  const ctx = normalizeCtx(rawCtx);
+  if (!ctx?.org_id) {
+    return {
+      ok: false,
+      status: 400,
+      error: "bootstrap_session_context returned unexpected shape",
+      details: { rawCtx },
+    };
+  }
+
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
@@ -75,7 +95,6 @@ async function resolveContext(req) {
   return { ok: true, user: userData.user, ctx, supaSrv };
 }
 
-/* ───────────────── Handlers ───────────────── */
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
@@ -115,31 +134,16 @@ async function handleList(req, res) {
   return json(res, 200, { items: data || [] });
 }
 
-async function readBody(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
 async function handleUpsert(req, res) {
   const ctxRes = await resolveContext(req);
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
 
-  if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
-  }
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
 
   const body = await readBody(req);
   const payload = body?.payload || body || {};
-
   const nowIso = new Date().toISOString();
 
   const nombre = (payload.nombre || "").trim();
@@ -147,19 +151,14 @@ async function handleUpsert(req, res) {
   const email = (payload.email || "").trim().toLowerCase();
   const telefono = (payload.telefono || "").trim();
   const telefonoNorm = normalizePhone(telefono);
-  const documento = payload.documento ? String(payload.documento).trim() : null;
 
-  const fecha_inicio = payload.fecha_inicio || null;
-  const fecha_fin = payload.fecha_fin || null;
-
-  let intervalMin = Number(payload.position_interval_min ?? (payload.position_interval_sec ? payload.position_interval_sec / 60 : 5));
+  let intervalMin = Number(payload.position_interval_min ?? 5);
   if (!Number.isFinite(intervalMin) || intervalMin < 5) intervalMin = 5;
   const position_interval_sec = Math.round(intervalMin * 60);
 
   if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
   if (!email) return json(res, 400, { error: "Email es obligatorio" });
 
-  // Verificación duplicados (misma org, email + telefono_norm; is_deleted=false)
   let dupQuery = supaSrv
     .from("personal")
     .select("id")
@@ -175,9 +174,7 @@ async function handleUpsert(req, res) {
   const { data: dupRows, error: dupErr } = await dupQuery;
   if (dupErr) return json(res, 500, { error: "No se pudo validar duplicados", details: dupErr.message });
   if (dupRows && dupRows.length > 0) {
-    return json(res, 409, {
-      error: "Duplicado: ya existe una persona con este email y teléfono en esta organización",
-    });
+    return json(res, 409, { error: "Duplicado: ya existe una persona con este email y teléfono en esta organización" });
   }
 
   const baseRow = {
@@ -186,15 +183,11 @@ async function handleUpsert(req, res) {
     email,
     telefono: telefono || null,
     telefono_norm: telefonoNorm || null,
-    documento,
-    fecha_inicio,
-    fecha_fin,
     vigente: payload.vigente ?? true,
     position_interval_sec,
     updated_at: nowIso,
   };
 
-  // INSERT
   if (!payload.id) {
     const insertRow = {
       ...baseRow,
@@ -205,13 +198,10 @@ async function handleUpsert(req, res) {
     };
 
     const { data, error } = await supaSrv.from("personal").insert(insertRow).select("*").maybeSingle();
-    if (error) {
-      return json(res, 500, { error: "No se pudo crear personal", details: error.message });
-    }
+    if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
     return json(res, 200, { item: data });
   }
 
-  // UPDATE (bloquea cross-org)
   const { data: existing, error: exErr } = await supaSrv
     .from("personal")
     .select("id, org_id, is_deleted")
@@ -232,7 +222,6 @@ async function handleUpsert(req, res) {
     .maybeSingle();
 
   if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
-
   return json(res, 200, { item: data });
 }
 
@@ -241,10 +230,7 @@ async function handleToggle(req, res) {
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
-
-  if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
-  }
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
 
   const body = await readBody(req);
   const id = body?.id;
@@ -272,7 +258,6 @@ async function handleToggle(req, res) {
     .maybeSingle();
 
   if (error) return json(res, 500, { error: "No se pudo actualizar vigente", details: error.message });
-
   return json(res, 200, { item: data });
 }
 
@@ -281,10 +266,7 @@ async function handleDelete(req, res) {
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
-
-  if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
-  }
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
 
   const body = await readBody(req);
   const id = body?.id;
@@ -292,7 +274,6 @@ async function handleDelete(req, res) {
 
   const nowIso = new Date().toISOString();
 
-  // Cross-org guard
   const { data: row, error: fetchErr } = await supaSrv
     .from("personal")
     .select("id, org_id, is_deleted")
@@ -305,12 +286,7 @@ async function handleDelete(req, res) {
 
   const { data, error } = await supaSrv
     .from("personal")
-    .update({
-      is_deleted: true,
-      vigente: false,
-      deleted_at: nowIso,
-      updated_at: nowIso,
-    })
+    .update({ is_deleted: true, vigente: false, deleted_at: nowIso, updated_at: nowIso })
     .eq("id", id)
     .eq("org_id", ctx.org_id)
     .eq("is_deleted", false)
@@ -318,16 +294,15 @@ async function handleDelete(req, res) {
     .maybeSingle();
 
   if (error) return json(res, 500, { error: "No se pudo eliminar personal", details: error.message });
-
   return json(res, 200, { item: data });
 }
 
-/* ───────────────── Entry ───────────────── */
 export default async function handler(req, res) {
   try {
-    // CORS básico (por si pruebas desde subdominios)
+    const origin = req.headers.origin;
+    if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
 
@@ -343,3 +318,4 @@ export default async function handler(req, res) {
     return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
   }
 }
+'@ | Set-Content -Encoding UTF8 api\personal.js
