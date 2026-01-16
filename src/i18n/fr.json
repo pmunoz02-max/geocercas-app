@@ -36,18 +36,21 @@
       "loginMagic": "Magic Link"
     },
     "tabs": {
-      "inicio": "Home",
-      "geocercas": "Geofences",
+      "inicio": "Accueil",
+      "geocercas": "Géorepères",
       "nuevaGeocerca": "Geofence",
       "personal": "Personnel",
-      "actividades": "Activities",
-      "asignaciones": "Assignments",
-      "reportes": "Reports",
-      "dashboard": "Costs Dashboard",
-      "dashboardCostos": "Costs Dashboard",
-      "tracker": "Tracker",
-      "invitarTracker": "Invite tracker",
-      "admins": "Admin"
+      "actividades": "Activités",
+      "asignaciones": "Affectations",
+      "reportes": "Rapports",
+      "dashboard": "Tableau des coûts",
+      "dashboardCostos": "Tableau des coûts",
+      "tracker": "Traceur",
+      "invitarTracker": "Inviter un traceur",
+      "admins": "Admins",
+      "home": "Accueil",
+      "geocerca": "Géorepère",
+      "invitar_tracker": "Inviter un traceur"
     }
   },
   "landing": {
