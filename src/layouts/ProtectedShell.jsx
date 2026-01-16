@@ -5,9 +5,9 @@ import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
 /**
- * ProtectedShell — vGeocerca
- * - Oculta "Geocercas"
- * - Usa "Geocerca" como tab único al mapa/constructor
+ * ProtectedShell — Tabs UX
+ * - Tab "Geocerca" abre el MAPA / constructor: /nueva-geocerca
+ * - La pantalla tipo hub/listado queda disponible en /geocerca (si la necesitas)
  */
 
 function buildTabs({ role, isAppRoot }) {
@@ -28,16 +28,14 @@ function buildTabs({ role, isAppRoot }) {
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
 
-    // ✅ TAB ÚNICO AL MAPA / CONSTRUCTOR
-    { path: "/geocerca", labelKey: "app.tabs.geocerca" },
+    // ✅ MAPA / CREACIÓN
+    { path: "/nueva-geocerca", labelKey: "app.tabs.geocerca" },
 
     { path: "/personal", labelKey: "app.tabs.personal" },
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
-
     { path: "/reportes", labelKey: "app.tabs.reportes" },
     { path: "/dashboard", labelKey: "app.tabs.dashboard" },
-
     { path: "/tracker", labelKey: "app.tabs.tracker" },
   ];
 
@@ -54,7 +52,6 @@ function buildTabs({ role, isAppRoot }) {
 
 export default function ProtectedShell() {
   const { loading, user, currentRole, isAppRoot } = useAuth();
-
   if (loading || !user) return null;
 
   const tabs = buildTabs({ role: currentRole, isAppRoot });

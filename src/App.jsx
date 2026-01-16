@@ -15,7 +15,8 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx";
+import GeocercasPage from "./pages/GeocercasPage.jsx"; // hub/listado
+import NuevaGeocerca from "./pages/NuevaGeocerca.jsx"; // ✅ MAPA/CREACIÓN
 import Personal from "./pages/Personal.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
@@ -35,10 +36,13 @@ function HashTokenCatcher() {
   const location = useLocation();
 
   useEffect(() => {
-    if (location.hash?.includes("access_token=") && location.pathname !== "/auth/callback") {
-      window.location.replace(`/auth/callback${location.search}${location.hash}`);
+    const hash = typeof location.hash === "string" ? location.hash : "";
+    const hasAccessToken = hash.includes("access_token=");
+    if (hasAccessToken && location.pathname !== "/auth/callback") {
+      const target = `/auth/callback${location.search || ""}${hash || ""}`;
+      window.location.replace(target);
     }
-  }, [location]);
+  }, [location.pathname, location.search, location.hash]);
 
   return null;
 }
@@ -48,7 +52,9 @@ function AdminRoute({ children }) {
   const location = useLocation();
 
   if (loading) return null;
-  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+  if (!user) {
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+  }
   if (!isAppRoot) return <Navigate to="/inicio" replace />;
   return children;
 }
@@ -65,9 +71,13 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Aliases */}
-        <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
+        {/* Aliases / legacy */}
+        <Route path="/mapa" element={<Navigate to="/nueva-geocerca" replace />} />
         <Route path="/geocercas" element={<Navigate to="/geocerca" replace />} />
+        <Route path="/geocerca/:id" element={<Navigate to="/nueva-geocerca" replace />} />
+
+        <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
         {/* Protected */}
         <Route
@@ -79,15 +89,11 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
 
-          {/* ✅ MAPA / CONSTRUCTOR */}
-          <Route
-            path="/geocerca"
-            element={
-              <RequireOrg>
-                <GeocercasPage />
-              </RequireOrg>
-            }
-          />
+          {/* Hub / listado (si lo quieres conservar) */}
+          <Route path="/geocerca" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+
+          {/* ✅ MAPA / CREACIÓN */}
+          <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
 
           <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
           <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
