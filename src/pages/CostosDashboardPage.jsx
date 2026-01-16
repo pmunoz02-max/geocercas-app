@@ -316,7 +316,7 @@ const CostosDashboardPage = () => {
   const chartRef = useRef(null);
 
   // ✅ Nuevo contrato
-  const { authReady, orgsReady, currentOrg } = useAuth();
+  const { loading, ready, currentOrg } = useAuth();
 
   // Permisos (se mantiene tu hook)
   const { role, canView, loading: loadingAccess } = useModuleAccess(
@@ -341,7 +341,13 @@ const CostosDashboardPage = () => {
   const [selectedMetric, setSelectedMetric] = useState("cost");
 
   // ✅ Loading correcto del contexto (antes de decidir nada)
-  if (!authReady || !orgsReady) {
+  if (loading || !ready) {
+    return (
+      <div className="p-4 text-sm text-gray-600">
+        {t("dashboardCostos.loadingAuth", "Cargando tu sesión y organización actual…")}
+      </div>
+    );
+  }
     return (
       <div className="p-4 text-sm text-gray-600">
         {t("dashboardCostos.loadingAuth", "Cargando tu sesión y organización actual…")}
