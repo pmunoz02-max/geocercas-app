@@ -1,6 +1,6 @@
 // src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase.js";
 
 /**
  * Rango inclusivo para "Hasta":
@@ -25,18 +25,48 @@ function buildDateRangeForDates(startStr, endStr) {
 }
 
 export default function Reports() {
-  /**
-   * IMPORTANTE:
-   * - No dependemos de currentOrg ni orgsReady.
-   * - Solo necesitamos sesión lista y el token.
-   *
-   * Ajuste: si tu AuthContext no expone `session`,
-   * dime y lo alineamos con lo que tengas (pero NO volvemos a depender de currentOrg).
-   */
-  const { authReady, session } = useAuth();
+  // ============================
+  // Sesión UNIVERSAL (no depende de AuthContext)
+  // ============================
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [accessToken, setAccessToken] = useState(null);
 
-  const accessToken = session?.access_token || null;
+  useEffect(() => {
+    let mounted = true;
 
+    async function initSession() {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
+        const token = data?.session?.access_token || null;
+        if (mounted) setAccessToken(token);
+      } catch (e) {
+        console.error("[Reports] getSession error:", e);
+        if (mounted) setAccessToken(null);
+      } finally {
+        if (mounted) setSessionLoading(false);
+      }
+    }
+
+    initSession();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setAccessToken(newSession?.access_token || null);
+      setSessionLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  const canCallApi = useMemo(() => !sessionLoading && !!accessToken, [sessionLoading, accessToken]);
+
+  // ============================
+  // UI state
+  // ============================
   const [rows, setRows] = useState([]);
   const [geocercas, setGeocercas] = useState([]);
   const [selectedGeocercaName, setSelectedGeocercaName] = useState("");
@@ -48,17 +78,9 @@ export default function Reports() {
   const [loadingGeocercas, setLoadingGeocercas] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const canCallApi = useMemo(() => !!authReady && !!accessToken, [authReady, accessToken]);
-
   // ============================
-  // Cargar geocercas (via API)
+  // Helper API
   // ============================
-  useEffect(() => {
-    if (!canCallApi) return;
-    loadGeocercas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canCallApi]);
-
   async function apiGet(url) {
     const resp = await fetch(url, {
       method: "GET",
@@ -68,11 +90,18 @@ export default function Reports() {
     });
 
     const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      throw new Error(json?.error || `HTTP ${resp.status}`);
-    }
+    if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
     return json;
   }
+
+  // ============================
+  // Cargar geocercas (via API)
+  // ============================
+  useEffect(() => {
+    if (!canCallApi) return;
+    loadGeocercas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCallApi]);
 
   async function loadGeocercas() {
     setLoadingGeocercas(true);
@@ -104,23 +133,11 @@ export default function Reports() {
         return;
       }
 
-      const { fromDate, toDateExclusive } = buildDateRangeForDates(start, end);
-
+      // Mandamos end inclusivo, la API lo convierte a exclusive internamente
       const params = new URLSearchParams();
       params.set("action", "attendance");
-      if (fromDate) params.set("start", fromDate);
-      if (toDateExclusive) {
-        // API espera end inclusivo para construir internamente, pero aquí ya pasamos end normal:
-        // preferimos pasar "end" normal, no el exclusive.
-        // Para mantener consistencia: mandamos end original (inclusive)
-        // y la API lo convierte a exclusive.
-        // Por eso:
-        // - aquí mandamos `end` tal como lo eligió el usuario.
-        params.set("end", end);
-      } else if (end) {
-        params.set("end", end);
-      }
-
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
       if (selectedGeocercaName) params.set("geocerca_name", selectedGeocercaName);
 
       const json = await apiGet(`/api/reportes?${params.toString()}`);
@@ -162,9 +179,9 @@ export default function Reports() {
   }
 
   // ============================
-  // Loading estable (solo auth)
+  // Estados de carga
   // ============================
-  if (!authReady) {
+  if (sessionLoading) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
@@ -178,18 +195,21 @@ export default function Reports() {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          No hay token de sesión disponible. Revisa que AuthContext exponga <code>session</code>.
+          No hay sesión activa. Inicia sesión nuevamente.
         </div>
       </div>
     );
   }
 
+  // ============================
+  // Render
+  // ============================
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold">Reportes de Asistencia</h1>
         <p className="text-xs text-gray-500">
-          (Este módulo filtra por organización en backend: API + RLS / views)
+          (Sesión resuelta directamente con Supabase; backend filtra por organización)
         </p>
       </div>
 
@@ -239,7 +259,6 @@ export default function Reports() {
               </option>
             ))}
           </select>
-
           <p className="text-[11px] text-gray-400 mt-1">
             Filtro por nombre en <code>v_attendance_daily.geofence_name</code>
           </p>
@@ -306,7 +325,7 @@ export default function Reports() {
       </section>
 
       <div className="text-[11px] text-gray-400">
-        Si aquí ves errores de permisos, el ajuste correcto es en backend (RLS / vista blindada), no en el frontend.
+        Si no hay filas, revisa que existan marcajes en <code>attendances</code> para la org del usuario autenticado (vista filtrada por <code>get_current_org_id()</code>).
       </div>
     </div>
   );
