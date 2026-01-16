@@ -16,52 +16,13 @@
       "no": "No",
       "loading": "Cargando…"
     },
+    "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
+    "createOrganization": "Crear organización",
+    "refreshContext": "Refrescar contexto",
+    "edit": "Editar",
     "yes": "Sí",
     "no": "No",
-    "loading": "Cargando…",
-    "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
-    "createOrganization": "Crear organización",
-    "refreshContext": "Refrescar contexto"
-  },
-
-  "personal": {
-    "title": "Personal",
-
-    "table": {
-      "loading": "Cargando…",
-      "noActive": "No hay personal activo.",
-      "columns": {
-        "firstName": "Nombre",
-        "lastName": "Apellido",
-        "email": "Correo",
-        "phone": "Teléfono",
-        "active": "Activo",
-        "start": "Inicio",
-        "end": "Fin"
-      }
-    }
-  }
-
-  /* 🔴 RESTO DEL ARCHIVO ES.JSON: SIN CAMBIOS */
-}
-
-  "common": {
-    "language": {
-      "es": "Español",
-      "en": "Inglés",
-      "fr": "Francés"
-    },
-    "actions": {
-      "close": "Cerrar",
-      "cancel": "Cancelar",
-      "save": "Guardar",
-      "delete": "Eliminar",
-      "edit": "Editar",
-      "back": "Volver"
-    },
-    "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
-    "createOrganization": "Crear organización",
-    "refreshContext": "Refrescar contexto"
+    "loading": "Cargando…"
   },
   "app": {
     "title": "App Geocercas",
@@ -303,7 +264,20 @@
     "yes": "Sí",
     "no": "No",
     "processing": "Procesando…",
-    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado."
+    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
+    "table": {
+      "loading": "Cargando…",
+      "noActive": "No hay personal activo.",
+      "columns": {
+        "firstName": "Nombre",
+        "lastName": "Apellido",
+        "email": "Correo",
+        "phone": "Teléfono",
+        "active": "Activo",
+        "start": "Inicio",
+        "end": "Fin"
+      }
+    }
   },
   "actividades": {
     "title": "Actividades",

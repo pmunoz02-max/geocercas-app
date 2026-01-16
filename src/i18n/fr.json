@@ -16,55 +16,13 @@
       "no": "Non",
       "loading": "Chargement…"
     },
-    "yes": "Oui",
-    "no": "Non",
-    "loading": "Chargement…",
-    "orgNamePlaceholder": "Nom de l’organisation (ex. Ferme A)",
-    "createOrganization": "Créer une organisation",
-    "refreshContext": "Rafraîchir le contexte"
-  },
-
-  "personal": {
-    "title": "Personnel",
-
-    "table": {
-      "loading": "Chargement…",
-      "noActive": "Aucun personnel actif.",
-      "columns": {
-        "firstName": "Prénom",
-        "lastName": "Nom",
-        "email": "E-mail",
-        "phone": "Téléphone",
-        "active": "Actif",
-        "start": "Début",
-        "end": "Fin"
-      }
-    }
-  }
-
-  /* 🔴 RESTO DEL ARCHIVO FR.JSON: SIN CAMBIOS */
-}
-
-  "common": {
-    "language": {
-      "es": "Espagnol",
-      "en": "Anglais",
-      "fr": "Français"
-    },
-    "actions": {
-      "close": "Fermer",
-      "cancel": "Annuler",
-      "save": "Enregistrer",
-      "delete": "Supprimer",
-      "edit": "Modifier",
-      "back": "Retour",
-      "yes": "Oui",
-      "no": "Non",
-      "loading": "Chargement…"
-    },
     "orgNamePlaceholder": "Organization name (e.g. Farm A)",
     "createOrganization": "Create organization",
-    "refreshContext": "Refresh context"
+    "refreshContext": "Refresh context",
+    "edit": "Modifier",
+    "yes": "Oui",
+    "no": "Non",
+    "loading": "Chargement…"
   },
   "app": {
     "title": "App Geocercas",
@@ -329,7 +287,20 @@
     "yes": "Yes",
     "no": "No",
     "processing": "Processing…",
-    "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted."
+    "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted.",
+    "table": {
+      "loading": "Chargement…",
+      "noActive": "Aucun personnel actif.",
+      "columns": {
+        "firstName": "Prénom",
+        "lastName": "Nom",
+        "email": "E-mail",
+        "phone": "Téléphone",
+        "active": "Actif",
+        "start": "Début",
+        "end": "Fin"
+      }
+    }
   },
   "actividades": {
     "title": "Activités",

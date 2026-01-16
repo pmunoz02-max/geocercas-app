@@ -14,54 +14,12 @@
       "back": "Back",
       "yes": "Yes",
       "no": "No",
-      "loading": "Loading…"
+      "loading": "Loading..."
     },
+    "edit": "Edit",
     "yes": "Yes",
     "no": "No",
-    "loading": "Loading…",
-    "orgNamePlaceholder": "Organization name (e.g. Farm A)",
-    "createOrganization": "Create organization",
-    "refreshContext": "Refresh context"
-  },
-
-  "personal": {
-    "title": "Personnel",
-
-    "table": {
-      "loading": "Loading…",
-      "noActive": "No active personnel.",
-      "columns": {
-        "firstName": "First name",
-        "lastName": "Last name",
-        "email": "Email",
-        "phone": "Phone",
-        "active": "Active",
-        "start": "Start",
-        "end": "End"
-      }
-    }
-  }
-
-  /* 🔴 RESTO DEL ARCHIVO EN.JSON: SIN CAMBIOS */
-}
-
-  "common": {
-    "language": {
-      "es": "Spanish",
-      "en": "English",
-      "fr": "French"
-    },
-    "actions": {
-      "close": "Close",
-      "cancel": "Cancel",
-      "save": "Save",
-      "delete": "Delete",
-      "edit": "Edit",
-      "back": "Back",
-      "yes": "Yes",
-      "no": "No",
-      "loading": "Loading..."
-    }
+    "loading": "Loading..."
   },
   "app": {
     "title": "App Geocercas",
@@ -346,7 +304,20 @@
     "yes": "Yes",
     "no": "No",
     "processing": "Processing…",
-    "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted."
+    "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted.",
+    "table": {
+      "loading": "Loading…",
+      "noActive": "No active personnel.",
+      "columns": {
+        "firstName": "First name",
+        "lastName": "Last name",
+        "email": "Email",
+        "phone": "Phone",
+        "active": "Active",
+        "start": "Start",
+        "end": "End"
+      }
+    }
   },
   "actividades": {
     "title": "Activities",
