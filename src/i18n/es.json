@@ -350,7 +350,15 @@
       "cancelEditButton": "Cancelar edición",
       "buttonCreate": "Crear asignación",
       "buttonUpdate": "Actualizar asignación",
-      "buttonCancel": "Cancelar"
+      "buttonCancel": "Cancelar",
+      "endOptionalHint": "Opcional",
+      "quickActivity": {
+        "noActivitiesHint": "No hay actividades (cree una en el módulo Actividades o aquí abajo).",
+        "newButton": "Nueva actividad",
+        "newNamePlaceholder": "Nombre de la nueva actividad",
+        "saveButton": "Guardar actividad",
+        "saving": "Guardando…"
+      }
     },
     "table": {
       "title": "Listado de asignaciones",
@@ -361,7 +369,8 @@
       "end": "Fin",
       "status": "Estado",
       "actions": "Acciones",
-      "noResults": "No hay asignaciones registradas."
+      "noResults": "No hay asignaciones registradas.",
+      "frequency": "Freq (min)"
     },
     "actions": {
       "edit": "Editar",

@@ -393,7 +393,15 @@
       "cancelEditButton": "Cancel editing",
       "buttonCreate": "Create assignment",
       "buttonUpdate": "Update assignment",
-      "buttonCancel": "Cancel"
+      "buttonCancel": "Cancel",
+      "endOptionalHint": "Optional",
+      "quickActivity": {
+        "noActivitiesHint": "No activities yet (create one in Activities module or here below).",
+        "newButton": "New activity",
+        "newNamePlaceholder": "New activity name",
+        "saveButton": "Save activity",
+        "saving": "Saving…"
+      }
     },
     "table": {
       "title": "Assignments list",
@@ -404,7 +412,8 @@
       "end": "End",
       "status": "Status",
       "actions": "Actions",
-      "noResults": "No assignments registered."
+      "noResults": "No assignments registered.",
+      "frequency": "Freq (min)"
     },
     "actions": {
       "edit": "Edit",
