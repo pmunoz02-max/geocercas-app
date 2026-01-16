@@ -960,4 +960,69 @@
     "roleEmpty": "(vide)",
     "retry": "Réessayer"
   }
+{
+  "help": {
+    "common": {
+      "back": "Retour",
+      "open": "Ouvrir →"
+    },
+    "faq": {
+      "title": "Questions fréquentes",
+      "subtitle": "Réponses aux questions les plus courantes sur App Geocercas.",
+      "sections": [
+        {
+          "title": "Qu’est-ce qu’une géorepère ?",
+          "items": [
+            {
+              "q": "À quoi sert une géorepère ?",
+              "a": "Une géorepère est une zone géographique qui permet de contrôler la présence du personnel et d’enregistrer des activités automatiquement."
+            }
+          ]
+        },
+        {
+          "title": "Utilisation de l’application",
+          "items": [
+            {
+              "q": "Ai-je besoin d’Internet en permanence ?",
+              "a": "Non. L’application peut fonctionner hors ligne et synchronise les données lorsqu’une connexion est disponible."
+            }
+          ]
+        }
+      ]
+    },
+    "changelog": {
+      "title": "Journal des modifications",
+      "subtitle": "Améliorations, corrections et nouvelles fonctionnalités.",
+      "badges": {
+        "feature": "Fonctionnalité",
+        "fix": "Correction",
+        "improvement": "Amélioration"
+      },
+      "items": [
+        {
+          "version": "v1.0",
+          "date": "2026-01-15",
+          "changes": [
+            {
+              "type": "feature",
+              "title": "Support multilingue",
+              "details": [
+                "Interface disponible en espagnol, anglais et français.",
+                "Sélecteur de langue global."
+              ]
+            },
+            {
+              "type": "improvement",
+              "title": "Module géorepères",
+              "details": [
+                "Amélioration de l’édition sur carte.",
+                "Stabilité accrue."
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
 }
+

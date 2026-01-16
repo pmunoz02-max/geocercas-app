@@ -977,4 +977,68 @@
     "roleEmpty": "(empty)",
     "retry": "Retry"
   }
+{
+  "help": {
+    "common": {
+      "back": "Back",
+      "open": "Open →"
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "subtitle": "Answers to the most common questions about App Geocercas.",
+      "sections": [
+        {
+          "title": "What is a geofence?",
+          "items": [
+            {
+              "q": "What is a geofence used for?",
+              "a": "A geofence is a geographic area used to control staff presence and automatically log activities."
+            }
+          ]
+        },
+        {
+          "title": "Using the app",
+          "items": [
+            {
+              "q": "Do I need constant Internet access?",
+              "a": "No. The app works offline and syncs data when a connection is available."
+            }
+          ]
+        }
+      ]
+    },
+    "changelog": {
+      "title": "Changelog",
+      "subtitle": "Improvements, fixes and new features.",
+      "badges": {
+        "feature": "Feature",
+        "fix": "Fix",
+        "improvement": "Improvement"
+      },
+      "items": [
+        {
+          "version": "v1.0",
+          "date": "2026-01-15",
+          "changes": [
+            {
+              "type": "feature",
+              "title": "Multilanguage support",
+              "details": [
+                "Interface available in Spanish, English and French.",
+                "Global language selector."
+              ]
+            },
+            {
+              "type": "improvement",
+              "title": "Geofence module",
+              "details": [
+                "Improved map editing.",
+                "Better stability."
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
 }
