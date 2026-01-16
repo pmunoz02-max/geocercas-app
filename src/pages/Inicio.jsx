@@ -1,11 +1,12 @@
 // src/pages/Inicio.jsx
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
 function HelpCard({ title, description, to }) {
   const navigate = useNavigate();
-
+  const { t } = useTranslation();
   return (
     <div
       onClick={() => navigate(to)}
@@ -24,7 +25,7 @@ function HelpCard({ title, description, to }) {
       <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       <div className="mt-4 text-sm font-medium text-blue-600">
-        Abrir →
+        {t("home.open", { defaultValue: "Abrir →" })}
       </div>
     </div>
   );
@@ -32,6 +33,7 @@ function HelpCard({ title, description, to }) {
 
 export default function Inicio() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const {
     loading,
@@ -46,7 +48,7 @@ export default function Inicio() {
   if (loading || !ready) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
-        Resolviendo permisos…
+        {t("home.loadingPermissions", { defaultValue: "Resolviendo permisos…" })}
       </div>
     );
   }
@@ -55,12 +57,12 @@ export default function Inicio() {
   if (!authenticated || !user) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-600">
-        Inicia sesión para continuar.
+        {t("home.loginToContinue", { defaultValue: "Inicia sesión para continuar." })}
         <button
           className="ml-3 px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
           onClick={() => navigate("/login")}
         >
-          Ir a Login
+          {t("home.goToLogin", { defaultValue: "Ir a Login" })}
         </button>
       </div>
     );
@@ -78,18 +80,17 @@ export default function Inicio() {
       <div className="max-w-2xl mx-auto px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
           <h1 className="text-xl font-semibold text-slate-900">
-            Sesión iniciada, pero falta contexto
+            {t("home.missingContextTitle", { defaultValue: "Sesión iniciada, pero falta contexto" })}
           </h1>
 
           <p className="text-sm text-slate-600">
-            La sesión existe ({user.email}), pero aún no se pudo determinar
-            tu rol u organización activa.
+            {t("home.missingContextBody", { defaultValue: "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.", email: user.email })}
           </p>
 
           <div className="text-sm text-slate-700 space-y-1">
-            <div><b>Email:</b> {user.email}</div>
-            <div><b>Organización:</b> (no resuelta)</div>
-            <div><b>Rol:</b> (vacío)</div>
+            <div><b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}</div>
+            <div><b>{t("home.labels.organization", { defaultValue: "Organización:" })}</b> {t("home.orgNotResolved", { defaultValue: "(no resuelta)" })}</div>
+            <div><b>{t("home.labels.role", { defaultValue: "Rol:" })}</b> {t("home.roleEmpty", { defaultValue: "(vacío)" })}</div>
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -97,7 +98,7 @@ export default function Inicio() {
               className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
               onClick={() => window.location.reload()}
             >
-              Reintentar
+              {t("home.retry", { defaultValue: "Reintentar" })}
             </button>
           </div>
         </div>
@@ -111,47 +112,47 @@ export default function Inicio() {
       {/* Bienvenida */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <h1 className="text-2xl font-semibold text-slate-900">
-          Bienvenido a App Geocercas
+          {t("home.welcome", { defaultValue: "Bienvenido a App Geocercas" })}
         </h1>
 
         <p className="text-slate-600 mt-2">
-          Sesión iniciada como <b>{roleLower}</b>
+          {t("home.sessionAs", { defaultValue: "Sesión iniciada como" })} <b>{roleLower}</b>
         </p>
 
         <div className="mt-4 text-sm text-slate-700 space-y-1">
-          <div><b>Email:</b> {user.email}</div>
-          <div><b>Organización ID:</b> {currentOrgId}</div>
+          <div><b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}</div>
+          <div><b>{t("home.labels.orgId", { defaultValue: "Organización ID:" })}</b> {currentOrgId}</div>
         </div>
       </div>
 
-      {/* Centro de ayuda */}
+      {/* {t("home.help.title", { defaultValue: "Centro de ayuda" })} */}
       <div>
         <h2 className="text-xl font-semibold text-slate-900 mb-4">
-          Centro de ayuda
+          {t("home.help.title", { defaultValue: "Centro de ayuda" })}
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <HelpCard
-            title="Guía rápida"
-            description="Aprende cómo usar la app paso a paso."
+            title={t("home.help.quick", { defaultValue: "Guía rápida" })}
+            description={t("home.help.quickDesc", { defaultValue: "Aprende cómo usar la app paso a paso." })}
             to="/help/instructions"
           />
 
           <HelpCard
-            title="Preguntas frecuentes"
-            description="Respuestas a las dudas más comunes."
+            title={t("home.help.faq", { defaultValue: "Preguntas frecuentes" })}
+            description={t("home.help.faqDesc", { defaultValue: "Respuestas a las dudas más comunes." })}
             to="/help/faq"
           />
 
           <HelpCard
-            title="Soporte"
-            description="¿Tienes un problema o consulta? Contáctanos."
+            title={t("home.help.support", { defaultValue: "Soporte" })}
+            description={t("home.help.supportDesc", { defaultValue: "¿Tienes un problema o consulta? Contáctanos." })}
             to="/help/support"
           />
 
           <HelpCard
-            title="Novedades"
-            description="Cambios, mejoras y actualizaciones recientes."
+            title={t("home.help.news", { defaultValue: "Novedades" })}
+            description={t("home.help.newsDesc", { defaultValue: "Cambios, mejoras y actualizaciones recientes." })}
             to="/help/changelog"
           />
         </div>

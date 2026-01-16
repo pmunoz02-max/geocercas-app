@@ -44,9 +44,7 @@
       "dashboardCostos": "Dashboard Costos",
       "tracker": "Tracker",
       "invitarTracker": "Invitar tracker",
-      "admins": "Administrador",
-      "home": "Inicio",
-      "invitar_tracker": "Invitar tracker"
+      "admins": "Administrador"
     }
   },
   "landing": {
@@ -85,21 +83,7 @@
     "accessBody": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
     "accessHint": "Consejo: usa \"Link mágico\" si tu administrador te invitó con correo.",
     "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
-    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
-    "login": "Entrar",
-    "heroTitle": "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo",
-    "goPanel": "Ir al panel de control",
-    "magicEnter": "Entrar con link mágico",
-    "quickAccessTitle": "Acceso rápido",
-    "quickAccessDesc": "Si prefieres, puedes ingresar con Magic Link (sin contraseña).",
-    "email": "Correo",
-    "sending": "Enviando...",
-    "sendMagic": "Enviar Magic Link",
-    "magicNote": "Importante: el acceso funciona solo con el Magic Link real.",
-    "support": "Soporte",
-    "invalidEmail": "Correo inválido.",
-    "magicLinkSent": "Te enviamos un enlace de acceso. Revisa tu correo.",
-    "magicLinkError": "No se pudo enviar el enlace. Intenta nuevamente."
+    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."
   },
   "login": {
     "title": "Iniciar sesión",
@@ -139,14 +123,7 @@
     "errorMagicLinkUnexpected": "Error inesperado al enviar el link mágico.",
     "errorResetPassword": "No se pudo enviar el correo de recuperación.",
     "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.",
-    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación.",
-    "badge": "(LOGIN-V31 NO-JS)",
-    "info": "Login estable en WebView/TWA: envío nativo (sin eventos JS), anti rate-limit por diseño.",
-    "email": "Correo",
-    "password": "Contraseña",
-    "modeTitle": "Modo: NO-JS (form submit nativo)",
-    "modeDesc": "Si el login es correcto, el servidor redirige a /auth/callback con tokens.",
-    "back": "Volver"
+    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación."
   },
   "inicio": {
     "header": {
@@ -926,5 +903,35 @@
     "invalidOrExpiredLink": "El enlace es inválido, ya expiró o fue utilizado.",
     "errorTitle": "No se pudo autenticar",
     "backToLogin": "Volver al login"
+  },
+  "home": {
+    "welcome": "Bienvenido a App Geocercas",
+    "sessionAs": "Sesión iniciada como",
+    "labels": {
+      "email": "Email:",
+      "orgId": "Organización ID:",
+      "organization": "Organización:",
+      "role": "Rol:"
+    },
+    "help": {
+      "title": "Centro de ayuda",
+      "quick": "Guía rápida",
+      "quickDesc": "Aprende cómo usar la app paso a paso.",
+      "faq": "Preguntas frecuentes",
+      "faqDesc": "Respuestas a las dudas más comunes.",
+      "support": "Soporte",
+      "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
+      "news": "Novedades",
+      "newsDesc": "Cambios, mejoras y actualizaciones recientes."
+    },
+    "open": "Abrir →",
+    "loadingPermissions": "Resolviendo permisos…",
+    "loginToContinue": "Inicia sesión para continuar.",
+    "goToLogin": "Ir a Login",
+    "missingContextTitle": "Sesión iniciada, pero falta contexto",
+    "missingContextBody": "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
+    "orgNotResolved": "(no resuelta)",
+    "roleEmpty": "(vacío)",
+    "retry": "Reintentar"
   }
 }

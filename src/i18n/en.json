@@ -946,5 +946,35 @@
     "invalidOrExpiredLink": "The link is invalid, expired, or already used.",
     "errorTitle": "Authentication failed",
     "backToLogin": "Back to login"
+  },
+  "home": {
+    "welcome": "Welcome to App Geocercas",
+    "sessionAs": "Logged in as",
+    "labels": {
+      "email": "Email:",
+      "orgId": "Organization ID:",
+      "organization": "Organization:",
+      "role": "Role:"
+    },
+    "help": {
+      "title": "Help center",
+      "quick": "Quick guide",
+      "quickDesc": "Learn how to use the app step by step.",
+      "faq": "Frequently asked questions",
+      "faqDesc": "Answers to the most common questions.",
+      "support": "Support",
+      "supportDesc": "Do you have a problem or question? Contact us.",
+      "news": "What’s new",
+      "newsDesc": "Recent changes, improvements, and updates."
+    },
+    "open": "Open →",
+    "loadingPermissions": "Resolving permissions…",
+    "loginToContinue": "Sign in to continue.",
+    "goToLogin": "Go to Login",
+    "missingContextTitle": "Signed in, but missing context",
+    "missingContextBody": "The session exists ({{email}}), but your role or active organization could not be determined yet.",
+    "orgNotResolved": "(not resolved)",
+    "roleEmpty": "(empty)",
+    "retry": "Retry"
   }
 }
