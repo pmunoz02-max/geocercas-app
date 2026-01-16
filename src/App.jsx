@@ -7,7 +7,7 @@ import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
 
-// Public pages
+// Public
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
@@ -23,11 +23,9 @@ import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
-
-// ✅ Dashboard Costos
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
-// Help pages (✅ ruta real)
+// Help
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
@@ -37,13 +35,10 @@ function HashTokenCatcher() {
   const location = useLocation();
 
   useEffect(() => {
-    const hash = typeof location.hash === "string" ? location.hash : "";
-    const hasAccessToken = hash.includes("access_token=");
-    if (hasAccessToken && location.pathname !== "/auth/callback") {
-      const target = `/auth/callback${location.search || ""}${hash || ""}`;
-      window.location.replace(target);
+    if (location.hash?.includes("access_token=") && location.pathname !== "/auth/callback") {
+      window.location.replace(`/auth/callback${location.search}${location.hash}`);
     }
-  }, [location.pathname, location.search, location.hash]);
+  }, [location]);
 
   return null;
 }
@@ -53,9 +48,7 @@ function AdminRoute({ children }) {
   const location = useLocation();
 
   if (loading) return null;
-  if (!user) {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
-  }
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
   if (!isAppRoot) return <Navigate to="/inicio" replace />;
   return children;
 }
@@ -72,17 +65,9 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Redirects legacy */}
-        <Route path="/geocerca" element={<Navigate to="/geocercas" replace />} />
-        <Route path="/geocerca/:id" element={<Navigate to="/geocercas" replace />} />
-        <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
-        <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
-        <Route path="/admin" element={<Navigate to="/admins" replace />} />
-        <Route path="/mapa" element={<Navigate to="/geocercas" replace />} />
-
-        {/* ✅ Legacy dashboard paths (por si existían) */}
-        <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
+        {/* Aliases */}
+        <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
+        <Route path="/geocercas" element={<Navigate to="/geocerca" replace />} />
 
         {/* Protected */}
         <Route
@@ -94,19 +79,25 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
 
-          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+          {/* ✅ MAPA / CONSTRUCTOR */}
+          <Route
+            path="/geocerca"
+            element={
+              <RequireOrg>
+                <GeocercasPage />
+              </RequireOrg>
+            }
+          />
+
           <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
           <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
           <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
           <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
-
-          {/* ✅ Dashboard Costos (FIX PRINCIPAL) */}
           <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
-          {/* Help (login requerido, org NO) */}
+          {/* Help */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
@@ -122,7 +113,6 @@ export default function App() {
           />
         </Route>
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
