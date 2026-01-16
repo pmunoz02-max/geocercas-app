@@ -1,3 +1,4 @@
+// src/i18n/i18n.js
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
@@ -6,15 +7,26 @@ import en from "./en.json";
 import fr from "./fr.json";
 
 /**
- * i18n v2 (BLINDADO)
- * Prioridad:
- * 1) ?lang=es|en|fr (sin depender de JS; útil en WebView/TWA)
+ * i18n BLINDADO – App Geocercas
+ *
+ * Prioridad de idioma:
+ * 1) ?lang=es|en|fr        (NO-JS friendly, TWA/WebView)
  * 2) localStorage.app_lang
  * 3) navigator.language
  * 4) fallback: es
+ *
+ * Objetivos:
+ * - Persistencia real del idioma
+ * - Funciona con y sin JS
+ * - Compatible Web / PWA / TWA / Google Play
+ * - Evita mostrar keys rotas
  */
 
 const SUPPORTED = ["es", "en", "fr"];
+
+/* =========================
+   Helpers de detección
+========================= */
 
 function readUrlLang() {
   try {
@@ -47,7 +59,9 @@ function readNavigatorLang() {
 
 function setHtmlLang(code) {
   try {
-    if (typeof document !== "undefined") document.documentElement.lang = code;
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = code;
+    }
   } catch {}
 }
 
@@ -57,23 +71,50 @@ function persistLang(code) {
   } catch {}
 }
 
-const initial = readUrlLang() || readStoredLang() || readNavigatorLang() || "es";
-persistLang(initial);
-setHtmlLang(initial);
+/* =========================
+   Resolución inicial
+========================= */
 
-i18n.use(initReactI18next).init({
-  resources: {
-    es: { translation: es },
-    en: { translation: en },
-    fr: { translation: fr },
-  },
-  lng: initial,
-  fallbackLng: "es",
-  interpolation: { escapeValue: false },
-  react: { useSuspense: false },
-  returnEmptyString: false,
-  returnNull: false,
-});
+const initialLang =
+  readUrlLang() ||
+  readStoredLang() ||
+  readNavigatorLang() ||
+  "es";
+
+persistLang(initialLang);
+setHtmlLang(initialLang);
+
+/* =========================
+   Init i18next
+========================= */
+
+i18n
+  .use(initReactI18next)
+  .init({
+    resources: {
+      es: { translation: es },
+      en: { translation: en },
+      fr: { translation: fr },
+    },
+    lng: initialLang,
+    fallbackLng: "es",
+
+    interpolation: {
+      escapeValue: false, // React ya escapa
+    },
+
+    react: {
+      useSuspense: false,
+    },
+
+    // Evita mostrar null o strings vacíos
+    returnEmptyString: false,
+    returnNull: false,
+  });
+
+/* =========================
+   Sincronización posterior
+========================= */
 
 i18n.on("languageChanged", (lng) => {
   const code = String(lng || "es").toLowerCase().slice(0, 2);
