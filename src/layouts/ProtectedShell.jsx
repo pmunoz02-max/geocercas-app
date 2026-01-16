@@ -5,9 +5,9 @@ import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
 /**
- * ProtectedShell — Tabs UX
- * - Tab "Geocerca" abre el MAPA / constructor: /nueva-geocerca
- * - La pantalla tipo hub/listado queda disponible en /geocerca (si la necesitas)
+ * ProtectedShell — Tabs
+ * - Tab "Geocerca" abre el MAPA (ruta /geocerca)
+ * - La pantalla hub/listado queda en /geocercas (sin tab)
  */
 
 function buildTabs({ role, isAppRoot }) {
@@ -28,8 +28,8 @@ function buildTabs({ role, isAppRoot }) {
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
 
-    // ✅ MAPA / CREACIÓN
-    { path: "/nueva-geocerca", labelKey: "app.tabs.geocerca" },
+    // ✅ MAPA / CONSTRUCTOR
+    { path: "/geocerca", labelKey: "app.tabs.geocerca" },
 
     { path: "/personal", labelKey: "app.tabs.personal" },
     { path: "/actividades", labelKey: "app.tabs.actividades" },
@@ -52,7 +52,9 @@ function buildTabs({ role, isAppRoot }) {
 
 export default function ProtectedShell() {
   const { loading, user, currentRole, isAppRoot } = useAuth();
-  if (loading || !user) return null;
+
+  if (loading) return null;
+  if (!user) return null;
 
   const tabs = buildTabs({ role: currentRole, isAppRoot });
 
@@ -60,6 +62,7 @@ export default function ProtectedShell() {
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
       <TopTabs tabs={tabs} />
+
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Outlet />
       </main>

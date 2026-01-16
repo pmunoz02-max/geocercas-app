@@ -7,7 +7,7 @@ import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
 
-// Public
+// Public pages
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
@@ -15,8 +15,8 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx"; // hub/listado
-import NuevaGeocerca from "./pages/NuevaGeocerca.jsx"; // ✅ MAPA/CREACIÓN
+import GeocercasPage from "./pages/GeocercasPage.jsx";   // hub/listado
+import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";   // ✅ MAPA/CREACIÓN
 import Personal from "./pages/Personal.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
@@ -26,7 +26,7 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
-// Help
+// Help pages
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
@@ -71,11 +71,14 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Aliases / legacy */}
-        <Route path="/mapa" element={<Navigate to="/nueva-geocerca" replace />} />
-        <Route path="/geocercas" element={<Navigate to="/geocerca" replace />} />
-        <Route path="/geocerca/:id" element={<Navigate to="/nueva-geocerca" replace />} />
+        {/* Legacy redirects */}
+        <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
+        <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
+        <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
+        <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
+        <Route path="/admin" element={<Navigate to="/admins" replace />} />
 
+        {/* ✅ Legacy dashboard paths */}
         <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
@@ -89,17 +92,19 @@ export default function App() {
         >
           <Route path="/inicio" element={<Inicio />} />
 
-          {/* Hub / listado (si lo quieres conservar) */}
-          <Route path="/geocerca" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+          {/* ✅ MAPA / CONSTRUCTOR */}
+          <Route path="/geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
 
-          {/* ✅ MAPA / CREACIÓN */}
-          <Route path="/nueva-geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
+          {/* Hub/listado (sin tab) */}
+          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
 
           <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
           <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
           <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
           <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
+
           <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
@@ -119,6 +124,7 @@ export default function App() {
           />
         </Route>
 
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
