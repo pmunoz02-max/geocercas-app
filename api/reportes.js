@@ -1,144 +1,300 @@
-// api/reportes.js
-import { createClient } from "@supabase/supabase-js";
+// src/pages/Reports.jsx
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 /**
- * Autenticación UNIVERSAL:
- * - Primaria: cookie HttpOnly (tg_at)
- * - Secundaria (fallback): Authorization Bearer
- *
- * Endpoints:
- * - GET /api/reportes?action=geocercas
- * - GET /api/reportes?action=attendance&start=YYYY-MM-DD&end=YYYY-MM-DD&geocerca_name=...
+ * Reportes de Asistencia (cookie-based)
+ * - Auth viene de AuthContext (/api/auth/session, cookie tg_at)
+ * - Datos vienen de /api/reportes (cookie-first)
  */
 
-export default async function handler(req, res) {
-  try {
-    if (req.method !== "GET") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
+function buildDateRangeForDates(startStr, endStr) {
+  // Usamos end inclusivo en UI, el backend lo convierte a exclusivo (+1 día)
+  // Aquí solo validamos y mandamos tal cual start/end.
+  return { startStr: startStr || "", endStr: endStr || "" };
+}
 
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+export default function Reports() {
+  const { ready, authenticated, currentOrg } = useAuth();
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return res.status(500).json({
-        error: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
-      });
-    }
+  const [rows, setRows] = useState([]);
+  const [geocercas, setGeocercas] = useState([]);
+  const [selectedGeocercaName, setSelectedGeocercaName] = useState("");
 
-    // ============================
-    // 1) Resolver token (cookie-first)
-    // ============================
-    let token = null;
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
 
-    // A) Cookie HttpOnly (tg_at)
-    const cookieHeader = req.headers.cookie || "";
-    const match = cookieHeader.match(/(?:^|;\s*)tg_at=([^;]+)/);
-    if (match && match[1]) {
-      token = decodeURIComponent(match[1]);
-    }
+  const [loading, setLoading] = useState(false);
+  const [loadingGeocercas, setLoadingGeocercas] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-    // B) Fallback: Authorization Bearer
-    if (!token) {
-      const authHeader = req.headers.authorization || "";
-      if (authHeader.toLowerCase().startsWith("bearer ")) {
-        token = authHeader.slice(7);
-      }
-    }
+  const canRun = useMemo(
+    () => ready && authenticated && !!currentOrg?.id,
+    [ready, authenticated, currentOrg]
+  );
 
-    if (!token) {
-      return res.status(401).json({
-        error: "Missing authentication (cookie or bearer token)",
-      });
-    }
-
-    // ============================
-    // 2) Supabase client "as user"
-    // ============================
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+  async function apiGet(url) {
+    const resp = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "cache-control": "no-cache",
+        pragma: "no-cache",
       },
-      auth: { persistSession: false },
     });
 
-    const action = String(req.query.action || "").toLowerCase();
-
-    // ============================
-    // 3) Endpoints
-    // ============================
-    if (action === "geocercas") {
-      const { data, error } = await supabase
-        .from("geocercas")
-        .select("id, nombre")
-        .order("nombre", { ascending: true });
-
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
-
-      return res.status(200).json({ data: data || [] });
-    }
-
-    if (action === "attendance") {
-      const start = req.query.start ? String(req.query.start) : "";
-      const end = req.query.end ? String(req.query.end) : "";
-      const geocercaName = req.query.geocerca_name
-        ? String(req.query.geocerca_name)
-        : "";
-
-      if (start && end && start > end) {
-        return res.status(400).json({
-          error: 'La fecha "Desde" no puede ser mayor que "Hasta".',
-        });
-      }
-
-      // rango inclusivo hasta
-      const buildDateRangeForDates = (startStr, endStr) => {
-        let fromDate = null;
-        let toDateExclusive = null;
-
-        if (startStr) fromDate = startStr;
-
-        if (endStr) {
-          const d = new Date(endStr + "T00:00:00");
-          if (!Number.isNaN(d.getTime())) {
-            d.setDate(d.getDate() + 1);
-            toDateExclusive = d.toISOString().slice(0, 10);
-          }
-        }
-        return { fromDate, toDateExclusive };
-      };
-
-      const { fromDate, toDateExclusive } =
-        buildDateRangeForDates(start, end);
-
-      let query = supabase.from("v_attendance_daily").select("*");
-
-      if (fromDate) query = query.gte("work_day", fromDate);
-      if (toDateExclusive) query = query.lt("work_day", toDateExclusive);
-      if (geocercaName) query = query.eq("geofence_name", geocercaName);
-
-      const { data, error } = await query.order("work_day", {
-        ascending: false,
-      });
-
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
-
-      return res.status(200).json({ data: data || [] });
-    }
-
-    return res.status(400).json({
-      error: "Invalid action. Use action=geocercas or action=attendance",
-    });
-  } catch (e) {
-    console.error("[api/reportes] error:", e);
-    return res.status(500).json({
-      error: e?.message || "Unexpected server error",
-    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
+    return json;
   }
+
+  // ============================
+  // Cargar geocercas
+  // ============================
+  useEffect(() => {
+    if (!canRun) return;
+    loadGeocercas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canRun]);
+
+  async function loadGeocercas() {
+    setLoadingGeocercas(true);
+    setErrorMsg("");
+
+    try {
+      const json = await apiGet("/api/reportes?action=geocercas");
+      setGeocercas(Array.isArray(json?.data) ? json.data : []);
+    } catch (e) {
+      console.error("[Reports] loadGeocercas:", e);
+      setGeocercas([]);
+      setErrorMsg(e?.message || "Error cargando geocercas.");
+    } finally {
+      setLoadingGeocercas(false);
+    }
+  }
+
+  // ============================
+  // Cargar reporte
+  // ============================
+  async function loadReport() {
+    setErrorMsg("");
+    setRows([]);
+    setLoading(true);
+
+    try {
+      if (!canRun) {
+        setErrorMsg("No hay organización activa o la sesión no está lista.");
+        return;
+      }
+
+      // Validación simple del rango
+      if (start && end && start > end) {
+        setErrorMsg('La fecha "Desde" no puede ser mayor que la fecha "Hasta".');
+        return;
+      }
+
+      const { startStr, endStr } = buildDateRangeForDates(start, end);
+
+      const params = new URLSearchParams();
+      params.set("action", "attendance");
+      if (startStr) params.set("start", startStr);
+      if (endStr) params.set("end", endStr);
+      if (selectedGeocercaName) params.set("geocerca_name", selectedGeocercaName);
+
+      const json = await apiGet(`/api/reportes?${params.toString()}`);
+      setRows(Array.isArray(json?.data) ? json.data : []);
+    } catch (e) {
+      console.error("[Reports] loadReport:", e);
+      setErrorMsg(e?.message || "Error cargando reporte.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ============================
+  // Exportar CSV
+  // ============================
+  function exportCSV() {
+    if (rows.length === 0) {
+      alert("No hay datos para exportar.");
+      return;
+    }
+
+    const header = Object.keys(rows[0]).join(",");
+    const lines = rows.map((r) =>
+      Object.values(r)
+        .map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`)
+        .join(",")
+    );
+
+    const blob = new Blob([header + "\n" + lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `reporte_asistencia_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ============================
+  // Estados globales
+  // ============================
+  if (!ready) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          Cargando tu sesión…
+        </div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          No hay sesión activa. Inicia sesión nuevamente.
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentOrg?.id) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          No hay organización activa para este usuario.
+        </div>
+      </div>
+    );
+  }
+
+  // ============================
+  // Render
+  // ============================
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold">Reportes de Asistencia</h1>
+        <p className="text-xs text-gray-500">
+          Organización actual:{" "}
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
+        </p>
+      </div>
+
+      {errorMsg && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMsg}
+        </div>
+      )}
+
+      {/* ====== FILTROS ====== */}
+      <div className="flex flex-wrap gap-3 items-end border rounded-xl bg-white p-4 shadow-sm">
+        <div>
+          <label className="text-sm font-medium text-slate-700">Desde</label>
+          <input
+            type="date"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            className="block border rounded-lg px-2 py-1 mt-1"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-slate-700">Hasta</label>
+          <input
+            type="date"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            className="block border rounded-lg px-2 py-1 mt-1"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-slate-700">
+            Geocerca{" "}
+            {loadingGeocercas ? <span className="text-xs text-gray-400">(cargando…)</span> : null}
+          </label>
+          <select
+            value={selectedGeocercaName}
+            onChange={(e) => setSelectedGeocercaName(e.target.value)}
+            className="block border rounded-lg px-2 py-1 mt-1 min-w-[220px]"
+            disabled={loadingGeocercas}
+          >
+            <option value="">Todas</option>
+            {geocercas.map((g) => (
+              <option key={g.id} value={g.nombre}>
+                {g.nombre}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-1">
+            (Filtro por nombre en <code>v_attendance_daily.geofence_name</code>)
+          </p>
+        </div>
+
+        <button
+          onClick={loadReport}
+          disabled={loading}
+          className="px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-60"
+        >
+          {loading ? "Generando…" : "Generar"}
+        </button>
+
+        <button
+          onClick={exportCSV}
+          disabled={rows.length === 0}
+          className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
+        >
+          Exportar CSV
+        </button>
+      </div>
+
+      {/* ====== TABLA ====== */}
+      <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        {loading ? (
+          <p className="p-4 text-sm text-slate-500">Cargando…</p>
+        ) : rows.length === 0 ? (
+          <p className="p-4 text-sm text-slate-500">No hay datos en el rango seleccionado.</p>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr>
+                <th className="p-2 text-left">Fecha</th>
+                <th className="p-2 text-left">Email</th>
+                <th className="p-2 text-left">Geocerca</th>
+                <th className="p-2 text-left">Entrada</th>
+                <th className="p-2 text-left">Salida</th>
+                <th className="p-2 text-left"># Marcajes</th>
+                <th className="p-2 text-left">Dentro</th>
+                <th className="p-2 text-left">Distancia (m)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr
+                  key={i}
+                  className={`border-t hover:bg-slate-50 ${
+                    i % 2 === 0 ? "bg-white" : "bg-slate-50/40"
+                  }`}
+                >
+                  <td className="p-2">{r.work_day ? String(r.work_day).slice(0, 10) : "—"}</td>
+                  <td className="p-2">{r.email}</td>
+                  <td className="p-2">{r.geofence_name}</td>
+                  <td className="p-2">{r.first_check_in}</td>
+                  <td className="p-2">{r.last_check_out}</td>
+                  <td className="p-2 text-center">{r.total_marks}</td>
+                  <td className="p-2 text-center">{r.inside_count}</td>
+                  <td className="p-2 text-center">{r.avg_distance_m}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  );
 }
