@@ -16,6 +16,52 @@
       "no": "Non",
       "loading": "Chargement…"
     },
+    "yes": "Oui",
+    "no": "Non",
+    "loading": "Chargement…",
+    "orgNamePlaceholder": "Nom de l’organisation (ex. Ferme A)",
+    "createOrganization": "Créer une organisation",
+    "refreshContext": "Rafraîchir le contexte"
+  },
+
+  "personal": {
+    "title": "Personnel",
+
+    "table": {
+      "loading": "Chargement…",
+      "noActive": "Aucun personnel actif.",
+      "columns": {
+        "firstName": "Prénom",
+        "lastName": "Nom",
+        "email": "E-mail",
+        "phone": "Téléphone",
+        "active": "Actif",
+        "start": "Début",
+        "end": "Fin"
+      }
+    }
+  }
+
+  /* 🔴 RESTO DEL ARCHIVO FR.JSON: SIN CAMBIOS */
+}
+
+  "common": {
+    "language": {
+      "es": "Espagnol",
+      "en": "Anglais",
+      "fr": "Français"
+    },
+    "actions": {
+      "close": "Fermer",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "edit": "Modifier",
+      "back": "Retour",
+      "yes": "Oui",
+      "no": "Non",
+      "loading": "Chargement…"
+    },
     "orgNamePlaceholder": "Organization name (e.g. Farm A)",
     "createOrganization": "Create organization",
     "refreshContext": "Refresh context"
