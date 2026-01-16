@@ -83,7 +83,21 @@
     "accessBody": "This app requires an account invited by an administrator. If you don’t have access, request an invitation to your organization.",
     "accessHint": "Tip: use “Magic Link” if your admin invited you by email.",
     "reviewNote": "Note: If you are reviewing the app (Google Play), use the credentials provided in Play Console (App access).",
-    "privacyMiniNote": "Privacy: location is used only for geofence and tracking features according to the permissions granted by the user."
+    "privacyMiniNote": "Privacy: location is used only for geofence and tracking features according to the permissions granted by the user.",
+    "heroTitle": "Control your team with smart geofences anywhere in the world",
+    "login": "Enter",
+    "goPanel": "Go to dashboard",
+    "magicEnter": "Enter with magic link",
+    "quickAccessTitle": "Access with an authorized account",
+    "quickAccessDesc": "This app requires an account invited by an administrator. If you don’t have access, request an invitation to your organization.",
+    "email": "Email",
+    "sending": "Sending...",
+    "sendMagic": "Send Magic Link",
+    "magicNote": "Important: access works only with the real Magic Link.",
+    "support": "Support",
+    "invalidEmail": "Invalid email.",
+    "magicLinkSent": "We sent you an access link. Check your email.",
+    "magicLinkError": "Could not send the link. Please try again."
   },
   "login": {
     "title": "Log in",

@@ -83,7 +83,21 @@
     "accessBody": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
     "accessHint": "Consejo: usa \"Link mágico\" si tu administrador te invitó con correo.",
     "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
-    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."
+    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
+    "heroTitle": "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo",
+    "login": "Entrar",
+    "goPanel": "Ir al panel",
+    "magicEnter": "Entrar con link mágico",
+    "quickAccessTitle": "Acceso con cuenta autorizada",
+    "quickAccessDesc": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
+    "email": "Correo",
+    "sending": "Enviando...",
+    "sendMagic": "Enviar Magic Link",
+    "magicNote": "Importante: el acceso funciona solo con el Magic Link real.",
+    "support": "Soporte",
+    "invalidEmail": "Correo inválido.",
+    "magicLinkSent": "Te enviamos un enlace de acceso. Revisa tu correo.",
+    "magicLinkError": "No se pudo enviar el enlace. Intenta nuevamente."
   },
   "login": {
     "title": "Iniciar sesión",
