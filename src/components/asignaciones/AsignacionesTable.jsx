@@ -1,18 +1,14 @@
 // src/components/asignaciones/AsignacionesTable.jsx
 
 /* eslint-disable react/prop-types */
+import { useTranslation } from "react-i18next";
 
 // Helper para formatear fechas en HORA LOCAL del navegador
 function formatDateTimeLocal(value) {
   if (!value) return "";
-
   try {
     const d = new Date(value);
-
-    // Si la fecha no es válida, devolvemos el valor original
     if (isNaN(d.getTime())) return String(value);
-
-    // toLocaleString respeta la zona horaria del navegador
     return d.toLocaleString(undefined, {
       year: "numeric",
       month: "2-digit",
@@ -21,7 +17,6 @@ function formatDateTimeLocal(value) {
       minute: "2-digit",
     });
   } catch {
-    // fallback defensivo
     return String(value);
   }
 }
@@ -32,39 +27,64 @@ export default function AsignacionesTable({
   onEdit,
   onDelete,
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-white rounded-lg border border-gray-100 shadow-sm">
       <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
         <h2 className="text-sm font-medium text-gray-700">
-          Asignaciones vigentes
+          {t("asignaciones.table.title", {
+            defaultValue: "Active assignments",
+          })}
         </h2>
       </div>
 
       {loading ? (
         <div className="px-4 py-6 text-sm text-gray-500">
-          Cargando asignaciones…
+          {t("asignaciones.messages.loadingData", {
+            defaultValue: "Loading assignments…",
+          })}
         </div>
       ) : !asignaciones || asignaciones.length === 0 ? (
         <div className="px-4 py-6 text-sm text-gray-500">
-          No hay asignaciones para los filtros seleccionados.
+          {t("asignaciones.table.noResults", {
+            defaultValue: "No assignments for the selected filters.",
+          })}
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
               <tr className="text-left text-gray-500">
-                <th className="px-4 py-2 whitespace-nowrap">Persona</th>
-                <th className="px-4 py-2 whitespace-nowrap">Geocerca</th>
-                <th className="px-4 py-2 whitespace-nowrap">Actividad</th>
-                <th className="px-4 py-2 whitespace-nowrap">Inicio</th>
-                <th className="px-4 py-2 whitespace-nowrap">Fin</th>
-                <th className="px-4 py-2 whitespace-nowrap">Freq (min)</th>
-                <th className="px-4 py-2 whitespace-nowrap">Estado</th>
+                <th className="px-4 py-2 whitespace-nowrap">
+                  {t("asignaciones.table.person")}
+                </th>
+                <th className="px-4 py-2 whitespace-nowrap">
+                  {t("asignaciones.table.geofence")}
+                </th>
+                <th className="px-4 py-2 whitespace-nowrap">
+                  {t("asignaciones.table.activity")}
+                </th>
+                <th className="px-4 py-2 whitespace-nowrap">
+                  {t("asignaciones.table.start")}
+                </th>
+                <th className="px-4 py-2 whitespace-nowrap">
+                  {t("asignaciones.table.end")}
+                </th>
+                <th className="px-4 py-2 whitespace-nowrap">
+                  {t("asignaciones.table.frequency", {
+                    defaultValue: "Freq (min)",
+                  })}
+                </th>
+                <th className="px-4 py-2 whitespace-nowrap">
+                  {t("asignaciones.table.status")}
+                </th>
                 <th className="px-4 py-2 whitespace-nowrap text-right">
-                  Acciones
+                  {t("asignaciones.table.actions")}
                 </th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-100">
               {asignaciones.map((row) => {
                 const personaNombre =
@@ -87,7 +107,6 @@ export default function AsignacionesTable({
                   ? Math.round(row.frecuencia_envio_sec / 60)
                   : "";
 
-                // 🚩 Aquí garantizamos que se use SIEMPRE la hora local del navegador
                 const inicio = formatDateTimeLocal(row.start_time);
                 const fin = formatDateTimeLocal(row.end_time);
 
@@ -125,7 +144,7 @@ export default function AsignacionesTable({
                     {/* Fin */}
                     <td className="px-4 py-2 whitespace-nowrap">{fin}</td>
 
-                    {/* Frecuencia (min) */}
+                    {/* Frecuencia */}
                     <td className="px-4 py-2 whitespace-nowrap text-center">
                       {freqMin || "—"}
                     </td>
@@ -139,7 +158,13 @@ export default function AsignacionesTable({
                             : "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
                         }
                       >
-                        {row.status || "—"}
+                        {row.status === "activa"
+                          ? t("asignaciones.actions.activate", {
+                              defaultValue: "Active",
+                            })
+                          : t("asignaciones.actions.deactivate", {
+                              defaultValue: "Inactive",
+                            })}
                       </span>
                     </td>
 
@@ -150,18 +175,18 @@ export default function AsignacionesTable({
                           <button
                             type="button"
                             onClick={() => onEdit(row)}
-                            className="px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1"
+                            className="px-3 py-1 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
                           >
-                            Editar
+                            {t("asignaciones.actions.edit")}
                           </button>
                         )}
                         {onDelete && (
                           <button
                             type="button"
                             onClick={() => onDelete(row.id)}
-                            className="px-3 py-1 text-xs font-semibold rounded-md border border-red-400 bg-red-50 text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
+                            className="px-3 py-1 text-xs font-semibold rounded-md border border-red-400 bg-red-50 text-red-700 hover:bg-red-100"
                           >
-                            Eliminar
+                            {t("asignaciones.actions.delete")}
                           </button>
                         )}
                       </div>
