@@ -5,10 +5,14 @@ import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
 /**
- * ProtectedShell — vFinal
+ * ProtectedShell — vFinal (i18n normalizado)
  * - Router decide navegación
  * - Shell solo muestra UI
  * - Orden lógico de módulos
+ *
+ * Nota i18n:
+ * - Usar keys canónicas existentes en JSON: app.tabs.inicio, app.tabs.invitarTracker
+ * - Mantenemos compatibilidad en JSON con alias: app.tabs.home, app.tabs.invitar_tracker
  */
 
 function buildTabs({ role, isAppRoot }) {
@@ -28,7 +32,8 @@ function buildTabs({ role, isAppRoot }) {
   }
 
   const tabs = [
-    { path: "/inicio", labelKey: "app.tabs.home" },
+    // ✅ key canónica (en tus JSON existe "inicio")
+    { path: "/inicio", labelKey: "app.tabs.inicio" },
 
     { path: "/geocercas", labelKey: "app.tabs.geocercas" },
     { path: "/personal", labelKey: "app.tabs.personal" },
@@ -43,7 +48,8 @@ function buildTabs({ role, isAppRoot }) {
   ];
 
   if (isAdmin) {
-    tabs.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitar_tracker" });
+    // ✅ key canónica (en tus JSON existe "invitarTracker")
+    tabs.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
   }
 
   if (isAppRoot) {
