@@ -1,17 +1,17 @@
 {
   "common": {
     "language": {
-      "es": "Spanish",
-      "en": "English",
-      "fr": "French"
+      "es": "Espagnol",
+      "en": "Anglais",
+      "fr": "Français"
     },
     "actions": {
-      "close": "Close",
+      "close": "Fermer",
       "cancel": "Annuler",
-      "save": "Save",
-      "delete": "Delete",
-      "edit": "Edit",
-      "back": "Back",
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "edit": "Modifier",
+      "back": "Retour",
       "yes": "Oui",
       "no": "Non",
       "loading": "Chargement…"
@@ -309,7 +309,7 @@
       "GBP": "Livre sterling",
       "LOCAL": "Devise locale"
     },
-    "buttonCreate": "Créer une activité",
+    "buttonCreate": "Créer l’activité",
     "buttonSave": "Enregistrer les modifications",
     "buttonUpdate": "Mettre à jour l’activité",
     "buttonCancel": "Annuler",
@@ -328,21 +328,21 @@
     "tableNoResults": "Aucune activité enregistrée.",
     "loading": "Chargement des activités…",
     "empty": "Aucune activité enregistrée.",
-    "readOnlyNote": "Seul le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
+    "readOnlyNote": "Seuls le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
     "bannerCreated": "Activité créée avec succès.",
     "bannerUpdated": "Activité mise à jour.",
     "bannerDeleted": "Activité supprimée.",
     "errorLoad": "Erreur lors du chargement des activités.",
     "errorSave": "Impossible d’enregistrer l’activité.",
     "errorDelete": "Impossible de supprimer l’activité.",
-    "errorMissingName": "Activity name is required.",
-    "errorMissingCurrency": "Currency is required.",
-    "errorMissingRate": "Hourly rate is required.",
-    "errorNameRequired": "Le nom de l’activité est obligatoire.",
+    "errorMissingName": "Le nom de l’activité est requis.",
+    "errorMissingCurrency": "La devise est requise.",
+    "errorMissingRate": "Le tarif horaire est requis.",
+    "errorNameRequired": "Le nom de l’activité est requis.",
     "errorRatePositive": "Le tarif horaire doit être supérieur à 0.",
     "errorMissingTenant": "Organisation de l’utilisateur introuvable (tenant_id/org_id).",
-    "errorToggle": "Impossible de changer l’état de l’activité.",
-    "confirmDelete": "Voulez-vous vraiment supprimer l’activité \"{{name}}\" ?"
+    "errorToggle": "Impossible de changer le statut de l’activité.",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer l’activité \"{{name}}\" ?"
   },
   "asignaciones": {
     "title": "Assignments",
@@ -416,7 +416,9 @@
       "updateSuccess": "Assignment updated successfully.",
       "deleteError": "Could not delete the assignment.",
       "deleteSuccess": "Assignment deleted.",
-      "confirmDelete": "Are you sure you want to delete this assignment?"
+      "confirmDelete": "Are you sure you want to delete this assignment?",
+      "noPersonal": "Il n’y a aucun personnel actif dans cette organisation. Créez ou réactivez au moins une personne.",
+      "noActivities": "Aucune activité n’a été créée. Créez au moins une activité pour pouvoir affecter."
     },
     "error": {
       "load": "Error loading assignments.",
@@ -717,65 +719,178 @@
   },
   "help": {
     "common": {
-      "back": "Retour",
-      "open": "Ouvrir →"
+      "breadcrumb": "Help Center",
+      "back": "Back",
+      "goHome": "Go to Home",
+      "viewFaq": "View FAQ",
+      "badge": "Help center",
+      "quickGuideBadge": "Quick guide"
+    },
+    "instructions": {
+      "title": "Quick setup guide",
+      "subtitle": "Follow these steps to configure your organization, create geofences, assign personnel, and start tracking.",
+      "jumpToSteps": "Jump to steps",
+      "viewResult": "View result",
+      "tocTitle": "Table of contents",
+      "tocSubtitle": "Use these shortcuts to navigate the guide.",
+      "tocSteps": "Steps",
+      "tocTips": "Best practices",
+      "tocResult": "Expected result",
+      "recommendationTitle": "Recommendation",
+      "recommendationBody": "Start with 1 geofence and 1 tracker. Once the flow works, scale to more zones and people.",
+      "stepsTitle": "Step-by-step",
+      "stepsSubtitle": "A practical sequence that works for most organizations.",
+      "steps": [
+        {
+          "title": "Select your organization",
+          "bullets": [
+            "Use the organization selector to choose where you will work.",
+            "If you are Owner, you can create/manage multiple organizations."
+          ]
+        },
+        {
+          "title": "Create your first geofence",
+          "bullets": [
+            "Go to Geofence and draw the area on the map.",
+            "Give it a clear name (Farm A, Field 3, Plant 1, etc.).",
+            "Save and verify it appears in Geofences list."
+          ]
+        },
+        {
+          "title": "Register your personnel",
+          "bullets": [
+            "Go to Personnel and create the people that will work in the field.",
+            "Use a valid email if you plan to invite them as trackers."
+          ]
+        },
+        {
+          "title": "Create activities and hourly rates",
+          "bullets": [
+            "Go to Activities and define tasks (Harvest, Irrigation, Maintenance…).",
+            "Set currency and hourly rate to calculate costs and reports."
+          ]
+        },
+        {
+          "title": "Create assignments",
+          "bullets": [
+            "Go to Assignments and link: Person + Activity + Geofence.",
+            "Set start/end and status Active.",
+            "Define frequency (minimum 5 minutes)."
+          ]
+        },
+        {
+          "title": "Invite trackers (field phones)",
+          "bullets": [
+            "Go to Invite tracker and send an invite by email.",
+            "The invited user can log in with Magic Link on mobile.",
+            "Once logged in, the tracker will send GPS points based on the assignment."
+          ]
+        },
+        {
+          "title": "Review reports and dashboard",
+          "bullets": [
+            "Open Reports to filter by geofence/person/activity and export CSV.",
+            "Open Costs Dashboard for charts and KPIs."
+          ]
+        }
+      ],
+      "tipsTitle": "Best practices",
+      "bestPractice1Title": "Use clear names",
+      "bestPractice1Body": "Name geofences and activities in a way that your team understands instantly (Farm, Field, Block, Task).",
+      "bestPractice2Title": "Start small, then scale",
+      "bestPractice2Body": "Validate the full flow with one person and one geofence before creating dozens of records.",
+      "bestPractice3Title": "Keep assignments updated",
+      "bestPractice3Body": "Close or deactivate old assignments so the tracker follows only the current work plan.",
+      "bestPractice4Title": "Mind battery and accuracy",
+      "bestPractice4Body": "Use a reasonable send frequency. Higher frequency uses more battery and mobile data.",
+      "resultTitle": "What you should see",
+      "resultIntro": "After completing the steps, your organization should have the following:",
+      "resultBullets": [
+        "At least 1 geofence saved and visible on the map",
+        "Personnel registered and ready for assignments",
+        "Activities with currency and hourly rate configured",
+        "Active assignments linking person + activity + geofence",
+        "GPS points appearing in Tracker / Tracking dashboard",
+        "Cost reports and dashboard ready to export and analyze"
+      ]
     },
     "faq": {
-      "title": "Questions fréquentes",
-      "subtitle": "Réponses aux questions les plus courantes sur App Geocercas.",
+      "title": "Frequently asked questions",
+      "subtitle": "Quick answers about invitations, roles, tracking, reports, and data privacy.",
+      "seeQuickGuide": "See quick guide",
+      "backToPanel": "Go to dashboard",
       "sections": [
         {
-          "title": "Qu’est-ce qu’une géorepère ?",
+          "title": "Access & roles",
           "items": [
             {
-              "q": "À quoi sert une géorepère ?",
-              "a": "Une géorepère est une zone géographique qui permet de contrôler la présence du personnel et d’enregistrer des activités automatiquement."
+              "q": "How do I get access to the app?",
+              "a": "You need to be invited by an Owner/Admin of an organization. If you don’t have access, request an invitation."
+            },
+            {
+              "q": "What is the difference between Owner, Admin and Tracker?",
+              "a": "Owner manages the organization and admins. Admin manages operational data (geofences, personnel, activities, assignments). Tracker is a field user who sends GPS points."
+            },
+            {
+              "q": "Can I manage more than one organization?",
+              "a": "Yes. Owners can work with multiple organizations and switch using the organization selector."
             }
           ]
         },
         {
-          "title": "Utilisation de l’application",
+          "title": "Tracking",
           "items": [
             {
-              "q": "Ai-je besoin d’Internet en permanence ?",
-              "a": "Non. L’application peut fonctionner hors ligne et synchronise les données lorsqu’une connexion est disponible."
+              "q": "Why do I see “No recent data” in Tracker?",
+              "a": "The tracker may be offline, location permissions may be disabled, or there is no active assignment for that person. Verify permissions and assignments."
+            },
+            {
+              "q": "How often does the tracker send location?",
+              "a": "The send frequency is defined in the assignment. The minimum allowed is 5 minutes to protect battery and data usage."
+            },
+            {
+              "q": "Does the app work with weak signal?",
+              "a": "Yes. The tracker can store points and sync when connectivity returns (depending on your build and permissions)."
+            }
+          ]
+        },
+        {
+          "title": "Costs & reports",
+          "items": [
+            {
+              "q": "How are costs calculated?",
+              "a": "Costs are calculated from assignments (hours) and the hourly rate configured for each activity."
+            },
+            {
+              "q": "Can I export reports to Excel?",
+              "a": "Yes. Reports can be exported as CSV, which you can open in Excel or Google Sheets."
+            },
+            {
+              "q": "Can I filter by geofence, person, activity and date range?",
+              "a": "Yes. Use the filters in Reports and Costs Dashboard to focus on specific geofences, people, activities, and dates."
+            }
+          ]
+        },
+        {
+          "title": "Data & privacy",
+          "items": [
+            {
+              "q": "What location data is stored?",
+              "a": "Only location points needed for tracking and geofence validation. Access is controlled by roles and organization permissions."
+            },
+            {
+              "q": "Can trackers see other organizations’ data?",
+              "a": "No. Data is isolated by organization (multi-tenant) and protected by database security rules."
             }
           ]
         }
       ]
     },
-    "changelog": {
-      "title": "Journal des modifications",
-      "subtitle": "Améliorations, corrections et nouvelles fonctionnalités.",
-      "badges": {
-        "feature": "Fonctionnalité",
-        "fix": "Correction",
-        "improvement": "Amélioration"
-      },
-      "items": [
-        {
-          "version": "v1.0",
-          "date": "2026-01-15",
-          "changes": [
-            {
-              "type": "feature",
-              "title": "Support multilingue",
-              "details": [
-                "Interface disponible en espagnol, anglais et français.",
-                "Sélecteur de langue global."
-              ]
-            },
-            {
-              "type": "improvement",
-              "title": "Module géorepères",
-              "details": [
-                "Amélioration de l’édition sur carte.",
-                "Stabilité accrue."
-              ]
-            }
-          ]
-        }
-      ]
+    "support": {
+      "title": "Support",
+      "subtitle": "Contact us for technical support, billing questions, or onboarding.",
+      "emailLabel": "Support email",
+      "notConfigured": "Support contact is not configured yet."
     }
   },
   "resetPassword": {

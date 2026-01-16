@@ -390,7 +390,9 @@
       "updateSuccess": "Asignación actualizada correctamente.",
       "deleteError": "No se pudo eliminar la asignación.",
       "deleteSuccess": "Asignación eliminada correctamente.",
-      "confirmDelete": "¿Seguro que deseas eliminar esta asignación?"
+      "confirmDelete": "¿Seguro que deseas eliminar esta asignación?",
+      "noPersonal": "No hay personal vigente en esta organización. Reactiva o crea al menos una persona.",
+      "noActivities": "No hay actividades creadas. Crea al menos una Actividad para poder asignar."
     },
     "error": {
       "load": "Error al cargar las asignaciones.",
@@ -933,68 +935,5 @@
     "orgNotResolved": "(no resuelta)",
     "roleEmpty": "(vacío)",
     "retry": "Reintentar"
-    },
-  "help": {
-    "common": {
-      "back": "Volver",
-      "open": "Abrir →"
-    },
-    "faq": {
-      "title": "Preguntas frecuentes",
-      "subtitle": "Respuestas a las dudas más comunes sobre App Geocercas.",
-      "sections": [
-        {
-          "title": "¿Qué es una geocerca?",
-          "items": [
-            {
-              "q": "¿Para qué sirve una geocerca?",
-              "a": "Una geocerca es un área geográfica que permite controlar la presencia del personal y registrar actividades automáticamente."
-            }
-          ]
-        },
-        {
-          "title": "Uso de la aplicación",
-          "items": [
-            {
-              "q": "¿Necesito Internet todo el tiempo?",
-              "a": "No. La aplicación puede funcionar sin conexión y sincroniza los datos cuando hay Internet."
-            }
-          ]
-        }
-      ]
-    },
-    "changelog": {
-      "title": "Registro de cambios",
-      "subtitle": "Mejoras, correcciones y nuevas funcionalidades.",
-      "badges": {
-        "feature": "Funcionalidad",
-        "fix": "Corrección",
-        "improvement": "Mejora"
-      },
-      "items": [
-        {
-          "version": "v1.0",
-          "date": "2026-01-15",
-          "changes": [
-            {
-              "type": "feature",
-              "title": "Soporte multidioma",
-              "details": [
-                "Interfaz disponible en español, inglés y francés.",
-                "Selector de idioma global."
-              ]
-            },
-            {
-              "type": "improvement",
-              "title": "Módulo de geocercas",
-              "details": [
-                "Mejor edición en el mapa.",
-                "Mayor estabilidad."
-              ]
-            }
-          ]
-        }
-      ]
-    }
   }
 }
