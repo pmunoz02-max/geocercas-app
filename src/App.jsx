@@ -24,11 +24,11 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 
-// Help pages
-import InstructionsPage from "./pages/InstructionsPage.jsx";
-import FaqPage from "./pages/FaqPage.jsx";
-import SupportPage from "./pages/SupportPage.jsx";
-import ChangelogPage from "./pages/ChangelogPage.jsx";
+// Help pages (✅ ruta real)
+import InstructionsPage from "./pages/help/InstructionsPage.jsx";
+import FaqPage from "./pages/help/FaqPage.jsx";
+import SupportPage from "./pages/help/SupportPage.jsx";
+import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 function HashTokenCatcher() {
   const location = useLocation();
@@ -95,7 +95,7 @@ export default function App() {
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
-          {/* Help (no requiere org; solo login) */}
+          {/* Help (login requerido, org NO) */}
           <Route path="/help/instructions" element={<InstructionsPage />} />
           <Route path="/help/faq" element={<FaqPage />} />
           <Route path="/help/support" element={<SupportPage />} />
