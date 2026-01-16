@@ -345,38 +345,34 @@
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer l’activité \"{{name}}\" ?"
   },
   "asignaciones": {
-    "title": "Assignments",
+    "title": "Affectations",
+    "currentOrgLabel": "Organisation actuelle",
     "filters": {
-      "statusLabel": "Status",
+      "statusLabel": "Statut",
       "status": {
-        "todos": "All",
-        "activo": "Active",
-        "inactivo": "Inactive"
-      },
-      "refresh": "Refresh",
-      "refreshLoading": "Refreshing…"
+        "todos": "Tous",
+        "activo": "Actives",
+        "inactivo": "Inactives"
+      }
     },
     "form": {
-      "newTitle": "New assignment",
-      "editTitle": "Edit assignment",
-      "personLabel": "Person",
-      "personPlaceholder": "Select a person",
-      "activityLabel": "Activity",
-      "activityPlaceholder": "Select an activity",
-      "geofenceLabel": "Geofence",
-      "geofencePlaceholder": "Select a geofence",
-      "startLabel": "Start date/time",
-      "endLabel": "End date/time",
-      "statusLabel": "Status",
+      "newTitle": "Nouvelle affectation",
+      "editTitle": "Modifier l’affectation",
+      "personLabel": "Personne",
+      "personPlaceholder": "Sélectionner une personne",
+      "geofenceLabel": "Géorepère",
+      "geofencePlaceholder": "Sélectionner un géorepère",
+      "activityLabel": "Activité",
+      "activityPlaceholder": "Sélectionner une activité",
+      "startLabel": "Date/heure de début",
+      "endLabel": "Date/heure de fin",
+      "statusLabel": "Statut",
       "statusActive": "Active",
       "statusInactive": "Inactive",
-      "frequencyLabel": "Frequency (min)",
-      "saveButton": "Save assignment",
-      "updateButton": "Update assignment",
-      "cancelEditButton": "Cancel editing",
-      "buttonCreate": "Create assignment",
-      "buttonUpdate": "Update assignment",
-      "buttonCancel": "Cancel",
+      "frequencyLabel": "Fréquence (min)",
+      "saveButton": "Enregistrer l’affectation",
+      "updateButton": "Mettre à jour",
+      "cancelEditButton": "Annuler la modification",
       "endOptionalHint": "Optionnel",
       "quickActivity": {
         "noActivitiesHint": "Aucune activité (créez-en une dans le module Activités ou ci-dessous).",
@@ -387,57 +383,43 @@
       }
     },
     "table": {
-      "title": "Assignments list",
-      "person": "Person",
-      "activity": "Activity",
-      "geofence": "Geofence",
-      "start": "Start",
-      "end": "End",
-      "status": "Status",
-      "actions": "Actions",
-      "noResults": "No assignments registered.",
-      "frequency": "Fréq. (min)"
+      "title": "Affectations actives",
+      "noResults": "Aucune affectation pour les filtres sélectionnés.",
+      "person": "Personne",
+      "geofence": "Géorepère",
+      "activity": "Activité",
+      "start": "Début",
+      "end": "Fin",
+      "frequency": "Fréq. (min)",
+      "status": "Statut",
+      "actions": "Actions"
     },
     "actions": {
-      "edit": "Edit",
-      "delete": "Delete",
-      "activate": "Activate",
-      "deactivate": "Deactivate"
-    },
-    "banner": {
-      "created": "Assignment created successfully.",
-      "updated": "Assignment updated.",
-      "deleted": "Assignment deleted."
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "activate": "Active",
+      "deactivate": "Inactive"
     },
     "messages": {
-      "loadError": "Error loading assignments.",
-      "catalogError": "Error loading catalogs (personnel, geofences, activities).",
-      "loadingData": "Loading assignment data…",
-      "overlapError": "The person already has an active assignment that overlaps in that date range.",
-      "selectPersonAndFence": "You must select a person and a geofence.",
-      "selectDates": "You must enter start and end date/time.",
-      "frequencyTooLow": "The minimum allowed frequency is 5 minutes.",
-      "frequencyInvalidRange": "Frequency must be between 5 minutes and 12 hours.",
-      "saveGenericError": "An error occurred while saving the assignment.",
-      "createGenericError": "Could not create the assignment.",
-      "createSuccess": "Assignment created successfully.",
-      "updateGenericError": "Could not update the assignment.",
-      "updateSuccess": "Assignment updated successfully.",
-      "deleteError": "Could not delete the assignment.",
-      "deleteSuccess": "Assignment deleted.",
-      "confirmDelete": "Are you sure you want to delete this assignment?",
+      "loadingData": "Chargement des affectations…",
+      "noOrg": "Aucune organisation active.",
+      "selectPersonAndFence": "Vous devez sélectionner une personne et un géorepère.",
+      "selectDates": "Vous devez renseigner la date/heure de début et de fin.",
+      "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
+      "confirmDelete": "Êtes-vous sûr de vouloir supprimer cette affectation ?",
+      "deleteError": "Impossible de supprimer l’affectation.",
+      "loadError": "Erreur lors du chargement des affectations.",
+      "saveGenericError": "Erreur lors de l’enregistrement de l’affectation.",
       "noPersonal": "Il n’y a aucun personnel actif dans cette organisation. Créez ou réactivez au moins une personne.",
       "noActivities": "Aucune activité n’a été créée. Créez au moins une activité pour pouvoir affecter."
     },
+    "banner": {
+      "created": "Affectation créée avec succès.",
+      "updated": "Affectation mise à jour.",
+      "deleted": "Affectation supprimée."
+    },
     "error": {
-      "load": "Error loading assignments.",
-      "save": "Could not save the assignment.",
-      "delete": "Could not delete the assignment.",
-      "missingPerson": "You must select a person.",
-      "missingGeofence": "You must select a geofence.",
-      "missingActivity": "You must select an activity.",
-      "missingStart": "You must enter a start date/time.",
-      "missingEnd": "You must enter an end date/time."
+      "missingActivity": "Vous devez sélectionner une activité."
     }
   },
   "reportes": {
