@@ -959,8 +959,7 @@
     "orgNotResolved": "(non résolue)",
     "roleEmpty": "(vide)",
     "retry": "Réessayer"
-  }
-{
+    },
   "help": {
     "common": {
       "back": "Retour",
@@ -1024,5 +1023,3 @@
       ]
     }
   }
-}
-
