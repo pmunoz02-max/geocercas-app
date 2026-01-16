@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
-import { listPersonal, upsertPersonal, toggleVigente, deletePersonal } from "../lib/personalApi.js";
+import {
+  listPersonal,
+  upsertPersonal,
+  toggleVigente,
+  deletePersonal,
+} from "../lib/personalApi.js";
 
 function Modal({ open, title, children, onClose }) {
   if (!open) return null;
@@ -25,6 +31,7 @@ function Modal({ open, title, children, onClose }) {
 }
 
 export default function Personal() {
+  const { t } = useTranslation();
   const { loading, ready, isLoggedIn, currentOrg, currentRole } = useAuth();
 
   const role = String(currentRole || "").toLowerCase();
@@ -47,18 +54,18 @@ export default function Personal() {
   });
 
   async function load() {
-    if (!isLoggedIn) return;
-    if (!currentOrg?.id) return;
-
+    if (!isLoggedIn || !currentOrg?.id) return;
     setBusy(true);
     setMsg("");
-
     try {
       const rows = await listPersonal({ q, onlyActive, limit: 500 });
       setItems(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setItems([]);
-      setMsg(e?.message || "No se pudo cargar personal.");
+      setMsg(
+        e?.message ||
+          t("personal.errorLoad", { defaultValue: "Error loading personnel." })
+      );
     } finally {
       setBusy(false);
     }
@@ -81,109 +88,154 @@ export default function Personal() {
 
   async function onSaveNew(e) {
     e.preventDefault();
-
-    console.log("[Personal] submit -> onSaveNew", { canEdit, form });
-
     if (!canEdit) {
-      setMsg("No tienes permisos (solo admin/owner).");
+      setMsg(
+        t("personal.errorNoPermissionCreate", {
+          defaultValue: "You don’t have permission.",
+        })
+      );
       return;
     }
-
     setSaving(true);
     setMsg("");
-
     try {
-      await upsertPersonal({
-        nombre: form.nombre,
-        apellido: form.apellido,
-        email: form.email,
-        telefono: form.telefono,
-        vigente: !!form.vigente,
-      });
-
+      await upsertPersonal({ ...form, vigente: !!form.vigente });
       setOpenNew(false);
-      setForm({ nombre: "", apellido: "", email: "", telefono: "", vigente: true });
-
+      setForm({
+        nombre: "",
+        apellido: "",
+        email: "",
+        telefono: "",
+        vigente: true,
+      });
       await load();
-      setMsg("Guardado ✅");
+      setMsg(
+        t("personal.bannerCreated", {
+          defaultValue: "Personnel created successfully.",
+        })
+      );
     } catch (e2) {
-      setMsg(e2?.message || "No se pudo guardar.");
+      setMsg(
+        e2?.message ||
+          t("personal.errorSave", {
+            defaultValue: "Could not save personnel.",
+          })
+      );
     } finally {
       setSaving(false);
     }
   }
 
   async function onToggle(row) {
-    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
+    if (!canEdit)
+      return setMsg(
+        t("personal.errorNoPermissionEdit", {
+          defaultValue: "You don’t have permission.",
+        })
+      );
     try {
       setBusy(true);
       await toggleVigente(row.id);
       await load();
     } catch (e) {
-      setMsg(e?.message || "No se pudo cambiar vigencia.");
+      setMsg(
+        e?.message ||
+          t("personal.errorToggle", {
+            defaultValue: "Could not change status.",
+          })
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function onDelete(row) {
-    if (!canEdit) return setMsg("No tienes permisos (solo admin/owner).");
-    if (!window.confirm("¿Eliminar este registro?")) return;
-
+    if (!canEdit)
+      return setMsg(
+        t("personal.errorNoPermissionDelete", {
+          defaultValue: "You don’t have permission.",
+        })
+      );
+    if (
+      !window.confirm(
+        t("personal.confirmDelete", {
+          defaultValue: "Delete this record?",
+        })
+      )
+    )
+      return;
     try {
       setBusy(true);
       await deletePersonal(row.id);
       await load();
     } catch (e) {
-      setMsg(e?.message || "No se pudo eliminar.");
+      setMsg(
+        e?.message ||
+          t("personal.errorDelete", {
+            defaultValue: "Could not delete.",
+          })
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading || !ready) return <div className="p-6 text-gray-300">Cargando sesión…</div>;
-
-  if (!isLoggedIn) {
-    return <div className="p-6 text-red-400">No hay sesión activa. Inicia sesión para continuar.</div>;
-  }
-
-  if (!currentOrg?.id) {
+  if (loading || !ready)
     return (
-      <div className="p-6 text-red-400">
-        No hay organización activa. Selecciona una organización para continuar.
+      <div className="p-6 text-gray-300">
+        {t("personal.bannerLoadingSession", {
+          defaultValue: "Loading session…",
+        })}
       </div>
     );
-  }
+
+  if (!isLoggedIn)
+    return (
+      <div className="p-6 text-red-400">
+        {t("personal.bannerLoginRequired", {
+          defaultValue: "You must log in.",
+        })}
+      </div>
+    );
+
+  if (!currentOrg?.id)
+    return (
+      <div className="p-6 text-red-400">
+        {t("personal.errorMissingTenant", {
+          defaultValue: "No organization selected.",
+        })}
+      </div>
+    );
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold mb-1 text-white">Personal</h1>
+          <h1 className="text-2xl font-semibold mb-1 text-white">
+            {t("personal.title", { defaultValue: "Personnel" })}
+          </h1>
           <div className="text-sm text-gray-300">
-            Rol: <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
+            {t("personal.roleLabel", { defaultValue: "Role:" })}{" "}
+            <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
             <span className="font-mono">{currentOrg.id}</span>
           </div>
         </div>
 
-        {canEdit ? (
+        {canEdit && (
           <button
-            className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800"
-            onClick={() => {
-              setMsg("");
-              setOpenNew(true);
-            }}
+            className="rounded-xl bg-slate-900 text-white px-4 py-2"
+            onClick={() => setOpenNew(true)}
             type="button"
           >
-            + Nuevo
+            + {t("personal.buttonNew", { defaultValue: "New" })}
           </button>
-        ) : null}
+        )}
       </div>
 
       <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
         <input
-          className="w-full md:w-96 rounded-xl border border-gray-300 px-3 py-2"
-          placeholder="Buscar por nombre, apellido, email o teléfono…"
+          className="w-full md:w-96 rounded-xl border px-3 py-2"
+          placeholder={t("personal.searchPlaceholder")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -194,66 +246,69 @@ export default function Personal() {
             checked={onlyActive}
             onChange={(e) => setOnlyActive(e.target.checked)}
           />
-          Solo vigentes
+          {t("personal.onlyActive")}
         </label>
 
         <button
-          className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded-xl border px-4 py-2"
           onClick={load}
           disabled={busy}
           type="button"
         >
-          {busy ? "Cargando…" : "Recargar"}
+          {busy ? t("personal.processing") : t("personal.buttonRefresh")}
         </button>
       </div>
 
-      {msg ? <div className="mt-4 text-sm text-yellow-200">{msg}</div> : null}
+      {msg && <div className="mt-4 text-sm text-yellow-200">{msg}</div>}
 
-      {/* ✅ Aquí está el FIX: text-slate-900 para que se vea sobre fondo blanco */}
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white text-slate-900 overflow-hidden">
+      <div className="mt-4 rounded-2xl border bg-white text-slate-900 overflow-hidden">
         {busy && filtered.length === 0 ? (
-          <div className="p-4 text-gray-600">Cargando personal…</div>
+          <div className="p-4 text-gray-600">
+            {t("personal.loading")}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="p-4 text-gray-600">No hay registros.</div>
+          <div className="p-4 text-gray-600">
+            {t("personal.tableNoResults")}
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <th className="text-left font-medium p-3">Nombre</th>
-                <th className="text-left font-medium p-3">Apellido</th>
-                <th className="text-left font-medium p-3">Email</th>
-                <th className="text-left font-medium p-3">Teléfono</th>
-                <th className="text-left font-medium p-3">Vigente</th>
-                <th className="text-left font-medium p-3">Acciones</th>
+                <th className="p-3">{t("personal.tableName")}</th>
+                <th className="p-3">{t("personal.tableLastName")}</th>
+                <th className="p-3">{t("personal.tableEmail")}</th>
+                <th className="p-3">{t("personal.tablePhone")}</th>
+                <th className="p-3">{t("personal.tableActive")}</th>
+                <th className="p-3">{t("personal.actions")}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id} className="border-t border-gray-100">
+                <tr key={r.id} className="border-t">
                   <td className="p-3">{r?.nombre ?? "-"}</td>
                   <td className="p-3">{r?.apellido ?? "-"}</td>
                   <td className="p-3">{r?.email ?? "-"}</td>
                   <td className="p-3">{r?.telefono ?? "-"}</td>
-                  <td className="p-3">{r?.vigente ? "Sí" : "No"}</td>
                   <td className="p-3">
-                    <div className="flex gap-2">
-                      <button
-                        className="rounded-lg border border-gray-300 px-3 py-1 hover:bg-gray-50 disabled:opacity-50"
-                        onClick={() => onToggle(r)}
-                        disabled={!canEdit || busy}
-                        type="button"
-                      >
-                        {r?.vigente ? "Desactivar" : "Activar"}
-                      </button>
-                      <button
-                        className="rounded-lg border border-red-200 text-red-700 px-3 py-1 hover:bg-red-50 disabled:opacity-50"
-                        onClick={() => onDelete(r)}
-                        disabled={!canEdit || busy}
-                        type="button"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+                    {r?.vigente ? t("personal.yes") : t("personal.no")}
+                  </td>
+                  <td className="p-3 flex gap-2">
+                    <button
+                      onClick={() => onToggle(r)}
+                      disabled={!canEdit || busy}
+                      className="rounded-lg border px-3 py-1"
+                    >
+                      {r?.vigente
+                        ? t("personal.actionDeactivate")
+                        : t("personal.actionActivate")}
+                    </button>
+                    <button
+                      onClick={() => onDelete(r)}
+                      disabled={!canEdit || busy}
+                      className="rounded-lg border border-red-200 text-red-700 px-3 py-1"
+                    >
+                      {t("personal.actionDelete")}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -262,57 +317,71 @@ export default function Personal() {
         )}
       </div>
 
-      <Modal open={openNew} title="Nuevo personal" onClose={() => setOpenNew(false)}>
+      <Modal
+        open={openNew}
+        title={t("personal.formTitleNew")}
+        onClose={() => setOpenNew(false)}
+      >
         <form className="space-y-3" onSubmit={onSaveNew}>
           <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Nombre"
+            className="w-full rounded-xl border px-3 py-2"
+            placeholder={t("personal.fieldName")}
             value={form.nombre}
-            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, nombre: e.target.value }))
+            }
           />
           <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Apellido"
+            className="w-full rounded-xl border px-3 py-2"
+            placeholder={t("personal.fieldLastName")}
             value={form.apellido}
-            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, apellido: e.target.value }))
+            }
           />
           <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Email"
+            className="w-full rounded-xl border px-3 py-2"
+            placeholder={t("personal.fieldEmail")}
             value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, email: e.target.value }))
+            }
           />
           <input
-            className="w-full rounded-xl border border-gray-300 px-3 py-2"
-            placeholder="Teléfono (ej: +593...)"
+            className="w-full rounded-xl border px-3 py-2"
+            placeholder={t("personal.fieldPhonePlaceholder")}
             value={form.telefono}
-            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, telefono: e.target.value }))
+            }
           />
 
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+          <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, vigente: e.target.checked }))
+              }
             />
-            Vigente
+            {t("personal.fieldActive")}
           </label>
 
           <div className="pt-2 flex justify-end gap-2">
             <button
               type="button"
-              className="rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-50"
+              className="rounded-xl border px-4 py-2"
               onClick={() => setOpenNew(false)}
               disabled={saving}
             >
-              Cancelar
+              {t("common.actions.cancel")}
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800 disabled:opacity-50"
+              className="rounded-xl bg-slate-900 text-white px-4 py-2"
               disabled={saving}
             >
-              {saving ? "Guardando…" : "Guardar"}
+              {saving ? t("personal.processing") : t("common.actions.save")}
             </button>
           </div>
         </form>
