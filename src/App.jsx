@@ -24,6 +24,9 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 
+// ✅ Dashboard Costos
+import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
+
 // Help pages (✅ ruta real)
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
@@ -77,6 +80,10 @@ export default function App() {
         <Route path="/admin" element={<Navigate to="/admins" replace />} />
         <Route path="/mapa" element={<Navigate to="/geocercas" replace />} />
 
+        {/* ✅ Legacy dashboard paths (por si existían) */}
+        <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
+
         {/* Protected */}
         <Route
           element={
@@ -92,6 +99,10 @@ export default function App() {
           <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
           <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
           <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
+
+          {/* ✅ Dashboard Costos (FIX PRINCIPAL) */}
+          <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
