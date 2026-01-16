@@ -47,7 +47,9 @@
       "dashboardCostos": "Costs Dashboard",
       "tracker": "Tracker",
       "invitarTracker": "Invite tracker",
-      "admins": "Admin"
+      "admins": "Admin",
+      "home": "Home",
+      "invitar_tracker": "Invite tracker"
     }
   },
   "landing": {
@@ -87,18 +89,18 @@
     "accessHint": "Tip: use “Magic Link” if your admin invited you by email.",
     "reviewNote": "Note: If you are reviewing the app (Google Play), use the credentials provided in Play Console (App access).",
     "privacyMiniNote": "Privacy: location is used only for geofence and tracking features according to the permissions granted by the user.",
-    "heroTitle": "Control your team with smart geofences anywhere in the world",
-    "login": "Enter",
-    "goPanel": "Go to dashboard",
-    "magicEnter": "Enter with magic link",
-    "quickAccessTitle": "Access with an authorized account",
-    "quickAccessDesc": "This app requires an account invited by an administrator. If you don’t have access, request an invitation to your organization.",
+    "login": "Se connecter",
+    "heroTitle": "Contrôlez votre équipe avec des géorepères intelligents partout dans le monde",
+    "goPanel": "Aller au tableau de bord",
+    "magicEnter": "Connexion par lien magique",
+    "quickAccessTitle": "Accès rapide",
+    "quickAccessDesc": "Si vous préférez, vous pouvez vous connecter avec un Magic Link (sans mot de passe).",
     "email": "E-mail",
     "sending": "Envoi...",
-    "sendMagic": "Envoyer le lien magique",
-    "magicNote": "Important : l’accès fonctionne uniquement avec le vrai lien magique.",
+    "sendMagic": "Envoyer le Magic Link",
+    "magicNote": "Important : l’accès fonctionne uniquement avec le vrai Magic Link.",
     "support": "Support",
-    "invalidEmail": "E-mail invalide.",
+    "invalidEmail": "E-mail invalide",
     "magicLinkSent": "Nous vous avons envoyé un lien d’accès. Vérifiez votre e-mail.",
     "magicLinkError": "Impossible d’envoyer le lien. Réessayez."
   },
@@ -140,7 +142,14 @@
     "errorMagicLinkUnexpected": "Unexpected error while sending the magic link.",
     "errorResetPassword": "Could not send the recovery email.",
     "infoResetPasswordSent": "We sent you an email to reset your password. Check your inbox.",
-    "errorResetPasswordUnexpected": "Unexpected error while sending the recovery email."
+    "errorResetPasswordUnexpected": "Unexpected error while sending the recovery email.",
+    "badge": "(LOGIN-V31 NO-JS)",
+    "info": "Connexion stable WebView/TWA : envoi natif (sans événements JS), anti rate-limit par conception.",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "modeTitle": "Mode : NO-JS (soumission native)",
+    "modeDesc": "Si la connexion est correcte, le serveur redirige vers /auth/callback avec des tokens.",
+    "back": "Retour"
   },
   "inicio": {
     "header": {

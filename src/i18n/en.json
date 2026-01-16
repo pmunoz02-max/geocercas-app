@@ -44,7 +44,9 @@
       "dashboardCostos": "Costs Dashboard",
       "tracker": "Tracker",
       "invitarTracker": "Invite tracker",
-      "admins": "Admin"
+      "admins": "Admin",
+      "home": "Home",
+      "invitar_tracker": "Invite tracker"
     }
   },
   "landing": {
@@ -84,15 +86,15 @@
     "accessHint": "Tip: use “Magic Link” if your admin invited you by email.",
     "reviewNote": "Note: If you are reviewing the app (Google Play), use the credentials provided in Play Console (App access).",
     "privacyMiniNote": "Privacy: location is used only for geofence and tracking features according to the permissions granted by the user.",
-    "heroTitle": "Control your team with smart geofences anywhere in the world",
-    "login": "Enter",
+    "login": "Sign in",
+    "heroTitle": "Manage your staff with smart geofences anywhere in the world",
     "goPanel": "Go to dashboard",
-    "magicEnter": "Enter with magic link",
-    "quickAccessTitle": "Access with an authorized account",
-    "quickAccessDesc": "This app requires an account invited by an administrator. If you don’t have access, request an invitation to your organization.",
+    "magicEnter": "Sign in with magic link",
+    "quickAccessTitle": "Quick access",
+    "quickAccessDesc": "If you prefer, you can sign in using a Magic Link (no password).",
     "email": "Email",
     "sending": "Sending...",
-    "sendMagic": "Send Magic Link",
+    "sendMagic": "Send magic link",
     "magicNote": "Important: access works only with the real Magic Link.",
     "support": "Support",
     "invalidEmail": "Invalid email.",
@@ -137,7 +139,14 @@
     "errorMagicLinkUnexpected": "Unexpected error while sending the magic link.",
     "errorResetPassword": "Could not send the recovery email.",
     "infoResetPasswordSent": "We sent you an email to reset your password. Check your inbox.",
-    "errorResetPasswordUnexpected": "Unexpected error while sending the recovery email."
+    "errorResetPasswordUnexpected": "Unexpected error while sending the recovery email.",
+    "badge": "(LOGIN-V31 NO-JS)",
+    "info": "Stable WebView/TWA login: native submit (no JS events), anti rate-limit by design.",
+    "email": "Email",
+    "password": "Password",
+    "modeTitle": "Mode: NO-JS (native form submit)",
+    "modeDesc": "If login is correct, the server redirects to /auth/callback with tokens.",
+    "back": "Back"
   },
   "inicio": {
     "header": {

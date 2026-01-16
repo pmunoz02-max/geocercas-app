@@ -6,35 +6,60 @@ import en from "./en.json";
 import fr from "./fr.json";
 
 /**
- * i18n DEFINITIVO – App Geocercas
- * - Fuente única del idioma: localStorage.app_lang (si existe)
- * - Fallback seguro: ES
- * - Sincroniza <html lang="..">
- * - Compatible Web / WebView / TWA
+ * i18n v2 (BLINDADO)
+ * Prioridad:
+ * 1) ?lang=es|en|fr (sin depender de JS; útil en WebView/TWA)
+ * 2) localStorage.app_lang
+ * 3) navigator.language
+ * 4) fallback: es
  */
 
 const SUPPORTED = ["es", "en", "fr"];
 
-function getInitialLanguage() {
-  // 1) Preferencia guardada por el usuario
+function readUrlLang() {
   try {
-    const saved = localStorage.getItem("app_lang");
-    if (saved && SUPPORTED.includes(saved)) return saved;
+    if (typeof window === "undefined") return null;
+    const url = new URL(window.location.href);
+    const v = (url.searchParams.get("lang") || "").toLowerCase().slice(0, 2);
+    return SUPPORTED.includes(v) ? v : null;
   } catch {
-    // ignorar si localStorage no está disponible
+    return null;
   }
-
-  // 2) Idioma del navegador
-  if (typeof navigator !== "undefined") {
-    const nav = String(navigator.language || "").slice(0, 2).toLowerCase();
-    if (SUPPORTED.includes(nav)) return nav;
-  }
-
-  // 3) Fallback
-  return "es";
 }
 
-const initialLang = getInitialLanguage();
+function readStoredLang() {
+  try {
+    const v = (localStorage.getItem("app_lang") || "").toLowerCase().slice(0, 2);
+    return SUPPORTED.includes(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function readNavigatorLang() {
+  try {
+    const v = (navigator.language || "").toLowerCase().slice(0, 2);
+    return SUPPORTED.includes(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function setHtmlLang(code) {
+  try {
+    if (typeof document !== "undefined") document.documentElement.lang = code;
+  } catch {}
+}
+
+function persistLang(code) {
+  try {
+    localStorage.setItem("app_lang", code);
+  } catch {}
+}
+
+const initial = readUrlLang() || readStoredLang() || readNavigatorLang() || "es";
+persistLang(initial);
+setHtmlLang(initial);
 
 i18n.use(initReactI18next).init({
   resources: {
@@ -42,33 +67,19 @@ i18n.use(initReactI18next).init({
     en: { translation: en },
     fr: { translation: fr },
   },
-  lng: initialLang,
+  lng: initial,
   fallbackLng: "es",
-  interpolation: {
-    escapeValue: false,
-  },
-  react: {
-    useSuspense: false,
-  },
+  interpolation: { escapeValue: false },
+  react: { useSuspense: false },
   returnEmptyString: false,
   returnNull: false,
 });
 
-// sincroniza <html lang="..">
-if (typeof document !== "undefined") {
-  document.documentElement.lang = initialLang;
-}
-
-// persiste y sincroniza cambios futuros
 i18n.on("languageChanged", (lng) => {
-  try {
-    localStorage.setItem("app_lang", lng);
-  } catch {
-    // ignore
-  }
-  if (typeof document !== "undefined") {
-    document.documentElement.lang = lng;
-  }
+  const code = String(lng || "es").toLowerCase().slice(0, 2);
+  if (!SUPPORTED.includes(code)) return;
+  persistLang(code);
+  setHtmlLang(code);
 });
 
 export default i18n;

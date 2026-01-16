@@ -44,7 +44,9 @@
       "dashboardCostos": "Dashboard Costos",
       "tracker": "Tracker",
       "invitarTracker": "Invitar tracker",
-      "admins": "Administrador"
+      "admins": "Administrador",
+      "home": "Inicio",
+      "invitar_tracker": "Invitar tracker"
     }
   },
   "landing": {
@@ -84,12 +86,12 @@
     "accessHint": "Consejo: usa \"Link mágico\" si tu administrador te invitó con correo.",
     "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
     "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
-    "heroTitle": "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo",
     "login": "Entrar",
-    "goPanel": "Ir al panel",
+    "heroTitle": "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo",
+    "goPanel": "Ir al panel de control",
     "magicEnter": "Entrar con link mágico",
-    "quickAccessTitle": "Acceso con cuenta autorizada",
-    "quickAccessDesc": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
+    "quickAccessTitle": "Acceso rápido",
+    "quickAccessDesc": "Si prefieres, puedes ingresar con Magic Link (sin contraseña).",
     "email": "Correo",
     "sending": "Enviando...",
     "sendMagic": "Enviar Magic Link",
@@ -137,7 +139,14 @@
     "errorMagicLinkUnexpected": "Error inesperado al enviar el link mágico.",
     "errorResetPassword": "No se pudo enviar el correo de recuperación.",
     "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.",
-    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación."
+    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación.",
+    "badge": "(LOGIN-V31 NO-JS)",
+    "info": "Login estable en WebView/TWA: envío nativo (sin eventos JS), anti rate-limit por diseño.",
+    "email": "Correo",
+    "password": "Contraseña",
+    "modeTitle": "Modo: NO-JS (form submit nativo)",
+    "modeDesc": "Si el login es correcto, el servidor redirige a /auth/callback con tokens.",
+    "back": "Volver"
   },
   "inicio": {
     "header": {
