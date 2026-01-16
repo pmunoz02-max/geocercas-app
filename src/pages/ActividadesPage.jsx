@@ -15,16 +15,16 @@ import { useTranslation } from "react-i18next";
 
 // Lista de monedas
 const CURRENCIES = [
-  { code: "USD", labelKey: "USD" },
-  { code: "EUR", labelKey: "EUR" },
-  { code: "MXN", labelKey: "MXN" },
-  { code: "COP", labelKey: "COP" },
-  { code: "PEN", labelKey: "PEN" },
-  { code: "CLP", labelKey: "CLP" },
-  { code: "ARS", labelKey: "ARS" },
-  { code: "BRL", labelKey: "BRL" },
-  { code: "CAD", labelKey: "CAD" },
-  { code: "GBP", labelKey: "GBP" },
+  { code: "USD" },
+  { code: "EUR" },
+  { code: "MXN" },
+  { code: "COP" },
+  { code: "PEN" },
+  { code: "CLP" },
+  { code: "ARS" },
+  { code: "BRL" },
+  { code: "CAD" },
+  { code: "GBP" },
 ];
 
 export default function ActividadesPage() {
@@ -54,7 +54,7 @@ export default function ActividadesPage() {
       setActividades(data || []);
     } catch (err) {
       console.error("[ActividadesPage] load error:", err);
-      setErrorMsg(err.message || "Error al cargar actividades");
+      setErrorMsg(err.message || t("actividades.errorLoad"));
     }
     setLoading(false);
   }
@@ -90,12 +90,12 @@ export default function ActividadesPage() {
     setErrorMsg("");
 
     if (!nombre.trim()) {
-      setErrorMsg("El nombre es obligatorio");
+      setErrorMsg(t("actividades.errorNameRequired"));
       return;
     }
 
     if (!hourlyRate || Number(hourlyRate) <= 0) {
-      setErrorMsg("La tarifa por hora debe ser mayor a 0");
+      setErrorMsg(t("actividades.errorRatePositive"));
       return;
     }
 
@@ -121,7 +121,7 @@ export default function ActividadesPage() {
       await loadActividades();
     } catch (err) {
       console.error("[ActividadesPage] save error:", err);
-      setErrorMsg(err.message || "Error al guardar la actividad");
+      setErrorMsg(err.message || t("actividades.errorSave"));
     }
   }
 
@@ -129,7 +129,7 @@ export default function ActividadesPage() {
     return (
       <div className="p-4 max-w-5xl mx-auto">
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
-          Cargando tu sesión y organización actual…
+          {t("common.actions.loading")}
         </div>
       </div>
     );
@@ -139,7 +139,7 @@ export default function ActividadesPage() {
     return (
       <div className="p-4 max-w-3xl mx-auto">
         <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
-          No tienes una organización asignada
+          {t("actividades.errorMissingTenant")}
         </div>
       </div>
     );
@@ -147,7 +147,9 @@ export default function ActividadesPage() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Actividades</h1>
+      <h1 className="text-2xl font-semibold mb-4">
+        {t("actividades.title")}
+      </h1>
 
       {errorMsg && (
         <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -157,18 +159,21 @@ export default function ActividadesPage() {
 
       {/* FORMULARIO */}
       {canEdit && (
-        <form onSubmit={handleSubmit} className="border rounded p-4 mb-6 bg-gray-50">
+        <form
+          onSubmit={handleSubmit}
+          className="border rounded p-4 mb-6 bg-gray-50"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               className="border rounded px-3 py-2"
-              placeholder="Nombre de la actividad"
+              placeholder={t("actividades.fieldNamePlaceholder")}
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
             />
 
             <input
               className="border rounded px-3 py-2"
-              placeholder="Tarifa por hora"
+              placeholder={t("actividades.fieldHourlyRatePlaceholder")}
               type="number"
               value={hourlyRate}
               onChange={(e) => setHourlyRate(e.target.value)}
@@ -181,14 +186,14 @@ export default function ActividadesPage() {
             >
               {CURRENCIES.map((c) => (
                 <option key={c.code} value={c.code}>
-                  {c.code}
+                  {t(`actividades.currencies.${c.code}`, { defaultValue: c.code })}
                 </option>
               ))}
             </select>
 
             <input
               className="border rounded px-3 py-2"
-              placeholder="Descripción (opcional)"
+              placeholder={t("actividades.fieldDescriptionPlaceholder")}
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
             />
@@ -196,15 +201,18 @@ export default function ActividadesPage() {
 
           <div className="mt-3 flex gap-2">
             <button className="px-4 py-2 rounded bg-blue-600 text-white text-sm">
-              {formMode === "create" ? "Crear actividad" : "Guardar cambios"}
+              {formMode === "create"
+                ? t("actividades.buttonCreate")
+                : t("actividades.buttonSave")}
             </button>
+
             {formMode === "edit" && (
               <button
                 type="button"
                 onClick={resetForm}
                 className="px-4 py-2 rounded bg-gray-300 text-sm"
               >
-                Cancelar
+                {t("actividades.buttonCancel")}
               </button>
             )}
           </div>
@@ -214,10 +222,16 @@ export default function ActividadesPage() {
       {/* LISTA */}
       {loading ? (
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
-          Cargando actividades…
+          {t("actividades.loading")}
         </div>
       ) : (
         <div className="space-y-2">
+          {actividades.length === 0 && (
+            <div className="text-sm text-gray-500">
+              {t("actividades.empty")}
+            </div>
+          )}
+
           {actividades.map((a) => (
             <div
               key={a.id}
@@ -227,7 +241,9 @@ export default function ActividadesPage() {
                 <div className="font-medium">{a.name}</div>
                 <div className="text-xs text-gray-500">
                   {a.currency_code} · {a.hourly_rate} ·{" "}
-                  {a.active ? "Activa" : "Inactiva"}
+                  {a.active
+                    ? t("actividades.statusActive")
+                    : t("actividades.statusInactive")}
                 </div>
                 {a.description && (
                   <div className="text-sm text-gray-600">{a.description}</div>
@@ -240,21 +256,25 @@ export default function ActividadesPage() {
                     onClick={() => startEdit(a)}
                     className="text-xs px-2 py-1 rounded bg-yellow-500 text-white"
                   >
-                    Editar
+                    {t("actividades.actionEdit")}
                   </button>
+
                   <button
                     onClick={() =>
                       toggleActividadActiva(a.id, !a.active).then(loadActividades)
                     }
                     className="text-xs px-2 py-1 rounded bg-blue-500 text-white"
                   >
-                    {a.active ? "Desactivar" : "Activar"}
+                    {a.active
+                      ? t("actividades.actionDeactivate")
+                      : t("actividades.actionActivate")}
                   </button>
+
                   <button
                     onClick={() => deleteActividad(a.id).then(loadActividades)}
                     className="text-xs px-2 py-1 rounded bg-red-600 text-white"
                   >
-                    Eliminar
+                    {t("actividades.actionDelete")}
                   </button>
                 </div>
               )}
@@ -265,4 +285,3 @@ export default function ActividadesPage() {
     </div>
   );
 }
-
