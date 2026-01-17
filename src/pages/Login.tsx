@@ -1,3 +1,4 @@
+// src/pages/Login.tsx
 // LOGIN-V31 (NO-JS) – WebView/TWA definitivo: submit nativo a /api/auth/password
 import React, { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -9,7 +10,7 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
-  // Solo para UX (no depende de eventos para autenticación)
+  // Solo UX (no depende de eventos para autenticación)
   const [email, setEmail] = useState("pruebatugeo@gmail.com");
   const [password, setPassword] = useState("");
 
@@ -21,12 +22,14 @@ export default function Login() {
     "w-full mt-8 py-4 rounded-2xl bg-white/90 text-slate-900 font-semibold text-center " +
     "active:bg-white select-none";
 
+  const linkClass = "text-xs underline opacity-80 hover:opacity-100";
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
       <div className="w-full max-w-xl">
         {/* Header público: idioma + volver */}
         <div className="flex items-center justify-between mb-4 px-1">
-          <Link to="/" className="text-xs sm:text-sm underline opacity-80">
+          <Link to="/" className={linkClass}>
             {t("login.back", { defaultValue: "Volver" })}
           </Link>
           <LanguageSwitcher />
@@ -34,7 +37,7 @@ export default function Login() {
 
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
           <h1 className="text-3xl font-semibold mb-6">
-            {t("login.title", { defaultValue: "Entrar" })}{" "}
+            {t("login.title", { defaultValue: "Iniciar sesión" })}{" "}
             <span className="text-xs opacity-60">
               {t("login.badge", { defaultValue: "(LOGIN-V31 NO-JS)" })}
             </span>
@@ -84,11 +87,23 @@ export default function Login() {
             </button>
           </form>
 
+          {/* ✅ Reset password (UI) */}
+          <div className="mt-4 flex items-center justify-between text-xs px-1">
+            <Link to="/forgot-password" className={linkClass}>
+              {t("login.forgot", { defaultValue: "¿Olvidaste tu contraseña?" })}
+            </Link>
+
+            {/* opcional: atajo directo si ya te llegó un link */}
+            <Link to="/reset-password" className={`${linkClass} opacity-60`}>
+              {t("login.reset", { defaultValue: "Ya tengo el link" })}
+            </Link>
+          </div>
+
           <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4">
             <div>{t("login.modeTitle", { defaultValue: "Modo: NO-JS (form submit nativo)" })}</div>
             <div>
               {t("login.modeDesc", {
-                defaultValue: "Si el login es correcto, el servidor redirige a /auth/callback con tokens.",
+                defaultValue: "Si el login es correcto, el servidor redirige a /inicio (o al next).",
               })}
             </div>
           </div>
