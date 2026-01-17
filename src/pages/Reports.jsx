@@ -2,118 +2,158 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-/**
- * Reportes alineado al AuthContext cookie-based
- * - NO usa supabase.auth
- * - NO maneja tokens
- * - Backend valida sesión por cookie HttpOnly
- */
+function toCsvValue(v) {
+  const s = v === null || v === undefined ? "" : String(v);
+  return `"${s.replaceAll('"', '""')}"`;
+}
+
+function exportRowsToCSV(rows, filenameBase = "reporte") {
+  if (!rows?.length) {
+    alert("No hay datos para exportar.");
+    return;
+  }
+
+  const columns = Object.keys(rows[0]);
+  const header = columns.map(toCsvValue).join(",");
+  const lines = rows.map((r) => columns.map((k) => toCsvValue(r[k])).join(","));
+  const csv = [header, ...lines].join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filenameBase}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
 
 export default function Reports() {
-  const {
-    ready,
-    authenticated,
-    currentOrg,
-  } = useAuth();
+  const { ready, authenticated, currentOrg } = useAuth();
 
-  const [rows, setRows] = useState([]);
-  const [geocercas, setGeocercas] = useState([]);
-  const [selectedGeocercaName, setSelectedGeocercaName] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [loadingFilters, setLoadingFilters] = useState(false);
+  const [loadingReport, setLoadingReport] = useState(false);
 
+  // filtros
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [loadingGeocercas, setLoadingGeocercas] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [filters, setFilters] = useState({
+    geocercas: [],
+    personas: [],
+    activities: [],
+    asignaciones: [],
+  });
+
+  const [selectedGeocercaIds, setSelectedGeocercaIds] = useState([]);
+  const [selectedPersonalIds, setSelectedPersonalIds] = useState([]);
+  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
+  const [selectedAsignacionIds, setSelectedAsignacionIds] = useState([]);
+
+  const [rows, setRows] = useState([]);
 
   const canRun = useMemo(
     () => ready && authenticated && !!currentOrg?.id,
     [ready, authenticated, currentOrg]
   );
 
-  // ============================
-  // Helpers API (cookie-based)
-  // ============================
   async function apiGet(url) {
     const resp = await fetch(url, {
       method: "GET",
-      credentials: "include", // 🔑 cookie HttpOnly
+      credentials: "include",
       headers: {
         "cache-control": "no-cache",
         pragma: "no-cache",
       },
     });
-
     const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      throw new Error(json?.error || `HTTP ${resp.status}`);
-    }
+    if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
     return json;
   }
 
-  // ============================
-  // Cargar geocercas
-  // ============================
+  // ===== cargar filtros =====
   useEffect(() => {
     if (!canRun) return;
-    loadGeocercas();
+    loadFilters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canRun]);
 
-  async function loadGeocercas() {
-    setLoadingGeocercas(true);
+  async function loadFilters() {
+    setLoadingFilters(true);
     setErrorMsg("");
-
     try {
-      const json = await apiGet("/api/reportes?action=geocercas");
-      setGeocercas(json?.data || []);
+      const json = await apiGet("/api/reportes?action=filters");
+      const data = json?.data || {};
+      setFilters({
+        geocercas: Array.isArray(data.geocercas) ? data.geocercas : [],
+        personas: Array.isArray(data.personas) ? data.personas : [],
+        activities: Array.isArray(data.activities) ? data.activities : [],
+        asignaciones: Array.isArray(data.asignaciones) ? data.asignaciones : [],
+      });
     } catch (e) {
-      console.error("[Reports] loadGeocercas:", e);
-      setGeocercas([]);
-      setErrorMsg(e.message || "Error cargando geocercas");
+      console.error("[Reports] loadFilters:", e);
+      setErrorMsg(e?.message || "Error cargando filtros.");
+      setFilters({ geocercas: [], personas: [], activities: [], asignaciones: [] });
     } finally {
-      setLoadingGeocercas(false);
+      setLoadingFilters(false);
     }
   }
 
-  // ============================
-  // Generar reporte
-  // ============================
+  // ===== generar reporte =====
   async function loadReport() {
-    setRows([]);
     setErrorMsg("");
-    setLoading(true);
+    setRows([]);
+    setLoadingReport(true);
 
     try {
+      if (!canRun) {
+        setErrorMsg("No hay organización activa o la sesión no está lista.");
+        return;
+      }
       if (start && end && start > end) {
-        setErrorMsg('La fecha "Desde" no puede ser mayor que "Hasta".');
+        setErrorMsg('La fecha "Desde" no puede ser mayor que la fecha "Hasta".');
         return;
       }
 
       const params = new URLSearchParams();
-      params.set("action", "attendance");
+      params.set("action", "report");
       if (start) params.set("start", start);
       if (end) params.set("end", end);
-      if (selectedGeocercaName) params.set("geocerca_name", selectedGeocercaName);
+
+      if (selectedGeocercaIds.length) params.set("geocerca_ids", selectedGeocercaIds.join(","));
+      if (selectedPersonalIds.length) params.set("personal_ids", selectedPersonalIds.join(","));
+      if (selectedActivityIds.length) params.set("activity_ids", selectedActivityIds.join(","));
+      if (selectedAsignacionIds.length) params.set("asignacion_ids", selectedAsignacionIds.join(","));
+
+      // paging simple (puedes agregar UI después)
+      params.set("limit", "500");
+      params.set("offset", "0");
 
       const json = await apiGet(`/api/reportes?${params.toString()}`);
-      setRows(json?.data || []);
+      setRows(Array.isArray(json?.data) ? json.data : []);
     } catch (e) {
       console.error("[Reports] loadReport:", e);
-      setErrorMsg(e.message || "Error generando reporte");
+      setErrorMsg(e?.message || "Error generando reporte.");
     } finally {
-      setLoading(false);
+      setLoadingReport(false);
     }
   }
 
-  // ============================
-  // Estados globales
-  // ============================
+  // helpers multiselect
+  function onMultiSelectChange(setter) {
+    return (e) => {
+      const values = Array.from(e.target.selectedOptions).map((o) => o.value);
+      setter(values);
+    };
+  }
+
+  // ===== estados globales =====
   if (!ready) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="border rounded-md p-4 text-sm text-gray-600 bg-white">
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
           Cargando tu sesión…
         </div>
       </div>
@@ -122,109 +162,236 @@ export default function Reports() {
 
   if (!authenticated) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="border border-red-200 rounded-md p-4 text-sm text-red-700 bg-red-50">
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           No hay sesión activa. Inicia sesión nuevamente.
         </div>
       </div>
     );
   }
 
-  // ============================
-  // Render
-  // ============================
+  if (!currentOrg?.id) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          No hay organización activa para este usuario.
+        </div>
+      </div>
+    );
+  }
+
+  // ===== render =====
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
-      <h1 className="text-2xl font-bold">Reportes de Asistencia</h1>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold">Reportes</h1>
+        <p className="text-xs text-gray-500">
+          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
+        </p>
+      </div>
 
       {errorMsg && (
-        <div className="border border-red-200 bg-red-50 rounded-md p-3 text-sm text-red-700">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMsg}
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="flex flex-wrap gap-3 items-end border rounded-xl bg-white p-4 shadow-sm">
-        <div>
-          <label className="text-sm">Desde</label>
-          <input
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            className="block border rounded px-2 py-1"
-          />
-        </div>
+      {/* ===== Filtros ===== */}
+      <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-sm font-medium text-slate-700">Desde</label>
+            <input
+              type="date"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              className="block border rounded-lg px-2 py-1 mt-1"
+            />
+          </div>
 
-        <div>
-          <label className="text-sm">Hasta</label>
-          <input
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className="block border rounded px-2 py-1"
-          />
-        </div>
+          <div>
+            <label className="text-sm font-medium text-slate-700">Hasta</label>
+            <input
+              type="date"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              className="block border rounded-lg px-2 py-1 mt-1"
+            />
+          </div>
 
-        <div>
-          <label className="text-sm">
-            Geocerca {loadingGeocercas && "(cargando…)"}
-          </label>
-          <select
-            value={selectedGeocercaName}
-            onChange={(e) => setSelectedGeocercaName(e.target.value)}
-            className="block border rounded px-2 py-1 min-w-[200px]"
+          <button
+            onClick={loadReport}
+            disabled={loadingReport}
+            className="px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-60"
           >
-            <option value="">Todas</option>
-            {geocercas.map((g) => (
-              <option key={g.id} value={g.nombre}>
-                {g.nombre}
-              </option>
-            ))}
-          </select>
+            {loadingReport ? "Generando…" : "Generar"}
+          </button>
+
+          <button
+            onClick={() => exportRowsToCSV(rows, "reportes")}
+            disabled={!rows.length}
+            className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
+          >
+            Exportar CSV
+          </button>
+
+          <button
+            onClick={loadFilters}
+            disabled={loadingFilters}
+            className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
+            title="Recargar listas"
+          >
+            {loadingFilters ? "Cargando…" : "Recargar filtros"}
+          </button>
         </div>
 
-        <button
-          onClick={loadReport}
-          disabled={loading}
-          className="px-4 py-2 rounded bg-emerald-700 text-white disabled:opacity-60"
-        >
-          {loading ? "Generando…" : "Generar"}
-        </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Geocercas */}
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              Geocercas (multi)
+            </label>
+            <select
+              multiple
+              value={selectedGeocercaIds}
+              onChange={onMultiSelectChange(setSelectedGeocercaIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.geocercas.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nombre}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Tip: Ctrl/Command para seleccionar múltiples.
+            </p>
+          </div>
+
+          {/* Personas */}
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              Personas (multi)
+            </label>
+            <select
+              multiple
+              value={selectedPersonalIds}
+              onChange={onMultiSelectChange(setSelectedPersonalIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.personas.map((p) => {
+                const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
+                return (
+                  <option key={p.id} value={p.id}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Actividades */}
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              Actividades (multi)
+            </label>
+            <select
+              multiple
+              value={selectedActivityIds}
+              onChange={onMultiSelectChange(setSelectedActivityIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.activities.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Asignaciones */}
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              Asignaciones (multi)
+            </label>
+            <select
+              multiple
+              value={selectedAsignacionIds}
+              onChange={onMultiSelectChange(setSelectedAsignacionIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.asignaciones.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.status || a.estado || "asignación"} — {a.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Nota: si tus asignaciones no tienen personal_id, el cruce con marcajes puede salir vacío.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Tabla */}
-      <div className="overflow-x-auto border rounded-xl bg-white">
-        {loading ? (
-          <p className="p-4 text-sm text-gray-500">Cargando…</p>
+      {/* ===== Tabla ===== */}
+      <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        {loadingReport ? (
+          <p className="p-4 text-sm text-slate-500">Cargando…</p>
         ) : rows.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500">No hay datos.</p>
+          <p className="p-4 text-sm text-slate-500">
+            No hay datos con los filtros seleccionados.
+          </p>
         ) : (
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-100">
+            <thead className="bg-slate-100 text-slate-700">
               <tr>
-                <th className="p-2 text-left">Fecha</th>
+                <th className="p-2 text-left">Día</th>
+                <th className="p-2 text-left">Persona</th>
                 <th className="p-2 text-left">Email</th>
                 <th className="p-2 text-left">Geocerca</th>
+                <th className="p-2 text-left">Actividad</th>
+                <th className="p-2 text-left">Asignación</th>
                 <th className="p-2 text-left">Entrada</th>
                 <th className="p-2 text-left">Salida</th>
-                <th className="p-2 text-center">#</th>
+                <th className="p-2 text-center">Marcajes</th>
+                <th className="p-2 text-center">Dentro</th>
+                <th className="p-2 text-center">Dist (m)</th>
+                <th className="p-2 text-left">Tarifa</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={i} className="border-t">
-                  <td className="p-2">{String(r.work_day).slice(0, 10)}</td>
-                  <td className="p-2">{r.email}</td>
-                  <td className="p-2">{r.geofence_name}</td>
-                  <td className="p-2">{r.first_check_in}</td>
-                  <td className="p-2">{r.last_check_out}</td>
-                  <td className="p-2 text-center">{r.total_marks}</td>
+                <tr
+                  key={r.attendance_id ? `${r.attendance_id}-${i}` : i}
+                  className={`border-t hover:bg-slate-50 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
+                >
+                  <td className="p-2">{r.work_day || "—"}</td>
+                  <td className="p-2">{r.personal_nombre || "—"}</td>
+                  <td className="p-2">{r.email || "—"}</td>
+                  <td className="p-2">{r.geofence_name || "—"}</td>
+                  <td className="p-2">{r.activity_name || "—"}</td>
+                  <td className="p-2">
+                    {r.asignacion_id ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})` : "—"}
+                  </td>
+                  <td className="p-2">{r.first_check_in || "—"}</td>
+                  <td className="p-2">{r.last_check_out || "—"}</td>
+                  <td className="p-2 text-center">{r.total_marks ?? "—"}</td>
+                  <td className="p-2 text-center">{r.inside_count ?? "—"}</td>
+                  <td className="p-2 text-center">{r.avg_distance_m ?? "—"}</td>
+                  <td className="p-2">
+                    {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </div>
+      </section>
     </div>
   );
 }

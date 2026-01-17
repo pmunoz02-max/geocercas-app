@@ -2,14 +2,20 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Auth UNIVERSAL:
- * - Cookie-first: tg_at (HttpOnly)
- * - Fallback: Authorization: Bearer <token>
+ * Reportes API (cookie-based)
+ * - Auth primary: cookie HttpOnly tg_at
+ * - Auth fallback: Authorization: Bearer <token>
  *
- * Env UNIVERSAL (server):
- * - SUPABASE_URL / SUPABASE_ANON_KEY
- *   o VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
- *   o NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY
+ * Actions:
+ * - GET /api/reportes?action=filters
+ * - GET /api/reportes?action=report&start=YYYY-MM-DD&end=YYYY-MM-DD
+ *     &geocerca_ids=uuid,uuid
+ *     &geocerca_names=text,text
+ *     &personal_ids=uuid,uuid
+ *     &emails=text,text
+ *     &activity_ids=uuid,uuid
+ *     &asignacion_ids=uuid,uuid
+ *     &limit=200&offset=0
  */
 
 function getEnv(nameList) {
@@ -24,14 +30,32 @@ function parseCookie(cookieHeader, key) {
   if (!cookieHeader) return null;
   const m = cookieHeader.match(new RegExp(`(?:^|;\\s*)${key}=([^;]+)`));
   if (!m || !m[1]) return null;
-
-  // No confiar en decodeURIComponent: puede fallar si viene mal encoded
   const raw = m[1];
   try {
     return decodeURIComponent(raw);
   } catch {
-    return raw; // fallback seguro
+    return raw;
   }
+}
+
+function parseCsvParam(value) {
+  if (!value) return [];
+  return String(value)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function normalizeLimit(v, def = 200, max = 1000) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return def;
+  return Math.min(Math.floor(n), max);
+}
+
+function normalizeOffset(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
 }
 
 export default async function handler(req, res) {
@@ -57,18 +81,14 @@ export default async function handler(req, res) {
       return res.status(500).json({
         error:
           "Server misconfigured: missing Supabase env vars (SUPABASE_URL / SUPABASE_ANON_KEY)",
-        details: {
-          hasUrl: Boolean(SUPABASE_URL),
-          hasAnonKey: Boolean(SUPABASE_ANON_KEY),
-        },
+        details: { hasUrl: Boolean(SUPABASE_URL), hasAnonKey: Boolean(SUPABASE_ANON_KEY) },
       });
     }
 
-    // 1) token cookie-first
+    // ===== auth: cookie-first, bearer fallback =====
     const cookieHeader = req.headers.cookie || "";
     let token = parseCookie(cookieHeader, "tg_at");
 
-    // 2) fallback bearer
     if (!token) {
       const authHeader = req.headers.authorization || "";
       if (authHeader.toLowerCase().startsWith("bearer ")) {
@@ -77,89 +97,122 @@ export default async function handler(req, res) {
     }
 
     if (!token) {
-      return res.status(401).json({
-        error: "Missing authentication (cookie tg_at or Authorization Bearer)",
-      });
+      return res
+        .status(401)
+        .json({ error: "Missing authentication (cookie tg_at or Authorization Bearer)" });
     }
 
-    // Supabase client as user (RLS applies)
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: { Authorization: `Bearer ${token}` },
-      },
+      global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },
     });
 
     const action = String(req.query.action || "").toLowerCase();
 
-    if (action === "geocercas") {
-      const { data, error } = await supabase
-        .from("geocercas")
-        .select("id, nombre")
-        .order("nombre", { ascending: true });
+    // ======================
+    // action=filters
+    // ======================
+    if (action === "filters") {
+      const [geocercasRes, personasRes, activitiesRes, asignacionesRes] =
+        await Promise.all([
+          supabase.from("geocercas").select("id, nombre").order("nombre", { ascending: true }),
+          supabase
+            .from("personal")
+            .select("id, nombre, apellido, email, email_norm, activo, vigente, is_deleted")
+            .order("nombre", { ascending: true }),
+          supabase
+            .from("activities")
+            .select("id, name, active, hourly_rate, currency_code")
+            .order("name", { ascending: true }),
+          supabase
+            .from("asignaciones")
+            .select(
+              "id, status, estado, geocerca_id, personal_id, activity_id, start_time, end_time, period, is_deleted"
+            )
+            .order("created_at", { ascending: false }),
+        ]);
 
-      if (error) {
-        return res.status(400).json({
-          error: error.message,
-          hint: "RLS/permiso o tabla geocercas no accesible para este usuario/org",
-        });
+      // si alguno falla, devolvemos error claro
+      const errors = [];
+      if (geocercasRes.error) errors.push({ source: "geocercas", error: geocercasRes.error.message });
+      if (personasRes.error) errors.push({ source: "personal", error: personasRes.error.message });
+      if (activitiesRes.error) errors.push({ source: "activities", error: activitiesRes.error.message });
+      if (asignacionesRes.error)
+        errors.push({ source: "asignaciones", error: asignacionesRes.error.message });
+
+      if (errors.length) {
+        return res.status(400).json({ error: "Failed to load filters", details: errors });
       }
 
-      return res.status(200).json({ data: data || [] });
+      const geocercas = geocercasRes.data || [];
+      const personas = (personasRes.data || []).filter((p) => !p?.is_deleted);
+      const activities = activitiesRes.data || [];
+      const asignaciones = (asignacionesRes.data || []).filter((a) => !a?.is_deleted);
+
+      return res.status(200).json({
+        data: { geocercas, personas, activities, asignaciones },
+      });
     }
 
-    if (action === "attendance") {
+    // ======================
+    // action=report
+    // ======================
+    if (action === "report") {
       const start = req.query.start ? String(req.query.start) : "";
       const end = req.query.end ? String(req.query.end) : "";
-      const geocercaName = req.query.geocerca_name
-        ? String(req.query.geocerca_name)
-        : "";
 
       if (start && end && start > end) {
-        return res.status(400).json({
-          error: 'La fecha "Desde" no puede ser mayor que "Hasta".',
-        });
+        return res.status(400).json({ error: 'La fecha "Desde" no puede ser mayor que "Hasta".' });
       }
 
-      // end inclusivo -> exclusive (+1 día)
-      const buildDateRangeForDates = (startStr, endStr) => {
-        let fromDate = null;
-        let toDateExclusive = null;
+      const geocercaIds = parseCsvParam(req.query.geocerca_ids);
+      const geocercaNames = parseCsvParam(req.query.geocerca_names);
+      const personalIds = parseCsvParam(req.query.personal_ids);
+      const emails = parseCsvParam(req.query.emails).map((e) => e.toLowerCase());
+      const activityIds = parseCsvParam(req.query.activity_ids);
+      const asignacionIds = parseCsvParam(req.query.asignacion_ids);
 
-        if (startStr) fromDate = startStr;
+      const limit = normalizeLimit(req.query.limit, 200, 1000);
+      const offset = normalizeOffset(req.query.offset);
 
-        if (endStr) {
-          const d = new Date(endStr + "T00:00:00");
-          if (!Number.isNaN(d.getTime())) {
-            d.setDate(d.getDate() + 1);
-            toDateExclusive = d.toISOString().slice(0, 10);
-          }
-        }
-        return { fromDate, toDateExclusive };
-      };
+      let query = supabase
+        .from("v_reportes_diario_con_asignacion")
+        .select("*")
+        .order("work_day", { ascending: false });
 
-      const { fromDate, toDateExclusive } = buildDateRangeForDates(start, end);
+      // work_day es DATE en la vista
+      if (start) query = query.gte("work_day", start);
+      if (end) query = query.lte("work_day", end);
 
-      let query = supabase.from("v_attendance_daily").select("*");
-      if (fromDate) query = query.gte("work_day", fromDate);
-      if (toDateExclusive) query = query.lt("work_day", toDateExclusive);
-      if (geocercaName) query = query.eq("geofence_name", geocercaName);
+      // filtros múltiples
+      if (geocercaIds.length) query = query.in("geocerca_id", geocercaIds);
+      if (geocercaNames.length) query = query.in("geofence_name", geocercaNames);
+      if (personalIds.length) query = query.in("personal_id", personalIds);
+      if (emails.length) query = query.in("email_norm", emails);
+      if (activityIds.length) query = query.in("activity_id", activityIds);
+      if (asignacionIds.length) query = query.in("asignacion_id", asignacionIds);
 
-      const { data, error } = await query.order("work_day", { ascending: false });
+      // paginación
+      query = query.range(offset, offset + limit - 1);
+
+      const { data, error } = await query;
 
       if (error) {
         return res.status(400).json({
           error: error.message,
           hint:
-            "Revisa v_attendance_daily (org_id + get_current_org_id) y/o RLS en attendances/geocercas",
+            "Revisa vistas v_reportes_* (get_current_org_id), y RLS en attendances/personal/activities/asignaciones/geocercas.",
         });
       }
 
-      return res.status(200).json({ data: data || [] });
+      return res.status(200).json({
+        data: data || [],
+        meta: { limit, offset, returned: (data || []).length },
+      });
     }
 
     return res.status(400).json({
-      error: "Invalid action. Use action=geocercas or action=attendance",
+      error: "Invalid action. Use action=filters or action=report",
     });
   } catch (e) {
     console.error("[api/reportes] fatal:", e);
