@@ -11,12 +11,13 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
-import ResetPassword from "./pages/ResetPassword.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import UpdatePassword from "./pages/UpdatePassword.jsx";
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx";   // hub/listado
-import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";   // ✅ MAPA/CREACIÓN
+import GeocercasPage from "./pages/GeocercasPage.jsx";
+import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";
 import Personal from "./pages/Personal.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
@@ -65,11 +66,14 @@ export default function App() {
       <HashTokenCatcher />
 
       <Routes>
-        {/* Public */}
+        {/* 🌐 Public */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* 🔐 Password flows */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<UpdatePassword />} />
 
         {/* Legacy redirects */}
         <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
@@ -77,12 +81,10 @@ export default function App() {
         <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
         <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
         <Route path="/admin" element={<Navigate to="/admins" replace />} />
-
-        {/* ✅ Legacy dashboard paths */}
         <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
-        {/* Protected */}
+        {/* 🔒 Protected */}
         <Route
           element={
             <AuthGuard>
@@ -91,20 +93,13 @@ export default function App() {
           }
         >
           <Route path="/inicio" element={<Inicio />} />
-
-          {/* ✅ MAPA / CONSTRUCTOR */}
           <Route path="/geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
-
-          {/* Hub/listado (sin tab) */}
           <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-
           <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
           <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
           <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
           <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
-
           <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
