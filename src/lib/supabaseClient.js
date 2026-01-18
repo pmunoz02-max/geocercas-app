@@ -1,89 +1,62 @@
 // src/lib/supabaseClient.js
 import { createClient } from "@supabase/supabase-js";
 
+// ---- Config ENV (Vite) ----
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Debug controlado (no usa service role, seguro para frontend)
+const AUTH_DEBUG =
+  String(import.meta.env.AUTH_DEBUG ?? "").toLowerCase() === "true" ||
+  String(import.meta.env.VITE_AUTH_DEBUG ?? "").toLowerCase() === "true";
+
+// Fail-fast: si Preview no tiene envs, NO hagas fallback a prod jamás
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("[supabaseClient] Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY");
+  // Esto evita “fall back” silencioso (que es lo que te está causando CORS)
+  throw new Error(
+    `[Supabase] Faltan variables de entorno. ` +
+      `VITE_SUPABASE_URL=${SUPABASE_URL ? "OK" : "MISSING"}, ` +
+      `VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY ? "OK" : "MISSING"}`
+  );
 }
 
-// ============================
-// Storage universal (browser/memory)
-// ============================
-function createMemoryStorage() {
-  const mem = new Map();
-  return {
-    getItem: (key) => (mem.has(key) ? mem.get(key) : null),
-    setItem: (key, value) => mem.set(key, value),
-    removeItem: (key) => mem.delete(key),
-  };
+if (AUTH_DEBUG) {
+  // eslint-disable-next-line no-console
+  console.info("[Supabase ENV]", {
+    MODE: import.meta.env.MODE,
+    VITE_SUPABASE_URL: SUPABASE_URL,
+    HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+  });
 }
 
-const isBrowser = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-const storage = isBrowser ? window.localStorage : createMemoryStorage();
-
-// Clave estable para no “perder sesión” entre versiones
-const STORAGE_KEY = "app-geocercas-auth";
-
-// ============================
-// Token en memoria (compatibilidad)
-// ============================
-let MEMORY_ACCESS_TOKEN = null;
+// ---- Memory token (por si lo usas en flows no-JS o custom) ----
+let memoryAccessToken = null;
 
 export function setMemoryAccessToken(token) {
-  MEMORY_ACCESS_TOKEN = token || null;
-
-  // Mantener realtime auth si se usa
-  try {
-    if (MEMORY_ACCESS_TOKEN && supabase?.realtime?.setAuth) {
-      supabase.realtime.setAuth(MEMORY_ACCESS_TOKEN);
-    }
-  } catch {}
+  memoryAccessToken = token || null;
 }
 
 export function getMemoryAccessToken() {
-  return MEMORY_ACCESS_TOKEN;
+  return memoryAccessToken;
 }
 
 export function clearMemoryAccessToken() {
-  setMemoryAccessToken(null);
+  memoryAccessToken = null;
 }
 
-// ============================
-// Fetch con headers correctos
-// - apikey siempre
-// - Authorization: preferimos session token de Supabase si existe
-// - si no existe, usamos MEMORY_ACCESS_TOKEN
-// ============================
-async function injectedFetch(url, options = {}) {
-  const headers = new Headers(options.headers || {});
-  headers.set("apikey", SUPABASE_ANON_KEY);
-
-  // Si ya hay auth header no lo pisamos
-  if (!headers.has("Authorization")) {
-    // Preferimos el token en memoria si existe, porque suele ser el mismo de la sesión.
-    if (MEMORY_ACCESS_TOKEN) {
-      headers.set("Authorization", `Bearer ${MEMORY_ACCESS_TOKEN}`);
-    }
-  }
-
-  return fetch(url, { ...options, headers });
-}
-
-// ============================
-// Supabase client (UNIVERSAL)
-// ============================
+// ---- Singleton ----
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  global: { fetch: injectedFetch },
   auth: {
-    persistSession: true,       // ✅ clave
-    autoRefreshToken: true,     // ✅ clave
-    detectSessionInUrl: true,   // ✅ clave
-    storageKey: STORAGE_KEY,    // ✅ estable
-    storage,                   // ✅ universal
-    flowType: "pkce",           // ✅ recomendado para SPA
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: "pkce",
   },
 });
+
+// Si en tu app a veces necesitas “obtener el cliente”
+export function getSupabase() {
+  return supabase;
+}
 
 export default supabase;
