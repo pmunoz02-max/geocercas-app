@@ -122,6 +122,7 @@ async function resolveContext(req) {
     };
   }
 
+  // Service role para lecturas/ escrituras server-side
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -130,14 +131,12 @@ async function resolveContext(req) {
   let ctx = null;
   try {
     const { data, error } = await supaUser.rpc("bootstrap_session_context");
-    if (!error) {
-      ctx = normalizeCtx(data);
-    }
+    if (!error) ctx = normalizeCtx(data);
   } catch {
     // seguimos a fallback
   }
 
-  // 2) Fallback ADMIN si el JWT no aplica (SQL Editor / serverless / auth edge)
+  // 2) Fallback ADMIN si el JWT no aplica para RPC
   if (!ctx?.org_id || !ctx?.role) {
     try {
       const { data, error } = await supaSrv.rpc(
@@ -214,18 +213,21 @@ async function handleList(req, res) {
   }
 
   const { data, error } = await query;
-  if (error)
-    return json(res, 500, { error: "No se pudo listar personal", details: error.message });
+  if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
 
   return json(res, 200, { items: data || [] });
 }
 
+/**
+ * ✅ WRITES con supaSrv para evitar 500 por RLS.
+ * Permisos se controlan por rol (ctx.role) en el API.
+ */
 async function handleUpsert(req, res) {
   const ctxRes = await resolveContext(req);
   if (!ctxRes.ok)
     return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
-  const { ctx, user, supaUser } = ctxRes;
+  const { ctx, user, supaSrv } = ctxRes;
 
   if (!requireWriteRole(ctx.role)) {
     return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
@@ -256,27 +258,26 @@ async function handleUpsert(req, res) {
     updated_at: nowIso,
   };
 
-  // Duplicado por email en la misma org
-  const { data: existing, error: findErr } = await supaUser
+  // Duplicado por email dentro de la org (con service role)
+  const { data: existing, error: findErr } = await supaSrv
     .from("personal")
     .select("id, is_deleted")
     .eq("org_id", ctx.org_id)
     .eq("email", email)
     .maybeSingle();
 
-  if (findErr)
-    return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
+  if (findErr) return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
 
   if (existing) {
-    const { data, error } = await supaUser
+    const { data, error } = await supaSrv
       .from("personal")
       .update({ ...baseRow, is_deleted: false, deleted_at: null, vigente: true })
       .eq("id", existing.id)
+      .eq("org_id", ctx.org_id)
       .select("*")
       .maybeSingle();
 
-    if (error)
-      return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
+    if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
 
     return json(res, 200, { item: data, revived: true });
   }
@@ -289,14 +290,13 @@ async function handleUpsert(req, res) {
     is_deleted: false,
   };
 
-  const { data, error } = await supaUser
+  const { data, error } = await supaSrv
     .from("personal")
     .insert(insertRow)
     .select("*")
     .maybeSingle();
 
-  if (error)
-    return json(res, 500, { error: "No se pudo crear personal", details: error.message });
+  if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
 
   return json(res, 200, { item: data, created: true });
 }
@@ -306,16 +306,15 @@ async function handleToggle(req, res) {
   if (!ctxRes.ok)
     return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
-  const { ctx, supaUser } = ctxRes;
-  if (!requireWriteRole(ctx.role))
-    return json(res, 403, { error: "Sin permisos" });
+  const { ctx, supaSrv } = ctxRes;
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos" });
 
   const body = await readBody(req);
   if (!body?.id) return json(res, 400, { error: "Missing id" });
 
   const nowIso = new Date().toISOString();
 
-  const { data: row, error: rErr } = await supaUser
+  const { data: row, error: rErr } = await supaSrv
     .from("personal")
     .select("id, vigente, org_id, is_deleted")
     .eq("id", body.id)
@@ -325,7 +324,7 @@ async function handleToggle(req, res) {
   if (!row || row.is_deleted) return json(res, 404, { error: "No encontrado" });
   if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Sin permisos" });
 
-  const { data, error } = await supaUser
+  const { data, error } = await supaSrv
     .from("personal")
     .update({ vigente: !row.vigente, updated_at: nowIso })
     .eq("id", body.id)
@@ -343,16 +342,15 @@ async function handleDelete(req, res) {
   if (!ctxRes.ok)
     return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
-  const { ctx, supaUser } = ctxRes;
-  if (!requireWriteRole(ctx.role))
-    return json(res, 403, { error: "Sin permisos" });
+  const { ctx, supaSrv } = ctxRes;
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos" });
 
   const body = await readBody(req);
   if (!body?.id) return json(res, 400, { error: "Missing id" });
 
   const nowIso = new Date().toISOString();
 
-  const { data, error } = await supaUser
+  const { data, error } = await supaSrv
     .from("personal")
     .update({ is_deleted: true, vigente: false, deleted_at: nowIso, updated_at: nowIso })
     .eq("id", body.id)
