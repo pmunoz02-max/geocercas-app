@@ -56,11 +56,10 @@ function normalizeCtx(data) {
 }
 
 /* =========================
-   Context Resolver (robusto)
+   Context Resolver (con fallback ADMIN)
 ========================= */
 
 async function resolveContext(req) {
-  // Permitimos múltiples nombres (para Vercel / Vite / Next-style)
   const SUPABASE_URL = getEnv([
     "SUPABASE_URL",
     "VITE_SUPABASE_URL",
@@ -78,15 +77,12 @@ async function resolveContext(req) {
     "SUPABASE_SERVICE_KEY",
   ]);
 
-  // Error CLARO + detalles (sin exponer secretos)
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
     return {
       ok: false,
       status: 500,
       error: "Configuración incompleta del servidor (Supabase)",
       details: {
-        message:
-          "Faltan variables de entorno necesarias para conectar con Supabase. Configúralas en Vercel (Project Settings → Environment Variables).",
         required: [
           "SUPABASE_URL",
           "SUPABASE_ANON_KEY",
@@ -97,8 +93,6 @@ async function resolveContext(req) {
           SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
           SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
         },
-        hint:
-          "Si estás usando Vite, también puedes mapear VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (pero el API serverless usa process.env.*).",
       },
     };
   }
@@ -115,11 +109,7 @@ async function resolveContext(req) {
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
@@ -132,54 +122,55 @@ async function resolveContext(req) {
     };
   }
 
-  // 🔒 IMPORTANTE: el RPC a veces falla si el usuario no tiene org/rol inicializado
-  // En vez de romper con 500, devolvemos 403 con un mensaje accionable.
-  let rpcData = null;
-  try {
-    const { data, error: ctxErr } = await supaUser.rpc(
-      "bootstrap_session_context"
-    );
+  const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
-    if (ctxErr) {
-      console.error("[api/personal] bootstrap_session_context failed:", ctxErr);
+  // 1) Intento normal con JWT
+  let ctx = null;
+  try {
+    const { data, error } = await supaUser.rpc("bootstrap_session_context");
+    if (!error) {
+      ctx = normalizeCtx(data);
+    }
+  } catch {
+    // seguimos a fallback
+  }
+
+  // 2) Fallback ADMIN si el JWT no aplica (SQL Editor / serverless / auth edge)
+  if (!ctx?.org_id || !ctx?.role) {
+    try {
+      const { data, error } = await supaSrv.rpc(
+        "bootstrap_session_context_admin",
+        { p_user_id: userData.user.id }
+      );
+      if (error) {
+        return {
+          ok: false,
+          status: 403,
+          error: "Contexto no inicializado (org/rol)",
+          details: error.message,
+        };
+      }
+      ctx = normalizeCtx(data);
+    } catch (e) {
       return {
         ok: false,
         status: 403,
         error: "Contexto no inicializado (org/rol)",
-        details:
-          "Tu usuario no tiene organización activa o rol asignado. Pide al administrador que te asigne un rol u organización.",
+        details: e?.message || String(e),
       };
     }
-
-    rpcData = data;
-  } catch (e) {
-    console.error("[api/personal] bootstrap_session_context fatal:", e);
-    return {
-      ok: false,
-      status: 403,
-      error: "Contexto no inicializado (org/rol)",
-      details:
-        "No se pudo resolver el contexto de organización del usuario. Contacta al administrador.",
-    };
   }
 
-  const ctx = normalizeCtx(rpcData);
   if (!ctx?.org_id || !ctx?.role) {
     return {
       ok: false,
       status: 403,
-      error: "Contexto incompleto: falta organización o rol",
-      details: rpcData,
+      error: "Contexto incompleto",
+      details: "Falta org_id o role",
     };
   }
-
-  const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
 
   return { ok: true, user: userData.user, ctx, supaUser, supaSrv };
 }
@@ -265,10 +256,10 @@ async function handleUpsert(req, res) {
     updated_at: nowIso,
   };
 
-  // Busca duplicado por email dentro de la misma org
+  // Duplicado por email en la misma org
   const { data: existing, error: findErr } = await supaUser
     .from("personal")
-    .select("id, is_deleted, vigente")
+    .select("id, is_deleted")
     .eq("org_id", ctx.org_id)
     .eq("email", email)
     .maybeSingle();
@@ -276,13 +267,10 @@ async function handleUpsert(req, res) {
   if (findErr)
     return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
 
-  // Si existe, revive/actualiza
   if (existing) {
-    const updateRow = { ...baseRow, is_deleted: false, deleted_at: null, vigente: true };
-
     const { data, error } = await supaUser
       .from("personal")
-      .update(updateRow)
+      .update({ ...baseRow, is_deleted: false, deleted_at: null, vigente: true })
       .eq("id", existing.id)
       .select("*")
       .maybeSingle();
@@ -293,7 +281,6 @@ async function handleUpsert(req, res) {
     return json(res, 200, { item: data, revived: true });
   }
 
-  // Nuevo registro
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
@@ -321,7 +308,7 @@ async function handleToggle(req, res) {
 
   const { ctx, supaUser } = ctxRes;
   if (!requireWriteRole(ctx.role))
-    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
+    return json(res, 403, { error: "Sin permisos" });
 
   const body = await readBody(req);
   if (!body?.id) return json(res, 400, { error: "Missing id" });
@@ -336,7 +323,7 @@ async function handleToggle(req, res) {
 
   if (rErr) return json(res, 500, { error: "No se pudo leer registro", details: rErr.message });
   if (!row || row.is_deleted) return json(res, 404, { error: "No encontrado" });
-  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Sin permisos", details: "cross-org" });
+  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Sin permisos" });
 
   const { data, error } = await supaUser
     .from("personal")
@@ -358,7 +345,7 @@ async function handleDelete(req, res) {
 
   const { ctx, supaUser } = ctxRes;
   if (!requireWriteRole(ctx.role))
-    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
+    return json(res, 403, { error: "Sin permisos" });
 
   const body = await readBody(req);
   if (!body?.id) return json(res, 400, { error: "Missing id" });
