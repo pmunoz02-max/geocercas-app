@@ -620,39 +620,28 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const ok = await saveGeofenceCollection({ name: nm });
       if (!ok) return;
 
-      // ✅ UI inmediata (sin depender de API / org / latencia):
-      // Re-lee localStorage (cache) y muestra el nuevo nombre ya mismo.
-      // Luego el refresh API reemplaza/mergea para traer ids y estado real.
-      try {
-        const localOnly = await listGeofences({ supabaseClient: null, orgId: null });
-        if (Array.isArray(localOnly) && localOnly.length) setGeofenceList(localOnly);
-        else {
-          // fallback mínimo si por alguna razón localStorage no está disponible
-          setGeofenceList((prev) => {
-            const list = Array.isArray(prev) ? prev : [];
-            if (list.some((g) => g?.nombre === nm)) return list;
-            const next = [...list, { nombre: nm, source: "local" }];
-            next.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
-            return next;
-          });
-        }
-      } catch {
-        // fallback mínimo
-        setGeofenceList((prev) => {
-          const list = Array.isArray(prev) ? prev : [];
-          if (list.some((g) => g?.nombre === nm)) return list;
-          const next = [...list, { nombre: nm, source: "local" }];
-          next.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
-          return next;
-        });
-      }
+      // ✅ Optimistic UI: el nombre aparece inmediatamente en el panel (sin esperar GET)
+      setGeofenceList((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        if (list.some((g) => String(g?.nombre || "") === nm)) return list;
+        const next = [...list, { nombre: nm, source: "optimistic" }];
+        next.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+        return next;
+      });
 
-      // ✅ Refresh NO bloqueante + reintentos suaves (por consistencia eventual)
-      const tryRefresh = (attempt = 0) => {
-        refreshGeofenceList().catch(() => {});
-        if (attempt < 2) setTimeout(() => tryRefresh(attempt + 1), 800);
-      };
-      tryRefresh(0);
+      // ✅ Refresh CON reintentos suaves (no rompe UX si falla)
+      // Esperamos un poco para evitar casos de consistencia eventual tras el upsert.
+      for (let i = 0; i < 3; i++) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, i === 0 ? 150 : 600));
+          // eslint-disable-next-line no-await-in-loop
+          await refreshGeofenceList();
+          break;
+        } catch {
+          // seguimos intentando
+        }
+      }
 
       alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
 
