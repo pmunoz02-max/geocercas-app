@@ -1,6 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v12";
+const VERSION = "personal-api-v13-e164-identity";
+
+/* =========================
+   Utils
+========================= */
 
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
@@ -48,16 +52,64 @@ function normalizeCtx(data) {
   return data;
 }
 
-function normalizePhone(phone) {
-  if (!phone) return null;
-  const p = String(phone).replace(/[^\d]/g, "");
-  return p || null;
+function onlyDigits(s) {
+  return String(s || "").replace(/[^\d]/g, "");
 }
 
+/**
+ * Heurística “segura” para E.164.
+ * - Si ya viene con + y 8-15 dígitos: OK.
+ * - Si viene sin +:
+ *    - si tiene 11-15 dígitos: lo asumimos como country+number → prefijo "+"
+ *    - si parece Ecuador 10 dígitos empezando con 0: +593 + (sin 0)
+ *    - si 10 dígitos sin 0: NO adivinamos país → null (evita romper CHECK)
+ *
+ * Si tu app es Ecuador-first, la regla +593 es la más útil.
+ */
+function toE164(rawPhone) {
+  const p = String(rawPhone || "").trim();
+  if (!p) return null;
+
+  // ya E.164
+  if (p.startsWith("+")) {
+    const d = onlyDigits(p);
+    if (d.length >= 8 && d.length <= 15) return `+${d}`;
+    return null;
+  }
+
+  const d = onlyDigits(p);
+  if (d.length >= 11 && d.length <= 15) return `+${d}`;
+
+  // Ecuador: 0XXXXXXXXX (10 dígitos)
+  if (d.length === 10 && d.startsWith("0")) {
+    return `+593${d.slice(1)}`;
+  }
+
+  // No adivinar país
+  return null;
+}
+
+/* =========================
+   Context Resolver (con fallback ADMIN)
+========================= */
+
 async function resolveContext(req) {
-  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
-  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
-  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
+  const SUPABASE_URL = getEnv([
+    "SUPABASE_URL",
+    "VITE_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+  ]);
+
+  const SUPABASE_ANON_KEY = getEnv([
+    "SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  ]);
+
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv([
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SERVICE_KEY",
+  ]);
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
     return {
@@ -75,7 +127,9 @@ async function resolveContext(req) {
   }
 
   const jwt = getCookie(req, "tg_at");
-  if (!jwt) return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
+  if (!jwt) {
+    return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
+  }
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
@@ -91,14 +145,14 @@ async function resolveContext(req) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // JWT RPC attempt
+  // Intento JWT
   let ctx = null;
   try {
     const { data, error } = await supaUser.rpc("bootstrap_session_context");
     if (!error) ctx = normalizeCtx(data);
   } catch {}
 
-  // Admin fallback RPC
+  // Fallback admin
   if (!ctx?.org_id || !ctx?.role) {
     const { data, error } = await supaSrv.rpc("bootstrap_session_context_admin", {
       p_user_id: userData.user.id,
@@ -115,6 +169,10 @@ async function resolveContext(req) {
 
   return { ok: true, user: userData.user, ctx, supaSrv };
 }
+
+/* =========================
+   Handlers
+========================= */
 
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
@@ -140,7 +198,7 @@ async function handleList(req, res) {
   if (q) {
     const pattern = `%${q}%`;
     query = query.or(
-      [`nombre.ilike.${pattern}`, `apellido.ilike.${pattern}`, `email.ilike.${pattern}`, `telefono.ilike.${pattern}`].join(",")
+      [`nombre.ilike.${pattern}`, `apellido.ilike.${pattern}`, `email.ilike.${pattern}`, `telefono.ilike.${pattern}`, `documento.ilike.${pattern}`].join(",")
     );
   }
 
@@ -166,24 +224,45 @@ async function handleUpsert(req, res) {
   const nombre = (payload.nombre || "").trim();
   const apellido = (payload.apellido || "").trim();
   const email = (payload.email || "").trim().toLowerCase();
-  const telefono = (payload.telefono || "").trim();
-  const telefono_norm = normalizePhone(telefono);
-  const vigente = payload.vigente === undefined ? true : !!payload.vigente;
+  const documento = (payload.documento || "").trim() || null;
+
+  const telefonoRaw = (payload.telefono || "").trim();
+  const phoneE164 = toE164(telefonoRaw); // puede ser null si no es convertible
 
   if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
   if (!email) return json(res, 400, { error: "Email es obligatorio" });
+
+  const vigente = payload.vigente === undefined ? true : !!payload.vigente;
+  const activo = vigente; // coherencia con checks “active”
+  const emailNorm = email;
+
+  // identity_key requerido cuando está activo (por tu CHECK)
+  const identityKey = (documento || emailNorm || "").trim() || null;
 
   const baseRow = {
     nombre,
     apellido: apellido || null,
     email,
-    telefono: telefono || null,
-    telefono_norm,
+    documento,
+    // Guardamos lo que el usuario escribió
+    telefono: telefonoRaw || null,
+    telefono_raw: telefonoRaw || null,
+
+    // Campos derivados (para satisfacer checks)
+    email_norm: emailNorm,
+    identity_key: identityKey,
+    activo,
+    activo_bool: activo,
+
+    // Normalización de teléfono (si podemos en E.164)
+    phone_norm: phoneE164,
+    telefono_norm: phoneE164, // por compatibilidad (tu tabla tiene ambos)
+
     vigente,
     updated_at: nowIso,
   };
 
-  // Duplicado email en la org
+  // Duplicado por email dentro de la org
   const { data: existing, error: findErr } = await supaSrv
     .from("personal")
     .select("id, is_deleted")
@@ -196,7 +275,7 @@ async function handleUpsert(req, res) {
   if (existing) {
     const { data, error } = await supaSrv
       .from("personal")
-      .update({ ...baseRow, is_deleted: false, deleted_at: null, vigente: true })
+      .update({ ...baseRow, is_deleted: false, deleted_at: null })
       .eq("id", existing.id)
       .eq("org_id", ctx.org_id)
       .select("*")
@@ -206,16 +285,21 @@ async function handleUpsert(req, res) {
     return json(res, 200, { item: data, revived: true });
   }
 
-  // Insert
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
     owner_id: user.id,
     created_at: nowIso,
     is_deleted: false,
+    position_interval_sec: 300, // default explícito por tus CHECKs
   };
 
-  const { data, error } = await supaSrv.from("personal").insert(insertRow).select("*").maybeSingle();
+  const { data, error } = await supaSrv
+    .from("personal")
+    .insert(insertRow)
+    .select("*")
+    .maybeSingle();
+
   if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
 
   return json(res, 200, { item: data, created: true });
