@@ -1,10 +1,15 @@
 // src/lib/personalApi.js
-const BASE =
-  (import.meta?.env?.VITE_API_BASE_URL && String(import.meta.env.VITE_API_BASE_URL)) || "";
+
+const BASE = ""; // SIEMPRE relativo al mismo dominio (evita POST fantasma)
+
+/* =========================
+   Helpers
+========================= */
 
 function withBase(path) {
-  if (!BASE) return path;
-  return BASE.replace(/\/+$/, "") + "/" + String(path).replace(/^\/+/, "");
+  return String(path).startsWith("/")
+    ? path
+    : "/" + String(path);
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
@@ -33,6 +38,7 @@ async function parseAny(res) {
 
 function makeError(res, parsed) {
   const status = res.status;
+
   if (parsed.json) {
     const msg =
       parsed.json.error ||
@@ -47,7 +53,11 @@ function makeError(res, parsed) {
 
     const e = new Error(
       details
-        ? `${msg}: ${typeof details === "string" ? details : JSON.stringify(details)}`
+        ? `${msg}: ${
+            typeof details === "string"
+              ? details
+              : JSON.stringify(details)
+          }`
         : msg
     );
     e.status = status;
@@ -56,14 +66,18 @@ function makeError(res, parsed) {
   }
 
   const snippet = (parsed.text || "").trim().slice(0, 400);
-  const e = new Error(snippet ? `Request failed (${status}): ${snippet}` : `Request failed (${status})`);
+  const e = new Error(
+    snippet
+      ? `Request failed (${status}): ${snippet}`
+      : `Request failed (${status})`
+  );
   e.status = status;
   e.payload = parsed.text;
   return e;
 }
 
-async function request(method, qsOrEmpty = "", body) {
-  const url = withBase(`/api/personal${qsOrEmpty}`);
+async function request(method, qs = "", body) {
+  const url = withBase(`/api/personal${qs}`);
   const res = await fetchWithTimeout(
     url,
     {
@@ -80,11 +94,20 @@ async function request(method, qsOrEmpty = "", body) {
   return parsed.json ?? {};
 }
 
-export async function listPersonal({ q = "", onlyActive = true, limit = 500 } = {}) {
+/* =========================
+   API pública
+========================= */
+
+export async function listPersonal({
+  q = "",
+  onlyActive = true,
+  limit = 500,
+} = {}) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   params.set("onlyActive", onlyActive ? "1" : "0");
   params.set("limit", String(limit));
+
   const data = await request("GET", `?${params.toString()}`);
   return data.items || [];
 }
@@ -94,12 +117,23 @@ export async function upsertPersonal(payload) {
   return data.item;
 }
 
+/**
+ * toggle y delete se hacen vía POST
+ * (backend /api/personal solo soporta POST/GET)
+ */
+
 export async function toggleVigente(id) {
-  const data = await request("PATCH", "", { id });
+  const data = await request("POST", "", {
+    id,
+    action: "toggle",
+  });
   return data.item;
 }
 
 export async function deletePersonal(id) {
-  const data = await request("DELETE", "", { id });
+  const data = await request("POST", "", {
+    id,
+    action: "delete",
+  });
   return data.item;
 }
