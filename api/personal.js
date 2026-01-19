@@ -14,6 +14,14 @@ function json(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function getEnv(nameList) {
+  for (const n of nameList) {
+    const v = process.env[n];
+    if (v && String(v).trim()) return String(v).trim();
+  }
+  return null;
+}
+
 function normalizePhone(phone) {
   if (!phone) return null;
   const p = String(phone).replace(/[^\d]/g, "");
@@ -44,16 +52,41 @@ function normalizeCtx(data) {
 }
 
 async function resolveContext(req) {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Permitimos múltiples nombres (para Vercel / Vite / Next-style)
+  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
+  const SUPABASE_ANON_KEY = getEnv([
+    "SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  ]);
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv([
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SERVICE_KEY",
+  ]);
 
+  // Error CLARO + detalles de diagnóstico (sin exponer secretos)
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, status: 500, error: "Missing Supabase env vars" };
+    return {
+      ok: false,
+      status: 500,
+      error: "Configuración incompleta del servidor (Supabase)",
+      details: {
+        message:
+          "Faltan variables de entorno necesarias para conectar con Supabase. Configúralas en Vercel (Project Settings → Environment Variables).",
+        required: ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"],
+        has: {
+          SUPABASE_URL: Boolean(SUPABASE_URL),
+          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+          SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+        },
+        hint:
+          "Si estás usando Vite, también puedes mapear VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (pero el API serverless usa process.env.*).",
+      },
+    };
   }
 
   const jwt = getCookie(req, "tg_at");
-  if (!jwt) return { ok: false, status: 401, error: "No authenticated cookie" };
+  if (!jwt) return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
@@ -61,16 +94,28 @@ async function resolveContext(req) {
   });
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
-  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
+  if (userErr || !userData?.user) {
+    return { ok: false, status: 401, error: "Sesión inválida", details: userErr?.message || "No user" };
+  }
 
   const { data: rpcData, error: ctxErr } = await supaUser.rpc("bootstrap_session_context");
   if (ctxErr) {
-    return { ok: false, status: 400, error: "bootstrap_session_context failed", details: ctxErr.message };
+    return {
+      ok: false,
+      status: 400,
+      error: "Fallo al cargar el contexto de sesión (org/rol)",
+      details: ctxErr.message,
+    };
   }
 
   const ctx = normalizeCtx(rpcData);
   if (!ctx?.org_id || !ctx?.role) {
-    return { ok: false, status: 400, error: "Invalid session context", details: rpcData };
+    return {
+      ok: false,
+      status: 400,
+      error: "Contexto incompleto: falta organización o rol",
+      details: rpcData,
+    };
   }
 
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -126,7 +171,7 @@ async function handleUpsert(req, res) {
   const { ctx, user, supaUser } = ctxRes;
 
   if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
   }
 
   const body = await readBody(req);
@@ -142,7 +187,6 @@ async function handleUpsert(req, res) {
   if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
   if (!email) return json(res, 400, { error: "Email es obligatorio" });
 
-  // ✅ Si el usuario no manda "vigente", asumimos true (mejor UX)
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
   const baseRow = {
@@ -155,7 +199,6 @@ async function handleUpsert(req, res) {
     updated_at: nowIso,
   };
 
-  // 1) Buscar existente por org + email (incluye borrados)
   const { data: existing, error: findErr } = await supaUser
     .from("personal")
     .select("id, is_deleted, vigente")
@@ -165,16 +208,8 @@ async function handleUpsert(req, res) {
 
   if (findErr) return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
 
-  // 2) Existe → UPDATE / REVIVE
   if (existing) {
-    const updateRow = {
-      ...baseRow,
-      // ✅ revive forzado
-      is_deleted: false,
-      deleted_at: null,
-      // ✅ si venía eliminado o inactivo, lo activamos
-      vigente: true,
-    };
+    const updateRow = { ...baseRow, is_deleted: false, deleted_at: null, vigente: true };
 
     const { data, error } = await supaUser
       .from("personal")
@@ -188,7 +223,6 @@ async function handleUpsert(req, res) {
     return json(res, 200, { item: data, revived: true });
   }
 
-  // 3) No existe → INSERT
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
@@ -208,7 +242,7 @@ async function handleToggle(req, res) {
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaUser } = ctxRes;
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
 
   const body = await readBody(req);
   if (!body?.id) return json(res, 400, { error: "Missing id" });
@@ -223,7 +257,7 @@ async function handleToggle(req, res) {
 
   if (rErr) return json(res, 500, { error: "No se pudo leer registro", details: rErr.message });
   if (!row || row.is_deleted) return json(res, 404, { error: "No encontrado" });
-  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Forbidden: cross-org" });
+  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Sin permisos", details: "cross-org" });
 
   const { data, error } = await supaUser
     .from("personal")
@@ -243,7 +277,7 @@ async function handleDelete(req, res) {
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaUser } = ctxRes;
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Forbidden: requiere rol admin u owner" });
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
 
   const body = await readBody(req);
   if (!body?.id) return json(res, 400, { error: "Missing id" });
