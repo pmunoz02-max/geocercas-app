@@ -269,6 +269,8 @@
     "errorMissingUser": "Could not get the authenticated user.",
     "errorNoAuthUser": "No authenticated user.",
     "errorLoad": "Error loading personnel.",
+    "formTitleNew": "New personnel",
+    "formTitleEdit": "Edit personnel",
     "errorNoPermissionCreate": "You don’t have permission to create personnel.",
     "errorNoPermissionEdit": "You don’t have permission to edit personnel.",
     "errorMustSelectForEdit": "You must select a record to edit it.",

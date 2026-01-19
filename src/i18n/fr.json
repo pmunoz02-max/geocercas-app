@@ -288,6 +288,8 @@
     "no": "No",
     "processing": "Processing…",
     "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted.",
+    "formTitleNew": "Nouveau personnel",
+    "formTitleEdit": "Modifier le personnel",
     "table": {
       "loading": "Chargement…",
       "noActive": "Aucun personnel actif.",

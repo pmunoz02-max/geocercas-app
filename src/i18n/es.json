@@ -227,6 +227,8 @@
     "bannerUpdated": "Personal actualizado correctamente.",
     "bannerDeletedOk": "Registro eliminado correctamente.",
     "errorMissingUser": "No se pudo obtener el usuario autenticado.",
+    "formTitleNew": "Nuevo personal",
+    "formTitleEdit": "Editar personal",
     "errorNoAuthUser": "No existe un usuario autenticado.",
     "errorLoad": "Error al cargar el personal.",
     "errorNoPermissionCreate": "No tienes permisos para crear personal.",
