@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+const VERSION = "personal-api-v12";
+
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
   const parts = raw.split(";").map((p) => p.trim());
@@ -11,7 +13,8 @@ function getCookie(req, name) {
 function json(res, status, payload) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(JSON.stringify(payload));
+  res.setHeader("X-Api-Version", VERSION);
+  res.end(JSON.stringify({ ...payload, version: VERSION }));
 }
 
 function getEnv(nameList) {
@@ -51,20 +54,6 @@ function normalizePhone(phone) {
   return p || null;
 }
 
-function debugDetails(err) {
-  const debugOn = String(process.env.AUTH_DEBUG || "").toLowerCase() === "true" || process.env.AUTH_DEBUG === "1";
-  if (!debugOn) return undefined;
-
-  // Solo cosas seguras (sin keys)
-  return {
-    message: err?.message || String(err),
-    name: err?.name,
-    code: err?.code,
-    hint: err?.hint,
-    details: err?.details,
-  };
-}
-
 async function resolveContext(req) {
   const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
   const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
@@ -102,16 +91,14 @@ async function resolveContext(req) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // Intento con JWT
+  // JWT RPC attempt
   let ctx = null;
   try {
     const { data, error } = await supaUser.rpc("bootstrap_session_context");
     if (!error) ctx = normalizeCtx(data);
-  } catch {
-    // ignore
-  }
+  } catch {}
 
-  // Fallback admin
+  // Admin fallback RPC
   if (!ctx?.org_id || !ctx?.role) {
     const { data, error } = await supaSrv.rpc("bootstrap_session_context_admin", {
       p_user_id: userData.user.id,
@@ -126,7 +113,7 @@ async function resolveContext(req) {
     return { ok: false, status: 403, error: "Contexto incompleto", details: "Falta org_id o role" };
   }
 
-  return { ok: true, user: userData.user, ctx, supaUser, supaSrv };
+  return { ok: true, user: userData.user, ctx, supaSrv };
 }
 
 async function handleList(req, res) {
@@ -134,6 +121,7 @@ async function handleList(req, res) {
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
+
   const url = new URL(req.url, `http://${req.headers.host}`);
   const q = (url.searchParams.get("q") || "").trim();
   const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
@@ -167,10 +155,12 @@ async function handleUpsert(req, res) {
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
 
-  const body = await readBody(req);
-  const payload = body?.payload || body || {};
+  if (!requireWriteRole(ctx.role)) {
+    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
+  }
+
+  const payload = (await readBody(req)) || {};
   const nowIso = new Date().toISOString();
 
   const nombre = (payload.nombre || "").trim();
@@ -178,15 +168,22 @@ async function handleUpsert(req, res) {
   const email = (payload.email || "").trim().toLowerCase();
   const telefono = (payload.telefono || "").trim();
   const telefono_norm = normalizePhone(telefono);
+  const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
   if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
   if (!email) return json(res, 400, { error: "Email es obligatorio" });
 
-  const vigente = payload.vigente === undefined ? true : !!payload.vigente;
+  const baseRow = {
+    nombre,
+    apellido: apellido || null,
+    email,
+    telefono: telefono || null,
+    telefono_norm,
+    vigente,
+    updated_at: nowIso,
+  };
 
-  const baseRow = { nombre, apellido: apellido || null, email, telefono: telefono || null, telefono_norm, vigente, updated_at: nowIso };
-
-  // Duplicado por email en la org
+  // Duplicado email en la org
   const { data: existing, error: findErr } = await supaSrv
     .from("personal")
     .select("id, is_deleted")
@@ -206,11 +203,10 @@ async function handleUpsert(req, res) {
       .maybeSingle();
 
     if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
-
     return json(res, 200, { item: data, revived: true });
   }
 
-  // INSERT nuevo
+  // Insert
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
@@ -225,60 +221,6 @@ async function handleUpsert(req, res) {
   return json(res, 200, { item: data, created: true });
 }
 
-async function handleToggle(req, res) {
-  const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
-
-  const { ctx, supaSrv } = ctxRes;
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos" });
-
-  const body = await readBody(req);
-  if (!body?.id) return json(res, 400, { error: "Missing id" });
-
-  const nowIso = new Date().toISOString();
-
-  const { data: row, error: rErr } = await supaSrv.from("personal").select("id, vigente, org_id, is_deleted").eq("id", body.id).maybeSingle();
-  if (rErr) return json(res, 500, { error: "No se pudo leer registro", details: rErr.message });
-  if (!row || row.is_deleted) return json(res, 404, { error: "No encontrado" });
-  if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Sin permisos" });
-
-  const { data, error } = await supaSrv
-    .from("personal")
-    .update({ vigente: !row.vigente, updated_at: nowIso })
-    .eq("id", body.id)
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
-    .select("*")
-    .maybeSingle();
-
-  if (error) return json(res, 500, { error: "No se pudo cambiar vigencia", details: error.message });
-  return json(res, 200, { item: data });
-}
-
-async function handleDelete(req, res) {
-  const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
-
-  const { ctx, supaSrv } = ctxRes;
-  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos" });
-
-  const body = await readBody(req);
-  if (!body?.id) return json(res, 400, { error: "Missing id" });
-
-  const nowIso = new Date().toISOString();
-
-  const { data, error } = await supaSrv
-    .from("personal")
-    .update({ is_deleted: true, vigente: false, deleted_at: nowIso, updated_at: nowIso })
-    .eq("id", body.id)
-    .eq("org_id", ctx.org_id)
-    .select("*")
-    .maybeSingle();
-
-  if (error) return json(res, 500, { error: "No se pudo eliminar personal", details: error.message });
-  return json(res, 200, { item: data });
-}
-
 export default async function handler(req, res) {
   try {
     const origin = req.headers.origin;
@@ -286,18 +228,15 @@ export default async function handler(req, res) {
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
 
     if (req.method === "OPTIONS") return json(res, 200, { ok: true });
-
     if (req.method === "GET") return await handleList(req, res);
     if (req.method === "POST") return await handleUpsert(req, res);
-    if (req.method === "PATCH") return await handleToggle(req, res);
-    if (req.method === "DELETE") return await handleDelete(req, res);
 
     return json(res, 405, { error: "Method not allowed" });
   } catch (e) {
-    console.error("[api/personal] Unexpected error:", e);
-    return json(res, 500, { error: "Unexpected error", details: debugDetails(e) || (e?.message || String(e)) });
+    console.error("[api/personal] fatal:", e);
+    return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
   }
 }
