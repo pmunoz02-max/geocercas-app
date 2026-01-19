@@ -1,99 +1,122 @@
 // src/lib/personalApi.js
-// Cookie-auth API (TWA/WebView safe)
-// Exports: listPersonal, newPersonal, upsertPersonal, toggleVigente, deletePersonal
+// Robust API client for /api/personal
+// - Always includes cookies (tg_at)
+// - Safe JSON parsing (handles HTML/text too)
+// - Throws with backend error/details
+// - Timeout to avoid "processing forever"
 
-function normalizePhone(phone) {
-  if (!phone) return "";
-  return String(phone).replace(/[^\d]/g, "");
+const DEFAULT_BASE =
+  (import.meta?.env?.VITE_API_BASE_URL && String(import.meta.env.VITE_API_BASE_URL)) || "";
+
+function withBase(path) {
+  if (!DEFAULT_BASE) return path;
+  return DEFAULT_BASE.replace(/\/+$/, "") + "/" + String(path).replace(/^\/+/, "");
 }
 
-function detailsToString(details) {
-  if (!details) return "";
-  if (typeof details === "string") return details;
+async function safeParseResponse(res) {
+  const text = await res.text(); // always read once
+  if (!text) return { asText: "", asJson: null };
+
   try {
-    return JSON.stringify(details);
+    const json = JSON.parse(text);
+    return { asText: text, asJson: json };
   } catch {
-    return String(details);
+    return { asText: text, asJson: null };
   }
 }
 
-async function requestJson(path, { method = "GET", body = null } = {}) {
-  const res = await fetch(path, {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      credentials: "include", // IMPORTANT: send HttpOnly cookies to Vercel API
+    });
+    return res;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function buildError(res, parsed) {
+  const status = res?.status || 0;
+
+  // Prefer JSON {error, details}
+  if (parsed?.asJson) {
+    const msg =
+      parsed.asJson.error ||
+      parsed.asJson.message ||
+      `Request failed (${status})`;
+
+    const details =
+      parsed.asJson.details ||
+      parsed.asJson.detail ||
+      parsed.asJson.hint ||
+      null;
+
+    const e = new Error(details ? `${msg}: ${typeof details === "string" ? details : JSON.stringify(details)}` : msg);
+    e.status = status;
+    e.payload = parsed.asJson;
+    return e;
+  }
+
+  // Fallback: text (could be HTML from Vercel)
+  const text = (parsed?.asText || "").trim();
+  const e = new Error(text ? `Request failed (${status}): ${text.slice(0, 250)}` : `Request failed (${status})`);
+  e.status = status;
+  e.payload = text;
+  return e;
+}
+
+async function requestPersonal(method, path, body) {
+  const url = withBase(`/api/personal${path || ""}`);
+
+  const opts = {
     method,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "cache-control": "no-cache",
-      pragma: "no-cache",
-    },
-    body: body ? JSON.stringify(body) : null,
-  });
+    headers: { "Content-Type": "application/json" },
+  };
 
-  const text = await res.text();
-
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { error: "Invalid JSON response", details: text?.slice?.(0, 500) || null };
+  if (body !== undefined) {
+    opts.body = JSON.stringify(body);
   }
+
+  const res = await fetchWithTimeout(url, opts, 20000);
+
+  const parsed = await safeParseResponse(res);
 
   if (!res.ok) {
-    const msg = data?.error || "Request failed";
-    const det = data?.details ? detailsToString(data.details) : "";
-    const suffix = det ? ` (${det})` : "";
-    throw new Error(`${msg}${suffix}`);
+    throw buildError(res, parsed);
   }
 
-  return data;
+  // OK response
+  return parsed.asJson ?? {};
 }
 
 export async function listPersonal({ q = "", onlyActive = true, limit = 500 } = {}) {
   const params = new URLSearchParams();
-  if (q?.trim()) params.set("q", q.trim());
+  if (q) params.set("q", q);
   params.set("onlyActive", onlyActive ? "1" : "0");
-  params.set("limit", String(limit || 500));
+  params.set("limit", String(limit));
 
-  const data = await requestJson(`/api/personal?${params.toString()}`, { method: "GET" });
-  return Array.isArray(data?.items) ? data.items : [];
-}
-
-export async function newPersonal(payload) {
-  const clean = { ...payload };
-  delete clean.id;
-  return upsertPersonal(clean);
+  const data = await requestPersonal("GET", `?${params.toString()}`);
+  // API returns { items: [...] }
+  return data.items || [];
 }
 
 export async function upsertPersonal(payload) {
-  const nombre = (payload.nombre || "").trim();
-  const email = (payload.email || "").trim().toLowerCase();
-  if (!nombre) throw new Error("Nombre es obligatorio");
-  if (!email) throw new Error("Email es obligatorio");
-
-  const telefono = (payload.telefono || "").trim();
-  const telefono_norm = telefono ? normalizePhone(telefono) : null;
-
-  const body = {
-    payload: {
-      ...payload,
-      email,
-      telefono,
-      telefono_norm,
-    },
-  };
-
-  const data = await requestJson("/api/personal", { method: "POST", body });
-  return data?.item || null;
+  const data = await requestPersonal("POST", "", payload);
+  return data.item;
 }
 
 export async function toggleVigente(id) {
-  if (!id) throw new Error("Missing id");
-  const data = await requestJson("/api/personal", { method: "PATCH", body: { id } });
-  return data?.item || null;
+  const data = await requestPersonal("PATCH", "", { id });
+  return data.item;
 }
 
 export async function deletePersonal(id) {
-  if (!id) throw new Error("Missing id");
-  const data = await requestJson("/api/personal", { method: "DELETE", body: { id } });
-  return data?.item || null;
+  const data = await requestPersonal("DELETE", "", { id });
+  return data.item;
 }
