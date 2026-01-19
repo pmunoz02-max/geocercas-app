@@ -238,25 +238,59 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
 }
 
 async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
-  // Por ahora: borramos SOLO localStorage.
-  // Delete en DB lo haremos DB-first (soft delete) vía /api/geocercas en el siguiente paso.
-  let deleted = 0;
+  // DB-first soft delete: activo=false via /api/geocercas (cookie tg_at).
+  // Además limpiamos localStorage como cache offline.
 
-  const nombres = Array.from(
-    new Set((items || []).map((x) => String(x?.nombre || "").trim()).filter(Boolean))
-  );
+  const ids = [];
+  const nombres_ci = [];
 
-  if (typeof window !== "undefined" && nombres.length) {
+  for (const it of items || []) {
+    const id = it?.id ? String(it.id) : null;
+    const nombre = String(it?.nombre || "").trim();
+    if (id) ids.push(id);
+    else if (nombre) nombres_ci.push(nombre.toLowerCase());
+  }
+
+  let apiDeleted = 0;
+  if (orgId && (ids.length || nombres_ci.length)) {
+    try {
+      const r = await fetch("/api/geocercas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "delete",
+          org_id: orgId,
+          ids: ids.length ? Array.from(new Set(ids)) : undefined,
+          nombres_ci: nombres_ci.length ? Array.from(new Set(nombres_ci)) : undefined,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      // UX-safe: aunque ok:false, mantenemos count
+      apiDeleted = Number(data?.deleted || 0);
+    } catch {
+      // si falla la API, igual limpiamos cache local
+      apiDeleted = 0;
+    }
+  }
+
+  // Limpiamos cache local (no cuenta como delete DB)
+  let localDeleted = 0;
+  if (typeof window !== "undefined") {
+    const nombres = Array.from(
+      new Set((items || []).map((x) => String(x?.nombre || "").trim()).filter(Boolean))
+    );
     for (const nombre of nombres) {
       const key = `geocerca_${nombre}`;
       if (localStorage.getItem(key) !== null) {
         localStorage.removeItem(key);
-        deleted += 1;
+        localDeleted += 1;
       }
     }
   }
 
-  return deleted;
+  // Para UX devolvemos el delete DB (si existe), si no, al menos el local.
+  return apiDeleted || localDeleted;
 }
 
 /* =========================================================
@@ -597,32 +631,24 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   );
 
   const handleSave = useCallback(async () => {
-    const nm = geofenceName.trim();
-    if (!nm) {
-      alert(
-        t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
-      );
-      return;
-    }
-
     try {
-      // ✅ 1) Guardado: CRÍTICO (si falla, se muestra error)
+      const nm = geofenceName.trim();
+      if (!nm) {
+        alert(
+          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
+        );
+        return;
+      }
+
       const ok = await saveGeofenceCollection({ name: nm });
       if (!ok) return;
 
-      // ✅ 2) Refresco: NO CRÍTICO (no debe invalidar un save exitoso)
-      refreshGeofenceList().catch(() => {
-        // Silencioso: puede fallar por latencia eventual / cambio de org / token, pero el save ya fue OK.
-        // Dejamos la lista para el siguiente render o reload.
-        console.warn("[geocercas] refreshGeofenceList falló (no crítico)");
-      });
-
-      // ✅ 3) UX de éxito
+      await refreshGeofenceList();
       alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+
       setGeofenceName("");
       setDraftFeature(null);
     } catch (e) {
-      // ❌ Solo errores reales de guardado
       alert(e?.message || String(e));
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
