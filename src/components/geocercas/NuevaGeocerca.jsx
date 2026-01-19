@@ -458,19 +458,6 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
     setCoordText("");
   }, [coordText, clearCanvas, t]);
 
-  // Optimistic add en panel sin refrescar
-  const optimisticAddToList = useCallback((nm) => {
-    const name = String(nm || "").trim();
-    if (!name) return;
-
-    setGeofenceList((prev) => {
-      if (prev.some((x) => x?.nombre === name)) return prev;
-      const next = [...prev, { nombre: name, source: "local", key: `geocerca_${name}` }];
-      next.sort((a, b) => a.nombre.localeCompare(b.nombre));
-      return next;
-    });
-  }, []);
-
   const saveGeofenceCollection = useCallback(
     async ({ name }) => {
       const nm = String(name || "").trim();
@@ -485,9 +472,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return null;
       }
 
-      // 1) Determinar la geometría a guardar (draftFeature o última capa geoman)
+      // 1) Determinar el GeoJSON a guardar (prioridad: coordenadas/draft -> capa Geoman)
       let feature = draftFeature;
-
       if (!feature) {
         const map = mapRef.current;
         const layerToSave =
@@ -502,12 +488,13 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           );
           return null;
         }
+
         feature = layerToSave.toGeoJSON();
       }
 
       const geo = { type: "FeatureCollection", features: [feature] };
 
-      // 2) Persistir local (fallback + listado)
+      // 2) Persistencia local (fallback offline / UX)
       if (typeof window !== "undefined") {
         localStorage.setItem(
           `geocerca_${nm}`,
@@ -515,8 +502,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         );
       }
 
-      // 3) Guardar vía /api/geocercas (para no depender de auth del browser)
-      const r = await fetch("/api/geocercas", {
+      // 3) Guardado SaaS-grade: UI -> /api/geocercas (same-origin) -> Supabase
+      //    (evita problemas de RLS cuando el access token vive en cookie HttpOnly)
+      const resp = await fetch("/api/geocercas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -526,21 +514,18 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
           nombre: nm,
           nombre_ci: nm,
           geojson: geo,
-          // tu tabla tiene geometry NOT NULL -> mandamos lo mismo
+          // En tu tabla existe geometry NOT NULL; enviamos el mismo FeatureCollection por compatibilidad.
           geometry: geo,
         }),
       });
 
-      const text = await r.text();
-      let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = { raw: text };
-      }
-
-      if (!r.ok) {
-        const msg = data?.error || data?.message || data?.details?.message || `HTTP ${r.status}`;
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        const msg =
+          data?.error ||
+          data?.message ||
+          data?.details?.message ||
+          `HTTP ${resp.status}`;
         throw new Error(msg);
       }
 
@@ -562,14 +547,20 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const saved = await saveGeofenceCollection({ name: nm });
       if (!saved) return;
 
-      // ✅ Actualiza UI sin refresh
-      optimisticAddToList(saved.nombre);
-      setSelectedNames(new Set([saved.nombre]));
-      setLastSelectedName(saved.nombre);
-
+      // UX inmediata: mostrar sin refrescar
       setViewFeature(saved.geo);
       setViewCentroid(centroidFeatureFromGeojson(saved.geo));
       setViewId((x) => x + 1);
+
+      // Selección y lista optimista
+      setSelectedNames(() => new Set([saved.nombre]));
+      setLastSelectedName(saved.nombre);
+      setGeofenceList((prev) => {
+        const exists = (prev || []).some((g) => g?.nombre === saved.nombre);
+        const next = exists ? prev : [...(prev || []), { nombre: saved.nombre, source: "local" }];
+        next.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+        return next;
+      });
 
       if (mapRef.current) {
         try {
@@ -579,16 +570,16 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         } catch {}
       }
 
-      // opcional: refrescar lista desde DB (pero la UX ya está lista)
-      refreshGeofenceList();
-
+      // Refresco real (si Supabase browser funciona lo verá; si no, no rompe)
+      await refreshGeofenceList();
       alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+
       setGeofenceName("");
       setDraftFeature(null);
     } catch (e) {
       alert(e?.message || String(e));
     }
-  }, [geofenceName, saveGeofenceCollection, optimisticAddToList, refreshGeofenceList, t]);
+  }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
 
   const handleDeleteSelected = async () => {
     if (!selectedNames || selectedNames.size === 0) {
@@ -654,7 +645,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         }
         const q = supabaseClient
           .from(SUPABASE_GEOFENCES_TABLE)
-          .select("geojson, geometry")
+          .select("geojson")
           .eq("org_id", currentOrg.id);
 
         if (item.id) q.eq("id", item.id);
@@ -662,7 +653,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
         const { data, error } = await q.maybeSingle();
         if (error) throw error;
-        geo = normalizeGeojson(data?.geojson || data?.geometry);
+        geo = normalizeGeojson(data?.geojson);
       }
 
       if (!geo && typeof window !== "undefined") {
@@ -717,16 +708,19 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   }, [draftFeature]);
 
   return (
-    // ✅ Layout universal: sin height fijo que rompa si el header cambia
-    <div className="flex flex-col gap-2 sm:gap-3 min-h-[calc(100vh-64px)]">
+    <div className="flex flex-col gap-2 sm:gap-3 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div className="space-y-0.5">
           <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">
             {t("geocercas.titleNew")}
           </h1>
+
+          {/* SOLO MÓVIL: oculto para ganar espacio (desktop intacto) */}
           <p className="hidden md:block text-xs text-slate-300">{t("geocercas.subtitleNew")}</p>
         </div>
 
+        {/* SOLO MÓVIL: input (fila 1) + 2 botones (fila 2)
+            DESKTOP: md:flex como estaba */}
         <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
           <input
             type="text"
@@ -788,6 +782,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
             ))}
           </div>
 
+          {/* Acciones: compactas en móvil (3 columnas), desktop intacto (columna) */}
           <div className="mt-2 grid grid-cols-3 gap-2 md:mt-3 md:flex md:flex-col md:gap-2">
             <button
               onClick={handleShowSelected}
@@ -823,119 +818,116 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
               {t("geocercas.loadingDataset", { defaultValue: "Cargando dataset..." })}
             </div>
           )}
-          {datasetError && (
-            <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>
-          )}
+          {datasetError && <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
         {/* Mapa */}
-        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-0">
-          <div className="h-[55svh] md:h-[70svh] lg:h-full">
-            <MapContainer
-              center={[-0.2, -78.5]}
-              zoom={8}
-              scrollWheelZoom={true}
-              style={{ height: "100%", width: "100%" }}
-              whenCreated={(map) => (mapRef.current = map)}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1
+                        min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
+          <MapContainer
+            center={[-0.2, -78.5]}
+            zoom={8}
+            scrollWheelZoom={true}
+            style={{ height: "100%", width: "100%" }}
+            whenCreated={(map) => (mapRef.current = map)}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
 
-              {dataset && <GeoJSON data={dataset} {...pointStyle} />}
+            {dataset && <GeoJSON data={dataset} {...pointStyle} />}
 
-              <CursorPosLive setCursorLatLng={setCursorLatLng} />
+            <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
-              <Pane name="draftPane" style={{ zIndex: 650 }}>
-                {draftFeature && (
+            <Pane name="draftPane" style={{ zIndex: 650 }}>
+              {draftFeature && (
+                <GeoJSON
+                  key={`draft-${draftId}`}
+                  data={draftFeature}
+                  style={() => ({
+                    color: "#22c55e",
+                    weight: 3,
+                    fillColor: "#22c55e",
+                    fillOpacity: 0.35,
+                  })}
+                />
+              )}
+            </Pane>
+
+            <Pane name="viewPane" style={{ zIndex: 640 }}>
+              {viewFeature && (
+                <>
                   <GeoJSON
-                    key={`draft-${draftId}`}
-                    data={draftFeature}
+                    key={`view-${viewId}`}
+                    data={viewFeature}
                     style={() => ({
-                      color: "#22c55e",
+                      color: "#38bdf8",
                       weight: 3,
-                      fillColor: "#22c55e",
-                      fillOpacity: 0.35,
+                      fillColor: "#38bdf8",
+                      fillOpacity: 0.15,
                     })}
                   />
-                )}
-              </Pane>
-
-              <Pane name="viewPane" style={{ zIndex: 640 }}>
-                {viewFeature && (
-                  <>
+                  {viewCentroid && (
                     <GeoJSON
-                      key={`view-${viewId}`}
-                      data={viewFeature}
-                      style={() => ({
-                        color: "#38bdf8",
-                        weight: 3,
-                        fillColor: "#38bdf8",
-                        fillOpacity: 0.15,
-                      })}
+                      key={`view-marker-${viewId}`}
+                      data={viewCentroid}
+                      pointToLayer={(_f, latlng) =>
+                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
+                      }
                     />
-                    {viewCentroid && (
-                      <GeoJSON
-                        key={`view-marker-${viewId}`}
-                        data={viewCentroid}
-                        pointToLayer={(_f, latlng) =>
-                          L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
-                        }
-                      />
-                    )}
-                  </>
-                )}
-              </Pane>
+                  )}
+                </>
+              )}
+            </Pane>
 
-              <FeatureGroup ref={featureGroupRef}>
-                <GeomanControls
-                  options={{
-                    position: "topleft",
-                    drawMarker: false,
-                    drawCircleMarker: false,
-                    drawPolyline: false,
-                    drawText: false,
-                    drawRectangle: true,
-                    drawPolygon: true,
-                    drawCircle: true,
-                    editMode: true,
-                    dragMode: true,
-                    removalMode: true,
-                  }}
-                  globalOptions={{ continueDrawing: false, editable: true }}
-                  onCreate={(e) => {
+            <FeatureGroup ref={featureGroupRef}>
+              <GeomanControls
+                options={{
+                  position: "topleft",
+                  drawMarker: false,
+                  drawCircleMarker: false,
+                  drawPolyline: false,
+                  drawText: false,
+                  drawRectangle: true,
+                  drawPolygon: true,
+                  drawCircle: true,
+                  editMode: true,
+                  dragMode: true,
+                  removalMode: true,
+                }}
+                globalOptions={{ continueDrawing: false, editable: true }}
+                onCreate={(e) => {
+                  selectedLayerRef.current = e.layer;
+                  lastCreatedLayerRef.current = e.layer;
+                  setDraftFeature(null);
+                  setViewFeature(null);
+                  setViewCentroid(null);
+                }}
+                onEdit={(e) => {
+                  if (e?.layer) {
                     selectedLayerRef.current = e.layer;
                     lastCreatedLayerRef.current = e.layer;
-                    setDraftFeature(null);
-                    setViewFeature(null);
-                    setViewCentroid(null);
-                  }}
-                  onEdit={(e) => {
-                    if (e?.layer) {
-                      selectedLayerRef.current = e.layer;
-                      lastCreatedLayerRef.current = e.layer;
-                    }
-                  }}
-                  onUpdate={(e) => {
-                    if (e?.layer) {
-                      selectedLayerRef.current = e.layer;
-                      lastCreatedLayerRef.current = e.layer;
-                    }
-                  }}
-                />
-              </FeatureGroup>
-            </MapContainer>
-          </div>
+                  }
+                }}
+                onUpdate={(e) => {
+                  if (e?.layer) {
+                    selectedLayerRef.current = e.layer;
+                    lastCreatedLayerRef.current = e.layer;
+                  }
+                }}
+              />
+            </FeatureGroup>
+          </MapContainer>
 
-          {/* ✅ MÓVIL: mini HUD */}
+          {/* ✅ MÓVIL: SOLO barrita mini (eliminamos hint grande) */}
           {cursorLatLng && (
             <div className="md:hidden absolute right-2 top-2 z-[9999] px-2 py-1 rounded bg-black/80 text-[11px] text-white font-mono pointer-events-none">
               {cursorLatLng.lat.toFixed(5)}, {cursorLatLng.lng.toFixed(5)}
             </div>
           )}
 
-          {/* ✅ DESKTOP: HUD original */}
+          {/* ✅ DESKTOP: HUD original intacto */}
           <div className="hidden md:block absolute right-3 top-3 z-[9999] space-y-2">
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
               {cursorLatLng ? (
@@ -972,7 +964,8 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
             <p className="text-xs text-slate-400">
               {t("geocercas.modalHintRule", {
-                defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
+                defaultValue:
+                  "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
               })}
               <br />
               {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
