@@ -1,47 +1,78 @@
 // src/lib/geocercasApi.js
-// API oficial de geocercas (UI -> /api/geocercas). No usa Supabase directo en el browser.
+// API de Geocercas (cookies HttpOnly tg_at): SIEMPRE via /api/geocercas
+// No usar supabase-js directo en el browser para geocercas.
 
-function normalizeError(ctx, err) {
-  console.error(`[geocercasApi] ${ctx}:`, err);
-  const msg = err?.message || String(err);
+async function readJsonSafe(r) {
+  const text = await r.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return { raw: text };
+  }
+}
+
+function toError(data, status) {
+  const msg =
+    data?.error ||
+    data?.message ||
+    data?.details?.message ||
+    (typeof data === "string" ? data : null) ||
+    `HTTP ${status}`;
   return new Error(msg);
 }
 
-async function postJSON(url, body) {
+export async function listGeocercas({ orgId, onlyActive = true } = {}) {
+  if (!orgId) return []; // tolerante: si aún no hay org, no rompe UI
+
+  const url =
+    `/api/geocercas?action=list&org_id=${encodeURIComponent(orgId)}` +
+    (onlyActive ? "&onlyActive=1" : "");
+
   const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include", // IMPORTANT: manda cookies tg_at
-    body: JSON.stringify(body),
+    method: "GET",
+    credentials: "include",
   });
 
-  const text = await r.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
-  }
+  const data = await readJsonSafe(r);
+  if (!r.ok) throw toError(data, r.status);
 
-  if (!r.ok) {
-    const msg =
-      data?.error ||
-      data?.message ||
-      data?.details?.message ||
-      `HTTP ${r.status}`;
-    throw new Error(msg);
-  }
-  return data;
+  return Array.isArray(data?.items) ? data.items : [];
 }
 
-/**
- * Upsert geocerca (create/update por on_conflict org_id,nombre_ci)
- */
+export async function getGeocerca({ id, orgId }) {
+  if (!orgId || !id) return null;
+
+  const url =
+    `/api/geocercas?action=get&org_id=${encodeURIComponent(orgId)}&id=${encodeURIComponent(id)}`;
+
+  const r = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  const data = await readJsonSafe(r);
+  if (!r.ok) throw toError(data, r.status);
+
+  return data?.geocerca ?? null;
+}
+
 export async function upsertGeocerca(payload) {
-  try {
-    const res = await postJSON("/api/geocercas", { action: "upsert", ...payload });
-    return res?.geocerca ?? null;
-  } catch (e) {
-    throw normalizeError("upsertGeocerca", e);
-  }
+  if (!payload?.org_id) throw new Error("upsertGeocerca requiere org_id");
+
+  const r = await fetch("/api/geocercas", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "upsert", ...payload }),
+  });
+
+  const data = await readJsonSafe(r);
+  if (!r.ok) throw toError(data, r.status);
+
+  return data?.geocerca ?? null;
+}
+
+// Delete lo hacemos en el siguiente paso (soft delete DB-first)
+export async function deleteGeocerca() {
+  throw new Error("deleteGeocerca pendiente: se implementará vía /api/geocercas (soft delete)");
 }
