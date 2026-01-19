@@ -1,6 +1,6 @@
 // api/geocercas.js
-// Endpoint oficial: UI -> /api/geocercas (same-origin) -> Supabase
-// Requiere cookie HttpOnly "tg_at" (access token de Supabase)
+// API oficial Geocercas (same-origin). Auth vía cookie HttpOnly "tg_at".
+// Soporta: OPTIONS (preflight), GET (list/get), POST (upsert).
 
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
@@ -23,11 +23,50 @@ function pick(obj, keys) {
   return out;
 }
 
+function getQuery(req) {
+  try {
+    const url = new URL(req.url, "http://localhost");
+    const q = {};
+    url.searchParams.forEach((v, k) => (q[k] = v));
+    return q;
+  } catch {
+    return {};
+  }
+}
+
+async function sbFetch({ url, anonKey, accessToken, method = "GET", body }) {
+  const r = await fetch(url, {
+    method,
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const text = await r.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+
+  return { ok: r.ok, status: r.status, data };
+}
+
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      res.setHeader("Allow", "POST");
-      return json(res, 405, { error: "Method not allowed" });
+    // ✅ Preflight / compat
+    if (req.method === "OPTIONS") {
+      res.statusCode = 204;
+      return res.end();
+    }
+    if (req.method === "HEAD") {
+      res.statusCode = 200;
+      return res.end();
     }
 
     const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -46,85 +85,123 @@ export default async function handler(req, res) {
       return json(res, 401, { error: "Not authenticated (missing tg_at cookie)" });
     }
 
-    const payload = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    // ✅ GET: listar / obtener
+    if (req.method === "GET") {
+      const q = getQuery(req);
+      const action = String(q.action || "list");
+      const org_id = q.org_id ? String(q.org_id) : null;
 
-    // action opcional (por si luego agregas toggle/delete). Por ahora soportamos upsert.
-    const action = String(payload?.action || "upsert");
+      if (!org_id) return json(res, 400, { error: "org_id is required" });
 
-    // Campos permitidos (whitelist)
-    // Ajusta aquí SOLO si tu UI envía otros campos.
-    const allowed = [
-      "id",
-      "org_id",
-      "nombre",
-      "nombre_ci",
-      "descripcion",
-      "geojson",
-      "geometry",
-      "polygon",
-      "geom",
-      "lat",
-      "lng",
-      "radius_m",
-      "visible",
-      "activo",
-      "activa",
-      "bbox",
-      "personal_ids",
-      "asignacion_ids",
-    ];
+      if (action === "list") {
+        const url =
+          `${SUPABASE_URL}/rest/v1/geocercas` +
+          `?org_id=eq.${encodeURIComponent(org_id)}` +
+          `&select=id,nombre,org_id,activo,updated_at` +
+          `&order=nombre.asc`;
 
-    if (action !== "upsert") {
+        const r = await sbFetch({
+          url,
+          anonKey: SUPABASE_ANON_KEY,
+          accessToken,
+          method: "GET",
+        });
+
+        if (!r.ok) return json(res, r.status, { error: "Supabase error", details: r.data });
+        return json(res, 200, { ok: true, items: Array.isArray(r.data) ? r.data : [] });
+      }
+
+      if (action === "get") {
+        const id = q.id ? String(q.id) : null;
+        if (!id) return json(res, 400, { error: "id is required" });
+
+        const url =
+          `${SUPABASE_URL}/rest/v1/geocercas` +
+          `?id=eq.${encodeURIComponent(id)}` +
+          `&org_id=eq.${encodeURIComponent(org_id)}` +
+          `&select=*` +
+          `&limit=1`;
+
+        const r = await sbFetch({
+          url,
+          anonKey: SUPABASE_ANON_KEY,
+          accessToken,
+          method: "GET",
+        });
+
+        if (!r.ok) return json(res, r.status, { error: "Supabase error", details: r.data });
+        const row = Array.isArray(r.data) ? r.data[0] : r.data;
+        return json(res, 200, { ok: true, geocerca: row || null });
+      }
+
       return json(res, 400, { error: "Unsupported action", action });
     }
 
-    const row = pick(payload, allowed);
+    // ✅ POST: upsert
+    if (req.method === "POST") {
+      const payload = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+      const action = String(payload?.action || "upsert");
 
-    // org_id es obligatorio en tu tabla
-    if (!row.org_id) return json(res, 400, { error: "org_id is required" });
+      const allowed = [
+        "id",
+        "org_id",
+        "nombre",
+        "nombre_ci",
+        "descripcion",
+        "geojson",
+        "geometry",
+        "polygon",
+        "geom",
+        "lat",
+        "lng",
+        "radius_m",
+        "visible",
+        "activo",
+        "activa",
+        "bbox",
+        "personal_ids",
+        "asignacion_ids",
+      ];
 
-    // si tu UI usa nombre, perfecto. Si usa name, mapea en frontend.
-    if (!row.nombre && !row.nombre_ci && !row.name) {
-      // Nota: "name" no existe en whitelist; lo mantenemos fuera adrede.
-      return json(res, 400, { error: "nombre (or nombre_ci) is required" });
-    }
+      if (action !== "upsert") {
+        return json(res, 400, { error: "Unsupported action", action });
+      }
 
-    // Upsert por constraint org_id,nombre_ci (como ya usas)
-    const upsertUrl =
-      `${SUPABASE_URL}/rest/v1/geocercas` +
-      `?on_conflict=org_id,nombre_ci` +
-      `&select=*`;
+      const row = pick(payload, allowed);
 
-    const r = await fetch(upsertUrl, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates,return=representation",
-      },
-      body: JSON.stringify(row),
-    });
+      if (!row.org_id) return json(res, 400, { error: "org_id is required" });
+      if (!row.nombre && !row.nombre_ci) {
+        return json(res, 400, { error: "nombre (or nombre_ci) is required" });
+      }
 
-    const text = await r.text();
-    let data = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = { raw: text };
-    }
+      const upsertUrl =
+        `${SUPABASE_URL}/rest/v1/geocercas` +
+        `?on_conflict=org_id,nombre_ci` +
+        `&select=*`;
 
-    if (!r.ok) {
-      return json(res, r.status, {
-        error: "Supabase error",
-        status: r.status,
-        details: data,
+      const r = await sbFetch({
+        url: upsertUrl,
+        anonKey: SUPABASE_ANON_KEY,
+        accessToken,
+        method: "POST",
+        body: row,
       });
+
+      if (!r.ok) {
+        return json(res, r.status, {
+          error: "Supabase error",
+          status: r.status,
+          details: r.data,
+        });
+      }
+
+      const saved = Array.isArray(r.data) ? r.data[0] : r.data;
+      return json(res, 200, { ok: true, geocerca: saved });
     }
 
-    // Supabase REST retorna array en upsert
-    const saved = Array.isArray(data) ? data[0] : data;
-    return json(res, 200, { ok: true, geocerca: saved });
+    // Todo lo demás
+    res.setHeader("Allow", "GET,POST,OPTIONS,HEAD");
+    return json(res, 405, { error: "Method not allowed" });
   } catch (e) {
     return json(res, 500, { error: "Server error", details: String(e?.message || e) });
   }
