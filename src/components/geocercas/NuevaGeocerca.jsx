@@ -19,6 +19,8 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
  * Este archivo vive en: src/components/geocercas/NuevaGeocerca.jsx
  * Por eso, para llegar a src/supabaseClient y src/context hay que subir 2 niveles (../../)
  */
+// Usamos Supabase SOLO para DATASET opcional de puntos (si DATA_SOURCE='supabase').
+// Para geocercas (SaaS + cookies HttpOnly tg_at), SIEMPRE usamos /api/geocercas.
 import { supabase } from "../../supabaseClient";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
@@ -34,6 +36,67 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 
 const SUPABASE_POINTS_TABLE = "puntos_mapa_corto";
 const SUPABASE_GEOFENCES_TABLE = "geocercas";
+
+/* =========================================================
+   API Geocercas (same-origin) — DB-first, cookie tg_at
+========================================================= */
+async function apiListGeofences(orgId) {
+  if (!orgId) return [];
+  const url = `/api/geocercas?action=list&org_id=${encodeURIComponent(orgId)}`;
+  const r = await fetch(url, { method: "GET", credentials: "include" });
+  const data = await r.json().catch(() => ({}));
+  // Para UX: si por cualquier razón llega status != 2xx, intentamos usar body si trae items
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map((x) => ({ id: x.id, nombre: x.nombre, source: "api" }));
+}
+
+async function apiGetGeofence({ orgId, id, nombre }) {
+  if (!orgId) return null;
+  if (id) {
+    const url = `/api/geocercas?action=get&org_id=${encodeURIComponent(orgId)}&id=${encodeURIComponent(id)}`;
+    const r = await fetch(url, { method: "GET", credentials: "include" });
+    const data = await r.json().catch(() => ({}));
+    return data?.geocerca || null;
+  }
+  // Si no hay id, intentamos resolver por nombre desde localStorage (sin query extra).
+  // (en el siguiente paso podemos agregar endpoint por nombre si lo necesitas)
+  return null;
+}
+
+async function apiUpsertGeofence({ orgId, nombre, geojson }) {
+  if (!orgId) throw new Error("org_id is required");
+  if (!nombre) throw new Error("nombre is required");
+
+  const payload = {
+    action: "upsert",
+    org_id: orgId,
+    nombre,
+    nombre_ci: nombre,
+    geojson,
+    geometry: geojson,
+  };
+
+  const r = await fetch("/api/geocercas", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+
+  const data = await r.json().catch(() => ({}));
+
+  // Blindaje: si por cualquier razón el status viene mal (ej. 400) pero el body trae ok=true,
+  // tratamos como éxito para evitar falsos negativos en UI.
+  if (!r.ok && data?.ok === true) return data;
+
+  if (!r.ok) {
+    const msg =
+      data?.error || data?.message || data?.details?.message || `HTTP ${r.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
 
 /* =========================================================
    GEOMAN: fuente real de shapes (robusto)
@@ -136,17 +199,17 @@ async function loadShortMap({ source = DATA_SOURCE, supabaseClient = null }) {
    Utils geocercas (lista/borrar)
 ========================================================= */
 async function listGeofences({ supabaseClient = null, orgId = null }) {
+  // En SaaS cookie-based: NO usamos supabaseClient para geocercas.
+  // Siempre listamos por /api/geocercas y luego mezclamos con localStorage como fallback offline.
   const list = [];
 
-  if (supabaseClient && orgId) {
-    const { data, error } = await supabaseClient
-      .from(SUPABASE_GEOFENCES_TABLE)
-      .select("id, nombre")
-      .eq("org_id", orgId)
-      .order("nombre", { ascending: true });
-
-    if (!error && data)
-      data.forEach((r) => list.push({ id: r.id, nombre: r.nombre, source: "supabase" }));
+  if (orgId) {
+    try {
+      const apiItems = await apiListGeofences(orgId);
+      apiItems.forEach((r) => list.push(r));
+    } catch {
+      // Silencioso: si falla API temporalmente, aún mostramos localStorage
+    }
   }
 
   if (typeof window !== "undefined") {
@@ -175,24 +238,13 @@ async function listGeofences({ supabaseClient = null, orgId = null }) {
 }
 
 async function deleteGeofences({ items, supabaseClient = null, orgId = null }) {
+  // Por ahora: borramos SOLO localStorage.
+  // Delete en DB lo haremos DB-first (soft delete) vía /api/geocercas en el siguiente paso.
   let deleted = 0;
 
   const nombres = Array.from(
     new Set((items || []).map((x) => String(x?.nombre || "").trim()).filter(Boolean))
   );
-
-  if (supabaseClient && nombres.length) {
-    let q = supabaseClient
-      .from(SUPABASE_GEOFENCES_TABLE)
-      .delete({ count: "exact" })
-      .in("nombre", nombres);
-
-    if (orgId) q = q.eq("org_id", orgId);
-
-    const { error, count } = await q;
-    if (error) throw error;
-    deleted += count || 0;
-  }
 
   if (typeof window !== "undefined" && nombres.length) {
     for (const nombre of nombres) {
@@ -388,7 +440,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         setGeofenceList([]);
         return;
       }
-      setGeofenceList(await listGeofences({ supabaseClient, orgId: currentOrg.id }));
+      setGeofenceList(await listGeofences({ supabaseClient: null, orgId: currentOrg.id }));
     } catch {
       setGeofenceList([]);
     }
@@ -465,36 +517,59 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         alert(
           t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
         );
-        return null;
+        return false;
       }
       if (!currentOrg?.id) {
         alert("Org no disponible.");
-        return null;
+        return false;
       }
 
-      // 1) Determinar el GeoJSON a guardar (prioridad: coordenadas/draft -> capa Geoman)
-      let feature = draftFeature;
-      if (!feature) {
-        const map = mapRef.current;
-        const layerToSave =
-          selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
+      // 1) si hay draft (coordenadas) usamos ese
+      if (draftFeature) {
+        const geo = { type: "FeatureCollection", features: [draftFeature] };
 
-        if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
-          alert(
-            t("geocercas.errorNoShape", {
-              defaultValue:
-                "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
-            })
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            `geocerca_${nm}`,
+            JSON.stringify({ nombre: nm, geojson: geo, updated_at: new Date().toISOString() })
           );
-          return null;
         }
 
-        feature = layerToSave.toGeoJSON();
+        // DB-first: siempre API
+        await apiUpsertGeofence({ orgId: currentOrg.id, nombre: nm, geojson: geo });
+
+        // UX inmediata: mostrar sin refresh
+        setViewFeature(geo);
+        setViewCentroid(centroidFeatureFromGeojson(geo));
+        setViewId((x) => x + 1);
+        if (mapRef.current) {
+          try {
+            mapRef.current.invalidateSize?.();
+            const bounds = L.geoJSON(geo).getBounds();
+            if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+          } catch {}
+        }
+
+        return true;
       }
 
-      const geo = { type: "FeatureCollection", features: [feature] };
+      // 2) si no hay draft, buscamos la última capa de Geoman
+      const map = mapRef.current;
+      const layerToSave =
+        selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
-      // 2) Persistencia local (fallback offline / UX)
+      if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
+        alert(
+          t("geocercas.errorNoShape", {
+            defaultValue:
+              "Dibuja una geocerca en el mapa o crea una por coordenadas antes de guardar.",
+          })
+        );
+        return false;
+      }
+
+      const geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
+
       if (typeof window !== "undefined") {
         localStorage.setItem(
           `geocerca_${nm}`,
@@ -502,34 +577,21 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         );
       }
 
-      // 3) Guardado SaaS-grade: UI -> /api/geocercas (same-origin) -> Supabase
-      //    (evita problemas de RLS cuando el access token vive en cookie HttpOnly)
-      const resp = await fetch("/api/geocercas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          action: "upsert",
-          org_id: currentOrg.id,
-          nombre: nm,
-          nombre_ci: nm,
-          geojson: geo,
-          // En tu tabla existe geometry NOT NULL; enviamos el mismo FeatureCollection por compatibilidad.
-          geometry: geo,
-        }),
-      });
+      await apiUpsertGeofence({ orgId: currentOrg.id, nombre: nm, geojson: geo });
 
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok) {
-        const msg =
-          data?.error ||
-          data?.message ||
-          data?.details?.message ||
-          `HTTP ${resp.status}`;
-        throw new Error(msg);
+      // UX inmediata: mostrar sin refresh
+      setViewFeature(geo);
+      setViewCentroid(centroidFeatureFromGeojson(geo));
+      setViewId((x) => x + 1);
+      if (mapRef.current) {
+        try {
+          mapRef.current.invalidateSize?.();
+          const bounds = L.geoJSON(geo).getBounds();
+          if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+        } catch {}
       }
 
-      return { nombre: nm, geo };
+      return true;
     },
     [draftFeature, currentOrg?.id, t]
   );
@@ -544,33 +606,9 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         return;
       }
 
-      const saved = await saveGeofenceCollection({ name: nm });
-      if (!saved) return;
+      const ok = await saveGeofenceCollection({ name: nm });
+      if (!ok) return;
 
-      // UX inmediata: mostrar sin refrescar
-      setViewFeature(saved.geo);
-      setViewCentroid(centroidFeatureFromGeojson(saved.geo));
-      setViewId((x) => x + 1);
-
-      // Selección y lista optimista
-      setSelectedNames(() => new Set([saved.nombre]));
-      setLastSelectedName(saved.nombre);
-      setGeofenceList((prev) => {
-        const exists = (prev || []).some((g) => g?.nombre === saved.nombre);
-        const next = exists ? prev : [...(prev || []), { nombre: saved.nombre, source: "local" }];
-        next.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
-        return next;
-      });
-
-      if (mapRef.current) {
-        try {
-          mapRef.current.invalidateSize?.();
-          const bounds = L.geoJSON(saved.geo).getBounds();
-          if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
-        } catch {}
-      }
-
-      // Refresco real (si Supabase browser funciona lo verá; si no, no rompe)
       await refreshGeofenceList();
       alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
 
@@ -638,22 +676,14 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
       let geo = null;
 
-      if (item.source === "supabase") {
-        if (!supabaseClient || !currentOrg?.id) {
+      if (item.source === "api") {
+        if (!currentOrg?.id) {
           alert("Org no disponible.");
           return;
         }
-        const q = supabaseClient
-          .from(SUPABASE_GEOFENCES_TABLE)
-          .select("geojson")
-          .eq("org_id", currentOrg.id);
-
-        if (item.id) q.eq("id", item.id);
-        else q.eq("nombre", item.nombre);
-
-        const { data, error } = await q.maybeSingle();
-        if (error) throw error;
-        geo = normalizeGeojson(data?.geojson);
+        // Si tenemos id, podemos pedir la geocerca completa por API
+        const row = await apiGetGeofence({ orgId: currentOrg.id, id: item.id, nombre: item.nombre });
+        geo = normalizeGeojson(row?.geojson || row?.geometry);
       }
 
       if (!geo && typeof window !== "undefined") {
