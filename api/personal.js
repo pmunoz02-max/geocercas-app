@@ -1,9 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 
-/* =========================
-   Utils
-========================= */
-
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
   const parts = raw.split(";").map((p) => p.trim());
@@ -24,12 +20,6 @@ function getEnv(nameList) {
     if (v && String(v).trim()) return String(v).trim();
   }
   return null;
-}
-
-function normalizePhone(phone) {
-  if (!phone) return null;
-  const p = String(phone).replace(/[^\d]/g, "");
-  return p || null;
 }
 
 function requireWriteRole(role) {
@@ -55,27 +45,30 @@ function normalizeCtx(data) {
   return data;
 }
 
-/* =========================
-   Context Resolver (con fallback ADMIN)
-========================= */
+function normalizePhone(phone) {
+  if (!phone) return null;
+  const p = String(phone).replace(/[^\d]/g, "");
+  return p || null;
+}
+
+function debugDetails(err) {
+  const debugOn = String(process.env.AUTH_DEBUG || "").toLowerCase() === "true" || process.env.AUTH_DEBUG === "1";
+  if (!debugOn) return undefined;
+
+  // Solo cosas seguras (sin keys)
+  return {
+    message: err?.message || String(err),
+    name: err?.name,
+    code: err?.code,
+    hint: err?.hint,
+    details: err?.details,
+  };
+}
 
 async function resolveContext(req) {
-  const SUPABASE_URL = getEnv([
-    "SUPABASE_URL",
-    "VITE_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_URL",
-  ]);
-
-  const SUPABASE_ANON_KEY = getEnv([
-    "SUPABASE_ANON_KEY",
-    "VITE_SUPABASE_ANON_KEY",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  ]);
-
-  const SUPABASE_SERVICE_ROLE_KEY = getEnv([
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "SUPABASE_SERVICE_KEY",
-  ]);
+  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
+  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
     return {
@@ -83,11 +76,6 @@ async function resolveContext(req) {
       status: 500,
       error: "Configuración incompleta del servidor (Supabase)",
       details: {
-        required: [
-          "SUPABASE_URL",
-          "SUPABASE_ANON_KEY",
-          "SUPABASE_SERVICE_ROLE_KEY",
-        ],
         has: {
           SUPABASE_URL: Boolean(SUPABASE_URL),
           SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
@@ -98,93 +86,54 @@ async function resolveContext(req) {
   }
 
   const jwt = getCookie(req, "tg_at");
-  if (!jwt) {
-    return {
-      ok: false,
-      status: 401,
-      error: "No autenticado",
-      details: "Falta cookie tg_at",
-    };
-  }
+  if (!jwt) return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
   if (userErr || !userData?.user) {
-    return {
-      ok: false,
-      status: 401,
-      error: "Sesión inválida",
-      details: userErr?.message || "No user",
-    };
+    return { ok: false, status: 401, error: "Sesión inválida", details: userErr?.message || "No user" };
   }
 
-  // Service role para lecturas/ escrituras server-side
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // 1) Intento normal con JWT
+  // Intento con JWT
   let ctx = null;
   try {
     const { data, error } = await supaUser.rpc("bootstrap_session_context");
     if (!error) ctx = normalizeCtx(data);
   } catch {
-    // seguimos a fallback
+    // ignore
   }
 
-  // 2) Fallback ADMIN si el JWT no aplica para RPC
+  // Fallback admin
   if (!ctx?.org_id || !ctx?.role) {
-    try {
-      const { data, error } = await supaSrv.rpc(
-        "bootstrap_session_context_admin",
-        { p_user_id: userData.user.id }
-      );
-      if (error) {
-        return {
-          ok: false,
-          status: 403,
-          error: "Contexto no inicializado (org/rol)",
-          details: error.message,
-        };
-      }
-      ctx = normalizeCtx(data);
-    } catch (e) {
-      return {
-        ok: false,
-        status: 403,
-        error: "Contexto no inicializado (org/rol)",
-        details: e?.message || String(e),
-      };
+    const { data, error } = await supaSrv.rpc("bootstrap_session_context_admin", {
+      p_user_id: userData.user.id,
+    });
+    if (error) {
+      return { ok: false, status: 403, error: "Contexto no inicializado (org/rol)", details: error.message };
     }
+    ctx = normalizeCtx(data);
   }
 
   if (!ctx?.org_id || !ctx?.role) {
-    return {
-      ok: false,
-      status: 403,
-      error: "Contexto incompleto",
-      details: "Falta org_id o role",
-    };
+    return { ok: false, status: 403, error: "Contexto incompleto", details: "Falta org_id o role" };
   }
 
   return { ok: true, user: userData.user, ctx, supaUser, supaSrv };
 }
 
-/* =========================
-   Handlers
-========================= */
-
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok)
-    return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
-
   const url = new URL(req.url, `http://${req.headers.host}`);
   const q = (url.searchParams.get("q") || "").trim();
   const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
@@ -203,12 +152,7 @@ async function handleList(req, res) {
   if (q) {
     const pattern = `%${q}%`;
     query = query.or(
-      [
-        `nombre.ilike.${pattern}`,
-        `apellido.ilike.${pattern}`,
-        `email.ilike.${pattern}`,
-        `telefono.ilike.${pattern}`,
-      ].join(",")
+      [`nombre.ilike.${pattern}`, `apellido.ilike.${pattern}`, `email.ilike.${pattern}`, `telefono.ilike.${pattern}`].join(",")
     );
   }
 
@@ -218,20 +162,12 @@ async function handleList(req, res) {
   return json(res, 200, { items: data || [] });
 }
 
-/**
- * ✅ WRITES con supaSrv para evitar 500 por RLS.
- * Permisos se controlan por rol (ctx.role) en el API.
- */
 async function handleUpsert(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok)
-    return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
-
-  if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
-  }
+  if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
 
   const body = await readBody(req);
   const payload = body?.payload || body || {};
@@ -248,17 +184,9 @@ async function handleUpsert(req, res) {
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
-  const baseRow = {
-    nombre,
-    apellido: apellido || null,
-    email,
-    telefono: telefono || null,
-    telefono_norm,
-    vigente,
-    updated_at: nowIso,
-  };
+  const baseRow = { nombre, apellido: apellido || null, email, telefono: telefono || null, telefono_norm, vigente, updated_at: nowIso };
 
-  // Duplicado por email dentro de la org (con service role)
+  // Duplicado por email en la org
   const { data: existing, error: findErr } = await supaSrv
     .from("personal")
     .select("id, is_deleted")
@@ -282,6 +210,7 @@ async function handleUpsert(req, res) {
     return json(res, 200, { item: data, revived: true });
   }
 
+  // INSERT nuevo
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
@@ -290,12 +219,7 @@ async function handleUpsert(req, res) {
     is_deleted: false,
   };
 
-  const { data, error } = await supaSrv
-    .from("personal")
-    .insert(insertRow)
-    .select("*")
-    .maybeSingle();
-
+  const { data, error } = await supaSrv.from("personal").insert(insertRow).select("*").maybeSingle();
   if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
 
   return json(res, 200, { item: data, created: true });
@@ -303,8 +227,7 @@ async function handleUpsert(req, res) {
 
 async function handleToggle(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok)
-    return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
   if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos" });
@@ -314,12 +237,7 @@ async function handleToggle(req, res) {
 
   const nowIso = new Date().toISOString();
 
-  const { data: row, error: rErr } = await supaSrv
-    .from("personal")
-    .select("id, vigente, org_id, is_deleted")
-    .eq("id", body.id)
-    .maybeSingle();
-
+  const { data: row, error: rErr } = await supaSrv.from("personal").select("id, vigente, org_id, is_deleted").eq("id", body.id).maybeSingle();
   if (rErr) return json(res, 500, { error: "No se pudo leer registro", details: rErr.message });
   if (!row || row.is_deleted) return json(res, 404, { error: "No encontrado" });
   if (row.org_id !== ctx.org_id) return json(res, 403, { error: "Sin permisos" });
@@ -339,8 +257,7 @@ async function handleToggle(req, res) {
 
 async function handleDelete(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok)
-    return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
   if (!requireWriteRole(ctx.role)) return json(res, 403, { error: "Sin permisos" });
@@ -362,10 +279,6 @@ async function handleDelete(req, res) {
   return json(res, 200, { item: data });
 }
 
-/* =========================
-   Entry
-========================= */
-
 export default async function handler(req, res) {
   try {
     const origin = req.headers.origin;
@@ -385,6 +298,6 @@ export default async function handler(req, res) {
     return json(res, 405, { error: "Method not allowed" });
   } catch (e) {
     console.error("[api/personal] Unexpected error:", e);
-    return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
+    return json(res, 500, { error: "Unexpected error", details: debugDetails(e) || (e?.message || String(e)) });
   }
 }
