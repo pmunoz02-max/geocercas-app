@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v13-e164-identity";
+const VERSION = "personal-api-v14-no-activo";
 
 /* =========================
    Utils
@@ -56,21 +56,10 @@ function onlyDigits(s) {
   return String(s || "").replace(/[^\d]/g, "");
 }
 
-/**
- * Heurística “segura” para E.164.
- * - Si ya viene con + y 8-15 dígitos: OK.
- * - Si viene sin +:
- *    - si tiene 11-15 dígitos: lo asumimos como country+number → prefijo "+"
- *    - si parece Ecuador 10 dígitos empezando con 0: +593 + (sin 0)
- *    - si 10 dígitos sin 0: NO adivinamos país → null (evita romper CHECK)
- *
- * Si tu app es Ecuador-first, la regla +593 es la más útil.
- */
 function toE164(rawPhone) {
   const p = String(rawPhone || "").trim();
   if (!p) return null;
 
-  // ya E.164
   if (p.startsWith("+")) {
     const d = onlyDigits(p);
     if (d.length >= 8 && d.length <= 15) return `+${d}`;
@@ -80,12 +69,9 @@ function toE164(rawPhone) {
   const d = onlyDigits(p);
   if (d.length >= 11 && d.length <= 15) return `+${d}`;
 
-  // Ecuador: 0XXXXXXXXX (10 dígitos)
-  if (d.length === 10 && d.startsWith("0")) {
-    return `+593${d.slice(1)}`;
-  }
+  // Ecuador: 0XXXXXXXXX (10)
+  if (d.length === 10 && d.startsWith("0")) return `+593${d.slice(1)}`;
 
-  // No adivinar país
   return null;
 }
 
@@ -227,42 +213,35 @@ async function handleUpsert(req, res) {
   const documento = (payload.documento || "").trim() || null;
 
   const telefonoRaw = (payload.telefono || "").trim();
-  const phoneE164 = toE164(telefonoRaw); // puede ser null si no es convertible
+  const phoneE164 = toE164(telefonoRaw);
 
   if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
   if (!email) return json(res, 400, { error: "Email es obligatorio" });
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
-  const activo = vigente; // coherencia con checks “active”
-  const emailNorm = email;
 
-  // identity_key requerido cuando está activo (por tu CHECK)
+  const emailNorm = email;
   const identityKey = (documento || emailNorm || "").trim() || null;
 
+  // ⚠️ NO enviar "activo" ni "activo_bool" (son GENERATED/derivados por triggers)
   const baseRow = {
     nombre,
     apellido: apellido || null,
     email,
     documento,
-    // Guardamos lo que el usuario escribió
     telefono: telefonoRaw || null,
     telefono_raw: telefonoRaw || null,
 
-    // Campos derivados (para satisfacer checks)
     email_norm: emailNorm,
     identity_key: identityKey,
-    activo,
-    activo_bool: activo,
 
-    // Normalización de teléfono (si podemos en E.164)
     phone_norm: phoneE164,
-    telefono_norm: phoneE164, // por compatibilidad (tu tabla tiene ambos)
+    telefono_norm: phoneE164,
 
     vigente,
     updated_at: nowIso,
   };
 
-  // Duplicado por email dentro de la org
   const { data: existing, error: findErr } = await supaSrv
     .from("personal")
     .select("id, is_deleted")
@@ -291,7 +270,7 @@ async function handleUpsert(req, res) {
     owner_id: user.id,
     created_at: nowIso,
     is_deleted: false,
-    position_interval_sec: 300, // default explícito por tus CHECKs
+    position_interval_sec: 300,
   };
 
   const { data, error } = await supaSrv
