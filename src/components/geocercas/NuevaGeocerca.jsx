@@ -645,7 +645,11 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
 
       await refreshGeofenceList();
       alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
-
+      setGeofenceList((prev) => {
+      if (prev.some((g) => g.nombre === nm)) return prev;
+    return [...prev, { nombre: nm, source: "api" }]
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+});
       setGeofenceName("");
       setDraftFeature(null);
     } catch (e) {
