@@ -597,24 +597,32 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   );
 
   const handleSave = useCallback(async () => {
-    try {
-      const nm = geofenceName.trim();
-      if (!nm) {
-        alert(
-          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
-        );
-        return;
-      }
+    const nm = geofenceName.trim();
+    if (!nm) {
+      alert(
+        t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
+      );
+      return;
+    }
 
+    try {
+      // ✅ 1) Guardado: CRÍTICO (si falla, se muestra error)
       const ok = await saveGeofenceCollection({ name: nm });
       if (!ok) return;
 
-      await refreshGeofenceList();
-      alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+      // ✅ 2) Refresco: NO CRÍTICO (no debe invalidar un save exitoso)
+      refreshGeofenceList().catch(() => {
+        // Silencioso: puede fallar por latencia eventual / cambio de org / token, pero el save ya fue OK.
+        // Dejamos la lista para el siguiente render o reload.
+        console.warn("[geocercas] refreshGeofenceList falló (no crítico)");
+      });
 
+      // ✅ 3) UX de éxito
+      alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
       setGeofenceName("");
       setDraftFeature(null);
     } catch (e) {
+      // ❌ Solo errores reales de guardado
       alert(e?.message || String(e));
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
