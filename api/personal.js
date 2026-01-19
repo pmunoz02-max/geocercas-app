@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v15-no-generated-fields";
+const VERSION = "personal-api-v16-actions-toggle-delete";
 
 /* =========================
    Utils
@@ -56,8 +56,7 @@ function onlyDigits(s) {
   return String(s || "").replace(/[^\d]/g, "");
 }
 
-// Convierte a E.164 cuando es posible (Ecuador friendly)
-// Devuelve null si no se puede asegurar E.164
+// Ecuador friendly E.164 (solo si se puede asegurar)
 function toE164(rawPhone) {
   const p = String(rawPhone || "").trim();
   if (!p) return null;
@@ -71,14 +70,14 @@ function toE164(rawPhone) {
   const d = onlyDigits(p);
   if (d.length >= 11 && d.length <= 15) return `+${d}`;
 
-  // Ecuador: 0XXXXXXXXX (10) => +593XXXXXXXXX (9)
+  // Ecuador: 0XXXXXXXXX (10) => +593XXXXXXXXX
   if (d.length === 10 && d.startsWith("0")) return `+593${d.slice(1)}`;
 
   return null;
 }
 
 /* =========================
-   Context Resolver (con fallback ADMIN)
+   Context Resolver
 ========================= */
 
 async function resolveContext(req) {
@@ -116,72 +115,41 @@ async function resolveContext(req) {
 
   const jwt = getCookie(req, "tg_at");
   if (!jwt) {
-    return {
-      ok: false,
-      status: 401,
-      error: "No autenticado",
-      details: "Falta cookie tg_at",
-    };
+    return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
   }
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
   if (userErr || !userData?.user) {
-    return {
-      ok: false,
-      status: 401,
-      error: "Sesión inválida",
-      details: userErr?.message || "No user",
-    };
+    return { ok: false, status: 401, error: "Sesión inválida", details: userErr?.message || "No user" };
   }
 
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // Intento JWT
   let ctx = null;
   try {
     const { data, error } = await supaUser.rpc("bootstrap_session_context");
     if (!error) ctx = normalizeCtx(data);
   } catch {}
 
-  // Fallback admin
   if (!ctx?.org_id || !ctx?.role) {
-    const { data, error } = await supaSrv.rpc(
-      "bootstrap_session_context_admin",
-      { p_user_id: userData.user.id }
-    );
+    const { data, error } = await supaSrv.rpc("bootstrap_session_context_admin", {
+      p_user_id: userData.user.id,
+    });
     if (error) {
-      return {
-        ok: false,
-        status: 403,
-        error: "Contexto no inicializado (org/rol)",
-        details: error.message,
-      };
+      return { ok: false, status: 403, error: "Contexto no inicializado (org/rol)", details: error.message };
     }
     ctx = normalizeCtx(data);
   }
 
   if (!ctx?.org_id || !ctx?.role) {
-    return {
-      ok: false,
-      status: 403,
-      error: "Contexto incompleto",
-      details: "Falta org_id o role",
-    };
+    return { ok: false, status: 403, error: "Contexto incompleto", details: "Falta org_id o role" };
   }
 
   return { ok: true, user: userData.user, ctx, supaSrv };
@@ -193,11 +161,7 @@ async function resolveContext(req) {
 
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok)
-    return json(res, ctxRes.status, {
-      error: ctxRes.error,
-      details: ctxRes.details,
-    });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
 
@@ -230,34 +194,75 @@ async function handleList(req, res) {
   }
 
   const { data, error } = await query;
-  if (error)
-    return json(res, 500, {
-      error: "No se pudo listar personal",
-      details: error.message,
-    });
+  if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
 
   return json(res, 200, { items: data || [] });
 }
 
-async function handleUpsert(req, res) {
+async function handlePost(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok)
-    return json(res, ctxRes.status, {
-      error: ctxRes.error,
-      details: ctxRes.details,
-    });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
 
   if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, {
-      error: "Sin permisos",
-      details: "Requiere rol admin u owner",
-    });
+    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
   }
 
   const payload = (await readBody(req)) || {};
   const nowIso = new Date().toISOString();
+
+  const action = String(payload.action || "").toLowerCase();
+  const id = payload.id ? String(payload.id) : null;
+
+  // ===== ACTION: TOGGLE =====
+  if (action === "toggle") {
+    if (!id) return json(res, 400, { error: "Falta id" });
+
+    const { data: cur, error: curErr } = await supaSrv
+      .from("personal")
+      .select("id, vigente, is_deleted")
+      .eq("id", id)
+      .eq("org_id", ctx.org_id)
+      .maybeSingle();
+
+    if (curErr) return json(res, 500, { error: "No se pudo leer registro", details: curErr.message });
+    if (!cur || cur.is_deleted) return json(res, 404, { error: "No encontrado" });
+
+    const nextVigente = !cur.vigente;
+
+    const { data: upd, error: updErr } = await supaSrv
+      .from("personal")
+      .update({ vigente: nextVigente, updated_at: nowIso })
+      .eq("id", id)
+      .eq("org_id", ctx.org_id)
+      .select("*")
+      .maybeSingle();
+
+    if (updErr) return json(res, 500, { error: "No se pudo cambiar estado", details: updErr.message });
+
+    return json(res, 200, { item: upd, toggled: true });
+  }
+
+  // ===== ACTION: DELETE (soft) =====
+  if (action === "delete") {
+    if (!id) return json(res, 400, { error: "Falta id" });
+
+    const { data: del, error: delErr } = await supaSrv
+      .from("personal")
+      .update({ is_deleted: true, deleted_at: nowIso, updated_at: nowIso })
+      .eq("id", id)
+      .eq("org_id", ctx.org_id)
+      .select("*")
+      .maybeSingle();
+
+    if (delErr) return json(res, 500, { error: "No se pudo eliminar", details: delErr.message });
+    if (!del) return json(res, 404, { error: "No encontrado" });
+
+    return json(res, 200, { item: del, deleted: true });
+  }
+
+  // ===== UPSERT CREATE/REVIVE =====
 
   const nombre = (payload.nombre || "").trim();
   const apellido = (payload.apellido || "").trim();
@@ -270,26 +275,20 @@ async function handleUpsert(req, res) {
   if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
   if (!email) return json(res, 400, { error: "Email es obligatorio" });
 
-  // NOTA:
-  // - telefono en DB tiene CHECK E.164 => solo guardamos E.164 o null
-  // - guardamos SIEMPRE el input original en telefono_raw
-  // - NO escribimos columnas GENERATED ALWAYS: email_norm, phone_norm, identity_key, etc.
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
+  // IMPORTANT: no escribir columnas GENERATED ALWAYS
   const baseRow = {
     nombre,
     apellido: apellido || null,
     email,
     documento,
-
     telefono: telefonoE164 || null,
     telefono_raw: telefonoRaw || null,
-
     vigente,
     updated_at: nowIso,
   };
 
-  // Duplicado por email dentro de la org
   const { data: existing, error: findErr } = await supaSrv
     .from("personal")
     .select("id, is_deleted")
@@ -297,53 +296,7 @@ async function handleUpsert(req, res) {
     .eq("email", email)
     .maybeSingle();
 
-  if (findErr)
-    return json(res, 500, {
-      error: "No se pudo validar duplicado",
-      details: findErr.message,
-    });
-
-  // Soporte para acciones futuras (toggle/delete) si las envías por POST desde el frontend
-  const action = String(payload.action || "").toLowerCase();
-  const id = payload.id ? String(payload.id) : null;
-
-  if (action === "toggle" && id) {
-    // Toggle vigente (sin tocar columnas generadas)
-    const { data, error } = await supaSrv
-      .from("personal")
-      .update({ vigente: payload.vigente === undefined ? null : !!payload.vigente })
-      .eq("id", id)
-      .eq("org_id", ctx.org_id)
-      .select("*")
-      .maybeSingle();
-
-    if (error)
-      return json(res, 500, {
-        error: "No se pudo cambiar estado",
-        details: error.message,
-      });
-
-    return json(res, 200, { item: data, toggled: true });
-  }
-
-  if (action === "delete" && id) {
-    // Soft delete
-    const { data, error } = await supaSrv
-      .from("personal")
-      .update({ is_deleted: true, deleted_at: nowIso, updated_at: nowIso })
-      .eq("id", id)
-      .eq("org_id", ctx.org_id)
-      .select("*")
-      .maybeSingle();
-
-    if (error)
-      return json(res, 500, {
-        error: "No se pudo eliminar",
-        details: error.message,
-      });
-
-    return json(res, 200, { item: data, deleted: true });
-  }
+  if (findErr) return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
 
   if (existing) {
     const { data, error } = await supaSrv
@@ -354,12 +307,7 @@ async function handleUpsert(req, res) {
       .select("*")
       .maybeSingle();
 
-    if (error)
-      return json(res, 500, {
-        error: "No se pudo actualizar personal",
-        details: error.message,
-      });
-
+    if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
     return json(res, 200, { item: data, revived: true });
   }
 
@@ -378,11 +326,7 @@ async function handleUpsert(req, res) {
     .select("*")
     .maybeSingle();
 
-  if (error)
-    return json(res, 500, {
-      error: "No se pudo crear personal",
-      details: error.message,
-    });
+  if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
 
   return json(res, 200, { item: data, created: true });
 }
@@ -398,14 +342,11 @@ export default async function handler(req, res) {
 
     if (req.method === "OPTIONS") return json(res, 200, { ok: true });
     if (req.method === "GET") return await handleList(req, res);
-    if (req.method === "POST") return await handleUpsert(req, res);
+    if (req.method === "POST") return await handlePost(req, res);
 
     return json(res, 405, { error: "Method not allowed" });
   } catch (e) {
     console.error("[api/personal] fatal:", e);
-    return json(res, 500, {
-      error: "Unexpected error",
-      details: e?.message || String(e),
-    });
+    return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
   }
 }
