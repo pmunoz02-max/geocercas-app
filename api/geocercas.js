@@ -1,6 +1,7 @@
 // api/geocercas.js
 // API oficial Geocercas (same-origin). Auth vía cookie HttpOnly "tg_at".
 // Soporta: OPTIONS (preflight), GET (list/get), POST (upsert).
+// Nota: GET sin org_id devuelve lista vacía (tolerante) para evitar errores tempranos.
 
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
@@ -59,7 +60,7 @@ async function sbFetch({ url, anonKey, accessToken, method = "GET", body }) {
 
 export default async function handler(req, res) {
   try {
-    // ✅ Preflight / compat
+    // Preflight / compat
     if (req.method === "OPTIONS") {
       res.statusCode = 204;
       return res.end();
@@ -91,7 +92,15 @@ export default async function handler(req, res) {
       const action = String(q.action || "list");
       const org_id = q.org_id ? String(q.org_id) : null;
 
-      if (!org_id) return json(res, 400, { error: "org_id is required" });
+      // ✅ Tolerancia: si llaman /api/geocercas sin org_id, no tiramos 400
+      // para evitar popups cuando el front todavía no tiene currentOrg listo.
+      if (!org_id) {
+        if (action === "list") {
+          return json(res, 200, { ok: true, items: [] });
+        }
+        // Para "get" sí exigimos org_id e id
+        return json(res, 400, { error: "org_id is required" });
+      }
 
       if (action === "list") {
         const url =
@@ -199,7 +208,6 @@ export default async function handler(req, res) {
       return json(res, 200, { ok: true, geocerca: saved });
     }
 
-    // Todo lo demás
     res.setHeader("Allow", "GET,POST,OPTIONS,HEAD");
     return json(res, 405, { error: "Method not allowed" });
   } catch (e) {
