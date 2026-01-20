@@ -1,9 +1,9 @@
 // api/geocercas.js
-// v6: API-first + UX-safe status + soft delete DB-first
+// v7: API-first + UX-safe status + soft delete DB-first
 // - GET action=list: SIEMPRE 200 con {ok:true|false, items:[]}
 // - GET action=get
 // - POST action=upsert
-// - POST action=delete (soft delete: activo=false)
+// - POST action=delete (soft delete: activo=false) UX-safe (nunca 400 por targets vacios)
 // - Header X-Api-Version para verificar que Vercel usa este archivo
 
 function getCookie(req, name) {
@@ -18,7 +18,7 @@ function getCookie(req, name) {
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.setHeader("X-Api-Version", "geocercas-api-v6-soft-delete");
+  res.setHeader("X-Api-Version", "geocercas-api-v7-uxsafe-delete");
 }
 
 function send(res, status, body) {
@@ -111,20 +111,17 @@ export default async function handler(req, res) {
       return send(res, 401, { ok: false, error: "Not authenticated (missing tg_at cookie)" });
     }
 
-    // ✅ GET
+    // GET
     if (req.method === "GET") {
       const q = getQuery(req);
       const action = String(q.action || "list");
 
-      // ✅ LIST: 200 SIEMPRE (UX-safe)
       if (action === "list") {
         const org_id = q.org_id ? String(q.org_id) : null;
-        const onlyActive = normalizeBoolFlag(q.onlyActive, true); // default: true
+        const onlyActive = normalizeBoolFlag(q.onlyActive, true);
 
-        // sin org_id -> 200 vacío (tolerante)
         if (!org_id) return ok(res, { ok: true, items: [] });
 
-        // filtro activo (soft delete)
         const activoFilter = onlyActive ? `&activo=eq.true` : ``;
 
         const url =
@@ -141,7 +138,6 @@ export default async function handler(req, res) {
           method: "GET",
         });
 
-        // para list: no reventamos UI, devolvemos 200 con ok:false si Supabase falla
         if (!r.ok)
           return ok(res, {
             ok: false,
@@ -153,7 +149,6 @@ export default async function handler(req, res) {
         return ok(res, { ok: true, items: Array.isArray(r.data) ? r.data : [] });
       }
 
-      // get exige org_id + id
       if (action === "get") {
         const org_id = q.org_id ? String(q.org_id) : null;
         const id = q.id ? String(q.id) : null;
@@ -183,12 +178,12 @@ export default async function handler(req, res) {
       return send(res, 400, { ok: false, error: "Unsupported action", action });
     }
 
-    // ✅ POST (upsert / delete)
+    // POST (upsert / delete)
     if (req.method === "POST") {
       const payload = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
       const action = String(payload?.action || "upsert");
 
-      // ---------- UPSERT ----------
+      // UPSERT
       if (action === "upsert") {
         const allowed = [
           "id",
@@ -237,7 +232,7 @@ export default async function handler(req, res) {
         return ok(res, { ok: true, geocerca: saved });
       }
 
-      // ---------- DELETE (soft) ----------
+      // DELETE (soft) — UX-safe
       if (action === "delete") {
         const org_id = payload?.org_id ? String(payload.org_id) : null;
         const id = payload?.id ? String(payload.id) : null;
@@ -248,7 +243,6 @@ export default async function handler(req, res) {
 
         if (!org_id) return send(res, 400, { ok: false, error: "org_id is required" });
 
-        // normalizamos targets
         const targets = [];
         if (id) targets.push({ type: "id", value: id });
         if (nombre_ci) targets.push({ type: "nombre_ci", value: nombre_ci });
@@ -260,14 +254,16 @@ export default async function handler(req, res) {
           for (const x of nombres_ci) if (x) targets.push({ type: "nombre_ci", value: String(x).toLowerCase() });
         }
 
+        // ✅ CAMBIO CLAVE: si no hay targets, no rompemos UI (200, skipped)
         if (!targets.length) {
-          return send(res, 400, {
-            ok: false,
-            error: "delete requiere id, nombre_ci/nombre, ids o nombres_ci",
+          return ok(res, {
+            ok: true,
+            deleted: 0,
+            skipped: true,
+            details: [{ ok: true, reason: "delete called without targets" }],
           });
         }
 
-        // Ejecutamos PATCH por target (simple y robusto, evita problemas con filtros in.(...))
         let deleted = 0;
         const details = [];
 
@@ -304,8 +300,7 @@ export default async function handler(req, res) {
           details.push({ target: t, ok: true, count: arr.length });
         }
 
-        // UX-safe: respondemos 200 siempre, con ok true/false
-        return ok(res, { ok: deleted > 0, deleted, details });
+        return ok(res, { ok: true, deleted, details });
       }
 
       return send(res, 400, { ok: false, error: "Unsupported action", action });
