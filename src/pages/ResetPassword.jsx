@@ -5,16 +5,28 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 function isStrongEnough(pw) {
   const s = String(pw || "");
-  // mínimo 8; al menos 1 letra y 1 número (ajústalo si quieres)
   return s.length >= 8 && /[A-Za-z]/.test(s) && /\d/.test(s);
+}
+
+// Lee params tanto de ?query como de #hash
+function parseUrlParams() {
+  const query = new URLSearchParams(window.location.search);
+  const hashRaw = (window.location.hash || "").replace(/^#/, "");
+  const hash = new URLSearchParams(hashRaw);
+
+  const token_hash = query.get("token_hash") || "";
+  const type = (query.get("type") || hash.get("type") || "").toLowerCase(); // recovery
+  const code = query.get("code") || "";
+
+  const access_token = hash.get("access_token") || "";
+  const refresh_token = hash.get("refresh_token") || "";
+
+  return { token_hash, type, code, access_token, refresh_token };
 }
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  const token_hash = searchParams.get("token_hash") || "";
-  const type = (searchParams.get("type") || "").toLowerCase(); // "recovery" esperado
+  const [searchParams] = useSearchParams(); // mantiene rerender si cambian querys
 
   const [checking, setChecking] = useState(true);
   const [ready, setReady] = useState(false);
@@ -23,7 +35,7 @@ export default function ResetPassword() {
   const [password2, setPassword2] = useState("");
 
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null); // { type: "error"|"success"|"warn", text }
+  const [msg, setMsg] = useState(null); // { type, text }
 
   const canSubmit = useMemo(() => {
     if (!password || !password2) return false;
@@ -31,7 +43,7 @@ export default function ResetPassword() {
     return isStrongEnough(password);
   }, [password, password2]);
 
-  // ✅ UNIVERSAL: si llegamos aquí con token_hash&type y NO hay sesión, verificamos OTP aquí mismo.
+  // Bootstrap universal: garantiza sesión para poder cambiar password
   useEffect(() => {
     let cancelled = false;
 
@@ -40,27 +52,69 @@ export default function ResetPassword() {
       setReady(false);
       setMsg(null);
 
-      try {
-        // 1) ¿ya hay sesión?
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+      const { token_hash, type, code, access_token, refresh_token } = parseUrlParams();
 
+      try {
+        // 0) Si ya hay sesión, listo
+        const { data: s0 } = await supabase.auth.getSession();
         if (cancelled) return;
 
-        if (session?.user?.id) {
+        if (s0?.session?.user?.id) {
           setReady(true);
           return;
         }
 
-        // 2) Si no hay sesión, intentamos verificar OTP si viene token_hash.
-        // Esto hace el flujo robusto incluso si /auth/callback no se ejecutó.
+        // 1) PKCE: si viene ?code=..., intercambiar por sesión
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (cancelled) return;
+
+          if (error) {
+            setMsg({
+              type: "error",
+              text:
+                "El link de recuperación no pudo validarse (code). Genera uno nuevo y ábrelo en incógnito.",
+            });
+            return;
+          }
+          if (data?.session?.user?.id) {
+            // limpia la URL (opcional)
+            window.history.replaceState({}, document.title, "/reset-password");
+            setReady(true);
+            return;
+          }
+        }
+
+        // 2) Hash tokens: #access_token=...&refresh_token=...
+        if (access_token && refresh_token) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (cancelled) return;
+
+          if (error) {
+            setMsg({
+              type: "error",
+              text:
+                "No se pudo establecer la sesión de recuperación (tokens). Genera un link nuevo e inténtalo en incógnito.",
+            });
+            return;
+          }
+          if (data?.session?.user?.id) {
+            // limpia el hash para que no quede token en URL
+            window.history.replaceState({}, document.title, "/reset-password");
+            setReady(true);
+            return;
+          }
+        }
+
+        // 3) Token hash: ?token_hash=...&type=recovery
         if (token_hash && type) {
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
-            type, // debe ser "recovery" normalmente
+            type, // recovery
           });
-
           if (cancelled) return;
 
           if (error) {
@@ -69,39 +123,35 @@ export default function ResetPassword() {
               text:
                 "El link de recuperación es inválido o expiró. Genera uno nuevo e inténtalo en incógnito.",
             });
-            setReady(false);
             return;
           }
 
-          // verifyOtp crea sesión
           if (data?.session?.user?.id) {
             setReady(true);
             return;
           }
         }
 
-        // 3) Si no hay sesión y no hay token válido:
+        // Si llegamos aquí, no hubo forma de crear sesión
         setMsg({
           type: "error",
           text:
-            "Faltan parámetros de recuperación o no hay sesión. Solicita un nuevo link de recuperación.",
+            "Auth session missing: no se pudo crear sesión con el link. Genera un nuevo reset y ábrelo en incógnito.",
         });
-        setReady(false);
       } catch (e) {
         if (cancelled) return;
         setMsg({ type: "error", text: e?.message || "Error inesperado." });
-        setReady(false);
       } finally {
         if (!cancelled) setChecking(false);
       }
     }
 
     bootstrap();
-
     return () => {
       cancelled = true;
     };
-  }, [token_hash, type]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -119,22 +169,17 @@ export default function ResetPassword() {
     try {
       setBusy(true);
 
-      // Asegura sesión antes de updateUser
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.user?.id) {
+      const { data: s } = await supabase.auth.getSession();
+      if (!s?.session?.user?.id) {
         setMsg({
           type: "error",
           text:
-            "No hay sesión activa para cambiar la contraseña. Abre el link de recuperación nuevamente o genera uno nuevo.",
+            "Auth session missing: abre el link de recuperación nuevamente (mejor en incógnito) o genera uno nuevo.",
         });
         return;
       }
 
       const { error } = await supabase.auth.updateUser({ password });
-
       if (error) {
         setMsg({ type: "error", text: error.message || "No se pudo actualizar." });
         return;
@@ -142,9 +187,9 @@ export default function ResetPassword() {
 
       setMsg({ type: "success", text: "✅ Contraseña actualizada. Ya puedes iniciar sesión." });
 
-      // opcional: cerrar sesión para forzar login con la nueva contraseña
+      // Forzar login limpio con la nueva contraseña
       await supabase.auth.signOut().catch(() => {});
-      setTimeout(() => navigate("/login", { replace: true }), 800);
+      setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (e2) {
       setMsg({ type: "error", text: e2?.message || "Error inesperado." });
     } finally {
@@ -162,7 +207,7 @@ export default function ResetPassword() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border rounded-2xl p-6">
-        <h1 className="text-xl font-semibold mb-2">Recrear contraseña</h1>
+        <h1 className="text-xl font-semibold mb-2">Actualizar contraseña</h1>
         <p className="text-sm text-slate-600 mb-4">
           Ingresa una nueva contraseña para tu cuenta.
         </p>
@@ -213,11 +258,11 @@ export default function ResetPassword() {
               disabled={busy}
               className="w-full bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-60"
             >
-              {busy ? "Guardando…" : "Guardar nueva contraseña"}
+              {busy ? "Guardando…" : "Guardar"}
             </button>
 
             <div className="text-[11px] text-slate-500">
-              Tip: si falla, genera un link nuevo y ábrelo en incógnito.
+              Tip: abre el link en incógnito. Si falla, genera uno nuevo.
             </div>
           </form>
         )}
