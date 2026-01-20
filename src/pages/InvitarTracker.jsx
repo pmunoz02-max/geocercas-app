@@ -32,30 +32,70 @@ async function callInviteTracker(payload) {
   return { ok: res.ok, status: res.status, data: json };
 }
 
+// Helpers universales para normalizar “personal activo” aunque la vista cambie columnas
+function pickId(row) {
+  return (
+    row?.org_people_id ??
+    row?.org_person_id ??
+    row?.org_personnel_id ??
+    row?.personal_id ??
+    row?.person_id ??
+    row?.id ??
+    null
+  );
+}
+
+function pickEmail(row) {
+  return row?.email ?? row?.correo ?? row?.mail ?? "";
+}
+
+function pickFirstName(row) {
+  return row?.nombre ?? row?.first_name ?? row?.firstname ?? row?.name ?? "";
+}
+
+function pickLastName(row) {
+  return row?.apellido ?? row?.last_name ?? row?.lastname ?? row?.surname ?? "";
+}
+
+// Activo = no borrado y no desactivado (soporta múltiples esquemas)
+function isActiveRow(row) {
+  const deleted =
+    row?.is_deleted ?? row?.deleted ?? row?.isDeleted ?? row?.is_removed ?? row?.removed ?? false;
+
+  const active =
+    row?.active ?? row?.is_active ?? row?.isActive ?? row?.enabled ?? row?.is_enabled ?? true;
+
+  return deleted !== true && active !== false;
+}
+
+function formatPersonLabel(row) {
+  const first = pickFirstName(row);
+  const last = pickLastName(row);
+  const email = pickEmail(row);
+  const full = `${first} ${last}`.trim();
+  return `${full || "—"} — ${email || "—"}`.trim();
+}
+
 export default function InvitarTracker() {
-  const { currentOrg } = useAuth();
+  const { currentOrg, ready } = useAuth();
   const { t } = useTranslation();
 
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
 
-  const [peopleList, setPeopleList] = useState([]);
-  const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
+  const [peopleList, setPeopleList] = useState([]); // [{ id, label, email, raw }]
+  const [selectedPersonId, setSelectedPersonId] = useState("");
 
-  const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text: string }
+  const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text }
   const [actionLink, setActionLink] = useState("");
 
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [peopleError, setPeopleError] = useState("");
 
   const selectedPersonLabel = useMemo(() => {
-    const p = peopleList.find(
-      (x) => String(x.org_people_id) === String(selectedOrgPeopleId)
-    );
-    if (!p) return "";
-    const name = `${p.nombre || ""} ${p.apellido || ""}`.trim();
-    return `${name || "—"} — ${p.email || ""}`;
-  }, [peopleList, selectedOrgPeopleId]);
+    const p = peopleList.find((x) => String(x.id) === String(selectedPersonId));
+    return p?.label || "";
+  }, [peopleList, selectedPersonId]);
 
   async function loadPeople() {
     if (!currentOrg?.id) return;
@@ -63,43 +103,55 @@ export default function InvitarTracker() {
     setLoadingPeople(true);
     setPeopleError("");
 
+    // IMPORTANTE: select("*") para no depender de nombres exactos de columnas en la vista
     const { data, error } = await supabase
       .from("v_org_people_ui")
-      .select("org_people_id, nombre, apellido, email, is_deleted")
+      .select("*")
       .eq("org_id", currentOrg.id)
-      .eq("is_deleted", false)
-      .order("nombre");
+      .limit(500);
 
     if (error) {
       console.error("[InvitarTracker] loadPeople error:", error);
       setPeopleList([]);
-      setPeopleError(
-        (error?.message || "Error loading personnel") +
-          (error?.details ? ` — ${error.details}` : "")
-      );
-    } else {
-      setPeopleList(Array.isArray(data) ? data : []);
+      setPeopleError(error.message || "Error loading personnel");
+      setLoadingPeople(false);
+      return;
     }
 
+    const rows = Array.isArray(data) ? data : [];
+
+    // Normaliza a una lista consistente para el select
+    const normalized = rows
+      .filter(isActiveRow)
+      .map((r) => {
+        const id = pickId(r);
+        const em = pickEmail(r);
+        return {
+          id,
+          email: em,
+          label: formatPersonLabel(r),
+          raw: r,
+        };
+      })
+      .filter((x) => x.id && x.email) // drop list solo con items válidos (con id y email)
+      .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+
+    setPeopleList(normalized);
     setLoadingPeople(false);
   }
 
   useEffect(() => {
+    if (!ready) return;
     loadPeople();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrg?.id]);
+  }, [ready, currentOrg?.id]);
 
   function handleSelectPerson(e) {
     const id = e.target.value;
-    setSelectedOrgPeopleId(id);
+    setSelectedPersonId(id);
 
-    const p = peopleList.find((x) => String(x.org_people_id) === String(id));
-    if (p?.email) setEmail(String(p.email).toLowerCase());
-  }
-
-  function goToPersonal() {
-    const returnTo = encodeURIComponent("/invitar-tracker");
-    window.location.href = `/personal?return=${returnTo}`;
+    const p = peopleList.find((x) => String(x.id) === String(id));
+    if (p?.email) setEmail(String(p.email).trim().toLowerCase());
   }
 
   async function handleSubmit(e) {
@@ -145,26 +197,17 @@ export default function InvitarTracker() {
       const link = resp.data.action_link || "";
 
       if (via === "email") {
-        setMessage({
-          type: "success",
-          text: `✅ Invitación enviada por correo a ${cleanEmail}.`,
-        });
-      } else if (via === "action_link") {
-        setActionLink(link);
-        setMessage({
-          type: "warn",
-          text: `⚠️ No se pudo enviar correo. Copia el Magic Link y envíalo a: ${cleanEmail}`,
-        });
+        setMessage({ type: "success", text: `✅ Invitación enviada por correo a ${cleanEmail}.` });
       } else {
         setActionLink(link);
         setMessage({
           type: "warn",
-          text: `⚠️ Invitación generada. Si no llega correo, usa el Magic Link para ${cleanEmail}.`,
+          text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo a: ${cleanEmail}`,
         });
       }
 
       setEmail("");
-      setSelectedOrgPeopleId("");
+      setSelectedPersonId("");
     } catch (err) {
       console.error("[InvitarTracker] unexpected:", err);
       setMessage({
@@ -185,6 +228,16 @@ export default function InvitarTracker() {
 
   const hasPeople = peopleList.length > 0;
 
+  if (!ready) {
+    return (
+      <div className="max-w-lg mx-auto p-4">
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">
+          {t("common.actions.loading", { defaultValue: "Loading…" })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-lg mx-auto">
       <h1 className="text-2xl font-semibold mb-4">
@@ -192,7 +245,7 @@ export default function InvitarTracker() {
       </h1>
 
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
-        {/* Conexión con Personal */}
+        {/* Drop list bien implementada */}
         <div className="border rounded-lg p-3 bg-slate-50">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -204,56 +257,45 @@ export default function InvitarTracker() {
                 {selectedPersonLabel
                   ? selectedPersonLabel
                   : t("inviteTracker.form.selectPersonHint", {
-                      defaultValue: "Elige una persona activa del módulo Personal.",
+                      defaultValue: "Selecciona una persona activa para autocompletar el email.",
                     })}
               </div>
 
               <div className="text-[11px] text-slate-500 mt-1">
-                {loadingPeople
-                  ? t("inviteTracker.form.loadingPeople", { defaultValue: "Cargando personal…" })
-                  : t("inviteTracker.form.peopleCount", {
-                      defaultValue: "Activos:",
-                    })}{" "}
-                <span className="font-semibold">{peopleList.length}</span>
+                {loadingPeople ? (
+                  t("inviteTracker.form.loadingPeople", { defaultValue: "Cargando personal…" })
+                ) : (
+                  <>
+                    {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
+                    <span className="font-semibold">{peopleList.length}</span>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={goToPersonal}
-                className="px-3 py-2 rounded bg-slate-800 text-white text-xs hover:bg-slate-900"
-              >
-                {t("inviteTracker.form.buttonOpenPersonal", { defaultValue: "Abrir Personal" })}
-              </button>
-
-              <button
-                type="button"
-                onClick={loadPeople}
-                className="px-3 py-2 rounded border text-xs bg-white hover:bg-slate-100"
-                disabled={loadingPeople}
-              >
-                {loadingPeople
-                  ? t("inviteTracker.form.buttonRefreshing", { defaultValue: "Refrescando…" })
-                  : t("inviteTracker.form.buttonRefreshPeople", { defaultValue: "Refrescar" })}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={loadPeople}
+              className="px-3 py-2 rounded border text-xs bg-white hover:bg-slate-100"
+              disabled={loadingPeople}
+            >
+              {loadingPeople
+                ? t("inviteTracker.form.buttonRefreshing", { defaultValue: "Refrescando…" })
+                : t("inviteTracker.form.buttonRefreshPeople", { defaultValue: "Refrescar" })}
+            </button>
           </div>
 
           {peopleError && (
             <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
               <div className="font-semibold">Error cargando personal</div>
               <div className="mt-1 break-words">{peopleError}</div>
-              <div className="mt-2 text-[11px] text-red-700">
-                Tip: si aquí dice “permission denied” o similar, es RLS/Vista/Permisos.
-              </div>
             </div>
           )}
 
           <div className="mt-3">
             <select
               className="w-full border rounded px-3 py-2 text-sm bg-white"
-              value={selectedOrgPeopleId}
+              value={selectedPersonId}
               onChange={handleSelectPerson}
               disabled={loadingPeople || !hasPeople}
             >
@@ -261,27 +303,24 @@ export default function InvitarTracker() {
                 {loadingPeople
                   ? t("inviteTracker.form.loadingPeople", { defaultValue: "Cargando…" })
                   : hasPeople
-                  ? t("inviteTracker.form.selectPlaceholder", { defaultValue: "Selecciona una persona activa" })
-                  : t("inviteTracker.form.noPeople", { defaultValue: "No hay personal activo (ve a Personal)" })}
+                  ? t("inviteTracker.form.selectPlaceholder", {
+                      defaultValue: "Selecciona una persona activa",
+                    })
+                  : t("inviteTracker.form.noPeople", {
+                      defaultValue: "No hay personal activo (actívalo en Personal)",
+                    })}
               </option>
 
               {peopleList.map((p) => (
-                <option key={p.org_people_id} value={p.org_people_id}>
-                  {`${p.nombre || ""} ${p.apellido || ""}`.trim()} — {p.email}
+                <option key={p.id} value={p.id}>
+                  {p.label}
                 </option>
               ))}
             </select>
-
-            <div className="mt-2 text-[11px] text-slate-500">
-              {t("inviteTracker.form.personalNote", {
-                defaultValue:
-                  "Si no aparece alguien, ve a Personal para activarlo/crearlo y luego pulsa Refrescar.",
-              })}
-            </div>
           </div>
         </div>
 
-        {/* Email (se autocompleta al seleccionar persona) */}
+        {/* Email (autocompleta al elegir persona) */}
         <input
           type="email"
           className="w-full border rounded px-3 py-2 text-sm"
@@ -324,10 +363,6 @@ export default function InvitarTracker() {
             </div>
 
             <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
-
-            <div className="text-[11px] text-slate-500 mt-2">
-              Recomendación: el tracker debe abrirlo en Chrome/Safari (mejor incógnito si ya intentó).
-            </div>
           </div>
         ) : null}
       </form>
