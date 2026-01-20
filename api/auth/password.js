@@ -1,19 +1,5 @@
 // api/auth/password.js
-// AUTH-V8 – Robust password login (no crashes) + HttpOnly cookies + redirect
-
-function parseCookies(cookieHeader = "") {
-  const out = {};
-  cookieHeader.split(";").forEach((part) => {
-    const p = part.trim();
-    if (!p) return;
-    const i = p.indexOf("=");
-    if (i < 0) return;
-    const k = p.slice(0, i).trim();
-    const v = p.slice(i + 1).trim();
-    out[k] = decodeURIComponent(v);
-  });
-  return out;
-}
+// AUTH-V9 – No-crash universal (Vercel Node Serverless) + HttpOnly cookies + JSON/redirect modes
 
 function makeCookie(name, value, opts = {}) {
   const {
@@ -36,14 +22,16 @@ function makeCookie(name, value, opts = {}) {
 async function readBody(req) {
   const ct = String(req.headers["content-type"] || "").toLowerCase();
 
-  try {
-    if (req.body && typeof req.body === "object") return req.body;
-    if (typeof req.body === "string" && req.body.trim()) {
-      if (ct.includes("application/json")) return JSON.parse(req.body);
-      return Object.fromEntries(new URLSearchParams(req.body));
-    }
-  } catch {}
+  // If body is already parsed by runtime/middleware
+  if (req.body && typeof req.body === "object") return req.body;
 
+  // If body is a string
+  if (typeof req.body === "string" && req.body.trim()) {
+    if (ct.includes("application/json")) return JSON.parse(req.body);
+    return Object.fromEntries(new URLSearchParams(req.body));
+  }
+
+  // Raw stream
   const raw = await new Promise((resolve) => {
     let data = "";
     req.on("data", (c) => (data += c));
@@ -55,8 +43,13 @@ async function readBody(req) {
   return Object.fromEntries(new URLSearchParams(raw));
 }
 
-export default async function handler(req, res) {
-  const version = "auth-password-v8-safe-2026-01-18";
+function wantsJson(req) {
+  const accept = String(req.headers["accept"] || "").toLowerCase();
+  return accept.includes("application/json") || accept.includes("text/json");
+}
+
+module.exports = async (req, res) => {
+  const version = "auth-password-v9-nocrash-2026-01-20";
 
   try {
     // ======================
@@ -70,12 +63,17 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
 
     if (req.method === "OPTIONS") {
-      return res.status(200).end();
+      res.statusCode = 200;
+      return res.end();
     }
 
+    // ======================
+    // Method guard (NO CRASH)
+    // ======================
     if (req.method !== "POST") {
-      res.setHeader("Allow", "POST");
-      return res.status(405).end("Method Not Allowed");
+      res.setHeader("Allow", "POST,OPTIONS");
+      res.statusCode = 405;
+      return res.end("Method Not Allowed");
     }
 
     // ======================
@@ -85,11 +83,15 @@ export default async function handler(req, res) {
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return res.status(500).json({
-        error: "Server misconfigured",
-        details: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
-        version,
-      });
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.end(
+        JSON.stringify({
+          error: "Server misconfigured",
+          details: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
+          version,
+        })
+      );
     }
 
     // ======================
@@ -99,7 +101,9 @@ export default async function handler(req, res) {
     try {
       body = await readBody(req);
     } catch {
-      return res.status(400).json({ error: "Invalid request body" });
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.end(JSON.stringify({ error: "Invalid request body", version }));
     }
 
     const email = String(body.email || "").trim().toLowerCase();
@@ -107,14 +111,21 @@ export default async function handler(req, res) {
     const next = String(body.next || "/inicio");
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password required" });
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.end(
+        JSON.stringify({
+          error: "Email and password required",
+          required: ["email", "password"],
+          version,
+        })
+      );
     }
 
     // ======================
-    // Supabase login
+    // Supabase password grant
     // ======================
     let r, data;
-
     try {
       r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
         method: "POST",
@@ -129,26 +140,32 @@ export default async function handler(req, res) {
       const text = await r.text();
       data = text ? JSON.parse(text) : {};
     } catch (err) {
-      console.error("[auth/password] fetch failed:", err);
-      return res.status(502).json({
-        error: "Authentication service unreachable",
-      });
+      console.error("[api/auth/password] fetch failed:", err);
+      res.statusCode = 502;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.end(
+        JSON.stringify({
+          error: "Authentication service unreachable",
+          version,
+        })
+      );
     }
 
     if (!r.ok || !data?.access_token) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      res.statusCode = 401;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.end(JSON.stringify({ error: "Invalid credentials", version }));
     }
 
     // ======================
-    // Cookies
+    // Cookies (HttpOnly)
     // ======================
     const accessToken = data.access_token;
     const refreshToken = data.refresh_token || "";
-
     const accessMaxAge = Number(data.expires_in || 3600);
     const refreshMaxAge = 30 * 24 * 60 * 60;
 
-    const cookies = [
+    res.setHeader("Set-Cookie", [
       makeCookie("tg_at", accessToken, {
         httpOnly: true,
         secure: true,
@@ -163,22 +180,34 @@ export default async function handler(req, res) {
         path: "/",
         maxAge: refreshMaxAge,
       }),
-    ];
-
-    res.setHeader("Set-Cookie", cookies);
+    ]);
 
     // ======================
-    // Redirect
+    // Response mode
     // ======================
+    if (wantsJson(req) || body.json === true) {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.end(
+        JSON.stringify({
+          ok: true,
+          user_id: data.user?.id || null,
+          expires_in: data.expires_in || null,
+          next,
+          version,
+        })
+      );
+    }
+
+    // Default: redirect for browser form login
     res.statusCode = 302;
     res.setHeader("Location", next);
-    res.end();
+    return res.end();
   } catch (fatal) {
     // 🔒 Nunca crash
-    console.error("[auth/password] fatal:", fatal);
-    res.status(500).json({
-      error: "Unexpected authentication error",
-      version,
-    });
+    console.error("[api/auth/password] fatal:", fatal);
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    return res.end(JSON.stringify({ error: "Unexpected error", version }));
   }
-}
+};
