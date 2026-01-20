@@ -1,332 +1,169 @@
 // api/geocercas.js
-// v8: API-first + UX-safe + anti-cache REAL (CDN + Vary) + soft delete DB-first
-// - GET action=list: SIEMPRE 200 con {ok:true|false, items:[]}
-// - GET action=get
-// - POST action=upsert
-// - POST action=delete (soft delete: activo=false) UX-safe (nunca 400 por targets vacios)
-// - Headers anti-cache fuertes + Vary: Cookie (evita cache entre sesiones/orgs)
-// - Header X-Api-Version para verificar en Network que Vercel sirve ESTE archivo
+// =====================================================
+// Endpoint API-FIRST para geocercas
+// FIX DEFINITIVO: normaliza orgId / name antes de validar
+// =====================================================
 
-function getCookie(req, name) {
-  const raw = req.headers.cookie || "";
-  const parts = raw.split(";").map((s) => s.trim());
-  for (const p of parts) {
-    if (p.startsWith(name + "=")) return decodeURIComponent(p.slice(name.length + 1));
-  }
-  return null;
-}
+import { createClient } from "@supabase/supabase-js";
 
-function setHeaders(res) {
-  // 🔒 Anti-cache fuerte (browser + CDN/proxy)
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
+// ---------- Supabase ----------
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // Evita cache en browser
-  res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  // Evita cache en CDNs (Vercel / proxies)
+// ---------- Helpers ----------
+function send(res, status, payload) {
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader("CDN-Cache-Control", "no-store");
   res.setHeader("Surrogate-Control", "no-store");
-
-  // MUY IMPORTANTE: cache key debe variar por cookie (tg_at)
-  // Sin esto, es común ver “lista vieja” hasta recargar.
   res.setHeader("Vary", "Cookie");
-
-  // Debug version
-  res.setHeader("X-Api-Version", "geocercas-api-v8-anti-cache-vary-cookie");
+  res.status(status).json(payload);
 }
 
-function send(res, status, body) {
-  setHeaders(res);
-  res.statusCode = status;
-  res.end(JSON.stringify(body));
-}
+function normalizePayload(body) {
+  const payload = typeof body === "string" ? JSON.parse(body) : { ...body };
 
-function ok(res, body) {
-  return send(res, 200, body);
-}
-
-function pick(obj, keys) {
-  const out = {};
-  for (const k of keys) if (obj?.[k] !== undefined) out[k] = obj[k];
-  return out;
-}
-
-function getQuery(req) {
-  try {
-    const url = new URL(req.url, "http://localhost");
-    const q = {};
-    url.searchParams.forEach((v, k) => (q[k] = v));
-    return q;
-  } catch {
-    return {};
-  }
-}
-
-async function sbFetch({ url, anonKey, accessToken, method = "GET", body }) {
-  const headers = {
-    apikey: anonKey,
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-    Prefer: "return=representation",
-  };
-
-  const r = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    // 🔒 Evita caché del runtime (por si acaso)
-    cache: "no-store",
-  });
-
-  const text = await r.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
+  // orgId → org_id
+  if (!payload.org_id && payload.orgId) {
+    payload.org_id = payload.orgId;
   }
 
-  return { ok: r.ok, status: r.status, data };
+  // name → nombre
+  if (!payload.nombre && payload.name) {
+    payload.nombre = payload.name;
+  }
+
+  // nombre_ci automático
+  if (!payload.nombre_ci && payload.nombre) {
+    payload.nombre_ci = String(payload.nombre).trim().toLowerCase();
+  }
+
+  // geometry aliases
+  if (!payload.geojson && payload.geometry) payload.geojson = payload.geometry;
+  if (!payload.geojson && payload.geom) payload.geojson = payload.geom;
+
+  return payload;
 }
 
-function normalizeBoolFlag(v, defaultValue) {
-  if (v === undefined || v === null || v === "") return defaultValue;
-  const s = String(v).toLowerCase();
-  if (["1", "true", "yes", "y", "on"].includes(s)) return true;
-  if (["0", "false", "no", "n", "off"].includes(s)) return false;
-  return defaultValue;
-}
-
+// =====================================================
+// HANDLER
+// =====================================================
 export default async function handler(req, res) {
   try {
-    if (req.method === "OPTIONS") {
-      setHeaders(res);
-      res.statusCode = 204;
-      return res.end();
-    }
-    if (req.method === "HEAD") {
-      setHeaders(res);
-      res.statusCode = 200;
-      return res.end();
+    // -------------------------------------------------
+    // GET /api/geocercas
+    // -------------------------------------------------
+    if (req.method === "GET") {
+      const { orgId, id, onlyActive } = req.query;
+      if (!orgId) return send(res, 422, { ok: false, error: "orgId is required" });
+
+      let q = supabase.from("geocercas").select("*").eq("org_id", orgId);
+
+      if (id) q = q.eq("id", id);
+      if (onlyActive === "true") q = q.eq("activa", true);
+
+      const { data, error } = await q.order("nombre");
+
+      if (error) {
+        console.error("[api/geocercas][GET]", error);
+        return send(res, 500, { ok: false, error: error.message });
+      }
+
+      return send(res, 200, data);
     }
 
-    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY =
-      process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    // -------------------------------------------------
+    // POST /api/geocercas  (UPSERT)
+    // -------------------------------------------------
+    if (req.method === "POST") {
+      const row = normalizePayload(req.body);
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return send(res, 500, {
-        ok: false,
-        error: "Server misconfigured",
-        details: "Missing SUPABASE env vars (URL / ANON KEY)",
+      // ---- Validaciones reales (422, no 400) ----
+      if (!row.org_id) {
+        return send(res, 422, { ok: false, error: "org_id is required" });
+      }
+
+      if (!row.nombre || !row.nombre_ci) {
+        return send(res, 422, {
+          ok: false,
+          error: "nombre (or name) is required",
+        });
+      }
+
+      if (!row.geojson) {
+        return send(res, 422, {
+          ok: false,
+          error: "geojson / geometry is required",
+        });
+      }
+
+      // Defaults seguros
+      row.activa = row.activa ?? true;
+      row.visible = row.visible ?? true;
+
+      // ---- UPSERT REAL ----
+      const { data, error } = await supabase
+        .from("geocercas")
+        .upsert(row, {
+          onConflict: "org_id,nombre_ci",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[api/geocercas][POST][SUPABASE]", error);
+        return send(res, 500, {
+          ok: false,
+          error: error.message,
+          details: error.details || null,
+        });
+      }
+
+      // ✅ ÉXITO REAL → 200
+      return send(res, 200, {
+        ok: true,
+        row: data,
       });
     }
 
-    const accessToken = getCookie(req, "tg_at");
-    if (!accessToken) {
-      return send(res, 401, { ok: false, error: "Not authenticated (missing tg_at cookie)" });
+    // -------------------------------------------------
+    // DELETE /api/geocercas
+    // -------------------------------------------------
+    if (req.method === "DELETE") {
+      const { orgId, id } = req.query;
+      if (!orgId || !id) {
+        return send(res, 422, {
+          ok: false,
+          error: "orgId and id are required",
+        });
+      }
+
+      const { error } = await supabase
+        .from("geocercas")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("id", id);
+
+      if (error) {
+        console.error("[api/geocercas][DELETE]", error);
+        return send(res, 500, { ok: false, error: error.message });
+      }
+
+      return send(res, 200, { ok: true });
     }
 
-    // GET
-    if (req.method === "GET") {
-      const q = getQuery(req);
-      const action = String(q.action || "list");
-
-      if (action === "list") {
-        const org_id = q.org_id ? String(q.org_id) : null;
-        const onlyActive = normalizeBoolFlag(q.onlyActive, true);
-
-        if (!org_id) return ok(res, { ok: true, items: [] });
-
-        const activoFilter = onlyActive ? `&activo=eq.true` : ``;
-
-        // OJO: aquí NO uses caches. Ya estamos con Vary + CDN no-store.
-        const url =
-          `${SUPABASE_URL}/rest/v1/geocercas` +
-          `?org_id=eq.${encodeURIComponent(org_id)}` +
-          activoFilter +
-          `&select=id,nombre,nombre_ci,org_id,activo,updated_at` +
-          `&order=nombre.asc`;
-
-        const r = await sbFetch({
-          url,
-          anonKey: SUPABASE_ANON_KEY,
-          accessToken,
-          method: "GET",
-        });
-
-        // UX-safe: nunca 400 en list, siempre 200 con ok false
-        if (!r.ok) {
-          return ok(res, {
-            ok: false,
-            items: [],
-            supabase_status: r.status,
-            details: r.data,
-          });
-        }
-
-        return ok(res, { ok: true, items: Array.isArray(r.data) ? r.data : [] });
-      }
-
-      if (action === "get") {
-        const org_id = q.org_id ? String(q.org_id) : null;
-        const id = q.id ? String(q.id) : null;
-        if (!org_id) return send(res, 400, { ok: false, error: "org_id is required" });
-        if (!id) return send(res, 400, { ok: false, error: "id is required" });
-
-        const url =
-          `${SUPABASE_URL}/rest/v1/geocercas` +
-          `?id=eq.${encodeURIComponent(id)}` +
-          `&org_id=eq.${encodeURIComponent(org_id)}` +
-          `&select=*` +
-          `&limit=1`;
-
-        const r = await sbFetch({
-          url,
-          anonKey: SUPABASE_ANON_KEY,
-          accessToken,
-          method: "GET",
-        });
-
-        if (!r.ok) {
-          return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
-        }
-
-        const row = Array.isArray(r.data) ? r.data[0] : r.data;
-        return ok(res, { ok: true, geocerca: row || null });
-      }
-
-      return send(res, 400, { ok: false, error: "Unsupported action", action });
-    }
-
-    // POST (upsert / delete)
-    if (req.method === "POST") {
-      const payload = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-      const action = String(payload?.action || "upsert");
-
-      // UPSERT
-      if (action === "upsert") {
-        const allowed = [
-          "id",
-          "org_id",
-          "nombre",
-          "nombre_ci",
-          "descripcion",
-          "geojson",
-          "geometry",
-          "polygon",
-          "geom",
-          "lat",
-          "lng",
-          "radius_m",
-          "visible",
-          "activo",
-          "activa",
-          "bbox",
-          "personal_ids",
-          "asignacion_ids",
-        ];
-
-        const row = pick(payload, allowed);
-
-        if (!row.org_id) return send(res, 400, { ok: false, error: "org_id is required" });
-        if (!row.nombre && !row.nombre_ci) {
-          return send(res, 400, { ok: false, error: "nombre (or nombre_ci) is required" });
-        }
-
-        const upsertUrl =
-          `${SUPABASE_URL}/rest/v1/geocercas` +
-          `?on_conflict=org_id,nombre_ci` +
-          `&select=*`;
-
-        const r = await sbFetch({
-          url: upsertUrl,
-          anonKey: SUPABASE_ANON_KEY,
-          accessToken,
-          method: "POST",
-          body: row,
-        });
-
-        if (!r.ok) {
-          return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
-        }
-
-        const saved = Array.isArray(r.data) ? r.data[0] : r.data;
-        return ok(res, { ok: true, geocerca: saved });
-      }
-
-      // DELETE (soft) — UX-safe
-      if (action === "delete") {
-        const org_id = payload?.org_id ? String(payload.org_id) : null;
-        const id = payload?.id ? String(payload.id) : null;
-        const nombre_ci = payload?.nombre_ci ? String(payload.nombre_ci) : null;
-        const nombre = payload?.nombre ? String(payload.nombre) : null;
-        const nombres_ci = Array.isArray(payload?.nombres_ci) ? payload.nombres_ci : null;
-        const ids = Array.isArray(payload?.ids) ? payload.ids : null;
-
-        if (!org_id) return send(res, 400, { ok: false, error: "org_id is required" });
-
-        const targets = [];
-        if (id) targets.push({ type: "id", value: id });
-        if (nombre_ci) targets.push({ type: "nombre_ci", value: nombre_ci });
-        if (nombre) targets.push({ type: "nombre_ci", value: nombre.toLowerCase() });
-        if (Array.isArray(ids)) for (const x of ids) if (x) targets.push({ type: "id", value: String(x) });
-        if (Array.isArray(nombres_ci))
-          for (const x of nombres_ci) if (x) targets.push({ type: "nombre_ci", value: String(x).toLowerCase() });
-
-        if (!targets.length) {
-          return ok(res, {
-            ok: true,
-            deleted: 0,
-            skipped: true,
-            details: [{ ok: true, reason: "delete called without targets" }],
-          });
-        }
-
-        let deleted = 0;
-        const details = [];
-
-        for (const t of targets) {
-          const filter =
-            t.type === "id"
-              ? `id=eq.${encodeURIComponent(t.value)}`
-              : `nombre_ci=eq.${encodeURIComponent(t.value)}`;
-
-          const patchUrl =
-            `${SUPABASE_URL}/rest/v1/geocercas` +
-            `?org_id=eq.${encodeURIComponent(org_id)}` +
-            `&${filter}` +
-            `&select=id,nombre,nombre_ci,org_id,activo,updated_at`;
-
-          const r = await sbFetch({
-            url: patchUrl,
-            anonKey: SUPABASE_ANON_KEY,
-            accessToken,
-            method: "PATCH",
-            body: { activo: false, updated_at: new Date().toISOString() },
-          });
-
-          if (!r.ok) {
-            details.push({ target: t, ok: false, status: r.status, data: r.data });
-            continue;
-          }
-
-          const arr = Array.isArray(r.data) ? r.data : r.data ? [r.data] : [];
-          deleted += arr.length;
-          details.push({ target: t, ok: true, count: arr.length });
-        }
-
-        return ok(res, { ok: true, deleted, details });
-      }
-
-      return send(res, 400, { ok: false, error: "Unsupported action", action });
-    }
-
-    res.setHeader("Allow", "GET,POST,OPTIONS,HEAD");
+    // -------------------------------------------------
+    // Method not allowed
+    // -------------------------------------------------
+    res.setHeader("Allow", ["GET", "POST", "DELETE"]);
     return send(res, 405, { ok: false, error: "Method not allowed" });
-  } catch (e) {
-    return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
+  } catch (err) {
+    console.error("[api/geocercas][FATAL]", err);
+    return send(res, 500, {
+      ok: false,
+      error: err.message || "Internal server error",
+    });
   }
 }
