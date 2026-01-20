@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "../supabaseClient.js";
 import { useTranslation } from "react-i18next";
@@ -45,21 +45,43 @@ export default function InvitarTracker() {
   const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text: string }
   const [actionLink, setActionLink] = useState("");
 
-  useEffect(() => {
-    async function loadPeople() {
-      if (!currentOrg?.id) return;
+  const [loadingPeople, setLoadingPeople] = useState(false);
+  const [showSelector, setShowSelector] = useState(true);
 
-      const { data, error } = await supabase
-        .from("v_org_people_ui")
-        .select("org_people_id, nombre, apellido, email, is_deleted")
-        .eq("org_id", currentOrg.id)
-        .eq("is_deleted", false)
-        .order("nombre");
+  // Para UX: texto del seleccionado
+  const selectedPersonLabel = useMemo(() => {
+    const p = peopleList.find((x) => x.org_people_id === selectedOrgPeopleId);
+    if (!p) return "";
+    const name = `${p.nombre || ""} ${p.apellido || ""}`.trim();
+    return `${name || "—"} — ${p.email || ""}`;
+  }, [peopleList, selectedOrgPeopleId]);
 
-      if (!error) setPeopleList(data || []);
+  async function loadPeople() {
+    if (!currentOrg?.id) return;
+
+    setLoadingPeople(true);
+
+    const { data, error } = await supabase
+      .from("v_org_people_ui")
+      .select("org_people_id, nombre, apellido, email, is_deleted")
+      .eq("org_id", currentOrg.id)
+      .eq("is_deleted", false)
+      .order("nombre");
+
+    if (error) {
+      console.error("[InvitarTracker] loadPeople error:", error);
+      // No bloqueamos el flujo: solo dejamos lista vacía
+      setPeopleList([]);
+    } else {
+      setPeopleList(data || []);
     }
 
+    setLoadingPeople(false);
+  }
+
+  useEffect(() => {
     loadPeople();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id]);
 
   function handleSelectPerson(e) {
@@ -68,6 +90,13 @@ export default function InvitarTracker() {
 
     const p = peopleList.find((x) => x.org_people_id === id);
     if (p?.email) setEmail(String(p.email).toLowerCase());
+  }
+
+  function goToPersonal() {
+    // Conecta el flujo con /personal (gestionar y/o activar personal)
+    // Incluimos return para que puedas volver rápido (si luego decides usarlo en /personal)
+    const returnTo = encodeURIComponent("/invitar-tracker");
+    window.location.href = `/personal?return=${returnTo}`;
   }
 
   async function handleSubmit(e) {
@@ -118,7 +147,6 @@ export default function InvitarTracker() {
           text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo al tracker: ${cleanEmail}`,
         });
       } else {
-        // fallback ultra seguro
         setActionLink(link);
         setMessage({
           type: "warn",
@@ -151,19 +179,82 @@ export default function InvitarTracker() {
       <h1 className="text-2xl font-semibold mb-4">{t("inviteTracker.title")}</h1>
 
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
-        <select
-          className="w-full border rounded px-3 py-2 text-sm"
-          value={selectedOrgPeopleId}
-          onChange={handleSelectPerson}
-        >
-          <option value="">{t("inviteTracker.form.selectPlaceholder")}</option>
-          {peopleList.map((p) => (
-            <option key={p.org_people_id} value={p.org_people_id}>
-              {`${p.nombre || ""} ${p.apellido || ""}`} — {p.email}
-            </option>
-          ))}
-        </select>
+        {/* Selector conectado a Personal */}
+        <div className="border rounded-lg p-3 bg-slate-50">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold">
+                {t("inviteTracker.form.selectPersonTitle", { defaultValue: "Seleccionar persona" })}
+              </div>
+              <div className="text-xs text-slate-600">
+                {selectedPersonLabel
+                  ? selectedPersonLabel
+                  : t("inviteTracker.form.selectPersonHint", {
+                      defaultValue: "Elige una persona activa del módulo Personal.",
+                    })}
+              </div>
+            </div>
 
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSelector((v) => !v)}
+                className="px-3 py-2 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
+              >
+                {t("inviteTracker.form.buttonSelectPerson", { defaultValue: "Seleccionar persona" })}
+              </button>
+
+              <button
+                type="button"
+                onClick={goToPersonal}
+                className="px-3 py-2 rounded bg-slate-700 text-white text-xs hover:bg-slate-800"
+                title={t("inviteTracker.form.buttonOpenPersonal", { defaultValue: "Abrir Personal" })}
+              >
+                {t("inviteTracker.form.buttonOpenPersonal", { defaultValue: "Abrir Personal" })}
+              </button>
+
+              <button
+                type="button"
+                onClick={loadPeople}
+                className="px-3 py-2 rounded border text-xs bg-white hover:bg-slate-100"
+                disabled={loadingPeople}
+                title={t("inviteTracker.form.buttonRefreshPeople", { defaultValue: "Refrescar lista" })}
+              >
+                {loadingPeople
+                  ? t("inviteTracker.form.buttonRefreshing", { defaultValue: "Refrescando…" })
+                  : t("inviteTracker.form.buttonRefreshPeople", { defaultValue: "Refrescar" })}
+              </button>
+            </div>
+          </div>
+
+          {showSelector && (
+            <div className="mt-3">
+              <select
+                className="w-full border rounded px-3 py-2 text-sm bg-white"
+                value={selectedOrgPeopleId}
+                onChange={handleSelectPerson}
+              >
+                <option value="">
+                  {t("inviteTracker.form.selectPlaceholder", { defaultValue: "Selecciona una persona activa" })}
+                </option>
+                {peopleList.map((p) => (
+                  <option key={p.org_people_id} value={p.org_people_id}>
+                    {`${p.nombre || ""} ${p.apellido || ""}`.trim()} — {p.email}
+                  </option>
+                ))}
+              </select>
+
+              <div className="mt-2 text-[11px] text-slate-500">
+                {t("inviteTracker.form.personalNote", {
+                  defaultValue:
+                    "Si no aparece alguien, ve a Personal para activarlo/crearlo y luego pulsa Refrescar.",
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Email (se autocompleta al seleccionar persona) */}
         <input
           type="email"
           className="w-full border rounded px-3 py-2 text-sm"
@@ -197,7 +288,6 @@ export default function InvitarTracker() {
               <button
                 type="button"
                 onClick={() => {
-                  // abre el link para prueba local
                   window.open(actionLink, "_blank", "noopener,noreferrer");
                 }}
                 className="bg-slate-700 text-white rounded px-3 py-2 text-xs"
