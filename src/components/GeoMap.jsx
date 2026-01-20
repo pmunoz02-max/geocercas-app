@@ -16,9 +16,13 @@ import { useAuth } from "../context/AuthContext.jsx";
  *    - onEditFeature({ orgId, id, geojson, polygon, nombre, color, layer })
  *    - onDeleteFeature({ orgId, id, layer })
  *
- * El orquestador (ej: NuevaGeocerca.jsx) decide:
- *  - llamar a /api/geocercas (upsert/delete)
- *  - refrescar listado (GET list)
+ * NUEVO:
+ *  - onNotify({ type: "info"|"ok"|"error", text, error? })
+ *    (opcional, para mostrar banners/toasts en el orquestador)
+ *
+ * Importante:
+ *  - NO usa alert().
+ *  - NO toca Supabase.
  */
 
 // --- safeParseJSON "blindado" (se conserva) ---
@@ -204,6 +208,7 @@ export default function GeoMap({
   onCreateFeature,
   onEditFeature,
   onDeleteFeature,
+  onNotify, // ✅ NUEVO opcional
 }) {
   const { currentOrg } = useAuth() || {};
   const orgId = orgIdProp ?? currentOrg?.id ?? null;
@@ -215,12 +220,24 @@ export default function GeoMap({
   const center = useMemo(() => [-1.8312, -78.1834], []); // Ecuador
   const zoom = 6;
 
+  const notify = (payload) => {
+    try {
+      if (typeof onNotify === "function") onNotify(payload);
+      else {
+        // fallback no intrusivo
+        if (payload?.type === "error") console.error("[GeoMap notify]", payload);
+        else console.log("[GeoMap notify]", payload);
+      }
+    } catch (e) {
+      console.error("[GeoMap notify] error", e);
+    }
+  };
+
   // Debug útil
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.__debug_orgId = orgId || null;
       window.__debug_canEdit = !!canEdit;
-      // eslint-disable-next-line no-console
       console.log("[GeoMap] orgId/canEdit:", orgId, canEdit);
     }
   }, [orgId, canEdit]);
@@ -261,8 +278,7 @@ export default function GeoMap({
       map.pm.disableGlobalRemovalMode?.();
       map.pm.disableDraw?.();
       if (canEdit && orgId) {
-        // No forzamos enableDraw automáticamente (solo habilita botones)
-        // La creación se valida en pm:create
+        // no-op: dejamos solo botones habilitados
       }
     } catch {}
 
@@ -299,8 +315,8 @@ export default function GeoMap({
     const onCreate = async (e) => {
       const gate = requireWritableContext();
       if (!gate.ok) {
-        alert(gate.msg);
-        e.layer?.remove?.();
+        notify({ type: "info", text: gate.msg });
+        try { e.layer?.remove?.(); } catch {}
         return;
       }
 
@@ -341,20 +357,23 @@ export default function GeoMap({
         fg.addLayer(layer);
       } catch (err) {
         console.error("[GeoMap] onCreateFeature error:", err);
-        alert("No se pudo guardar la geocerca.");
-        layer?.remove?.();
+        notify({ type: "error", text: "No se pudo guardar la geocerca.", error: err });
+        try { layer?.remove?.(); } catch {}
       }
     };
 
     const onEdit = async (e) => {
       const gate = requireWritableContext();
-      if (!gate.ok) return;
+      if (!gate.ok) {
+        notify({ type: "info", text: gate.msg });
+        return;
+      }
 
       const layers = e.layers || new L.LayerGroup([e.layer]);
       layers.eachLayer(async (layer) => {
         try {
           const id = layer._dbId;
-          if (!id) return; // si no tiene id, es draft o capa vieja
+          if (!id) return;
 
           const gj = layer.toGeoJSON();
           const polygon = polygonLegacyFromFeature(gj);
@@ -376,14 +395,17 @@ export default function GeoMap({
           }
         } catch (err) {
           console.error("[GeoMap] onEditFeature error:", err);
-          alert("No se pudo actualizar la geocerca.");
+          notify({ type: "error", text: "No se pudo actualizar la geocerca.", error: err });
         }
       });
     };
 
     const onRemove = async (e) => {
       const gate = requireWritableContext();
-      if (!gate.ok) return;
+      if (!gate.ok) {
+        notify({ type: "info", text: gate.msg });
+        return;
+      }
 
       const layers = e.layers || new L.LayerGroup([e.layer]);
       layers.eachLayer(async (layer) => {
@@ -396,7 +418,7 @@ export default function GeoMap({
           }
         } catch (err) {
           console.error("[GeoMap] onDeleteFeature error:", err);
-          alert("No se pudo eliminar la geocerca.");
+          notify({ type: "error", text: "No se pudo eliminar la geocerca.", error: err });
         }
       });
     };
