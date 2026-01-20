@@ -1,6 +1,6 @@
 // src/pages/ResetPassword.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabaseRecovery } from "../supabaseClient";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 function isStrongEnough(pw) {
@@ -16,7 +16,7 @@ function parseUrlParams() {
 
   return {
     token_hash: query.get("token_hash") || "",
-    type: (query.get("type") || hash.get("type") || "").toLowerCase(), // recovery
+    type: (query.get("type") || hash.get("type") || "recovery").toLowerCase(),
     code: query.get("code") || "",
     access_token: hash.get("access_token") || "",
     refresh_token: hash.get("refresh_token") || "",
@@ -29,30 +29,30 @@ function parseUrlParams() {
  * - #access_token=...&refresh_token=...
  * - ?token_hash=...&type=recovery
  *
- * Devuelve true si deja sesión activa en memoria.
+ * Devuelve true si deja sesión activa (y persistida) para updateUser().
  */
 async function ensureSessionFromUrl() {
   // 1) Si ya hay sesión, listo
-  const { data: s0 } = await supabase.auth.getSession();
+  const { data: s0 } = await supabaseRecovery.auth.getSession();
   if (s0?.session?.user?.id) return true;
 
   const { token_hash, type, code, access_token, refresh_token } = parseUrlParams();
 
   // 2) PKCE code
   if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabaseRecovery.auth.exchangeCodeForSession(code);
     if (!error && data?.session?.user?.id) return true;
   }
 
   // 3) Hash tokens
   if (access_token && refresh_token) {
-    const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+    const { data, error } = await supabaseRecovery.auth.setSession({ access_token, refresh_token });
     if (!error && data?.session?.user?.id) return true;
   }
 
-  // 4) token_hash + type
+  // 4) token_hash + type (recovery)
   if (token_hash && type) {
-    const { data, error } = await supabase.auth.verifyOtp({ token_hash, type });
+    const { data, error } = await supabaseRecovery.auth.verifyOtp({ token_hash, type });
     if (!error && data?.session?.user?.id) return true;
   }
 
@@ -78,7 +78,7 @@ export default function ResetPassword() {
     return isStrongEnough(password);
   }, [password, password2]);
 
-  // Bootstrap: solo verifica que el link permite crear sesión
+  // Bootstrap: verifica que el link permite crear sesión recovery
   useEffect(() => {
     let cancelled = false;
 
@@ -101,8 +101,7 @@ export default function ResetPassword() {
           return;
         }
 
-        // Limpieza de URL para que no queden tokens visibles (opcional pero recomendado)
-        // Mantiene la pantalla en /reset-password
+        // Opcional: limpiar URL (sin borrar sesión, que queda en localStorage del cliente recovery)
         window.history.replaceState({}, document.title, "/reset-password");
 
         setReady(true);
@@ -138,7 +137,7 @@ export default function ResetPassword() {
     try {
       setBusy(true);
 
-      // 🔥 CLAVE: Re-asegurar sesión justo antes de updateUser (no dependemos de persistencia)
+      // Re-asegurar sesión justo antes de updateUser (por si el browser recargó, etc.)
       const ok = await ensureSessionFromUrl();
       if (!ok) {
         setMsg({
@@ -149,8 +148,8 @@ export default function ResetPassword() {
         return;
       }
 
-      // Ahora sí, cambia password
-      const { error } = await supabase.auth.updateUser({ password });
+      // Cambia password (requiere sesión activa en el cliente recovery)
+      const { error } = await supabaseRecovery.auth.updateUser({ password });
 
       if (error) {
         setMsg({ type: "error", text: error.message || "No se pudo actualizar." });
@@ -159,8 +158,8 @@ export default function ResetPassword() {
 
       setMsg({ type: "success", text: "✅ Contraseña actualizada. Ya puedes iniciar sesión." });
 
-      // Forzar login limpio con la nueva contraseña
-      await supabase.auth.signOut().catch(() => {});
+      // Cerrar sesión recovery para evitar que quede un estado intermedio
+      await supabaseRecovery.auth.signOut().catch(() => {});
       setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (e2) {
       setMsg({ type: "error", text: e2?.message || "Error inesperado." });
@@ -234,7 +233,7 @@ export default function ResetPassword() {
             </button>
 
             <div className="text-[11px] text-slate-500">
-              Tip: genera un link nuevo y ábrelo en incógnito.
+              Tip: si falla, genera un link nuevo y ábrelo en incógnito.
             </div>
           </form>
         )}
