@@ -17,6 +17,7 @@ async function callInviteTracker(payload) {
       ok: false,
       status: 401,
       data: { error: "No session token (user not authenticated)" },
+      url: null,
     };
   }
 
@@ -40,12 +41,11 @@ async function callInviteTracker(payload) {
       data: {
         error: "Network error calling invite_tracker",
         details: String(networkErr?.message || networkErr),
-        url,
       },
+      url,
     };
   }
 
-  // Intentar JSON, si falla leer texto crudo (muy común en 502/504/html)
   let json = null;
   let rawText = "";
   try {
@@ -88,7 +88,7 @@ export default function InvitarTracker() {
   const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text }
   const [actionLink, setActionLink] = useState("");
 
-  // Diagnóstico del server de invitación (para no adivinar)
+  // diagnóstico del server
   const [inviteDiag, setInviteDiag] = useState(null); // {status,url,body}
 
   const selectedPersonLabel = useMemo(() => {
@@ -174,7 +174,6 @@ export default function InvitarTracker() {
         org_id: currentOrg.id,
       });
 
-      // ✅ Diagnóstico visible
       if (!resp.ok) {
         setInviteDiag({
           status: resp.status,
@@ -182,7 +181,6 @@ export default function InvitarTracker() {
           body: resp.data,
         });
 
-        // Mensaje más útil según status
         let friendly = t("inviteTracker.messages.serverProblem", {
           defaultValue: "There was a problem contacting the invitation server.",
         });
@@ -190,7 +188,7 @@ export default function InvitarTracker() {
         if (resp.status === 0) friendly = "Network error contacting invitation server.";
         if (resp.status === 401) friendly = "Unauthorized (session/token). Please re-login.";
         if (resp.status === 404) friendly = "invite_tracker function not found (404).";
-        if (resp.status >= >= 500) friendly = "Server error in invite_tracker (5xx).";
+        if (resp.status >= 500) friendly = "Server error in invite_tracker (5xx).";
 
         const serverMsg =
           resp?.data?.error ||
@@ -206,21 +204,15 @@ export default function InvitarTracker() {
 
       if (!resp.data) {
         setInviteDiag({ status: resp.status, url: resp.url, body: null });
-        setMessage({
-          type: "error",
-          text: "Invitation server returned empty response.",
-        });
+        setMessage({ type: "error", text: "Invitation server returned empty response." });
         return;
       }
 
-      const via = resp.data.invited_via;
+      const via = resp.data.invited_via; // "email" | "action_link"
       const link = resp.data.action_link || "";
 
       if (via === "email") {
-        setMessage({
-          type: "success",
-          text: `✅ Invitación enviada por correo a ${cleanEmail}.`,
-        });
+        setMessage({ type: "success", text: `✅ Invitación enviada por correo a ${cleanEmail}.` });
       } else {
         setActionLink(link);
         setMessage({
@@ -272,6 +264,7 @@ export default function InvitarTracker() {
               <div className="text-sm font-semibold">
                 {t("inviteTracker.form.selectPersonTitle", { defaultValue: "Seleccionar persona" })}
               </div>
+
               <div className="text-xs text-slate-600 mt-1">
                 {selectedPersonLabel
                   ? selectedPersonLabel
@@ -279,6 +272,7 @@ export default function InvitarTracker() {
                       defaultValue: "Selecciona una persona activa para autocompletar el email.",
                     })}
               </div>
+
               <div className="text-[11px] text-slate-500 mt-1">
                 {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
                 <span className="font-semibold">{peopleList.length}</span>
@@ -313,6 +307,7 @@ export default function InvitarTracker() {
               <option value="">
                 {peopleList.length > 0 ? "Selecciona una persona activa" : "(No hay personal activo)"}
               </option>
+
               {peopleList.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -339,11 +334,12 @@ export default function InvitarTracker() {
 
         {message && <div className={`text-sm ${msgClass}`}>{message.text}</div>}
 
-        {/* ✅ Diagnóstico visible SOLO si falla */}
         {inviteDiag && (
           <div className="text-xs bg-slate-50 border rounded p-3">
             <div className="font-semibold mb-1">Invite server diagnostic</div>
-            <div>Status: <span className="font-semibold">{inviteDiag.status}</span></div>
+            <div>
+              Status: <span className="font-semibold">{inviteDiag.status}</span>
+            </div>
             <div className="break-all">URL: {inviteDiag.url}</div>
             <div className="mt-2 font-semibold">Body:</div>
             <pre className="mt-1 whitespace-pre-wrap break-words bg-white border rounded p-2">
@@ -355,6 +351,7 @@ export default function InvitarTracker() {
         {actionLink ? (
           <div className="text-xs break-all bg-slate-50 border rounded p-3">
             <div className="font-semibold mb-2">Magic Link (tracker)</div>
+
             <div className="flex gap-2 mb-2">
               <button
                 type="button"
@@ -363,6 +360,7 @@ export default function InvitarTracker() {
               >
                 Copiar link
               </button>
+
               <button
                 type="button"
                 onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
@@ -371,6 +369,7 @@ export default function InvitarTracker() {
                 Probar link
               </button>
             </div>
+
             <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
           </div>
         ) : null}
