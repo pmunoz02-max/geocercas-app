@@ -25,17 +25,29 @@ function normalizeNombreCi(nombre) {
   return String(nombre || "").trim().toLowerCase();
 }
 
+// Cache-buster universal (mata caches intermedios)
+function withTs(url) {
+  const ts = Date.now();
+  return url.includes("?") ? `${url}&_ts=${ts}` : `${url}?_ts=${ts}`;
+}
+
 export async function listGeocercas({ orgId, onlyActive = true } = {}) {
   if (!orgId) return [];
 
-  const url =
+  let url =
     `/api/geocercas?action=list&org_id=${encodeURIComponent(orgId)}` +
     (onlyActive ? "&onlyActive=1" : "&onlyActive=0");
+
+  url = withTs(url);
 
   const r = await fetch(url, {
     method: "GET",
     credentials: "include",
     cache: "no-store",
+    headers: {
+      "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+      Pragma: "no-cache",
+    },
   });
 
   const data = await readJsonSafe(r);
@@ -48,13 +60,19 @@ export async function listGeocercas({ orgId, onlyActive = true } = {}) {
 export async function getGeocerca({ id, orgId } = {}) {
   if (!orgId || !id) return null;
 
-  const url =
+  let url =
     `/api/geocercas?action=get&org_id=${encodeURIComponent(orgId)}&id=${encodeURIComponent(id)}`;
+
+  url = withTs(url);
 
   const r = await fetch(url, {
     method: "GET",
     credentials: "include",
     cache: "no-store",
+    headers: {
+      "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+      Pragma: "no-cache",
+    },
   });
 
   const data = await readJsonSafe(r);
@@ -68,8 +86,13 @@ export async function upsertGeocerca(payload) {
 
   const r = await fetch("/api/geocercas", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
+    },
     credentials: "include",
+    cache: "no-store",
     body: JSON.stringify({ action: "upsert", ...payload }),
   });
 
@@ -80,20 +103,10 @@ export async function upsertGeocerca(payload) {
 }
 
 // Soft delete DB-first: activo=false
-// Puedes borrar por:
-// - id
-// - nombre_ci
-// - nombre (se normaliza a nombre_ci)
-// - ids[]
-// - nombres_ci[]
 export async function deleteGeocerca({ orgId, id, nombre_ci, nombre, ids, nombres_ci } = {}) {
   if (!orgId) throw new Error("deleteGeocerca requiere orgId");
 
-  // Normalizaciones
-  const payload = {
-    action: "delete",
-    org_id: orgId,
-  };
+  const payload = { action: "delete", org_id: orgId };
 
   if (id) payload.id = String(id);
   if (nombre_ci) payload.nombre_ci = String(nombre_ci);
@@ -102,11 +115,8 @@ export async function deleteGeocerca({ orgId, id, nombre_ci, nombre, ids, nombre
   if (Array.isArray(ids) && ids.length) payload.ids = ids.map(String);
   if (Array.isArray(nombres_ci) && nombres_ci.length) payload.nombres_ci = nombres_ci.map(String);
 
-  // fallback: si viene nombre pero no nombre_ci
   if (!payload.nombre_ci && payload.nombre) payload.nombre_ci = normalizeNombreCi(payload.nombre);
 
-  // ✅ BLINDAJE CRÍTICO:
-  // Si no hay ningún target real (id/ids/nombre_ci/nombres_ci), NO hacemos fetch.
   const hasTargets =
     Boolean(payload.id) ||
     Boolean(payload.nombre_ci) ||
@@ -124,8 +134,13 @@ export async function deleteGeocerca({ orgId, id, nombre_ci, nombre, ids, nombre
 
   const r = await fetch("/api/geocercas", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
+    },
     credentials: "include",
+    cache: "no-store",
     body: JSON.stringify(payload),
   });
 

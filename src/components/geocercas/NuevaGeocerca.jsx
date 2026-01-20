@@ -155,9 +155,7 @@ async function listGeofencesUnified({ orgId }) {
   if (orgId) {
     try {
       const apiItems = await listGeocercas({ orgId, onlyActive: true });
-      for (const r of apiItems) {
-        list.push({ id: r.id, nombre: r.nombre, source: "api" });
-      }
+      for (const r of apiItems) list.push({ id: r.id, nombre: r.nombre, source: "api" });
     } catch {
       // ignore
     }
@@ -406,15 +404,12 @@ export default function NuevaGeocerca() {
     setCoordText("");
   }, [coordText, clearCanvas, t]);
 
-  // Save only does: upsert -> list -> setGeofenceList
-  // No secondary calls. No delete. No cleanup.
+  // ✅ FIX REAL: optimistic insert + refresh con cache-buster (en geocercasApi)
   const handleSave = useCallback(async () => {
     try {
       const nm = String(geofenceName || "").trim();
       if (!nm) {
-        alert(
-          t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
-        );
+        alert(t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." }));
         return;
       }
 
@@ -456,8 +451,13 @@ export default function NuevaGeocerca() {
         }
       } catch {}
 
-      // upsert API
-      await upsertGeocerca({
+      // ✅ 1) Optimistic: aparece inmediatamente en el panel
+      setGeofenceList((prev) =>
+        mergeUniqueByNombre([{ id: `optim-${Date.now()}`, nombre: nm, source: "api" }, ...(prev || [])])
+      );
+
+      // ✅ 2) Upsert real
+      const saved = await upsertGeocerca({
         org_id: orgId,
         nombre: nm,
         nombre_ci: normalizeNombreCi(nm),
@@ -470,54 +470,38 @@ export default function NuevaGeocerca() {
       setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
 
-      // IMPORTANT: refresh list from API
-      // This is the key fix: upsert then list, without any other POST.
-      try {
-        const apiItems = await listGeocercas({ orgId, onlyActive: true });
-        const ui = apiItems.map((r) => ({ id: r.id, nombre: r.nombre, source: "api" }));
-        const merged = mergeUniqueByNombre([...ui, ...readLocalGeocercas()]);
-        setGeofenceList(merged);
-      } catch {
-        // fallback: at least show in list locally
-        setGeofenceList((prev) => mergeUniqueByNombre([{ nombre: nm, source: "api" }, ...(prev || [])]));
-      }
+      // ✅ 3) Refresh “real” (GET con _ts)
+      await refreshGeofenceList();
 
-      // clear draft name + draft feature
+      // Limpieza UI
       setGeofenceName("");
       setDraftFeature(null);
+
+      // (opcional) si saved trae id, queda ya estable tras refresh
+      void saved;
 
       alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
     } catch (e) {
       alert(e?.message || String(e));
     }
-  }, [geofenceName, currentOrg?.id, draftFeature, t]);
+  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
-      alert(
-        t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
-      );
+      alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
       return;
     }
 
-    if (
-      !window.confirm(
-        t("geocercas.deleteConfirm", { defaultValue: "Eliminar las geocercas seleccionadas?" })
-      )
-    ) {
+    if (!window.confirm(t("geocercas.deleteConfirm", { defaultValue: "Eliminar las geocercas seleccionadas?" }))) {
       return;
     }
 
     const orgId = currentOrg?.id || null;
-    const names = Array.from(selectedNames)
-      .map((x) => String(x || "").trim())
-      .filter(Boolean);
+    const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
 
     try {
-      // local cleanup
       deleteFromLocalStorageByNames(names);
 
-      // API delete only when user confirmed delete
       if (orgId) {
         await deleteGeocerca({
           orgId,
@@ -525,7 +509,6 @@ export default function NuevaGeocerca() {
         });
       }
 
-      // UI reset
       setSelectedNames(() => new Set());
       setLastSelectedName(null);
       setViewFeature(null);
@@ -555,9 +538,7 @@ export default function NuevaGeocerca() {
       if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
 
       if (!nameToShow) {
-        alert(
-          t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
-        );
+        alert(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
         return;
       }
 
@@ -566,13 +547,11 @@ export default function NuevaGeocerca() {
 
       let geo = null;
 
-      // Prefer API (by id)
-      if (item.source === "api" && orgId && item.id) {
+      if (item.source === "api" && orgId && item.id && !String(item.id).startsWith("optim-")) {
         const row = await getGeocerca({ id: item.id, orgId });
         geo = normalizeGeojson(row?.geojson || row?.geometry);
       }
 
-      // fallback localStorage
       if (!geo && typeof window !== "undefined") {
         const key = item.key || `geocerca_${item.nombre}`;
         const raw = localStorage.getItem(key);
@@ -607,7 +586,8 @@ export default function NuevaGeocerca() {
 
   const pointStyle = useMemo(
     () => ({
-      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
+      pointToLayer: (_feature, latlng) =>
+        L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
     }),
     []
   );
