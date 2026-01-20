@@ -1,10 +1,11 @@
 // api/geocercas.js
-// v7: API-first + UX-safe status + soft delete DB-first
+// v8: API-first + UX-safe + anti-cache REAL (CDN + Vary) + soft delete DB-first
 // - GET action=list: SIEMPRE 200 con {ok:true|false, items:[]}
 // - GET action=get
 // - POST action=upsert
 // - POST action=delete (soft delete: activo=false) UX-safe (nunca 400 por targets vacios)
-// - Header X-Api-Version para verificar que Vercel usa este archivo
+// - Headers anti-cache fuertes + Vary: Cookie (evita cache entre sesiones/orgs)
+// - Header X-Api-Version para verificar en Network que Vercel sirve ESTE archivo
 
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
@@ -16,9 +17,24 @@ function getCookie(req, name) {
 }
 
 function setHeaders(res) {
+  // 🔒 Anti-cache fuerte (browser + CDN/proxy)
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Cache-Control", "no-store");
-  res.setHeader("X-Api-Version", "geocercas-api-v7-uxsafe-delete");
+
+  // Evita cache en browser
+  res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  // Evita cache en CDNs (Vercel / proxies)
+  res.setHeader("CDN-Cache-Control", "no-store");
+  res.setHeader("Surrogate-Control", "no-store");
+
+  // MUY IMPORTANTE: cache key debe variar por cookie (tg_at)
+  // Sin esto, es común ver “lista vieja” hasta recargar.
+  res.setHeader("Vary", "Cookie");
+
+  // Debug version
+  res.setHeader("X-Api-Version", "geocercas-api-v8-anti-cache-vary-cookie");
 }
 
 function send(res, status, body) {
@@ -60,6 +76,8 @@ async function sbFetch({ url, anonKey, accessToken, method = "GET", body }) {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    // 🔒 Evita caché del runtime (por si acaso)
+    cache: "no-store",
   });
 
   const text = await r.text();
@@ -124,6 +142,7 @@ export default async function handler(req, res) {
 
         const activoFilter = onlyActive ? `&activo=eq.true` : ``;
 
+        // OJO: aquí NO uses caches. Ya estamos con Vary + CDN no-store.
         const url =
           `${SUPABASE_URL}/rest/v1/geocercas` +
           `?org_id=eq.${encodeURIComponent(org_id)}` +
@@ -138,13 +157,15 @@ export default async function handler(req, res) {
           method: "GET",
         });
 
-        if (!r.ok)
+        // UX-safe: nunca 400 en list, siempre 200 con ok false
+        if (!r.ok) {
           return ok(res, {
             ok: false,
             items: [],
             supabase_status: r.status,
             details: r.data,
           });
+        }
 
         return ok(res, { ok: true, items: Array.isArray(r.data) ? r.data : [] });
       }
@@ -169,7 +190,9 @@ export default async function handler(req, res) {
           method: "GET",
         });
 
-        if (!r.ok) return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
+        if (!r.ok) {
+          return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
+        }
 
         const row = Array.isArray(r.data) ? r.data[0] : r.data;
         return ok(res, { ok: true, geocerca: row || null });
@@ -226,7 +249,9 @@ export default async function handler(req, res) {
           body: row,
         });
 
-        if (!r.ok) return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
+        if (!r.ok) {
+          return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
+        }
 
         const saved = Array.isArray(r.data) ? r.data[0] : r.data;
         return ok(res, { ok: true, geocerca: saved });
@@ -247,14 +272,10 @@ export default async function handler(req, res) {
         if (id) targets.push({ type: "id", value: id });
         if (nombre_ci) targets.push({ type: "nombre_ci", value: nombre_ci });
         if (nombre) targets.push({ type: "nombre_ci", value: nombre.toLowerCase() });
-        if (Array.isArray(ids)) {
-          for (const x of ids) if (x) targets.push({ type: "id", value: String(x) });
-        }
-        if (Array.isArray(nombres_ci)) {
+        if (Array.isArray(ids)) for (const x of ids) if (x) targets.push({ type: "id", value: String(x) });
+        if (Array.isArray(nombres_ci))
           for (const x of nombres_ci) if (x) targets.push({ type: "nombre_ci", value: String(x).toLowerCase() });
-        }
 
-        // ✅ CAMBIO CLAVE: si no hay targets, no rompemos UI (200, skipped)
         if (!targets.length) {
           return ok(res, {
             ok: true,
@@ -284,10 +305,7 @@ export default async function handler(req, res) {
             anonKey: SUPABASE_ANON_KEY,
             accessToken,
             method: "PATCH",
-            body: {
-              activo: false,
-              updated_at: new Date().toISOString(),
-            },
+            body: { activo: false, updated_at: new Date().toISOString() },
           });
 
           if (!r.ok) {
