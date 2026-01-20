@@ -32,12 +32,13 @@ async function callInviteTracker(payload) {
   return { ok: res.ok, status: res.status, data: json };
 }
 
-// Helpers universales (toleran cambios de columnas en la vista)
+// ---- Normalización universal (tolerante a distintos esquemas/vistas) ----
 function pickId(row) {
   return (
     row?.org_people_id ??
     row?.org_person_id ??
     row?.org_personnel_id ??
+    row?.org_people_ui_id ??
     row?.personal_id ??
     row?.person_id ??
     row?.id ??
@@ -59,7 +60,7 @@ function pickLastName(row) {
 
 function isActiveRow(row) {
   const deleted =
-    row?.is_deleted ?? row?.deleted ?? row?.isDeleted ?? row?.is_removed ?? row?.removed ?? false;
+    row?.is_deleted ?? row?.deleted ?? row?.isDeleted ?? row?.removed ?? row?.is_removed ?? false;
 
   const active =
     row?.active ?? row?.is_active ?? row?.isActive ?? row?.enabled ?? row?.is_enabled ?? true;
@@ -75,6 +76,19 @@ function formatPersonLabel(row) {
   return `${full || "—"} — ${email || "—"}`.trim();
 }
 
+// Detecta la columna de organización en la vista, sin suposiciones
+function detectOrgKey(sampleRow) {
+  if (!sampleRow || typeof sampleRow !== "object") return null;
+  const candidates = ["org_id", "tenant_id", "organization_id", "company_id"];
+  for (const k of candidates) {
+    if (k in sampleRow) return k;
+  }
+  // fallback por heurística: algún key que termine en "_org_id"
+  const keys = Object.keys(sampleRow);
+  const heuristic = keys.find((k) => /org_id$/i.test(k));
+  return heuristic || null;
+}
+
 export default function InvitarTracker() {
   const { currentOrg, ready } = useAuth();
   const { t } = useTranslation();
@@ -82,15 +96,22 @@ export default function InvitarTracker() {
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
 
-  // [{ id, label, email }]
-  const [peopleList, setPeopleList] = useState([]);
+  const [peopleList, setPeopleList] = useState([]); // [{ id, email, label }]
   const [selectedPersonId, setSelectedPersonId] = useState("");
 
-  const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text }
+  const [message, setMessage] = useState(null); // { type, text }
   const [actionLink, setActionLink] = useState("");
 
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [peopleError, setPeopleError] = useState("");
+
+  // Diagnóstico visible
+  const [stats, setStats] = useState({
+    orgKey: null,
+    totalRows: 0,
+    orgRows: 0,
+    activeRows: 0,
+  });
 
   const selectedPersonLabel = useMemo(() => {
     const p = peopleList.find((x) => String(x.id) === String(selectedPersonId));
@@ -102,13 +123,13 @@ export default function InvitarTracker() {
 
     setLoadingPeople(true);
     setPeopleError("");
+    setStats({ orgKey: null, totalRows: 0, orgRows: 0, activeRows: 0 });
 
-    // select("*") para no depender del nombre exacto de columnas
+    // 👇 Clave: NO filtramos por org_id en SQL porque la vista puede no tener esa columna
     const { data, error } = await supabase
       .from("v_org_people_ui")
       .select("*")
-      .eq("org_id", currentOrg.id)
-      .limit(500);
+      .limit(1000);
 
     if (error) {
       console.error("[InvitarTracker] loadPeople error:", error);
@@ -119,20 +140,31 @@ export default function InvitarTracker() {
     }
 
     const rows = Array.isArray(data) ? data : [];
+    const sample = rows[0] || null;
+    const orgKey = detectOrgKey(sample);
+    const orgId = String(currentOrg.id);
 
-    const normalized = rows
-      .filter(isActiveRow)
+    const rowsForOrg = orgKey
+      ? rows.filter((r) => String(r?.[orgKey] ?? "") === orgId)
+      : rows; // si no se detecta orgKey, no filtramos (mejor que 0)
+
+    const activeForOrg = rowsForOrg.filter(isActiveRow);
+
+    const normalized = activeForOrg
       .map((r) => {
         const id = pickId(r);
         const em = pickEmail(r);
-        return {
-          id,
-          email: em,
-          label: formatPersonLabel(r),
-        };
+        return { id, email: em, label: formatPersonLabel(r) };
       })
       .filter((x) => x.id && x.email)
       .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+
+    setStats({
+      orgKey,
+      totalRows: rows.length,
+      orgRows: rowsForOrg.length,
+      activeRows: activeForOrg.length,
+    });
 
     setPeopleList(normalized);
     setLoadingPeople(false);
@@ -241,7 +273,6 @@ export default function InvitarTracker() {
       </h1>
 
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
-        {/* Drop list bien implementada (SIEMPRE habilitada) */}
         <div className="border rounded-lg p-3 bg-slate-50">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -257,13 +288,12 @@ export default function InvitarTracker() {
                     })}
               </div>
 
-              {/* Diagnóstico visible */}
+              {/* Diagnóstico que nos dice por qué “no hay activos” */}
               <div className="text-[11px] text-slate-500 mt-1">
-                {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
-                <span className="font-semibold">{peopleList.length}</span>
-                {loadingPeople ? (
-                  <span className="ml-2">({t("inviteTracker.form.loadingPeople", { defaultValue: "cargando…" })})</span>
-                ) : null}
+                OrgKey: <span className="font-semibold">{stats.orgKey || "no-detectada"}</span>{" "}
+                · Total: <span className="font-semibold">{stats.totalRows}</span> · En esta org:{" "}
+                <span className="font-semibold">{stats.orgRows}</span> · Activos:{" "}
+                <span className="font-semibold">{stats.activeRows}</span>
               </div>
             </div>
 
@@ -291,12 +321,6 @@ export default function InvitarTracker() {
               className="w-full border rounded px-3 py-2 text-sm bg-white"
               value={selectedPersonId}
               onChange={handleSelectPerson}
-              onFocus={() => {
-                // UX: si el usuario entra y aún no hay datos, intentamos cargar (sin bloquear)
-                if (!loadingPeople && peopleList.length === 0 && !peopleError && currentOrg?.id) {
-                  loadPeople();
-                }
-              }}
             >
               <option value="">
                 {peopleList.length > 0
@@ -313,7 +337,6 @@ export default function InvitarTracker() {
           </div>
         </div>
 
-        {/* Email (autocompleta al elegir persona) */}
         <input
           type="email"
           className="w-full border rounded px-3 py-2 text-sm"
@@ -322,10 +345,7 @@ export default function InvitarTracker() {
           onChange={(e) => setEmail(e.target.value)}
         />
 
-        <button
-          disabled={sending}
-          className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm"
-        >
+        <button disabled={sending} className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm">
           {sending
             ? t("inviteTracker.form.buttonSending", { defaultValue: "Enviando…" })
             : t("inviteTracker.form.buttonSend", { defaultValue: "Send invitation" })}
