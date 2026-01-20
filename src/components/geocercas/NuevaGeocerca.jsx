@@ -453,14 +453,11 @@ export default function NuevaGeocerca() {
     showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
-  // ✅ Save (corrige UX): el error rojo solo aparece si falla el UPSERT real.
-  // Si falla el refresh, muestra INFO (sin decir que no se guardó).
+  // ✅ Save definitivo: si el UPSERT falla pero en realidad ya se guardó, lo detectamos y NO mostramos error falso.
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
     if (!nm) {
-      showErr(
-        t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
-      );
+      showErr(t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." }));
       return;
     }
 
@@ -510,37 +507,61 @@ export default function NuevaGeocerca() {
       ])
     );
 
-    // 4) Upsert real (único punto crítico)
+    const nombre_ci = normalizeNombreCi(nm);
+
+    // 4) Upsert real (crítico) + verificación anti-falso-error
+    let upsertOk = false;
     try {
       await upsertGeocerca({
         org_id: orgId,
         nombre: nm,
-        nombre_ci: normalizeNombreCi(nm),
+        nombre_ci,
         geojson: geo,
         geometry: geo,
       });
+      upsertOk = true;
     } catch (e) {
-      console.error("[NuevaGeocerca] upsert error", e);
-      showErr(
-        t("geocercas.errorSave", {
-          defaultValue: "No se pudo guardar la geocerca.",
-        }),
-        e
-      );
-      return;
+      console.warn("[NuevaGeocerca] upsert falló; verificando existencia...", e);
+
+      // 🔎 Verificación: si ya existe en DB, consideramos OK (evita el mensaje falso)
+      try {
+        const items = await listGeocercas({ orgId, onlyActive: false });
+        const exists = (items || []).some((g) => {
+          const n1 = normalizeNombreCi(g?.nombre || g?.name || "");
+          const n2 = normalizeNombreCi(g?.nombre_ci || "");
+          return n1 === nombre_ci || n2 === nombre_ci;
+        });
+
+        if (exists) {
+          upsertOk = true;
+        } else {
+          throw e;
+        }
+      } catch (verifyErr) {
+        console.error("[NuevaGeocerca] upsert error (confirmado)", verifyErr);
+        showErr(
+          t("geocercas.errorSave", {
+            defaultValue: "No se pudo guardar la geocerca.",
+          }),
+          verifyErr
+        );
+        return;
+      }
     }
 
-    // 5) UX post-save (no crítico)
-    setViewFeature(geo);
-    setViewCentroid(centroidFeatureFromGeojson(geo));
-    setViewId((x) => x + 1);
+    // 5) UX post-save
+    if (upsertOk) {
+      setViewFeature(geo);
+      setViewCentroid(centroidFeatureFromGeojson(geo));
+      setViewId((x) => x + 1);
 
-    setGeofenceName("");
-    setDraftFeature(null);
+      setGeofenceName("");
+      setDraftFeature(null);
 
-    showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+      showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+    }
 
-    // 6) Refresh best-effort (no debe disparar mensaje falso)
+    // 6) Refresh best-effort (no crítico)
     try {
       await refreshGeofenceList();
     } catch (e) {
@@ -564,9 +585,7 @@ export default function NuevaGeocerca() {
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
-      showErr(
-        t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
-      );
+      showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
       return;
     }
 
@@ -619,9 +638,7 @@ export default function NuevaGeocerca() {
       if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
 
       if (!nameToShow) {
-        showErr(
-          t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
-        );
+        showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
         return;
       }
 
