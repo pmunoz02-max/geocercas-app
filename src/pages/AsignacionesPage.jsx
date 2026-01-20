@@ -1,7 +1,7 @@
 // src/pages/AsignacionesPage.jsx
 // DEFINITIVO: Asignaciones usa personal (personal_id) + /api/asignaciones
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -23,6 +23,40 @@ function localDateTimeToISO(localDateTime) {
 
 // Importante: valores internos siguen siendo "activa/inactiva" (compat backend).
 const ESTADOS = ["todos", "activa", "inactiva"];
+
+// Icono calendario (SVG inline, sin dependencias)
+function CalendarIcon({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M8 3v2M16 3v2" />
+      <path d="M3 9h18" />
+      <path d="M6 5h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z" />
+    </svg>
+  );
+}
+
+function openNativePicker(inputEl) {
+  if (!inputEl) return;
+  // showPicker() funciona en Chromium modernos para inputs date/datetime-local
+  try {
+    if (typeof inputEl.showPicker === "function") {
+      inputEl.showPicker();
+      return;
+    }
+  } catch (_) {
+    // ignore
+  }
+  // Fallback
+  inputEl.focus();
+  inputEl.click();
+}
 
 export default function AsignacionesPage() {
   const { t } = useTranslation();
@@ -46,6 +80,10 @@ export default function AsignacionesPage() {
   const [frecuenciaEnvioMin, setFrecuenciaEnvioMin] = useState(5);
   const [status, setStatus] = useState("activa");
   const [editingId, setEditingId] = useState(null);
+
+  // Refs para abrir el picker con el icono
+  const startInputRef = useRef(null);
+  const endInputRef = useRef(null);
 
   // CATALOGOS
   const [personalOptions, setPersonalOptions] = useState([]);
@@ -237,7 +275,8 @@ export default function AsignacionesPage() {
   const labelForEstado = (v) => {
     if (v === "todos") return t("asignaciones.filters.status.todos", { defaultValue: "All" });
     if (v === "activa") return t("asignaciones.filters.status.activo", { defaultValue: "Active" });
-    if (v === "inactiva") return t("asignaciones.filters.status.inactivo", { defaultValue: "Inactive" });
+    if (v === "inactiva")
+      return t("asignaciones.filters.status.inactivo", { defaultValue: "Inactive" });
     return v;
   };
 
@@ -288,7 +327,8 @@ export default function AsignacionesPage() {
         {personalOptions.length === 0 && (
           <p className="text-red-600 font-semibold mb-3">
             {t("asignaciones.messages.noPersonal", {
-              defaultValue: "There is no active personnel in this organization. Create or reactivate at least one person.",
+              defaultValue:
+                "There is no active personnel in this organization. Create or reactivate at least one person.",
             })}
           </p>
         )}
@@ -296,7 +336,8 @@ export default function AsignacionesPage() {
         {activityOptions.length === 0 && (
           <p className="text-red-600 font-semibold mb-3">
             {t("asignaciones.messages.noActivities", {
-              defaultValue: "There are no activities created. Create at least one activity to assign.",
+              defaultValue:
+                "There are no activities created. Create at least one activity to assign.",
             })}
           </p>
         )}
@@ -359,7 +400,9 @@ export default function AsignacionesPage() {
               disabled={activityOptions.length === 0}
             >
               <option value="">
-                {t("asignaciones.form.activityPlaceholder", { defaultValue: "Select an activity" })}
+                {t("asignaciones.form.activityPlaceholder", {
+                  defaultValue: "Select an activity",
+                })}
               </option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -374,13 +417,30 @@ export default function AsignacionesPage() {
             <label className="mb-1 font-medium text-sm">
               {t("asignaciones.form.startLabel", { defaultValue: "Start date/time" })}
             </label>
-            <input
-              type="datetime-local"
-              className="border rounded px-3 py-2"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              required
-            />
+
+            <div className="relative">
+              <input
+                ref={startInputRef}
+                type="datetime-local"
+                className="border rounded px-3 py-2 w-full pr-10"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => openNativePicker(startInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                aria-label={t("asignaciones.form.openStartCalendar", {
+                  defaultValue: "Open start date/time picker",
+                })}
+                title={t("asignaciones.form.openStartCalendar", {
+                  defaultValue: "Open start date/time picker",
+                })}
+              >
+                <CalendarIcon />
+              </button>
+            </div>
           </div>
 
           {/* Fin */}
@@ -388,13 +448,30 @@ export default function AsignacionesPage() {
             <label className="mb-1 font-medium text-sm">
               {t("asignaciones.form.endLabel", { defaultValue: "End date/time" })}
             </label>
-            <input
-              type="datetime-local"
-              className="border rounded px-3 py-2"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              required
-            />
+
+            <div className="relative">
+              <input
+                ref={endInputRef}
+                type="datetime-local"
+                className="border rounded px-3 py-2 w-full pr-10"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => openNativePicker(endInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                aria-label={t("asignaciones.form.openEndCalendar", {
+                  defaultValue: "Open end date/time picker",
+                })}
+                title={t("asignaciones.form.openEndCalendar", {
+                  defaultValue: "Open end date/time picker",
+                })}
+              >
+                <CalendarIcon />
+              </button>
+            </div>
           </div>
 
           {/* Estado */}
@@ -442,11 +519,7 @@ export default function AsignacionesPage() {
             </button>
 
             {editingId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="border px-4 py-2 rounded"
-              >
+              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
                 {t("asignaciones.form.cancelEditButton", { defaultValue: "Cancel editing" })}
               </button>
             )}
@@ -476,19 +549,21 @@ export default function AsignacionesPage() {
         }}
         onDelete={async (id) => {
           const ok = window.confirm(
-            t("asignaciones.messages.confirmDelete", { defaultValue: "Are you sure you want to delete this assignment?" })
+            t("asignaciones.messages.confirmDelete", {
+              defaultValue: "Are you sure you want to delete this assignment?",
+            })
           );
           if (!ok) return;
 
           const resp = await deleteAsignacion(id);
           if (resp.error) {
             setError(
-              t("asignaciones.messages.deleteError", { defaultValue: "Could not delete the assignment." })
+              t("asignaciones.messages.deleteError", {
+                defaultValue: "Could not delete the assignment.",
+              })
             );
           } else {
-            setSuccessMessage(
-              t("asignaciones.banner.deleted", { defaultValue: "Assignment deleted." })
-            );
+            setSuccessMessage(t("asignaciones.banner.deleted", { defaultValue: "Assignment deleted." }));
             loadAll();
           }
         }}
