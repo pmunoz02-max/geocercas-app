@@ -238,15 +238,30 @@ export default function ActividadesPage() {
               className="border rounded p-3 flex items-center justify-between"
             >
               <div>
-                <div className="font-medium">{a.name}</div>
-                <div className="text-xs text-gray-500">
-                  {a.currency_code} · {a.hourly_rate} ·{" "}
-                  {a.active
-                    ? t("actividades.statusActive")
-                    : t("actividades.statusInactive")}
+                <div className="font-medium text-gray-900">{a.name}</div>
+
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-gray-800 font-medium">
+                    {a.currency_code} · {a.hourly_rate}
+                  </span>
+
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      a.active
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-200 text-gray-700"
+                    }`}
+                  >
+                    {a.active
+                      ? t("actividades.statusActive")
+                      : t("actividades.statusInactive")}
+                  </span>
                 </div>
+
                 {a.description && (
-                  <div className="text-sm text-gray-600">{a.description}</div>
+                  <div className="mt-1 text-sm text-gray-700">
+                    {a.description}
+                  </div>
                 )}
               </div>
 
