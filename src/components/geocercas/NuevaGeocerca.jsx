@@ -643,7 +643,7 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
         }
       }
 
-      alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+      alert("OK acb7e19 (nuevo bundle)");
 
       setGeofenceName("");
       setDraftFeature(null);
