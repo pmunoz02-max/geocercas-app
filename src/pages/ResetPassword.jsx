@@ -14,19 +14,54 @@ function parseUrlParams() {
   const hashRaw = (window.location.hash || "").replace(/^#/, "");
   const hash = new URLSearchParams(hashRaw);
 
-  const token_hash = query.get("token_hash") || "";
-  const type = (query.get("type") || hash.get("type") || "").toLowerCase(); // recovery
-  const code = query.get("code") || "";
+  return {
+    token_hash: query.get("token_hash") || "",
+    type: (query.get("type") || hash.get("type") || "").toLowerCase(), // recovery
+    code: query.get("code") || "",
+    access_token: hash.get("access_token") || "",
+    refresh_token: hash.get("refresh_token") || "",
+  };
+}
 
-  const access_token = hash.get("access_token") || "";
-  const refresh_token = hash.get("refresh_token") || "";
+/**
+ * Asegura sesión de Supabase usando cualquiera de los formatos:
+ * - ?code=...
+ * - #access_token=...&refresh_token=...
+ * - ?token_hash=...&type=recovery
+ *
+ * Devuelve true si deja sesión activa en memoria.
+ */
+async function ensureSessionFromUrl() {
+  // 1) Si ya hay sesión, listo
+  const { data: s0 } = await supabase.auth.getSession();
+  if (s0?.session?.user?.id) return true;
 
-  return { token_hash, type, code, access_token, refresh_token };
+  const { token_hash, type, code, access_token, refresh_token } = parseUrlParams();
+
+  // 2) PKCE code
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data?.session?.user?.id) return true;
+  }
+
+  // 3) Hash tokens
+  if (access_token && refresh_token) {
+    const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+    if (!error && data?.session?.user?.id) return true;
+  }
+
+  // 4) token_hash + type
+  if (token_hash && type) {
+    const { data, error } = await supabase.auth.verifyOtp({ token_hash, type });
+    if (!error && data?.session?.user?.id) return true;
+  }
+
+  return false;
 }
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams(); // mantiene rerender si cambian querys
+  const [searchParams] = useSearchParams(); // rerender cuando cambie query
 
   const [checking, setChecking] = useState(true);
   const [ready, setReady] = useState(false);
@@ -35,7 +70,7 @@ export default function ResetPassword() {
   const [password2, setPassword2] = useState("");
 
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null); // { type, text }
+  const [msg, setMsg] = useState(null); // { type: "error"|"success"|"warn", text }
 
   const canSubmit = useMemo(() => {
     if (!password || !password2) return false;
@@ -43,7 +78,7 @@ export default function ResetPassword() {
     return isStrongEnough(password);
   }, [password, password2]);
 
-  // Bootstrap universal: garantiza sesión para poder cambiar password
+  // Bootstrap: solo verifica que el link permite crear sesión
   useEffect(() => {
     let cancelled = false;
 
@@ -52,95 +87,29 @@ export default function ResetPassword() {
       setReady(false);
       setMsg(null);
 
-      const { token_hash, type, code, access_token, refresh_token } = parseUrlParams();
-
       try {
-        // 0) Si ya hay sesión, listo
-        const { data: s0 } = await supabase.auth.getSession();
+        const ok = await ensureSessionFromUrl();
         if (cancelled) return;
 
-        if (s0?.session?.user?.id) {
-          setReady(true);
+        if (!ok) {
+          setMsg({
+            type: "error",
+            text:
+              "No se pudo crear sesión con el link de recuperación. Genera un reset nuevo y ábrelo en incógnito.",
+          });
+          setReady(false);
           return;
         }
 
-        // 1) PKCE: si viene ?code=..., intercambiar por sesión
-        if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (cancelled) return;
+        // Limpieza de URL para que no queden tokens visibles (opcional pero recomendado)
+        // Mantiene la pantalla en /reset-password
+        window.history.replaceState({}, document.title, "/reset-password");
 
-          if (error) {
-            setMsg({
-              type: "error",
-              text:
-                "El link de recuperación no pudo validarse (code). Genera uno nuevo y ábrelo en incógnito.",
-            });
-            return;
-          }
-          if (data?.session?.user?.id) {
-            // limpia la URL (opcional)
-            window.history.replaceState({}, document.title, "/reset-password");
-            setReady(true);
-            return;
-          }
-        }
-
-        // 2) Hash tokens: #access_token=...&refresh_token=...
-        if (access_token && refresh_token) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token,
-            refresh_token,
-          });
-          if (cancelled) return;
-
-          if (error) {
-            setMsg({
-              type: "error",
-              text:
-                "No se pudo establecer la sesión de recuperación (tokens). Genera un link nuevo e inténtalo en incógnito.",
-            });
-            return;
-          }
-          if (data?.session?.user?.id) {
-            // limpia el hash para que no quede token en URL
-            window.history.replaceState({}, document.title, "/reset-password");
-            setReady(true);
-            return;
-          }
-        }
-
-        // 3) Token hash: ?token_hash=...&type=recovery
-        if (token_hash && type) {
-          const { data, error } = await supabase.auth.verifyOtp({
-            token_hash,
-            type, // recovery
-          });
-          if (cancelled) return;
-
-          if (error) {
-            setMsg({
-              type: "error",
-              text:
-                "El link de recuperación es inválido o expiró. Genera uno nuevo e inténtalo en incógnito.",
-            });
-            return;
-          }
-
-          if (data?.session?.user?.id) {
-            setReady(true);
-            return;
-          }
-        }
-
-        // Si llegamos aquí, no hubo forma de crear sesión
-        setMsg({
-          type: "error",
-          text:
-            "Auth session missing: no se pudo crear sesión con el link. Genera un nuevo reset y ábrelo en incógnito.",
-        });
+        setReady(true);
       } catch (e) {
         if (cancelled) return;
         setMsg({ type: "error", text: e?.message || "Error inesperado." });
+        setReady(false);
       } finally {
         if (!cancelled) setChecking(false);
       }
@@ -169,17 +138,20 @@ export default function ResetPassword() {
     try {
       setBusy(true);
 
-      const { data: s } = await supabase.auth.getSession();
-      if (!s?.session?.user?.id) {
+      // 🔥 CLAVE: Re-asegurar sesión justo antes de updateUser (no dependemos de persistencia)
+      const ok = await ensureSessionFromUrl();
+      if (!ok) {
         setMsg({
           type: "error",
           text:
-            "Auth session missing: abre el link de recuperación nuevamente (mejor en incógnito) o genera uno nuevo.",
+            "Auth session missing. Abre el link de recuperación nuevamente (mejor en incógnito) o genera uno nuevo.",
         });
         return;
       }
 
+      // Ahora sí, cambia password
       const { error } = await supabase.auth.updateUser({ password });
+
       if (error) {
         setMsg({ type: "error", text: error.message || "No se pudo actualizar." });
         return;
@@ -262,7 +234,7 @@ export default function ResetPassword() {
             </button>
 
             <div className="text-[11px] text-slate-500">
-              Tip: abre el link en incógnito. Si falla, genera uno nuevo.
+              Tip: genera un link nuevo y ábrelo en incógnito.
             </div>
           </form>
         )}
