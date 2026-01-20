@@ -3,6 +3,9 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "../supabaseClient.js";
 import { useTranslation } from "react-i18next";
 
+// ✅ MISMA FUENTE QUE /personal
+import { listPersonal } from "../lib/personalApi.js";
+
 async function callInviteTracker(payload) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -32,86 +35,27 @@ async function callInviteTracker(payload) {
   return { ok: res.ok, status: res.status, data: json };
 }
 
-// ---- Normalización universal (tolerante a distintos esquemas/vistas) ----
-function pickId(row) {
-  return (
-    row?.org_people_id ??
-    row?.org_person_id ??
-    row?.org_personnel_id ??
-    row?.org_people_ui_id ??
-    row?.personal_id ??
-    row?.person_id ??
-    row?.id ??
-    null
-  );
-}
-
-function pickEmail(row) {
-  return row?.email ?? row?.correo ?? row?.mail ?? "";
-}
-
-function pickFirstName(row) {
-  return row?.nombre ?? row?.first_name ?? row?.firstname ?? row?.name ?? "";
-}
-
-function pickLastName(row) {
-  return row?.apellido ?? row?.last_name ?? row?.lastname ?? row?.surname ?? "";
-}
-
-function isActiveRow(row) {
-  const deleted =
-    row?.is_deleted ?? row?.deleted ?? row?.isDeleted ?? row?.removed ?? row?.is_removed ?? false;
-
-  const active =
-    row?.active ?? row?.is_active ?? row?.isActive ?? row?.enabled ?? row?.is_enabled ?? true;
-
-  return deleted !== true && active !== false;
-}
-
-function formatPersonLabel(row) {
-  const first = pickFirstName(row);
-  const last = pickLastName(row);
-  const email = pickEmail(row);
-  const full = `${first} ${last}`.trim();
-  return `${full || "—"} — ${email || "—"}`.trim();
-}
-
-// Detecta la columna de organización en la vista, sin suposiciones
-function detectOrgKey(sampleRow) {
-  if (!sampleRow || typeof sampleRow !== "object") return null;
-  const candidates = ["org_id", "tenant_id", "organization_id", "company_id"];
-  for (const k of candidates) {
-    if (k in sampleRow) return k;
-  }
-  // fallback por heurística: algún key que termine en "_org_id"
-  const keys = Object.keys(sampleRow);
-  const heuristic = keys.find((k) => /org_id$/i.test(k));
-  return heuristic || null;
+function personLabel(p) {
+  const nombre = `${p?.nombre ?? ""} ${p?.apellido ?? ""}`.trim();
+  const email = String(p?.email ?? "").trim();
+  return `${nombre || "—"} — ${email || "—"}`.trim();
 }
 
 export default function InvitarTracker() {
-  const { currentOrg, ready } = useAuth();
+  const { currentOrg, ready, isLoggedIn } = useAuth();
   const { t } = useTranslation();
 
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
 
-  const [peopleList, setPeopleList] = useState([]); // [{ id, email, label }]
+  const [peopleList, setPeopleList] = useState([]); // [{id, label, email}]
   const [selectedPersonId, setSelectedPersonId] = useState("");
-
-  const [message, setMessage] = useState(null); // { type, text }
-  const [actionLink, setActionLink] = useState("");
 
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [peopleError, setPeopleError] = useState("");
 
-  // Diagnóstico visible
-  const [stats, setStats] = useState({
-    orgKey: null,
-    totalRows: 0,
-    orgRows: 0,
-    activeRows: 0,
-  });
+  const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text }
+  const [actionLink, setActionLink] = useState("");
 
   const selectedPersonLabel = useMemo(() => {
     const p = peopleList.find((x) => String(x.id) === String(selectedPersonId));
@@ -119,69 +63,51 @@ export default function InvitarTracker() {
   }, [peopleList, selectedPersonId]);
 
   async function loadPeople() {
-    if (!currentOrg?.id) return;
+    if (!isLoggedIn || !currentOrg?.id) return;
 
     setLoadingPeople(true);
     setPeopleError("");
-    setStats({ orgKey: null, totalRows: 0, orgRows: 0, activeRows: 0 });
 
-    // 👇 Clave: NO filtramos por org_id en SQL porque la vista puede no tener esa columna
-    const { data, error } = await supabase
-      .from("v_org_people_ui")
-      .select("*")
-      .limit(1000);
+    try {
+      // ✅ igual que /personal: onlyActive true
+      const rows = await listPersonal({ q: "", onlyActive: true, limit: 500 });
 
-    if (error) {
-      console.error("[InvitarTracker] loadPeople error:", error);
+      const normalized = (Array.isArray(rows) ? rows : [])
+        // onlyActive ya filtra, pero por seguridad:
+        .filter((r) => r?.vigente === true || r?.vigente === 1)
+        .map((r) => ({
+          id: r.id,
+          email: String(r?.email ?? "").trim(),
+          label: personLabel(r),
+        }))
+        .filter((x) => x.id && x.email)
+        .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+
+      setPeopleList(normalized);
+    } catch (e) {
+      console.error("[InvitarTracker] loadPeople error:", e);
       setPeopleList([]);
-      setPeopleError(error.message || "Error loading personnel");
+      setPeopleError(
+        e?.message ||
+          t("inviteTracker.errors.loadPeople", { defaultValue: "Error loading active personnel." })
+      );
+    } finally {
       setLoadingPeople(false);
-      return;
     }
-
-    const rows = Array.isArray(data) ? data : [];
-    const sample = rows[0] || null;
-    const orgKey = detectOrgKey(sample);
-    const orgId = String(currentOrg.id);
-
-    const rowsForOrg = orgKey
-      ? rows.filter((r) => String(r?.[orgKey] ?? "") === orgId)
-      : rows; // si no se detecta orgKey, no filtramos (mejor que 0)
-
-    const activeForOrg = rowsForOrg.filter(isActiveRow);
-
-    const normalized = activeForOrg
-      .map((r) => {
-        const id = pickId(r);
-        const em = pickEmail(r);
-        return { id, email: em, label: formatPersonLabel(r) };
-      })
-      .filter((x) => x.id && x.email)
-      .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
-
-    setStats({
-      orgKey,
-      totalRows: rows.length,
-      orgRows: rowsForOrg.length,
-      activeRows: activeForOrg.length,
-    });
-
-    setPeopleList(normalized);
-    setLoadingPeople(false);
   }
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !isLoggedIn || !currentOrg?.id) return;
     loadPeople();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, currentOrg?.id]);
+  }, [ready, isLoggedIn, currentOrg?.id]);
 
   function handleSelectPerson(e) {
     const id = e.target.value;
     setSelectedPersonId(id);
 
     const p = peopleList.find((x) => String(x.id) === String(id));
-    if (p?.email) setEmail(String(p.email).trim().toLowerCase());
+    if (p?.email) setEmail(String(p.email).toLowerCase());
   }
 
   async function handleSubmit(e) {
@@ -227,7 +153,10 @@ export default function InvitarTracker() {
       const link = resp.data.action_link || "";
 
       if (via === "email") {
-        setMessage({ type: "success", text: `✅ Invitación enviada por correo a ${cleanEmail}.` });
+        setMessage({
+          type: "success",
+          text: `✅ Invitación enviada por correo a ${cleanEmail}.`,
+        });
       } else {
         setActionLink(link);
         setMessage({
@@ -273,6 +202,7 @@ export default function InvitarTracker() {
       </h1>
 
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
+        {/* ✅ Drop list correcta: misma fuente de /personal */}
         <div className="border rounded-lg p-3 bg-slate-50">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -288,12 +218,9 @@ export default function InvitarTracker() {
                     })}
               </div>
 
-              {/* Diagnóstico que nos dice por qué “no hay activos” */}
               <div className="text-[11px] text-slate-500 mt-1">
-                OrgKey: <span className="font-semibold">{stats.orgKey || "no-detectada"}</span>{" "}
-                · Total: <span className="font-semibold">{stats.totalRows}</span> · En esta org:{" "}
-                <span className="font-semibold">{stats.orgRows}</span> · Activos:{" "}
-                <span className="font-semibold">{stats.activeRows}</span>
+                {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
+                <span className="font-semibold">{peopleList.length}</span>
               </div>
             </div>
 
@@ -311,7 +238,9 @@ export default function InvitarTracker() {
 
           {peopleError && (
             <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
-              <div className="font-semibold">Error cargando personal</div>
+              <div className="font-semibold">
+                {t("inviteTracker.errors.loadPeopleTitle", { defaultValue: "Error cargando personal" })}
+              </div>
               <div className="mt-1 break-words">{peopleError}</div>
             </div>
           )}
@@ -337,6 +266,7 @@ export default function InvitarTracker() {
           </div>
         </div>
 
+        {/* Email (autocompleta al elegir persona) */}
         <input
           type="email"
           className="w-full border rounded px-3 py-2 text-sm"
@@ -345,7 +275,10 @@ export default function InvitarTracker() {
           onChange={(e) => setEmail(e.target.value)}
         />
 
-        <button disabled={sending} className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm">
+        <button
+          disabled={sending}
+          className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm"
+        >
           {sending
             ? t("inviteTracker.form.buttonSending", { defaultValue: "Enviando…" })
             : t("inviteTracker.form.buttonSend", { defaultValue: "Send invitation" })}
