@@ -32,7 +32,7 @@ async function callInviteTracker(payload) {
   return { ok: res.ok, status: res.status, data: json };
 }
 
-// Helpers universales para normalizar “personal activo” aunque la vista cambie columnas
+// Helpers universales (toleran cambios de columnas en la vista)
 function pickId(row) {
   return (
     row?.org_people_id ??
@@ -57,7 +57,6 @@ function pickLastName(row) {
   return row?.apellido ?? row?.last_name ?? row?.lastname ?? row?.surname ?? "";
 }
 
-// Activo = no borrado y no desactivado (soporta múltiples esquemas)
 function isActiveRow(row) {
   const deleted =
     row?.is_deleted ?? row?.deleted ?? row?.isDeleted ?? row?.is_removed ?? row?.removed ?? false;
@@ -83,7 +82,8 @@ export default function InvitarTracker() {
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
 
-  const [peopleList, setPeopleList] = useState([]); // [{ id, label, email, raw }]
+  // [{ id, label, email }]
+  const [peopleList, setPeopleList] = useState([]);
   const [selectedPersonId, setSelectedPersonId] = useState("");
 
   const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text }
@@ -103,7 +103,7 @@ export default function InvitarTracker() {
     setLoadingPeople(true);
     setPeopleError("");
 
-    // IMPORTANTE: select("*") para no depender de nombres exactos de columnas en la vista
+    // select("*") para no depender del nombre exacto de columnas
     const { data, error } = await supabase
       .from("v_org_people_ui")
       .select("*")
@@ -120,7 +120,6 @@ export default function InvitarTracker() {
 
     const rows = Array.isArray(data) ? data : [];
 
-    // Normaliza a una lista consistente para el select
     const normalized = rows
       .filter(isActiveRow)
       .map((r) => {
@@ -130,10 +129,9 @@ export default function InvitarTracker() {
           id,
           email: em,
           label: formatPersonLabel(r),
-          raw: r,
         };
       })
-      .filter((x) => x.id && x.email) // drop list solo con items válidos (con id y email)
+      .filter((x) => x.id && x.email)
       .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
 
     setPeopleList(normalized);
@@ -226,8 +224,6 @@ export default function InvitarTracker() {
       ? "text-amber-700"
       : "text-red-600";
 
-  const hasPeople = peopleList.length > 0;
-
   if (!ready) {
     return (
       <div className="max-w-lg mx-auto p-4">
@@ -245,7 +241,7 @@ export default function InvitarTracker() {
       </h1>
 
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
-        {/* Drop list bien implementada */}
+        {/* Drop list bien implementada (SIEMPRE habilitada) */}
         <div className="border rounded-lg p-3 bg-slate-50">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -261,15 +257,13 @@ export default function InvitarTracker() {
                     })}
               </div>
 
+              {/* Diagnóstico visible */}
               <div className="text-[11px] text-slate-500 mt-1">
+                {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
+                <span className="font-semibold">{peopleList.length}</span>
                 {loadingPeople ? (
-                  t("inviteTracker.form.loadingPeople", { defaultValue: "Cargando personal…" })
-                ) : (
-                  <>
-                    {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
-                    <span className="font-semibold">{peopleList.length}</span>
-                  </>
-                )}
+                  <span className="ml-2">({t("inviteTracker.form.loadingPeople", { defaultValue: "cargando…" })})</span>
+                ) : null}
               </div>
             </div>
 
@@ -297,18 +291,17 @@ export default function InvitarTracker() {
               className="w-full border rounded px-3 py-2 text-sm bg-white"
               value={selectedPersonId}
               onChange={handleSelectPerson}
-              disabled={loadingPeople || !hasPeople}
+              onFocus={() => {
+                // UX: si el usuario entra y aún no hay datos, intentamos cargar (sin bloquear)
+                if (!loadingPeople && peopleList.length === 0 && !peopleError && currentOrg?.id) {
+                  loadPeople();
+                }
+              }}
             >
               <option value="">
-                {loadingPeople
-                  ? t("inviteTracker.form.loadingPeople", { defaultValue: "Cargando…" })
-                  : hasPeople
-                  ? t("inviteTracker.form.selectPlaceholder", {
-                      defaultValue: "Selecciona una persona activa",
-                    })
-                  : t("inviteTracker.form.noPeople", {
-                      defaultValue: "No hay personal activo (actívalo en Personal)",
-                    })}
+                {peopleList.length > 0
+                  ? t("inviteTracker.form.selectPlaceholder", { defaultValue: "Selecciona una persona activa" })
+                  : t("inviteTracker.form.noPeople", { defaultValue: "(No hay personal activo)" })}
               </option>
 
               {peopleList.map((p) => (
