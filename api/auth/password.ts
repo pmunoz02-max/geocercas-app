@@ -1,201 +1,142 @@
-/* api/auth/password.ts
- * AUTH – Ruta B (API-first con cookies)
- * Runtime: Node.js (forzado)
- * Nunca debe crashear con GET
- */
-
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { fetch } from "undici";
 
-/* 🔒 FORZAR RUNTIME NODE.JS (CRÍTICO) */
 export const config = {
   runtime: "nodejs",
 };
 
-/* =========================
-   Helpers
-========================= */
+const VERSION = "auth-password-nodejs-v2";
+const AUTH_DEBUG = process.env.AUTH_DEBUG === "true";
 
-function makeCookie(
-  name: string,
-  value: string,
-  opts: {
-    httpOnly?: boolean;
-    secure?: boolean;
-    sameSite?: "Lax" | "Strict" | "None";
-    path?: string;
-    maxAge?: number;
-  } = {}
+function debugLog(...args: any[]) {
+  if (AUTH_DEBUG) {
+    console.log("[AUTH_DEBUG]", ...args);
+  }
+}
+
+function fail(
+  res: VercelResponse,
+  status: number,
+  error: string,
+  details?: any
 ) {
-  const {
-    httpOnly = true,
-    secure = true,
-    sameSite = "Lax",
-    path = "/",
-    maxAge,
-  } = opts;
-
-  let c = `${name}=${encodeURIComponent(value)}`;
-  if (path) c += `; Path=${path}`;
-  if (typeof maxAge === "number") c += `; Max-Age=${maxAge}`;
-  if (sameSite) c += `; SameSite=${sameSite}`;
-  if (secure) c += `; Secure`;
-  if (httpOnly) c += `; HttpOnly`;
-  return c;
-}
-
-async function readJson(req: VercelRequest): Promise<any> {
-  if (req.body && typeof req.body === "object") return req.body;
-
-  const raw = await new Promise<string>((resolve) => {
-    let data = "";
-    req.on("data", (c) => (data += c));
-    req.on("end", () => resolve(data));
+  return res.status(status).json({
+    error,
+    details,
+    version: VERSION,
   });
-
-  if (!raw) return {};
-  return JSON.parse(raw);
 }
-
-/* =========================
-   Handler
-========================= */
 
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  const VERSION = "auth-password-nodejs-v1";
+  if (req.method !== "POST") {
+    return fail(res, 405, "Method not allowed");
+  }
+
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return fail(res, 400, "Missing email or password");
+  }
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+  /* ─────────────── FAIL FAST: ENV VARS ─────────────── */
+
+  if (!SUPABASE_URL) {
+    return fail(res, 500, "Missing env var SUPABASE_URL");
+  }
+
+  if (!SUPABASE_URL.startsWith("https://") || !SUPABASE_URL.includes(".supabase.co")) {
+    return fail(res, 500, "Invalid SUPABASE_URL format");
+  }
+
+  if (!SUPABASE_ANON_KEY) {
+    return fail(res, 500, "Missing env var SUPABASE_ANON_KEY");
+  }
+
+  if (!SUPABASE_ANON_KEY.startsWith("eyJ") || SUPABASE_ANON_KEY.length < 100) {
+    return fail(res, 500, "Invalid SUPABASE_ANON_KEY format");
+  }
+
+  debugLog("Env vars OK", {
+    supabaseHost: new URL(SUPABASE_URL).host,
+    anonKeyLength: SUPABASE_ANON_KEY.length,
+  });
+
+  const authUrl = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
+  let response: any;
 
   try {
-    /* ---- CORS mínimo (same-origin) ---- */
-    const origin = req.headers.origin;
-    if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-
-    if (req.method === "OPTIONS") {
-      res.status(200).end();
-      return;
-    }
-
-    /* ---- BLOQUEO DE MÉTODO (NUNCA 500) ---- */
-    if (req.method !== "POST") {
-      res.setHeader("Allow", "POST,OPTIONS");
-      res.status(405).send("Method Not Allowed");
-      return;
-    }
-
-    /* ---- ENV ---- */
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      res.status(500).json({
-        error: "Server misconfigured",
-        details: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
-        version: VERSION,
-      });
-      return;
-    }
-
-    /* ---- BODY ---- */
-    let body: any = {};
-    try {
-      body = await readJson(req);
-    } catch {
-      res.status(400).json({
-        error: "Invalid JSON body",
-        version: VERSION,
-      });
-      return;
-    }
-
-    const email = String(body.email || "").trim().toLowerCase();
-    const password = String(body.password || "");
-    const next = String(body.next || "/");
-
-    if (!email || !password) {
-      res.status(400).json({
-        error: "Email and password required",
-        version: VERSION,
-      });
-      return;
-    }
-
-    /* ---- SUPABASE PASSWORD GRANT ---- */
-    const tokenUrl =
-      SUPABASE_URL.replace(/\/$/, "") +
-      "/auth/v1/token?grant_type=password";
-
-    let data: any;
-    try {
-      const r = await fetch(tokenUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const text = await r.text();
-      data = text ? JSON.parse(text) : null;
-
-      if (!r.ok || !data?.access_token) {
-        res.status(401).json({
-          error: "Invalid credentials",
-          version: VERSION,
-        });
-        return;
-      }
-    } catch (e: any) {
-      res.status(502).json({
-        error: "Auth service unreachable",
-        details: String(e?.message || e),
-        version: VERSION,
-      });
-      return;
-    }
-
-    /* ---- COOKIES (Ruta B) ---- */
-    const accessToken = data.access_token;
-    const refreshToken = data.refresh_token || "";
-    const accessMaxAge = Number(data.expires_in || 3600);
-    const refreshMaxAge = 30 * 24 * 60 * 60;
-
-    res.setHeader("Set-Cookie", [
-      makeCookie("tg_at", accessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        path: "/",
-        maxAge: accessMaxAge,
-      }),
-      makeCookie("tg_rt", refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        path: "/",
-        maxAge: refreshMaxAge,
-      }),
-    ]);
-
-    /* ---- RESPUESTA JSON (frontend maneja navegación) ---- */
-    res.status(200).json({
-      ok: true,
-      user_id: data.user?.id || null,
-      expires_in: data.expires_in,
-      next,
-      version: VERSION,
+    response = await fetch(authUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
     });
-  } catch (fatal: any) {
-    /* ---- ÚLTIMA BARRERA: JAMÁS CRASH ---- */
-    console.error("[api/auth/password] fatal:", fatal);
-    res.status(500).json({
-      error: "Unexpected server error",
-      version: "auth-password-nodejs-v1",
+  } catch (err: any) {
+    clearTimeout(timeout);
+
+    debugLog("Fetch error", {
+      name: err?.name,
+      message: err?.message,
+      cause: err?.cause,
     });
+
+    return fail(res, 502, "Auth service unreachable", err?.message);
   }
+
+  clearTimeout(timeout);
+
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    return fail(res, 502, "Invalid auth response from Supabase");
+  }
+
+  if (!response.ok) {
+    debugLog("Supabase auth error", {
+      status: response.status,
+      error: data?.error,
+    });
+
+    return fail(res, response.status, data?.error || "Authentication failed");
+  }
+
+  const { access_token, refresh_token, expires_in, user } = data;
+
+  if (!access_token || !refresh_token) {
+    return fail(res, 502, "Invalid token payload from Supabase");
+  }
+
+  /* ─────────────── COOKIES HttpOnly ─────────────── */
+
+  res.setHeader("Set-Cookie", [
+    `tg_at=${access_token}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+    `tg_rt=${refresh_token}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+  ]);
+
+  debugLog("Login OK", {
+    user_id: user?.id,
+    expires_in,
+  });
+
+  return res.status(200).json({
+    ok: true,
+    user_id: user?.id,
+    expires_in,
+    next: "/inicio",
+    version: VERSION,
+  });
 }
