@@ -437,23 +437,12 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
   const refreshGeofenceList = useCallback(async () => {
     try {
       if (!currentOrg?.id) {
-        // Tolerante: no borramos el listado si org aún no está listo (evita parpadeos y falsos vacíos)
+        setGeofenceList([]);
         return;
       }
-
-      const fetched = await listGeofences({ supabaseClient: null, orgId: currentOrg.id });
-
-      // Merge: preserva items optimistas aunque el GET aún no los devuelva (eventual consistency)
-      setGeofenceList((prev) => {
-        const byName = new Map();
-        for (const g of (prev || [])) byName.set(g.nombre, g);
-        for (const g of (fetched || [])) byName.set(g.nombre, g);
-        const merged = Array.from(byName.values());
-        merged.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
-        return merged;
-      });
+      setGeofenceList(await listGeofences({ supabaseClient: null, orgId: currentOrg.id }));
     } catch {
-      // no reventamos UI: mantenemos lo que ya está
+      setGeofenceList([]);
     }
   }, [supabaseClient, currentOrg?.id]);
 
@@ -620,34 +609,29 @@ export default function NuevaGeocerca({ supabaseClient = supabase }) {
       const ok = await saveGeofenceCollection({ name: nm });
       if (!ok) return;
 
-      // ✅ Optimistic UI: el nombre aparece inmediatamente en el panel (sin esperar GET)
+      // ✅ Optimistic UI: aparece sin recargar
       setGeofenceList((prev) => {
-        const list = Array.isArray(prev) ? prev : [];
-        if (list.some((g) => String(g?.nombre || "") === nm)) return list;
-        const next = [...list, { nombre: nm, source: "optimistic" }];
-        next.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
-        return next;
+        const byName = new Map();
+        for (const g of (prev || [])) if (g?.nombre) byName.set(g.nombre, g);
+        if (!byName.has(nm)) byName.set(nm, { nombre: nm, source: "api" });
+        const merged = Array.from(byName.values());
+        merged.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+        return merged;
       });
 
-      // ✅ Refresh CON reintentos suaves (no rompe UX si falla)
-      // Esperamos un poco para evitar casos de consistencia eventual tras el upsert.
-      for (let i = 0; i < 3; i++) {
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, i === 0 ? 150 : 600));
-          // eslint-disable-next-line no-await-in-loop
-          await refreshGeofenceList();
-          break;
-        } catch {
-          // seguimos intentando
-        }
+      // ✅ Refresh real (pero no tumba UX si falla)
+      try {
+        await refreshGeofenceList();
+      } catch {
+        // silencioso
       }
 
-      alert("OK acb7e19 (nuevo bundle)");
+      alert(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
 
       setGeofenceName("");
       setDraftFeature(null);
     } catch (e) {
+      // Errores reales del save / API
       alert(e?.message || String(e));
     }
   }, [geofenceName, saveGeofenceCollection, refreshGeofenceList, t]);
