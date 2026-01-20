@@ -1,238 +1,164 @@
 // src/services/geocercas.js
-import { supabase } from "../supabaseClient.js";
+// ============================================================
+// API-FIRST (NO supabase-js directo en browser para geocercas)
+// Este archivo reemplaza el CRUD legacy que usaba supabase.from("geocercas").
+// Todo pasa por /api/geocercas (cookie tg_at).
+// ============================================================
+
+import {
+  listGeocercas as apiListGeocercas,
+  getGeocerca as apiGetGeocerca,
+  upsertGeocerca as apiUpsertGeocerca,
+  deleteGeocerca as apiDeleteGeocerca,
+} from "../lib/geocercasApi.js";
 
 /**
- * Lista geocercas completas (incluye geometría) para el mapa.
+ * Lista geocercas completas para el mapa.
+ * @param {string} orgId
+ * @param {{onlyActive?: boolean}} opts
  */
-export async function listGeocercas(orgId) {
-  console.log("[geocercas] listGeocercas() orgId:", orgId);
+export async function listGeocercas(orgId, opts = {}) {
+  if (!orgId) return [];
+  const onlyActive = opts.onlyActive !== false;
 
-  if (!orgId) {
-    console.warn("[geocercas] listGeocercas sin orgId, retorno []");
-    return [];
-  }
+  const items = await apiListGeocercas({ orgId, onlyActive });
 
-  const { data, error } = await supabase
-    .from("geocercas")
-    .select(
-      `
-      id,
-      org_id,
-      name,
-      nombre,
-      geom,
-      geojson,
-      geometry,
-      polygon,
-      lat,
-      lng,
-      radius_m,
-      active,
-      visible,
-      created_at
-    `
-    )
-    .eq("org_id", orgId)
-    .eq("active", true);
-
-  if (error) {
-    console.error("[geocercas] error en listGeocercas:", error);
-    throw error;
-  }
-
-  console.log(
-    "[geocercas] listGeocercas filas:",
-    data?.length ?? 0,
-    "ejemplo:",
-    data && data[0]
-  );
-
-  return data ?? [];
+  // Normaliza a formato que esperan algunos módulos legacy:
+  return (items || []).map((g) => ({
+    ...g,
+    // legacy aliases:
+    name: g.nombre ?? g.name ?? g.nombre_ci ?? "Sin nombre",
+    active: g.activo ?? g.active ?? true,
+  }));
 }
 
 /**
- * Lista geocercas para la UI (selector múltiple), solo id + nombre.
+ * Lista geocercas para UI (selector múltiple)
  */
 export async function listGeocercasForUI(orgId) {
-  const rows = await listGeocercas(orgId);
+  const rows = await listGeocercas(orgId, { onlyActive: true });
   return rows.map((g) => ({
     id: g.id,
     nombre: g.nombre || g.name || "Sin nombre",
   }));
 }
 
-// ---------- helpers internos para construir polygon a partir de geom ----------
-
-function normalizeGeom(input) {
-  if (!input) return null;
-  if (typeof input === "string") {
-    try {
-      return JSON.parse(input);
-    } catch (e) {
-      console.warn("[geocercas] geom string inválido", input);
-      return null;
-    }
-  }
-  if (typeof input === "object") return input;
-  return null;
-}
-
 /**
- * Dado un geom (Feature / Geometry) intenta extraer un anillo principal
- * como array de { lat, lng } compatible con tu columna polygon legacy.
- */
-function buildPolygonFromGeom(geomInput) {
-  const geom = normalizeGeom(geomInput);
-  if (!geom) return null;
-
-  // Feature -> geometry
-  const g =
-    geom.type === "Feature" && geom.geometry
-      ? geom.geometry
-      : geom.type === "FeatureCollection" &&
-        Array.isArray(geom.features) &&
-        geom.features[0]
-      ? geom.features[0].geometry
-      : geom;
-
-  if (!g || !g.type || !g.coordinates) return null;
-
-  let ring = null;
-
-  if (g.type === "Polygon" && Array.isArray(g.coordinates[0])) {
-    ring = g.coordinates[0]; // [[lng,lat], [lng,lat], ...]
-  } else if (g.type === "MultiPolygon" && Array.isArray(g.coordinates[0])) {
-    ring = g.coordinates[0][0]; // primer polígono, primer anillo
-  } else {
-    return null;
-  }
-
-  const out = ring
-    .filter(
-      (pt) =>
-        Array.isArray(pt) &&
-        typeof pt[0] === "number" &&
-        typeof pt[1] === "number"
-    )
-    .map(([lng, lat]) => ({ lat, lng }));
-
-  return out.length > 2 ? out : null;
-}
-
-/**
- * Crea una nueva geocerca. Se usa desde GeoMap al dibujar.
- * Si llega geom y no llega polygon, construye polygon automáticamente.
+ * Crear geocerca (API-first). Se usa desde mapa o formularios.
+ * Debe incluir org_id y nombre al menos.
  */
 export async function createGeocerca(payload) {
-  console.log("[geocercas] createGeocerca payload (entrada):", payload);
+  if (!payload?.org_id) throw new Error("createGeocerca requiere org_id");
+  if (!payload?.nombre && !payload?.name) throw new Error("createGeocerca requiere nombre");
 
-  const finalPayload = { ...payload };
+  const nombre = payload.nombre ?? payload.name;
+  const nombre_ci = payload.nombre_ci ?? String(nombre).trim().toLowerCase();
 
-  // Si tenemos geom pero no polygon, derivamos polygon para compatibilidad legacy
-  if (finalPayload.geom && !finalPayload.polygon) {
-    const derivedPolygon = buildPolygonFromGeom(finalPayload.geom);
-    if (derivedPolygon) {
-      finalPayload.polygon = derivedPolygon;
-      console.log(
-        "[geocercas] createGeocerca → polygon derivado desde geom, puntos:",
-        derivedPolygon.length
-      );
-    }
-  }
+  const saved = await apiUpsertGeocerca({
+    ...payload,
+    nombre,
+    nombre_ci,
+    // normaliza flags
+    activo: payload.activo ?? true,
+    activa: payload.activa ?? true,
+    visible: payload.visible ?? true,
+  });
 
-  const insertPayload = {
-    active: true,
-    visible: true,
-    ...finalPayload,
-  };
-
-  const { data, error } = await supabase
-    .from("geocercas")
-    .insert(insertPayload)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("[geocercas] error en createGeocerca:", error);
-    throw error;
-  }
-
-  console.log("[geocercas] createGeocerca OK:", data);
-  return data;
+  return saved;
 }
 
 /**
- * Actualiza una geocerca existente por id.
- * Si el patch trae geom y no trae polygon, también derivamos polygon.
+ * Actualizar geocerca (API-first)
  */
 export async function updateGeocerca(id, patch) {
-  console.log("[geocercas] updateGeocerca id:", id, "patch (entrada):", patch);
+  const org_id = patch?.org_id;
+  if (!org_id) throw new Error("updateGeocerca requiere patch.org_id");
+  if (!id) throw new Error("updateGeocerca requiere id");
 
-  const finalPatch = { ...patch };
+  const next = { ...patch, id, org_id };
 
-  if (finalPatch.geom && !finalPatch.polygon) {
-    const derivedPolygon = buildPolygonFromGeom(finalPatch.geom);
-    if (derivedPolygon) {
-      finalPatch.polygon = derivedPolygon;
-      console.log(
-        "[geocercas] updateGeocerca → polygon derivado desde geom, puntos:",
-        derivedPolygon.length
+  // si viene nombre sin nombre_ci, lo derivamos
+  if (next.nombre !== undefined && next.nombre_ci === undefined) {
+    next.nombre_ci = String(next.nombre).trim().toLowerCase();
+  }
+  if (next.name !== undefined && next.nombre === undefined) {
+    next.nombre = next.name;
+    if (next.nombre_ci === undefined) next.nombre_ci = String(next.name).trim().toLowerCase();
+  }
+
+  const saved = await apiUpsertGeocerca(next);
+  return saved;
+}
+
+/**
+ * Soft delete (API-first): activo=false
+ */
+export async function deleteGeocerca(idOrParams) {
+  // Compat:
+  // - deleteGeocerca(id)  (legacy)
+  // - deleteGeocerca({ orgId, id })
+  if (typeof idOrParams === "string") {
+    throw new Error(
+      "deleteGeocerca(id) legacy no es soportado sin orgId. Usa deleteGeocerca({ orgId, id })."
+    );
+  }
+
+  const orgId = idOrParams?.orgId || idOrParams?.org_id;
+  const id = idOrParams?.id;
+
+  if (!orgId) throw new Error("deleteGeocerca requiere orgId");
+  if (!id) throw new Error("deleteGeocerca requiere id");
+
+  await apiDeleteGeocerca({ orgId, id });
+}
+
+/**
+ * Realtime legacy:
+ * Antes usaba supabase.channel().
+ * En API-first no usamos realtime directo desde el browser para geocercas.
+ * Dejamos un "subscribe" seguro que hace polling ligero (opcional).
+ *
+ * Uso sugerido:
+ *   const unsub = subscribeGeocercas(orgId, callback, { intervalMs: 10000 })
+ */
+export function subscribeGeocercas(orgId, callback, opts = {}) {
+  // Backward compatible si llaman subscribeGeocercas(callback)
+  if (typeof orgId === "function") {
+    callback = orgId;
+    orgId = null;
+  }
+
+  const intervalMs = Number(opts.intervalMs || 10000);
+
+  let stopped = false;
+  let lastSig = null;
+
+  async function tick() {
+    if (stopped) return;
+    if (!orgId) return;
+
+    try {
+      const rows = await apiListGeocercas({ orgId, onlyActive: false });
+      const sig = JSON.stringify(
+        (rows || []).map((r) => [r.id, r.updated_at || "", r.activo ?? true, r.activa ?? true])
       );
+
+      if (lastSig !== null && sig !== lastSig) {
+        callback?.({ eventType: "POLL_CHANGE", rows });
+      }
+      lastSig = sig;
+    } catch (e) {
+      // No alert aquí. Solo log.
+      console.warn("[subscribeGeocercas] polling error:", e?.message || e);
     }
   }
 
-  const { data, error } = await supabase
-    .from("geocercas")
-    .update(finalPatch)
-    .eq("id", id)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("[geocercas] error en updateGeocerca:", error);
-    throw error;
-  }
-
-  console.log("[geocercas] updateGeocerca OK:", data);
-  return data;
-}
-
-/**
- * Elimina una geocerca (delete duro).
- */
-export async function deleteGeocerca(id) {
-  console.log("[geocercas] deleteGeocerca id:", id);
-
-  const { error } = await supabase.from("geocercas").delete().eq("id", id);
-
-  if (error) {
-    console.error("[geocercas] error en deleteGeocerca:", error);
-    throw error;
-  }
-
-  console.log("[geocercas] deleteGeocerca OK");
-}
-
-/**
- * Suscripción realtime a cambios en geocercas.
- */
-export function subscribeGeocercas(callback) {
-  const channel = supabase
-    .channel("geocercas_changes")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "geocercas" },
-      (payload) => {
-        console.log("[geocercas] cambio realtime:", payload.eventType, payload);
-        callback?.(payload);
-      }
-    )
-    .subscribe((status) => {
-      console.log("[geocercas] canal realtime status:", status);
-    });
+  // primer tick
+  tick();
+  const timer = setInterval(tick, intervalMs);
 
   return () => {
-    console.log("[geocercas] unsubscribe canal realtime");
-    supabase.removeChannel(channel);
+    stopped = true;
+    clearInterval(timer);
   };
 }
