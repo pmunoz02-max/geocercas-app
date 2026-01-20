@@ -1,10 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-export const config = {
-  runtime: "nodejs",
-};
+export const config = { runtime: "nodejs" };
 
-const VERSION = "auth-password-nodejs-v4";
+const VERSION = "auth-password-nodejs-v5";
 const AUTH_DEBUG = process.env.AUTH_DEBUG === "true";
 
 function debugLog(...args: any[]) {
@@ -15,26 +13,25 @@ function fail(res: VercelResponse, status: number, error: string, details?: any)
   return res.status(status).json({ error, details, version: VERSION });
 }
 
-function normalizeSupabaseUrl(raw: string) {
+function normalizeUrl(raw: string) {
   const trimmed = raw.trim();
-  // remove surrounding quotes if present
   const unquoted =
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")))
       ? trimmed.slice(1, -1).trim()
       : trimmed;
+
+  let hostOk = false;
+  try {
+    hostOk = Boolean(new URL(unquoted).host);
+  } catch {
+    hostOk = false;
+  }
 
   const startsWithHttps = unquoted.startsWith("https://");
   const includesSupabase = unquoted.includes(".supabase.co");
 
-  let host: string | null = null;
-  try {
-    host = new URL(unquoted).host;
-  } catch {
-    host = null;
-  }
-
-  return { raw, trimmed, unquoted, startsWithHttps, includesSupabase, host };
+  return { url: unquoted, startsWithHttps, includesSupabase, hostOk };
 }
 
 async function getFetch(): Promise<typeof fetch> {
@@ -46,7 +43,9 @@ async function getFetch(): Promise<typeof fetch> {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return fail(res, 405, "Method not allowed");
 
-  const { email, password } = req.body || {};
+  const email = (req.body?.email ?? "").toString().trim();
+  const password = (req.body?.password ?? "").toString();
+
   if (!email || !password) return fail(res, 400, "Missing email or password");
 
   const SUPABASE_URL_RAW = process.env.SUPABASE_URL;
@@ -55,34 +54,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!SUPABASE_URL_RAW) return fail(res, 500, "Missing env var SUPABASE_URL");
   if (!SUPABASE_ANON_KEY) return fail(res, 500, "Missing env var SUPABASE_ANON_KEY");
 
-  const u = normalizeSupabaseUrl(SUPABASE_URL_RAW);
-
-  // Diagnóstico seguro (SUPABASE_URL no es secreto)
-  debugLog("SUPABASE_URL diagnostics", {
-    rawLen: u.raw.length,
-    trimmedLen: u.trimmed.length,
-    unquotedLen: u.unquoted.length,
-    startsWithHttps: u.startsWithHttps,
-    includesSupabase: u.includesSupabase,
-    host: u.host,
-  });
-
-  if (!u.startsWithHttps || !u.includesSupabase || !u.host) {
-    return fail(res, 500, "Invalid SUPABASE_URL format", {
-      startsWithHttps: u.startsWithHttps,
-      includesSupabase: u.includesSupabase,
-      hostParsed: Boolean(u.host),
-      // Muestra el URL “limpio” para que puedas comparar (no es secreto)
-      normalized: u.unquoted,
-    });
+  const u = normalizeUrl(SUPABASE_URL_RAW);
+  if (!u.startsWithHttps || !u.includesSupabase || !u.hostOk) {
+    return fail(res, 500, "Invalid SUPABASE_URL format");
   }
 
   if (!SUPABASE_ANON_KEY.startsWith("eyJ") || SUPABASE_ANON_KEY.length < 100) {
     return fail(res, 500, "Invalid SUPABASE_ANON_KEY format");
   }
 
-  const SUPABASE_URL = u.unquoted;
-  const authUrl = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
+  const authUrl = `${u.url}/auth/v1/token?grant_type=password`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
@@ -102,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     clearTimeout(timeout);
 
-    let data: any;
+    let data: any = null;
     try {
       data = await response.json();
     } catch {
@@ -110,8 +91,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!response.ok) {
-      debugLog("Supabase auth error", { status: response.status, error: data?.error });
-      return fail(res, response.status, data?.error || "Authentication failed");
+      const msg =
+        data?.error_description ||
+        data?.msg ||
+        data?.error ||
+        "Authentication failed";
+
+      debugLog("Supabase auth error", {
+        status: response.status,
+        error: data?.error,
+        error_description: data?.error_description,
+      });
+
+      // Mantén el mensaje, pero sin detalles sensibles
+      return fail(res, response.status, msg);
     }
 
     const { access_token, refresh_token, expires_in, user } = data || {};
@@ -131,7 +124,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err: any) {
     clearTimeout(timeout);
-    debugLog("Auth handler error", { name: err?.name, message: err?.message, cause: err?.cause });
+
+    debugLog("Fetch/handler error", {
+      name: err?.name,
+      message: err?.message,
+      cause: err?.cause,
+    });
+
     return fail(res, 502, "Auth service unreachable", err?.message || String(err));
   }
 }
