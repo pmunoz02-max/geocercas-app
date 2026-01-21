@@ -1,15 +1,12 @@
 {
-  "redirects": [
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.tugeocercas.com" }],
-      "destination": "https://tugeocercas.com/$1",
-      "permanent": true
+      "destination": "/index.html"
     }
-  ],
-  "routes": [
-    { "src": "^/api/(.*)$", "dest": "/api/$1" },
-    { "handle": "filesystem" },
-    { "src": "^(.*)$", "dest": "/index.html" }
   ]
 }
