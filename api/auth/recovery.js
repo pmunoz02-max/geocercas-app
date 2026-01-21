@@ -1,9 +1,7 @@
 // api/auth/recovery.js
 import { createClient } from "@supabase/supabase-js";
 
-export const config = {
-  runtime: "nodejs",
-};
+export const config = { runtime: "nodejs" };
 
 function json(res, status, body) {
   res.statusCode = status;
@@ -17,27 +15,36 @@ function isStrongEnough(pw) {
 }
 
 export default async function handler(req, res) {
+  // ✅ CORS/preflight safe (aunque sea same-origin)
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+    res.setHeader("Allow", "POST, OPTIONS");
     return json(res, 405, { ok: false, error: "Method not allowed" });
   }
 
   try {
-    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY =
-      process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SERVICE_ROLE_KEY) {
       return json(res, 500, {
         ok: false,
-        error:
-          "Missing env vars: SUPABASE_URL/VITE_SUPABASE_URL, SUPABASE_ANON_KEY/VITE_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY",
+        error: "Missing env vars",
+        has: {
+          SUPABASE_URL: Boolean(SUPABASE_URL),
+          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+          SUPABASE_SERVICE_ROLE_KEY: Boolean(SERVICE_ROLE_KEY),
+        },
       });
     }
 
     const { token_hash, type, new_password } = req.body || {};
-
     if (!token_hash || !type || !new_password) {
       return json(res, 400, { ok: false, error: "Missing fields" });
     }
@@ -49,7 +56,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Cliente ANON solo para verificar el OTP recovery (no admin)
+    // 1) Verify OTP (ANON)
     const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
@@ -66,14 +73,12 @@ export default async function handler(req, res) {
       });
     }
 
-    const userId = otpData.user.id;
-
-    // Cliente SERVICE ROLE para cambiar password sin sesión
+    // 2) Update password (SERVICE ROLE)
     const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
 
-    const { error: updError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    const { error: updError } = await supabaseAdmin.auth.admin.updateUserById(otpData.user.id, {
       password: new_password,
     });
 

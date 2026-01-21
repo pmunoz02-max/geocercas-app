@@ -3,23 +3,15 @@
     {
       "source": "/(.*)",
       "has": [
-        {
-          "type": "host",
-          "value": "www.tugeocercas.com"
-        }
+        { "type": "host", "value": "www.tugeocercas.com" }
       ],
       "destination": "https://tugeocercas.com/$1",
       "permanent": true
     }
   ],
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+  "routes": [
+    { "src": "^/api/(.*)$", "dest": "/api/$1" },
+    { "handle": "filesystem" },
+    { "src": "^(.*)$", "dest": "/index.html" }
   ]
 }

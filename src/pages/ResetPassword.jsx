@@ -4,10 +4,10 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * ResetPassword (Ruta B API-first)
- * - NO usa supabase.auth.updateUser (evita "Auth session missing")
+ * - NO usa Supabase client en frontend para updateUser (evita "Auth session missing")
  * - Llama a tu endpoint: POST /api/auth/recovery
- * - Incluye hardening UI: pointer-events + zIndex para evitar overlays que “roban” el click
- * - Incluye diagnóstico visible (temporal) para ver si el click realmente dispara fetch
+ * - Parseo robusto: resp.text() -> JSON.parse seguro (evita "Unexpected end of JSON input")
+ * - Incluye diagnóstico visible (temporal) para ver status + respuesta real del API
  */
 
 function isStrongEnough(pw) {
@@ -34,8 +34,6 @@ export default function ResetPassword() {
   const [diag, setDiag] = useState(null); // debug visible
 
   useEffect(() => {
-    // Diagnóstico para confirmar que el componente realmente está montado
-    // (si no aparece en consola, estás viendo otro build/route)
     // eslint-disable-next-line no-console
     console.log("[ResetPassword] mounted", {
       hasTokenHash: Boolean(token_hash),
@@ -69,22 +67,20 @@ export default function ResetPassword() {
     if (!canSave) {
       setMsg({
         type: "warn",
-        text:
-          "Contraseña inválida o no coincide. Mínimo 8 caracteres con letras y números.",
+        text: "Contraseña inválida o no coincide. Mín. 8 caracteres con letras y números.",
       });
       return;
     }
 
     try {
       setBusy(true);
-
       // eslint-disable-next-line no-console
       console.log("[ResetPassword] calling /api/auth/recovery");
 
       const resp = await fetch("/api/auth/recovery", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // no hace daño; tu endpoint no depende de cookies
+        credentials: "include",
         body: JSON.stringify({
           token_hash,
           type,
@@ -92,7 +88,14 @@ export default function ResetPassword() {
         }),
       });
 
-      const data = await resp.json().catch(() => ({}));
+      // ✅ Parse robusto (evita: Unexpected end of JSON input)
+      const raw = await resp.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = { raw };
+      }
 
       setDiag({
         step: "api_response",
@@ -111,12 +114,9 @@ export default function ResetPassword() {
         return;
       }
 
-      setMsg({
-        type: "success",
-        text: "✅ Contraseña actualizada. Redirigiendo a login…",
-      });
+      setMsg({ type: "success", text: "✅ Contraseña actualizada. Redirigiendo a login…" });
 
-      // Limpia la URL (evita dejar token en barra)
+      // Limpia URL para no dejar token expuesto
       try {
         window.history.replaceState({}, document.title, "/reset-password");
       } catch {}
@@ -138,22 +138,8 @@ export default function ResetPassword() {
       : "text-red-600";
 
   return (
-    <div
-      className="min-h-[70vh] flex items-center justify-center px-4"
-      style={{
-        pointerEvents: "auto",
-        zIndex: 40,
-        position: "relative",
-      }}
-    >
-      <div
-        className="w-full max-w-md bg-white border rounded-2xl p-6"
-        style={{
-          pointerEvents: "auto",
-          zIndex: 45,
-          position: "relative",
-        }}
-      >
+    <div className="min-h-[70vh] flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-white border rounded-2xl p-6">
         <h1 className="text-xl font-semibold mb-2">Actualizar contraseña</h1>
         <p className="text-sm text-slate-600 mb-4">Ingresa una nueva contraseña para tu cuenta.</p>
 
@@ -165,71 +151,61 @@ export default function ResetPassword() {
             <button
               type="button"
               className="w-full bg-slate-900 text-white rounded-lg px-4 py-2 text-sm"
-              style={{ pointerEvents: "auto", zIndex: 50, position: "relative" }}
               onClick={() => navigate("/login", { replace: true })}
             >
               Ir a Login
             </button>
           </div>
         ) : (
-          <>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nueva contraseña
-                </label>
-                <input
-                  type="password"
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mín. 8 caracteres, letras y números"
-                  style={{ pointerEvents: "auto", zIndex: 50, position: "relative" }}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Repetir contraseña
-                </label>
-                <input
-                  type="password"
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={password2}
-                  onChange={(e) => setPassword2(e.target.value)}
-                  placeholder="Repite la contraseña"
-                  style={{ pointerEvents: "auto", zIndex: 50, position: "relative" }}
-                />
-              </div>
-
-              {msg ? <div className={`text-sm ${msgClass}`}>{msg.text}</div> : null}
-
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={busy}
-                className="w-full bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-60"
-                style={{
-                  pointerEvents: "auto",
-                  zIndex: 50,
-                  position: "relative",
-                }}
-              >
-                {busy ? "Guardando…" : "Guardar"}
-              </button>
-
-              {/* Diagnóstico temporal para cerrar el bug (remover cuando ya funcione) */}
-              {diag ? (
-                <pre className="mt-2 text-[10px] whitespace-pre-wrap bg-slate-50 border rounded-lg p-2 text-slate-700">
-                  {JSON.stringify(diag, null, 2)}
-                </pre>
-              ) : null}
-
-              <div className="text-[11px] text-slate-500">
-                Tip: si el link expiró, genera uno nuevo.
-              </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Nueva contraseña
+              </label>
+              <input
+                type="password"
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mín. 8 caracteres, letras y números"
+              />
             </div>
-          </>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Repetir contraseña
+              </label>
+              <input
+                type="password"
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+                value={password2}
+                onChange={(e) => setPassword2(e.target.value)}
+                placeholder="Repite la contraseña"
+              />
+            </div>
+
+            {msg ? <div className={`text-sm ${msgClass}`}>{msg.text}</div> : null}
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={busy}
+              className="w-full bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-60"
+            >
+              {busy ? "Guardando…" : "Guardar"}
+            </button>
+
+            {/* Diagnóstico temporal (quitar cuando ya esté estable) */}
+            {diag ? (
+              <pre className="mt-2 text-[10px] whitespace-pre-wrap bg-slate-50 border rounded-lg p-2 text-slate-700">
+                {JSON.stringify(diag, null, 2)}
+              </pre>
+            ) : null}
+
+            <div className="text-[11px] text-slate-500">
+              Tip: si el link expiró, genera uno nuevo.
+            </div>
+          </div>
         )}
       </div>
     </div>
