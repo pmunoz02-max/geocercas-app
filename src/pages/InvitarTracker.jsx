@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../context/AuthContext";
 import { listPersonal } from "../lib/personalApi.js";
 
 async function safeJsonFromResponse(res) {
@@ -20,7 +20,7 @@ async function callInviteTrackerAPI(payload) {
   try {
     res = await fetch(url, {
       method: "POST",
-      credentials: "include", // 🔑 cookies tg_at/tg_rt
+      credentials: "include", // 🔑 manda cookies tg_at/tg_rt
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -63,7 +63,7 @@ export default function InvitarTracker() {
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [peopleError, setPeopleError] = useState("");
 
-  const [message, setMessage] = useState(null); // { type, text }
+  const [message, setMessage] = useState(null); // { type: "success"|"warn"|"error", text }
   const [actionLink, setActionLink] = useState("");
   const [inviteDiag, setInviteDiag] = useState(null);
 
@@ -94,8 +94,11 @@ export default function InvitarTracker() {
       setPeopleList(normalized);
     } catch (e) {
       console.error("[InvitarTracker] loadPeople error:", e);
-      setPeopleError(e?.message || "Error loading active personnel.");
       setPeopleList([]);
+      setPeopleError(
+        e?.message ||
+          t("inviteTracker.errors.loadPeople", { defaultValue: "Error loading active personnel." })
+      );
     } finally {
       setLoadingPeople(false);
     }
@@ -110,7 +113,6 @@ export default function InvitarTracker() {
   function handleSelectPerson(e) {
     const id = e.target.value;
     setSelectedPersonId(id);
-
     const p = peopleList.find((x) => String(x.id) === String(id));
     if (p?.email) setEmail(String(p.email).toLowerCase());
   }
@@ -124,11 +126,18 @@ export default function InvitarTracker() {
     const cleanEmail = String(email || "").trim().toLowerCase();
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setMessage({ type: "error", text: "Email inválido." });
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.errors.emailInvalid", { defaultValue: "Email inválido." }),
+      });
       return;
     }
+
     if (!currentOrg?.id) {
-      setMessage({ type: "error", text: "No hay organización activa." });
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.errors.noOrg", { defaultValue: "No hay organización activa." }),
+      });
       return;
     }
 
@@ -141,7 +150,12 @@ export default function InvitarTracker() {
       });
 
       if (!resp.ok) {
-        setInviteDiag({ status: resp.status, url: resp.url, body: resp.data, raw: resp.raw || null });
+        setInviteDiag({
+          status: resp.status,
+          url: resp.url,
+          body: resp.data,
+          raw: resp.raw || null,
+        });
 
         let friendly = "Server error (5xx).";
         if (resp.status === 0) friendly = "Network error contacting invitation server.";
@@ -149,15 +163,26 @@ export default function InvitarTracker() {
         if (resp.status === 404) friendly = "API endpoint not found (404).";
         if (resp.status >= 500) friendly = "Server error (5xx).";
 
-        const serverMsg =
+        // ✅ evita [object Object]
+        const serverMsgRaw =
           resp?.data?.error ||
           resp?.data?.message ||
           resp?.data?.data?.error ||
           resp?.data?.data?.message ||
-          (resp?.data?.raw ? String(resp.data.raw).slice(0, 220) : "") ||
-          (resp?.raw ? String(resp.raw).slice(0, 220) : "");
+          (resp?.data?.raw ? resp.data.raw : "") ||
+          (resp?.raw ? resp.raw : "");
 
-        setMessage({ type: "error", text: serverMsg ? `${friendly} — ${serverMsg}` : friendly });
+        const serverMsg =
+          typeof serverMsgRaw === "string"
+            ? serverMsgRaw
+            : serverMsgRaw
+            ? JSON.stringify(serverMsgRaw)
+            : "";
+
+        setMessage({
+          type: "error",
+          text: serverMsg ? `${friendly} — ${serverMsg}` : friendly,
+        });
         return;
       }
 
@@ -165,29 +190,54 @@ export default function InvitarTracker() {
       const inner = proxyPayload?.data ?? null;
 
       if (!proxyPayload?.ok) {
-        setInviteDiag({ status: proxyPayload?.status ?? resp.status, url: resp.url, body: proxyPayload, raw: resp.raw || null });
-        setMessage({ type: "error", text: String(inner?.error || inner?.message || "Invitation failed.") });
+        setInviteDiag({
+          status: proxyPayload?.status ?? resp.status,
+          url: resp.url,
+          body: proxyPayload,
+          raw: resp.raw || null,
+        });
+
+        const innerErr =
+          inner?.error ||
+          inner?.message ||
+          proxyPayload?.error ||
+          proxyPayload?.message ||
+          "Invitation failed.";
+
+        setMessage({
+          type: "error",
+          text: typeof innerErr === "string" ? innerErr : JSON.stringify(innerErr),
+        });
         return;
       }
 
-      const via = inner?.invited_via;
+      const via = inner?.invited_via; // "email" | "action_link"
       const link = inner?.action_link || "";
 
       if (via === "email") {
         setMessage({ type: "success", text: `✅ Invitación enviada por correo a ${cleanEmail}.` });
       } else if (link) {
         setActionLink(link);
-        setMessage({ type: "warn", text: `⚠️ Copia el Magic Link y envíalo a: ${cleanEmail}` });
+        setMessage({
+          type: "warn",
+          text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo a: ${cleanEmail}`,
+        });
       } else {
         setInviteDiag({ status: resp.status, url: resp.url, body: proxyPayload, raw: resp.raw || null });
-        setMessage({ type: "warn", text: "✅ Invitación OK, pero sin detalles (invited_via/action_link)." });
+        setMessage({
+          type: "warn",
+          text: "✅ Invitación procesada, pero la respuesta no incluyó detalles (invited_via/action_link).",
+        });
       }
 
       setEmail("");
       setSelectedPersonId("");
     } catch (err) {
       console.error("[InvitarTracker] unexpected:", err);
-      setMessage({ type: "error", text: "Error inesperado." });
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.messages.unexpectedError", { defaultValue: "Error inesperado." }),
+      });
     } finally {
       setSending(false);
     }
@@ -203,23 +253,38 @@ export default function InvitarTracker() {
   if (!ready) {
     return (
       <div className="max-w-lg mx-auto p-4">
-        <div className="border rounded px-4 py-3 text-sm text-gray-600">Loading…</div>
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">
+          {t("common.actions.loading", { defaultValue: "Loading…" })}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="max-w-lg mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">{t("inviteTracker.title", { defaultValue: "Invitar Tracker" })}</h1>
+      <h1 className="text-2xl font-semibold mb-4">
+        {t("inviteTracker.title", { defaultValue: "Invitar Tracker" })}
+      </h1>
 
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
         <div className="border rounded-lg p-3 bg-slate-50">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <div className="text-sm font-semibold">Seleccionar persona</div>
-              <div className="text-xs text-slate-600 mt-1">{selectedPersonLabel || "Selecciona una persona activa."}</div>
+              <div className="text-sm font-semibold">
+                {t("inviteTracker.form.selectPersonTitle", { defaultValue: "Seleccionar persona" })}
+              </div>
+
+              <div className="text-xs text-slate-600 mt-1">
+                {selectedPersonLabel
+                  ? selectedPersonLabel
+                  : t("inviteTracker.form.selectPersonHint", {
+                      defaultValue: "Selecciona una persona activa para autocompletar el email.",
+                    })}
+              </div>
+
               <div className="text-[11px] text-slate-500 mt-1">
-                Activos: <span className="font-semibold">{peopleList.length}</span>
+                {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
+                <span className="font-semibold">{peopleList.length}</span>
               </div>
             </div>
 
@@ -229,7 +294,9 @@ export default function InvitarTracker() {
               className="px-3 py-2 rounded border text-xs bg-white hover:bg-slate-100"
               disabled={loadingPeople}
             >
-              {loadingPeople ? "Refrescando…" : "Refrescar"}
+              {loadingPeople
+                ? t("inviteTracker.form.buttonRefreshing", { defaultValue: "Refrescando…" })
+                : t("inviteTracker.form.buttonRefreshPeople", { defaultValue: "Refrescar" })}
             </button>
           </div>
 
@@ -241,8 +308,15 @@ export default function InvitarTracker() {
           )}
 
           <div className="mt-3">
-            <select className="w-full border rounded px-3 py-2 text-sm bg-white" value={selectedPersonId} onChange={handleSelectPerson}>
-              <option value="">{peopleList.length > 0 ? "Selecciona una persona activa" : "(No hay personal activo)"}</option>
+            <select
+              className="w-full border rounded px-3 py-2 text-sm bg-white"
+              value={selectedPersonId}
+              onChange={handleSelectPerson}
+            >
+              <option value="">
+                {peopleList.length > 0 ? "Selecciona una persona activa" : "(No hay personal activo)"}
+              </option>
+
               {peopleList.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -269,7 +343,9 @@ export default function InvitarTracker() {
         {inviteDiag && (
           <div className="text-xs bg-slate-50 border rounded p-3">
             <div className="font-semibold mb-1">Invite server diagnostic</div>
-            <div>Status: <span className="font-semibold">{inviteDiag.status}</span></div>
+            <div>
+              Status: <span className="font-semibold">{inviteDiag.status}</span>
+            </div>
             <div className="break-all">URL: {inviteDiag.url}</div>
             <div className="mt-2 font-semibold">Body:</div>
             <pre className="mt-1 whitespace-pre-wrap break-words bg-white border rounded p-2">
@@ -281,14 +357,25 @@ export default function InvitarTracker() {
         {actionLink ? (
           <div className="text-xs break-all bg-slate-50 border rounded p-3">
             <div className="font-semibold mb-2">Magic Link (tracker)</div>
+
             <div className="flex gap-2 mb-2">
-              <button type="button" onClick={() => navigator.clipboard.writeText(actionLink)} className="bg-blue-600 text-white rounded px-3 py-2 text-xs">
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(actionLink)}
+                className="bg-blue-600 text-white rounded px-3 py-2 text-xs"
+              >
                 Copiar link
               </button>
-              <button type="button" onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")} className="bg-slate-700 text-white rounded px-3 py-2 text-xs">
+
+              <button
+                type="button"
+                onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
+                className="bg-slate-700 text-white rounded px-3 py-2 text-xs"
+              >
                 Probar link
               </button>
             </div>
+
             <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
           </div>
         ) : null}
