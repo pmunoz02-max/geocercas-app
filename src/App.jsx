@@ -12,7 +12,7 @@ import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
-import UpdatePassword from "./pages/UpdatePassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx"; // ✅ CORRECTO
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
@@ -73,7 +73,7 @@ export default function App() {
 
         {/* 🔐 Password flows */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<UpdatePassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} /> {/* ✅ */}
 
         {/* Legacy redirects */}
         <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
