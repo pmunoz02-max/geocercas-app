@@ -16,11 +16,28 @@ import React, {
  * EXPONE:
  * - Nuevo: currentRole, currentOrg, organizations, selectOrg, isAppRoot
  * - Legacy: role, currentOrgId, orgId, authenticated, ready (para páginas viejas)
+ *
+ * ✅ FIX (Enero 2026):
+ * - /reset-password debe ser PUBLIC y NO depender de sesión (porque es flujo recovery)
+ * - Evitamos que AuthContext bloquee el submit y muestre "Auth session missing!"
  */
 
 const AuthContext = createContext(null);
 
 const LS_ORG_KEY = "tg_current_org_id";
+
+/** Rutas públicas: NO deben disparar /api/auth/session */
+const PUBLIC_ROUTES = [
+  "/login",
+  "/reset-password",
+  "/forgot-password",
+  "/auth/callback", // si lo usas para callbacks públicos
+];
+
+function isPublicRoutePath(pathname) {
+  const p = (pathname || "").toLowerCase();
+  return PUBLIC_ROUTES.some((r) => p === r || p.startsWith(r + "/"));
+}
 
 async function fetchSession() {
   const res = await fetch("/api/auth/session", {
@@ -87,6 +104,23 @@ export function AuthProvider({ children }) {
   );
 
   const bootstrap = useCallback(async () => {
+    // ✅ Si estamos en ruta pública, NO hacemos session guard.
+    if (typeof window !== "undefined" && isPublicRoutePath(window.location.pathname)) {
+      setLoading(false);
+      setUser(null);
+      setCurrentRole(null);
+      setIsAppRoot(false);
+      setOrganizations([]);
+      setCurrentOrg(null);
+
+      // ✅ Marca ready si todavía no lo hicimos
+      if (!didBootstrapOnceRef.current) {
+        didBootstrapOnceRef.current = true;
+        setReady(true);
+      }
+      return;
+    }
+
     setLoading(true);
 
     try {
