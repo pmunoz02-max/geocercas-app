@@ -2,6 +2,7 @@
 // Wrapper de compatibilidad.
 // ✅ Mantiene TODOS los exports existentes desde ./lib/supabaseClient (incluye setMemoryAccessToken, supabase, etc.)
 // ✅ Agrega un cliente adicional "supabaseRecovery" (solo para reset/recovery) sin romper Ruta B.
+// ✅ Usa storageKey SEPARADO para que NO choque con el cliente principal ni sea borrado por lógica global.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -24,11 +25,13 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 // --- Cliente recovery-only ---
 // Úsalo SOLO en /reset-password (y páginas de recuperación similares).
 // Permite que verifyOtp/exchangeCodeForSession creen sesión persistida para que updateUser({password}) no falle.
+// IMPORTANTÍSIMO: storageKey separado evita interferencia con tu Ruta B.
 export const supabaseRecovery = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storageKey: "tg_recovery_auth", // 👈 clave distinta
     storage: typeof window !== "undefined" ? window.localStorage : undefined,
   },
 });
