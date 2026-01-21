@@ -1,309 +1,375 @@
-// api/invite-tracker.js
-// Proxy API-first: Browser -> Vercel (cookies tg_at/tg_rt) -> Supabase Edge Function invite_tracker
-// Never crash, always JSON.
-// Universal runtime: NO dependency on global fetch (works on Node 16/18/20).
+import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../context/AuthContext"; // <- evita alias @/ si tu build no lo soporta
+import { useTranslation } from "react-i18next";
+import { listPersonal } from "../lib/personalApi.js";
 
-const https = require("https");
-const http = require("http");
-
-function parseCookies(cookieHeader) {
-  const out = {};
-  if (!cookieHeader) return out;
-  const parts = cookieHeader.split(";");
-  for (const p of parts) {
-    const i = p.indexOf("=");
-    if (i === -1) continue;
-    const k = p.slice(0, i).trim();
-    const v = p.slice(i + 1).trim();
-    if (!k) continue;
-    try {
-      out[k] = decodeURIComponent(v);
-    } catch {
-      out[k] = v;
-    }
-  }
-  return out;
-}
-
-function makeCookie(name, value, opts = {}) {
-  const {
-    httpOnly = true,
-    secure = true,
-    sameSite = "Lax",
-    path = "/",
-    maxAge,
-  } = opts;
-
-  let s = `${name}=${encodeURIComponent(value ?? "")}`;
-  if (path) s += `; Path=${path}`;
-  if (typeof maxAge === "number") s += `; Max-Age=${maxAge}`;
-  if (sameSite) s += `; SameSite=${sameSite}`;
-  if (secure) s += `; Secure`;
-  if (httpOnly) s += `; HttpOnly`;
-  return s;
-}
-
-async function readJsonBody(req) {
-  // Vercel sometimes gives req.body as object/string/buffer depending on runtime
-  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) return req.body;
-  if (typeof req.body === "string" && req.body.trim()) return JSON.parse(req.body);
-  if (Buffer.isBuffer(req.body) && req.body.length) return JSON.parse(req.body.toString("utf8"));
-
-  const raw = await new Promise((resolve) => {
-    let data = "";
-    req.on("data", (c) => (data += c));
-    req.on("end", () => resolve(data));
-  });
-
-  if (!raw || !String(raw).trim()) return {};
-  return JSON.parse(raw);
-}
-
-/**
- * Minimal fetch-like request using http/https (no external deps).
- * Returns { ok, status, headers, text():Promise<string> }.
- */
-function nodeRequest(url, { method = "GET", headers = {}, body } = {}) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const isHttps = u.protocol === "https:";
-    const lib = isHttps ? https : http;
-
-    const opts = {
-      method,
-      hostname: u.hostname,
-      port: u.port ? Number(u.port) : isHttps ? 443 : 80,
-      path: `${u.pathname}${u.search || ""}`,
-      headers: {
-        ...headers,
-      },
-    };
-
-    const req2 = lib.request(opts, (r) => {
-      let data = "";
-      r.on("data", (chunk) => (data += chunk));
-      r.on("end", () => {
-        resolve({
-          ok: r.statusCode >= 200 && r.statusCode < 300,
-          status: r.statusCode || 0,
-          headers: r.headers || {},
-          text: async () => data,
-        });
-      });
-    });
-
-    req2.on("error", reject);
-
-    if (body !== undefined && body !== null) {
-      req2.write(typeof body === "string" ? body : String(body));
-    }
-    req2.end();
-  });
-}
-
-function safeJsonParse(text) {
-  if (!text || !String(text).trim()) return null;
+async function safeJsonFromResponse(res) {
+  const text = await res.text();
+  if (!text || !text.trim()) return { json: null, raw: "" };
   try {
-    return JSON.parse(text);
+    return { json: JSON.parse(text), raw: text };
   } catch {
-    return { raw: text };
+    return { json: null, raw: text };
   }
 }
 
-async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
-  const url = `${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/token?grant_type=refresh_token`;
+async function callInviteTrackerAPI(payload) {
+  const url = "/api/invite-tracker";
 
-  const r = await nodeRequest(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-
-  const text = await r.text();
-  const json = safeJsonParse(text) || {};
-
-  if (!r.ok || !json?.access_token) {
-    const msg = json?.error_description || json?.error || "Failed to refresh token";
-    const err = new Error(msg);
-    err.status = 401;
-    err.body = json || null;
-    throw err;
-  }
-
-  return json; // {access_token, refresh_token, expires_in, user, ...}
-}
-
-module.exports = async (req, res) => {
-  const version = "invite-tracker-proxy-v2-node-http-2026-01-21";
-
+  let res;
   try {
-    // CORS (same-origin recommended; still safe)
-    const origin = req.headers.origin;
-    if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type,Accept");
-    res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+    res = await fetch(url, {
+      method: "POST",
+      credentials: "include", // 🔑 manda tg_at/tg_rt
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (networkErr) {
+    return {
+      ok: false,
+      status: 0,
+      data: {
+        error: "Network error calling /api/invite-tracker",
+        details: String(networkErr?.message || networkErr),
+      },
+      url,
+      raw: null,
+    };
+  }
 
-    if (req.method === "OPTIONS") {
-      res.statusCode = 200;
-      return res.end();
-    }
+  const { json, raw } = await safeJsonFromResponse(res);
+  return { ok: res.ok, status: res.status, data: json ?? (raw ? { raw } : null), url, raw };
+}
 
-    if (req.method !== "POST") {
-      res.setHeader("Allow", "POST,OPTIONS");
-      res.statusCode = 405;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(JSON.stringify({ ok: false, error: "Method Not Allowed", version }));
-    }
+function personLabel(p) {
+  const nombre = `${p?.nombre ?? ""} ${p?.apellido ?? ""}`.trim();
+  const email = String(p?.email ?? "").trim();
+  return `${nombre || "—"} — ${email || "—"}`.trim();
+}
 
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+export default function InvitarTracker() {
+  const { currentOrg, ready, isLoggedIn } = useAuth();
+  const { t } = useTranslation();
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      res.statusCode = 500;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(
-        JSON.stringify({
-          ok: false,
-          error: "Server misconfigured",
-          details: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
-          version,
-        })
-      );
-    }
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
 
-    let body = {};
+  const [peopleList, setPeopleList] = useState([]);
+  const [selectedPersonId, setSelectedPersonId] = useState("");
+
+  const [loadingPeople, setLoadingPeople] = useState(false);
+  const [peopleError, setPeopleError] = useState("");
+
+  const [message, setMessage] = useState(null); // { type, text }
+  const [actionLink, setActionLink] = useState("");
+  const [inviteDiag, setInviteDiag] = useState(null);
+
+  const selectedPersonLabel = useMemo(() => {
+    const p = peopleList.find((x) => String(x.id) === String(selectedPersonId));
+    return p?.label || "";
+  }, [peopleList, selectedPersonId]);
+
+  async function loadPeople() {
+    if (!isLoggedIn || !currentOrg?.id) return;
+
+    setLoadingPeople(true);
+    setPeopleError("");
+
     try {
-      body = await readJsonBody(req);
+      const rows = await listPersonal({ q: "", onlyActive: true, limit: 500 });
+
+      const normalized = (Array.isArray(rows) ? rows : [])
+        .filter((r) => r?.vigente === true || r?.vigente === 1)
+        .map((r) => ({
+          id: r.id,
+          email: String(r?.email ?? "").trim(),
+          label: personLabel(r),
+        }))
+        .filter((x) => x.id && x.email)
+        .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+
+      setPeopleList(normalized);
     } catch (e) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(JSON.stringify({ ok: false, error: "Invalid JSON body", details: String(e?.message || e), version }));
-    }
-
-    const email = String(body.email || "").trim().toLowerCase();
-    const org_id = String(body.org_id || "").trim();
-
-    if (!email || !email.includes("@") || !org_id) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(
-        JSON.stringify({
-          ok: false,
-          error: "Missing or invalid fields",
-          required: ["email", "org_id"],
-          version,
-        })
+      console.error("[InvitarTracker] loadPeople error:", e);
+      setPeopleList([]);
+      setPeopleError(
+        e?.message ||
+          t("inviteTracker.errors.loadPeople", { defaultValue: "Error loading active personnel." })
       );
+    } finally {
+      setLoadingPeople(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!ready || !isLoggedIn || !currentOrg?.id) return;
+    loadPeople();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, isLoggedIn, currentOrg?.id]);
+
+  function handleSelectPerson(e) {
+    const id = e.target.value;
+    setSelectedPersonId(id);
+
+    const p = peopleList.find((x) => String(x.id) === String(id));
+    if (p?.email) setEmail(String(p.email).toLowerCase());
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setMessage(null);
+    setActionLink("");
+    setInviteDiag(null);
+
+    const cleanEmail = String(email || "").trim().toLowerCase();
+
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.errors.emailInvalid", { defaultValue: "Email inválido." }),
+      });
+      return;
     }
 
-    // Read cookies from browser request
-    const cookies = parseCookies(req.headers.cookie || "");
-    let accessToken = cookies.tg_at || "";
-    const refreshToken = cookies.tg_rt || "";
+    if (!currentOrg?.id) {
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.errors.noOrg", { defaultValue: "No hay organización activa." }),
+      });
+      return;
+    }
 
-    if (!accessToken) {
-      // Try refresh if we at least have refresh token
-      if (!refreshToken) {
-        res.statusCode = 401;
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        return res.end(
-          JSON.stringify({
-            ok: false,
-            error: "No session token (missing tg_at cookie). Please login again.",
-            version,
-          })
-        );
+    try {
+      setSending(true);
+
+      const resp = await callInviteTrackerAPI({
+        email: cleanEmail,
+        org_id: currentOrg.id,
+      });
+
+      if (!resp.ok) {
+        setInviteDiag({
+          status: resp.status,
+          url: resp.url,
+          body: resp.data,
+          raw: resp.raw || null,
+        });
+
+        let friendly = "Server error (5xx).";
+        if (resp.status === 0) friendly = "Network error contacting invitation server.";
+        if (resp.status === 401) friendly = "Unauthorized (session/token). Please re-login.";
+        if (resp.status === 404) friendly = "API endpoint not found (404).";
+        if (resp.status >= 500) friendly = "Server error (5xx).";
+
+        const serverMsg =
+          resp?.data?.error ||
+          resp?.data?.message ||
+          resp?.data?.data?.error ||
+          resp?.data?.data?.message ||
+          (resp?.data?.raw ? String(resp.data.raw).slice(0, 220) : "") ||
+          (resp?.raw ? String(resp.raw).slice(0, 220) : "");
+
+        setMessage({
+          type: "error",
+          text: serverMsg ? `${friendly} — ${serverMsg}` : friendly,
+        });
+        return;
       }
 
-      const refreshed = await refreshAccessToken({
-        supabaseUrl: SUPABASE_URL,
-        anonKey: SUPABASE_ANON_KEY,
-        refreshToken,
+      const proxyPayload = resp.data;
+      const inner = proxyPayload?.data ?? null;
+
+      if (!proxyPayload?.ok) {
+        setInviteDiag({
+          status: proxyPayload?.status ?? resp.status,
+          url: resp.url,
+          body: proxyPayload,
+          raw: resp.raw || null,
+        });
+
+        const innerErr =
+          inner?.error ||
+          inner?.message ||
+          proxyPayload?.error ||
+          proxyPayload?.message ||
+          "Invitation failed.";
+
+        setMessage({ type: "error", text: String(innerErr) });
+        return;
+      }
+
+      const via = inner?.invited_via; // "email" | "action_link"
+      const link = inner?.action_link || "";
+
+      if (via === "email") {
+        setMessage({ type: "success", text: `✅ Invitación enviada por correo a ${cleanEmail}.` });
+      } else if (link) {
+        setActionLink(link);
+        setMessage({
+          type: "warn",
+          text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo a: ${cleanEmail}`,
+        });
+      } else {
+        setInviteDiag({ status: resp.status, url: resp.url, body: proxyPayload, raw: resp.raw || null });
+        setMessage({
+          type: "warn",
+          text: "✅ Invitación procesada, pero la respuesta no incluyó detalles (invited_via/action_link).",
+        });
+      }
+
+      setEmail("");
+      setSelectedPersonId("");
+    } catch (err) {
+      console.error("[InvitarTracker] unexpected:", err);
+      setMessage({
+        type: "error",
+        text: t("inviteTracker.messages.unexpectedError", { defaultValue: "Error inesperado." }),
       });
-
-      accessToken = refreshed.access_token;
-
-      // Update cookies (keep refresh token too)
-      const accessMaxAge = Number(refreshed.expires_in || 3600);
-      const refreshMaxAge = 30 * 24 * 60 * 60;
-
-      res.setHeader("Set-Cookie", [
-        makeCookie("tg_at", refreshed.access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          maxAge: accessMaxAge,
-        }),
-        makeCookie("tg_rt", refreshed.refresh_token || refreshToken, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          maxAge: refreshMaxAge,
-        }),
-      ]);
+    } finally {
+      setSending(false);
     }
+  }
 
-    // Call Supabase Edge Function using Authorization as the user
-    const fnUrl = `${String(SUPABASE_URL).replace(/\/$/, "")}/functions/v1/invite_tracker`;
+  const msgClass =
+    message?.type === "success"
+      ? "text-emerald-700"
+      : message?.type === "warn"
+      ? "text-amber-700"
+      : "text-red-600";
 
-    let fnRes;
-    try {
-      fnRes = await nodeRequest(fnUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ email, org_id }),
-      });
-    } catch (e) {
-      res.statusCode = 502;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(
-        JSON.stringify({
-          ok: false,
-          error: "Network error calling invite_tracker",
-          details: String(e?.message || e),
-          version,
-        })
-      );
-    }
-
-    // Pass-through response
-    const text = await fnRes.text();
-    const json = safeJsonParse(text);
-
-    res.statusCode = fnRes.status;
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.end(
-      JSON.stringify({
-        ok: fnRes.ok,
-        status: fnRes.status,
-        data: json,
-        version,
-      })
-    );
-  } catch (fatal) {
-    console.error("[api/invite-tracker] fatal:", fatal);
-    res.statusCode = fatal?.status || 500;
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.end(
-      JSON.stringify({
-        ok: false,
-        error: fatal?.message || "Unexpected error",
-        details: fatal?.body || null,
-        stack: fatal?.stack || null,
-        version,
-      })
+  if (!ready) {
+    return (
+      <div className="max-w-lg mx-auto p-4">
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">
+          {t("common.actions.loading", { defaultValue: "Loading…" })}
+        </div>
+      </div>
     );
   }
-};
+
+  return (
+    <div className="max-w-lg mx-auto">
+      <h1 className="text-2xl font-semibold mb-4">
+        {t("inviteTracker.title", { defaultValue: "Invitar Tracker" })}
+      </h1>
+
+      <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
+        <div className="border rounded-lg p-3 bg-slate-50">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold">
+                {t("inviteTracker.form.selectPersonTitle", { defaultValue: "Seleccionar persona" })}
+              </div>
+
+              <div className="text-xs text-slate-600 mt-1">
+                {selectedPersonLabel
+                  ? selectedPersonLabel
+                  : t("inviteTracker.form.selectPersonHint", {
+                      defaultValue: "Selecciona una persona activa para autocompletar el email.",
+                    })}
+              </div>
+
+              <div className="text-[11px] text-slate-500 mt-1">
+                {t("inviteTracker.form.peopleCount", { defaultValue: "Activos:" })}{" "}
+                <span className="font-semibold">{peopleList.length}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadPeople}
+              className="px-3 py-2 rounded border text-xs bg-white hover:bg-slate-100"
+              disabled={loadingPeople}
+            >
+              {loadingPeople
+                ? t("inviteTracker.form.buttonRefreshing", { defaultValue: "Refrescando…" })
+                : t("inviteTracker.form.buttonRefreshPeople", { defaultValue: "Refrescar" })}
+            </button>
+          </div>
+
+          {peopleError && (
+            <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+              <div className="font-semibold">Error cargando personal</div>
+              <div className="mt-1 break-words">{peopleError}</div>
+            </div>
+          )}
+
+          <div className="mt-3">
+            <select
+              className="w-full border rounded px-3 py-2 text-sm bg-white"
+              value={selectedPersonId}
+              onChange={handleSelectPerson}
+            >
+              <option value="">
+                {peopleList.length > 0 ? "Selecciona una persona activa" : "(No hay personal activo)"}
+              </option>
+
+              {peopleList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <input
+          type="email"
+          className="w-full border rounded px-3 py-2 text-sm"
+          placeholder="tracker@ejemplo.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+
+        <button disabled={sending} className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm">
+          {sending ? "Enviando…" : "Send invitation"}
+        </button>
+
+        {message && <div className={`text-sm ${msgClass}`}>{message.text}</div>}
+
+        {inviteDiag && (
+          <div className="text-xs bg-slate-50 border rounded p-3">
+            <div className="font-semibold mb-1">Invite server diagnostic</div>
+            <div>
+              Status: <span className="font-semibold">{inviteDiag.status}</span>
+            </div>
+            <div className="break-all">URL: {inviteDiag.url}</div>
+            <div className="mt-2 font-semibold">Body:</div>
+            <pre className="mt-1 whitespace-pre-wrap break-words bg-white border rounded p-2">
+              {JSON.stringify(inviteDiag.body, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        {actionLink ? (
+          <div className="text-xs break-all bg-slate-50 border rounded p-3">
+            <div className="font-semibold mb-2">Magic Link (tracker)</div>
+
+            <div className="flex gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(actionLink)}
+                className="bg-blue-600 text-white rounded px-3 py-2 text-xs"
+              >
+                Copiar link
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
+                className="bg-slate-700 text-white rounded px-3 py-2 text-xs"
+              >
+                Probar link
+              </button>
+            </div>
+
+            <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
+          </div>
+        ) : null}
+      </form>
+    </div>
+  );
+}
