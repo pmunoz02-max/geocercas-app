@@ -1,36 +1,30 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { supabase } from "../supabaseClient.js";
 import { useTranslation } from "react-i18next";
 import { listPersonal } from "../lib/personalApi.js";
 
-async function callInviteTracker(payload) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+async function safeJsonFromResponse(res) {
+  const text = await res.text();
+  if (!text || !text.trim()) return { json: null, raw: "" };
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    return {
-      ok: false,
-      status: 401,
-      data: { error: "No session token (user not authenticated)" },
-      url: null,
-    };
+  try {
+    return { json: JSON.parse(text), raw: text };
+  } catch {
+    return { json: null, raw: text };
   }
+}
 
-  const url = `${String(supabaseUrl || "").replace(/\/$/, "")}/functions/v1/invite_tracker`;
+async function callInviteTrackerAPI(payload) {
+  const url = "/api/invite-tracker";
 
   let res;
   try {
     res = await fetch(url, {
       method: "POST",
+      credentials: "include", // 🔑 CLAVE: envía cookies HttpOnly tg_at/tg_rt
       headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify(payload),
     });
@@ -39,30 +33,24 @@ async function callInviteTracker(payload) {
       ok: false,
       status: 0,
       data: {
-        error: "Network error calling invite_tracker",
+        error: "Network error calling /api/invite-tracker",
         details: String(networkErr?.message || networkErr),
       },
       url,
+      raw: null,
     };
   }
 
-  let json = null;
-  let rawText = "";
-  try {
-    json = await res.json();
-  } catch (_) {
-    try {
-      rawText = await res.text();
-    } catch (_) {
-      rawText = "";
-    }
-  }
+  const { json, raw } = await safeJsonFromResponse(res);
 
+  // Tu proxy responde: { ok, status, data, version }
+  // Pero por robustez, devolvemos lo que venga.
   return {
     ok: res.ok,
     status: res.status,
-    data: json || (rawText ? { raw: rawText } : null),
+    data: json ?? (raw ? { raw } : null),
     url,
+    raw,
   };
 }
 
@@ -89,7 +77,7 @@ export default function InvitarTracker() {
   const [actionLink, setActionLink] = useState("");
 
   // diagnóstico del server
-  const [inviteDiag, setInviteDiag] = useState(null); // {status,url,body}
+  const [inviteDiag, setInviteDiag] = useState(null); // {status,url,body,raw}
 
   const selectedPersonLabel = useMemo(() => {
     const p = peopleList.find((x) => String(x.id) === String(selectedPersonId));
@@ -169,16 +157,19 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      const resp = await callInviteTracker({
+      const resp = await callInviteTrackerAPI({
         email: cleanEmail,
         org_id: currentOrg.id,
       });
 
+      // Tu proxy regresa { ok, status, data, version } en resp.data si todo bien,
+      // pero si algo raro pasa, igual lo mostramos.
       if (!resp.ok) {
         setInviteDiag({
           status: resp.status,
           url: resp.url,
           body: resp.data,
+          raw: resp.raw || null,
         });
 
         let friendly = t("inviteTracker.messages.serverProblem", {
@@ -187,13 +178,16 @@ export default function InvitarTracker() {
 
         if (resp.status === 0) friendly = "Network error contacting invitation server.";
         if (resp.status === 401) friendly = "Unauthorized (session/token). Please re-login.";
-        if (resp.status === 404) friendly = "invite_tracker function not found (404).";
-        if (resp.status >= 500) friendly = "Server error in invite_tracker (5xx).";
+        if (resp.status === 404) friendly = "API endpoint not found (404).";
+        if (resp.status >= 500) friendly = "Server error (5xx).";
 
         const serverMsg =
           resp?.data?.error ||
           resp?.data?.message ||
-          (resp?.data?.raw ? String(resp.data.raw).slice(0, 220) : "");
+          resp?.data?.data?.error ||
+          resp?.data?.data?.message ||
+          (resp?.data?.raw ? String(resp.data.raw).slice(0, 220) : "") ||
+          (resp?.raw ? String(resp.raw).slice(0, 220) : "");
 
         setMessage({
           type: "error",
@@ -203,21 +197,52 @@ export default function InvitarTracker() {
       }
 
       if (!resp.data) {
-        setInviteDiag({ status: resp.status, url: resp.url, body: null });
+        setInviteDiag({ status: resp.status, url: resp.url, body: null, raw: resp.raw || null });
         setMessage({ type: "error", text: "Invitation server returned empty response." });
         return;
       }
 
-      const via = resp.data.invited_via; // "email" | "action_link"
-      const link = resp.data.action_link || "";
+      // El proxy devuelve: { ok, status, data, version }
+      const proxyPayload = resp.data;
+      const inner = proxyPayload?.data ?? null;
+
+      if (!proxyPayload?.ok) {
+        setInviteDiag({
+          status: proxyPayload?.status ?? resp.status,
+          url: resp.url,
+          body: proxyPayload,
+          raw: resp.raw || null,
+        });
+
+        const innerErr =
+          inner?.error ||
+          inner?.message ||
+          proxyPayload?.error ||
+          proxyPayload?.message ||
+          "Invitation failed.";
+
+        setMessage({ type: "error", text: String(innerErr) });
+        return;
+      }
+
+      // Esperamos que inner contenga: { invited_via, action_link }
+      const via = inner?.invited_via; // "email" | "action_link"
+      const link = inner?.action_link || "";
 
       if (via === "email") {
         setMessage({ type: "success", text: `✅ Invitación enviada por correo a ${cleanEmail}.` });
-      } else {
+      } else if (link) {
         setActionLink(link);
         setMessage({
           type: "warn",
           text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo a: ${cleanEmail}`,
+        });
+      } else {
+        // Caso raro: OK pero sin formato esperado
+        setInviteDiag({ status: resp.status, url: resp.url, body: proxyPayload, raw: resp.raw || null });
+        setMessage({
+          type: "warn",
+          text: "✅ Invitación procesada, pero la respuesta no incluyó detalles (invited_via/action_link).",
         });
       }
 
