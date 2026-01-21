@@ -1,6 +1,14 @@
 // src/pages/ResetPassword.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+/**
+ * ResetPassword (Ruta B API-first)
+ * - NO usa supabase.auth.updateUser (evita "Auth session missing")
+ * - Llama a tu endpoint: POST /api/auth/recovery
+ * - Incluye hardening UI: pointer-events + zIndex para evitar overlays que “roban” el click
+ * - Incluye diagnóstico visible (temporal) para ver si el click realmente dispara fetch
+ */
 
 function isStrongEnough(pw) {
   const s = String(pw || "");
@@ -9,10 +17,9 @@ function isStrongEnough(pw) {
 
 function getRecoveryParams() {
   const q = new URLSearchParams(window.location.search);
-  return {
-    token_hash: q.get("token_hash") || "",
-    type: (q.get("type") || "recovery").toLowerCase(),
-  };
+  const token_hash = q.get("token_hash") || q.get("token") || q.get("recovery_token") || "";
+  const type = (q.get("type") || "recovery").toLowerCase();
+  return { token_hash, type };
 }
 
 export default function ResetPassword() {
@@ -21,13 +28,26 @@ export default function ResetPassword() {
 
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [diag, setDiag] = useState(null);
+  const [msg, setMsg] = useState(null); // { type: "success"|"warn"|"error", text }
+  const [diag, setDiag] = useState(null); // debug visible
+
+  useEffect(() => {
+    // Diagnóstico para confirmar que el componente realmente está montado
+    // (si no aparece en consola, estás viendo otro build/route)
+    // eslint-disable-next-line no-console
+    console.log("[ResetPassword] mounted", {
+      hasTokenHash: Boolean(token_hash),
+      type,
+      href: window.location.href,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const canSave = useMemo(() => {
     return (
-      token_hash &&
+      Boolean(token_hash) &&
       password &&
       password2 &&
       password === password2 &&
@@ -36,8 +56,15 @@ export default function ResetPassword() {
   }, [token_hash, password, password2]);
 
   async function handleSave() {
+    // eslint-disable-next-line no-console
+    console.log("[ResetPassword] CLICK DETECTED");
     setMsg(null);
     setDiag(null);
+
+    if (!token_hash) {
+      setMsg({ type: "error", text: "Link inválido o incompleto. Genera un reset nuevo." });
+      return;
+    }
 
     if (!canSave) {
       setMsg({
@@ -51,11 +78,13 @@ export default function ResetPassword() {
     try {
       setBusy(true);
 
-      console.log("[RESET] calling /api/auth/recovery");
+      // eslint-disable-next-line no-console
+      console.log("[ResetPassword] calling /api/auth/recovery");
 
       const resp = await fetch("/api/auth/recovery", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // no hace daño; tu endpoint no depende de cookies
         body: JSON.stringify({
           token_hash,
           type,
@@ -64,12 +93,20 @@ export default function ResetPassword() {
       });
 
       const data = await resp.json().catch(() => ({}));
-      setDiag({ status: resp.status, data });
+
+      setDiag({
+        step: "api_response",
+        status: resp.status,
+        ok: resp.ok,
+        data,
+      });
 
       if (!resp.ok || !data?.ok) {
         setMsg({
           type: "error",
-          text: data?.error || `Error HTTP ${resp.status}`,
+          text:
+            data?.error ||
+            `No se pudo actualizar (HTTP ${resp.status}). Genera un link nuevo e intenta otra vez.`,
         });
         return;
       }
@@ -79,10 +116,15 @@ export default function ResetPassword() {
         text: "✅ Contraseña actualizada. Redirigiendo a login…",
       });
 
-      setTimeout(() => navigate("/login", { replace: true }), 1000);
+      // Limpia la URL (evita dejar token en barra)
+      try {
+        window.history.replaceState({}, document.title, "/reset-password");
+      } catch {}
+
+      setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (e) {
-      setMsg({ type: "error", text: e?.message || "Error inesperado" });
-      setDiag({ exception: String(e) });
+      setMsg({ type: "error", text: e?.message || "Error inesperado." });
+      setDiag({ step: "exception", error: e?.message || String(e) });
     } finally {
       setBusy(false);
     }
@@ -90,54 +132,103 @@ export default function ResetPassword() {
 
   const msgClass =
     msg?.type === "success"
-      ? "text-emerald-600"
+      ? "text-emerald-700"
       : msg?.type === "warn"
-      ? "text-amber-600"
+      ? "text-amber-700"
       : "text-red-600";
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white border rounded-xl p-6">
-        <h1 className="text-xl font-semibold mb-3">Actualizar contraseña</h1>
+    <div
+      className="min-h-[70vh] flex items-center justify-center px-4"
+      style={{
+        pointerEvents: "auto",
+        zIndex: 40,
+        position: "relative",
+      }}
+    >
+      <div
+        className="w-full max-w-md bg-white border rounded-2xl p-6"
+        style={{
+          pointerEvents: "auto",
+          zIndex: 45,
+          position: "relative",
+        }}
+      >
+        <h1 className="text-xl font-semibold mb-2">Actualizar contraseña</h1>
+        <p className="text-sm text-slate-600 mb-4">Ingresa una nueva contraseña para tu cuenta.</p>
 
         {!token_hash ? (
-          <div className="text-red-600 text-sm">
-            Link inválido o incompleto.
+          <div className="space-y-3">
+            <div className="text-sm text-red-600">
+              Link inválido o incompleto. Genera un reset nuevo.
+            </div>
+            <button
+              type="button"
+              className="w-full bg-slate-900 text-white rounded-lg px-4 py-2 text-sm"
+              style={{ pointerEvents: "auto", zIndex: 50, position: "relative" }}
+              onClick={() => navigate("/login", { replace: true })}
+            >
+              Ir a Login
+            </button>
           </div>
         ) : (
           <>
-            <input
-              type="password"
-              placeholder="Nueva contraseña"
-              className="w-full border rounded px-3 py-2 mb-3"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nueva contraseña
+                </label>
+                <input
+                  type="password"
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mín. 8 caracteres, letras y números"
+                  style={{ pointerEvents: "auto", zIndex: 50, position: "relative" }}
+                />
+              </div>
 
-            <input
-              type="password"
-              placeholder="Repetir contraseña"
-              className="w-full border rounded px-3 py-2 mb-3"
-              value={password2}
-              onChange={(e) => setPassword2(e.target.value)}
-            />
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Repetir contraseña
+                </label>
+                <input
+                  type="password"
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={password2}
+                  onChange={(e) => setPassword2(e.target.value)}
+                  placeholder="Repite la contraseña"
+                  style={{ pointerEvents: "auto", zIndex: 50, position: "relative" }}
+                />
+              </div>
 
-            {msg && <div className={`text-sm mb-2 ${msgClass}`}>{msg.text}</div>}
+              {msg ? <div className={`text-sm ${msgClass}`}>{msg.text}</div> : null}
 
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={busy}
-              className="w-full bg-emerald-600 text-white py-2 rounded disabled:opacity-50"
-            >
-              {busy ? "Guardando…" : "Guardar"}
-            </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={busy}
+                className="w-full bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-60"
+                style={{
+                  pointerEvents: "auto",
+                  zIndex: 50,
+                  position: "relative",
+                }}
+              >
+                {busy ? "Guardando…" : "Guardar"}
+              </button>
 
-            {diag && (
-              <pre className="mt-3 text-[10px] bg-slate-50 p-2 rounded">
-                {JSON.stringify(diag, null, 2)}
-              </pre>
-            )}
+              {/* Diagnóstico temporal para cerrar el bug (remover cuando ya funcione) */}
+              {diag ? (
+                <pre className="mt-2 text-[10px] whitespace-pre-wrap bg-slate-50 border rounded-lg p-2 text-slate-700">
+                  {JSON.stringify(diag, null, 2)}
+                </pre>
+              ) : null}
+
+              <div className="text-[11px] text-slate-500">
+                Tip: si el link expiró, genera uno nuevo.
+              </div>
+            </div>
           </>
         )}
       </div>
