@@ -1,6 +1,6 @@
 // api/invite-tracker.js
 // Proxy API-first: Browser -> Vercel (cookies tg_at/tg_rt) -> Supabase Edge Function invite_tracker
-// Never crash, always JSON.
+// Nunca crashea, siempre JSON.
 
 function parseCookies(cookieHeader) {
   const out = {};
@@ -37,7 +37,9 @@ function makeCookie(name, value, opts = {}) {
 
 async function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string" && req.body.trim()) return JSON.parse(req.body);
+  if (typeof req.body === "string" && req.body.trim()) {
+    return JSON.parse(req.body);
+  }
 
   const raw = await new Promise((resolve) => {
     let data = "";
@@ -66,21 +68,20 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   const json = text ? JSON.parse(text) : {};
 
   if (!r.ok || !json?.access_token) {
-    const msg = json?.error_description || json?.error || "Failed to refresh token";
-    const err = new Error(msg);
+    const err = new Error(json?.error_description || json?.error || "Failed to refresh token");
     err.status = 401;
     err.body = json || null;
     throw err;
   }
 
-  return json; // {access_token, refresh_token, expires_in, user, ...}
+  return json;
 }
 
 module.exports = async (req, res) => {
-  const version = "invite-tracker-proxy-v1-2026-01-20";
+  const version = "invite-tracker-proxy-v1-2026-01-22";
 
   try {
-    // CORS (same-origin recommended; still safe)
+    // CORS
     const origin = req.headers.origin;
     if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
@@ -105,55 +106,51 @@ module.exports = async (req, res) => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(
-        JSON.stringify({
-          error: "Server misconfigured",
-          details: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
-          version,
-        })
-      );
+      return res.end(JSON.stringify({
+        ok: false,
+        error: "Server misconfigured",
+        details: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
+        version,
+      }));
     }
 
-    let body = {};
+    let body;
     try {
       body = await readJsonBody(req);
     } catch {
       res.statusCode = 400;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(JSON.stringify({ error: "Invalid JSON body", version }));
+      return res.end(JSON.stringify({ ok: false, error: "Invalid JSON body", version }));
     }
 
     const email = String(body.email || "").trim().toLowerCase();
     const org_id = String(body.org_id || "").trim();
+    const person_id = String(body.person_id || "").trim();
 
-    if (!email || !email.includes("@") || !org_id) {
+    if (!email || !email.includes("@") || !org_id || !person_id) {
       res.statusCode = 400;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(
-        JSON.stringify({
-          error: "Missing or invalid fields",
-          required: ["email", "org_id"],
-          version,
-        })
-      );
+      return res.end(JSON.stringify({
+        ok: false,
+        error: "Missing or invalid fields",
+        required: ["email", "org_id", "person_id"],
+        version,
+      }));
     }
 
-    // Read cookies from browser request
     const cookies = parseCookies(req.headers.cookie || "");
     let accessToken = cookies.tg_at || "";
     const refreshToken = cookies.tg_rt || "";
 
     if (!accessToken) {
-      // Try refresh if we at least have refresh token
       if (!refreshToken) {
         res.statusCode = 401;
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        return res.end(
-          JSON.stringify({
-            error: "No session token (missing tg_at cookie). Please login again.",
-            version,
-          })
-        );
+        return res.end(JSON.stringify({
+          ok: false,
+          error: "No session token (missing tg_at)",
+          version,
+        }));
       }
 
       const refreshed = await refreshAccessToken({
@@ -164,83 +161,52 @@ module.exports = async (req, res) => {
 
       accessToken = refreshed.access_token;
 
-      // Update cookies (keep refresh token too)
-      const accessMaxAge = Number(refreshed.expires_in || 3600);
-      const refreshMaxAge = 30 * 24 * 60 * 60;
-
       res.setHeader("Set-Cookie", [
         makeCookie("tg_at", refreshed.access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          maxAge: accessMaxAge,
+          maxAge: Number(refreshed.expires_in || 3600),
         }),
         makeCookie("tg_rt", refreshed.refresh_token || refreshToken, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          maxAge: refreshMaxAge,
+          maxAge: 30 * 24 * 60 * 60,
         }),
       ]);
     }
 
-    // Call Supabase Edge Function using Authorization as the user
     const fnUrl = `${String(SUPABASE_URL).replace(/\/$/, "")}/functions/v1/invite_tracker`;
 
-    let fnRes;
-    try {
-      fnRes = await fetch(fnUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ email, org_id }),
-      });
-    } catch (e) {
-      res.statusCode = 502;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.end(
-        JSON.stringify({
-          error: "Network error calling invite_tracker",
-          details: String(e?.message || e),
-          version,
-        })
-      );
-    }
+    const fnRes = await fetch(fnUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email, org_id, person_id }),
+    });
 
-    // Pass-through response
     const text = await fnRes.text();
-    let json = null;
+    let data;
     try {
-      json = text ? JSON.parse(text) : null;
+      data = text ? JSON.parse(text) : null;
     } catch {
-      json = text ? { raw: text } : null;
+      data = text ? { raw: text } : null;
     }
 
     res.statusCode = fnRes.status;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.end(
-      JSON.stringify({
-        ok: fnRes.ok,
-        status: fnRes.status,
-        data: json,
-        version,
-      })
-    );
+    return res.end(JSON.stringify({
+      ok: fnRes.ok,
+      data,
+      version,
+    }));
   } catch (fatal) {
     console.error("[api/invite-tracker] fatal:", fatal);
     res.statusCode = fatal?.status || 500;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.end(
-      JSON.stringify({
-        error: fatal?.message || "Unexpected error",
-        details: fatal?.body || null,
-        version: "invite-tracker-proxy-v1-2026-01-20",
-      })
-    );
+    return res.end(JSON.stringify({
+      ok: false,
+      error: fatal?.message || "Unexpected error",
+      details: fatal?.body || null,
+      version,
+    }));
   }
 };
