@@ -9,29 +9,14 @@ import React, {
   useRef,
 } from "react";
 
-/**
- * AuthContext UNIVERSAL (TWA/WebView safe)
- * Fuente: /api/auth/session (cookie HttpOnly tg_at)
- *
- * EXPONE:
- * - Nuevo: currentRole, currentOrg, organizations, selectOrg, isAppRoot
- * - Legacy: role, currentOrgId, orgId, authenticated, ready (para páginas viejas)
- *
- * ✅ FIX (Enero 2026):
- * - /reset-password debe ser PUBLIC y NO depender de sesión (porque es flujo recovery)
- * - Evitamos que AuthContext bloquee el submit y muestre "Auth session missing!"
- */
-
 const AuthContext = createContext(null);
-
 const LS_ORG_KEY = "tg_current_org_id";
 
-/** Rutas públicas: NO deben disparar /api/auth/session */
 const PUBLIC_ROUTES = [
   "/login",
   "/reset-password",
   "/forgot-password",
-  "/auth/callback", // si lo usas para callbacks públicos
+  "/auth/callback",
 ];
 
 function isPublicRoutePath(pathname) {
@@ -59,53 +44,21 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
-  // NEW API
   const [currentRole, setCurrentRole] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
 
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
 
-  // Legacy aliases (computed)
-  const role = currentRole; // legacy alias
-  const currentOrgId = currentOrg?.id || null; // legacy alias
-  const orgId = currentOrgId; // another alias
-
-  // Legacy fields expected by páginas antiguas
-  const authenticated = Boolean(user); // legacy alias
-  const [ready, setReady] = useState(false); // legacy: "AuthContext ya hidrató al menos una vez"
+  const authenticated = Boolean(user);
+  const [ready, setReady] = useState(false);
   const didBootstrapOnceRef = useRef(false);
 
-  const selectOrg = useCallback(
-    (orgIdToSelect) => {
-      if (!orgIdToSelect) return;
-
-      try {
-        localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
-      } catch {}
-
-      // si ya tenemos el objeto en organizations lo usamos
-      setCurrentOrg((prev) => {
-        if (prev?.id === orgIdToSelect) return prev;
-        const found = Array.isArray(organizations)
-          ? organizations.find((o) => o?.id === orgIdToSelect)
-          : null;
-        return found || { id: orgIdToSelect };
-      });
-
-      // asegurar que organizations contenga al menos ese id
-      setOrganizations((prev) => {
-        const arr = Array.isArray(prev) ? prev : [];
-        if (arr.some((o) => o?.id === orgIdToSelect)) return arr;
-        return [{ id: orgIdToSelect }, ...arr];
-      });
-    },
-    [organizations]
-  );
-
   const bootstrap = useCallback(async () => {
-    // ✅ Si estamos en ruta pública, NO hacemos session guard.
-    if (typeof window !== "undefined" && isPublicRoutePath(window.location.pathname)) {
+    if (
+      typeof window !== "undefined" &&
+      isPublicRoutePath(window.location.pathname)
+    ) {
       setLoading(false);
       setUser(null);
       setCurrentRole(null);
@@ -113,7 +66,6 @@ export function AuthProvider({ children }) {
       setOrganizations([]);
       setCurrentOrg(null);
 
-      // ✅ Marca ready si todavía no lo hicimos
       if (!didBootstrapOnceRef.current) {
         didBootstrapOnceRef.current = true;
         setReady(true);
@@ -137,7 +89,6 @@ export function AuthProvider({ children }) {
 
       setUser(data.user ?? null);
 
-      // role (tolerante a múltiples llaves)
       const resolvedRole =
         data.currentRole ??
         data.current_role ??
@@ -146,11 +97,9 @@ export function AuthProvider({ children }) {
         null;
 
       setCurrentRole(resolvedRole ? String(resolvedRole).toLowerCase() : null);
-
-      // isAppRoot si algún día lo envías desde backend
       setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
 
-      // org id (tolerante)
+      // ✅ ORG: SOLO DESDE BACKEND
       const serverOrgId =
         data.current_org_id ??
         data.currentOrgId ??
@@ -158,54 +107,27 @@ export function AuthProvider({ children }) {
         data.orgId ??
         null;
 
-      // respetar org seleccionada anteriormente si existe, si no usar la del server
-      let preferredOrgId = null;
-      try {
-        preferredOrgId = localStorage.getItem(LS_ORG_KEY);
-      } catch {}
-
-      const finalOrgId = preferredOrgId || serverOrgId || null;
-
-      // Si backend manda lista de orgs, úsala; si no, crea mínimo con id
       const orgsFromServer = Array.isArray(data.organizations)
         ? data.organizations
-        : null;
+        : serverOrgId
+        ? [{ id: serverOrgId }]
+        : [];
 
-      if (orgsFromServer && orgsFromServer.length > 0) {
-        setOrganizations(orgsFromServer);
+      setOrganizations(orgsFromServer);
 
-        const picked =
-          (finalOrgId &&
-            orgsFromServer.find((o) => o?.id === finalOrgId)?.id) ||
-          orgsFromServer.find((o) => o?.id)?.id ||
-          null;
+      const orgObj =
+        orgsFromServer.find((o) => o?.id === serverOrgId) || null;
 
-        const orgObj = picked
-          ? orgsFromServer.find((o) => o?.id === picked)
-          : null;
-        setCurrentOrg(orgObj || null);
+      setCurrentOrg(orgObj);
 
-        if (picked) {
-          try {
-            localStorage.setItem(LS_ORG_KEY, picked);
-          } catch {}
-        }
-      } else {
-        if (finalOrgId) {
-          setOrganizations([{ id: finalOrgId }]);
-          setCurrentOrg({ id: finalOrgId });
-          try {
-            localStorage.setItem(LS_ORG_KEY, finalOrgId);
-          } catch {}
-        } else {
-          setOrganizations([]);
-          setCurrentOrg(null);
-        }
+      // Guardar SOLO la org válida del backend (opcional)
+      if (serverOrgId) {
+        try {
+          localStorage.setItem(LS_ORG_KEY, serverOrgId);
+        } catch {}
       }
     } finally {
       setLoading(false);
-
-      // ✅ Marca "ready" una vez que el primer bootstrap terminó (ok o no)
       if (!didBootstrapOnceRef.current) {
         didBootstrapOnceRef.current = true;
         setReady(true);
@@ -219,7 +141,10 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
     } catch {}
 
     try {
@@ -237,26 +162,22 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      // base
       loading,
-      ready, // ✅ legacy
-      authenticated, // ✅ legacy
+      ready,
+      authenticated,
       user,
       isLoggedIn: Boolean(user),
 
-      // NEW
       currentRole,
       isAppRoot,
       organizations,
       currentOrg,
-      selectOrg,
 
-      // LEGACY (para páginas viejas)
-      role,
-      currentOrgId,
-      orgId,
+      // legacy aliases
+      role: currentRole,
+      currentOrgId: currentOrg?.id || null,
+      orgId: currentOrg?.id || null,
 
-      // helpers
       refreshSession: bootstrap,
       logout,
     }),
@@ -269,16 +190,14 @@ export function AuthProvider({ children }) {
       isAppRoot,
       organizations,
       currentOrg,
-      selectOrg,
-      role,
-      currentOrgId,
-      orgId,
       bootstrap,
       logout,
     ]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
