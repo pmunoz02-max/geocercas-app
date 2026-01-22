@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 export default function InvitarTracker() {
   const { currentOrg } = useAuth();
 
-  const [personal, setPersonal] = useState([]);
+  const [personalRaw, setPersonalRaw] = useState([]);
   const [loadingPersonal, setLoadingPersonal] = useState(false);
   const [personalError, setPersonalError] = useState(null);
 
@@ -15,17 +15,30 @@ export default function InvitarTracker() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
+  const orgId = currentOrg?.id ? String(currentOrg.id) : "";
+
+  const personal = useMemo(() => {
+    // Filtro duro por org actual (seguridad multi-tenant)
+    if (!orgId) return [];
+    return personalRaw.filter((p) => String(p.org_id || "") === orgId);
+  }, [personalRaw, orgId]);
+
+  const foreignCount = useMemo(() => {
+    if (!orgId) return 0;
+    return personalRaw.filter((p) => p.org_id && String(p.org_id) !== orgId).length;
+  }, [personalRaw, orgId]);
+
   const selectedPerson = useMemo(() => {
     if (!selectedPersonId) return null;
-    return personal.find((p) => String(p.id) === String(selectedPersonId)) || null;
-  }, [personal, selectedPersonId]);
+    // buscamos en RAW por si el API devuelve mezclado
+    return personalRaw.find((p) => String(p.id) === String(selectedPersonId)) || null;
+  }, [personalRaw, selectedPersonId]);
 
   async function loadPersonal() {
     setLoadingPersonal(true);
     setPersonalError(null);
 
     try {
-      const orgId = currentOrg?.id ? String(currentOrg.id) : "";
       const url = orgId
         ? `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`
         : `/api/personal?onlyActive=1&limit=500`;
@@ -42,7 +55,6 @@ export default function InvitarTracker() {
         throw new Error(data?.error || data?.message || "No se pudo cargar el personal activo");
       }
 
-      // TU API responde: { items: [...], version: "..." }
       const rows = Array.isArray(data?.items)
         ? data.items
         : Array.isArray(data?.data)
@@ -58,11 +70,12 @@ export default function InvitarTracker() {
           const id = p.id ?? p.person_id ?? p.uuid;
           const nombre = (p.nombre ?? p.first_name ?? "").toString().trim();
           const apellido = (p.apellido ?? p.apellidos ?? p.last_name ?? "").toString().trim();
-          const fullName = `${nombre} ${apellido}`.trim() || (p.full_name ?? p.name ?? "").toString().trim();
+          const fullName =
+            `${nombre} ${apellido}`.trim() ||
+            (p.full_name ?? p.name ?? "").toString().trim();
 
           const emailValue = (p.email_norm ?? p.email ?? p.mail ?? "").toString().trim();
 
-          // "activo_bool" en tu API; también soporta otras variantes
           const isActive =
             p.activo_bool ?? p.activo ?? p.vigente ?? p.active ?? p.is_active ?? true;
 
@@ -76,10 +89,19 @@ export default function InvitarTracker() {
         })
         .filter((p) => p.id);
 
-      setPersonal(normalized);
+      setPersonalRaw(normalized);
+
+      // Reset selección si quedó fuera de org
+      if (selectedPersonId) {
+        const sel = normalized.find((p) => String(p.id) === String(selectedPersonId));
+        if (sel?.org_id && orgId && String(sel.org_id) !== orgId) {
+          setSelectedPersonId("");
+          setEmail("");
+        }
+      }
     } catch (e) {
       setPersonalError(e?.message || "Error cargando personal");
-      setPersonal([]);
+      setPersonalRaw([]);
     } finally {
       setLoadingPersonal(false);
     }
@@ -88,10 +110,12 @@ export default function InvitarTracker() {
   useEffect(() => {
     loadPersonal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrg?.id]);
+  }, [orgId]);
 
   useEffect(() => {
-    // Autocompletar email cuando se selecciona persona
+    setError(null);
+    setSuccess(null);
+
     if (selectedPerson?.email) setEmail(String(selectedPerson.email).trim());
     else if (selectedPersonId) setEmail("");
   }, [selectedPersonId, selectedPerson]);
@@ -101,13 +125,19 @@ export default function InvitarTracker() {
     setError(null);
     setSuccess(null);
 
-    if (!currentOrg?.id) {
+    if (!orgId) {
       setError("Organización no válida. Reingresa al panel.");
       return;
     }
 
     if (!selectedPersonId) {
       setError("Selecciona una persona del personal activo.");
+      return;
+    }
+
+    // Bloqueo duro multi-tenant
+    if (selectedPerson?.org_id && String(selectedPerson.org_id) !== orgId) {
+      setError("La persona seleccionada pertenece a otra organización. Refresca y selecciona del listado correcto.");
       return;
     }
 
@@ -126,7 +156,7 @@ export default function InvitarTracker() {
         credentials: "include",
         body: JSON.stringify({
           email: cleanEmail,
-          org_id: currentOrg.id,
+          org_id: orgId,
           person_id: selectedPersonId,
         }),
       });
@@ -162,6 +192,11 @@ export default function InvitarTracker() {
           <div>
             <div className="text-sm font-medium">Seleccionar persona (Personal activo)</div>
             <div className="text-xs text-gray-500">Activos: {loadingPersonal ? "..." : activeCount}</div>
+            {foreignCount > 0 && (
+              <div className="text-xs text-red-600 mt-1">
+                Aviso: tu API devolvió {foreignCount} persona(s) de otra organización (esto debe corregirse en /api/personal).
+              </div>
+            )}
           </div>
 
           <button
@@ -221,7 +256,7 @@ export default function InvitarTracker() {
       </div>
 
       <div className="text-xs text-gray-500">
-        Org actual: <span className="font-mono">{currentOrg?.id || "(sin org)"}</span>
+        Org actual: <span className="font-mono">{orgId || "(sin org)"}</span>
       </div>
     </div>
   );
