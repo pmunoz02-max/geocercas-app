@@ -1,4 +1,3 @@
-@'
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -25,4 +24,4 @@
   "include": ["src", "api", "vite.config.*", "env.d.ts"],
   "exclude": ["dist", "node_modules"]
 }
-'@ | Set-Content -Encoding UTF8 tsconfig.json
+
