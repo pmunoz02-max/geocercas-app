@@ -15,8 +15,6 @@ export default function InvitarTracker() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  const activeCount = personal?.length || 0;
-
   const selectedPerson = useMemo(() => {
     if (!selectedPersonId) return null;
     return personal.find((p) => String(p.id) === String(selectedPersonId)) || null;
@@ -27,7 +25,12 @@ export default function InvitarTracker() {
     setPersonalError(null);
 
     try {
-      const res = await fetch("/api/personal?onlyActive=1&limit=500", {
+      const orgId = currentOrg?.id ? String(currentOrg.id) : "";
+      const url = orgId
+        ? `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`
+        : `/api/personal?onlyActive=1&limit=500`;
+
+      const res = await fetch(url, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -39,17 +42,38 @@ export default function InvitarTracker() {
         throw new Error(data?.error || data?.message || "No se pudo cargar el personal activo");
       }
 
-      // Soportar varios formatos comunes:
-      const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : Array.isArray(data?.rows) ? data.rows : [];
+      // TU API responde: { items: [...], version: "..." }
+      const rows = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.rows)
+        ? data.rows
+        : Array.isArray(data)
+        ? data
+        : [];
 
-      // Normaliza campos esperados: id, full_name/name, email
       const normalized = rows
-        .map((p) => ({
-          id: p.id ?? p.person_id ?? p.uuid,
-          full_name: p.full_name ?? p.name ?? p.nombre ?? p.apellidos ? `${p.nombre ?? ""} ${p.apellidos ?? ""}`.trim() : "",
-          email: p.email ?? p.mail ?? "",
-          active: p.active ?? p.is_active ?? true,
-        }))
+        .map((p) => {
+          const id = p.id ?? p.person_id ?? p.uuid;
+          const nombre = (p.nombre ?? p.first_name ?? "").toString().trim();
+          const apellido = (p.apellido ?? p.apellidos ?? p.last_name ?? "").toString().trim();
+          const fullName = `${nombre} ${apellido}`.trim() || (p.full_name ?? p.name ?? "").toString().trim();
+
+          const emailValue = (p.email_norm ?? p.email ?? p.mail ?? "").toString().trim();
+
+          // "activo_bool" en tu API; también soporta otras variantes
+          const isActive =
+            p.activo_bool ?? p.activo ?? p.vigente ?? p.active ?? p.is_active ?? true;
+
+          return {
+            id,
+            full_name: fullName,
+            email: emailValue,
+            active: Boolean(isActive),
+            org_id: p.org_id ?? null,
+          };
+        })
         .filter((p) => p.id);
 
       setPersonal(normalized);
@@ -64,16 +88,12 @@ export default function InvitarTracker() {
   useEffect(() => {
     loadPersonal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentOrg?.id]);
 
   useEffect(() => {
     // Autocompletar email cuando se selecciona persona
-    if (selectedPerson?.email) {
-      setEmail(String(selectedPerson.email).trim());
-    } else if (selectedPersonId) {
-      // Si la persona no tiene email, deja el campo vacío para que lo escriban
-      setEmail("");
-    }
+    if (selectedPerson?.email) setEmail(String(selectedPerson.email).trim());
+    else if (selectedPersonId) setEmail("");
   }, [selectedPersonId, selectedPerson]);
 
   async function handleInvite(e) {
@@ -114,7 +134,6 @@ export default function InvitarTracker() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        // Si tu proxy v2 está activo, el error real vendrá en data.upstream
         const upstreamMsg =
           data?.upstream?.message ||
           data?.upstream?.error ||
@@ -131,6 +150,8 @@ export default function InvitarTracker() {
       setSending(false);
     }
   }
+
+  const activeCount = personal.length;
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -153,11 +174,7 @@ export default function InvitarTracker() {
           </button>
         </div>
 
-        {personalError && (
-          <div className="text-red-600 text-sm mb-3">
-            {personalError}
-          </div>
-        )}
+        {personalError && <div className="text-red-600 text-sm mb-3">{personalError}</div>}
 
         <select
           value={selectedPersonId}
