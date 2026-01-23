@@ -1,8 +1,10 @@
-﻿module.exports = async (req, res) => {
-  const host = req.headers.host || "app.tugeocercas.com";
-  const url = new URL(req.url, `https://${host}`);
-  const next = url.searchParams.get("next") || "/inicio";
-  res.statusCode = 302;
-  res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=diag_ok`);
-  res.end();
-};
+﻿// api/auth/callback.js  (ESM)
+// Diagnóstico: si esto NO responde, el dominio no está sirviendo este repo o hay routing raro.
+
+export const config = { runtime: "nodejs" };
+
+export default function handler(req, res) {
+  res.statusCode = 200;
+  res.setHeader("content-type", "text/plain; charset=utf-8");
+  res.end("CALLBACK_OK_V1");
+}
