@@ -115,15 +115,34 @@ export function AuthProvider({ children }) {
 
       setOrganizations(orgsFromServer);
 
-      const orgObj =
-        orgsFromServer.find((o) => o?.id === serverOrgId) || null;
+      // ✅ NUEVO: si backend no manda current_org_id, escoger una org válida
+      let orgObj = null;
+
+      if (serverOrgId) {
+        orgObj = orgsFromServer.find((o) => String(o?.id) === String(serverOrgId)) || null;
+      }
+
+      // Si no hay serverOrgId, pero solo hay 1 org, usarla
+      if (!orgObj && orgsFromServer.length === 1 && orgsFromServer[0]?.id) {
+        orgObj = orgsFromServer[0];
+      }
+
+      // Si no hay serverOrgId, intentar recuperar última org guardada
+      if (!orgObj && orgsFromServer.length > 1) {
+        try {
+          const last = localStorage.getItem(LS_ORG_KEY);
+          if (last) {
+            orgObj = orgsFromServer.find((o) => String(o?.id) === String(last)) || null;
+          }
+        } catch {}
+      }
 
       setCurrentOrg(orgObj);
 
-      // Guardar SOLO la org válida del backend (opcional)
-      if (serverOrgId) {
+      // Guardar SOLO la org válida
+      if (orgObj?.id) {
         try {
-          localStorage.setItem(LS_ORG_KEY, serverOrgId);
+          localStorage.setItem(LS_ORG_KEY, String(orgObj.id));
         } catch {}
       }
     } finally {
@@ -195,9 +214,7 @@ export function AuthProvider({ children }) {
     ]
   );
 
-  return (
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
