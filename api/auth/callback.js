@@ -1,9 +1,8 @@
 ﻿// api/auth/callback.js
-// Backend callback PKCE (TWA/WebView SAFE)
-// - Recibe ?code=...&next=/tracker-gps?tg_flow=tracker
-// - exchangeCodeForSession(code) con Supabase
-// - Set cookies HttpOnly: tg_at, tg_rt
-// - Redirect a next (solo paths relativos)
+// Backend callback (TWA/WebView SAFE)
+// Soporta:
+//  - PKCE:      ?code=...&next=/tracker-gps?tg_flow=tracker
+//  - token_hash ?token_hash=...&type=invite|magiclink|recovery|email_change&next=...
 
 export const config = { runtime: "nodejs" };
 
@@ -50,7 +49,16 @@ function clearCookie(name, domain, secure) {
   });
 }
 
+function normalizeOtpType(typeRaw) {
+  const t = String(typeRaw || "").trim().toLowerCase();
+  // Tipos soportados por Supabase verifyOtp en JS v2 (y los más comunes en emails)
+  const allowed = new Set(["invite", "magiclink", "recovery", "email_change", "signup"]);
+  return allowed.has(t) ? t : null;
+}
+
 export default async function handler(req, res) {
+  const trace = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
   try {
     if (req.method !== "GET") {
       res.statusCode = 405;
@@ -64,23 +72,16 @@ export default async function handler(req, res) {
 
     const next = safeNext(url.searchParams.get("next"));
     const code = url.searchParams.get("code");
+    const token_hash = url.searchParams.get("token_hash");
+    const typeRaw = url.searchParams.get("type");
 
     const secure = isSecure(req);
     const COOKIE_DOMAIN = env("COOKIE_DOMAIN"); // opcional: ".tugeocercas.com"
 
-    // Limpia cookies si el flujo viene mal
     const clearCookies = [
       clearCookie("tg_at", COOKIE_DOMAIN, secure),
       clearCookie("tg_rt", COOKIE_DOMAIN, secure),
     ];
-
-    if (!code) {
-      res.statusCode = 302;
-      res.setHeader("Set-Cookie", clearCookies);
-      res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=missing_code`);
-      res.end();
-      return;
-    }
 
     const SUPABASE_URL = env("SUPABASE_URL");
     const SUPABASE_ANON_KEY = env("SUPABASE_ANON_KEY");
@@ -99,20 +100,69 @@ export default async function handler(req, res) {
       auth: { persistSession: false, flowType: "pkce" },
     });
 
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    let at = null;
+    let rt = null;
 
-    const at = data?.session?.access_token || null;
-    const rt = data?.session?.refresh_token || null;
+    // 1) PKCE code flow
+    if (code) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      at = data?.session?.access_token || null;
+      rt = data?.session?.refresh_token || null;
 
-    if (error || !at || !rt) {
-      const msg = encodeURIComponent(error?.message || "exchange_failed");
+      if (error || !at || !rt) {
+        const msg = encodeURIComponent(error?.message || "exchange_failed");
+        console.log("[CALLBACK]", { trace, mode: "code", ok: false, err: error?.message || "no_session" });
+        res.statusCode = 302;
+        res.setHeader("Set-Cookie", clearCookies);
+        res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=${msg}`);
+        res.end();
+        return;
+      }
+
+      console.log("[CALLBACK]", { trace, mode: "code", ok: true, next });
+    }
+    // 2) token_hash flow (invite/magiclink/etc)
+    else if (token_hash) {
+      const type = normalizeOtpType(typeRaw);
+      if (!type) {
+        console.log("[CALLBACK]", { trace, mode: "token_hash", ok: false, err: "invalid_type", typeRaw });
+        res.statusCode = 302;
+        res.setHeader("Set-Cookie", clearCookies);
+        res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=invalid_type`);
+        res.end();
+        return;
+      }
+
+      const { data, error } = await supabase.auth.verifyOtp({
+        type,
+        token_hash,
+      });
+
+      at = data?.session?.access_token || null;
+      rt = data?.session?.refresh_token || null;
+
+      if (error || !at || !rt) {
+        const msg = encodeURIComponent(error?.message || "verify_failed");
+        console.log("[CALLBACK]", { trace, mode: "token_hash", ok: false, err: error?.message || "no_session", type });
+        res.statusCode = 302;
+        res.setHeader("Set-Cookie", clearCookies);
+        res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=${msg}`);
+        res.end();
+        return;
+      }
+
+      console.log("[CALLBACK]", { trace, mode: "token_hash", ok: true, type, next });
+    } else {
+      // no code, no token_hash
+      console.log("[CALLBACK]", { trace, ok: false, err: "missing_code_or_token_hash" });
       res.statusCode = 302;
       res.setHeader("Set-Cookie", clearCookies);
-      res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=${msg}`);
+      res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=missing_code_or_token_hash`);
       res.end();
       return;
     }
 
+    // Set cookies HttpOnly (API-first)
     res.statusCode = 302;
     res.setHeader("Set-Cookie", [
       makeCookie("tg_at", at, {
@@ -133,10 +183,11 @@ export default async function handler(req, res) {
       }),
     ]);
 
-    // Redirige directo al tracker
+    // Redirige directo al tracker (no /login)
     res.setHeader("Location", next);
     res.end();
   } catch (e) {
+    console.log("[CALLBACK_FATAL]", { error: e?.message || String(e) });
     res.statusCode = 500;
     res.setHeader("content-type", "application/json; charset=utf-8");
     res.end(JSON.stringify({ ok: false, stage: "fatal", error: e?.message || String(e) }));
