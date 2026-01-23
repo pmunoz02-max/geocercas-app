@@ -2,7 +2,7 @@
 // CALLBACK-V33 – WebView/TWA safe:
 // - NO setSession()
 // - token en memoria (setMemoryAccessToken)
-// - anti double-load: "callback ya procesado" en sessionStorage (1-uso + TTL)
+// - anti double-load: si se reabre sin hash, re-redirige a next (NO login)
 
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -20,11 +20,8 @@ function parseHashParams(hash: string) {
   const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
   const sp = new URLSearchParams(h);
   const access_token = sp.get("access_token") || "";
-  const refresh_token = sp.get("refresh_token") || "";
-  const token_type = sp.get("token_type") || "";
-  const expires_in = sp.get("expires_in") || "";
   const error = sp.get("error") || sp.get("error_description") || "";
-  return { access_token, refresh_token, token_type, expires_in, error };
+  return { access_token, error };
 }
 
 const DONE_KEY = "tg_authcb_done_v1";
@@ -61,7 +58,6 @@ function clearDone() {
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const fired = useRef(false);
-
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
   useEffect(() => {
@@ -69,13 +65,11 @@ export default function AuthCallback() {
     fired.current = true;
 
     try {
-      setDiag({ step: "parse_url" });
-
       const next = searchParams.get("next") || "/inicio";
       const { access_token, error } = parseHashParams(window.location.hash || "");
 
-      // ✅ Caso WebView/TWA: doble carga del callback SIN hash.
-      // Si ya procesamos hace segundos, NO mandes a login: re-redirige al mismo next.
+      // ✅ TWA/WebView double-load: reapertura del callback SIN hash.
+      // En ese caso, si ya procesamos hace segundos, NO enviar a login.
       if (!access_token && !error) {
         const done = getDone();
         if (done?.next) {
@@ -86,7 +80,6 @@ export default function AuthCallback() {
             reusedDoneFlag: true,
           });
 
-          // Limpia URL por si vuelve a cargar
           try {
             window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
           } catch {}
@@ -96,14 +89,8 @@ export default function AuthCallback() {
         }
       }
 
-      setDiag({
-        step: "hash_parsed",
-        next,
-        hasAccessToken: !!access_token,
-        error: error || undefined,
-      });
+      setDiag({ step: "hash_parsed", next, hasAccessToken: !!access_token, error: error || undefined });
 
-      // Si Supabase devolvió error
       if (error) {
         const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
         try {
@@ -124,19 +111,17 @@ export default function AuthCallback() {
         return;
       }
 
-      // ✅ Marca “procesado” ANTES de limpiar hash y redirigir (anti double-load)
+      // ✅ Marca “procesado” ANTES de limpiar hash y redirigir
       setDone(next);
 
-      // ✅ Fuente de verdad: token en memoria (NO setSession)
       setDiag({ step: "set_memory_token", next, hasAccessToken: true });
       setMemoryAccessToken(access_token);
 
-      // Limpia hash (evita re-proceso si la WebView reusa la URL)
+      // Limpia hash para evitar re-proceso
       try {
         window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
       } catch {}
 
-      // ✅ Redirección directa
       setDiag({ step: "redirect", next, hasAccessToken: true });
       window.location.replace(next);
     } catch (e: any) {
