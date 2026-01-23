@@ -112,6 +112,7 @@ export default function InvitarTracker() {
   const [personalRaw, setPersonalRaw] = useState([]);
   const [loadingPersonal, setLoadingPersonal] = useState(false);
   const [personalError, setPersonalError] = useState(null);
+  const [personalDebug, setPersonalDebug] = useState(null);
 
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [email, setEmail] = useState("");
@@ -132,41 +133,72 @@ export default function InvitarTracker() {
     return personalRaw.find((p) => String(p.id) === String(selectedPersonId)) || null;
   }, [personalRaw, selectedPersonId]);
 
+  function normalizeRows(data) {
+    const rows = Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data)
+      ? data
+      : [];
+
+    return rows
+      .map((p) => ({
+        id: p.id,
+        full_name:
+          `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim() ||
+          p.full_name ||
+          p.name ||
+          "(Sin nombre)",
+        email: (p.email_norm ?? p.email ?? "").trim(),
+        org_id: p.org_id ?? null,
+      }))
+      .filter((p) => p.id);
+  }
+
+  async function fetchPersonal(url, label) {
+    const res = await fetch(url, { credentials: "include" });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data, label, url };
+  }
+
   async function loadPersonal() {
     setLoadingPersonal(true);
     setPersonalError(null);
+    setPersonalDebug(null);
 
     try {
-      const url = orgId
-        ? `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`
-        : `/api/personal?onlyActive=1&limit=500`;
+      if (!orgId) {
+        setPersonalRaw([]);
+        setPersonalError("Org actual no definida.");
+        return;
+      }
 
-      const res = await fetch(url, { credentials: "include" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "No se pudo cargar el personal");
+      // A) org_id + onlyActive
+      const aUrl = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`;
+      const A = await fetchPersonal(aUrl, "A org_id+onlyActive");
 
-      const rows = Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.data)
-        ? data.data
-        : Array.isArray(data)
-        ? data
-        : [];
+      if (!A.ok) throw new Error(A.data?.error || "No se pudo cargar el personal (A)");
 
-      const normalized = rows
-        .map((p) => ({
-          id: p.id,
-          full_name:
-            `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim() ||
-            p.full_name ||
-            p.name ||
-            "(Sin nombre)",
-          email: (p.email_norm ?? p.email ?? "").trim(),
-          org_id: p.org_id ?? null,
-        }))
-        .filter((p) => p.id);
+      let rows = normalizeRows(A.data);
 
-      setPersonalRaw(normalized);
+      // Fallback B) sin org_id (si backend ignora org_id o usa org server-side distinto)
+      if (rows.length === 0) {
+        const bUrl = `/api/personal?onlyActive=1&limit=500`;
+        const B = await fetchPersonal(bUrl, "B onlyActive (sin org_id)");
+        if (B.ok) rows = normalizeRows(B.data);
+        setPersonalDebug({ tried: ["A", "B"], A: A.data, B: B.data });
+      }
+
+      // Fallback C) org_id sin onlyActive (si filtro activo está mal)
+      if (rows.length === 0) {
+        const cUrl = `/api/personal?limit=500&org_id=${encodeURIComponent(orgId)}`;
+        const C = await fetchPersonal(cUrl, "C org_id (sin onlyActive)");
+        if (C.ok) rows = normalizeRows(C.data);
+        setPersonalDebug((d) => ({ ...(d || {}), tried: [...(d?.tried || ["A","B"]), "C"], C: C.data }));
+      }
+
+      setPersonalRaw(rows);
     } catch (e) {
       setPersonalError(e.message || "Error cargando personal");
       setPersonalRaw([]);
@@ -228,9 +260,7 @@ export default function InvitarTracker() {
 
       <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
         <div className="flex justify-between items-center mb-3">
-          <div className="text-sm font-medium">
-            Personal activo ({personal.length})
-          </div>
+          <div className="text-sm font-medium">Personal activo ({personal.length})</div>
           <button
             onClick={loadPersonal}
             disabled={loadingPersonal}
@@ -250,12 +280,13 @@ export default function InvitarTracker() {
             onChange={setSelectedPersonId}
             placeholder="— Selecciona una persona —"
           />
-          {!orgId && (
-            <div className="text-xs text-amber-700 mt-2">
-              Org actual está vacío. Si esto pasa tras callback, revisa que sesión devuelva org.
-            </div>
-          )}
         </div>
+
+        {personal.length === 0 && personalDebug && (
+          <div className="mt-3 text-xs text-amber-700">
+            Debug: API devolvió 0 items. Fallbacks usados: {String(personalDebug?.tried || [])}
+          </div>
+        )}
 
         <div className="mt-4">
           <label className="text-sm font-medium">Email del tracker</label>
