@@ -15,7 +15,6 @@ export default function InvitarTracker() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // NUEVO: magic link
   const [magicLink, setMagicLink] = useState(null);
 
   const orgId = currentOrg?.id ? String(currentOrg.id) : "";
@@ -23,11 +22,6 @@ export default function InvitarTracker() {
   const personal = useMemo(() => {
     if (!orgId) return [];
     return personalRaw.filter((p) => String(p.org_id || "") === orgId);
-  }, [personalRaw, orgId]);
-
-  const foreignCount = useMemo(() => {
-    if (!orgId) return 0;
-    return personalRaw.filter((p) => p.org_id && String(p.org_id) !== orgId).length;
   }, [personalRaw, orgId]);
 
   const selectedPerson = useMemo(() => {
@@ -46,7 +40,6 @@ export default function InvitarTracker() {
 
       const res = await fetch(url, { credentials: "include" });
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok) throw new Error(data?.error || "No se pudo cargar el personal");
 
       const rows = Array.isArray(data?.items)
@@ -63,7 +56,6 @@ export default function InvitarTracker() {
           full_name:
             `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim() ||
             p.full_name ||
-            p.name ||
             "(Sin nombre)",
           email: (p.email_norm ?? p.email ?? "").trim(),
           org_id: p.org_id ?? null,
@@ -120,16 +112,7 @@ export default function InvitarTracker() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Error al enviar invitación");
 
-      // 👇 NUEVO: detectar magic link
-      const delivery = data?.data?.delivery;
-      const actionLink = data?.data?.action_link;
-
-      if (delivery === "magic_link" && actionLink) {
-        setMagicLink(actionLink);
-        setSuccess("Invitación creada. No se envió correo. Comparte el enlace con el tracker.");
-      } else {
-        setSuccess("Invitación enviada. Revisa el correo del tracker.");
-      }
+      setSuccess("Invitación enviada. Revisa el correo del tracker.");
     } catch (err) {
       setError(err.message || "Error inesperado");
     } finally {
@@ -137,17 +120,11 @@ export default function InvitarTracker() {
     }
   }
 
-  function copyLink() {
-    if (!magicLink) return;
-    navigator.clipboard.writeText(magicLink);
-    alert("Enlace copiado");
-  }
-
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-6 relative">
       <h1 className="text-2xl font-semibold mb-6">Invitar Tracker</h1>
 
-      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6 relative z-10">
         <div className="flex justify-between items-center mb-3">
           <div className="text-sm font-medium">
             Personal activo ({personal.length})
@@ -163,56 +140,34 @@ export default function InvitarTracker() {
 
         {personalError && <div className="text-red-600 text-sm">{personalError}</div>}
 
-        <select
-          value={selectedPersonId}
-          onChange={(e) => setSelectedPersonId(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2 mt-2"
-        >
-          <option value="">— Selecciona una persona —</option>
-          {personal.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.full_name} — {p.email || "(sin email)"}
-            </option>
-          ))}
-        </select>
+        {/* 🔑 FIX TWA: wrapper con z-index y pointer-events */}
+        <div className="relative z-20 pointer-events-auto">
+          <select
+            value={selectedPersonId}
+            onChange={(e) => setSelectedPersonId(e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 mt-2 bg-white pointer-events-auto"
+          >
+            <option value="">— Selecciona una persona —</option>
+            {personal.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name} — {p.email || "(sin email)"}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="mt-4">
           <label className="text-sm font-medium">Email del tracker</label>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 mt-1"
+            className="w-full border rounded-lg px-3 py-2 mt-1 bg-white"
           />
         </div>
 
         <form onSubmit={handleInvite} className="mt-5">
           {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
           {success && <div className="text-green-600 text-sm mb-2">{success}</div>}
-
-          {magicLink && (
-            <div className="mt-3 p-3 border rounded-lg bg-gray-50">
-              <div className="text-sm font-medium mb-2">
-                Enlace de acceso para el tracker
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  className="px-3 py-2 bg-gray-200 rounded-lg text-sm"
-                >
-                  Copiar enlace
-                </button>
-                <a
-                  href={magicLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm"
-                >
-                  Abrir enlace
-                </a>
-              </div>
-            </div>
-          )}
 
           <button
             type="submit"
