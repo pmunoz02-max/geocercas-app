@@ -6,9 +6,11 @@ function env(n) {
   return v && v.trim() ? v.trim() : null;
 }
 
-function safeNext(n) {
-  const x = (n || "/inicio").trim();
-  if (!x.startsWith("/") || x.startsWith("//")) return "/inicio";
+function safePath(p) {
+  const x = (p || "").trim();
+  if (!x) return null;
+  if (!x.startsWith("/") || x.startsWith("//")) return null;
+  if (x.includes("\\") || x.includes("\u0000")) return null;
   return x;
 }
 
@@ -18,12 +20,7 @@ function isSecure(req) {
 }
 
 function cookie(name, value, { domain, secure, maxAge }) {
-  const parts = [
-    `${name}=${encodeURIComponent(value)}`,
-    "Path=/",
-    "HttpOnly",
-    `SameSite=Lax`,
-  ];
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "HttpOnly", "SameSite=Lax"];
   if (secure) parts.push("Secure");
   if (domain) parts.push(`Domain=${domain}`);
   if (typeof maxAge === "number") parts.push(`Max-Age=${maxAge}`);
@@ -32,6 +29,12 @@ function cookie(name, value, { domain, secure, maxAge }) {
 
 function clearCookie(name, { domain, secure }) {
   return cookie(name, "", { domain, secure, maxAge: 0 });
+}
+
+function normalizeType(t) {
+  const x = String(t || "").trim().toLowerCase();
+  const allowed = new Set(["invite", "magiclink", "recovery", "email_change", "signup"]);
+  return allowed.has(x) ? x : null;
 }
 
 export default async function handler(req, res) {
@@ -48,10 +51,16 @@ export default async function handler(req, res) {
     const host = req.headers.host || "app.tugeocercas.com";
     const url = new URL(req.url, `https://${host}`);
 
-    const next = safeNext(url.searchParams.get("next"));
     const code = url.searchParams.get("code");
     const token_hash = url.searchParams.get("token_hash");
-    const typeFromUrl = (url.searchParams.get("type") || "").toLowerCase().trim();
+    const typeFromUrl = normalizeType(url.searchParams.get("type"));
+
+    // ✅ next: si no viene, y es invite/magiclink -> tracker por defecto
+    const nextRaw = safePath(url.searchParams.get("next"));
+    const defaultTracker = "/tracker-gps?tg_flow=tracker";
+    const next =
+      nextRaw ||
+      (token_hash && (typeFromUrl === "invite" || typeFromUrl === "magiclink") ? defaultTracker : "/inicio");
 
     const SUPABASE_URL = env("SUPABASE_URL");
     const SUPABASE_ANON_KEY = env("SUPABASE_ANON_KEY");
@@ -78,29 +87,24 @@ export default async function handler(req, res) {
 
     let session = null;
 
-    // 1) PKCE code flow (web normal)
+    // 1) Web PKCE normal
     if (code) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) throw error;
       session = data?.session || null;
       console.log("[CALLBACK]", { trace, mode: "code", ok: !!session, next });
     }
-
-    // 2) Email token_hash flow (tracker invite/magiclink)
+    // 2) Email token_hash (invite/magiclink/etc) -> verifyOtp robusto
     else if (token_hash) {
-      // Intentos robustos: primero el type recibido, luego magiclink, luego invite
       const candidates = [];
       if (typeFromUrl) candidates.push(typeFromUrl);
-      candidates.push("magiclink", "invite");
+      candidates.push("magiclink", "invite", "signup");
 
       let lastErr = null;
 
       for (const t of candidates) {
         try {
-          const { data, error } = await supabase.auth.verifyOtp({
-            type: t,
-            token_hash,
-          });
+          const { data, error } = await supabase.auth.verifyOtp({ type: t, token_hash });
           if (error) throw error;
           if (data?.session?.access_token && data?.session?.refresh_token) {
             session = data.session;
