@@ -1,5 +1,110 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+
+function useClickOutside(ref, onOutside) {
+  useEffect(() => {
+    function onDown(e) {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target)) onOutside?.();
+    }
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("touchstart", onDown, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("touchstart", onDown, true);
+    };
+  }, [ref, onOutside]);
+}
+
+function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const boxRef = useRef(null);
+
+  useClickOutside(boxRef, () => setOpen(false));
+
+  const selected = useMemo(
+    () => items.find((x) => String(x.id) === String(value)) || null,
+    [items, value]
+  );
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return items;
+    return items.filter((x) =>
+      `${x.full_name || ""} ${x.email || ""}`.toLowerCase().includes(s)
+    );
+  }, [items, q]);
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        className="w-full border rounded-lg px-3 py-2 bg-white text-left"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="truncate">
+            {selected ? (
+              <>
+                <span className="font-medium">{selected.full_name}</span>
+                <span className="text-gray-600">
+                  {" "}
+                  — {selected.email || "(sin email)"}
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-500">{placeholder}</span>
+            )}
+          </div>
+          <div className="text-gray-500">{open ? "▴" : "▾"}</div>
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-2 w-full bg-white border rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar…"
+              className="w-full border rounded-lg px-3 py-2 bg-white"
+              autoFocus
+            />
+          </div>
+
+          <div className="max-h-72 overflow-auto">
+            {filtered.length === 0 ? (
+              <div className="p-3 text-sm text-gray-500">Sin resultados</div>
+            ) : (
+              filtered.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(String(p.id));
+                    setOpen(false);
+                    setQ("");
+                  }}
+                >
+                  <div className="text-sm font-medium">{p.full_name}</div>
+                  <div className="text-xs text-gray-600">
+                    {p.email || "(sin email)"}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function InvitarTracker() {
   const { currentOrg } = useAuth();
@@ -117,33 +222,20 @@ export default function InvitarTracker() {
     }
   }
 
-  // 🔑 Bloqueo global típico (touch/pointer preventDefault): aislamos el select
-  function isolatePickerEvent(e) {
-    // corta propagación para que no dispare listeners globales que bloquean el picker
-    e.stopPropagation();
-    // intento suave de abrir picker (si el navegador lo soporta)
-    const el = e.currentTarget;
-    if (el && typeof el.showPicker === "function") {
-      try {
-        // algunos navegadores requieren llamada sincrónica
-        el.showPicker();
-      } catch {
-        // ignore
-      }
-    }
-  }
-
   return (
-    <div className="max-w-3xl mx-auto p-6 relative">
+    <div className="max-w-3xl mx-auto p-6">
       <h1 className="text-2xl font-semibold mb-6">Invitar Tracker</h1>
 
-      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6 relative">
+      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
         <div className="flex justify-between items-center mb-3">
-          <div className="text-sm font-medium">Personal activo ({personal.length})</div>
+          <div className="text-sm font-medium">
+            Personal activo ({personal.length})
+          </div>
           <button
             onClick={loadPersonal}
             disabled={loadingPersonal}
             className="px-3 py-2 border rounded-lg text-sm"
+            type="button"
           >
             {loadingPersonal ? "Cargando..." : "Refrescar"}
           </button>
@@ -151,23 +243,18 @@ export default function InvitarTracker() {
 
         {personalError && <div className="text-red-600 text-sm">{personalError}</div>}
 
-        <div className="relative z-10">
-          <select
+        <div className="mt-2">
+          <Dropdown
+            items={personal}
             value={selectedPersonId}
-            onChange={(e) => setSelectedPersonId(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 mt-2 bg-white"
-            // 👇 CAPTURE para cortar listeners globales
-            onPointerDownCapture={isolatePickerEvent}
-            onTouchStartCapture={isolatePickerEvent}
-            onMouseDownCapture={isolatePickerEvent}
-          >
-            <option value="">— Selecciona una persona —</option>
-            {personal.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name} — {p.email || "(sin email)"}
-              </option>
-            ))}
-          </select>
+            onChange={setSelectedPersonId}
+            placeholder="— Selecciona una persona —"
+          />
+          {!orgId && (
+            <div className="text-xs text-amber-700 mt-2">
+              Org actual está vacío. Si esto pasa tras callback, revisa que sesión devuelva org.
+            </div>
+          )}
         </div>
 
         <div className="mt-4">
@@ -194,7 +281,7 @@ export default function InvitarTracker() {
       </div>
 
       <div className="text-xs text-gray-500">
-        Org actual: <span className="font-mono">{orgId}</span>
+        Org actual: <span className="font-mono">{orgId || "(vacío)"}</span>
       </div>
     </div>
   );
