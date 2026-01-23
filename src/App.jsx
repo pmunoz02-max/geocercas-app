@@ -12,7 +12,7 @@ import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
-import ResetPassword from "./pages/ResetPassword.jsx"; // ✅ CORRECTO
+import ResetPassword from "./pages/ResetPassword.jsx";
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
@@ -23,6 +23,7 @@ import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
+import TrackerGpsPage from "./pages/TrackerGpsPage.jsx"; // ✅ NUEVO
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
@@ -73,13 +74,13 @@ export default function App() {
 
         {/* 🔐 Password flows */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} /> {/* ✅ */}
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Legacy redirects */}
         <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
         <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
         <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
-        <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
+        {/* ✅ IMPORTANTE: ya NO redirigir /tracker-gps a /tracker */}
         <Route path="/admin" element={<Navigate to="/admins" replace />} />
         <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
@@ -100,7 +101,19 @@ export default function App() {
           <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
           <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
           <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+
+          {/* ✅ RUTA CORRECTA: tracker GPS */}
+          <Route
+            path="/tracker-gps"
+            element={
+              <RequireOrg>
+                <TrackerGpsPage />
+              </RequireOrg>
+            }
+          />
+
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
           {/* Help */}
