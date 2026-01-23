@@ -1,12 +1,9 @@
-// api/auth/callback.cjs
-// Vercel Serverless Function – UNIVERSAL (CommonJS via .cjs)
-// PKCE backend callback (TWA/WebView SAFE)
-// - No depende de #access_token
-// - Intercambia ?code= por session (exchangeCodeForSession)
-// - Setea cookies HttpOnly tg_at/tg_rt
-// - Redirige a next
+// api/auth/callback.js
+// Vercel Function (CommonJS) – PKCE backend callback (TWA/WebView SAFE)
 
-function getEnv(name) {
+const { createClient } = require("@supabase/supabase-js");
+
+function env(name) {
   const v = process.env[name];
   return v && String(v).trim() ? String(v).trim() : null;
 }
@@ -19,14 +16,11 @@ function safeNext(nextRaw) {
   return next;
 }
 
-function isSecureRequest(req) {
-  const forced = getEnv("COOKIE_SECURE_FORCE");
+function isSecure(req) {
+  const forced = env("COOKIE_SECURE_FORCE");
   if (forced && forced.toLowerCase() === "true") return true;
-
-  const xfProto = (req.headers["x-forwarded-proto"] || "").toString().toLowerCase();
-  if (xfProto.includes("https")) return true;
-
-  return false;
+  const xf = (req.headers["x-forwarded-proto"] || "").toString().toLowerCase();
+  return xf.includes("https");
 }
 
 function makeCookie(name, value, opts) {
@@ -67,10 +61,10 @@ module.exports = async (req, res) => {
     const next = safeNext(url.searchParams.get("next"));
     const code = url.searchParams.get("code");
 
-    const secure = isSecureRequest(req);
-    const COOKIE_DOMAIN = getEnv("COOKIE_DOMAIN"); // optional
+    const secure = isSecure(req);
+    const COOKIE_DOMAIN = env("COOKIE_DOMAIN"); // optional
 
-    // Test manual sin code: NO debe crashear, debe ir a missing_code
+    // Test manual sin code: debe redirigir, NO caer al home, NO crashear
     if (!code) {
       res.statusCode = 302;
       res.setHeader("Location", `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_code")}`);
@@ -82,8 +76,8 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const SUPABASE_URL = getEnv("SUPABASE_URL");
-    const SUPABASE_ANON_KEY = getEnv("SUPABASE_ANON_KEY");
+    const SUPABASE_URL = env("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = env("SUPABASE_ANON_KEY");
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       res.statusCode = 302;
@@ -93,25 +87,6 @@ module.exports = async (req, res) => {
         clearCookie("tg_rt", COOKIE_DOMAIN, secure),
       ]);
       res.end();
-      return;
-    }
-
-    let createClient;
-    try {
-      // require dentro del handler (más tolerante)
-      ({ createClient } = require("@supabase/supabase-js"));
-      if (typeof createClient !== "function") throw new Error("createClient not found");
-    } catch (e) {
-      res.statusCode = 500;
-      res.setHeader("content-type", "application/json; charset=utf-8");
-      res.end(
-        JSON.stringify({
-          ok: false,
-          stage: "require_supabase_failed",
-          error: e?.message || String(e),
-          hint: "Asegura que @supabase/supabase-js esté en dependencies (no devDependencies).",
-        }),
-      );
       return;
     }
 
@@ -136,13 +111,10 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const maxAgeAT = 60 * 60; // 1h
-    const maxAgeRT = 60 * 60 * 24 * 30; // 30d
-
     res.statusCode = 302;
     res.setHeader("Set-Cookie", [
-      makeCookie("tg_at", at, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: maxAgeAT, domain: COOKIE_DOMAIN }),
-      makeCookie("tg_rt", rt, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: maxAgeRT, domain: COOKIE_DOMAIN }),
+      makeCookie("tg_at", at, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: 60 * 60, domain: COOKIE_DOMAIN }),
+      makeCookie("tg_rt", rt, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: 60 * 60 * 24 * 30, domain: COOKIE_DOMAIN }),
     ]);
     res.setHeader("Location", next);
     res.end();
