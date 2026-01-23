@@ -1,8 +1,9 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V33 – WebView/TWA safe:
+// CALLBACK-V35 – TWA/WebView safe definitivo:
 // - NO setSession()
-// - token en memoria (setMemoryAccessToken)
-// - anti double-load: si se reabre sin hash, re-redirige a next (NO login)
+// - usa token en memoria (setMemoryAccessToken)
+// - NO limpia el hash aquí (evita el 2do load sin token que causa missing_access_token)
+// - redirige directo a next
 
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -13,7 +14,6 @@ type Diag = {
   next?: string;
   hasAccessToken?: boolean;
   error?: string;
-  reusedDoneFlag?: boolean;
 };
 
 function parseHashParams(hash: string) {
@@ -24,40 +24,10 @@ function parseHashParams(hash: string) {
   return { access_token, error };
 }
 
-const DONE_KEY = "tg_authcb_done_v1";
-const DONE_TTL_MS = 2 * 60 * 1000; // 2 minutos
-
-type DonePayload = { ts: number; next: string };
-
-function setDone(next: string) {
-  try {
-    const payload: DonePayload = { ts: Date.now(), next };
-    sessionStorage.setItem(DONE_KEY, JSON.stringify(payload));
-  } catch {}
-}
-
-function getDone(): DonePayload | null {
-  try {
-    const raw = sessionStorage.getItem(DONE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as DonePayload;
-    if (!parsed?.ts || !parsed?.next) return null;
-    if (Date.now() - parsed.ts > DONE_TTL_MS) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function clearDone() {
-  try {
-    sessionStorage.removeItem(DONE_KEY);
-  } catch {}
-}
-
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const fired = useRef(false);
+
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
   useEffect(() => {
@@ -65,63 +35,39 @@ export default function AuthCallback() {
     fired.current = true;
 
     try {
+      setDiag({ step: "parse_url" });
+
       const next = searchParams.get("next") || "/inicio";
       const { access_token, error } = parseHashParams(window.location.hash || "");
 
-      // ✅ TWA/WebView double-load: reapertura del callback SIN hash.
-      // En ese caso, si ya procesamos hace segundos, NO enviar a login.
-      if (!access_token && !error) {
-        const done = getDone();
-        if (done?.next) {
-          setDiag({
-            step: "reopen_without_hash_reuse_done",
-            next: done.next,
-            hasAccessToken: false,
-            reusedDoneFlag: true,
-          });
+      setDiag({
+        step: "hash_parsed",
+        next,
+        hasAccessToken: !!access_token,
+        error: error || undefined,
+      });
 
-          try {
-            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-          } catch {}
-
-          window.location.replace(done.next);
-          return;
-        }
-      }
-
-      setDiag({ step: "hash_parsed", next, hasAccessToken: !!access_token, error: error || undefined });
-
+      // Si Supabase devolvió error
       if (error) {
         const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        } catch {}
-        clearDone();
         window.location.replace(target);
         return;
       }
 
       if (!access_token) {
         const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        } catch {}
-        clearDone();
         window.location.replace(target);
         return;
       }
 
-      // ✅ Marca “procesado” ANTES de limpiar hash y redirigir
-      setDone(next);
-
+      // ✅ Fuente de verdad: token en memoria (NO setSession)
       setDiag({ step: "set_memory_token", next, hasAccessToken: true });
       setMemoryAccessToken(access_token);
 
-      // Limpia hash para evitar re-proceso
-      try {
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-      } catch {}
-
+      // ✅ CRÍTICO TWA/WebView:
+      // NO limpiar el hash aquí. En WebView, limpiar el hash provoca que el callback se reabra sin token
+      // y termine en /login?err=missing_access_token.
+      // Redirige inmediatamente.
       setDiag({ step: "redirect", next, hasAccessToken: true });
       window.location.replace(next);
     } catch (e: any) {
@@ -130,10 +76,6 @@ export default function AuthCallback() {
 
       const next = searchParams.get("next") || "/inicio";
       const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
-      try {
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-      } catch {}
-      clearDone();
       window.location.replace(target);
     }
   }, [searchParams]);
@@ -149,7 +91,6 @@ export default function AuthCallback() {
             <div>step: {diag.step}</div>
             <div>next: {diag.next || "-"}</div>
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
-            <div>reusedDoneFlag: {String(diag.reusedDoneFlag ?? "-")}</div>
             <div>error: {diag.error || "-"}</div>
           </div>
         </div>
