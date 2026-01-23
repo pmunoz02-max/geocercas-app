@@ -1,5 +1,9 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V32 – WebView/TWA safe: NO setSession(), token en memoria + sessionStorage 1-uso + redirect
+// CALLBACK-V33 – WebView/TWA safe:
+// - NO setSession()
+// - token en memoria (setMemoryAccessToken)
+// - anti double-load: "callback ya procesado" en sessionStorage (1-uso + TTL)
+
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { setMemoryAccessToken } from "../supabaseClient";
@@ -9,15 +13,8 @@ type Diag = {
   next?: string;
   hasAccessToken?: boolean;
   error?: string;
+  reusedDoneFlag?: boolean;
 };
-
-type CachedTokens = {
-  access_token: string;
-  ts: number; // epoch ms
-};
-
-const SS_KEY = "tg_cb_access_token_v1";
-const SS_TTL_MS = 2 * 60 * 1000; // 2 minutos (suficiente para 1 loop de WebView)
 
 function parseHashParams(hash: string) {
   const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
@@ -30,30 +27,35 @@ function parseHashParams(hash: string) {
   return { access_token, refresh_token, token_type, expires_in, error };
 }
 
-function ssWriteAccessTokenOnce(access_token: string) {
+const DONE_KEY = "tg_authcb_done_v1";
+const DONE_TTL_MS = 2 * 60 * 1000; // 2 minutos
+
+type DonePayload = { ts: number; next: string };
+
+function setDone(next: string) {
   try {
-    const payload: CachedTokens = { access_token, ts: Date.now() };
-    sessionStorage.setItem(SS_KEY, JSON.stringify(payload));
+    const payload: DonePayload = { ts: Date.now(), next };
+    sessionStorage.setItem(DONE_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
+function getDone(): DonePayload | null {
+  try {
+    const raw = sessionStorage.getItem(DONE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DonePayload;
+    if (!parsed?.ts || !parsed?.next) return null;
+    if (Date.now() - parsed.ts > DONE_TTL_MS) return null;
+    return parsed;
   } catch {
-    // ignore
+    return null;
   }
 }
 
-function ssReadAccessTokenOnce(): string {
+function clearDone() {
   try {
-    const raw = sessionStorage.getItem(SS_KEY);
-    if (!raw) return "";
-    sessionStorage.removeItem(SS_KEY); // 1-uso SIEMPRE
-    const parsed = JSON.parse(raw) as CachedTokens;
-    if (!parsed?.access_token || !parsed?.ts) return "";
-    if (Date.now() - parsed.ts > SS_TTL_MS) return "";
-    return String(parsed.access_token || "");
-  } catch {
-    try {
-      sessionStorage.removeItem(SS_KEY);
-    } catch {}
-    return "";
-  }
+    sessionStorage.removeItem(DONE_KEY);
+  } catch {}
 }
 
 export default function AuthCallback() {
@@ -70,29 +72,44 @@ export default function AuthCallback() {
       setDiag({ step: "parse_url" });
 
       const next = searchParams.get("next") || "/inicio";
+      const { access_token, error } = parseHashParams(window.location.hash || "");
 
-      // 1) Intenta leer tokens del hash (camino normal)
-      const { access_token: hashAT, error } = parseHashParams(window.location.hash || "");
+      // ✅ Caso WebView/TWA: doble carga del callback SIN hash.
+      // Si ya procesamos hace segundos, NO mandes a login: re-redirige al mismo next.
+      if (!access_token && !error) {
+        const done = getDone();
+        if (done?.next) {
+          setDiag({
+            step: "reopen_without_hash_reuse_done",
+            next: done.next,
+            hasAccessToken: false,
+            reusedDoneFlag: true,
+          });
 
-      // 2) Si no hay hash token, intenta recuperar 1-vez desde sessionStorage (anti WebView double-load)
-      const recoveredAT = !hashAT ? ssReadAccessTokenOnce() : "";
+          // Limpia URL por si vuelve a cargar
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch {}
 
-      const access_token = hashAT || recoveredAT;
+          window.location.replace(done.next);
+          return;
+        }
+      }
 
       setDiag({
-        step: "tokens_resolved",
+        step: "hash_parsed",
         next,
         hasAccessToken: !!access_token,
         error: error || undefined,
       });
 
-      // Si Supabase devolvió error explícito
+      // Si Supabase devolvió error
       if (error) {
         const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
-        // Limpia hash/URL del callback para evitar re-proceso
         try {
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
         } catch {}
+        clearDone();
         window.location.replace(target);
         return;
       }
@@ -102,18 +119,19 @@ export default function AuthCallback() {
         try {
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
         } catch {}
+        clearDone();
         window.location.replace(target);
         return;
       }
 
-      // ✅ Antes de limpiar hash: guarda token 1-vez por si la WebView re-carga el callback sin hash
-      if (hashAT) ssWriteAccessTokenOnce(hashAT);
+      // ✅ Marca “procesado” ANTES de limpiar hash y redirigir (anti double-load)
+      setDone(next);
 
       // ✅ Fuente de verdad: token en memoria (NO setSession)
       setDiag({ step: "set_memory_token", next, hasAccessToken: true });
       setMemoryAccessToken(access_token);
 
-      // Limpia hash para evitar re-proceso si la WebView reusa la URL
+      // Limpia hash (evita re-proceso si la WebView reusa la URL)
       try {
         window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
       } catch {}
@@ -130,6 +148,7 @@ export default function AuthCallback() {
       try {
         window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
       } catch {}
+      clearDone();
       window.location.replace(target);
     }
   }, [searchParams]);
@@ -145,6 +164,7 @@ export default function AuthCallback() {
             <div>step: {diag.step}</div>
             <div>next: {diag.next || "-"}</div>
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
+            <div>reusedDoneFlag: {String(diag.reusedDoneFlag ?? "-")}</div>
             <div>error: {diag.error || "-"}</div>
           </div>
         </div>
