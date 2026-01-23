@@ -15,8 +15,6 @@ export default function InvitarTracker() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  const [magicLink, setMagicLink] = useState(null);
-
   const orgId = currentOrg?.id ? String(currentOrg.id) : "";
 
   const personal = useMemo(() => {
@@ -56,6 +54,7 @@ export default function InvitarTracker() {
           full_name:
             `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim() ||
             p.full_name ||
+            p.name ||
             "(Sin nombre)",
           email: (p.email_norm ?? p.email ?? "").trim(),
           org_id: p.org_id ?? null,
@@ -79,7 +78,6 @@ export default function InvitarTracker() {
   useEffect(() => {
     setError(null);
     setSuccess(null);
-    setMagicLink(null);
 
     if (selectedPerson?.email) setEmail(selectedPerson.email);
     else if (selectedPersonId) setEmail("");
@@ -89,7 +87,6 @@ export default function InvitarTracker() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-    setMagicLink(null);
 
     if (!orgId) return setError("Organización no válida.");
     if (!selectedPersonId) return setError("Selecciona una persona.");
@@ -120,15 +117,29 @@ export default function InvitarTracker() {
     }
   }
 
+  // 🔑 Bloqueo global típico (touch/pointer preventDefault): aislamos el select
+  function isolatePickerEvent(e) {
+    // corta propagación para que no dispare listeners globales que bloquean el picker
+    e.stopPropagation();
+    // intento suave de abrir picker (si el navegador lo soporta)
+    const el = e.currentTarget;
+    if (el && typeof el.showPicker === "function") {
+      try {
+        // algunos navegadores requieren llamada sincrónica
+        el.showPicker();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto p-6 relative">
       <h1 className="text-2xl font-semibold mb-6">Invitar Tracker</h1>
 
-      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6 relative z-10">
+      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6 relative">
         <div className="flex justify-between items-center mb-3">
-          <div className="text-sm font-medium">
-            Personal activo ({personal.length})
-          </div>
+          <div className="text-sm font-medium">Personal activo ({personal.length})</div>
           <button
             onClick={loadPersonal}
             disabled={loadingPersonal}
@@ -140,12 +151,15 @@ export default function InvitarTracker() {
 
         {personalError && <div className="text-red-600 text-sm">{personalError}</div>}
 
-        {/* 🔑 FIX TWA: wrapper con z-index y pointer-events */}
-        <div className="relative z-20 pointer-events-auto">
+        <div className="relative z-10">
           <select
             value={selectedPersonId}
             onChange={(e) => setSelectedPersonId(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 mt-2 bg-white pointer-events-auto"
+            className="w-full border rounded-lg px-3 py-2 mt-2 bg-white"
+            // 👇 CAPTURE para cortar listeners globales
+            onPointerDownCapture={isolatePickerEvent}
+            onTouchStartCapture={isolatePickerEvent}
+            onMouseDownCapture={isolatePickerEvent}
           >
             <option value="">— Selecciona una persona —</option>
             {personal.map((p) => (
