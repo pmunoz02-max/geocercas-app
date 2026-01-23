@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v16-actions-toggle-delete";
+const VERSION = "personal-api-v17-org-override-safe";
 
 /* =========================
    Utils
@@ -31,7 +31,7 @@ function getEnv(nameList) {
 
 function requireWriteRole(role) {
   const r = String(role || "").toLowerCase();
-  return r === "owner" || r === "admin";
+  return r === "owner" || r === "admin" || r === "root";
 }
 
 async function readBody(req) {
@@ -76,6 +76,14 @@ function toE164(rawPhone) {
   return null;
 }
 
+function safeUuid(s) {
+  const x = String(s || "").trim();
+  if (!x) return null;
+  // UUID v4-ish check (suficiente para evitar basura)
+  if (!/^[0-9a-fA-F-]{32,36}$/.test(x)) return null;
+  return x;
+}
+
 /* =========================
    Context Resolver
 ========================= */
@@ -115,7 +123,12 @@ async function resolveContext(req) {
 
   const jwt = getCookie(req, "tg_at");
   if (!jwt) {
-    return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
+    return {
+      ok: false,
+      status: 401,
+      error: "No autenticado",
+      details: "Falta cookie tg_at",
+    };
   }
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -125,7 +138,12 @@ async function resolveContext(req) {
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
   if (userErr || !userData?.user) {
-    return { ok: false, status: 401, error: "Sesión inválida", details: userErr?.message || "No user" };
+    return {
+      ok: false,
+      status: 401,
+      error: "Sesión inválida",
+      details: userErr?.message || "No user",
+    };
   }
 
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -143,7 +161,12 @@ async function resolveContext(req) {
       p_user_id: userData.user.id,
     });
     if (error) {
-      return { ok: false, status: 403, error: "Contexto no inicializado (org/rol)", details: error.message };
+      return {
+        ok: false,
+        status: 403,
+        error: "Contexto no inicializado (org/rol)",
+        details: error.message,
+      };
     }
     ctx = normalizeCtx(data);
   }
@@ -156,6 +179,44 @@ async function resolveContext(req) {
 }
 
 /* =========================
+   Org override SAFE
+========================= */
+
+async function resolveEffectiveOrgId({ req, ctx, userId, supaSrv }) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const requestedOrgId = safeUuid(url.searchParams.get("org_id"));
+
+  // Si no piden org_id, usar ctx.org_id
+  if (!requestedOrgId) return { org_id: ctx.org_id, source: "ctx" };
+
+  // Si piden el mismo, OK
+  if (String(requestedOrgId) === String(ctx.org_id)) {
+    return { org_id: ctx.org_id, source: "ctx_match" };
+  }
+
+  // Validar pertenencia: app_user_roles debe tener user_id+org_id
+  const { data, error } = await supaSrv
+    .from("app_user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("org_id", requestedOrgId)
+    .maybeSingle();
+
+  if (error) {
+    // Ante duda, NO cambiar org (seguridad)
+    return { org_id: ctx.org_id, source: "ctx_membership_check_error" };
+  }
+
+  if (!data?.role) {
+    // No pertenece => no permitir override
+    return { org_id: ctx.org_id, source: "ctx_not_member" };
+  }
+
+  // Es miembro => permitir override
+  return { org_id: requestedOrgId, source: `query_member:${String(data.role).toLowerCase()}` };
+}
+
+/* =========================
    Handlers
 ========================= */
 
@@ -163,17 +224,22 @@ async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
-  const { ctx, supaSrv } = ctxRes;
+  const { ctx, user, supaSrv } = ctxRes;
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   const q = (url.searchParams.get("q") || "").trim();
   const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
   const limit = Math.min(Number(url.searchParams.get("limit") || 500), 2000);
+  const debug = url.searchParams.get("debug") === "1";
+
+  // ✅ ORG efectiva (ctx por defecto, override solo si pertenece)
+  const eff = await resolveEffectiveOrgId({ req, ctx, userId: user.id, supaSrv });
+  const orgIdToUse = eff.org_id;
 
   let query = supaSrv
     .from("personal")
     .select("*")
-    .eq("org_id", ctx.org_id)
+    .eq("org_id", orgIdToUse)
     .eq("is_deleted", false)
     .order("nombre", { ascending: true })
     .limit(limit);
@@ -196,7 +262,21 @@ async function handleList(req, res) {
   const { data, error } = await query;
   if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
 
-  return json(res, 200, { items: data || [] });
+  return json(res, 200, {
+    items: data || [],
+    ...(debug
+      ? {
+          debug: {
+            ctx_org_id: ctx.org_id,
+            effective_org_id: orgIdToUse,
+            org_source: eff.source,
+            role: ctx.role,
+            onlyActive,
+            limit,
+          },
+        }
+      : {}),
+  });
 }
 
 async function handlePost(req, res) {
@@ -204,6 +284,10 @@ async function handlePost(req, res) {
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
+
+  // ✅ org efectiva para escrituras también (seguro)
+  const eff = await resolveEffectiveOrgId({ req, ctx, userId: user.id, supaSrv });
+  const orgIdToUse = eff.org_id;
 
   if (!requireWriteRole(ctx.role)) {
     return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
@@ -223,7 +307,7 @@ async function handlePost(req, res) {
       .from("personal")
       .select("id, vigente, is_deleted")
       .eq("id", id)
-      .eq("org_id", ctx.org_id)
+      .eq("org_id", orgIdToUse)
       .maybeSingle();
 
     if (curErr) return json(res, 500, { error: "No se pudo leer registro", details: curErr.message });
@@ -235,7 +319,7 @@ async function handlePost(req, res) {
       .from("personal")
       .update({ vigente: nextVigente, updated_at: nowIso })
       .eq("id", id)
-      .eq("org_id", ctx.org_id)
+      .eq("org_id", orgIdToUse)
       .select("*")
       .maybeSingle();
 
@@ -252,7 +336,7 @@ async function handlePost(req, res) {
       .from("personal")
       .update({ is_deleted: true, deleted_at: nowIso, updated_at: nowIso })
       .eq("id", id)
-      .eq("org_id", ctx.org_id)
+      .eq("org_id", orgIdToUse)
       .select("*")
       .maybeSingle();
 
@@ -277,7 +361,6 @@ async function handlePost(req, res) {
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
-  // IMPORTANT: no escribir columnas GENERATED ALWAYS
   const baseRow = {
     nombre,
     apellido: apellido || null,
@@ -292,7 +375,7 @@ async function handlePost(req, res) {
   const { data: existing, error: findErr } = await supaSrv
     .from("personal")
     .select("id, is_deleted")
-    .eq("org_id", ctx.org_id)
+    .eq("org_id", orgIdToUse)
     .eq("email", email)
     .maybeSingle();
 
@@ -303,7 +386,7 @@ async function handlePost(req, res) {
       .from("personal")
       .update({ ...baseRow, is_deleted: false, deleted_at: null })
       .eq("id", existing.id)
-      .eq("org_id", ctx.org_id)
+      .eq("org_id", orgIdToUse)
       .select("*")
       .maybeSingle();
 
@@ -313,7 +396,7 @@ async function handlePost(req, res) {
 
   const insertRow = {
     ...baseRow,
-    org_id: ctx.org_id,
+    org_id: orgIdToUse,
     owner_id: user.id,
     created_at: nowIso,
     is_deleted: false,
