@@ -1,5 +1,5 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V31 – WebView/TWA safe: NO setSession(), solo token en memoria + redirect
+// CALLBACK-V32 – WebView/TWA safe: NO setSession(), token en memoria + sessionStorage 1-uso + redirect
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { setMemoryAccessToken } from "../supabaseClient";
@@ -11,6 +11,14 @@ type Diag = {
   error?: string;
 };
 
+type CachedTokens = {
+  access_token: string;
+  ts: number; // epoch ms
+};
+
+const SS_KEY = "tg_cb_access_token_v1";
+const SS_TTL_MS = 2 * 60 * 1000; // 2 minutos (suficiente para 1 loop de WebView)
+
 function parseHashParams(hash: string) {
   const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
   const sp = new URLSearchParams(h);
@@ -20,6 +28,32 @@ function parseHashParams(hash: string) {
   const expires_in = sp.get("expires_in") || "";
   const error = sp.get("error") || sp.get("error_description") || "";
   return { access_token, refresh_token, token_type, expires_in, error };
+}
+
+function ssWriteAccessTokenOnce(access_token: string) {
+  try {
+    const payload: CachedTokens = { access_token, ts: Date.now() };
+    sessionStorage.setItem(SS_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore
+  }
+}
+
+function ssReadAccessTokenOnce(): string {
+  try {
+    const raw = sessionStorage.getItem(SS_KEY);
+    if (!raw) return "";
+    sessionStorage.removeItem(SS_KEY); // 1-uso SIEMPRE
+    const parsed = JSON.parse(raw) as CachedTokens;
+    if (!parsed?.access_token || !parsed?.ts) return "";
+    if (Date.now() - parsed.ts > SS_TTL_MS) return "";
+    return String(parsed.access_token || "");
+  } catch {
+    try {
+      sessionStorage.removeItem(SS_KEY);
+    } catch {}
+    return "";
+  }
 }
 
 export default function AuthCallback() {
@@ -36,20 +70,26 @@ export default function AuthCallback() {
       setDiag({ step: "parse_url" });
 
       const next = searchParams.get("next") || "/inicio";
-      const { access_token, error } = parseHashParams(window.location.hash || "");
+
+      // 1) Intenta leer tokens del hash (camino normal)
+      const { access_token: hashAT, error } = parseHashParams(window.location.hash || "");
+
+      // 2) Si no hay hash token, intenta recuperar 1-vez desde sessionStorage (anti WebView double-load)
+      const recoveredAT = !hashAT ? ssReadAccessTokenOnce() : "";
+
+      const access_token = hashAT || recoveredAT;
 
       setDiag({
-        step: "hash_parsed",
+        step: "tokens_resolved",
         next,
         hasAccessToken: !!access_token,
         error: error || undefined,
       });
 
-      // Si Supabase devolvió error
+      // Si Supabase devolvió error explícito
       if (error) {
-        // Redirige a login con mensaje, sin loops
         const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
-        // Limpia hash para evitar re-proceso si el WebView reusa la URL
+        // Limpia hash/URL del callback para evitar re-proceso
         try {
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
         } catch {}
@@ -66,20 +106,19 @@ export default function AuthCallback() {
         return;
       }
 
+      // ✅ Antes de limpiar hash: guarda token 1-vez por si la WebView re-carga el callback sin hash
+      if (hashAT) ssWriteAccessTokenOnce(hashAT);
+
       // ✅ Fuente de verdad: token en memoria (NO setSession)
       setDiag({ step: "set_memory_token", next, hasAccessToken: true });
       setMemoryAccessToken(access_token);
 
-      // Limpia hash (evita repetir callback si la WebView re-renderiza)
+      // Limpia hash para evitar re-proceso si la WebView reusa la URL
       try {
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname + window.location.search
-        );
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
       } catch {}
 
-      // ✅ Redirección directa (sin navigate, sin timers)
+      // ✅ Redirección directa
       setDiag({ step: "redirect", next, hasAccessToken: true });
       window.location.replace(next);
     } catch (e: any) {
