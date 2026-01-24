@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 function NavItem({ to, children }) {
   const base =
-    "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors";
+    "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors whitespace-nowrap";
   const active = "bg-gray-900 text-white hover:bg-gray-900";
   const inactive = "text-gray-700";
 
@@ -40,13 +40,22 @@ export default function Header() {
   return (
     <header className="w-full border-b bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <Link to="/inicio" className="text-lg font-semibold text-gray-900">
             App Geocercas
           </Link>
 
           {user && (
-            <nav className="hidden md:flex items-center gap-1">
+            <nav
+              className="
+                flex items-center gap-1
+                overflow-x-auto
+                [-webkit-overflow-scrolling:touch]
+                scrollbar-none
+                max-w-[62vw]
+              "
+              aria-label="Navegación principal"
+            >
               <NavItem to="/inicio">Inicio</NavItem>
               <NavItem to="/geocerca">Geocerca</NavItem>
               <NavItem to="/personal">Personal</NavItem>
@@ -70,7 +79,7 @@ export default function Header() {
 
               <button
                 onClick={handleLogout}
-                className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
+                className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm whitespace-nowrap"
               >
                 Cerrar sesión
               </button>
@@ -78,7 +87,7 @@ export default function Header() {
           ) : (
             <Link
               to="/login"
-              className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
+              className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm whitespace-nowrap"
             >
               Iniciar sesión
             </Link>
