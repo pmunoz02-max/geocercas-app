@@ -5,6 +5,18 @@ import { supabase } from "../supabaseClient";
 type Org = { id: string; name: string };
 type Role = { id: string; slug: "owner" | "admin" | "tracker"; name: string };
 
+function errToString(e: any) {
+  if (!e) return "Error desconocido";
+  if (typeof e === "string") return e;
+  const msg = e?.message || e?.error_description || e?.hint || null;
+  if (msg) return String(msg);
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
 export default function AdminAssign() {
   const [email, setEmail] = useState("");
   const [orgs, setOrgs] = useState<Org[]>([]);
@@ -18,19 +30,18 @@ export default function AdminAssign() {
     let mounted = true;
 
     (async () => {
-      const [{ data: orgData, error: orgErr }, { data: roleData, error: roleErr }] =
-        await Promise.all([
-          supabase.from("orgs").select("id,name").order("name", { ascending: true }),
-          supabase.from("roles").select("id,slug,name").order("name", { ascending: true }),
-        ]);
+      const [orgRes, roleRes] = await Promise.all([
+        supabase.from("orgs").select("id,name").order("name", { ascending: true }),
+        supabase.from("roles").select("id,slug,name").order("name", { ascending: true }),
+      ]);
 
       if (!mounted) return;
 
-      if (orgErr) console.error("orgs error:", orgErr);
-      if (roleErr) console.error("roles error:", roleErr);
+      if (orgRes.error) console.error("orgs error:", orgRes.error);
+      if (roleRes.error) console.error("roles error:", roleRes.error);
 
-      setOrgs((orgData ?? []) as Org[]);
-      setRoles((roleData ?? []) as Role[]);
+      setOrgs((orgRes.data ?? []) as Org[]);
+      setRoles((roleRes.data ?? []) as Role[]);
     })();
 
     return () => {
@@ -81,7 +92,7 @@ export default function AdminAssign() {
           setMsg("Respuesta desconocida del servidor.");
       }
     } catch (e: any) {
-      setMsg(e?.message ?? "Error desconocido");
+      setMsg(errToString(e));
     } finally {
       setLoading(false);
     }
@@ -94,11 +105,9 @@ export default function AdminAssign() {
     setLoading(true);
     setMsg(null);
     try {
-      // Si tu proyecto usa OTP/link desde el frontend:
       const { error } = await supabase.auth.signInWithOtp({
         email: target,
         options: {
-          // Si ya tienes un redirect URL estándar, mantenlo aquí:
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
@@ -110,7 +119,7 @@ export default function AdminAssign() {
 
       setMsg("Magic Link enviado ✅ (revisa correo)");
     } catch (e: any) {
-      setMsg(e?.message ?? "Error enviando Magic Link");
+      setMsg(errToString(e));
     } finally {
       setLoading(false);
     }
@@ -162,7 +171,6 @@ export default function AdminAssign() {
               value={roleSlug}
               onChange={(e) => setRoleSlug(e.target.value as Role["slug"])}
             >
-              {/* Solo roles válidos por constraint: owner/admin/tracker */}
               <option value="tracker">tracker</option>
               <option value="admin">admin</option>
               <option value="owner">owner</option>
