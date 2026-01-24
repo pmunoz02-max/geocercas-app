@@ -1,11 +1,11 @@
 // src/pages/AdminAssign.tsx
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../supabaseClient"; // ✅ CANÓNICO (NO "./supabaseClient")
 
 type Org = { id: string; name: string };
 type Role = { id: string; slug: "owner" | "admin" | "tracker"; name: string };
 
-function errToString(e: any) {
+function errText(e: any) {
   if (!e) return "Error desconocido";
   if (typeof e === "string") return e;
   return e?.message || e?.error_description || e?.hint || JSON.stringify(e);
@@ -18,25 +18,34 @@ export default function AdminAssign() {
   const [orgId, setOrgId] = useState<string>("");
   const [roleSlug, setRoleSlug] = useState<Role["slug"]>("tracker");
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+
+  // ✅ Avisos claros
+  const [notice, setNotice] = useState<{ type: "ok" | "err" | "info"; text: string } | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
     (async () => {
-      const [{ data: orgData, error: orgErr }, { data: roleData, error: roleErr }] =
-        await Promise.all([
-          supabase.from("orgs").select("id,name").order("name", { ascending: true }),
-          supabase.from("roles").select("id,slug,name").order("name", { ascending: true }),
-        ]);
+      const [orgRes, roleRes] = await Promise.all([
+        supabase.from("orgs").select("id,name").order("name", { ascending: true }),
+        supabase.from("roles").select("id,slug,name").order("name", { ascending: true }),
+      ]);
 
       if (!mounted) return;
 
-      if (orgErr) console.error("orgs error:", orgErr);
-      if (roleErr) console.error("roles error:", roleErr);
+      if (orgRes.error) {
+        console.error("orgs error:", orgRes.error);
+        setNotice({ type: "err", text: `No se pudieron cargar organizaciones: ${orgRes.error.message}` });
+      } else {
+        setOrgs((orgRes.data ?? []) as Org[]);
+      }
 
-      setOrgs((orgData ?? []) as Org[]);
-      setRoles((roleData ?? []) as Role[]);
+      if (roleRes.error) {
+        console.error("roles error:", roleRes.error);
+        setNotice({ type: "err", text: `No se pudieron cargar roles: ${roleRes.error.message}` });
+      } else {
+        setRoles((roleRes.data ?? []) as Role[]);
+      }
     })();
 
     return () => {
@@ -50,12 +59,12 @@ export default function AdminAssign() {
   );
 
   const onAssign = async () => {
-    setMsg(null);
+    setNotice(null);
 
     const targetEmail = email.trim().toLowerCase();
-    if (!targetEmail) return setMsg("Ingresa un email.");
-    if (!orgId) return setMsg("Selecciona una organización.");
-    if (!roleSlug) return setMsg("Selecciona un rol.");
+    if (!targetEmail) return setNotice({ type: "err", text: "Ingresa un email." });
+    if (!orgId) return setNotice({ type: "err", text: "Selecciona una organización." });
+    if (!roleSlug) return setNotice({ type: "err", text: "Selecciona un rol." });
 
     setLoading(true);
     try {
@@ -65,23 +74,26 @@ export default function AdminAssign() {
         p_org_id: orgId,
       });
 
-      if (error) return setMsg(`No se pudo asignar: ${error.message}`);
+      if (error) {
+        setNotice({ type: "err", text: `No se pudo asignar: ${error.message}` });
+        return;
+      }
 
       switch (data?.status) {
         case "NEEDS_MAGIC_LINK":
-          setMsg("El correo no existe en Auth. Envía Magic Link y vuelve a asignar.");
+          setNotice({ type: "info", text: "El usuario no existe en Auth. Envía Magic Link y vuelve a asignar." });
           break;
         case "OK":
-          setMsg("Asignación completada ✅");
+          setNotice({ type: "ok", text: "Asignación completada ✅" });
           break;
         case "FORBIDDEN":
-          setMsg(data?.message ?? "No autorizado");
+          setNotice({ type: "err", text: data?.message ?? "No autorizado" });
           break;
         default:
-          setMsg(data?.message ?? "Respuesta desconocida");
+          setNotice({ type: "info", text: data?.message ?? "Respuesta desconocida." });
       }
     } catch (e: any) {
-      setMsg(errToString(e));
+      setNotice({ type: "err", text: errText(e) });
     } finally {
       setLoading(false);
     }
@@ -89,32 +101,48 @@ export default function AdminAssign() {
 
   const sendMagicLink = async () => {
     const target = email.trim().toLowerCase();
-    if (!target) return setMsg("Ingresa un email para enviar el Magic Link.");
+    if (!target) return setNotice({ type: "err", text: "Ingresa un email para enviar el Magic Link." });
 
     setLoading(true);
-    setMsg(null);
+    setNotice({ type: "info", text: "Enviando Magic Link..." });
+
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: target,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
 
-      if (error) return setMsg(`No se pudo enviar Magic Link: ${error.message}`);
-      setMsg("Magic Link enviado ✅ (revisa correo)");
+      if (error) {
+        console.error("MagicLink error:", error);
+        setNotice({ type: "err", text: `❌ No se pudo enviar el Magic Link: ${error.message}` });
+        return;
+      }
+
+      setNotice({ type: "ok", text: "✅ Magic Link enviado. Revisa el correo (Inbox/Spam)." });
     } catch (e: any) {
-      setMsg(errToString(e));
+      console.error("MagicLink exception:", e);
+      setNotice({ type: "err", text: `❌ Error enviando Magic Link: ${errText(e)}` });
     } finally {
       setLoading(false);
     }
   };
 
+  const noticeClass =
+    notice?.type === "ok"
+      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+      : notice?.type === "err"
+      ? "bg-red-50 border-red-200 text-red-800"
+      : "bg-slate-50 border-slate-200 text-slate-800";
+
   return (
     <div className="mx-auto max-w-3xl p-4">
       <h1 className="text-2xl font-semibold mb-4">Administradores (Root)</h1>
 
-      {msg && (
-        <div className="mb-4 rounded border border-slate-200 bg-white p-3 text-sm">
-          {msg}
+      {notice && (
+        <div className={`mb-4 rounded border p-3 text-sm ${noticeClass}`}>
+          {notice.text}
         </div>
       )}
 
@@ -174,9 +202,13 @@ export default function AdminAssign() {
               onClick={sendMagicLink}
               disabled={loading || email.trim().length < 4}
             >
-              Enviar Magic Link
+              {loading ? "Enviando..." : "Enviar Magic Link"}
             </button>
           </div>
+
+          <p className="text-xs text-slate-600 pt-2">
+            Nota: si el RPC responde NEEDS_MAGIC_LINK, primero envía Magic Link y luego vuelve a asignar.
+          </p>
         </div>
       </div>
     </div>
