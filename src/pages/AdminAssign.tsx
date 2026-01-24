@@ -1,6 +1,5 @@
 // src/pages/AdminAssign.tsx
 import { useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
 
 type Notice = { type: "ok" | "err" | "info"; text: string };
 
@@ -25,7 +24,7 @@ export default function AdminAssign() {
       ? "bg-red-50 border-red-200 text-red-800"
       : "bg-slate-50 border-slate-200 text-slate-800";
 
-  async function sendInviteAndCreateOrg() {
+  async function sendInvite() {
     if (!targetEmail) {
       setNotice({ type: "err", text: "Ingresa un email válido." });
       return;
@@ -35,62 +34,34 @@ export default function AdminAssign() {
     setNotice({ type: "info", text: "Enviando invitación (Magic Link)..." });
 
     try {
-      // 1) Enviar Magic Link (esto crea auth.users inmediatamente con create_user=true)
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: targetEmail,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        credentials: "include", // 🔒 cookies HttpOnly
+        body: JSON.stringify({
+          action: "invite_new_admin",
+          email: targetEmail,
+        }),
       });
 
-      if (otpError) {
-        console.error("MagicLink error:", otpError);
-        setNotice({ type: "err", text: `❌ No se pudo enviar el Magic Link: ${otpError.message}` });
-        return;
-      }
+      const json = await res.json();
 
-      // 2) Crear org propia + OWNER automáticamente (regla canónica)
-      setNotice({ type: "info", text: "Magic Link enviado. Creando organización propia (OWNER)..." });
-
-      const { data, error: rpcError } = await supabase.rpc("admin_invite_new_admin", {
-        p_email: targetEmail,
-        p_role: "owner",
-        p_org_name: null,
-      });
-
-      if (rpcError) {
-        console.error("RPC admin_invite_new_admin error:", rpcError);
+      if (!res.ok || json?.ok === false) {
+        console.error("Invite admin error:", json);
         setNotice({
           type: "err",
-          text: `❌ Magic Link enviado, pero falló crear la organización/OWNER: ${rpcError.message}`,
-        });
-        return;
-      }
-
-      const status = data?.status ?? "UNKNOWN";
-
-      if (status === "OK") {
-        setNotice({
-          type: "ok",
-          text: `✅ Invitación enviada y organización creada. El usuario nacerá como OWNER al aceptar el link.`,
-        });
-        return;
-      }
-
-      if (status === "NEEDS_MAGIC_LINK") {
-        // En teoría no debería ocurrir porque signInWithOtp crea el usuario,
-        // pero lo manejamos por robustez.
-        setNotice({
-          type: "info",
-          text: "Magic Link enviado. Si el usuario aún no existe, reintenta en 10 segundos.",
+          text: `❌ No se pudo enviar la invitación: ${json?.error || "Error desconocido"}`,
         });
         return;
       }
 
       setNotice({
-        type: status === "FORBIDDEN" ? "err" : "info",
-        text: data?.message ? String(data.message) : `Respuesta: ${status}`,
+        type: "ok",
+        text: "✅ Invitación enviada. El nuevo administrador nacerá con su propia organización como OWNER.",
       });
+      setEmail("");
     } catch (e: any) {
       console.error("Invite exception:", e);
       setNotice({ type: "err", text: `❌ Error: ${errText(e)}` });
@@ -103,7 +74,8 @@ export default function AdminAssign() {
     <div className="mx-auto max-w-3xl p-4">
       <h1 className="text-2xl font-semibold mb-2">Invitar nuevo administrador (OWNER)</h1>
       <p className="text-sm text-slate-600 mb-4">
-        Regla canónica: un nuevo administrador nace con su propia organización y queda como <b>OWNER</b>.
+        Regla canónica: un nuevo administrador nace con su propia organización y queda como{" "}
+        <b>OWNER</b>.
       </p>
 
       {notice && <div className={`mb-4 rounded border p-3 text-sm ${noticeClass}`}>{notice.text}</div>}
@@ -124,7 +96,7 @@ export default function AdminAssign() {
           <div className="flex flex-wrap gap-2 pt-2">
             <button
               className="rounded-md bg-emerald-600 px-4 py-2 text-white disabled:opacity-50"
-              onClick={sendInviteAndCreateOrg}
+              onClick={sendInvite}
               disabled={!canSend}
               title="Envía Magic Link y crea la organización propia como OWNER"
             >
