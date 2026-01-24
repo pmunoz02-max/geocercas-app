@@ -1,7 +1,7 @@
 // /api/auth/session.js
 import { createClient } from "@supabase/supabase-js";
 
-/* ---------- helpers cookies ---------- */
+/** Minimal cookie parser (no deps) */
 function parseCookies(cookieHeader) {
   const out = {};
   if (!cookieHeader) return out;
@@ -39,7 +39,6 @@ function makeCookie(name, value, opts = {}) {
   return s;
 }
 
-/* ---------- auth helpers ---------- */
 async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   const url = `${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/token?grant_type=refresh_token`;
 
@@ -53,15 +52,23 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
 
-  const json = await r.json().catch(() => ({}));
+  const text = await r.text();
+  let json = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text };
+  }
+
   if (!r.ok || !json?.access_token) {
-    const err = new Error(
-      json?.error_description || json?.error || "Failed to refresh token"
-    );
+    const msg = json?.error_description || json?.error || "Failed to refresh token";
+    const err = new Error(msg);
     err.status = 401;
+    err.body = json || null;
     throw err;
   }
-  return json;
+
+  return json; // {access_token, refresh_token, expires_in, user, ...}
 }
 
 async function getUserFromAccessToken({ url, anonKey, accessToken }) {
@@ -70,36 +77,32 @@ async function getUserFromAccessToken({ url, anonKey, accessToken }) {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
   });
 
-  const { data, error } = await sbUser.auth.getUser();
-  const user = data?.user ? { id: data.user.id, email: data.user.email } : null;
-  return { sbUser, user, error };
+  const { data: u1, error: uerr1 } = await sbUser.auth.getUser();
+  const user = u1?.user ? { id: u1.user.id, email: u1.user.email } : null;
+  return { sbUser, user, error: uerr1 };
 }
 
-/* ---------- ROOT CHECK ---------- */
-async function isAppRoot({ url, serviceKey, userId }) {
-  if (!serviceKey || !userId) return false;
+function computeIsAppRoot({ userEmail, roleFromBoot }) {
+  const role = String(roleFromBoot || "").toLowerCase();
+  if (role === "root" || role === "root_owner") return true;
 
-  const sbAdmin = createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const listRaw = process.env.APP_ROOT_EMAILS || "";
+  const allow = listRaw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 
-  const { data } = await sbAdmin
-    .from("app_root_users")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  return Boolean(data);
+  if (!allow.length) return false;
+  return allow.includes(String(userEmail || "").toLowerCase());
 }
 
-/* ---------- handler ---------- */
 export default async function handler(req, res) {
-  // increment if you want to visually confirm the deployed file
-  const build_tag = "session-v13-root-aware";
+  const build_tag = "session-v13-rootflag-orgs";
 
   try {
+    // Solo GET/OPTIONS
     if (req.method === "OPTIONS") {
-      res.status(200);
+      res.statusCode = 200;
       return res.end();
     }
     if (req.method !== "GET") {
@@ -126,57 +129,117 @@ export default async function handler(req, res) {
     let access_token = cookies.tg_at || "";
     const refresh_token = cookies.tg_rt || "";
 
-    // Refresh if needed
-    if (!access_token && refresh_token) {
-      const refreshed = await refreshAccessToken({
-        supabaseUrl: url,
-        anonKey,
-        refreshToken: refresh_token,
-      });
+    // Si no hay access, intenta refresh (si hay refresh)
+    if (!access_token) {
+      if (!refresh_token) return res.status(200).json({ build_tag, authenticated: false });
 
-      access_token = refreshed.access_token;
+      try {
+        const refreshed = await refreshAccessToken({
+          supabaseUrl: url,
+          anonKey,
+          refreshToken: refresh_token,
+        });
 
-      res.setHeader("Set-Cookie", [
-        makeCookie("tg_at", refreshed.access_token, {
-          maxAge: Number(refreshed.expires_in || 3600),
-        }),
-        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
-          maxAge: 30 * 24 * 60 * 60,
-        }),
-      ]);
+        access_token = refreshed.access_token;
+
+        // Actualiza cookies
+        const accessMaxAge = Number(refreshed.expires_in || 3600);
+        const refreshMaxAge = 30 * 24 * 60 * 60;
+
+        res.setHeader("Set-Cookie", [
+          makeCookie("tg_at", refreshed.access_token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+            path: "/",
+            maxAge: accessMaxAge,
+          }),
+          makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+            path: "/",
+            maxAge: refreshMaxAge,
+          }),
+        ]);
+      } catch {
+        return res.status(200).json({ build_tag, authenticated: false });
+      }
     }
 
-    // Resolve user
-    const r1 = await getUserFromAccessToken({ url, anonKey, accessToken: access_token });
-    const { sbUser, user } = r1;
-
-    if (!user) {
-      return res.status(200).json({ build_tag, authenticated: false });
+    // 1) Validar sesión con JWT del usuario
+    let sbUser, user, uerr1;
+    {
+      const r = await getUserFromAccessToken({ url, anonKey, accessToken: access_token });
+      sbUser = r.sbUser;
+      user = r.user;
+      uerr1 = r.error;
     }
 
-    // ROOT flag (only app owner sees ADMIN tab)
-    const appRoot = await isAppRoot({
-      url,
-      serviceKey,
-      userId: user.id,
-    });
+    // Si el access expiró/invalidó, intenta refresh UNA vez
+    if (!user || uerr1) {
+      if (!refresh_token) return res.status(200).json({ build_tag, authenticated: false });
 
-    /* ---------- BOOTSTRAP (RLS-safe via RPC) ---------- */
-    const { data: boot } = await sbUser.rpc("bootstrap_session_context");
+      try {
+        const refreshed = await refreshAccessToken({
+          supabaseUrl: url,
+          anonKey,
+          refreshToken: refresh_token,
+        });
 
-    if (Array.isArray(boot) && boot[0]?.org_id && boot[0]?.role) {
+        access_token = refreshed.access_token;
+
+        const accessMaxAge = Number(refreshed.expires_in || 3600);
+        const refreshMaxAge = 30 * 24 * 60 * 60;
+
+        res.setHeader("Set-Cookie", [
+          makeCookie("tg_at", refreshed.access_token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+            path: "/",
+            maxAge: accessMaxAge,
+          }),
+          makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+            path: "/",
+            maxAge: refreshMaxAge,
+          }),
+        ]);
+
+        const r2 = await getUserFromAccessToken({ url, anonKey, accessToken: access_token });
+        sbUser = r2.sbUser;
+        user = r2.user;
+      } catch {
+        return res.status(200).json({ build_tag, authenticated: false });
+      }
+    }
+
+    if (!user) return res.status(200).json({ build_tag, authenticated: false });
+
+    // 2) BOOTSTRAP UNIVERSAL (canónico)
+    const { data: boot, error: berr } = await sbUser.rpc("bootstrap_session_context");
+
+    if (!berr && Array.isArray(boot) && boot[0]?.org_id && boot[0]?.role) {
+      const current_org_id = boot[0].org_id;
+      const role = String(boot[0].role || "").toLowerCase();
+      const is_app_root = computeIsAppRoot({ userEmail: user.email, roleFromBoot: role });
+
       return res.status(200).json({
         build_tag,
         authenticated: true,
         bootstrapped: true,
         user,
-        current_org_id: boot[0].org_id,
-        role: boot[0].role,
-        is_app_root: appRoot,
+        current_org_id,
+        role,
+        is_app_root,
+        organizations: [{ id: current_org_id }],
       });
     }
 
-    /* ---------- FALLBACK (service role) ---------- */
+    // 3) Fallback con service role (si existe)
     let fallback = { current_org_id: null, role: null };
 
     if (serviceKey) {
@@ -184,7 +247,7 @@ export default async function handler(req, res) {
         auth: { persistSession: false, autoRefreshToken: false },
       });
 
-      const { data } = await sbAdmin
+      const { data: r1 } = await sbAdmin
         .from("app_user_roles")
         .select("org_id, role")
         .eq("user_id", user.id)
@@ -192,9 +255,11 @@ export default async function handler(req, res) {
         .limit(1)
         .maybeSingle();
 
-      fallback.current_org_id = data?.org_id || null;
-      fallback.role = data?.role || null;
+      fallback.current_org_id = r1?.org_id || null;
+      fallback.role = r1?.role || null;
     }
+
+    const is_app_root = computeIsAppRoot({ userEmail: user.email, roleFromBoot: fallback.role });
 
     return res.status(200).json({
       build_tag,
@@ -202,8 +267,12 @@ export default async function handler(req, res) {
       bootstrapped: false,
       user,
       current_org_id: fallback.current_org_id,
-      role: fallback.role,
-      is_app_root: appRoot,
+      role: fallback.role ? String(fallback.role).toLowerCase() : null,
+      is_app_root,
+      organizations: fallback.current_org_id ? [{ id: fallback.current_org_id }] : [],
+      bootstrap_error: berr
+        ? { message: berr.message, code: berr.code, details: berr.details, hint: berr.hint }
+        : null,
       warning: "bootstrap_session_context failed; served fallback",
     });
   } catch (e) {

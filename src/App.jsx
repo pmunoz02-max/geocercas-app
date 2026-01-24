@@ -23,10 +23,12 @@ import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
-import TrackerGpsPage from "./pages/TrackerGpsPage.jsx"; // ✅ NUEVO
+import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
-import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
+
+// ✅ Admins page (reemplaza InvitarAdmin)
+import AdminAssign from "./pages/AdminAssign.tsx";
 
 // Help pages
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
@@ -80,7 +82,6 @@ export default function App() {
         <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
         <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
         <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
-        {/* ✅ IMPORTANTE: ya NO redirigir /tracker-gps a /tracker */}
         <Route path="/admin" element={<Navigate to="/admins" replace />} />
         <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
@@ -104,7 +105,7 @@ export default function App() {
 
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
 
-          {/* ✅ RUTA CORRECTA: tracker GPS */}
+          {/* ✅ tracker GPS */}
           <Route
             path="/tracker-gps"
             element={
@@ -122,11 +123,12 @@ export default function App() {
           <Route path="/help/support" element={<SupportPage />} />
           <Route path="/help/changelog" element={<ChangelogPage />} />
 
+          {/* ✅ Admins (solo fenice.ecuador@gmail.com como root) */}
           <Route
             path="/admins"
             element={
               <AdminRoute>
-                <InvitarAdmin />
+                <AdminAssign />
               </AdminRoute>
             }
           />
