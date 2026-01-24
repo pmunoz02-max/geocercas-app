@@ -1,9 +1,8 @@
 // src/pages/AdminAssign.tsx
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient"; // ✅ CANÓNICO (NO "./supabaseClient")
+import { useMemo, useState } from "react";
+import { supabase } from "../supabaseClient";
 
-type Org = { id: string; name: string };
-type Role = { id: string; slug: "owner" | "admin" | "tracker"; name: string };
+type Notice = { type: "ok" | "err" | "info"; text: string };
 
 function errText(e: any) {
   if (!e) return "Error desconocido";
@@ -13,102 +12,36 @@ function errText(e: any) {
 
 export default function AdminAssign() {
   const [email, setEmail] = useState("");
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [orgId, setOrgId] = useState<string>("");
-  const [roleSlug, setRoleSlug] = useState<Role["slug"]>("tracker");
+  const [orgName, setOrgName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
-  // ✅ Avisos claros
-  const [notice, setNotice] = useState<{ type: "ok" | "err" | "info"; text: string } | null>(null);
+  const [lastStatus, setLastStatus] = useState<string | null>(null);
+  const [createdOrgId, setCreatedOrgId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
+  const targetEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const canSendMagic = useMemo(() => targetEmail.length > 5 && !loading, [targetEmail, loading]);
+  const canCreate = useMemo(() => targetEmail.length > 5 && !loading, [targetEmail, loading]);
 
-    (async () => {
-      const [orgRes, roleRes] = await Promise.all([
-        supabase.from("orgs").select("id,name").order("name", { ascending: true }),
-        supabase.from("roles").select("id,slug,name").order("name", { ascending: true }),
-      ]);
+  const noticeClass =
+    notice?.type === "ok"
+      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+      : notice?.type === "err"
+      ? "bg-red-50 border-red-200 text-red-800"
+      : "bg-slate-50 border-slate-200 text-slate-800";
 
-      if (!mounted) return;
-
-      if (orgRes.error) {
-        console.error("orgs error:", orgRes.error);
-        setNotice({ type: "err", text: `No se pudieron cargar organizaciones: ${orgRes.error.message}` });
-      } else {
-        setOrgs((orgRes.data ?? []) as Org[]);
-      }
-
-      if (roleRes.error) {
-        console.error("roles error:", roleRes.error);
-        setNotice({ type: "err", text: `No se pudieron cargar roles: ${roleRes.error.message}` });
-      } else {
-        setRoles((roleRes.data ?? []) as Role[]);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const canSubmit = useMemo(
-    () => email.trim().length > 3 && orgId && roleSlug && !loading,
-    [email, orgId, roleSlug, loading]
-  );
-
-  const onAssign = async () => {
-    setNotice(null);
-
-    const targetEmail = email.trim().toLowerCase();
-    if (!targetEmail) return setNotice({ type: "err", text: "Ingresa un email." });
-    if (!orgId) return setNotice({ type: "err", text: "Selecciona una organización." });
-    if (!roleSlug) return setNotice({ type: "err", text: "Selecciona un rol." });
-
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.rpc("admin_assign_role_org", {
-        p_email: targetEmail,
-        p_role_slug: roleSlug,
-        p_org_id: orgId,
-      });
-
-      if (error) {
-        setNotice({ type: "err", text: `No se pudo asignar: ${error.message}` });
-        return;
-      }
-
-      switch (data?.status) {
-        case "NEEDS_MAGIC_LINK":
-          setNotice({ type: "info", text: "El usuario no existe en Auth. Envía Magic Link y vuelve a asignar." });
-          break;
-        case "OK":
-          setNotice({ type: "ok", text: "Asignación completada ✅" });
-          break;
-        case "FORBIDDEN":
-          setNotice({ type: "err", text: data?.message ?? "No autorizado" });
-          break;
-        default:
-          setNotice({ type: "info", text: data?.message ?? "Respuesta desconocida." });
-      }
-    } catch (e: any) {
-      setNotice({ type: "err", text: errText(e) });
-    } finally {
-      setLoading(false);
+  async function sendMagicLink() {
+    if (!targetEmail) {
+      setNotice({ type: "err", text: "Ingresa un email válido." });
+      return;
     }
-  };
-
-  const sendMagicLink = async () => {
-    const target = email.trim().toLowerCase();
-    if (!target) return setNotice({ type: "err", text: "Ingresa un email para enviar el Magic Link." });
 
     setLoading(true);
     setNotice({ type: "info", text: "Enviando Magic Link..." });
 
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        email: target,
+        email: targetEmail,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
@@ -127,29 +60,82 @@ export default function AdminAssign() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const noticeClass =
-    notice?.type === "ok"
-      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-      : notice?.type === "err"
-      ? "bg-red-50 border-red-200 text-red-800"
-      : "bg-slate-50 border-slate-200 text-slate-800";
+  async function createOwnerOrg() {
+    if (!targetEmail) {
+      setNotice({ type: "err", text: "Ingresa un email válido." });
+      return;
+    }
+
+    setLoading(true);
+    setNotice({ type: "info", text: "Creando organización y asignando OWNER..." });
+    setLastStatus(null);
+    setCreatedOrgId(null);
+
+    try {
+      // Rol fijo por regla de negocio: owner
+      const { data, error } = await supabase.rpc("admin_invite_new_admin", {
+        p_email: targetEmail,
+        p_role: "owner",
+        p_org_name: orgName?.trim() ? orgName.trim() : null,
+      });
+
+      if (error) {
+        console.error("RPC admin_invite_new_admin error:", error);
+        setNotice({ type: "err", text: `❌ RPC falló: ${error.message}` });
+        setLastStatus("RPC_ERROR");
+        return;
+      }
+
+      const status = data?.status ?? "UNKNOWN";
+      setLastStatus(status);
+
+      if (status === "NEEDS_MAGIC_LINK") {
+        setNotice({
+          type: "info",
+          text: "El usuario aún no existe en Auth. Primero envía Magic Link y cuando acepte, vuelve a presionar “Crear org + OWNER”.",
+        });
+        return;
+      }
+
+      if (status === "OK") {
+        const orgId = data?.org_id ?? null;
+        setCreatedOrgId(orgId);
+        setNotice({
+          type: "ok",
+          text: `✅ Listo. Se creó una org nueva y el usuario quedó como OWNER.${orgId ? ` Org ID: ${orgId}` : ""}`,
+        });
+        return;
+      }
+
+      // Otros estados posibles
+      setNotice({
+        type: status === "FORBIDDEN" ? "err" : "info",
+        text: data?.message ? String(data.message) : `Respuesta: ${status}`,
+      });
+    } catch (e: any) {
+      console.error("RPC exception:", e);
+      setNotice({ type: "err", text: `❌ Error: ${errText(e)}` });
+      setLastStatus("EXCEPTION");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-3xl p-4">
-      <h1 className="text-2xl font-semibold mb-4">Administradores (Root)</h1>
+      <h1 className="text-2xl font-semibold mb-2">Invitar nuevo administrador (OWNER)</h1>
+      <p className="text-sm text-slate-600 mb-4">
+        Regla canónica: un nuevo administrador nace con su propia organización y queda como <b>OWNER</b>.
+      </p>
 
-      {notice && (
-        <div className={`mb-4 rounded border p-3 text-sm ${noticeClass}`}>
-          {notice.text}
-        </div>
-      )}
+      {notice && <div className={`mb-4 rounded border p-3 text-sm ${noticeClass}`}>{notice.text}</div>}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3">
           <label className="text-sm">
-            Email usuario
+            Email del nuevo administrador
             <input
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
               value={email}
@@ -160,54 +146,53 @@ export default function AdminAssign() {
           </label>
 
           <label className="text-sm">
-            Organización
-            <select
+            Nombre de la organización (opcional)
+            <input
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
-              value={orgId}
-              onChange={(e) => setOrgId(e.target.value)}
-            >
-              <option value="">-- Selecciona --</option>
-              {orgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name} ({o.id})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-sm">
-            Rol
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
-              value={roleSlug}
-              onChange={(e) => setRoleSlug(e.target.value as Role["slug"])}
-            >
-              <option value="tracker">tracker</option>
-              <option value="admin">admin</option>
-              <option value="owner">owner</option>
-            </select>
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              placeholder="Org de Juan / Mi Empresa / etc."
+            />
           </label>
 
           <div className="flex flex-wrap gap-2 pt-2">
             <button
               className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
-              onClick={onAssign}
-              disabled={!canSubmit}
+              onClick={createOwnerOrg}
+              disabled={!canCreate}
+              title="Crea una org nueva y asigna OWNER al usuario"
             >
-              {loading ? "Procesando..." : "Asignar rol"}
+              {loading ? "Procesando..." : "Crear org + OWNER"}
             </button>
 
             <button
               className="rounded-md border border-slate-300 px-4 py-2 disabled:opacity-50"
               onClick={sendMagicLink}
-              disabled={loading || email.trim().length < 4}
+              disabled={!canSendMagic}
+              title="Úsalo si el RPC responde NEEDS_MAGIC_LINK"
             >
               {loading ? "Enviando..." : "Enviar Magic Link"}
             </button>
           </div>
 
+          {(lastStatus || createdOrgId) && (
+            <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              {lastStatus && (
+                <div>
+                  <b>Último status:</b> {lastStatus}
+                </div>
+              )}
+              {createdOrgId && (
+                <div>
+                  <b>Org ID creada:</b> {createdOrgId}
+                </div>
+              )}
+            </div>
+          )}
+
           <p className="text-xs text-slate-600 pt-2">
-            Nota: si el RPC responde NEEDS_MAGIC_LINK, primero envía Magic Link y luego vuelve a asignar.
+            Flujo recomendado: (1) “Crear org + OWNER” → si responde NEEDS_MAGIC_LINK: (2) “Enviar Magic Link”
+            → (3) cuando el usuario acepte, vuelve a “Crear org + OWNER”.
           </p>
         </div>
       </div>
