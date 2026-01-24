@@ -9,6 +9,16 @@ function errText(e: any) {
   return e?.message || e?.error_description || e?.hint || JSON.stringify(e);
 }
 
+async function safeReadJson(res: Response) {
+  const text = await res.text().catch(() => "");
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+}
+
 export default function AdminAssign() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,25 +44,22 @@ export default function AdminAssign() {
     setNotice({ type: "info", text: "Enviando invitación (Magic Link)..." });
 
     try {
-      const res = await fetch("/api/session", {
+      const res = await fetch("/api/auth/session", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include", // 🔒 cookies HttpOnly
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // cookies tg_at / tg_rt
         body: JSON.stringify({
           action: "invite_new_admin",
           email: targetEmail,
         }),
       });
 
-      const json = await res.json();
+      const json: any = await safeReadJson(res);
 
       if (!res.ok || json?.ok === false) {
-        console.error("Invite admin error:", json);
         setNotice({
           type: "err",
-          text: `❌ No se pudo enviar la invitación: ${json?.error || "Error desconocido"}`,
+          text: `❌ No se pudo enviar la invitación: ${json?.error || json?.raw || `HTTP ${res.status}`}`,
         });
         return;
       }
@@ -74,8 +81,7 @@ export default function AdminAssign() {
     <div className="mx-auto max-w-3xl p-4">
       <h1 className="text-2xl font-semibold mb-2">Invitar nuevo administrador (OWNER)</h1>
       <p className="text-sm text-slate-600 mb-4">
-        Regla canónica: un nuevo administrador nace con su propia organización y queda como{" "}
-        <b>OWNER</b>.
+        Regla canónica: un nuevo administrador nace con su propia organización y queda como <b>OWNER</b>.
       </p>
 
       {notice && <div className={`mb-4 rounded border p-3 text-sm ${noticeClass}`}>{notice.text}</div>}
@@ -93,19 +99,18 @@ export default function AdminAssign() {
             />
           </label>
 
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex gap-2 pt-2">
             <button
               className="rounded-md bg-emerald-600 px-4 py-2 text-white disabled:opacity-50"
               onClick={sendInvite}
               disabled={!canSend}
-              title="Envía Magic Link y crea la organización propia como OWNER"
             >
               {loading ? "Procesando..." : "Enviar invitación (Magic Link)"}
             </button>
           </div>
 
           <p className="text-xs text-slate-600 pt-2">
-            El invitado debe abrir el link en el navegador/dispositivo donde quiere usar la app.
+            El invitado debe abrir el link en el dispositivo donde usará la app.
           </p>
         </div>
       </div>
