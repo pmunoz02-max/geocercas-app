@@ -24,31 +24,28 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const role = (currentRole || "").toLowerCase();
-  const roleLabel = isAppRoot ? "ROOT" : currentRole ? currentRole.toUpperCase() : "SIN ROL";
+  const roleLabel = isAppRoot
+    ? "ROOT"
+    : currentRole
+    ? String(currentRole).toUpperCase()
+    : "SIN ROL";
 
   const handleLogout = async () => {
     await logout();
     if (location.pathname !== "/login") navigate("/login", { replace: true });
   };
 
-  // Tabs “full” vs “tracker-only”
-  const fullNav = [
-    { to: "/inicio", label: "Inicio" },
-    { to: "/geocerca", label: "Geocerca" },
-    { to: "/personal", label: "Personal" },
-    { to: "/actividades", label: "Actividades" },
-    { to: "/asignaciones", label: "Asignaciones" },
-    { to: "/reportes", label: "Reportes" },
+  const navItems = [
+    { to: "/inicio", label: "Home" },
+    { to: "/geocerca", label: "Geofence" },
+    { to: "/personal", label: "Personnel" },
+    { to: "/actividades", label: "Activities" },
+    { to: "/asignaciones", label: "Assignments" },
+    { to: "/reportes", label: "Reports" },
+    { to: "/costos-dashboard", label: "Costs Dashboard" },
     { to: "/tracker", label: "Tracker" },
+    { to: "/invite-tracker", label: "Invite tracker" },
   ];
-
-  // Si es tracker puro, muestro solo Tracker (y opcionalmente Inicio)
-  const trackerNav = [
-    { to: "/tracker", label: "Tracker" },
-  ];
-
-  const navItems = role === "tracker" ? trackerNav : fullNav;
 
   return (
     <header className="w-full border-b bg-white">
@@ -60,7 +57,7 @@ export default function Header() {
 
           {user && (
             <nav
-              className="flex items-center gap-1 overflow-x-auto max-w-[65vw]"
+              className="flex items-center gap-1 overflow-x-auto max-w-[70vw]"
               style={{ WebkitOverflowScrolling: "touch" }}
               aria-label="Navegación principal"
             >
@@ -69,6 +66,9 @@ export default function Header() {
                   {it.label}
                 </NavItem>
               ))}
+
+              {/* SOLO ROOT (dueño de la app) */}
+              {isAppRoot && <NavItem to="/admin">Administrador</NavItem>}
             </nav>
           )}
         </div>
