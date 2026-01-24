@@ -1,8 +1,6 @@
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
-const FORCE_ADMIN_TAB = true; // <- DEBUG: ponlo en false cuando ya esté isAppRoot ok
-
 function NavItem({ to, children }) {
   const base =
     "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors whitespace-nowrap";
@@ -22,44 +20,47 @@ function NavItem({ to, children }) {
 }
 
 export default function Header() {
-  const { user, loading, currentOrg, currentRole, isAppRoot, logout } = useAuth();
+  const { user, loading, currentOrg, currentRole, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const roleLabel = isAppRoot
-    ? "ROOT"
-    : currentRole
-    ? String(currentRole).toUpperCase()
-    : "SIN ROL";
-
   const handleLogout = async () => {
     await logout();
-    if (location.pathname !== "/login") navigate("/login", { replace: true });
+    if (location.pathname !== "/login") {
+      navigate("/login", { replace: true });
+    }
   };
-
-  const showAdmin = FORCE_ADMIN_TAB || isAppRoot;
 
   return (
     <header className="w-full border-b bg-white">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      {/* ===== DEBUG / MARCA DE BUILD ===== */}
+      <div className="bg-red-600 text-white text-xs px-3 py-1 font-bold">
+        HEADER_BUILD_OK – ADMIN FORZADO
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-4 min-w-0">
           <Link to="/inicio" className="text-lg font-semibold text-gray-900 whitespace-nowrap">
             App Geocercas
           </Link>
 
           {user && (
-            <nav className="flex flex-wrap items-center gap-1" aria-label="Navegación principal">
-              {showAdmin && <NavItem to="/admin">Administrador</NavItem>}
+            <nav
+              className="flex flex-wrap items-center gap-1"
+              aria-label="Navegación principal"
+            >
+              {/* ===== ADMIN FORZADO (SIEMPRE VISIBLE) ===== */}
+              <NavItem to="/admin">ADMINISTRADOR</NavItem>
 
-              <NavItem to="/inicio">Home</NavItem>
-              <NavItem to="/geocerca">Geofence</NavItem>
-              <NavItem to="/personal">Personnel</NavItem>
-              <NavItem to="/actividades">Activities</NavItem>
-              <NavItem to="/asignaciones">Assignments</NavItem>
-              <NavItem to="/reportes">Reports</NavItem>
-              <NavItem to="/costos-dashboard">Costs Dashboard</NavItem>
+              <NavItem to="/inicio">Inicio</NavItem>
+              <NavItem to="/geocerca">Geocercas</NavItem>
+              <NavItem to="/personal">Personal</NavItem>
+              <NavItem to="/actividades">Actividades</NavItem>
+              <NavItem to="/asignaciones">Asignaciones</NavItem>
+              <NavItem to="/reportes">Reportes</NavItem>
+              <NavItem to="/costos-dashboard">Costos</NavItem>
               <NavItem to="/tracker">Tracker</NavItem>
-              <NavItem to="/invite-tracker">Invite tracker</NavItem>
+              <NavItem to="/invite-tracker">Invitar Tracker</NavItem>
             </nav>
           )}
         </div>
@@ -73,7 +74,7 @@ export default function Header() {
                 </span>
                 <span className="text-gray-600">{user.email}</span>
                 <span className="text-gray-600">
-                  {roleLabel} · isAppRoot={String(isAppRoot)}
+                  Rol: {currentRole ?? "N/D"}
                 </span>
               </div>
 
