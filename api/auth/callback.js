@@ -16,6 +16,7 @@ function safePath(p) {
 
 function isSecure(req) {
   const xf = (req.headers["x-forwarded-proto"] || "").toString().toLowerCase();
+  // En Vercel suele venir "https"
   return xf.includes("https");
 }
 
@@ -37,6 +38,20 @@ function normalizeType(t) {
   return allowed.has(x) ? x : null;
 }
 
+function getBaseUrl(req) {
+  // ✅ Fuente de verdad canónica
+  const base = env("APP_BASE_URL") || "https://app.tugeocercas.com";
+
+  // Seguridad extra: si alguien pone algo raro en env, normalizamos
+  try {
+    const u = new URL(base);
+    if (u.protocol !== "https:") u.protocol = "https:";
+    return u.toString().replace(/\/+$/, "");
+  } catch {
+    return "https://app.tugeocercas.com";
+  }
+}
+
 export default async function handler(req, res) {
   const trace = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
@@ -48,16 +63,18 @@ export default async function handler(req, res) {
       return;
     }
 
-    const host = req.headers.host || "app.tugeocercas.com";
-    const url = new URL(req.url, `https://${host}`);
+    const BASE_URL = getBaseUrl(req); // ✅ SIEMPRE canónico
+    const url = new URL(req.url, BASE_URL);
 
     const code = url.searchParams.get("code");
     const token_hash = url.searchParams.get("token_hash");
     const typeFromUrl = normalizeType(url.searchParams.get("type"));
 
-    // ✅ next: si no viene, y es invite/magiclink -> tracker por defecto
+    // next seguro
     const nextRaw = safePath(url.searchParams.get("next"));
     const defaultTracker = "/tracker-gps?tg_flow=tracker";
+
+    // Si no viene next, pero es un link de email invite/magiclink -> tracker por defecto
     const next =
       nextRaw ||
       (token_hash && (typeFromUrl === "invite" || typeFromUrl === "magiclink") ? defaultTracker : "/inicio");
@@ -65,7 +82,8 @@ export default async function handler(req, res) {
     const SUPABASE_URL = env("SUPABASE_URL");
     const SUPABASE_ANON_KEY = env("SUPABASE_ANON_KEY");
     const COOKIE_DOMAIN = env("COOKIE_DOMAIN") || null;
-    const secure = isSecure(req);
+
+    const secure = isSecure(req) || BASE_URL.startsWith("https://");
 
     const clear = [
       clearCookie("tg_at", { domain: COOKIE_DOMAIN, secure }),
@@ -75,7 +93,7 @@ export default async function handler(req, res) {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       res.statusCode = 302;
       res.setHeader("Set-Cookie", clear);
-      res.setHeader("Location", `/login?err=missing_env`);
+      res.setHeader("Location", `${BASE_URL}/login?err=missing_env`);
       res.end();
       return;
     }
@@ -87,14 +105,14 @@ export default async function handler(req, res) {
 
     let session = null;
 
-    // 1) Web PKCE normal
+    // 1) PKCE normal (web)
     if (code) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) throw error;
       session = data?.session || null;
       console.log("[CALLBACK]", { trace, mode: "code", ok: !!session, next });
     }
-    // 2) Email token_hash (invite/magiclink/etc) -> verifyOtp robusto
+    // 2) Email token_hash (OTP magiclink/invite) -> verifyOtp robusto
     else if (token_hash) {
       const candidates = [];
       if (typeFromUrl) candidates.push(typeFromUrl);
@@ -113,7 +131,13 @@ export default async function handler(req, res) {
           }
         } catch (e) {
           lastErr = e;
-          console.log("[CALLBACK]", { trace, mode: "token_hash", ok: false, type_try: t, err: e?.message || String(e) });
+          console.log("[CALLBACK]", {
+            trace,
+            mode: "token_hash",
+            ok: false,
+            type_try: t,
+            err: e?.message || String(e),
+          });
         }
       }
 
@@ -121,14 +145,14 @@ export default async function handler(req, res) {
         const msg = encodeURIComponent(lastErr?.message || "Email link is invalid or has expired");
         res.statusCode = 302;
         res.setHeader("Set-Cookie", clear);
-        res.setHeader("Location", `/login?err=${msg}`);
+        res.setHeader("Location", `${BASE_URL}/login?err=${msg}`);
         res.end();
         return;
       }
     } else {
       res.statusCode = 302;
       res.setHeader("Set-Cookie", clear);
-      res.setHeader("Location", `/login?err=missing_code_or_token_hash`);
+      res.setHeader("Location", `${BASE_URL}/login?err=missing_code_or_token_hash`);
       res.end();
       return;
     }
@@ -136,23 +160,27 @@ export default async function handler(req, res) {
     if (!session?.access_token || !session?.refresh_token) {
       res.statusCode = 302;
       res.setHeader("Set-Cookie", clear);
-      res.setHeader("Location", `/login?err=no_session`);
+      res.setHeader("Location", `${BASE_URL}/login?err=no_session`);
       res.end();
       return;
     }
 
+    // ✅ Set cookies SIEMPRE para el dominio correcto
     res.statusCode = 302;
     res.setHeader("Set-Cookie", [
       cookie("tg_at", session.access_token, { domain: COOKIE_DOMAIN, secure, maxAge: 60 * 60 }),
       cookie("tg_rt", session.refresh_token, { domain: COOKIE_DOMAIN, secure, maxAge: 60 * 60 * 24 * 30 }),
     ]);
-    res.setHeader("Location", next);
+
+    // ✅ Redirigir SIEMPRE al host canónico
+    res.setHeader("Location", `${BASE_URL}${next}`);
     res.end();
   } catch (e) {
+    const BASE_URL = getBaseUrl(req);
     const msg = encodeURIComponent(e?.message || "auth_failed");
     console.log("[CALLBACK_FATAL]", { trace, err: e?.message || String(e) });
     res.statusCode = 302;
-    res.setHeader("Location", `/login?err=${msg}`);
+    res.setHeader("Location", `${BASE_URL}/login?err=${msg}`);
     res.end();
   }
 }
