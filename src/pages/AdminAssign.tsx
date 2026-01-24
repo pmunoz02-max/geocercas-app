@@ -12,16 +12,11 @@ function errText(e: any) {
 
 export default function AdminAssign() {
   const [email, setEmail] = useState("");
-  const [orgName, setOrgName] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
-  const [lastStatus, setLastStatus] = useState<string | null>(null);
-  const [createdOrgId, setCreatedOrgId] = useState<string | null>(null);
-
   const targetEmail = useMemo(() => email.trim().toLowerCase(), [email]);
-  const canSendMagic = useMemo(() => targetEmail.length > 5 && !loading, [targetEmail, loading]);
-  const canCreate = useMemo(() => targetEmail.length > 5 && !loading, [targetEmail, loading]);
+  const canSend = useMemo(() => targetEmail.length > 5 && !loading, [targetEmail, loading]);
 
   const noticeClass =
     notice?.type === "ok"
@@ -30,94 +25,75 @@ export default function AdminAssign() {
       ? "bg-red-50 border-red-200 text-red-800"
       : "bg-slate-50 border-slate-200 text-slate-800";
 
-  async function sendMagicLink() {
+  async function sendInviteAndCreateOrg() {
     if (!targetEmail) {
       setNotice({ type: "err", text: "Ingresa un email válido." });
       return;
     }
 
     setLoading(true);
-    setNotice({ type: "info", text: "Enviando Magic Link..." });
+    setNotice({ type: "info", text: "Enviando invitación (Magic Link)..." });
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
+      // 1) Enviar Magic Link (esto crea auth.users inmediatamente con create_user=true)
+      const { error: otpError } = await supabase.auth.signInWithOtp({
         email: targetEmail,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
-      if (error) {
-        console.error("MagicLink error:", error);
-        setNotice({ type: "err", text: `❌ No se pudo enviar el Magic Link: ${error.message}` });
+      if (otpError) {
+        console.error("MagicLink error:", otpError);
+        setNotice({ type: "err", text: `❌ No se pudo enviar el Magic Link: ${otpError.message}` });
         return;
       }
 
-      setNotice({ type: "ok", text: "✅ Magic Link enviado. Revisa el correo (Inbox/Spam)." });
-    } catch (e: any) {
-      console.error("MagicLink exception:", e);
-      setNotice({ type: "err", text: `❌ Error enviando Magic Link: ${errText(e)}` });
-    } finally {
-      setLoading(false);
-    }
-  }
+      // 2) Crear org propia + OWNER automáticamente (regla canónica)
+      setNotice({ type: "info", text: "Magic Link enviado. Creando organización propia (OWNER)..." });
 
-  async function createOwnerOrg() {
-    if (!targetEmail) {
-      setNotice({ type: "err", text: "Ingresa un email válido." });
-      return;
-    }
-
-    setLoading(true);
-    setNotice({ type: "info", text: "Creando organización y asignando OWNER..." });
-    setLastStatus(null);
-    setCreatedOrgId(null);
-
-    try {
-      // Rol fijo por regla de negocio: owner
-      const { data, error } = await supabase.rpc("admin_invite_new_admin", {
+      const { data, error: rpcError } = await supabase.rpc("admin_invite_new_admin", {
         p_email: targetEmail,
         p_role: "owner",
-        p_org_name: orgName?.trim() ? orgName.trim() : null,
+        p_org_name: null,
       });
 
-      if (error) {
-        console.error("RPC admin_invite_new_admin error:", error);
-        setNotice({ type: "err", text: `❌ RPC falló: ${error.message}` });
-        setLastStatus("RPC_ERROR");
+      if (rpcError) {
+        console.error("RPC admin_invite_new_admin error:", rpcError);
+        setNotice({
+          type: "err",
+          text: `❌ Magic Link enviado, pero falló crear la organización/OWNER: ${rpcError.message}`,
+        });
         return;
       }
 
       const status = data?.status ?? "UNKNOWN";
-      setLastStatus(status);
-
-      if (status === "NEEDS_MAGIC_LINK") {
-        setNotice({
-          type: "info",
-          text: "El usuario aún no existe en Auth. Primero envía Magic Link y cuando acepte, vuelve a presionar “Crear org + OWNER”.",
-        });
-        return;
-      }
 
       if (status === "OK") {
-        const orgId = data?.org_id ?? null;
-        setCreatedOrgId(orgId);
         setNotice({
           type: "ok",
-          text: `✅ Listo. Se creó una org nueva y el usuario quedó como OWNER.${orgId ? ` Org ID: ${orgId}` : ""}`,
+          text: `✅ Invitación enviada y organización creada. El usuario nacerá como OWNER al aceptar el link.`,
         });
         return;
       }
 
-      // Otros estados posibles
+      if (status === "NEEDS_MAGIC_LINK") {
+        // En teoría no debería ocurrir porque signInWithOtp crea el usuario,
+        // pero lo manejamos por robustez.
+        setNotice({
+          type: "info",
+          text: "Magic Link enviado. Si el usuario aún no existe, reintenta en 10 segundos.",
+        });
+        return;
+      }
+
       setNotice({
         type: status === "FORBIDDEN" ? "err" : "info",
         text: data?.message ? String(data.message) : `Respuesta: ${status}`,
       });
     } catch (e: any) {
-      console.error("RPC exception:", e);
+      console.error("Invite exception:", e);
       setNotice({ type: "err", text: `❌ Error: ${errText(e)}` });
-      setLastStatus("EXCEPTION");
     } finally {
       setLoading(false);
     }
@@ -145,54 +121,19 @@ export default function AdminAssign() {
             />
           </label>
 
-          <label className="text-sm">
-            Nombre de la organización (opcional)
-            <input
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              placeholder="Org de Juan / Mi Empresa / etc."
-            />
-          </label>
-
           <div className="flex flex-wrap gap-2 pt-2">
             <button
-              className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
-              onClick={createOwnerOrg}
-              disabled={!canCreate}
-              title="Crea una org nueva y asigna OWNER al usuario"
+              className="rounded-md bg-emerald-600 px-4 py-2 text-white disabled:opacity-50"
+              onClick={sendInviteAndCreateOrg}
+              disabled={!canSend}
+              title="Envía Magic Link y crea la organización propia como OWNER"
             >
-              {loading ? "Procesando..." : "Crear org + OWNER"}
-            </button>
-
-            <button
-              className="rounded-md border border-slate-300 px-4 py-2 disabled:opacity-50"
-              onClick={sendMagicLink}
-              disabled={!canSendMagic}
-              title="Úsalo si el RPC responde NEEDS_MAGIC_LINK"
-            >
-              {loading ? "Enviando..." : "Enviar Magic Link"}
+              {loading ? "Procesando..." : "Enviar invitación (Magic Link)"}
             </button>
           </div>
 
-          {(lastStatus || createdOrgId) && (
-            <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-              {lastStatus && (
-                <div>
-                  <b>Último status:</b> {lastStatus}
-                </div>
-              )}
-              {createdOrgId && (
-                <div>
-                  <b>Org ID creada:</b> {createdOrgId}
-                </div>
-              )}
-            </div>
-          )}
-
           <p className="text-xs text-slate-600 pt-2">
-            Flujo recomendado: (1) “Crear org + OWNER” → si responde NEEDS_MAGIC_LINK: (2) “Enviar Magic Link”
-            → (3) cuando el usuario acepte, vuelve a “Crear org + OWNER”.
+            El invitado debe abrir el link en el navegador/dispositivo donde quiere usar la app.
           </p>
         </div>
       </div>

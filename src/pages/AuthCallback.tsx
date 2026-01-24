@@ -1,19 +1,20 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V35 – TWA/WebView safe definitivo:
-// - NO setSession()
-// - usa token en memoria (setMemoryAccessToken)
-// - NO limpia el hash aquí (evita el 2do load sin token que causa missing_access_token)
-// - redirige directo a next
+// CALLBACK-V36 – Soporta:
+// - Invite/MagicLink: token_hash&type=invite|magiclink|recovery  => verifyOtp()
+// - OAuth/PKCE: ?code=...                                     => exchangeCodeForSession()
+// - Hash access_token (TWA/WebView legacy)                    => setMemoryAccessToken()
+// Siempre redirige a next (default /inicio)
 
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { setMemoryAccessToken } from "../supabaseClient";
+import { supabase, setMemoryAccessToken } from "../supabaseClient";
 
 type Diag = {
   step: string;
   next?: string;
   hasAccessToken?: boolean;
   error?: string;
+  mode?: string;
 };
 
 function parseHashParams(hash: string) {
@@ -27,57 +28,110 @@ function parseHashParams(hash: string) {
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const fired = useRef(false);
-
   const [diag, setDiag] = useState<Diag>({ step: "idle" });
 
   useEffect(() => {
     if (fired.current) return;
     fired.current = true;
 
-    try {
-      setDiag({ step: "parse_url" });
+    (async () => {
+      try {
+        setDiag({ step: "parse_url" });
 
-      const next = searchParams.get("next") || "/inicio";
-      const { access_token, error } = parseHashParams(window.location.hash || "");
+        const next = searchParams.get("next") || "/inicio";
 
-      setDiag({
-        step: "hash_parsed",
-        next,
-        hasAccessToken: !!access_token,
-        error: error || undefined,
-      });
+        // 1) Invite/MagicLink por query: token_hash + type
+        const token_hash = searchParams.get("token_hash") || "";
+        const type = (searchParams.get("type") || "").toLowerCase(); // invite | magiclink | recovery | ...
 
-      // Si Supabase devolvió error
-      if (error) {
-        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
-        window.location.replace(target);
-        return;
+        if (token_hash && type) {
+          setDiag({ step: "verify_otp_start", next, mode: `verifyOtp:${type}` });
+
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash,
+            type: type as any,
+          });
+
+          if (error) {
+            const msg = error.message || "verify_otp_error";
+            setDiag({ step: "verify_otp_error", next, error: msg, mode: `verifyOtp:${type}` });
+            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
+            return;
+          }
+
+          const accessToken = data?.session?.access_token || "";
+          if (!accessToken) {
+            const msg = "missing_access_token_after_verifyOtp";
+            setDiag({ step: "verify_otp_no_token", next, error: msg, mode: `verifyOtp:${type}` });
+            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
+            return;
+          }
+
+          setDiag({ step: "set_memory_token", next, hasAccessToken: true, mode: `verifyOtp:${type}` });
+          setMemoryAccessToken(accessToken);
+
+          setDiag({ step: "redirect", next, hasAccessToken: true, mode: `verifyOtp:${type}` });
+          window.location.replace(next);
+          return;
+        }
+
+        // 2) OAuth/PKCE por query: code
+        const code = searchParams.get("code") || "";
+        if (code) {
+          setDiag({ step: "exchange_code_start", next, mode: "exchangeCodeForSession" });
+
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (error) {
+            const msg = error.message || "exchange_code_error";
+            setDiag({ step: "exchange_code_error", next, error: msg, mode: "exchangeCodeForSession" });
+            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
+            return;
+          }
+
+          const accessToken = data?.session?.access_token || "";
+          if (!accessToken) {
+            const msg = "missing_access_token_after_exchange";
+            setDiag({ step: "exchange_code_no_token", next, error: msg, mode: "exchangeCodeForSession" });
+            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
+            return;
+          }
+
+          setDiag({ step: "set_memory_token", next, hasAccessToken: true, mode: "exchangeCodeForSession" });
+          setMemoryAccessToken(accessToken);
+
+          setDiag({ step: "redirect", next, hasAccessToken: true, mode: "exchangeCodeForSession" });
+          window.location.replace(next);
+          return;
+        }
+
+        // 3) Hash access_token (tu flujo TWA/WebView legacy)
+        const { access_token, error } = parseHashParams(window.location.hash || "");
+        setDiag({ step: "hash_parsed", next, hasAccessToken: !!access_token, error: error || undefined, mode: "hash" });
+
+        if (error) {
+          window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`);
+          return;
+        }
+
+        if (!access_token) {
+          const msg = "missing_access_token";
+          window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
+          return;
+        }
+
+        setDiag({ step: "set_memory_token", next, hasAccessToken: true, mode: "hash" });
+        setMemoryAccessToken(access_token);
+
+        setDiag({ step: "redirect", next, hasAccessToken: true, mode: "hash" });
+        window.location.replace(next);
+      } catch (e: any) {
+        const msg = String(e?.message || e || "callback_error");
+        const next = searchParams.get("next") || "/inicio";
+        setDiag({ step: "fatal", error: msg, next });
+        window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
       }
-
-      if (!access_token) {
-        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
-        window.location.replace(target);
-        return;
-      }
-
-      // ✅ Fuente de verdad: token en memoria (NO setSession)
-      setDiag({ step: "set_memory_token", next, hasAccessToken: true });
-      setMemoryAccessToken(access_token);
-
-      // ✅ CRÍTICO TWA/WebView:
-      // NO limpiar el hash aquí. En WebView, limpiar el hash provoca que el callback se reabra sin token
-      // y termine en /login?err=missing_access_token.
-      // Redirige inmediatamente.
-      setDiag({ step: "redirect", next, hasAccessToken: true });
-      window.location.replace(next);
-    } catch (e: any) {
-      const msg = String(e?.message || e || "callback_error");
-      setDiag({ step: "fatal", error: msg });
-
-      const next = searchParams.get("next") || "/inicio";
-      const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
-      window.location.replace(target);
-    }
+    })();
   }, [searchParams]);
 
   return (
@@ -89,6 +143,7 @@ export default function AuthCallback() {
 
           <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 space-y-1">
             <div>step: {diag.step}</div>
+            <div>mode: {diag.mode || "-"}</div>
             <div>next: {diag.next || "-"}</div>
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
             <div>error: {diag.error || "-"}</div>
