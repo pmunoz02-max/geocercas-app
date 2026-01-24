@@ -1,6 +1,8 @@
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
+const FORCE_ADMIN_TAB = true; // <- DEBUG: ponlo en false cuando ya esté isAppRoot ok
+
 function NavItem({ to, children }) {
   const base =
     "px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors whitespace-nowrap";
@@ -35,6 +37,8 @@ export default function Header() {
     if (location.pathname !== "/login") navigate("/login", { replace: true });
   };
 
+  const showAdmin = FORCE_ADMIN_TAB || isAppRoot;
+
   return (
     <header className="w-full border-b bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
@@ -44,12 +48,8 @@ export default function Header() {
           </Link>
 
           {user && (
-            <nav
-              className="flex flex-wrap items-center gap-1"
-              aria-label="Navegación principal"
-            >
-              {/* SOLO ROOT (dueño de la app) */}
-              {isAppRoot && <NavItem to="/admin">Administrador</NavItem>}
+            <nav className="flex flex-wrap items-center gap-1" aria-label="Navegación principal">
+              {showAdmin && <NavItem to="/admin">Administrador</NavItem>}
 
               <NavItem to="/inicio">Home</NavItem>
               <NavItem to="/geocerca">Geofence</NavItem>
@@ -72,7 +72,9 @@ export default function Header() {
                   {currentOrg?.name ?? "Sin organización"}
                 </span>
                 <span className="text-gray-600">{user.email}</span>
-                <span className="text-gray-600">{roleLabel}</span>
+                <span className="text-gray-600">
+                  {roleLabel} · isAppRoot={String(isAppRoot)}
+                </span>
               </div>
 
               <button
