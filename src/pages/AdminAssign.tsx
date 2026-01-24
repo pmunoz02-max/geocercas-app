@@ -8,13 +8,7 @@ type Role = { id: string; slug: "owner" | "admin" | "tracker"; name: string };
 function errToString(e: any) {
   if (!e) return "Error desconocido";
   if (typeof e === "string") return e;
-  const msg = e?.message || e?.error_description || e?.hint || null;
-  if (msg) return String(msg);
-  try {
-    return JSON.stringify(e);
-  } catch {
-    return String(e);
-  }
+  return e?.message || e?.error_description || e?.hint || JSON.stringify(e);
 }
 
 export default function AdminAssign() {
@@ -30,18 +24,19 @@ export default function AdminAssign() {
     let mounted = true;
 
     (async () => {
-      const [orgRes, roleRes] = await Promise.all([
-        supabase.from("orgs").select("id,name").order("name", { ascending: true }),
-        supabase.from("roles").select("id,slug,name").order("name", { ascending: true }),
-      ]);
+      const [{ data: orgData, error: orgErr }, { data: roleData, error: roleErr }] =
+        await Promise.all([
+          supabase.from("orgs").select("id,name").order("name", { ascending: true }),
+          supabase.from("roles").select("id,slug,name").order("name", { ascending: true }),
+        ]);
 
       if (!mounted) return;
 
-      if (orgRes.error) console.error("orgs error:", orgRes.error);
-      if (roleRes.error) console.error("roles error:", roleRes.error);
+      if (orgErr) console.error("orgs error:", orgErr);
+      if (roleErr) console.error("roles error:", roleErr);
 
-      setOrgs((orgRes.data ?? []) as Org[]);
-      setRoles((roleRes.data ?? []) as Role[]);
+      setOrgs((orgData ?? []) as Org[]);
+      setRoles((roleData ?? []) as Role[]);
     })();
 
     return () => {
@@ -70,10 +65,7 @@ export default function AdminAssign() {
         p_org_id: orgId,
       });
 
-      if (error) {
-        setMsg(`No se pudo asignar: ${error.message}`);
-        return;
-      }
+      if (error) return setMsg(`No se pudo asignar: ${error.message}`);
 
       switch (data?.status) {
         case "NEEDS_MAGIC_LINK":
@@ -85,11 +77,8 @@ export default function AdminAssign() {
         case "FORBIDDEN":
           setMsg(data?.message ?? "No autorizado");
           break;
-        case "ERROR":
-          setMsg(data?.message ?? "Error");
-          break;
         default:
-          setMsg("Respuesta desconocida del servidor.");
+          setMsg(data?.message ?? "Respuesta desconocida");
       }
     } catch (e: any) {
       setMsg(errToString(e));
@@ -107,16 +96,10 @@ export default function AdminAssign() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: target,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
 
-      if (error) {
-        setMsg(`No se pudo enviar Magic Link: ${error.message}`);
-        return;
-      }
-
+      if (error) return setMsg(`No se pudo enviar Magic Link: ${error.message}`);
       setMsg("Magic Link enviado ✅ (revisa correo)");
     } catch (e: any) {
       setMsg(errToString(e));
@@ -190,15 +173,10 @@ export default function AdminAssign() {
               className="rounded-md border border-slate-300 px-4 py-2 disabled:opacity-50"
               onClick={sendMagicLink}
               disabled={loading || email.trim().length < 4}
-              title="Si el usuario aún no existe en Auth"
             >
               Enviar Magic Link
             </button>
           </div>
-
-          <p className="text-xs text-slate-600 pt-2">
-            Nota: si el RPC responde NEEDS_MAGIC_LINK, primero envía Magic Link y luego vuelve a asignar.
-          </p>
         </div>
       </div>
     </div>
