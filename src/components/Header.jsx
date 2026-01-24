@@ -24,45 +24,51 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const roleLabel = isAppRoot
-    ? "ROOT"
-    : currentRole
-    ? currentRole.toUpperCase()
-    : "SIN ROL";
+  const role = (currentRole || "").toLowerCase();
+  const roleLabel = isAppRoot ? "ROOT" : currentRole ? currentRole.toUpperCase() : "SIN ROL";
 
   const handleLogout = async () => {
     await logout();
-    if (location.pathname !== "/login") {
-      navigate("/login", { replace: true });
-    }
+    if (location.pathname !== "/login") navigate("/login", { replace: true });
   };
+
+  // Tabs “full” vs “tracker-only”
+  const fullNav = [
+    { to: "/inicio", label: "Inicio" },
+    { to: "/geocerca", label: "Geocerca" },
+    { to: "/personal", label: "Personal" },
+    { to: "/actividades", label: "Actividades" },
+    { to: "/asignaciones", label: "Asignaciones" },
+    { to: "/reportes", label: "Reportes" },
+    { to: "/tracker", label: "Tracker" },
+  ];
+
+  // Si es tracker puro, muestro solo Tracker (y opcionalmente Inicio)
+  const trackerNav = [
+    { to: "/tracker", label: "Tracker" },
+  ];
+
+  const navItems = role === "tracker" ? trackerNav : fullNav;
 
   return (
     <header className="w-full border-b bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-4 min-w-0">
-          <Link to="/inicio" className="text-lg font-semibold text-gray-900">
+          <Link to="/inicio" className="text-lg font-semibold text-gray-900 whitespace-nowrap">
             App Geocercas
           </Link>
 
           {user && (
             <nav
-              className="
-                flex items-center gap-1
-                overflow-x-auto
-                [-webkit-overflow-scrolling:touch]
-                scrollbar-none
-                max-w-[62vw]
-              "
+              className="flex items-center gap-1 overflow-x-auto max-w-[65vw]"
+              style={{ WebkitOverflowScrolling: "touch" }}
               aria-label="Navegación principal"
             >
-              <NavItem to="/inicio">Inicio</NavItem>
-              <NavItem to="/geocerca">Geocerca</NavItem>
-              <NavItem to="/personal">Personal</NavItem>
-              <NavItem to="/actividades">Actividades</NavItem>
-              <NavItem to="/asignaciones">Asignaciones</NavItem>
-              <NavItem to="/reportes">Reportes</NavItem>
-              <NavItem to="/tracker">Tracker</NavItem>
+              {navItems.map((it) => (
+                <NavItem key={it.to} to={it.to}>
+                  {it.label}
+                </NavItem>
+              ))}
             </nav>
           )}
         </div>
