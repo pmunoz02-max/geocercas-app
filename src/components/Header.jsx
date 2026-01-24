@@ -35,18 +35,6 @@ export default function Header() {
     if (location.pathname !== "/login") navigate("/login", { replace: true });
   };
 
-  const navItems = [
-    { to: "/inicio", label: "Home" },
-    { to: "/geocerca", label: "Geofence" },
-    { to: "/personal", label: "Personnel" },
-    { to: "/actividades", label: "Activities" },
-    { to: "/asignaciones", label: "Assignments" },
-    { to: "/reportes", label: "Reports" },
-    { to: "/costos-dashboard", label: "Costs Dashboard" },
-    { to: "/tracker", label: "Tracker" },
-    { to: "/invite-tracker", label: "Invite tracker" },
-  ];
-
   return (
     <header className="w-full border-b bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
@@ -57,18 +45,21 @@ export default function Header() {
 
           {user && (
             <nav
-              className="flex items-center gap-1 overflow-x-auto max-w-[70vw]"
-              style={{ WebkitOverflowScrolling: "touch" }}
+              className="flex flex-wrap items-center gap-1"
               aria-label="Navegación principal"
             >
-              {navItems.map((it) => (
-                <NavItem key={it.to} to={it.to}>
-                  {it.label}
-                </NavItem>
-              ))}
-
               {/* SOLO ROOT (dueño de la app) */}
               {isAppRoot && <NavItem to="/admin">Administrador</NavItem>}
+
+              <NavItem to="/inicio">Home</NavItem>
+              <NavItem to="/geocerca">Geofence</NavItem>
+              <NavItem to="/personal">Personnel</NavItem>
+              <NavItem to="/actividades">Activities</NavItem>
+              <NavItem to="/asignaciones">Assignments</NavItem>
+              <NavItem to="/reportes">Reports</NavItem>
+              <NavItem to="/costos-dashboard">Costs Dashboard</NavItem>
+              <NavItem to="/tracker">Tracker</NavItem>
+              <NavItem to="/invite-tracker">Invite tracker</NavItem>
             </nav>
           )}
         </div>
@@ -80,6 +71,7 @@ export default function Header() {
                 <span className="font-medium text-gray-800">
                   {currentOrg?.name ?? "Sin organización"}
                 </span>
+                <span className="text-gray-600">{user.email}</span>
                 <span className="text-gray-600">{roleLabel}</span>
               </div>
 
