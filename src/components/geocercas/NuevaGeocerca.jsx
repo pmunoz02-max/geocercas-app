@@ -222,13 +222,24 @@ function isTombstoned(orgId, nombre) {
   return ts[ci] !== undefined;
 }
 
+function isSoftDeletedName(nombre) {
+  const nm = String(nombre || "").trim().toLowerCase();
+  // Backend/soft-delete patterns: deleted_<uuid> or deleted-<uuid>
+  return nm.startsWith("deleted_") || nm.startsWith("deleted-") || nm === "deleted";
+}
+
 function filterTombstones(orgId, items) {
-  if (!orgId) return items || [];
+  // Siempre filtramos nombres soft-deleted para evitar mostrar basura tipo deleted_<uuid>
+  const base = (items || []).filter((g) => !isSoftDeletedName(g?.nombre || g?.name));
+
+  if (!orgId) return base;
+
   const now = Date.now();
   const ts = purgeExpiredTombstones(orgId, now);
   const set = new Set(Object.keys(ts || {}));
-  if (!set.size) return items || [];
-  return (items || []).filter((g) => {
+  if (!set.size) return base;
+
+  return base.filter((g) => {
     const nm = g?.nombre || g?.name || "";
     const ci = normalizeNombreCi(nm);
     return !set.has(ci);
@@ -284,7 +295,7 @@ async function listGeofencesUnified({ orgId }) {
 
   if (orgId) {
     try {
-      const apiItems = await listGeocercas({ orgId, onlyActive: true });
+      const apiItems = await listGeocercas({ orgId, onlyActive: false });
       // Filtrar tombstones (evita que reaparezca una geocerca recién borrada)
       const safeApi = filterTombstones(orgId, apiItems || []);
       for (const r of safeApi) list.push({ id: r.id, nombre: r.nombre, source: "api" });
@@ -432,6 +443,19 @@ export default function NuevaGeocerca() {
 
   const [banner, setBanner] = useState(null);
   const showOk = useCallback((text) => setBanner({ type: "ok", text }), []);
+
+  // OK banners se auto-ocultan para no dejar la UI "pegada" (ej: Deleted: 1)
+  const showOkTimed = useCallback((text, ms = 1800) => {
+    setBanner({ type: "ok", text });
+    window.setTimeout(() => {
+      setBanner((prev) => {
+        if (!prev) return prev;
+        if (prev.type !== "ok") return prev;
+        if (prev.text !== text) return prev;
+        return null;
+      });
+    }, ms);
+  }, []);
   const showErr = useCallback((text, err) => {
     if (err) console.error("[NuevaGeocerca]", text, err);
     setBanner({ type: "error", text });
@@ -773,7 +797,7 @@ export default function NuevaGeocerca() {
       clearCanvas();
       setDraftFeature(null);
 
-      showOk(
+      showOkTimed(
         t("geocercas.deletedCount", {
           count: names.length,
           defaultValue: `Eliminadas: ${names.length}`,
@@ -782,7 +806,7 @@ export default function NuevaGeocerca() {
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
     }
-  }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
+  }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOkTimed]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
