@@ -523,51 +523,81 @@ export default function NuevaGeocerca() {
     } catch (e) {
       console.warn("[NuevaGeocerca] upsert falló; verificando existencia...", e);
 
-      // 🔎 Solo emitimos error si podemos CONFIRMAR que NO se guardó.
-      // Si no podemos verificar (p.ej. fallo de red/list), no mostramos mensaje para evitar falsos negativos.
-      let verified = false;
-      let exists = false;
+      // 🔎 Regla: SOLO mostramos error si podemos CONFIRMAR (2 veces) que NO se guardó.
+      // Si existe cualquier duda (red, caché, latencia, respuesta vacía), NO mostramos mensaje.
+      const targetRaw = String(nm || "").trim().toLowerCase();
+      const targetCi = String(nombre_ci || "").trim().toLowerCase();
 
-      try {
-        const items = await listGeocercas({ orgId, onlyActive: false });
-        verified = true;
+      const matches = (g) => {
+        const nRaw = String(g?.nombre || g?.name || "").trim().toLowerCase();
+        const nCi = String(g?.nombre_ci || "").trim().toLowerCase();
+        return nRaw === targetRaw || nRaw === targetCi || nCi === targetCi || nCi === targetRaw;
+      };
 
-        exists = (items || []).some((g) => {
-          const n1 = normalizeNombreCi(g?.nombre || g?.name || "");
-          const n2 = normalizeNombreCi(g?.nombre_ci || "");
-          return n1 === nombre_ci || n2 === nombre_ci;
-        });
-      } catch (verifyErr) {
-        console.error("[NuevaGeocerca] verificación falló; no se puede confirmar guardado", verifyErr);
-      }
+      const verifyOnce = async () => {
+        try {
+          const items = await listGeocercas({ orgId, onlyActive: false });
+          return (items || []).some(matches);
+        } catch (verifyErr) {
+          console.error("[NuevaGeocerca] verificación falló; no se puede confirmar guardado", verifyErr);
+          return null; // no verificable
+        }
+      };
 
-      if (verified && exists) {
+      const v1 = await verifyOnce();
+
+      if (v1 === true) {
         upsertOk = true;
-      } else if (verified && !exists) {
-        console.error("[NuevaGeocerca] upsert error (confirmado: NO existe en DB)", e);
+      } else if (v1 === false) {
+        // Intento 2: refrescar y volver a verificar (por consistencia eventual)
+        try {
+          await refreshGeofenceList();
+        } catch {}
 
-        // rollback optimistic para no confundir
-        setGeofenceList((prev) =>
-          (prev || []).filter((g) => normalizeNombreCi(g?.nombre || "") !== nombre_ci)
-        );
+        const v2 = await verifyOnce();
 
-        showErr(
-          t("geocercas.errorSave", {
-            defaultValue: "No se pudo guardar la geocerca.",
-          }),
-          e
-        );
-        return;
+        if (v2 === true) {
+          upsertOk = true;
+        } else if (v2 === false) {
+          console.error("[NuevaGeocerca] upsert error (confirmado: NO existe en DB)", e);
+
+          // rollback optimistic para no confundir
+          setGeofenceList((prev) =>
+            (prev || []).filter((g) => {
+              const n = String(g?.nombre || "").trim().toLowerCase();
+              return n !== targetRaw && n !== targetCi;
+            })
+          );
+
+          showErr(
+            t("geocercas.errorSave", {
+              defaultValue: "No se pudo guardar la geocerca.",
+            }),
+            e
+          );
+          return;
+        } else {
+          // No se pudo verificar → silencio (regla)
+          setGeofenceList((prev) =>
+            (prev || []).filter((g) => {
+              const n = String(g?.nombre || "").trim().toLowerCase();
+              return n !== targetRaw && n !== targetCi;
+            })
+          );
+          return;
+        }
       } else {
-        // No se pudo verificar → no mostramos mensaje (regla del usuario) y no limpiamos el formulario
+        // No se pudo verificar → silencio (regla)
         setGeofenceList((prev) =>
-          (prev || []).filter((g) => normalizeNombreCi(g?.nombre || "") !== nombre_ci)
+          (prev || []).filter((g) => {
+            const n = String(g?.nombre || "").trim().toLowerCase();
+            return n !== targetRaw && n !== targetCi;
+          })
         );
         return;
       }
     }
-
-    // 5) UX post-save (SILENCIOSO)
+// 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
