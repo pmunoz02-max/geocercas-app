@@ -1,8 +1,9 @@
 // src/lib/geocercasApi.js
 // ============================================================
 // API-FIRST client for /api/geocercas
-// Objetivo: eliminar 400 por mismatch de contrato (orgId vs org_id, query vs body)
-// y evitar mensajes genéricos tipo "Supabase error".
+// Contrato canónico:
+// - Si HTTP es OK → la operación fue exitosa
+// - El frontend NO infiere error por body vacío
 // ============================================================
 
 function pickErrorMessage(payload) {
@@ -13,7 +14,9 @@ function pickErrorMessage(payload) {
     payload.message ||
     payload.detail ||
     payload.hint ||
-    (Array.isArray(payload.errors) ? payload.errors.map((e) => e.message || e).join(" | ") : null) ||
+    (Array.isArray(payload.errors)
+      ? payload.errors.map((e) => e.message || e).join(" | ")
+      : null) ||
     null
   );
 }
@@ -50,11 +53,18 @@ async function requestJson(url, { method = "GET", body } = {}) {
     throw err;
   }
 
-  return payload;
+  return payload; // puede ser null, string, objeto, etc.
 }
 
 function normalizeOrgId(input) {
-  return input?.orgId || input?.org_id || input?.org || input?.tenant_id || input?.tenantId || null;
+  return (
+    input?.orgId ||
+    input?.org_id ||
+    input?.org ||
+    input?.tenant_id ||
+    input?.tenantId ||
+    null
+  );
 }
 
 function normalizeNombre(input) {
@@ -62,7 +72,8 @@ function normalizeNombre(input) {
 }
 
 function normalizeNombreCi(nombre, fallback) {
-  if (typeof fallback === "string" && fallback.trim()) return fallback.trim().toLowerCase();
+  if (typeof fallback === "string" && fallback.trim())
+    return fallback.trim().toLowerCase();
   return String(nombre || "").trim().toLowerCase();
 }
 
@@ -79,14 +90,14 @@ function buildGeocercasUrl(base, orgId, extra = {}) {
 
 /**
  * List
- * GET /api/geocercas?orgId=...&onlyActive=true|false
  */
 export async function listGeocercas({ orgId, onlyActive = true } = {}) {
   if (!orgId) return [];
-  const url = buildGeocercasUrl("/api/geocercas", orgId, { onlyActive: String(!!onlyActive) });
+  const url = buildGeocercasUrl("/api/geocercas", orgId, {
+    onlyActive: String(!!onlyActive),
+  });
   const data = await requestJson(url, { method: "GET" });
 
-  // Normaliza respuestas típicas
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.rows)) return data.rows;
   if (Array.isArray(data?.data)) return data.data;
@@ -95,7 +106,6 @@ export async function listGeocercas({ orgId, onlyActive = true } = {}) {
 
 /**
  * Get one
- * GET /api/geocercas?id=...&orgId=...
  */
 export async function getGeocerca({ id, orgId } = {}) {
   if (!id) throw new Error("getGeocerca requiere id");
@@ -106,28 +116,17 @@ export async function getGeocerca({ id, orgId } = {}) {
 }
 
 /**
- * Upsert
- * POST /api/geocercas?orgId=...
- * body incluye: orgId + org_id + nombre + nombre_ci + geojson/geometry + flags
+ * Upsert (CANÓNICO)
  */
 export async function upsertGeocerca(payload = {}) {
   const orgId = normalizeOrgId(payload);
   const nombre = normalizeNombre(payload);
 
-  if (!orgId) {
-    const err = new Error("Falta orgId (o org_id) en upsertGeocerca()");
-    err.status = 400;
-    throw err;
-  }
-  if (!nombre) {
-    const err = new Error("Falta nombre (o name) en upsertGeocerca()");
-    err.status = 400;
-    throw err;
-  }
+  if (!orgId) throw new Error("Falta orgId en upsertGeocerca()");
+  if (!nombre) throw new Error("Falta nombre en upsertGeocerca()");
 
   const nombre_ci = normalizeNombreCi(nombre, payload?.nombre_ci);
 
-  // Geo: aceptar geojson/geometry/geom
   const geojson =
     payload.geojson ??
     payload.geometry ??
@@ -135,63 +134,60 @@ export async function upsertGeocerca(payload = {}) {
     payload.geo ??
     null;
 
-  // Flags: acepta activa/activo/visible
   const activa = payload.activa ?? payload.active ?? payload.activo ?? true;
   const visible = payload.visible ?? true;
 
   const body = {
     ...payload,
-
-    // aliases robustos (backend puede validar cualquiera)
     orgId,
     org_id: orgId,
-
     nombre,
     name: nombre,
     nombre_ci,
-
     geojson,
     geometry: geojson,
     geom: geojson,
-
     activa,
     activo: activa,
     active: activa,
     visible,
   };
 
-  // Muy importante: algunos backends esperan orgId en query, no en body
   const url = buildGeocercasUrl("/api/geocercas", orgId);
 
   const data = await requestJson(url, { method: "POST", body });
 
-  // Normaliza respuesta típica
-  return data?.row || data?.data || data;
+  // 🔒 CONTRATO FUERTE:
+  // Si no hubo error HTTP → el guardado fue exitoso
+  return (
+    data?.row ||
+    data?.data ||
+    data || {
+      ok: true,
+      orgId,
+      nombre,
+      nombre_ci,
+    }
+  );
 }
 
 /**
- * Delete (por id) - contrato flexible
- * DELETE /api/geocercas?id=...&orgId=...
- * o POST /api/geocercas (si tu backend usa soft delete por upsert)
+ * Delete
  */
 export async function deleteGeocerca({ orgId, id, nombres_ci } = {}) {
   if (!orgId) throw new Error("deleteGeocerca requiere orgId");
 
-  // si viene id, intentamos DELETE por id
   if (id) {
     const url = buildGeocercasUrl("/api/geocercas", orgId, { id });
-    const data = await requestJson(url, { method: "DELETE" });
-    return data;
+    return await requestJson(url, { method: "DELETE" });
   }
 
-  // si viene nombres_ci, intentamos DELETE por nombres_ci (si tu backend lo soporta)
   if (Array.isArray(nombres_ci) && nombres_ci.length) {
     const url = buildGeocercasUrl("/api/geocercas", orgId);
-    const data = await requestJson(url, {
+    return await requestJson(url, {
       method: "POST",
       body: { orgId, org_id: orgId, delete: true, nombres_ci },
     });
-    return data;
   }
 
   throw new Error("deleteGeocerca requiere id o nombres_ci");
