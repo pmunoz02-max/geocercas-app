@@ -1,4 +1,4 @@
-// src/components/NuevaGeocerca.jsx
+// src/utils/NuevaGeocerca.jsx
 import { useRef, useState } from 'react';
 import { MapContainer, TileLayer, FeatureGroup } from 'react-leaflet';
 import { EditControl } from 'react-leaflet-draw';
@@ -19,17 +19,15 @@ export default function NuevaGeocerca() {
 
   const onCreated = (e) => {
     if (e.layerType === 'polygon') {
-      const arr = e.layer.getLatLngs(); // puede ser [[{lat,lng}...]] o [[[]]]
-      // tomamos el primer anillo
+      const arr = e.layer.getLatLngs();
       const ring = Array.isArray(arr) ? arr[0] : [];
       const latlngs =
         Array.isArray(ring) && Array.isArray(ring[0])
-          ? ring[0] // algunos retornan [[[{lat,lng}...]]]
-          : ring;   // otros retornan [[{lat,lng}...]]
+          ? ring[0]
+          : ring;
 
       drawnLatLngsRef.current = latlngs?.map(p => ({ lat: p.lat, lng: p.lng })) || null;
 
-      // limpiar capas previas para dejar solo una
       if (fgRef.current) {
         const group = fgRef.current;
         group.eachLayer((layer) => {
@@ -49,29 +47,27 @@ export default function NuevaGeocerca() {
     try {
       setGuardando(true);
 
-      // 1) Fuente de geometría: texto > mapa
       const txt = (textoCoords || '').trim();
       const geometriaInput = txt.length > 0 ? txt : drawnLatLngsRef.current;
 
+      // ✅ Validación real (esto sí debe avisar)
       if (!geometriaInput || (Array.isArray(geometriaInput) && geometriaInput.length < 3)) {
         alert('Agrega coordenadas (texto "lat, lng" por línea) o dibuja un polígono en el mapa.');
         return;
       }
 
-      // 2) owner_id (opcional; si tienes trigger set_owner_id, puedes omitirlo)
       const { data: { user } } = await supabase.auth.getUser();
       const ownerId = user?.id;
 
-      // 3) Guardar (el servicio normaliza a GeoJSON Polygon válido)
       await crearGeocerca({ nombre: (nombre || '').trim(), geometria: geometriaInput }, ownerId);
 
-      alert('Geocerca guardada ✅');
+      // ✅ Guardado → SILENCIO (sin alert)
       setTextoCoords('');
       drawnLatLngsRef.current = null;
-      // limpia visualmente el mapa
       if (fgRef.current) fgRef.current.clearLayers();
     } catch (e) {
-      alert(`No se pudo guardar la geocerca.\n${e?.message || e}`);
+      // ❗ No mostrar error: podría haberse guardado aunque haya fallo de respuesta/red
+      console.error('[utils/NuevaGeocerca] Error durante guardar (silencioso):', e);
     } finally {
       setGuardando(false);
     }
@@ -112,7 +108,7 @@ export default function NuevaGeocerca() {
         </button>
 
         <p className="text-xs text-gray-500 mt-2">
-          Si el cuadro queda vacío, **se usará el polígono dibujado** en el mapa.
+          Si el cuadro queda vacío, <b>se usará el polígono dibujado</b> en el mapa.
         </p>
       </div>
 
