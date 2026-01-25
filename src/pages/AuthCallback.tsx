@@ -1,154 +1,115 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V36 – Soporta:
-// - Invite/MagicLink: token_hash&type=invite|magiclink|recovery  => verifyOtp()
-// - OAuth/PKCE: ?code=...                                     => exchangeCodeForSession()
-// - Hash access_token (TWA/WebView legacy)                    => setMemoryAccessToken()
-// Siempre redirige a next (default /inicio)
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient"; // ajusta si tu path es distinto
 
-import React, { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { supabase, setMemoryAccessToken } from "../supabaseClient";
+function qp(name: string) {
+  return new URLSearchParams(window.location.search).get(name);
+}
 
-type Diag = {
-  step: string;
-  next?: string;
-  hasAccessToken?: boolean;
-  error?: string;
-  mode?: string;
-};
-
-function parseHashParams(hash: string) {
-  const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
-  const sp = new URLSearchParams(h);
-  const access_token = sp.get("access_token") || "";
-  const error = sp.get("error") || sp.get("error_description") || "";
-  return { access_token, error };
+function parseHash() {
+  const hash = window.location.hash?.replace(/^#/, "") || "";
+  const p = new URLSearchParams(hash);
+  return {
+    access_token: p.get("access_token"),
+    refresh_token: p.get("refresh_token"),
+  };
 }
 
 export default function AuthCallback() {
-  const [searchParams] = useSearchParams();
-  const fired = useRef(false);
-  const [diag, setDiag] = useState<Diag>({ step: "idle" });
+  const navigate = useNavigate();
+  const [status, setStatus] = useState("Validando acceso…");
 
   useEffect(() => {
-    if (fired.current) return;
-    fired.current = true;
-
     (async () => {
       try {
-        setDiag({ step: "parse_url" });
-
-        const next = searchParams.get("next") || "/inicio";
-
-        // 1) Invite/MagicLink por query: token_hash + type
-        const token_hash = searchParams.get("token_hash") || "";
-        const type = (searchParams.get("type") || "").toLowerCase(); // invite | magiclink | recovery | ...
-
-        if (token_hash && type) {
-          setDiag({ step: "verify_otp_start", next, mode: `verifyOtp:${type}` });
-
-          const { data, error } = await supabase.auth.verifyOtp({
-            token_hash,
-            type: type as any,
-          });
-
-          if (error) {
-            const msg = error.message || "verify_otp_error";
-            setDiag({ step: "verify_otp_error", next, error: msg, mode: `verifyOtp:${type}` });
-            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
-            return;
-          }
-
-          const accessToken = data?.session?.access_token || "";
-          if (!accessToken) {
-            const msg = "missing_access_token_after_verifyOtp";
-            setDiag({ step: "verify_otp_no_token", next, error: msg, mode: `verifyOtp:${type}` });
-            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
-            return;
-          }
-
-          setDiag({ step: "set_memory_token", next, hasAccessToken: true, mode: `verifyOtp:${type}` });
-          setMemoryAccessToken(accessToken);
-
-          setDiag({ step: "redirect", next, hasAccessToken: true, mode: `verifyOtp:${type}` });
-          window.location.replace(next);
+        // 0) Error explícito desde Supabase
+        const err = qp("error") || qp("err");
+        if (err) {
+          navigate(`/login?err=${encodeURIComponent(err)}`, { replace: true });
           return;
         }
 
-        // 2) OAuth/PKCE por query: code
-        const code = searchParams.get("code") || "";
+        // 1) PKCE flow (?code=...)
+        const code = qp("code");
         if (code) {
-          setDiag({ step: "exchange_code_start", next, mode: "exchangeCodeForSession" });
-
+          setStatus("Confirmando código…");
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-
-          if (error) {
-            const msg = error.message || "exchange_code_error";
-            setDiag({ step: "exchange_code_error", next, error: msg, mode: "exchangeCodeForSession" });
-            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
+          if (error || !data?.session) {
+            navigate(`/login?err=${encodeURIComponent(error?.message || "exchange_failed")}`, {
+              replace: true,
+            });
             return;
           }
+        } else {
+          // 2) OTP / Invite / Magic Link (?token_hash=...&type=...)
+          const token_hash = qp("token_hash");
+          const type = qp("type") as
+            | "invite"
+            | "magiclink"
+            | "recovery"
+            | "signup"
+            | null;
 
-          const accessToken = data?.session?.access_token || "";
-          if (!accessToken) {
-            const msg = "missing_access_token_after_exchange";
-            setDiag({ step: "exchange_code_no_token", next, error: msg, mode: "exchangeCodeForSession" });
-            window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
-            return;
+          if (token_hash && type) {
+            setStatus("Verificando enlace…");
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash,
+              type,
+            });
+            if (error || !data?.session) {
+              navigate(`/login?err=${encodeURIComponent(error?.message || "verify_failed")}`, {
+                replace: true,
+              });
+              return;
+            }
+          } else {
+            // 3) Hash tokens (#access_token=...&refresh_token=...)
+            const { access_token, refresh_token } = parseHash();
+            if (access_token && refresh_token) {
+              setStatus("Estableciendo sesión…");
+              const { data, error } = await supabase.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+              if (error || !data?.session) {
+                navigate(`/login?err=${encodeURIComponent(error?.message || "set_session_failed")}`, {
+                  replace: true,
+                });
+                return;
+              }
+            } else {
+              // Nada válido en URL → error real
+              navigate(`/login?err=${encodeURIComponent("missing_code_or_token_hash")}`, {
+                replace: true,
+              });
+              return;
+            }
           }
-
-          setDiag({ step: "set_memory_token", next, hasAccessToken: true, mode: "exchangeCodeForSession" });
-          setMemoryAccessToken(accessToken);
-
-          setDiag({ step: "redirect", next, hasAccessToken: true, mode: "exchangeCodeForSession" });
-          window.location.replace(next);
-          return;
         }
 
-        // 3) Hash access_token (tu flujo TWA/WebView legacy)
-        const { access_token, error } = parseHashParams(window.location.hash || "");
-        setDiag({ step: "hash_parsed", next, hasAccessToken: !!access_token, error: error || undefined, mode: "hash" });
+        // 4) Persistir sesión en backend (cookies HttpOnly)
+        setStatus("Iniciando sesión…");
+        await fetch("/api/auth/session", {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => null);
 
-        if (error) {
-          window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`);
-          return;
-        }
-
-        if (!access_token) {
-          const msg = "missing_access_token";
-          window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
-          return;
-        }
-
-        setDiag({ step: "set_memory_token", next, hasAccessToken: true, mode: "hash" });
-        setMemoryAccessToken(access_token);
-
-        setDiag({ step: "redirect", next, hasAccessToken: true, mode: "hash" });
-        window.location.replace(next);
+        // 5) Entrada directa al panel
+        navigate("/panel", { replace: true });
       } catch (e: any) {
-        const msg = String(e?.message || e || "callback_error");
-        const next = searchParams.get("next") || "/inicio";
-        setDiag({ step: "fatal", error: msg, next });
-        window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`);
+        navigate(`/login?err=${encodeURIComponent(e?.message || "callback_error")}`, {
+          replace: true,
+        });
       }
     })();
-  }, [searchParams]);
+  }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      <div className="w-full max-w-xl">
-        <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
-          <h1 className="text-2xl font-semibold">Creando sesión...</h1>
-          <p className="text-sm opacity-70 mt-2">Un momento...</p>
-
-          <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 space-y-1">
-            <div>step: {diag.step}</div>
-            <div>mode: {diag.mode || "-"}</div>
-            <div>next: {diag.next || "-"}</div>
-            <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
-            <div>error: {diag.error || "-"}</div>
-          </div>
-        </div>
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold">{status}</h2>
+        <p className="mt-2 text-sm text-slate-600">Un momento por favor…</p>
       </div>
     </div>
   );
