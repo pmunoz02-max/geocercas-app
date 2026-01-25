@@ -147,105 +147,6 @@ function normalizeNombreCi(nombre) {
   return String(nombre || "").trim().toLowerCase();
 }
 
-/* ----------------------------- Tombstones ----------------------------- */
-/**
- * Tombstone = marca temporal de borrado para evitar "fantasmas" por latencia/caché.
- * - Se guarda por orgId en localStorage
- * - TTL corto (p.ej. 30s)
- * - Se filtra tanto API como local mientras el tombstone esté activo
- */
-const TOMBSTONE_TTL_MS = 30_000;
-
-function tombstoneStorageKey(orgId) {
-  return `geocerca_deleted__${orgId || "noorg"}`;
-}
-
-function readTombstones(orgId) {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(tombstoneStorageKey(orgId));
-    const obj = raw ? JSON.parse(raw) : {};
-    return obj && typeof obj === "object" ? obj : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeTombstones(orgId, obj) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(tombstoneStorageKey(orgId), JSON.stringify(obj || {}));
-  } catch {}
-}
-
-function purgeExpiredTombstones(orgId, now = Date.now()) {
-  const ts = readTombstones(orgId);
-  let changed = false;
-  for (const [k, v] of Object.entries(ts)) {
-    const t = Number(v);
-    if (!Number.isFinite(t) || now - t > TOMBSTONE_TTL_MS) {
-      delete ts[k];
-      changed = true;
-    }
-  }
-  if (changed) writeTombstones(orgId, ts);
-  return ts;
-}
-
-function addTombstones(orgId, nombres) {
-  if (typeof window === "undefined") return;
-  const now = Date.now();
-  const ts = purgeExpiredTombstones(orgId, now);
-  for (const nm of nombres || []) {
-    const ci = normalizeNombreCi(nm);
-    if (!ci) continue;
-    ts[ci] = now;
-  }
-  writeTombstones(orgId, ts);
-}
-
-function clearTombstone(orgId, nombre) {
-  if (typeof window === "undefined") return;
-  const ci = normalizeNombreCi(nombre);
-  if (!ci) return;
-  const ts = purgeExpiredTombstones(orgId);
-  if (ts[ci] !== undefined) {
-    delete ts[ci];
-    writeTombstones(orgId, ts);
-  }
-}
-
-function isTombstoned(orgId, nombre) {
-  const ci = normalizeNombreCi(nombre);
-  if (!ci) return false;
-  const ts = purgeExpiredTombstones(orgId);
-  return ts[ci] !== undefined;
-}
-
-function isSoftDeletedName(nombre) {
-  const nm = String(nombre || "").trim().toLowerCase();
-  // Backend/soft-delete patterns: deleted_<uuid> or deleted-<uuid>
-  return nm.startsWith("deleted_") || nm.startsWith("deleted-") || nm === "deleted";
-}
-
-function filterTombstones(orgId, items) {
-  // Siempre filtramos nombres soft-deleted para evitar mostrar basura tipo deleted_<uuid>
-  const base = (items || []).filter((g) => !isSoftDeletedName(g?.nombre || g?.name));
-
-  if (!orgId) return base;
-
-  const now = Date.now();
-  const ts = purgeExpiredTombstones(orgId, now);
-  const set = new Set(Object.keys(ts || {}));
-  if (!set.size) return base;
-
-  return base.filter((g) => {
-    const nm = g?.nombre || g?.name || "";
-    const ci = normalizeNombreCi(nm);
-    return !set.has(ci);
-  });
-}
-
 function readLocalGeocercas() {
   const list = [];
   if (typeof window === "undefined") return list;
@@ -295,19 +196,14 @@ async function listGeofencesUnified({ orgId }) {
 
   if (orgId) {
     try {
-      const apiItems = await listGeocercas({ orgId, onlyActive: false });
-      // Filtrar tombstones (evita que reaparezca una geocerca recién borrada)
-      const safeApi = filterTombstones(orgId, apiItems || []);
-      for (const r of safeApi) list.push({ id: r.id, nombre: r.nombre, source: "api" });
+      const apiItems = await listGeocercas({ orgId, onlyActive: true });
+      for (const r of apiItems) list.push({ id: r.id, nombre: r.nombre, source: "api" });
     } catch {
       // ignore
     }
   }
 
-  const localItems = readLocalGeocercas();
-  const safeLocal = orgId ? filterTombstones(orgId, localItems) : localItems;
-
-  list.push(...safeLocal);
+  list.push(...readLocalGeocercas());
   return mergeUniqueByNombre(list);
 }
 
@@ -443,19 +339,6 @@ export default function NuevaGeocerca() {
 
   const [banner, setBanner] = useState(null);
   const showOk = useCallback((text) => setBanner({ type: "ok", text }), []);
-
-  // OK banners se auto-ocultan para no dejar la UI "pegada" (ej: Deleted: 1)
-  const showOkTimed = useCallback((text, ms = 1800) => {
-    setBanner({ type: "ok", text });
-    window.setTimeout(() => {
-      setBanner((prev) => {
-        if (!prev) return prev;
-        if (prev.type !== "ok") return prev;
-        if (prev.text !== text) return prev;
-        return null;
-      });
-    }, ms);
-  }, []);
   const showErr = useCallback((text, err) => {
     if (err) console.error("[NuevaGeocerca]", text, err);
     setBanner({ type: "error", text });
@@ -571,6 +454,7 @@ export default function NuevaGeocerca() {
 
     setCoordModalOpen(false);
     setCoordText("");
+    setBanner(null);
     showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
@@ -600,16 +484,25 @@ export default function NuevaGeocerca() {
       const layerToSave =
         selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
+      // Si el usuario "mostró en mapa" una geocerca (viewFeature) y quiere guardarla con otro nombre,
+      // permitimos guardar esa geometría aunque no haya capas Geoman activas.
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
-        showErr(
-          t("geocercas.errorNoShape", {
-            defaultValue: "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
-          })
-        );
-        return;
+        if (viewFeature) {
+          geo =
+            viewFeature?.type === "FeatureCollection"
+              ? viewFeature
+              : { type: "FeatureCollection", features: [viewFeature] };
+        } else {
+          showErr(
+            t("geocercas.errorNoShape", {
+              defaultValue: "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
+            })
+          );
+          return;
+        }
+      } else {
+        geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
       }
-
-      geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
     }
 
     // 2) local fallback store (non-blocking)
@@ -628,11 +521,6 @@ export default function NuevaGeocerca() {
     );
 
     const nombre_ci = normalizeNombreCi(nm);
-
-    // Si se recrea una geocerca recién borrada, liberamos el tombstone para que aparezca de inmediato
-    try {
-      clearTombstone(orgId, nm);
-    } catch {}
 
     // 4) Upsert real (crítico) + verificación anti-falso-error
     let upsertOk = false;
@@ -696,9 +584,7 @@ export default function NuevaGeocerca() {
           if (vAll === true || vAct === true) return { found: true, unverifiable: false };
           if (vAll === null || vAct === null) unverifiable = true;
 
-          try {
-            await refreshGeofenceList();
-          } catch {}
+          // No refrescamos la lista aquí: puede sobrescribir el estado optimista y causar “desapariciones”.
         }
         return { found: false, unverifiable };
       };
@@ -731,6 +617,7 @@ export default function NuevaGeocerca() {
 
     // 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
+      setBanner(null);
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
@@ -746,7 +633,7 @@ export default function NuevaGeocerca() {
       console.warn("[NuevaGeocerca] refresh falló (no crítico)", e);
       // Regla: si se guardó, NO emitimos mensajes.
     }
-  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr]);
+  }, [geofenceName, currentOrg?.id, draftFeature, viewFeature, t, refreshGeofenceList, showErr]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
@@ -765,18 +652,6 @@ export default function NuevaGeocerca() {
     const names = Array.from(selectedNames)
       .map((x) => String(x || "").trim())
       .filter(Boolean);
-
-    // Tombstone inmediato (evita reaparición por latencia / caché / merge local+API)
-    try {
-      addTombstones(orgId, names);
-    } catch {}
-
-    // Optimista: retirar de la lista local inmediatamente (sin mensajes)
-    try {
-      setGeofenceList((prev) =>
-        (prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim()))
-      );
-    } catch {}
 
     try {
       deleteFromLocalStorageByNames(names);
@@ -797,7 +672,7 @@ export default function NuevaGeocerca() {
       clearCanvas();
       setDraftFeature(null);
 
-      showOkTimed(
+      showOk(
         t("geocercas.deletedCount", {
           count: names.length,
           defaultValue: `Eliminadas: ${names.length}`,
@@ -806,7 +681,7 @@ export default function NuevaGeocerca() {
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
     }
-  }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOkTimed]);
+  }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
@@ -1081,18 +956,21 @@ export default function NuevaGeocerca() {
                   setDraftFeature(null);
                   setViewFeature(null);
                   setViewCentroid(null);
+                  setBanner(null);
                 }}
                 onEdit={(e) => {
                   if (e?.layer) {
                     selectedLayerRef.current = e.layer;
                     lastCreatedLayerRef.current = e.layer;
                   }
+                  setBanner(null);
                 }}
                 onUpdate={(e) => {
                   if (e?.layer) {
                     selectedLayerRef.current = e.layer;
                     lastCreatedLayerRef.current = e.layer;
                   }
+                  setBanner(null);
                 }}
               />
             </FeatureGroup>
