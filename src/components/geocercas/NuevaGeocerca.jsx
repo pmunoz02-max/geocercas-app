@@ -616,14 +616,7 @@ export default function NuevaGeocerca() {
       console.warn("[NuevaGeocerca] refresh falló (no crítico)", e);
       // Regla: si se guardó, NO emitimos mensajes.
     }
-  }, [
-    geofenceName,
-    currentOrg?.id,
-    draftFeature,
-    t,
-    refreshGeofenceList,
-    showErr,
-  ]);
+  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
