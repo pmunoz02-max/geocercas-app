@@ -147,6 +147,94 @@ function normalizeNombreCi(nombre) {
   return String(nombre || "").trim().toLowerCase();
 }
 
+/* ----------------------------- Tombstones ----------------------------- */
+/**
+ * Tombstone = marca temporal de borrado para evitar "fantasmas" por latencia/caché.
+ * - Se guarda por orgId en localStorage
+ * - TTL corto (p.ej. 30s)
+ * - Se filtra tanto API como local mientras el tombstone esté activo
+ */
+const TOMBSTONE_TTL_MS = 30_000;
+
+function tombstoneStorageKey(orgId) {
+  return `geocerca_deleted__${orgId || "noorg"}`;
+}
+
+function readTombstones(orgId) {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(tombstoneStorageKey(orgId));
+    const obj = raw ? JSON.parse(raw) : {};
+    return obj && typeof obj === "object" ? obj : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeTombstones(orgId, obj) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(tombstoneStorageKey(orgId), JSON.stringify(obj || {}));
+  } catch {}
+}
+
+function purgeExpiredTombstones(orgId, now = Date.now()) {
+  const ts = readTombstones(orgId);
+  let changed = false;
+  for (const [k, v] of Object.entries(ts)) {
+    const t = Number(v);
+    if (!Number.isFinite(t) || now - t > TOMBSTONE_TTL_MS) {
+      delete ts[k];
+      changed = true;
+    }
+  }
+  if (changed) writeTombstones(orgId, ts);
+  return ts;
+}
+
+function addTombstones(orgId, nombres) {
+  if (typeof window === "undefined") return;
+  const now = Date.now();
+  const ts = purgeExpiredTombstones(orgId, now);
+  for (const nm of nombres || []) {
+    const ci = normalizeNombreCi(nm);
+    if (!ci) continue;
+    ts[ci] = now;
+  }
+  writeTombstones(orgId, ts);
+}
+
+function clearTombstone(orgId, nombre) {
+  if (typeof window === "undefined") return;
+  const ci = normalizeNombreCi(nombre);
+  if (!ci) return;
+  const ts = purgeExpiredTombstones(orgId);
+  if (ts[ci] !== undefined) {
+    delete ts[ci];
+    writeTombstones(orgId, ts);
+  }
+}
+
+function isTombstoned(orgId, nombre) {
+  const ci = normalizeNombreCi(nombre);
+  if (!ci) return false;
+  const ts = purgeExpiredTombstones(orgId);
+  return ts[ci] !== undefined;
+}
+
+function filterTombstones(orgId, items) {
+  if (!orgId) return items || [];
+  const now = Date.now();
+  const ts = purgeExpiredTombstones(orgId, now);
+  const set = new Set(Object.keys(ts || {}));
+  if (!set.size) return items || [];
+  return (items || []).filter((g) => {
+    const nm = g?.nombre || g?.name || "";
+    const ci = normalizeNombreCi(nm);
+    return !set.has(ci);
+  });
+}
+
 function readLocalGeocercas() {
   const list = [];
   if (typeof window === "undefined") return list;
@@ -197,13 +285,18 @@ async function listGeofencesUnified({ orgId }) {
   if (orgId) {
     try {
       const apiItems = await listGeocercas({ orgId, onlyActive: true });
-      for (const r of apiItems) list.push({ id: r.id, nombre: r.nombre, source: "api" });
+      // Filtrar tombstones (evita que reaparezca una geocerca recién borrada)
+      const safeApi = filterTombstones(orgId, apiItems || []);
+      for (const r of safeApi) list.push({ id: r.id, nombre: r.nombre, source: "api" });
     } catch {
       // ignore
     }
   }
 
-  list.push(...readLocalGeocercas());
+  const localItems = readLocalGeocercas();
+  const safeLocal = orgId ? filterTombstones(orgId, localItems) : localItems;
+
+  list.push(...safeLocal);
   return mergeUniqueByNombre(list);
 }
 
@@ -512,6 +605,11 @@ export default function NuevaGeocerca() {
 
     const nombre_ci = normalizeNombreCi(nm);
 
+    // Si se recrea una geocerca recién borrada, liberamos el tombstone para que aparezca de inmediato
+    try {
+      clearTombstone(orgId, nm);
+    } catch {}
+
     // 4) Upsert real (crítico) + verificación anti-falso-error
     let upsertOk = false;
 
@@ -643,6 +741,18 @@ export default function NuevaGeocerca() {
     const names = Array.from(selectedNames)
       .map((x) => String(x || "").trim())
       .filter(Boolean);
+
+    // Tombstone inmediato (evita reaparición por latencia / caché / merge local+API)
+    try {
+      addTombstones(orgId, names);
+    } catch {}
+
+    // Optimista: retirar de la lista local inmediatamente (sin mensajes)
+    try {
+      setGeofenceList((prev) =>
+        (prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim()))
+      );
+    } catch {}
 
     try {
       deleteFromLocalStorageByNames(names);
