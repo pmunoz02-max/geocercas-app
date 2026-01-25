@@ -523,33 +523,52 @@ export default function NuevaGeocerca() {
     } catch (e) {
       console.warn("[NuevaGeocerca] upsert falló; verificando existencia...", e);
 
-      // 🔎 Verificación: si ya existe en DB, consideramos OK (evita el mensaje falso)
+      // 🔎 Solo emitimos error si podemos CONFIRMAR que NO se guardó.
+      // Si no podemos verificar (p.ej. fallo de red/list), no mostramos mensaje para evitar falsos negativos.
+      let verified = false;
+      let exists = false;
+
       try {
         const items = await listGeocercas({ orgId, onlyActive: false });
-        const exists = (items || []).some((g) => {
+        verified = true;
+
+        exists = (items || []).some((g) => {
           const n1 = normalizeNombreCi(g?.nombre || g?.name || "");
           const n2 = normalizeNombreCi(g?.nombre_ci || "");
           return n1 === nombre_ci || n2 === nombre_ci;
         });
-
-        if (exists) {
-          upsertOk = true;
-        } else {
-          throw e;
-        }
       } catch (verifyErr) {
-        console.error("[NuevaGeocerca] upsert error (confirmado)", verifyErr);
+        console.error("[NuevaGeocerca] verificación falló; no se puede confirmar guardado", verifyErr);
+      }
+
+      if (verified && exists) {
+        upsertOk = true;
+      } else if (verified && !exists) {
+        console.error("[NuevaGeocerca] upsert error (confirmado: NO existe en DB)", e);
+
+        // rollback optimistic para no confundir
+        setGeofenceList((prev) =>
+          (prev || []).filter((g) => normalizeNombreCi(g?.nombre || "") !== nombre_ci)
+        );
+
         showErr(
           t("geocercas.errorSave", {
             defaultValue: "No se pudo guardar la geocerca.",
           }),
-          verifyErr
+          e
+        );
+        return;
+      } else {
+        // No se pudo verificar → no mostramos mensaje (regla del usuario) y no limpiamos el formulario
+        setGeofenceList((prev) =>
+          (prev || []).filter((g) => normalizeNombreCi(g?.nombre || "") !== nombre_ci)
         );
         return;
       }
     }
+    }
 
-    // 5) UX post-save
+    // 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
@@ -557,17 +576,14 @@ export default function NuevaGeocerca() {
 
       setGeofenceName("");
       setDraftFeature(null);
-
-      showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
     }
 
-    // 6) Refresh best-effort (no crítico)
+    // 6) Refresh best-effort (silencioso, no crítico)
     try {
       await refreshGeofenceList();
     } catch (e) {
-      // Importante: si la geocerca ya se guardó, NO mostramos mensajes por fallas no críticas
-      // (ej: refresh de lista). Solo log para depuración.
       console.warn("[NuevaGeocerca] refresh falló (no crítico)", e);
+      // Regla: si se guardó, NO emitimos mensajes.
     }
   }, [
     geofenceName,
