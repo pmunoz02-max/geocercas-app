@@ -92,9 +92,11 @@ function parseCSV(text) {
   if (!lines.length) return [];
 
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-  const latKey = headers.find((h) => ["lat", "latitude", "y"].includes(h)) || "lat";
+  const latKey =
+    headers.find((h) => ["lat", "latitude", "y"].includes(h)) || "lat";
   const lonKey =
-    headers.find((h) => ["lon", "lng", "long", "longitude", "x"].includes(h)) || "lon";
+    headers.find((h) => ["lon", "lng", "long", "longitude", "x"].includes(h)) ||
+    "lon";
 
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
@@ -311,7 +313,9 @@ function normalizeGeojson(geo) {
 function centroidFeatureFromGeojson(geo) {
   try {
     const gj =
-      geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
+      geo?.type === "FeatureCollection"
+        ? geo
+        : { type: "FeatureCollection", features: [geo] };
     const bounds = L.geoJSON(gj).getBounds();
     if (!bounds?.isValid?.()) return null;
     const c = bounds.getCenter();
@@ -457,7 +461,9 @@ export default function NuevaGeocerca() {
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
     if (!nm) {
-      showErr(t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." }));
+      showErr(
+        t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." })
+      );
       return;
     }
 
@@ -501,16 +507,14 @@ export default function NuevaGeocerca() {
 
     // 3) Optimistic: aparece inmediatamente en el panel
     setGeofenceList((prev) =>
-      mergeUniqueByNombre([
-        { id: `optim-${Date.now()}`, nombre: nm, source: "api" },
-        ...(prev || []),
-      ])
+      mergeUniqueByNombre([{ id: `optim-${Date.now()}`, nombre: nm, source: "api" }, ...(prev || [])])
     );
 
     const nombre_ci = normalizeNombreCi(nm);
 
     // 4) Upsert real (crítico) + verificación anti-falso-error
     let upsertOk = false;
+
     try {
       await upsertGeocerca({
         org_id: orgId,
@@ -541,18 +545,11 @@ export default function NuevaGeocerca() {
           const items = await listGeocercas({ orgId, onlyActive: !!onlyActive });
           return (items || []).some(matches);
         } catch (verifyErr) {
-          console.error(
-            "[NuevaGeocerca] verificación falló; no se puede confirmar guardado",
-            verifyErr
-          );
+          console.error("[NuevaGeocerca] verificación falló; no se puede confirmar guardado", verifyErr);
           return null; // no verificable
         }
       };
 
-      // 🔎 Verificación robusta (anti-falso-error):
-      // - intenta por onlyActive=false y onlyActive=true
-      // - hace varios reintentos con backoff + refresh best-effort
-      // - SOLO muestra error si TODAS las verificaciones son "false" (no existe) sin fallos de verificación
       const verifyWithRetries = async () => {
         let unverifiable = false;
         const waits = [0, 350, 900, 1800]; // ms
@@ -577,7 +574,7 @@ export default function NuevaGeocerca() {
       if (vr.found) {
         upsertOk = true;
       } else {
-        // rollback optimistic para no confundir (si el usuario recarga, verá la realidad)
+        // rollback optimistic para no confundir
         setGeofenceList((prev) =>
           (prev || []).filter((g) => {
             const n = String(g?.nombre || "").trim().toLowerCase();
@@ -589,17 +586,16 @@ export default function NuevaGeocerca() {
           // ✅ Alta confianza: NO existe en DB (verificado varias veces)
           console.error("[NuevaGeocerca] upsert error (confirmado: NO existe en DB)", e);
           showErr(
-            t("geocercas.errorSave", {
-              defaultValue: "No se pudo guardar la geocerca.",
-            }),
+            t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca." }),
             e
           );
         }
         // Si no se pudo verificar con certeza → SILENCIO (regla)
         return;
       }
+    }
 
-      // 5) UX post-save (SILENCIOSO)
+    // 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
@@ -620,7 +616,9 @@ export default function NuevaGeocerca() {
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
-      showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+      showErr(
+        t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
+      );
       return;
     }
 
@@ -673,7 +671,9 @@ export default function NuevaGeocerca() {
       if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
 
       if (!nameToShow) {
-        showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+        showErr(
+          t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." })
+        );
         return;
       }
 
@@ -968,7 +968,9 @@ export default function NuevaGeocerca() {
                   <span className="ml-2">Lng: {cursorLatLng.lng.toFixed(6)}</span>
                 </>
               ) : (
-                <span>{t("geocercas.cursorHint", { defaultValue: "Mueve el cursor sobre el mapa" })}</span>
+                <span>
+                  {t("geocercas.cursorHint", { defaultValue: "Mueve el cursor sobre el mapa" })}
+                </span>
               )}
             </div>
 
