@@ -543,9 +543,21 @@ export default function NuevaGeocerca() {
       const verifyOnce = async (onlyActive) => {
         try {
           const items = await listGeocercas({ orgId, onlyActive: !!onlyActive });
-          return (items || []).some(matches);
+
+          // 🔒 Regla canónica:
+          // - Lista vacía o respuesta no-array = INCONCLUSO (silencio)
+          // - Solo un match positivo confirma existencia
+          if (!Array.isArray(items) || items.length === 0) {
+            return null; // no se puede confirmar
+          }
+
+          const found = items.some(matches);
+          return found ? true : null; // si no lo vemos, sigue siendo duda
         } catch (verifyErr) {
-          console.error("[NuevaGeocerca] verificación falló; no se puede confirmar guardado", verifyErr);
+          console.error(
+            "[NuevaGeocerca] verificación falló; no se puede confirmar guardado",
+            verifyErr
+          );
           return null; // no verificable
         }
       };
