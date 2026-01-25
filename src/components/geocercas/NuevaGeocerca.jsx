@@ -164,6 +164,7 @@ function filterSoftDeleted(items) {
  * NO permitimos que desaparezca del panel. Se des-pinea cuando el backend la confirma.
  */
 const PIN_TTL_MS = 25_000;
+const DELETE_TTL_MS = 30_000;
 
 function makePinKey(nombre) {
   return normalizeNombreCi(nombre);
@@ -394,6 +395,7 @@ export default function NuevaGeocerca() {
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
   const pinnedRef = useRef({}); // { [nombre_ci]: { nombre, ts } }
+  const deletedRef = useRef({}); // { [nombre_ci]: { ts } } (tombstones)
 
   const pinGeofenceName = useCallback((nombre) => {
     const ci = makePinKey(nombre);
@@ -407,6 +409,29 @@ export default function NuevaGeocerca() {
     for (const [ci, v] of Object.entries(pins)) {
       const ts = Number(v?.ts);
       if (!Number.isFinite(ts) || now - ts > PIN_TTL_MS) delete pins[ci];
+    }
+  }, []);
+
+
+  const markDeletedNames = useCallback((names) => {
+    try {
+      const now = Date.now();
+      const obj = deletedRef.current || {};
+      for (const nm of names || []) {
+        const ci = makePinKey(nm);
+        if (!ci) continue;
+        obj[ci] = { ts: now };
+      }
+      deletedRef.current = obj;
+    } catch {}
+  }, []);
+
+  const purgeDeleted = useCallback(() => {
+    const now = Date.now();
+    const tombs = deletedRef.current || {};
+    for (const [ci, v] of Object.entries(tombs)) {
+      const ts = Number(v?.ts);
+      if (!Number.isFinite(ts) || now - ts > DELETE_TTL_MS) delete tombs[ci];
     }
   }, []);
 
@@ -426,9 +451,18 @@ export default function NuevaGeocerca() {
     const orgId = currentOrg?.id || null;
     try {
       purgePins();
+      purgeDeleted();
 
       const mergedRaw = await listGeofencesUnified({ orgId });
-      const merged = mergeUniqueByNombre(filterSoftDeleted(mergedRaw));
+      let merged = mergeUniqueByNombre(filterSoftDeleted(mergedRaw));
+      // Evitar que una geocerca recién eliminada reaparezca por lecturas stale/caché
+      try {
+        const tombs = deletedRef.current || {};
+        const tombKeys = new Set(Object.keys(tombs));
+        if (tombKeys.size) {
+          merged = (merged || []).filter((g) => !tombKeys.has(makePinKey(g?.nombre)));
+        }
+      } catch {}
 
       setGeofenceList((prev) => {
         const prevList = prev || [];
@@ -467,7 +501,7 @@ export default function NuevaGeocerca() {
         return fallback.length ? fallback : prev;
       });
     }
-  }, [currentOrg?.id, purgePins]);
+  }, [currentOrg?.id, purgePins, purgeDeleted]);
 
   useEffect(() => {
     refreshGeofenceList();
@@ -625,6 +659,8 @@ export default function NuevaGeocerca() {
       const verifyOnce = async (onlyActive) => {
         try {
           const items = await listGeocercas({ orgId, onlyActive: !!onlyActive });
+          // Si el API devuelve vacío (posible caché/latencia/RLS), NO lo tomamos como 'no existe'
+          if (Array.isArray(items) && items.length === 0) return null;
           return (items || []).some(matches);
         } catch (verifyErr) {
           console.error("[NuevaGeocerca] verificación falló; no se puede confirmar guardado", verifyErr);
@@ -714,6 +750,23 @@ export default function NuevaGeocerca() {
       .map((x) => String(x || "").trim())
       .filter(Boolean);
 
+    // ✅ Optimistic UI: remover inmediatamente del panel (sin refresh)
+    setGeofenceList((prev) =>
+      (prev || []).filter((g) => {
+        const n = String(g?.nombre || "").trim();
+        return !names.includes(n);
+      })
+    );
+
+    // Tombstone TTL para evitar que reaparezcan por lecturas stale/caché
+    markDeletedNames(names);
+
+    // limpiar selección y vista ya mismo
+    setSelectedNames(() => new Set());
+    setLastSelectedName(null);
+    setViewFeature(null);
+    setViewCentroid(null);
+
     try {
       deleteFromLocalStorageByNames(names);
 
@@ -723,11 +776,6 @@ export default function NuevaGeocerca() {
           nombres_ci: names.map(normalizeNombreCi),
         });
       }
-
-      setSelectedNames(() => new Set());
-      setLastSelectedName(null);
-      setViewFeature(null);
-      setViewCentroid(null);
 
       await refreshGeofenceList();
       clearCanvas();
@@ -742,7 +790,7 @@ export default function NuevaGeocerca() {
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
     }
-  }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
+  }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk, markDeletedNames]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
