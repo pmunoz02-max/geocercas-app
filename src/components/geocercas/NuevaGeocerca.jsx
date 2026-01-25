@@ -147,6 +147,18 @@ function normalizeNombreCi(nombre) {
   return String(nombre || "").trim().toLowerCase();
 }
 
+function isSoftDeletedName(nombre) {
+  const nm = String(nombre || "").trim().toLowerCase();
+  return nm.startsWith("deleted_") || nm.startsWith("deleted-") || nm === "deleted";
+}
+
+function filterSoftDeleted(items) {
+  return (items || []).filter((g) => {
+    const nm = g?.nombre || g?.name || "";
+    return !isSoftDeletedName(nm);
+  });
+}
+
 function readLocalGeocercas() {
   const list = [];
   if (typeof window === "undefined") return list;
@@ -158,7 +170,7 @@ function readLocalGeocercas() {
     try {
       const obj = JSON.parse(localStorage.getItem(k) || "{}");
       const nombre = obj?.nombre || k.replace(/^geocerca_/, "");
-      list.push({ key: k, nombre, source: "local" });
+      if (!isSoftDeletedName(nombre)) list.push({ key: k, nombre, source: "local" });
     } catch {}
   }
   return list;
@@ -196,17 +208,19 @@ async function listGeofencesUnified({ orgId }) {
 
   if (orgId) {
     try {
-      const apiItems = await listGeocercas({ orgId, onlyActive: true });
-      for (const r of apiItems) list.push({ id: r.id, nombre: r.nombre, source: "api" });
+      // Más robusto: traemos activas e inactivas, y filtramos client-side
+      const apiItems = await listGeocercas({ orgId, onlyActive: false });
+      for (const r of filterSoftDeleted(apiItems)) {
+        list.push({ id: r.id, nombre: r.nombre, source: "api" });
+      }
     } catch {
       // ignore
     }
   }
 
-  list.push(...readLocalGeocercas());
+  list.push(...filterSoftDeleted(readLocalGeocercas()));
   return mergeUniqueByNombre(list);
 }
-
 /* ----------------------------- Map cursor live ---------------------------- */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
@@ -385,10 +399,13 @@ export default function NuevaGeocerca() {
     const orgId = currentOrg?.id || null;
     try {
       const merged = await listGeofencesUnified({ orgId });
-      setGeofenceList(merged);
+      setGeofenceList((prev) => (merged?.length ? merged : prev));
     } catch (e) {
       console.error("[NuevaGeocerca] refreshGeofenceList error", e);
-      setGeofenceList(mergeUniqueByNombre(readLocalGeocercas()));
+      setGeofenceList((prev) => {
+        const fallback = mergeUniqueByNombre(filterSoftDeleted(readLocalGeocercas()));
+        return fallback.length ? fallback : prev;
+      });
     }
   }, [currentOrg?.id]);
 
@@ -484,8 +501,8 @@ export default function NuevaGeocerca() {
       const layerToSave =
         selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
-      // Si el usuario mostró una geocerca en el mapa (viewFeature) y luego quiere guardar,
-      // permitimos usar esa geometría aunque no haya capas Geoman activas.
+      // Si el usuario "mostró en mapa" una geocerca (viewFeature) y quiere guardarla con otro nombre,
+      // permitimos guardar esa geometría aunque no haya capas Geoman activas.
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
         if (viewFeature) {
           geo =
@@ -517,7 +534,7 @@ export default function NuevaGeocerca() {
 
     // 3) Optimistic: aparece inmediatamente en el panel
     setGeofenceList((prev) =>
-      mergeUniqueByNombre([{ id: `optim-${Date.now()}`, nombre: nm, source: "api" }, ...(prev || [])])
+      mergeUniqueByNombre([{ id: `optim-${Date.now()}`, nombre: nm, source: "local" }, ...(prev || [])])
     );
 
     const nombre_ci = normalizeNombreCi(nm);
@@ -555,12 +572,14 @@ export default function NuevaGeocerca() {
           const items = await listGeocercas({ orgId, onlyActive: !!onlyActive });
 
           // 🔒 Regla canónica:
-          // - lista vacía / respuesta inválida = INCONCLUSO (silencio)
-          // - solo un match positivo confirma existencia
-          if (!Array.isArray(items) || items.length === 0) return null;
+          // - Lista vacía o respuesta no-array = INCONCLUSO (silencio)
+          // - Solo un match positivo confirma existencia
+          if (!Array.isArray(items) || items.length === 0) {
+            return null; // no se puede confirmar
+          }
 
           const found = items.some(matches);
-          return found ? true : null;
+          return found ? true : null; // si no lo vemos, sigue siendo duda
         } catch (verifyErr) {
           console.error(
             "[NuevaGeocerca] verificación falló; no se puede confirmar guardado",
@@ -581,7 +600,8 @@ export default function NuevaGeocerca() {
 
           if (vAll === true || vAct === true) return { found: true, unverifiable: false };
           if (vAll === null || vAct === null) unverifiable = true;
-          // No refrescamos la lista aquí: puede sobrescribir el estado y causar “desapariciones”.
+
+          // No refrescamos la lista aquí: puede sobrescribir el estado optimista y causar “desapariciones”.
         }
         return { found: false, unverifiable };
       };
@@ -649,6 +669,13 @@ export default function NuevaGeocerca() {
     const names = Array.from(selectedNames)
       .map((x) => String(x || "").trim())
       .filter(Boolean);
+
+    // Optimista: retirar de la lista inmediatamente (sin refresh) y sin mostrar deleted_*
+    try {
+      setGeofenceList((prev) =>
+        filterSoftDeleted((prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim())))
+      );
+    } catch {}
 
     try {
       deleteFromLocalStorageByNames(names);
@@ -806,7 +833,7 @@ export default function NuevaGeocerca() {
               <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>
             )}
 
-            {geofenceList.map((g) => (
+            {filterSoftDeleted(geofenceList).map((g) => (
               <label
                 key={`${g.source}-${g.id || ""}-${g.nombre}`}
                 className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
