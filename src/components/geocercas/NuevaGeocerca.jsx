@@ -566,7 +566,6 @@ export default function NuevaGeocerca() {
         return;
       }
     }
-    }
 
     // 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
@@ -592,7 +591,6 @@ export default function NuevaGeocerca() {
     t,
     refreshGeofenceList,
     showErr,
-    showOk,
   ]);
 
   const handleDeleteSelected = useCallback(async () => {
