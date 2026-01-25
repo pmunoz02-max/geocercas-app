@@ -565,13 +565,9 @@ export default function NuevaGeocerca() {
     try {
       await refreshGeofenceList();
     } catch (e) {
+      // Importante: si la geocerca ya se guardó, NO mostramos mensajes por fallas no críticas
+      // (ej: refresh de lista). Solo log para depuración.
       console.warn("[NuevaGeocerca] refresh falló (no crítico)", e);
-      setBanner({
-        type: "info",
-        text: t("geocercas.refreshWarn", {
-          defaultValue: "Geocerca guardada, pero la lista no pudo refrescarse automáticamente.",
-        }),
-      });
     }
   }, [
     geofenceName,
