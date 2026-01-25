@@ -153,10 +153,20 @@ function isSoftDeletedName(nombre) {
 }
 
 function filterSoftDeleted(items) {
-  return (items || []).filter((g) => {
-    const nm = g?.nombre || g?.name || "";
-    return !isSoftDeletedName(nm);
-  });
+  return (items || []).filter((g) => !isSoftDeletedName(g?.nombre || g?.name || ""));
+}
+
+/* -------------------------- Pin de recién guardadas -------------------------- */
+/**
+ * Problema observado: después de guardar, la lista puede "parpadear" y perder el item
+ * por refresh que trae temporalmente vacío / incompleto (latencia, RLS, caché).
+ * Solución: "pin" temporal por nombre_ci (TTL corto). Mientras esté pineada,
+ * NO permitimos que desaparezca del panel. Se des-pinea cuando el backend la confirma.
+ */
+const PIN_TTL_MS = 25_000;
+
+function makePinKey(nombre) {
+  return normalizeNombreCi(nombre);
 }
 
 function readLocalGeocercas() {
@@ -208,7 +218,6 @@ async function listGeofencesUnified({ orgId }) {
 
   if (orgId) {
     try {
-      // Más robusto: traemos activas e inactivas, y filtramos client-side
       const apiItems = await listGeocercas({ orgId, onlyActive: false });
       for (const r of filterSoftDeleted(apiItems)) {
         list.push({ id: r.id, nombre: r.nombre, source: "api" });
@@ -221,6 +230,7 @@ async function listGeofencesUnified({ orgId }) {
   list.push(...filterSoftDeleted(readLocalGeocercas()));
   return mergeUniqueByNombre(list);
 }
+
 /* ----------------------------- Map cursor live ---------------------------- */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
@@ -383,6 +393,23 @@ export default function NuevaGeocerca() {
 
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
+  const pinnedRef = useRef({}); // { [nombre_ci]: { nombre, ts } }
+
+  const pinGeofenceName = useCallback((nombre) => {
+    const ci = makePinKey(nombre);
+    if (!ci) return;
+    pinnedRef.current[ci] = { nombre: String(nombre || "").trim(), ts: Date.now() };
+  }, []);
+
+  const purgePins = useCallback(() => {
+    const now = Date.now();
+    const pins = pinnedRef.current || {};
+    for (const [ci, v] of Object.entries(pins)) {
+      const ts = Number(v?.ts);
+      if (!Number.isFinite(ts) || now - ts > PIN_TTL_MS) delete pins[ci];
+    }
+  }, []);
+
 
   const clearCanvas = useCallback(() => {
     try {
@@ -398,8 +425,41 @@ export default function NuevaGeocerca() {
   const refreshGeofenceList = useCallback(async () => {
     const orgId = currentOrg?.id || null;
     try {
-      const merged = await listGeofencesUnified({ orgId });
-      setGeofenceList((prev) => (merged?.length ? merged : prev));
+      purgePins();
+
+      const mergedRaw = await listGeofencesUnified({ orgId });
+      const merged = mergeUniqueByNombre(filterSoftDeleted(mergedRaw));
+
+      setGeofenceList((prev) => {
+        const prevList = prev || [];
+        let out = merged.length ? merged : prevList;
+
+        // Mantener pineadas si el refresh no las trae todavía (evita desaparición temporal)
+        const pins = pinnedRef.current || {};
+        const outNames = new Set((out || []).map((g) => String(g?.nombre || "").trim()));
+        for (const v of Object.values(pins)) {
+          const nm = String(v?.nombre || "").trim();
+          if (!nm) continue;
+          if (!outNames.has(nm)) {
+            const fromPrev = prevList.find((g) => String(g?.nombre || "").trim() === nm);
+            out = mergeUniqueByNombre([
+              fromPrev || { id: `pin-${makePinKey(nm)}`, nombre: nm, source: "local" },
+              ...(out || []),
+            ]);
+          }
+        }
+
+        return out;
+      });
+
+      // Si el backend ya la trae, des-pinear
+      try {
+        const pins = pinnedRef.current || {};
+        const mergedNamesCi = new Set((merged || []).map((g) => makePinKey(g?.nombre)));
+        for (const ci of Object.keys(pins)) {
+          if (mergedNamesCi.has(ci)) delete pins[ci];
+        }
+      } catch {}
     } catch (e) {
       console.error("[NuevaGeocerca] refreshGeofenceList error", e);
       setGeofenceList((prev) => {
@@ -407,7 +467,7 @@ export default function NuevaGeocerca() {
         return fallback.length ? fallback : prev;
       });
     }
-  }, [currentOrg?.id]);
+  }, [currentOrg?.id, purgePins]);
 
   useEffect(() => {
     refreshGeofenceList();
@@ -471,7 +531,6 @@ export default function NuevaGeocerca() {
 
     setCoordModalOpen(false);
     setCoordText("");
-    setBanner(null);
     showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
@@ -501,25 +560,16 @@ export default function NuevaGeocerca() {
       const layerToSave =
         selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
-      // Si el usuario "mostró en mapa" una geocerca (viewFeature) y quiere guardarla con otro nombre,
-      // permitimos guardar esa geometría aunque no haya capas Geoman activas.
       if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
-        if (viewFeature) {
-          geo =
-            viewFeature?.type === "FeatureCollection"
-              ? viewFeature
-              : { type: "FeatureCollection", features: [viewFeature] };
-        } else {
-          showErr(
-            t("geocercas.errorNoShape", {
-              defaultValue: "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
-            })
-          );
-          return;
-        }
-      } else {
-        geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
+        showErr(
+          t("geocercas.errorNoShape", {
+            defaultValue: "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
+          })
+        );
+        return;
       }
+
+      geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
     }
 
     // 2) local fallback store (non-blocking)
@@ -536,6 +586,11 @@ export default function NuevaGeocerca() {
     setGeofenceList((prev) =>
       mergeUniqueByNombre([{ id: `optim-${Date.now()}`, nombre: nm, source: "local" }, ...(prev || [])])
     );
+
+    // Pinear para evitar desaparición temporal por refresh incompleto
+    try {
+      pinGeofenceName(nm);
+    } catch {}
 
     const nombre_ci = normalizeNombreCi(nm);
 
@@ -570,21 +625,9 @@ export default function NuevaGeocerca() {
       const verifyOnce = async (onlyActive) => {
         try {
           const items = await listGeocercas({ orgId, onlyActive: !!onlyActive });
-
-          // 🔒 Regla canónica:
-          // - Lista vacía o respuesta no-array = INCONCLUSO (silencio)
-          // - Solo un match positivo confirma existencia
-          if (!Array.isArray(items) || items.length === 0) {
-            return null; // no se puede confirmar
-          }
-
-          const found = items.some(matches);
-          return found ? true : null; // si no lo vemos, sigue siendo duda
+          return (items || []).some(matches);
         } catch (verifyErr) {
-          console.error(
-            "[NuevaGeocerca] verificación falló; no se puede confirmar guardado",
-            verifyErr
-          );
+          console.error("[NuevaGeocerca] verificación falló; no se puede confirmar guardado", verifyErr);
           return null; // no verificable
         }
       };
@@ -601,7 +644,9 @@ export default function NuevaGeocerca() {
           if (vAll === true || vAct === true) return { found: true, unverifiable: false };
           if (vAll === null || vAct === null) unverifiable = true;
 
-          // No refrescamos la lista aquí: puede sobrescribir el estado optimista y causar “desapariciones”.
+          try {
+            await refreshGeofenceList();
+          } catch {}
         }
         return { found: false, unverifiable };
       };
@@ -634,7 +679,6 @@ export default function NuevaGeocerca() {
 
     // 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
-      setBanner(null);
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
@@ -650,7 +694,7 @@ export default function NuevaGeocerca() {
       console.warn("[NuevaGeocerca] refresh falló (no crítico)", e);
       // Regla: si se guardó, NO emitimos mensajes.
     }
-  }, [geofenceName, currentOrg?.id, draftFeature, viewFeature, t, refreshGeofenceList, showErr]);
+  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
@@ -669,13 +713,6 @@ export default function NuevaGeocerca() {
     const names = Array.from(selectedNames)
       .map((x) => String(x || "").trim())
       .filter(Boolean);
-
-    // Optimista: retirar de la lista inmediatamente (sin refresh) y sin mostrar deleted_*
-    try {
-      setGeofenceList((prev) =>
-        filterSoftDeleted((prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim())))
-      );
-    } catch {}
 
     try {
       deleteFromLocalStorageByNames(names);
@@ -980,21 +1017,18 @@ export default function NuevaGeocerca() {
                   setDraftFeature(null);
                   setViewFeature(null);
                   setViewCentroid(null);
-                  setBanner(null);
                 }}
                 onEdit={(e) => {
                   if (e?.layer) {
                     selectedLayerRef.current = e.layer;
                     lastCreatedLayerRef.current = e.layer;
                   }
-                  setBanner(null);
                 }}
                 onUpdate={(e) => {
                   if (e?.layer) {
                     selectedLayerRef.current = e.layer;
                     lastCreatedLayerRef.current = e.layer;
                   }
-                  setBanner(null);
                 }}
               />
             </FeatureGroup>
