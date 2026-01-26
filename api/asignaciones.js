@@ -1,10 +1,9 @@
 // api/asignaciones.js
-// DEFINITIVO: Asignaciones usa catalogo "personal" y guarda personal_id
+// DEFINITIVO: Asignaciones usa catálogo "personal" y guarda personal_id
 // - cookie HttpOnly tg_at
 // - contexto via public.bootstrap_session_context()
 // - normaliza array vs objeto
-// - filtra por org_id (fallback tenant_id)
-// - devuelve: asignaciones + catalogs { personal, geocercas, activities, people(alias) }
+// - NO accede directo a activities (usa RPC activities_list) ✅ Nota Técnica
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -53,11 +52,21 @@ function pickOrgId(ctx) {
 function supabaseForToken(accessToken) {
   const url = process.env.SUPABASE_URL;
   const anon = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
+  if (!url || !anon) {
+    // Si esto explota, en Vercel verás error claro en response (no genérico),
+    // PERO igual lo dejamos explícito.
+    throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
+  }
 
   return createClient(url, anon, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    },
   });
 }
 
@@ -83,6 +92,7 @@ async function getContextOr401(req) {
 
   const supabase = supabaseForToken(token);
 
+  // Nota: bootstrap_session_context() puede crear org/roles si estás “huérfano”
   const { data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
   if (ctxErr) return { ok: false, status: 401, error: ctxErr.message || "ctx rpc error" };
 
@@ -114,7 +124,7 @@ async function loadCatalogs(supabase, { orgId, tenantId }) {
     if (!r.error) personal = r.data || [];
   }
 
-  // Geocercas
+  // ✅ Geocercas
   let geocercas = [];
   {
     let q = supabase
@@ -129,22 +139,21 @@ async function loadCatalogs(supabase, { orgId, tenantId }) {
     if (!r.error) geocercas = r.data || [];
   }
 
-  // Activities (org_id -> fallback legacy)
+  // ✅ Activities: RPC ONLY (tenant-safe) — NO .from("activities")
   let activities = [];
   {
-   let activities = [];
-{
-  const { data, error } = await supabase.rpc("activities_list", {
-    p_include_inactive: false,
-  });
+    // Espera firma: activities_list(p_include_inactive boolean)
+    const { data, error } = await supabase.rpc("activities_list", {
+      p_include_inactive: false,
+    });
 
-  if (!error && Array.isArray(data)) {
-    activities = data.map((a) => ({
-      id: a.id,
-      name: a.name,
-    }));
+    if (!error && Array.isArray(data)) {
+      activities = data.map((a) => ({
+        id: a.id,
+        name: a.name,
+      }));
+    }
   }
-}
 
   // Alias de compatibilidad para UIs viejas
   const people = personal.map((p) => ({
@@ -269,6 +278,7 @@ export default async function handler(req, res) {
     return json(res, 405, { ok: false, error: "method not allowed" });
   } catch (e) {
     console.error("[api/asignaciones] fatal:", e);
+    // Importante: devolver mensaje real ayuda a no ver el genérico de Vercel
     return json(res, 500, { ok: false, error: e?.message || "fatal" });
   }
 }
