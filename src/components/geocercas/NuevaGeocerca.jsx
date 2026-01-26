@@ -465,6 +465,7 @@ export default function NuevaGeocerca() {
     }, 220);
   }, []);
 
+
   const refreshGeofenceList = useCallback(async () => {
     const orgId = currentOrg?.id || null;
     try {
@@ -520,6 +521,19 @@ export default function NuevaGeocerca() {
       });
     }
   }, [currentOrg?.id, purgePins, purgeDeleted]);
+
+// Reintentos silenciosos post-save: ayuda a que la lista y el mapa se estabilicen sin refresh manual
+const scheduleRefreshAfterSave = useCallback(() => {
+  const waits = [400, 1200, 2500, 5000]; // ms
+  for (const ms of waits) {
+    setTimeout(() => {
+      try {
+        refreshGeofenceList();
+      } catch {}
+    }, ms);
+  }
+}, [refreshGeofenceList]);
+
 
   useEffect(() => {
     refreshGeofenceList();
@@ -706,36 +720,40 @@ export default function NuevaGeocerca() {
 
           try {
             await refreshGeofenceList();
+      scheduleRefreshAfterSave();
           } catch {}
         }
         return { found: false, unverifiable };
       };
 
-      const vr = await verifyWithRetries();
+        const vr = await verifyWithRetries();
 
-      if (vr.found) {
-        upsertOk = true;
-      } else {
-        // rollback optimistic para no confundir
-        setGeofenceList((prev) =>
-          (prev || []).filter((g) => {
-            const n = String(g?.nombre || "").trim().toLowerCase();
-            return n !== targetRaw && n !== targetCi;
-          })
-        );
+  if (vr.found) {
+    // Se guardó (o ya existía) aunque el upsert reportó error.
+    upsertOk = true;
+  } else if (vr.unverifiable) {
+    // No es verificable con certeza (latencia, red, RLS, caché). 
+    // Regla: NO mostrar error falso y NO hacer rollback.
+    // Dejamos el item optimista + pineado y seguimos intentando refrescar.
+    scheduleRefreshAfterSave();
+    return;
+  } else {
+    // Alta confianza: NO existe en DB (verificado varias veces) → rollback + error real
+    setGeofenceList((prev) =>
+      (prev || []).filter((g) => {
+        const n = String(g?.nombre || "").trim().toLowerCase();
+        return n !== targetRaw && n !== targetCi;
+      })
+    );
 
-        if (!vr.unverifiable) {
-          // ✅ Alta confianza: NO existe en DB (verificado varias veces)
-          console.error("[NuevaGeocerca] upsert error (confirmado: NO existe en DB)", e);
-          showErr(
-            t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca." }),
-            e
-          );
-        }
-        // Si no se pudo verificar con certeza → SILENCIO (regla)
-        return;
-      }
-    }
+    console.error("[NuevaGeocerca] upsert error (confirmado: NO existe en DB)", e);
+    showErr(
+      t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca." }),
+      e
+    );
+    return;
+  }
+}
 
     // 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
@@ -770,11 +788,12 @@ export default function NuevaGeocerca() {
     // 6) Refresh best-effort (silencioso, no crítico)
     try {
       await refreshGeofenceList();
+      scheduleRefreshAfterSave();
     } catch (e) {
       console.warn("[NuevaGeocerca] refresh falló (no crítico)", e);
       // Regla: si se guardó, NO emitimos mensajes.
     }
-  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr, pinGeofenceName, invalidateMapSize]);
+  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr, pinGeofenceName, invalidateMapSize, scheduleRefreshAfterSave]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
@@ -822,6 +841,7 @@ export default function NuevaGeocerca() {
       }
 
       await refreshGeofenceList();
+      scheduleRefreshAfterSave();
       clearCanvas();
       setDraftFeature(null);
 
