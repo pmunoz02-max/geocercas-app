@@ -4,11 +4,6 @@
 // Auth por cookie HttpOnly: tg_at
 // Contexto por RPC: public.bootstrap_session_context()
 // NO org_id desde frontend.
-//
-// NOTA DE ESQUEMA (según tu DB):
-// - activities.tenant_id: uuid NOT NULL  -> lo llenamos con orgId resuelto
-// - activities.org_id: uuid NULLABLE     -> lo llenamos por compatibilidad
-// - NO existe activities.updated_at      -> NO lo pedimos en select
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -82,6 +77,17 @@ function extractRole(ctxObj) {
   return typeof r === "string" ? r : null;
 }
 
+/* 🔒 Universal: detecta error de tenant huérfano */
+function isNoMembershipError(err) {
+  const msg = (err?.message || "").toLowerCase();
+  return (
+    msg.includes("no tiene memberships") ||
+    msg.includes("no memberships") ||
+    msg.includes("inferir tenant") ||
+    msg.includes("no org")
+  );
+}
+
 async function resolveContext(req) {
   const accessToken = getCookie(req, "tg_at");
   if (!accessToken) return { ok: false, status: 401, error: "No session cookie (tg_at)" };
@@ -91,8 +97,20 @@ async function resolveContext(req) {
   const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
   if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-  const { data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
-  if (ctxErr) return { ok: false, status: 500, error: ctxErr.message || "bootstrap_session_context failed" };
+  // ---- intento 1 ----
+  let ctxRaw, ctxErr;
+  ({ data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context"));
+
+  // ---- autocura si falta membership ----
+  if (ctxErr && isNoMembershipError(ctxErr)) {
+    const { error: fixErr } = await supabase.rpc("ensure_membership_for_current_user");
+    if (fixErr) {
+      return { ok: false, status: 500, error: fixErr.message };
+    }
+    ({ data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context"));
+  }
+
+  if (ctxErr) return { ok: false, status: 500, error: ctxErr.message };
 
   const ctxObj = normalizeCtx(ctxRaw);
   const orgId = extractOrgId(ctxObj);
@@ -107,15 +125,9 @@ export default async function handler(req, res) {
     if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error });
 
     const { supabase, orgId } = ctx;
+    if (!orgId) return json(res, 403, { ok: false, error: "No org resolved for current user" });
 
-    if (!orgId) {
-      return json(res, 403, { ok: false, error: "No org resolved for current user" });
-    }
-
-    // En tu esquema, el "tenant real" es tenant_id (NOT NULL).
-    // Usamos orgId resuelto como tenant_id.
     const tenantId = orgId;
-
     const id = typeof req.query?.id === "string" ? req.query.id : null;
 
     // ---------- GET ----------
@@ -143,14 +155,13 @@ export default async function handler(req, res) {
       if (!name) return json(res, 400, { ok: false, error: "Missing name" });
 
       const payload = {
-        tenant_id: tenantId, // ✅ NOT NULL
-        org_id: tenantId,    // ✅ compatibilidad (si aún lo usas en otras partes)
+        tenant_id: tenantId,
+        org_id: tenantId,
         name,
         description: body?.description ?? null,
         active: body?.active ?? true,
         currency_code: body?.currency_code ?? "USD",
         hourly_rate: body?.hourly_rate ?? null,
-        // created_by: opcional (si tu DB lo setea con trigger, no lo toques)
       };
 
       const { data, error } = await supabase
@@ -164,13 +175,11 @@ export default async function handler(req, res) {
       return json(res, 201, { ok: true, data });
     }
 
-    // Requiere id
+    // ---------- resto igual ----------
     if (!id) return json(res, 400, { ok: false, error: "Missing id query param (?id=...)" });
 
-    // ---------- PUT ----------
     if (req.method === "PUT") {
       const body = safeJson(req.body);
-
       const patch = {
         name: body?.name !== undefined ? String(body.name).trim() : undefined,
         description: body?.description !== undefined ? (body.description || null) : undefined,
@@ -192,11 +201,9 @@ export default async function handler(req, res) {
         .single();
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true, data });
     }
 
-    // ---------- PATCH (active) ----------
     if (req.method === "PATCH") {
       const body = safeJson(req.body);
       const active = Boolean(body?.active);
@@ -210,11 +217,9 @@ export default async function handler(req, res) {
         .single();
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true, data });
     }
 
-    // ---------- DELETE ----------
     if (req.method === "DELETE") {
       const { error } = await supabase
         .from("activities")
@@ -223,7 +228,6 @@ export default async function handler(req, res) {
         .eq("tenant_id", tenantId);
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true });
     }
 
