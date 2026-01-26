@@ -447,6 +447,24 @@ export default function NuevaGeocerca() {
     lastCreatedLayerRef.current = null;
   }, []);
 
+
+  // Evita “pantalla inestable”/mapa gris tras cambios en panel (Leaflet necesita recalcular tamaño)
+  const invalidateMapSize = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    // doble tick: primero el DOM se ajusta, luego Leaflet recalcula
+    setTimeout(() => {
+      try {
+        map.invalidateSize?.();
+      } catch {}
+    }, 50);
+    setTimeout(() => {
+      try {
+        map.invalidateSize?.();
+      } catch {}
+    }, 220);
+  }, []);
+
   const refreshGeofenceList = useCallback(async () => {
     const orgId = currentOrg?.id || null;
     try {
@@ -506,6 +524,12 @@ export default function NuevaGeocerca() {
   useEffect(() => {
     refreshGeofenceList();
   }, [refreshGeofenceList]);
+
+
+  // Cuando cambia la lista (crear/eliminar), forzamos recalculo del mapa sin necesidad de refresh
+  useEffect(() => {
+    invalidateMapSize();
+  }, [geofenceList.length, invalidateMapSize]);
 
   useEffect(() => {
     let mounted = true;
@@ -715,9 +739,29 @@ export default function NuevaGeocerca() {
 
     // 5) UX post-save (SILENCIOSO)
     if (upsertOk) {
+      // Asegurar presencia inmediata en la lista (sin refresh) y auto-seleccionar
+      setGeofenceList((prev) =>
+        mergeUniqueByNombre([
+          { id: `saved-${Date.now()}`, nombre: nm, source: "local" },
+          ...(prev || []),
+        ])
+      );
+      setSelectedNames(() => new Set([nm]));
+      setLastSelectedName(nm);
+
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
+
+      // Fit bounds + estabilizar tamaño del mapa
+      try {
+        const map = mapRef.current;
+        if (map) {
+          const bounds = L.geoJSON(geo).getBounds();
+          if (bounds?.isValid?.()) map.fitBounds(bounds, { padding: [40, 40] });
+        }
+      } catch {}
+      invalidateMapSize();
 
       setGeofenceName("");
       setDraftFeature(null);
@@ -730,7 +774,7 @@ export default function NuevaGeocerca() {
       console.warn("[NuevaGeocerca] refresh falló (no crítico)", e);
       // Regla: si se guardó, NO emitimos mensajes.
     }
-  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr]);
+  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr, pinGeofenceName, invalidateMapSize]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
