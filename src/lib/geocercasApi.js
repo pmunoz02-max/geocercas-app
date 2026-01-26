@@ -1,9 +1,9 @@
 // src/lib/geocercasApi.js
 // ============================================================
-// API-FIRST client for /api/geocercas
-// Contrato canónico:
-// - Si HTTP es OK → la operación fue exitosa
-// - El frontend NO infiere error por body vacío
+// CANONICAL client for /api/geocercas (TENANT-SAFE)
+// - NO orgId
+// - NO tenantId
+// - Backend resuelve contexto vía RPC
 // ============================================================
 
 function pickErrorMessage(payload) {
@@ -53,50 +53,15 @@ async function requestJson(url, { method = "GET", body } = {}) {
     throw err;
   }
 
-  return payload; // puede ser null, string, objeto, etc.
-}
-
-function normalizeOrgId(input) {
-  return (
-    input?.orgId ||
-    input?.org_id ||
-    input?.org ||
-    input?.tenant_id ||
-    input?.tenantId ||
-    null
-  );
-}
-
-function normalizeNombre(input) {
-  return input?.nombre || input?.name || input?.title || null;
-}
-
-function normalizeNombreCi(nombre, fallback) {
-  if (typeof fallback === "string" && fallback.trim())
-    return fallback.trim().toLowerCase();
-  return String(nombre || "").trim().toLowerCase();
-}
-
-function buildGeocercasUrl(base, orgId, extra = {}) {
-  const qs = new URLSearchParams();
-  if (orgId) qs.set("orgId", String(orgId));
-  Object.entries(extra).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === "") return;
-    qs.set(k, String(v));
-  });
-  const q = qs.toString();
-  return q ? `${base}?${q}` : base;
+  return payload;
 }
 
 /**
- * List
+ * LIST (canonical)
+ * Backend decides tenant + org
  */
-export async function listGeocercas({ orgId, onlyActive = true } = {}) {
-  if (!orgId) return [];
-  const url = buildGeocercasUrl("/api/geocercas", orgId, {
-    onlyActive: String(!!onlyActive),
-  });
-  const data = await requestJson(url, { method: "GET" });
+export async function listGeocercas() {
+  const data = await requestJson("/api/geocercas", { method: "GET" });
 
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.rows)) return data.rows;
@@ -105,90 +70,40 @@ export async function listGeocercas({ orgId, onlyActive = true } = {}) {
 }
 
 /**
- * Get one
+ * GET ONE
  */
-export async function getGeocerca({ id, orgId } = {}) {
+export async function getGeocerca(id) {
   if (!id) throw new Error("getGeocerca requiere id");
-  if (!orgId) throw new Error("getGeocerca requiere orgId");
-  const url = buildGeocercasUrl("/api/geocercas", orgId, { id });
-  const data = await requestJson(url, { method: "GET" });
+  const data = await requestJson(`/api/geocercas?id=${id}`, { method: "GET" });
   return data?.row || data?.data || data;
 }
 
 /**
- * Upsert (CANÓNICO)
+ * UPSERT (canonical)
+ * Backend ignora org/tenant del cliente
  */
 export async function upsertGeocerca(payload = {}) {
-  const orgId = normalizeOrgId(payload);
-  const nombre = normalizeNombre(payload);
-
-  if (!orgId) throw new Error("Falta orgId en upsertGeocerca()");
-  if (!nombre) throw new Error("Falta nombre en upsertGeocerca()");
-
-  const nombre_ci = normalizeNombreCi(nombre, payload?.nombre_ci);
-
-  const geojson =
-    payload.geojson ??
-    payload.geometry ??
-    payload.geom ??
-    payload.geo ??
-    null;
-
-  const activa = payload.activa ?? payload.active ?? payload.activo ?? true;
-  const visible = payload.visible ?? true;
+  if (!payload?.nombre && !payload?.name) {
+    throw new Error("upsertGeocerca requiere nombre");
+  }
 
   const body = {
     ...payload,
-    orgId,
-    org_id: orgId,
-    nombre,
-    name: nombre,
-    nombre_ci,
-    geojson,
-    geometry: geojson,
-    geom: geojson,
-    activa,
-    activo: activa,
-    active: activa,
-    visible,
+    nombre: payload.nombre ?? payload.name,
   };
 
-  const url = buildGeocercasUrl("/api/geocercas", orgId);
+  const data = await requestJson("/api/geocercas", {
+    method: "POST",
+    body,
+  });
 
-  const data = await requestJson(url, { method: "POST", body });
-
-  // 🔒 CONTRATO FUERTE:
-  // Si no hubo error HTTP → el guardado fue exitoso
-  return (
-    data?.row ||
-    data?.data ||
-    data || {
-      ok: true,
-      orgId,
-      nombre,
-      nombre_ci,
-    }
-  );
+  return data?.row || data?.data || data || { ok: true };
 }
 
 /**
- * Delete
+ * DELETE
  */
-export async function deleteGeocerca({ orgId, id, nombres_ci } = {}) {
-  if (!orgId) throw new Error("deleteGeocerca requiere orgId");
-
-  if (id) {
-    const url = buildGeocercasUrl("/api/geocercas", orgId, { id });
-    return await requestJson(url, { method: "DELETE" });
-  }
-
-  if (Array.isArray(nombres_ci) && nombres_ci.length) {
-    const url = buildGeocercasUrl("/api/geocercas", orgId);
-    return await requestJson(url, {
-      method: "POST",
-      body: { orgId, org_id: orgId, delete: true, nombres_ci },
-    });
-  }
-
-  throw new Error("deleteGeocerca requiere id o nombres_ci");
+export async function deleteGeocerca(id) {
+  if (!id) throw new Error("deleteGeocerca requiere id");
+  return await requestJson(`/api/geocercas?id=${id}`, { method: "DELETE" });
 }
