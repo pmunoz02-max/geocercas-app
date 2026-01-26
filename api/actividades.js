@@ -1,19 +1,18 @@
 // api/actividades.js
 //
-// Actividades API (multi-tenant)
-// Auth por cookie HttpOnly: tg_at
-// Contexto por RPC: public.bootstrap_session_context()
-// Autocura: SIEMPRE intenta asegurar memberships con public.ensure_membership_for_current_user()
-// NO org_id desde frontend.
+// Actividades API (multi-tenant) - FIX DEFINITIVO
+// Problema raíz: app.tenant_id (GUC) NO persiste entre llamadas Supabase (cada .rpc/.from es una request distinta).
+// Solución universal/permanente: TODA lectura/escritura de activities se hace vía RPC que:
+// - resuelve org_id (tenant) en DB
+// - setea app.tenant_id dentro de ESA misma transacción
+// - ejecuta el SELECT/INSERT/UPDATE/DELETE y retorna
 //
-// NOTA DE ESQUEMA (según tu DB):
-// - activities.tenant_id: uuid NOT NULL  -> lo llenamos con orgId resuelto
-// - activities.org_id: uuid NULLABLE     -> lo llenamos por compatibilidad
-// - NO existe activities.updated_at      -> NO lo pedimos en select
+// Auth por cookie HttpOnly: tg_at
+// Frontend NO envía org_id.
 
 import { createClient } from "@supabase/supabase-js";
 
-const API_VERSION = "actividades-api-2026-01-26-r3-ensure-first";
+const API_VERSION = "actividades-api-2026-01-26-r4-rpc-only";
 
 function json(res, status, payload) {
   res.status(status);
@@ -51,42 +50,7 @@ function buildSupabaseForUser(accessToken) {
   });
 }
 
-function normalizeCtx(ctx) {
-  if (Array.isArray(ctx)) return ctx[0] ?? null;
-  return ctx ?? null;
-}
-
-function asUuidOrNull(v) {
-  if (typeof v !== "string") return null;
-  const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
-  return ok ? v : null;
-}
-
-function extractOrgId(ctxObj) {
-  const candidate =
-    ctxObj?.org_id ??
-    ctxObj?.current_org_id ??
-    ctxObj?.currentOrgId ??
-    ctxObj?.current_org?.id ??
-    ctxObj?.org?.id ??
-    (Array.isArray(ctxObj?.orgs) && ctxObj.orgs[0]?.id) ??
-    null;
-
-  return asUuidOrNull(candidate);
-}
-
-function extractRole(ctxObj) {
-  const r =
-    ctxObj?.role ??
-    ctxObj?.current_role ??
-    ctxObj?.currentRole ??
-    ctxObj?.membership?.role ??
-    null;
-
-  return typeof r === "string" ? r : null;
-}
-
-async function resolveContext(req) {
+async function getSupabase(req) {
   const accessToken = getCookie(req, "tg_at");
   if (!accessToken) return { ok: false, status: 401, error: "No session cookie (tg_at)" };
 
@@ -95,99 +59,26 @@ async function resolveContext(req) {
   const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
   if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-  const userId = userData.user.id;
-
-  // 1) Asegurar memberships SIEMPRE (universal y permanente)
-  //    Esto hace que bootstrap_session_context no dependa de que un trigger haya corrido antes.
-  const { error: ensureErr } = await supabase.rpc("ensure_membership_for_current_user");
-  if (ensureErr) {
-    return { ok: false, status: 500, error: ensureErr.message || "ensure_membership_for_current_user failed" };
-  }
-
-  // 2) Ejecutar bootstrap de contexto
-  const { data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
-  if (ctxErr) {
-    // Diagnóstico universal: revisar si aún no hay memberships visibles
-    const { data: ms, error: msErr } = await supabase
-      .from("memberships")
-      .select("org_id,is_default,role,created_at")
-      .eq("user_id", userId)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: true })
-      .limit(5);
-
-    return {
-      ok: false,
-      status: 500,
-      error: ctxErr.message || "bootstrap_session_context failed",
-      debug: {
-        user_id: userId,
-        memberships_visible_count: msErr ? null : (ms?.length || 0),
-        memberships_sample: msErr ? null : ms,
-        memberships_read_error: msErr ? msErr.message : null,
-        hint:
-          "Si memberships_visible_count=0, entonces ensure_default_org_for_current_user NO está creando memberships para este usuario. Revisar RLS/triggers/funciones ensure_*.",
-      },
-    };
-  }
-
-  const ctxObj = normalizeCtx(ctxRaw);
-  const orgId = extractOrgId(ctxObj);
-  const role = extractRole(ctxObj);
-
-  if (!orgId) {
-    // Diagnóstico universal: memberships visibles
-    const { data: ms, error: msErr } = await supabase
-      .from("memberships")
-      .select("org_id,is_default,role,created_at")
-      .eq("user_id", userId)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: true })
-      .limit(5);
-
-    return {
-      ok: false,
-      status: 403,
-      error: "No org resolved for current user",
-      debug: {
-        user_id: userId,
-        memberships_visible_count: msErr ? null : (ms?.length || 0),
-        memberships_sample: msErr ? null : ms,
-        memberships_read_error: msErr ? msErr.message : null,
-        hint:
-          "bootstrap_session_context no devolvió org_id. Si memberships_visible_count>0, revisa extractOrgId() vs shape real del ctx.",
-      },
-    };
-  }
-
-  return { ok: true, status: 200, supabase, user: userData.user, orgId, role };
+  return { ok: true, status: 200, supabase, user: userData.user };
 }
 
 export default async function handler(req, res) {
   try {
-    const ctx = await resolveContext(req);
-    if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error, debug: ctx.debug });
+    const ctx = await getSupabase(req);
+    if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error });
 
-    const { supabase, orgId } = ctx;
-
-    const tenantId = orgId;
+    const { supabase } = ctx;
     const id = typeof req.query?.id === "string" ? req.query.id : null;
 
     // ---------- GET ----------
     if (req.method === "GET") {
       const includeInactive = req.query?.includeInactive === "true" || req.query?.includeInactive === "1";
 
-      let q = supabase
-        .from("activities")
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
-        .eq("tenant_id", tenantId)
-        .order("name", { ascending: true });
+      const { data, error } = await supabase.rpc("activities_list", {
+        p_include_inactive: includeInactive,
+      });
 
-      if (!includeInactive) q = q.eq("active", true);
-
-      const { data, error } = await q;
       if (error) return json(res, 400, { ok: false, error: error.message });
-
       return json(res, 200, { ok: true, data: data || [] });
     }
 
@@ -197,57 +88,39 @@ export default async function handler(req, res) {
       const name = String(body?.name || "").trim();
       if (!name) return json(res, 400, { ok: false, error: "Missing name" });
 
-      const payload = {
-        tenant_id: tenantId,
-        org_id: tenantId,
-        name,
-        description: body?.description ?? null,
-        active: body?.active ?? true,
-        currency_code: body?.currency_code ?? "USD",
-        hourly_rate: body?.hourly_rate ?? null,
-      };
-
-      const { data, error } = await supabase
-        .from("activities")
-        .insert(payload)
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
-        .single();
+      const { data, error } = await supabase.rpc("activities_create", {
+        p_name: name,
+        p_description: body?.description ?? null,
+        p_active: body?.active ?? true,
+        p_currency_code: body?.currency_code ?? "USD",
+        p_hourly_rate: body?.hourly_rate ?? null,
+      });
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 201, { ok: true, data });
+      const row = Array.isArray(data) ? data[0] : data;
+      return json(res, 201, { ok: true, data: row });
     }
 
-    // Requiere id
+    // Requiere id para PUT/PATCH/DELETE
     if (!id) return json(res, 400, { ok: false, error: "Missing id query param (?id=...)" });
 
     // ---------- PUT ----------
     if (req.method === "PUT") {
       const body = safeJson(req.body);
+      const patchName = body?.name !== undefined ? String(body.name).trim() : null;
+      if (body?.name !== undefined && !patchName) return json(res, 400, { ok: false, error: "Invalid name" });
 
-      const patch = {
-        name: body?.name !== undefined ? String(body.name).trim() : undefined,
-        description: body?.description !== undefined ? (body.description || null) : undefined,
-        currency_code: body?.currency_code !== undefined ? (body.currency_code || "USD") : undefined,
-        hourly_rate: body?.hourly_rate !== undefined ? body.hourly_rate : undefined,
-      };
-      Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
-
-      if (patch.name !== undefined && !patch.name) {
-        return json(res, 400, { ok: false, error: "Invalid name" });
-      }
-
-      const { data, error } = await supabase
-        .from("activities")
-        .update(patch)
-        .eq("id", id)
-        .eq("tenant_id", tenantId)
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
-        .single();
+      const { data, error } = await supabase.rpc("activities_update", {
+        p_id: id,
+        p_name: body?.name !== undefined ? patchName : null,
+        p_description: body?.description !== undefined ? (body.description || null) : null,
+        p_currency_code: body?.currency_code !== undefined ? (body.currency_code || "USD") : null,
+        p_hourly_rate: body?.hourly_rate !== undefined ? body.hourly_rate : null,
+      });
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 200, { ok: true, data });
+      const row = Array.isArray(data) ? data[0] : data;
+      return json(res, 200, { ok: true, data: row });
     }
 
     // ---------- PATCH (active) ----------
@@ -255,30 +128,21 @@ export default async function handler(req, res) {
       const body = safeJson(req.body);
       const active = Boolean(body?.active);
 
-      const { data, error } = await supabase
-        .from("activities")
-        .update({ active })
-        .eq("id", id)
-        .eq("tenant_id", tenantId)
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
-        .single();
+      const { data, error } = await supabase.rpc("activities_set_active", {
+        p_id: id,
+        p_active: active,
+      });
 
       if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 200, { ok: true, data });
+      const row = Array.isArray(data) ? data[0] : data;
+      return json(res, 200, { ok: true, data: row });
     }
 
     // ---------- DELETE ----------
     if (req.method === "DELETE") {
-      const { error } = await supabase
-        .from("activities")
-        .delete()
-        .eq("id", id)
-        .eq("tenant_id", tenantId);
-
+      const { data, error } = await supabase.rpc("activities_delete", { p_id: id });
       if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, data });
     }
 
     return json(res, 405, { ok: false, error: "Method not allowed" });
