@@ -3,12 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
-const VERSION = "personal-api-v18-cookie-refresh-org-context";
+const VERSION = "personal-api-v19-rpc-write-tenant-guc";
 
 /* =========================
-   Cookies
+   Cookies helpers (igual a tu session)
 ========================= */
-
 function parseCookies(cookieHeader) {
   const out = {};
   if (!cookieHeader) return out;
@@ -18,11 +17,7 @@ function parseCookies(cookieHeader) {
     const k = p.slice(0, i).trim();
     const v = p.slice(i + 1).trim();
     if (!k) continue;
-    try {
-      out[k] = decodeURIComponent(v);
-    } catch {
-      out[k] = v;
-    }
+    try { out[k] = decodeURIComponent(v); } catch { out[k] = v; }
   }
   return out;
 }
@@ -45,10 +40,6 @@ function makeCookie(name, value, opts = {}) {
   return s;
 }
 
-/* =========================
-   Response helpers
-========================= */
-
 function json(res, status, payload) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -69,11 +60,7 @@ async function readBody(req) {
   for await (const c of req) chunks.push(c);
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(raw); } catch { return {}; }
 }
 
 function normalizeCtx(data) {
@@ -87,34 +74,6 @@ function requireWriteRole(role) {
   return r === "owner" || r === "admin" || r === "root" || r === "root_owner";
 }
 
-/* =========================
-   Phone normalization
-========================= */
-
-function onlyDigits(s) {
-  return String(s || "").replace(/[^\d]/g, "");
-}
-
-// Ecuador friendly E.164 (solo si se puede asegurar)
-function toE164(rawPhone) {
-  const p = String(rawPhone || "").trim();
-  if (!p) return null;
-
-  if (p.startsWith("+")) {
-    const d = onlyDigits(p);
-    if (d.length >= 8 && d.length <= 15) return `+${d}`;
-    return null;
-  }
-
-  const d = onlyDigits(p);
-  if (d.length >= 11 && d.length <= 15) return `+${d}`;
-
-  // Ecuador: 0XXXXXXXXX (10) => +593XXXXXXXXX
-  if (d.length === 10 && d.startsWith("0")) return `+593${d.slice(1)}`;
-
-  return null;
-}
-
 function safeUuid(s) {
   const x = String(s || "").trim();
   if (!x) return null;
@@ -123,12 +82,10 @@ function safeUuid(s) {
 }
 
 /* =========================
-   Refresh token (igual a session.js)
+   Refresh token
 ========================= */
-
 async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   const url = `${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/token?grant_type=refresh_token`;
-
   const r = await fetch(url, {
     method: "POST",
     headers: {
@@ -140,22 +97,17 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   });
 
   const text = await r.text();
-  let json = {};
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    json = { raw: text };
-  }
+  let j = {};
+  try { j = text ? JSON.parse(text) : {}; } catch { j = { raw: text }; }
 
-  if (!r.ok || !json?.access_token) {
-    const msg = json?.error_description || json?.error || "Failed to refresh token";
+  if (!r.ok || !j?.access_token) {
+    const msg = j?.error_description || j?.error || "Failed to refresh token";
     const err = new Error(msg);
     err.status = 401;
-    err.body = json || null;
+    err.body = j || null;
     throw err;
   }
-
-  return json;
+  return j;
 }
 
 async function getUserFromAccessToken({ url, anonKey, accessToken }) {
@@ -169,26 +121,12 @@ async function getUserFromAccessToken({ url, anonKey, accessToken }) {
 }
 
 /* =========================
-   Context Resolver (cookie-first, refresh-safe)
+   Context resolver (cookie-based)
 ========================= */
-
 async function resolveContext(req, res) {
-  const SUPABASE_URL = getEnv([
-    "SUPABASE_URL",
-    "VITE_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_URL",
-  ]);
-
-  const SUPABASE_ANON_KEY = getEnv([
-    "SUPABASE_ANON_KEY",
-    "VITE_SUPABASE_ANON_KEY",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  ]);
-
-  const SUPABASE_SERVICE_ROLE_KEY = getEnv([
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "SUPABASE_SERVICE_KEY",
-  ]);
+  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
+  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
     return {
@@ -209,30 +147,20 @@ async function resolveContext(req, res) {
   let access_token = cookies.tg_at || "";
   const refresh_token = cookies.tg_rt || "";
 
-  // Si no hay access token, pero sí refresh, refrescar y setear cookies
+  // refresh if needed
   if (!access_token && refresh_token) {
-    const r = await refreshAccessToken({
-      supabaseUrl: SUPABASE_URL,
-      anonKey: SUPABASE_ANON_KEY,
-      refreshToken: refresh_token,
-    });
-
+    const r = await refreshAccessToken({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, refreshToken: refresh_token });
     access_token = r.access_token;
 
-    const accessMaxAge = Number(r.expires_in || 3600);
-    const refreshMaxAge = 30 * 24 * 60 * 60;
-
     res.setHeader("Set-Cookie", [
-      makeCookie("tg_at", r.access_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: accessMaxAge }),
-      makeCookie("tg_rt", r.refresh_token || refresh_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: refreshMaxAge }),
+      makeCookie("tg_at", r.access_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: Number(r.expires_in || 3600) }),
+      makeCookie("tg_rt", r.refresh_token || refresh_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 30 * 24 * 60 * 60 }),
     ]);
   }
 
-  if (!access_token) {
-    return { ok: false, status: 401, error: "No autenticado", details: "Falta tg_at y tg_rt" };
-  }
+  if (!access_token) return { ok: false, status: 401, error: "No autenticado", details: "Falta tg_at y tg_rt" };
 
-  // Validar usuario con access token (si falla, intentar refresh una vez)
+  // validate user (try refresh once if invalid)
   let sbUser, user;
   {
     const r = await getUserFromAccessToken({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, accessToken: access_token });
@@ -240,20 +168,12 @@ async function resolveContext(req, res) {
     user = r.user;
 
     if (!user && refresh_token) {
-      const refreshed = await refreshAccessToken({
-        supabaseUrl: SUPABASE_URL,
-        anonKey: SUPABASE_ANON_KEY,
-        refreshToken: refresh_token,
-      });
-
+      const refreshed = await refreshAccessToken({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, refreshToken: refresh_token });
       access_token = refreshed.access_token;
 
-      const accessMaxAge = Number(refreshed.expires_in || 3600);
-      const refreshMaxAge = 30 * 24 * 60 * 60;
-
       res.setHeader("Set-Cookie", [
-        makeCookie("tg_at", refreshed.access_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: accessMaxAge }),
-        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: refreshMaxAge }),
+        makeCookie("tg_at", refreshed.access_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: Number(refreshed.expires_in || 3600) }),
+        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 30 * 24 * 60 * 60 }),
       ]);
 
       const r2 = await getUserFromAccessToken({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, accessToken: access_token });
@@ -262,15 +182,13 @@ async function resolveContext(req, res) {
     }
   }
 
-  if (!user) {
-    return { ok: false, status: 401, error: "Sesión inválida", details: "No user" };
-  }
+  if (!user) return { ok: false, status: 401, error: "Sesión inválida", details: "No user" };
 
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // Contexto por RPC (user) y fallback admin
+  // ctx via RPC (user) fallback admin
   let ctx = null;
   try {
     const { data, error } = await sbUser.rpc("bootstrap_session_context");
@@ -278,25 +196,15 @@ async function resolveContext(req, res) {
   } catch {}
 
   if (!ctx?.org_id || !ctx?.role) {
-    const { data, error } = await supaSrv.rpc("bootstrap_session_context_admin", {
-      p_user_id: user.id,
-    });
-    if (error) {
-      return { ok: false, status: 403, error: "Contexto no inicializado (org/rol)", details: error.message };
-    }
+    const { data, error } = await supaSrv.rpc("bootstrap_session_context_admin", { p_user_id: user.id });
+    if (error) return { ok: false, status: 403, error: "Contexto no inicializado (org/rol)", details: error.message };
     ctx = normalizeCtx(data);
   }
 
-  if (!ctx?.org_id || !ctx?.role) {
-    return { ok: false, status: 403, error: "Contexto incompleto", details: "Falta org_id o role" };
-  }
+  if (!ctx?.org_id || !ctx?.role) return { ok: false, status: 403, error: "Contexto incompleto", details: "Falta org_id o role" };
 
   return { ok: true, user, ctx, supaSrv };
 }
-
-/* =========================
-   Org override SAFE
-========================= */
 
 async function resolveEffectiveOrgId({ req, ctx, userId, supaSrv }) {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -314,14 +222,12 @@ async function resolveEffectiveOrgId({ req, ctx, userId, supaSrv }) {
 
   if (error) return { org_id: ctx.org_id, source: "ctx_membership_check_error" };
   if (!data?.role) return { org_id: ctx.org_id, source: "ctx_not_member" };
-
   return { org_id: requestedOrgId, source: `query_member:${String(data.role).toLowerCase()}` };
 }
 
 /* =========================
-   Handlers
+   GET (list)
 ========================= */
-
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req, res);
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
@@ -365,137 +271,73 @@ async function handleList(req, res) {
 
   return json(res, 200, {
     items: data || [],
-    ...(debug ? { debug: { ctx_org_id: ctx.org_id, effective_org_id: orgIdToUse, org_source: eff.source, role: ctx.role, onlyActive, limit } } : {}),
+    ...(debug
+      ? { debug: { ctx_org_id: ctx.org_id, effective_org_id: orgIdToUse, org_source: eff.source, role: ctx.role, onlyActive, limit } }
+      : {}),
   });
 }
 
+/* =========================
+   POST (writes via RPC)
+========================= */
 async function handlePost(req, res) {
   const ctxRes = await resolveContext(req, res);
   if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
 
-  const eff = await resolveEffectiveOrgId({ req, ctx, userId: user.id, supaSrv });
-  const orgIdToUse = eff.org_id;
-
   if (!requireWriteRole(ctx.role)) {
     return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
   }
 
-  const payload = (await readBody(req)) || {};
-  const nowIso = new Date().toISOString();
+  const eff = await resolveEffectiveOrgId({ req, ctx, userId: user.id, supaSrv });
+  const orgIdToUse = eff.org_id;
 
+  const payload = (await readBody(req)) || {};
   const action = String(payload.action || "").toLowerCase();
-  const id = payload.id ? String(payload.id) : null;
 
   if (action === "toggle") {
+    const id = payload.id;
     if (!id) return json(res, 400, { error: "Falta id" });
 
-    const { data: cur, error: curErr } = await supaSrv
-      .from("personal")
-      .select("id, vigente, is_deleted")
-      .eq("id", id)
-      .eq("org_id", orgIdToUse)
-      .maybeSingle();
+    const { data, error } = await supaSrv.rpc("personal_toggle_admin", {
+      p_org_id: orgIdToUse,
+      p_user_id: user.id,
+      p_id: id,
+    });
 
-    if (curErr) return json(res, 500, { error: "No se pudo leer registro", details: curErr.message });
-    if (!cur || cur.is_deleted) return json(res, 404, { error: "No encontrado" });
-
-    const nextVigente = !cur.vigente;
-
-    const { data: upd, error: updErr } = await supaSrv
-      .from("personal")
-      .update({ vigente: nextVigente, updated_at: nowIso })
-      .eq("id", id)
-      .eq("org_id", orgIdToUse)
-      .select("*")
-      .maybeSingle();
-
-    if (updErr) return json(res, 500, { error: "No se pudo cambiar estado", details: updErr.message });
-    return json(res, 200, { item: upd, toggled: true });
+    if (error) return json(res, 500, { error: "No se pudo cambiar estado", details: error.message });
+    return json(res, 200, { item: data });
   }
 
   if (action === "delete") {
+    const id = payload.id;
     if (!id) return json(res, 400, { error: "Falta id" });
 
-    const { data: del, error: delErr } = await supaSrv
-      .from("personal")
-      .update({ is_deleted: true, deleted_at: nowIso, updated_at: nowIso })
-      .eq("id", id)
-      .eq("org_id", orgIdToUse)
-      .select("*")
-      .maybeSingle();
+    const { data, error } = await supaSrv.rpc("personal_delete_admin", {
+      p_org_id: orgIdToUse,
+      p_user_id: user.id,
+      p_id: id,
+    });
 
-    if (delErr) return json(res, 500, { error: "No se pudo eliminar", details: delErr.message });
-    if (!del) return json(res, 404, { error: "No encontrado" });
-
-    return json(res, 200, { item: del, deleted: true });
+    if (error) return json(res, 500, { error: "No se pudo eliminar", details: error.message });
+    return json(res, 200, { item: data });
   }
 
-  // UPSERT (create / revive by email)
-  const nombre = (payload.nombre || "").trim();
-  const apellido = (payload.apellido || "").trim();
-  const email = (payload.email || "").trim().toLowerCase();
-  const documento = (payload.documento || "").trim() || null;
+  // upsert (default)
+  const { data, error } = await supaSrv.rpc("personal_upsert_admin", {
+    p_org_id: orgIdToUse,
+    p_user_id: user.id,
+    p_payload: payload,
+  });
 
-  const telefonoRaw = (payload.telefono || "").trim();
-  const telefonoE164 = toE164(telefonoRaw);
-
-  if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
-  if (!email) return json(res, 400, { error: "Email es obligatorio" });
-
-  const vigente = payload.vigente === undefined ? true : !!payload.vigente;
-
-  const baseRow = {
-    nombre,
-    apellido: apellido || null,
-    email,
-    documento,
-    telefono: telefonoE164 || null,
-    telefono_raw: telefonoRaw || null,
-    vigente,
-    updated_at: nowIso,
-  };
-
-  const { data: existing, error: findErr } = await supaSrv
-    .from("personal")
-    .select("id, is_deleted")
-    .eq("org_id", orgIdToUse)
-    .eq("email", email)
-    .maybeSingle();
-
-  if (findErr) return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
-
-  if (existing) {
-    const { data, error } = await supaSrv
-      .from("personal")
-      .update({ ...baseRow, is_deleted: false, deleted_at: null })
-      .eq("id", existing.id)
-      .eq("org_id", orgIdToUse)
-      .select("*")
-      .maybeSingle();
-
-    if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
-    return json(res, 200, { item: data, revived: true });
+  if (error) {
+    // si viene P0001 por validación, mejor 400
+    const isValidation = String(error.code || "") === "P0001";
+    return json(res, isValidation ? 400 : 500, { error: "No se pudo crear personal", details: error.message });
   }
 
-  const insertRow = {
-    ...baseRow,
-    org_id: orgIdToUse,
-    owner_id: user.id,
-    created_at: nowIso,
-    is_deleted: false,
-    position_interval_sec: 300,
-  };
-
-  const { data, error } = await supaSrv
-    .from("personal")
-    .insert(insertRow)
-    .select("*")
-    .maybeSingle();
-
-  if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
-  return json(res, 200, { item: data, created: true });
+  return json(res, 200, { item: data });
 }
 
 export default async function handler(req, res) {
