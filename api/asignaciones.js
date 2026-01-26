@@ -132,24 +132,19 @@ async function loadCatalogs(supabase, { orgId, tenantId }) {
   // Activities (org_id -> fallback legacy)
   let activities = [];
   {
-    let r1 = await supabase
-      .from("activities")
-      .select("id,name,org_id")
-      .eq("org_id", orgId)
-      .order("name", { ascending: true });
+   let activities = [];
+{
+  const { data, error } = await supabase.rpc("activities_list", {
+    p_include_inactive: false,
+  });
 
-    if (!r1.error && Array.isArray(r1.data) && r1.data.length > 0) {
-      activities = r1.data;
-    } else {
-      let r2 = await supabase
-        .from("activities")
-        .select("id,name,tenant_id")
-        .eq("tenant_id", orgId) // legacy posible
-        .order("name", { ascending: true });
-
-      if (!r2.error) activities = r2.data || [];
-    }
+  if (!error && Array.isArray(data)) {
+    activities = data.map((a) => ({
+      id: a.id,
+      name: a.name,
+    }));
   }
+}
 
   // Alias de compatibilidad para UIs viejas
   const people = personal.map((p) => ({
