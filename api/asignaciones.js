@@ -3,7 +3,8 @@
 // - cookie HttpOnly tg_at
 // - contexto via public.bootstrap_session_context()
 // - normaliza array vs objeto
-// - NO accede directo a activities (usa RPC activities_list) ✅ Nota Técnica
+// - NO accede directo a activities (usa RPC activities_list) ✅
+// - Geocercas via RPC list_geocercas_for_assign ✅
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -52,21 +53,11 @@ function pickOrgId(ctx) {
 function supabaseForToken(accessToken) {
   const url = process.env.SUPABASE_URL;
   const anon = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anon) {
-    // Si esto explota, en Vercel verás error claro en response (no genérico),
-    // PERO igual lo dejamos explícito.
-    throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
-  }
+  if (!url || !anon) throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
 
   return createClient(url, anon, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-    },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
   });
 }
 
@@ -92,7 +83,6 @@ async function getContextOr401(req) {
 
   const supabase = supabaseForToken(token);
 
-  // Nota: bootstrap_session_context() puede crear org/roles si estás “huérfano”
   const { data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
   if (ctxErr) return { ok: false, status: 401, error: ctxErr.message || "ctx rpc error" };
 
@@ -107,8 +97,18 @@ async function getContextOr401(req) {
   return { ok: true, supabase, tenantId, orgId };
 }
 
+function normalizeGeocercas(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((g) => ({
+      id: g.id ?? g.geocerca_id ?? g.fence_id ?? g.uuid ?? null,
+      nombre: g.nombre ?? g.name ?? g.label ?? g.title ?? null,
+    }))
+    .filter((g) => g.id);
+}
+
 async function loadCatalogs(supabase, { orgId, tenantId }) {
-  // ✅ Personal (mismo catálogo que PersonalPage)
+  // ✅ Personal
   let personal = [];
   {
     let q = supabase
@@ -118,31 +118,43 @@ async function loadCatalogs(supabase, { orgId, tenantId }) {
       .order("nombre", { ascending: true });
 
     if (orgId) q = q.eq("org_id", orgId);
-    else q = q.eq("tenant_id", tenantId); // legacy por si existiera
+    else q = q.eq("tenant_id", tenantId);
 
     const r = await q;
     if (!r.error) personal = r.data || [];
   }
 
-  // ✅ Geocercas
+  // ✅ Geocercas via RPC (tenant-safe)
   let geocercas = [];
   {
-    let q = supabase
-      .from("geocercas")
-      .select("id,nombre,org_id")
-      .order("nombre", { ascending: true });
+    const { data, error } = await supabase.rpc("list_geocercas_for_assign");
+    if (!error) {
+      geocercas = normalizeGeocercas(data);
+    } else {
+      // Fallback ultra defensivo (por si la RPC no existiera en algún entorno)
+      let r1 = await supabase
+        .from("geocercas")
+        .select("id,nombre,org_id,tenant_id")
+        .order("nombre", { ascending: true });
 
-    if (orgId) q = q.eq("org_id", orgId);
-    else q = q.eq("tenant_id", tenantId);
-
-    const r = await q;
-    if (!r.error) geocercas = r.data || [];
+      // Intentar ambos filtros si vienen valores
+      if (!r1.error) {
+        let rows = r1.data || [];
+        if (orgId) {
+          const byOrg = rows.filter((x) => x.org_id === orgId);
+          if (byOrg.length) geocercas = byOrg.map((x) => ({ id: x.id, nombre: x.nombre }));
+        }
+        if (!geocercas.length && tenantId) {
+          const byTenant = rows.filter((x) => x.tenant_id === tenantId);
+          if (byTenant.length) geocercas = byTenant.map((x) => ({ id: x.id, nombre: x.nombre }));
+        }
+      }
+    }
   }
 
-  // ✅ Activities: RPC ONLY (tenant-safe) — NO .from("activities")
+  // ✅ Activities via RPC
   let activities = [];
   {
-    // Espera firma: activities_list(p_include_inactive boolean)
     const { data, error } = await supabase.rpc("activities_list", {
       p_include_inactive: false,
     });
@@ -155,9 +167,9 @@ async function loadCatalogs(supabase, { orgId, tenantId }) {
     }
   }
 
-  // Alias de compatibilidad para UIs viejas
+  // Alias compat
   const people = personal.map((p) => ({
-    org_people_id: p.id, // alias para selects viejos (usa el id de personal)
+    org_people_id: p.id,
     nombre: p.nombre,
     apellido: p.apellido,
     email: p.email,
@@ -214,19 +226,14 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = (await readJson(req)) || {};
 
-      // Forzar contexto
       const payload = {
         ...body,
         org_id: orgId ?? null,
         tenant_id: tenantId ?? body.tenant_id ?? null,
       };
 
-      // ✅ Canon: personal_id obligatorio
-      if (!payload.personal_id) {
-        return json(res, 400, { ok: false, error: "personal_id is required" });
-      }
+      if (!payload.personal_id) return json(res, 400, { ok: false, error: "personal_id is required" });
 
-      // Nunca confiar en org_people_id desde cliente
       delete payload.org_people_id;
 
       const { data, error } = await supabase.from("asignaciones").insert(payload).select("*").single();
@@ -244,8 +251,6 @@ export default async function handler(req, res) {
       const safe = { ...patch };
       delete safe.org_id;
       delete safe.tenant_id;
-
-      // Si estás migrando: permitimos actualizar personal_id
       delete safe.org_people_id;
 
       let q = supabase.from("asignaciones").update(safe).eq("id", id);
@@ -278,7 +283,6 @@ export default async function handler(req, res) {
     return json(res, 405, { ok: false, error: "method not allowed" });
   } catch (e) {
     console.error("[api/asignaciones] fatal:", e);
-    // Importante: devolver mensaje real ayuda a no ver el genérico de Vercel
     return json(res, 500, { ok: false, error: e?.message || "fatal" });
   }
 }
