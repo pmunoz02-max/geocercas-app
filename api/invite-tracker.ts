@@ -9,8 +9,8 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
-    const { email, org_id, person_id } = req.body || {};
-    if (!email || !org_id || !person_id) {
+    const { email, org_id } = req.body || {};
+    if (!email || !org_id) {
       return res.status(400).json({ error: "Missing params" });
     }
 
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
       userId = created.user.id;
     }
 
-    // 3️⃣ Crear / asegurar rol tracker
+    // 3️⃣ Crear / asegurar rol tracker (SIN person_id)
     const { error: roleErr } = await sb
       .from("app_user_roles")
       .upsert(
@@ -53,7 +53,6 @@ export default async function handler(req, res) {
           user_id: userId,
           org_id,
           role: "tracker",
-          person_id,
         },
         { onConflict: "user_id,org_id" }
       );
