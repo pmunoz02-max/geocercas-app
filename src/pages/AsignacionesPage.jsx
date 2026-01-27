@@ -1,10 +1,9 @@
 // src/pages/AsignacionesPage.jsx
-// Fix Enero 2026:
-// - El catálogo "personal" puede venir duplicado por email (migraciones / invites). Se deduplica por email.
-// - Se desactiva el fallback de /api/activities si no es tenant-safe (para evitar activities de otra org).
-// - La UI renderiza desde campos planos primero (geocerca_nombre / activity_name / start_time / end_time)
-//   y solo luego usa relaciones.
-// - Mantiene el comportamiento actual del módulo.
+// Fix Enero 2026 (hotfix UI):
+// - Activities dropdown estaba vacío porque dependía solo del bundle.catalogs.activities.
+// - Se agrega fallback tenant-safe directo a Supabase: activities por org_id + active=true.
+// - Se normaliza catálogo activities del bundle (id/name/active/org_id) y se filtra por org.
+// - Mantiene comportamiento del módulo y tus dedup/flat-first.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,6 +15,9 @@ import {
   deleteAsignacion,
 } from "../lib/asignacionesApi";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
+
+// ✅ Ajusta este import si tu proyecto usa otro path/nombre
+import { supabase } from "../lib/supabaseClient";
 
 function localDateTimeToISO(localDateTime) {
   if (!localDateTime) return null;
@@ -123,11 +125,35 @@ async function fetchGeocercasFallback() {
   return normalizeGeocercas(rows);
 }
 
-// IMPORTANTE:
-// Desactivamos fallback /api/activities porque NO es garantía de tenant-safe.
-// Si más adelante confirmas que /api/activities filtra por tenant, lo reactivamos.
-async function fetchActivitiesFallback() {
-  return null;
+// ✅ Fallback tenant-safe para activities: directo a Supabase por org_id + active=true
+async function fetchActivitiesSafeByOrg(orgId) {
+  if (!orgId) return [];
+  const { data, error } = await supabase
+    .from("activities")
+    .select("id, name, active, org_id")
+    .eq("org_id", orgId)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+function normalizeActivities(rows, orgId) {
+  const arr = Array.isArray(rows) ? rows : [];
+  return dedupeById(
+    arr
+      .map((a) => ({
+        ...a,
+        id: a.id || a.activity_id || a.activityId || null,
+        name: (a.name || a.nombre || "").trim() || null,
+        active: a.active ?? true,
+        org_id: a.org_id || null,
+      }))
+      .filter((a) => a?.id)
+      .filter((a) => (orgId ? (a.org_id ? a.org_id === orgId : true) : true))
+      .filter((a) => a.active !== false)
+  );
 }
 
 function normalizePersonalFromBundle(catalogs) {
@@ -165,8 +191,7 @@ function normalizeAsignacionRow(a) {
 
   const start =
     a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
-  const end =
-    a.end_time || a.fin || a.end || a.fecha_fin || a.endTime || null;
+  const end = a.end_time || a.fin || a.end || a.fecha_fin || a.endTime || null;
 
   let freqSec =
     a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
@@ -249,19 +274,22 @@ export default function AsignacionesPage() {
     const bundleGeos = normalizeGeocercas(catalogs.geocercas);
     setGeocercaOptions(bundleGeos);
 
-    const acts = Array.isArray(catalogs.activities) ? dedupeById(catalogs.activities) : [];
-    setActivityOptions(acts);
+    // ✅ Normalizar activities del bundle y filtrar por org + active
+    const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
+    const bundleActs = normalizeActivities(bundleActsRaw, orgId);
+    setActivityOptions(bundleActs);
 
     // Ensure catalog contains referenced ids
     const referencedGeoIds = new Set(rows.map((a) => a.geocerca_id).filter(Boolean));
     const referencedActIds = new Set(rows.map((a) => a.activity_id).filter(Boolean));
 
     const geoMap = toIdMap(bundleGeos);
-    const actMap = toIdMap(acts);
+    const actMap = toIdMap(bundleActs);
 
     const missingGeo = Array.from(referencedGeoIds).some((id) => !geoMap.has(id));
     const missingAct = Array.from(referencedActIds).some((id) => !actMap.has(id));
 
+    // Geocercas fallback (ya lo tenías)
     if (bundleGeos.length === 0 || missingGeo) {
       try {
         const geos = await fetchGeocercasFallback();
@@ -271,9 +299,15 @@ export default function AsignacionesPage() {
       }
     }
 
-    if (acts.length === 0 || missingAct) {
-      const activities = await fetchActivitiesFallback();
-      if (activities?.length) setActivityOptions(dedupeById([...activities, ...acts]));
+    // ✅ Activities fallback SAFE (Supabase directo por org)
+    if (bundleActs.length === 0 || missingAct) {
+      try {
+        const actsSafe = await fetchActivitiesSafeByOrg(orgId);
+        const actsNorm = normalizeActivities(actsSafe, orgId);
+        if (actsNorm?.length) setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
+      } catch (e) {
+        console.warn("[AsignacionesPage] activities safe fallback failed:", e?.message || e);
+      }
     }
 
     setLoading(false);
@@ -287,7 +321,8 @@ export default function AsignacionesPage() {
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
-    if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
+    if (estadoFilter !== "todos")
+      rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
     if (selectedPersonalId) rows = rows.filter((a) => a.personal_id === selectedPersonalId);
     return rows;
   }, [asignaciones, estadoFilter, selectedPersonalId]);
@@ -402,10 +437,7 @@ export default function AsignacionesPage() {
           {editingId ? "Editar asignación" : "Nueva asignación"}
         </h2>
 
-        <form
-          onSubmit={handleSubmit}
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-        >
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Persona</label>
             <select
@@ -451,10 +483,17 @@ export default function AsignacionesPage() {
               <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name || a.nombre || a.id}
+                  {a.name || a.id}
                 </option>
               ))}
             </select>
+
+            {/* Debug útil si vuelve a vaciarse */}
+            {activityOptions.length === 0 && !loading && (
+              <p className="text-xs text-amber-700 mt-1">
+                No hay actividades activas para esta org. Crea una en “Actividades” o revisa que esté Active=true.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col">
@@ -532,20 +571,14 @@ export default function AsignacionesPage() {
             </button>
 
             {editingId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="border px-4 py-2 rounded"
-              >
+              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
                 Cancelar
               </button>
             )}
           </div>
 
           <div className="md:col-span-2">
-            {successMessage && (
-              <p className="text-green-600 font-semibold">{successMessage}</p>
-            )}
+            {successMessage && <p className="text-green-600 font-semibold">{successMessage}</p>}
             {error && <p className="text-red-600 font-semibold">{error}</p>}
           </div>
         </form>
@@ -576,9 +609,7 @@ export default function AsignacionesPage() {
           setSelectedActivityId(a.activity_id || "");
           setStartTime(a.start_time?.slice(0, 16) || "");
           setEndTime(a.end_time?.slice(0, 16) || "");
-          setFrecuenciaEnvioMin(
-            Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
-          );
+          setFrecuenciaEnvioMin(Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60)));
           setStatus(a.status || "activa");
           setError(null);
           setSuccessMessage(null);
