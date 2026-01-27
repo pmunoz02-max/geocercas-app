@@ -105,15 +105,8 @@ export default function App() {
 
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
 
-          {/* ✅ tracker GPS */}
-          <Route
-            path="/tracker-gps"
-            element={
-              <RequireOrg>
-                <TrackerGpsPage />
-              </RequireOrg>
-            }
-          />
+          {/* ✅ tracker GPS (SIN RequireOrg para trackers invitados) */}
+          <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
