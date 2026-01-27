@@ -23,14 +23,14 @@ export default function AuthCallback() {
   useEffect(() => {
     (async () => {
       try {
-        // 0) Error explícito desde Supabase
+        // 0) Error explícito
         const err = qp("error") || qp("err");
         if (err) {
           navigate(`/login?err=${encodeURIComponent(err)}`, { replace: true });
           return;
         }
 
-        // 1) PKCE flow
+        // 1) PKCE (?code=...)
         const code = qp("code");
         if (code) {
           setStatus("Confirmando código…");
@@ -42,16 +42,13 @@ export default function AuthCallback() {
             return;
           }
         } else {
-          // 2) Magic link / invite
+          // 2) Magic link / invite (?token_hash=...&type=...)
           const token_hash = qp("token_hash");
           const type = qp("type") as "invite" | "magiclink" | "recovery" | "signup" | null;
 
           if (token_hash && type) {
             setStatus("Verificando enlace…");
-            const { data, error } = await supabase.auth.verifyOtp({
-              token_hash,
-              type,
-            });
+            const { data, error } = await supabase.auth.verifyOtp({ token_hash, type });
             if (error || !data?.session) {
               navigate(`/login?err=${encodeURIComponent(error?.message || "verify_failed")}`, {
                 replace: true,
@@ -63,10 +60,7 @@ export default function AuthCallback() {
             const { access_token, refresh_token } = parseHash();
             if (access_token && refresh_token) {
               setStatus("Estableciendo sesión…");
-              const { data, error } = await supabase.auth.setSession({
-                access_token,
-                refresh_token,
-              });
+              const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
               if (error || !data?.session) {
                 navigate(`/login?err=${encodeURIComponent(error?.message || "set_session_failed")}`, {
                   replace: true,
@@ -82,27 +76,24 @@ export default function AuthCallback() {
           }
         }
 
-        // 4) Persistir sesión backend (cookies HttpOnly)
+        // 4) Persistir cookies HttpOnly en backend
         setStatus("Iniciando sesión…");
-        await fetch("/api/auth/session", {
-          method: "POST",
-          credentials: "include",
-        });
+        await fetch("/api/auth/session", { method: "POST", credentials: "include" });
 
-        // 5) Consultar rol real
+        // 5) Leer rol real desde backend (OJO: el campo es "role")
         setStatus("Cargando perfil…");
-        const res = await fetch("/api/auth/session", {
-          credentials: "include",
-        });
+        const r = await fetch("/api/auth/session", { credentials: "include" });
+        const j = await r.json().catch(() => ({}));
 
-        const session = await res.json();
+        const role = String(j?.role || "").toLowerCase();
 
-        // 6) Redirección canónica
-        if (session?.authenticated && session?.currentRole === "tracker") {
-          navigate("/tracker-gps", { replace: true });
-        } else {
-          navigate("/inicio", { replace: true });
+        // 6) Hard redirect (evita que el router/shell lo pise)
+        if (j?.authenticated && role === "tracker") {
+          window.location.replace("/tracker-gps");
+          return;
         }
+
+        window.location.replace("/inicio");
       } catch (e: any) {
         navigate(`/login?err=${encodeURIComponent(e?.message || "callback_error")}`, {
           replace: true,
