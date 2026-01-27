@@ -1,7 +1,7 @@
 // src/pages/AuthCallback.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient"; // ajusta si tu path es distinto
+import { supabase } from "../supabaseClient";
 
 function qp(name: string) {
   return new URLSearchParams(window.location.search).get(name);
@@ -30,7 +30,7 @@ export default function AuthCallback() {
           return;
         }
 
-        // 1) PKCE flow (?code=...)
+        // 1) PKCE flow
         const code = qp("code");
         if (code) {
           setStatus("Confirmando código…");
@@ -42,14 +42,9 @@ export default function AuthCallback() {
             return;
           }
         } else {
-          // 2) OTP / Invite / Magic Link (?token_hash=...&type=...)
+          // 2) Magic link / invite
           const token_hash = qp("token_hash");
-          const type = qp("type") as
-            | "invite"
-            | "magiclink"
-            | "recovery"
-            | "signup"
-            | null;
+          const type = qp("type") as "invite" | "magiclink" | "recovery" | "signup" | null;
 
           if (token_hash && type) {
             setStatus("Verificando enlace…");
@@ -64,7 +59,7 @@ export default function AuthCallback() {
               return;
             }
           } else {
-            // 3) Hash tokens (#access_token=...&refresh_token=...)
+            // 3) Hash tokens
             const { access_token, refresh_token } = parseHash();
             if (access_token && refresh_token) {
               setStatus("Estableciendo sesión…");
@@ -79,7 +74,6 @@ export default function AuthCallback() {
                 return;
               }
             } else {
-              // Nada válido en URL → error real
               navigate(`/login?err=${encodeURIComponent("missing_code_or_token_hash")}`, {
                 replace: true,
               });
@@ -88,15 +82,27 @@ export default function AuthCallback() {
           }
         }
 
-        // 4) Persistir sesión en backend (cookies HttpOnly)
+        // 4) Persistir sesión backend (cookies HttpOnly)
         setStatus("Iniciando sesión…");
         await fetch("/api/auth/session", {
           method: "POST",
           credentials: "include",
-        }).catch(() => null);
+        });
 
-        // 5) Entrada directa al panel
-        navigate("/panel", { replace: true });
+        // 5) Consultar rol real
+        setStatus("Cargando perfil…");
+        const res = await fetch("/api/auth/session", {
+          credentials: "include",
+        });
+
+        const session = await res.json();
+
+        // 6) Redirección canónica
+        if (session?.authenticated && session?.currentRole === "tracker") {
+          navigate("/tracker-gps", { replace: true });
+        } else {
+          navigate("/inicio", { replace: true });
+        }
       } catch (e: any) {
         navigate(`/login?err=${encodeURIComponent(e?.message || "callback_error")}`, {
           replace: true,
