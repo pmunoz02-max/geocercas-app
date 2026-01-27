@@ -1,6 +1,6 @@
-// src/pages/AsignacionesPage.jsx
 // DEFINITIVO: Asignaciones usa personal (personal_id) + /api/asignaciones
 // + Fallback universal para geocercas: si bundle no trae catálogo, consulta /api/geocercas
+// + Blindaje universal de personal: si bundle trae personal contaminado (cross-org) o vacío, consulta /api/personal (canónico)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,27 +53,96 @@ function openNativePicker(inputEl) {
   inputEl.click();
 }
 
+function dedupeById(rows) {
+  const arr = Array.isArray(rows) ? rows : [];
+  const map = new Map();
+  for (const r of arr) {
+    if (!r?.id) continue;
+    if (!map.has(r.id)) map.set(r.id, r);
+  }
+  return Array.from(map.values());
+}
+
 function normalizeGeocercas(rows) {
   const arr = Array.isArray(rows) ? rows : [];
-  return arr
-    .map((g) => ({
-      id: g.id,
-      nombre: (g.nombre || g.name || "").trim() || null,
-    }))
-    .filter((g) => g.id);
+  return dedupeById(
+    arr
+      .map((g) => ({
+        id: g.id,
+        nombre: (g.nombre || g.name || "").trim() || null,
+      }))
+      .filter((g) => g.id)
+  );
 }
 
 async function fetchGeocercasFallback() {
-  // /api/geocercas devuelve array plano según tu implementación
   const r = await fetch("/api/geocercas", { credentials: "include" });
   const j = await r.json().catch(() => null);
   if (!r.ok) {
     const msg = (j && j.error) || `HTTP ${r.status}`;
     throw new Error(msg);
   }
-  // j puede ser array o {data:[]}; soportamos ambas
   const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
   return normalizeGeocercas(rows);
+}
+
+function normalizePersonalFromBundle({ catalogs }) {
+  const personal = Array.isArray(catalogs?.personal) ? catalogs.personal : [];
+  const peopleFallback = Array.isArray(catalogs?.people) ? catalogs.people : [];
+
+  // bundle nuevo (personal) o legacy (people)
+  const normalized =
+    personal.length > 0
+      ? personal
+      : peopleFallback.map((p) => ({
+          id: p.org_people_id,
+          nombre: p.nombre,
+          apellido: p.apellido,
+          email: p.email,
+          org_id: p.org_id || null,
+        }));
+
+  // ensure shape
+  return dedupeById(
+    normalized
+      .map((p) => ({
+        id: p.id,
+        nombre: p.nombre || "",
+        apellido: p.apellido || "",
+        email: p.email || "",
+        org_id: p.org_id || null, // si viene, lo usamos para detectar contaminación
+      }))
+      .filter((p) => p.id)
+  );
+}
+
+function isContaminatedByOrg({ rows, orgId }) {
+  if (!orgId) return false;
+  const arr = Array.isArray(rows) ? rows : [];
+  // si al menos una fila trae org_id y no coincide => contaminación cross-org
+  return arr.some((p) => p?.org_id && String(p.org_id) !== String(orgId));
+}
+
+async function fetchPersonalFallback() {
+  // /api/personal devuelve { items: [] }
+  const r = await fetch("/api/personal?onlyActive=1&limit=2000", { credentials: "include" });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) {
+    const msg = (j && j.error) || `HTTP ${r.status}`;
+    throw new Error(msg);
+  }
+  const rows = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
+  return dedupeById(
+    rows
+      .map((p) => ({
+        id: p.id,
+        nombre: p.nombre || "",
+        apellido: p.apellido || "",
+        email: p.email || "",
+        org_id: p.org_id || null,
+      }))
+      .filter((p) => p.id)
+  );
 }
 
 export default function AsignacionesPage() {
@@ -132,18 +201,22 @@ export default function AsignacionesPage() {
 
     setAsignaciones(Array.isArray(rows) ? rows : []);
 
-    const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
-    const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
-    const normalizedPersonal =
-      personal.length > 0
-        ? personal
-        : fallback.map((p) => ({
-            id: p.org_people_id,
-            nombre: p.nombre,
-            apellido: p.apellido,
-            email: p.email,
-          }));
-    setPersonalOptions(normalizedPersonal);
+    // ✅ Personal desde bundle (primario)
+    let normalizedPersonal = normalizePersonalFromBundle({ catalogs });
+
+    // ✅ Si viene contaminado (cross-org) o vacío => fallback canónico a /api/personal
+    const contaminated = isContaminatedByOrg({ rows: normalizedPersonal, orgId });
+    if (normalizedPersonal.length === 0 || contaminated) {
+      try {
+        const personal = await fetchPersonalFallback();
+        if (personal.length > 0) normalizedPersonal = personal;
+      } catch (e) {
+        console.warn("[AsignacionesPage] personal fallback failed:", e?.message || e);
+      }
+    }
+
+    // Blindaje final (por si acaso)
+    setPersonalOptions(dedupeById(normalizedPersonal));
 
     // ✅ Geocercas del bundle (si llegan)
     const bundleGeos = normalizeGeocercas(catalogs.geocercas);
@@ -156,8 +229,7 @@ export default function AsignacionesPage() {
       setSelectedActivityId(catalogs.activities[0].id);
     }
 
-    // ✅ FALLBACK UNIVERSAL: si bundle no trajo geocercas, consultamos /api/geocercas
-    // Esto repara casos donde el bundle cambió forma/retorno o falló parcialmente.
+    // ✅ FALLBACK UNIVERSAL geocercas
     if (bundleGeos.length === 0) {
       try {
         const geos = await fetchGeocercasFallback();
@@ -166,7 +238,6 @@ export default function AsignacionesPage() {
         }
       } catch (e) {
         console.warn("[AsignacionesPage] geocercas fallback failed:", e?.message || e);
-        // no bloqueamos la pantalla; solo quedará vacío si realmente no hay geocercas o falla la API
       }
     }
 
