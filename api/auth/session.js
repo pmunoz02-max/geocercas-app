@@ -79,7 +79,8 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   }
 
   if (!r.ok || !json?.access_token) {
-    const msg = json?.error_description || json?.error || "Failed to refresh token";
+    const msg =
+      json?.error_description || json?.error || "Failed to refresh token";
     const err = new Error(msg);
     err.status = 401;
     err.body = json || null;
@@ -146,7 +147,9 @@ async function callEdgeInviteAdmin({ supabaseUrl, userAccessToken, payload }) {
   }
 
   if (!r.ok || !json?.ok) {
-    const err = new Error(json?.message || json?.error || `Edge invite_admin failed (HTTP ${r.status})`);
+    const err = new Error(
+      json?.message || json?.error || `Edge invite_admin failed (HTTP ${r.status})`
+    );
     err.status = r.status;
     err.body = json;
     throw err;
@@ -224,12 +227,14 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
   }
 
   if (existing?.role && existing.role !== "tracker") {
-    const e = new Error(`Este usuario ya tiene rol '${existing.role}' en esta organización. No puede ser tracker.`);
+    const e = new Error(
+      `Este usuario ya tiene rol '${existing.role}' en esta organización. No puede ser tracker.`
+    );
     e.status = 409;
     throw e;
   }
 
-  // Upsert tracker (idempotente si ya era tracker)
+  // Upsert tracker (idempotente)
   const { error: upErr } = await serviceClient
     .from("memberships")
     .upsert(
@@ -243,7 +248,6 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
     throw e;
   }
 
-  // Marcar invitación como usada
   const { error: useErr } = await serviceClient
     .from("tracker_invites")
     .update({ used_at: new Date().toISOString(), used_by_user_id: user.id })
@@ -258,8 +262,47 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
   return { org_id: orgId, role: "tracker" };
 }
 
+// ---------- NUEVO: fallback org desde memberships ----------
+async function listMembershipsForUser({ sbUser, serviceClient, userId }) {
+  // Intento: incluir is_default si existe; si falla, reintento sin is_default
+  const base = serviceClient || sbUser;
+
+  let q = base
+    .from("memberships")
+    .select("org_id, role, is_default, created_at")
+    .eq("user_id", userId);
+
+  let r = await q;
+  if (r?.error && String(r.error.message || "").toLowerCase().includes("is_default")) {
+    r = await base
+      .from("memberships")
+      .select("org_id, role, created_at")
+      .eq("user_id", userId);
+  }
+
+  if (r.error) return { rows: [], error: r.error };
+
+  const rows = Array.isArray(r.data) ? r.data : [];
+  return { rows, error: null };
+}
+
+function pickOrgFromMemberships(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  // Preferir is_default=true si existe
+  const hasIsDefault = rows.some((x) => Object.prototype.hasOwnProperty.call(x, "is_default"));
+  if (hasIsDefault) {
+    const def = rows.find((x) => x?.is_default === true && x?.org_id);
+    if (def?.org_id) return def.org_id;
+  }
+
+  // Fallback: primera org_id válida
+  const first = rows.find((x) => x?.org_id);
+  return first?.org_id || null;
+}
+
 export default async function handler(req, res) {
-  const build_tag = "auth-session-v20-tracker-invite-org-cookie";
+  const build_tag = "auth-session-v21-org-fallback-memberships";
   const debug = process.env.AUTH_DEBUG === "1";
 
   try {
@@ -274,18 +317,18 @@ export default async function handler(req, res) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !anonKey) {
-      return res.status(500).json({ build_tag, ok: false, error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
+      return res
+        .status(500)
+        .json({ build_tag, ok: false, error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
     }
 
     const cookieDomain = process.env.COOKIE_DOMAIN || ""; // ejemplo: .tugeocercas.com
     const cookies = parseCookies(req.headers.cookie || "");
 
-    // Cookies actuales
     let access_token = cookies.tg_at || "";
     const refresh_token = cookies.tg_rt || "";
     const forced_org = cookies.tg_org || "";
 
-    // Body tokens opcionales (desde AuthCallback) → hace el flujo robusto
     const body = req.method === "POST" ? safeJsonBody(req) : {};
     if (req.method === "POST" && body === null) {
       return res.status(400).json({ build_tag, ok: false, error: "Invalid JSON body" });
@@ -294,7 +337,6 @@ export default async function handler(req, res) {
     const bodyAccess = String(body?.access_token || "").trim();
     const bodyRefresh = String(body?.refresh_token || "").trim();
 
-    // Si el callback manda tokens, los seteamos en cookies HttpOnly
     const setCookieParts = [];
 
     if (bodyAccess) {
@@ -324,7 +366,6 @@ export default async function handler(req, res) {
       );
     }
 
-    // Si aún no tenemos access token, intentamos refresh con cookie
     if (!access_token && refresh_token) {
       const r = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
       access_token = r.access_token;
@@ -334,10 +375,20 @@ export default async function handler(req, res) {
 
       setCookieParts.push(
         makeCookie("tg_at", r.access_token, {
-          httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: accessMaxAge,
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          domain: cookieDomain || undefined,
+          maxAge: accessMaxAge,
         }),
         makeCookie("tg_rt", r.refresh_token || refresh_token, {
-          httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: refreshMaxAge,
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          domain: cookieDomain || undefined,
+          maxAge: refreshMaxAge,
         })
       );
     }
@@ -350,14 +401,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ build_tag, ok: true, authenticated: false });
     }
 
-    // User desde access_token
     let sbUser, user;
     {
       const r = await getUserFromAccessToken({ url, anonKey, accessToken: access_token });
       sbUser = r.sbUser;
       user = r.user;
 
-      // Intento extra con refresh si user no aparece
       if (!user && refresh_token) {
         const refreshed = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
         access_token = refreshed.access_token;
@@ -366,8 +415,12 @@ export default async function handler(req, res) {
         const refreshMaxAge = 30 * 24 * 60 * 60;
 
         res.setHeader("Set-Cookie", [
-          makeCookie("tg_at", refreshed.access_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: accessMaxAge }),
-          makeCookie("tg_rt", refreshed.refresh_token || refresh_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: refreshMaxAge }),
+          makeCookie("tg_at", refreshed.access_token, {
+            httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: accessMaxAge,
+          }),
+          makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
+            httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: refreshMaxAge,
+          }),
         ]);
 
         const r2 = await getUserFromAccessToken({ url, anonKey, accessToken: access_token });
@@ -399,7 +452,6 @@ export default async function handler(req, res) {
           user,
         });
 
-        // Amarrar la sesión a la org del invite (cookie)
         res.setHeader("Set-Cookie", [
           makeCookie("tg_org", String(result.org_id), {
             httpOnly: true,
@@ -407,16 +459,20 @@ export default async function handler(req, res) {
             sameSite: "Lax",
             path: "/",
             domain: cookieDomain || undefined,
-            maxAge: 30 * 24 * 60 * 60, // 30 días
+            maxAge: 30 * 24 * 60 * 60,
           }),
         ]);
 
-        return res.status(200).json({ build_tag, ok: true, accepted: true, org_id: result.org_id, role: "tracker" });
+        return res.status(200).json({
+          build_tag,
+          ok: true,
+          accepted: true,
+          org_id: result.org_id,
+          role: "tracker",
+        });
       }
 
-      // Mantener soporte previo (invite admin edge)
       if (action === "invite_new_admin") {
-        // Determinar rol/org actual para permisos root
         const { data: boot } = await sbUser.rpc("bootstrap_session_context");
         const roleFromBoot = boot?.[0]?.role || null;
 
@@ -446,38 +502,63 @@ export default async function handler(req, res) {
         return res.status(200).json({ build_tag, ok: true, invited_email: email, edge: edgeResp });
       }
 
-      // POST sin action: solo confirma/establece cookies (compat)
       return res.status(200).json({ build_tag, ok: true, authenticated: true });
     }
 
-    // GET Session: si existe tg_org, forzamos org y rol de esa org (tracker invite)
+    // GET Session
     let current_org_id = null;
     let role = null;
 
     if (forced_org) {
       current_org_id = forced_org;
 
-      // Leer rol real en esa org (por regla, si tg_org existe debe ser tracker)
-      const { data: rRow, error: rErr } = await serviceClient
-        .from("memberships")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("org_id", current_org_id)
-        .maybeSingle();
+      if (serviceClient) {
+        const { data: rRow, error: rErr } = await serviceClient
+          .from("memberships")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("org_id", current_org_id)
+          .maybeSingle();
 
-      if (rErr) {
-        // fallback al boot
-        const { data: boot } = await sbUser.rpc("bootstrap_session_context");
-        current_org_id = boot?.[0]?.org_id || null;
-        role = boot?.[0]?.role || null;
-      } else {
-        role = rRow?.role || null;
+        if (!rErr) role = rRow?.role || null;
       }
-    } else {
-      // fallback normal
+    }
+
+    // Fallback normal
+    if (!current_org_id) {
       const { data: boot } = await sbUser.rpc("bootstrap_session_context");
       current_org_id = boot?.[0]?.org_id || null;
-      role = boot?.[0]?.role || null;
+      role = role ?? (boot?.[0]?.role || null);
+    }
+
+    // NUEVO: si boot no devolvió org, resolver por memberships
+    let membershipRows = [];
+    if (!current_org_id) {
+      const { rows, error } = await listMembershipsForUser({
+        sbUser,
+        serviceClient,
+        userId: user.id,
+      });
+
+      if (!error) {
+        membershipRows = rows;
+        current_org_id = pickOrgFromMemberships(rows);
+        if (!role &&s(r => r.org_id === current_org_id)) role = membershipRows.find(r => r.org_id === current_org_id)?.role || role;
+      }
+    }
+
+    // Si resolvimos org y no hay tg_org, setear cookie sticky (30 días)
+    if (current_org_id && !forced_org) {
+      res.setHeader("Set-Cookie", [
+        makeCookie("tg_org", String(current_org_id), {
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          domain: cookieDomain || undefined,
+          maxAge: 30 * 24 * 60 * 60,
+        }),
+      ]);
     }
 
     const is_app_root = await computeIsAppRoot({
@@ -485,6 +566,15 @@ export default async function handler(req, res) {
       roleFromBoot: role,
       serviceClient,
     });
+
+    const organizations =
+      membershipRows.length > 0
+        ? membershipRows
+            .map((m) => (m?.org_id ? { id: m.org_id } : null))
+            .filter(Boolean)
+        : current_org_id
+        ? [{ id: current_org_id }]
+        : [];
 
     return res.status(200).json({
       build_tag,
@@ -495,16 +585,18 @@ export default async function handler(req, res) {
       current_org_id,
       role,
       is_app_root,
-      organizations: current_org_id ? [{ id: current_org_id }] : [],
+      organizations,
       ...(debug ? { debug: { forced_org: forced_org || null } } : {}),
     });
   } catch (e) {
     console.error("[api/auth/session] fatal:", e);
     return res.status(500).json({
-      build_tag: "auth-session-v20-tracker-invite-org-cookie",
+      build_tag: "auth-session-v21-org-fallback-memberships",
       ok: false,
       error: String(e?.message || e),
-      ...(process.env.AUTH_DEBUG === "1" ? { debug: { body: e?.body || null, status: e?.status || null } } : {}),
+      ...(process.env.AUTH_DEBUG === "1"
+        ? { debug: { body: e?.body || null, status: e?.status || null } }
+        : {}),
     });
   }
 }
