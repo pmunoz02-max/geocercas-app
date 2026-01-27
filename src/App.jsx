@@ -14,7 +14,10 @@ import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// App pages
+// Tracker GPS (página “solo trackers”)
+import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
+
+// App pages (protegidas)
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";
@@ -23,11 +26,10 @@ import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import Reports from "./pages/Reports.jsx";
 import TrackerDashboard from "./pages/TrackerDashboard.jsx";
-import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
-// ✅ Admins page (reemplaza InvitarAdmin)
+// ✅ Admins
 import AdminAssign from "./pages/AdminAssign.tsx";
 
 // Help pages
@@ -74,6 +76,9 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
+        {/* ✅ TRACKER GPS: fuera del shell protegido (clave) */}
+        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+
         {/* 🔐 Password flows */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -86,7 +91,7 @@ export default function App() {
         <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
-        {/* 🔒 Protected */}
+        {/* 🔒 Protected app (panel normal) */}
         <Route
           element={
             <AuthGuard>
@@ -104,10 +109,6 @@ export default function App() {
           <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
 
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-
-          {/* ✅ tracker GPS (SIN RequireOrg para trackers invitados) */}
-          <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
           {/* Help */}
@@ -116,7 +117,7 @@ export default function App() {
           <Route path="/help/support" element={<SupportPage />} />
           <Route path="/help/changelog" element={<ChangelogPage />} />
 
-          {/* ✅ Admins (solo fenice.ecuador@gmail.com como root) */}
+          {/* Admins */}
           <Route
             path="/admins"
             element={
