@@ -110,12 +110,16 @@ async function loadCatalogs(supabase) {
     .order("nombre", { ascending: true });
 
   // Geocercas: RPC tenant-safe
-  let geocercas = [];
-  {
-    const { data, error } = await supabase.rpc("list_geocercas_for_assign");
-    if (!error) geocercas = normalizeGeocercas(data);
+  // ✅ CANÓNICO: geocercas por contexto DB
+let geocercas = [];
+{
+  const { data, error } = await supabase.rpc("get_geocercas_for_current_org");
+  if (error) {
+    console.error("[asignaciones] geocercas rpc error:", error);
+  } else {
+    geocercas = normalizeGeocercas(data);
   }
-
+}
   // Activities: RPC tenant-safe
   let activities = [];
   {
