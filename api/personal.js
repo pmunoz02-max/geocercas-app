@@ -214,7 +214,7 @@ async function resolveEffectiveOrgId({ req, ctx, userId, supaSrv }) {
   if (String(requestedOrgId) === String(ctx.org_id)) return { org_id: ctx.org_id, source: "ctx_match" };
 
   const { data, error } = await supaSrv
-    .from("app_user_roles")
+    .from("memberships")
     .select("role")
     .eq("user_id", userId)
     .eq("org_id", requestedOrgId)

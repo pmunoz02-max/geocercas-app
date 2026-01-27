@@ -55,10 +55,10 @@ export default async function handler(req: any, res: any) {
 
     if (!userId) throw new Error("No se pudo determinar user_id");
 
-    // 3) Asegurar rol tracker (SIN person_id)
+    // 3) Asegurar membership tracker (source of truth). Triggers sincronizan app_user_roles.
     const { error: roleErr } = await sbAdmin
-      .from("app_user_roles")
-      .upsert({ user_id: userId, org_id, role: "tracker" }, { onConflict: "user_id,org_id" });
+      .from("memberships")
+      .upsert({ org_id, user_id: userId, role: "tracker", is_default: false }, { onConflict: "org_id,user_id" });
 
     if (roleErr) throw roleErr;
 

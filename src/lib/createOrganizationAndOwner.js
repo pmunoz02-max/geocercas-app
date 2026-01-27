@@ -5,9 +5,11 @@
 // Importante:
 //   - La Edge Function `invite-user` debe aceptar:
 //       { email, full_name, role_name: "OWNER", org_id: null }
-//   - En el backend, `invite-user` debe insertar en app_user_roles:
-//       role = 'owner', org_id = null
-//     para que el trigger `ensure_org_for_owner_role()` cree la organización.
+//   - En el backend, `invite-user` debe:
+      1) crear una nueva organización (org)
+      2) crear la membresía en `memberships` con role = 'owner'
+      3) opcional: marcar is_default = true para ese nuevo owner
+    (Triggers sincronizan `app_user_roles` automáticamente; NO escribirla desde cliente.)
 
 import { supabase } from "../supabaseClient";
 

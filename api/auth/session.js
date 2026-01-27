@@ -211,14 +211,14 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
 
   // Regla #2: admin NO puede ser tracker
   const { data: existing, error: exErr } = await serviceClient
-    .from("app_user_roles")
+    .from("memberships")
     .select("role")
     .eq("user_id", user.id)
     .eq("org_id", orgId)
     .maybeSingle();
 
   if (exErr) {
-    const e = new Error(exErr.message || "Error leyendo app_user_roles");
+    const e = new Error(exErr.message || "Error leyendo memberships");
     e.status = 500;
     throw e;
   }
@@ -231,10 +231,10 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
 
   // Upsert tracker (idempotente si ya era tracker)
   const { error: upErr } = await serviceClient
-    .from("app_user_roles")
+    .from("memberships")
     .upsert(
-      { user_id: user.id, org_id: orgId, role: "tracker" },
-      { onConflict: "user_id,org_id" }
+      { org_id: orgId, user_id: user.id, role: "tracker", is_default: false },
+      { onConflict: "org_id,user_id" }
     );
 
   if (upErr) {
@@ -459,7 +459,7 @@ export default async function handler(req, res) {
 
       // Leer rol real en esa org (por regla, si tg_org existe debe ser tracker)
       const { data: rRow, error: rErr } = await serviceClient
-        .from("app_user_roles")
+        .from("memberships")
         .select("role")
         .eq("user_id", user.id)
         .eq("org_id", current_org_id)
