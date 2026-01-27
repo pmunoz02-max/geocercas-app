@@ -1,10 +1,10 @@
 // src/pages/AsignacionesPage.jsx
-// Página real de ASIGNACIONES (form + filtros + tabla)
-// - Carga bundle
-// - Normaliza campos
-// - Enriquecimiento: resuelve geocerca/activity/person por ID
-// - Fallback geocercas a /api/geocercas
-// - (Opcional) Fallback activities a /api/activities si existe
+// Fix Enero 2026:
+// - El catálogo "personal" puede venir duplicado por email (migraciones / invites). Se deduplica por email.
+// - Se desactiva el fallback de /api/activities si no es tenant-safe (para evitar activities de otra org).
+// - La UI renderiza desde campos planos primero (geocerca_nombre / activity_name / start_time / end_time)
+//   y solo luego usa relaciones.
+// - Mantiene el comportamiento actual del módulo.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -72,6 +72,28 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
+function dedupePersonalByEmail(arr) {
+  const map = new Map();
+  (Array.isArray(arr) ? arr : []).forEach((p) => {
+    const id = p?.id || null;
+    const email = String(p?.email || "").trim().toLowerCase();
+    if (!id) return;
+
+    const key = email || id; // si no hay email, cae a id
+    if (!map.has(key)) {
+      map.set(key, p);
+      return;
+    }
+
+    // Preferencia: si uno tiene email y el otro no, gana el que tiene email.
+    const cur = map.get(key);
+    const curHasEmail = String(cur?.email || "").trim().length > 0;
+    const newHasEmail = String(p?.email || "").trim().length > 0;
+    if (!curHasEmail && newHasEmail) map.set(key, p);
+  });
+  return Array.from(map.values());
+}
+
 function normalizeGeocercas(rows) {
   const arr = Array.isArray(rows) ? rows : [];
   return dedupeById(
@@ -101,29 +123,11 @@ async function fetchGeocercasFallback() {
   return normalizeGeocercas(rows);
 }
 
+// IMPORTANTE:
+// Desactivamos fallback /api/activities porque NO es garantía de tenant-safe.
+// Si más adelante confirmas que /api/activities filtra por tenant, lo reactivamos.
 async function fetchActivitiesFallback() {
-  // Opcional: si existe endpoint /api/activities, lo usamos. Si no, no rompe nada.
-  try {
-    const j = await fetchJson("/api/activities?onlyActive=1&limit=2000");
-    const rows = Array.isArray(j)
-      ? j
-      : Array.isArray(j?.items)
-      ? j.items
-      : Array.isArray(j?.data)
-      ? j.data
-      : [];
-    return dedupeById(
-      rows
-        .map((a) => ({
-          ...a,
-          id: a.id,
-          name: (a.name || a.nombre || "").trim() || a.id,
-        }))
-        .filter((a) => a?.id)
-    );
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function normalizePersonalFromBundle(catalogs) {
@@ -141,17 +145,18 @@ function normalizePersonalFromBundle(catalogs) {
           org_id: p.org_id || null,
         }));
 
-  return dedupeById(
-    normalized
-      .map((p) => ({
-        ...p,
-        id: p.id,
-        nombre: p.nombre || "",
-        apellido: p.apellido || "",
-        email: p.email || "",
-      }))
-      .filter((p) => p?.id)
-  );
+  const cleaned = normalized
+    .map((p) => ({
+      ...p,
+      id: p.id,
+      nombre: p.nombre || "",
+      apellido: p.apellido || "",
+      email: p.email || "",
+    }))
+    .filter((p) => p?.id);
+
+  // Dedup por email (evita "2 Pietro")
+  return dedupePersonalByEmail(cleaned);
 }
 
 // Normaliza asignaciones aunque el backend cambie nombres
@@ -163,7 +168,9 @@ function normalizeAsignacionRow(a) {
   const end =
     a.end_time || a.fin || a.end || a.fecha_fin || a.endTime || null;
 
-  let freqSec = a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
+  let freqSec =
+    a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
+
   if (freqSec == null && a.frecuencia_envio_min != null) {
     const n = Number(a.frecuencia_envio_min);
     if (Number.isFinite(n)) freqSec = n * 60;
@@ -285,7 +292,7 @@ export default function AsignacionesPage() {
     return rows;
   }, [asignaciones, estadoFilter, selectedPersonalId]);
 
-  // ENRICHMENT FINAL (siempre)
+  // ENRICHMENT FINAL (flat-first)
   const enrichedAsignaciones = useMemo(() => {
     const geoMap = toIdMap(geocercaOptions);
     const actMap = toIdMap(activityOptions);
@@ -298,15 +305,19 @@ export default function AsignacionesPage() {
       const activity = a.activity || actMap.get(a.activity_id) || null;
       const personal = a.personal || perMap.get(a.personal_id) || null;
 
+      const geocercaNombre =
+        a.geocerca_nombre || geocerca?.nombre || geocerca?.name || "";
+
+      const activityName =
+        a.activity_name || activity?.name || activity?.nombre || "";
+
       return {
         ...a,
         geocerca,
         activity,
         personal,
-        geocerca_nombre:
-          a.geocerca_nombre || geocerca?.nombre || geocerca?.name || "",
-        activity_name:
-          a.activity_name || activity?.name || activity?.nombre || "",
+        geocerca_nombre: geocercaNombre,
+        activity_name: activityName,
       };
     });
   }, [filteredAsignaciones, geocercaOptions, activityOptions, personalOptions]);
@@ -375,9 +386,14 @@ export default function AsignacionesPage() {
   return (
     <div className="w-full">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
+        <h1 className="text-2xl font-bold">
+          {t("asignaciones.title", { defaultValue: "Asignaciones" })}
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+          Org actual:{" "}
+          <span className="font-medium">
+            {currentOrg?.name || currentOrg?.id || "—"}
+          </span>
         </p>
       </div>
 
@@ -386,10 +402,18 @@ export default function AsignacionesPage() {
           {editingId ? "Editar asignación" : "Nueva asignación"}
         </h2>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Persona</label>
-            <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedPersonalId}
+              onChange={(e) => setSelectedPersonalId(e.target.value)}
+              required
+            >
               <option value="">Selecciona una persona</option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -401,7 +425,12 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Geocerca</label>
-            <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedGeocercaId}
+              onChange={(e) => setSelectedGeocercaId(e.target.value)}
+              required
+            >
               <option value="">Selecciona una geocerca</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -413,7 +442,12 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Actividad</label>
-            <select className="border rounded px-3 py-2" value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedActivityId}
+              onChange={(e) => setSelectedActivityId(e.target.value)}
+              required
+            >
               <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -434,7 +468,11 @@ export default function AsignacionesPage() {
                 onChange={(e) => setStartTime(e.target.value)}
                 required
               />
-              <button type="button" onClick={() => openNativePicker(startInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
+              <button
+                type="button"
+                onClick={() => openNativePicker(startInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
+              >
                 <CalendarIcon />
               </button>
             </div>
@@ -451,7 +489,11 @@ export default function AsignacionesPage() {
                 onChange={(e) => setEndTime(e.target.value)}
                 required
               />
-              <button type="button" onClick={() => openNativePicker(endInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
+              <button
+                type="button"
+                onClick={() => openNativePicker(endInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
+              >
                 <CalendarIcon />
               </button>
             </div>
@@ -459,7 +501,11 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Estado</label>
-            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select
+              className="border rounded px-3 py-2"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
@@ -486,14 +532,20 @@ export default function AsignacionesPage() {
             </button>
 
             {editingId && (
-              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="border px-4 py-2 rounded"
+              >
                 Cancelar
               </button>
             )}
           </div>
 
           <div className="md:col-span-2">
-            {successMessage && <p className="text-green-600 font-semibold">{successMessage}</p>}
+            {successMessage && (
+              <p className="text-green-600 font-semibold">{successMessage}</p>
+            )}
             {error && <p className="text-red-600 font-semibold">{error}</p>}
           </div>
         </form>
@@ -501,7 +553,11 @@ export default function AsignacionesPage() {
 
       <div className="mb-4 flex items-center gap-3">
         <label className="font-medium">Estado</label>
-        <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+        <select
+          className="border rounded px-3 py-2"
+          value={estadoFilter}
+          onChange={(e) => setEstadoFilter(e.target.value)}
+        >
           {ESTADOS.map((v) => (
             <option key={v} value={v}>
               {v}
@@ -520,7 +576,9 @@ export default function AsignacionesPage() {
           setSelectedActivityId(a.activity_id || "");
           setStartTime(a.start_time?.slice(0, 16) || "");
           setEndTime(a.end_time?.slice(0, 16) || "");
-          setFrecuenciaEnvioMin(Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60)));
+          setFrecuenciaEnvioMin(
+            Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
+          );
           setStatus(a.status || "activa");
           setError(null);
           setSuccessMessage(null);

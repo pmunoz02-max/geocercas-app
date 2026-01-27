@@ -1,15 +1,11 @@
 // api/asignaciones.js
 // ============================================================
 // TENANT-SAFE Asignaciones API (CANONICAL) - ESM safe
-// - cookie HttpOnly tg_at
-// - bootstrap_session_context() devuelve org_id/role
-// - tenant_id = org_id (tenant==org)
-// - Catalogos por org (personal, geocercas, activities)
-// - Asignaciones devuelve:
-//    - campos canónicos (start_time/end_time/frecuencia_envio_sec/status)
-//    - relaciones (personal/geocerca/activity)
-//    - CAMPOS PLANOS RESILIENTES: geocerca_nombre, activity_name, frecuencia_envio_min, status_final
-// - Validación anti cross-org en POST/PATCH (geocerca/activity deben pertenecer a la org actual)
+// Fix Enero 2026:
+//  - activities table usa tenant_id (NOT NULL). org_id puede ser NULL.
+//  - Catálogo activities y validación cross-org deben basarse en tenant_id.
+//  - Evita contaminación cross-org por fallbacks / catálogos no filtrados.
+//  - Mantiene campos planos resilientes para UI.
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
@@ -98,7 +94,11 @@ async function getContextOr401(req) {
 
   const ctxResp = await supabase.rpc("bootstrap_session_context");
   if (ctxResp.error)
-    return { ok: false, status: 401, error: ctxResp.error.message || "ctx rpc error" };
+    return {
+      ok: false,
+      status: 401,
+      error: ctxResp.error.message || "ctx rpc error",
+    };
 
   const ctx = normalizeCtx(ctxResp.data);
   if (!ctx) return { ok: false, status: 401, error: "invalid ctx" };
@@ -121,8 +121,8 @@ function normalizeGeocercas(rows) {
     .filter((g) => g && g.id);
 }
 
-async function loadCatalogs(supabase) {
-  // Personal por org (RLS + filtro explícito ya lo tienes en tabla)
+async function loadCatalogs(supabase, tenantId) {
+  // Personal por org (RLS + filtro explícito)
   const pResp = await supabase
     .from("personal")
     .select("id,nombre,apellido,email,org_id,is_deleted")
@@ -138,16 +138,18 @@ async function loadCatalogs(supabase) {
     geocercas = normalizeGeocercas(gResp.data);
   }
 
-  // Activities por org (RPC canónica)
-  let activities = [];
-  const aResp = await supabase.rpc("activities_list", {
-    p_include_inactive: false,
-  });
-  if (!aResp.error && Array.isArray(aResp.data)) {
-    activities = aResp.data.map((a) => ({ id: a.id, name: a.name }));
-  } else if (aResp.error) {
-    console.error("[api/asignaciones] activities_list rpc error:", aResp.error);
-  }
+  // Activities por org (NO usar org_id; usar tenant_id)
+  // Evita contaminación cross-org si algún RPC devolvía global.
+  const aResp = await supabase
+    .from("activities")
+    .select("id,name,tenant_id,active")
+    .eq("tenant_id", tenantId)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  const activities = aResp.error
+    ? []
+    : (aResp.data || []).map((a) => ({ id: a.id, name: a.name }));
 
   const personal = pResp.error ? [] : pResp.data || [];
 
@@ -157,6 +159,7 @@ async function loadCatalogs(supabase) {
     nombre: p.nombre,
     apellido: p.apellido,
     email: p.email,
+    org_id: p.org_id || null,
   }));
 
   return { personal, geocercas, activities, people };
@@ -199,7 +202,6 @@ function enrichAsignacionRow(row) {
 }
 
 async function ensureGeocercaInOrg(supabase, orgId, geocercaId) {
-  // Validación anti cross-org: geocerca debe pertenecer a org actual
   const q = await supabase
     .from("geocercas")
     .select("id,org_id,name,nombre")
@@ -209,29 +211,32 @@ async function ensureGeocercaInOrg(supabase, orgId, geocercaId) {
     .maybeSingle();
 
   if (q.error) return { ok: false, error: q.error.message };
-  if (!q.data) return { ok: false, error: "geocerca_id no pertenece a la org actual" };
+  if (!q.data)
+    return { ok: false, error: "geocerca_id no pertenece a la org actual" };
   return { ok: true };
 }
 
-async function ensureActivityInOrg(supabase, orgId, activityId) {
-  // Validación anti cross-org: activity debe pertenecer a org actual
+async function ensureActivityInTenant(supabase, tenantId, activityId) {
+  // activities.tenant_id es la fuente de verdad (NOT NULL)
   const q = await supabase
     .from("activities")
-    .select("id,org_id,name")
+    .select("id,tenant_id,name,active")
     .eq("id", activityId)
-    .eq("org_id", orgId)
+    .eq("tenant_id", tenantId)
     .limit(1)
     .maybeSingle();
 
   if (q.error) return { ok: false, error: q.error.message };
-  if (!q.data) return { ok: false, error: "activity_id no pertenece a la org actual" };
+  if (!q.data)
+    return { ok: false, error: "activity_id no pertenece a la org actual" };
   return { ok: true };
 }
 
 export default async function handler(req, res) {
   try {
     const ctxRes = await getContextOr401(req);
-    if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error });
+    if (!ctxRes.ok)
+      return json(res, ctxRes.status, { ok: false, error: ctxRes.error });
 
     const supabase = ctxRes.supabase;
     const orgId = ctxRes.orgId;
@@ -241,7 +246,7 @@ export default async function handler(req, res) {
     // GET: bundle asignaciones + catalogs
     // =========================
     if (req.method === "GET") {
-      const q = supabase
+      const resp = await supabase
         .from("asignaciones")
         .select(
           `
@@ -267,13 +272,12 @@ export default async function handler(req, res) {
         .eq("org_id", orgId)
         .order("start_time", { ascending: true });
 
-      const resp = await q;
       if (resp.error) return json(res, 500, { ok: false, error: resp.error.message });
 
       const rows = Array.isArray(resp.data) ? resp.data : [];
       const enriched = rows.map(enrichAsignacionRow);
 
-      const catalogs = await loadCatalogs(supabase);
+      const catalogs = await loadCatalogs(supabase, tenantId);
       return json(res, 200, { ok: true, data: { asignaciones: enriched, catalogs } });
     }
 
@@ -283,15 +287,17 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = (await readJson(req)) || {};
 
-      if (!body.personal_id) return json(res, 400, { ok: false, error: "personal_id is required" });
-      if (!body.geocerca_id) return json(res, 400, { ok: false, error: "geocerca_id is required" });
-      if (!body.activity_id) return json(res, 400, { ok: false, error: "activity_id is required" });
+      if (!body.personal_id)
+        return json(res, 400, { ok: false, error: "personal_id is required" });
+      if (!body.geocerca_id)
+        return json(res, 400, { ok: false, error: "geocerca_id is required" });
+      if (!body.activity_id)
+        return json(res, 400, { ok: false, error: "activity_id is required" });
 
-      // Validación anti cross-org (universal)
       const okG = await ensureGeocercaInOrg(supabase, orgId, body.geocerca_id);
       if (!okG.ok) return json(res, 400, { ok: false, error: okG.error });
 
-      const okA = await ensureActivityInOrg(supabase, orgId, body.activity_id);
+      const okA = await ensureActivityInTenant(supabase, tenantId, body.activity_id);
       if (!okA.ok) return json(res, 400, { ok: false, error: okA.error });
 
       const payload = { ...body, org_id: orgId, tenant_id: tenantId };
@@ -334,19 +340,19 @@ export default async function handler(req, res) {
       const id = body.id;
       const patch = body.patch;
 
-      if (!id || !patch) return json(res, 400, { ok: false, error: "missing id/patch" });
+      if (!id || !patch)
+        return json(res, 400, { ok: false, error: "missing id/patch" });
 
       const safe = { ...patch };
       delete safe.org_id;
       delete safe.tenant_id;
 
-      // Si cambian geocerca/activity, validar org
       if (safe.geocerca_id) {
         const okG = await ensureGeocercaInOrg(supabase, orgId, safe.geocerca_id);
         if (!okG.ok) return json(res, 400, { ok: false, error: okG.error });
       }
       if (safe.activity_id) {
-        const okA = await ensureActivityInOrg(supabase, orgId, safe.activity_id);
+        const okA = await ensureActivityInTenant(supabase, tenantId, safe.activity_id);
         if (!okA.ok) return json(res, 400, { ok: false, error: okA.error });
       }
 
