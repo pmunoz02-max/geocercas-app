@@ -1,4 +1,3 @@
-// src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
@@ -29,10 +28,79 @@ function exportRowsToCSV(rows, filenameBase = "reporte") {
   URL.revokeObjectURL(url);
 }
 
+function dedupeById(arr) {
+  const list = Array.isArray(arr) ? arr : [];
+  const map = new Map();
+  for (const it of list) {
+    const id = it?.id;
+    if (!id) continue;
+    if (!map.has(id)) map.set(id, it);
+  }
+  return Array.from(map.values());
+}
+
+function getItemOrgId(it) {
+  return it?.org_id || it?.tenant_id || null;
+}
+
+function filterByOrgIfPossible(arr, orgId) {
+  const list = Array.isArray(arr) ? arr : [];
+  if (!orgId) return list;
+
+  // Si los items traen org_id/tenant_id, filtramos estricto.
+  const hasOrgField = list.some((it) => !!getItemOrgId(it));
+  if (!hasOrgField) return list;
+
+  return list.filter((it) => String(getItemOrgId(it)) === String(orgId));
+}
+
+function normalizeGeocercas(arr) {
+  return dedupeById(
+    (Array.isArray(arr) ? arr : [])
+      .map((g) => ({
+        ...g,
+        nombre: (g?.nombre || g?.name || "").trim() || g?.id,
+      }))
+      .filter((g) => g?.id)
+  );
+}
+
+function normalizePersonas(arr) {
+  return dedupeById(
+    (Array.isArray(arr) ? arr : [])
+      .map((p) => ({
+        ...p,
+        nombre: p?.nombre || "",
+        apellido: p?.apellido || "",
+        email: p?.email || "",
+      }))
+      .filter((p) => p?.id)
+  );
+}
+
+function normalizeActivities(arr) {
+  return dedupeById(
+    (Array.isArray(arr) ? arr : [])
+      .map((a) => ({
+        ...a,
+        name: (a?.name || a?.nombre || "").trim() || a?.id,
+      }))
+      .filter((a) => a?.id)
+  );
+}
+
+function normalizeAsignaciones(arr) {
+  return dedupeById(
+    (Array.isArray(arr) ? arr : []).filter((a) => a?.id)
+  );
+}
+
 export default function Reports() {
   const { ready, authenticated, currentOrg } = useAuth();
+  const orgId = currentOrg?.id || null;
 
   const [errorMsg, setErrorMsg] = useState("");
+  const [warningMsg, setWarningMsg] = useState("");
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
 
@@ -55,8 +123,8 @@ export default function Reports() {
   const [rows, setRows] = useState([]);
 
   const canRun = useMemo(
-    () => ready && authenticated && !!currentOrg?.id,
-    [ready, authenticated, currentOrg]
+    () => ready && authenticated && !!orgId,
+    [ready, authenticated, orgId]
   );
 
   async function apiGet(url) {
@@ -83,15 +151,64 @@ export default function Reports() {
   async function loadFilters() {
     setLoadingFilters(true);
     setErrorMsg("");
+    setWarningMsg("");
+
     try {
       const json = await apiGet("/api/reportes?action=filters");
       const data = json?.data || {};
-      setFilters({
-        geocercas: Array.isArray(data.geocercas) ? data.geocercas : [],
-        personas: Array.isArray(data.personas) ? data.personas : [],
-        activities: Array.isArray(data.activities) ? data.activities : [],
-        asignaciones: Array.isArray(data.asignaciones) ? data.asignaciones : [],
-      });
+
+      // Normalizar + dedupe
+      let geocercas = normalizeGeocercas(data.geocercas);
+      let personas = normalizePersonas(data.personas);
+      let activities = normalizeActivities(data.activities);
+      let asignaciones = normalizeAsignaciones(data.asignaciones);
+
+      // Filtrado por org cuando sea posible (si el backend incluye org_id/tenant_id)
+      const beforeCounts = {
+        geocercas: geocercas.length,
+        personas: personas.length,
+        activities: activities.length,
+        asignaciones: asignaciones.length,
+      };
+
+      geocercas = filterByOrgIfPossible(geocercas, orgId);
+      personas = filterByOrgIfPossible(personas, orgId);
+      activities = filterByOrgIfPossible(activities, orgId);
+      asignaciones = filterByOrgIfPossible(asignaciones, orgId);
+
+      const afterCounts = {
+        geocercas: geocercas.length,
+        personas: personas.length,
+        activities: activities.length,
+        asignaciones: asignaciones.length,
+      };
+
+      const contaminated =
+        afterCounts.geocercas < beforeCounts.geocercas ||
+        afterCounts.personas < beforeCounts.personas ||
+        afterCounts.activities < beforeCounts.activities ||
+        afterCounts.asignaciones < beforeCounts.asignaciones;
+
+      if (contaminated) {
+        setWarningMsg(
+          "Detecté catálogos de otras organizaciones y fueron filtrados por la org actual. " +
+            "Recomendación: corregir /api/reportes?action=filters para que siempre filtre por current_org_id."
+        );
+      }
+
+      setFilters({ geocercas, personas, activities, asignaciones });
+
+      // Si lo seleccionado ya no existe tras filtrar, limpiamos selecciones inválidas
+      const validSet = (arr) => new Set(arr.map((x) => String(x.id)));
+      const gSet = validSet(geocercas);
+      const pSet = validSet(personas);
+      const aSet = validSet(activities);
+      const asSet = validSet(asignaciones);
+
+      setSelectedGeocercaIds((prev) => prev.filter((id) => gSet.has(String(id))));
+      setSelectedPersonalIds((prev) => prev.filter((id) => pSet.has(String(id))));
+      setSelectedActivityIds((prev) => prev.filter((id) => aSet.has(String(id))));
+      setSelectedAsignacionIds((prev) => prev.filter((id) => asSet.has(String(id))));
     } catch (e) {
       console.error("[Reports] loadFilters:", e);
       setErrorMsg(e?.message || "Error cargando filtros.");
@@ -127,7 +244,6 @@ export default function Reports() {
       if (selectedActivityIds.length) params.set("activity_ids", selectedActivityIds.join(","));
       if (selectedAsignacionIds.length) params.set("asignacion_ids", selectedAsignacionIds.join(","));
 
-      // paging simple (puedes agregar UI después)
       params.set("limit", "500");
       params.set("offset", "0");
 
@@ -141,7 +257,6 @@ export default function Reports() {
     }
   }
 
-  // helpers multiselect
   function onMultiSelectChange(setter) {
     return (e) => {
       const values = Array.from(e.target.selectedOptions).map((o) => o.value);
@@ -149,7 +264,6 @@ export default function Reports() {
     };
   }
 
-  // ===== estados globales =====
   if (!ready) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -170,7 +284,7 @@ export default function Reports() {
     );
   }
 
-  if (!currentOrg?.id) {
+  if (!orgId) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -180,7 +294,6 @@ export default function Reports() {
     );
   }
 
-  // ===== render =====
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
       <div className="flex flex-col gap-1">
@@ -196,7 +309,12 @@ export default function Reports() {
         </div>
       )}
 
-      {/* ===== Filtros ===== */}
+      {warningMsg && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {warningMsg}
+        </div>
+      )}
+
       <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
         <div className="flex flex-wrap gap-3 items-end">
           <div>
@@ -246,11 +364,8 @@ export default function Reports() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Geocercas */}
           <div>
-            <label className="text-sm font-medium text-slate-700">
-              Geocercas (multi)
-            </label>
+            <label className="text-sm font-medium text-slate-700">Geocercas (multi)</label>
             <select
               multiple
               value={selectedGeocercaIds}
@@ -264,16 +379,11 @@ export default function Reports() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Tip: Ctrl/Command para seleccionar múltiples.
-            </p>
+            <p className="text-[11px] text-gray-400 mt-1">Tip: Ctrl/Command para seleccionar múltiples.</p>
           </div>
 
-          {/* Personas */}
           <div>
-            <label className="text-sm font-medium text-slate-700">
-              Personas (multi)
-            </label>
+            <label className="text-sm font-medium text-slate-700">Personas (multi)</label>
             <select
               multiple
               value={selectedPersonalIds}
@@ -292,11 +402,8 @@ export default function Reports() {
             </select>
           </div>
 
-          {/* Actividades */}
           <div>
-            <label className="text-sm font-medium text-slate-700">
-              Actividades (multi)
-            </label>
+            <label className="text-sm font-medium text-slate-700">Actividades (multi)</label>
             <select
               multiple
               value={selectedActivityIds}
@@ -311,13 +418,15 @@ export default function Reports() {
                 </option>
               ))}
             </select>
+            {filters.activities.length === 0 && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                En tu organización existe al menos 1 actividad en DB, pero el endpoint no la está devolviendo. Hay que corregir /api/reportes?action=filters.
+              </p>
+            )}
           </div>
 
-          {/* Asignaciones */}
           <div>
-            <label className="text-sm font-medium text-slate-700">
-              Asignaciones (multi)
-            </label>
+            <label className="text-sm font-medium text-slate-700">Asignaciones (multi)</label>
             <select
               multiple
               value={selectedAsignacionIds}
@@ -327,7 +436,7 @@ export default function Reports() {
             >
               {filters.asignaciones.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.status || a.estado || "asignación"} — {a.id.slice(0, 8)}
+                  {a.status || a.estado || "asignación"} — {String(a.id).slice(0, 8)}
                 </option>
               ))}
             </select>
@@ -338,14 +447,11 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* ===== Tabla ===== */}
       <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         {loadingReport ? (
           <p className="p-4 text-sm text-slate-500">Cargando…</p>
         ) : rows.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">
-            No hay datos con los filtros seleccionados.
-          </p>
+          <p className="p-4 text-sm text-slate-500">No hay datos con los filtros seleccionados.</p>
         ) : (
           <table className="min-w-full text-sm">
             <thead className="bg-slate-100 text-slate-700">
@@ -383,9 +489,7 @@ export default function Reports() {
                   <td className="p-2 text-center">{r.total_marks ?? "—"}</td>
                   <td className="p-2 text-center">{r.inside_count ?? "—"}</td>
                   <td className="p-2 text-center">{r.avg_distance_m ?? "—"}</td>
-                  <td className="p-2">
-                    {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
-                  </td>
+                  <td className="p-2">{r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -395,3 +499,4 @@ export default function Reports() {
     </div>
   );
 }
+
