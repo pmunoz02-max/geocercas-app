@@ -199,6 +199,7 @@ export default async function handler(req, res) {
 
       const { data, error } = await supabase
         .from("asignaciones")
+        .console.log("[asignaciones POST] orgId/tenantId", { orgId, tenantId });
         .insert(payload)
         .select("*")
         .single();
