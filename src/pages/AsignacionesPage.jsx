@@ -1,7 +1,9 @@
 // src/pages/AsignacionesPage.jsx
-// DEFINITIVO: Asignaciones usa personal (personal_id) + /api/asignaciones
-// + Fallback universal para geocercas: si bundle no trae catálogo, consulta /api/geocercas
-// + Enrichment universal: AsignacionesTable recibe geocerca/activity/person resueltos por ID
+// DEFINITIVO: ASIGNACIONES resiliente
+// - Bundle como fuente primaria
+// - Normaliza campos (start_time/end_time/frecuencia_envio_sec)
+// - Enrichment: geocerca/activity/person resueltos por ID
+// - Auto-fallback y merge de catálogos si faltan IDs referenciados
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -54,36 +56,137 @@ function openNativePicker(inputEl) {
   inputEl.click();
 }
 
-function normalizeGeocercas(rows) {
-  const arr = Array.isArray(rows) ? rows : [];
-  return arr
-    .map((g) => ({
-      id: g.id,
-      nombre: (g.nombre || g.name || "").trim() || null,
-      name: g.name,
-      org_id: g.org_id,
-      tenant_id: g.tenant_id,
-    }))
-    .filter((g) => g.id);
-}
-
-async function fetchGeocercasFallback() {
-  const r = await fetch("/api/geocercas", { credentials: "include" });
-  const j = await r.json().catch(() => null);
-  if (!r.ok) {
-    const msg = (j && j.error) || `HTTP ${r.status}`;
-    throw new Error(msg);
-  }
-  const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-  return normalizeGeocercas(rows);
-}
-
 function toIdMap(arr) {
   const m = new Map();
   (Array.isArray(arr) ? arr : []).forEach((x) => {
     if (x?.id) m.set(x.id, x);
   });
   return m;
+}
+
+function dedupeById(arr) {
+  const map = new Map();
+  (Array.isArray(arr) ? arr : []).forEach((x) => {
+    if (!x?.id) return;
+    if (!map.has(x.id)) map.set(x.id, x);
+  });
+  return Array.from(map.values());
+}
+
+function normalizeGeocercas(rows) {
+  const arr = Array.isArray(rows) ? rows : [];
+  return dedupeById(
+    arr
+      .map((g) => ({
+        ...g,
+        id: g.id,
+        nombre: (g.nombre || g.name || "").trim() || null,
+      }))
+      .filter((g) => g?.id)
+  );
+}
+
+async function fetchJson(url) {
+  const r = await fetch(url, { credentials: "include" });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) {
+    const msg = (j && j.error) || `HTTP ${r.status}`;
+    throw new Error(msg);
+  }
+  return j;
+}
+
+async function fetchGeocercasFallback() {
+  const j = await fetchJson("/api/geocercas");
+  const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
+  return normalizeGeocercas(rows);
+}
+
+async function fetchActivitiesFallback() {
+  // Intento universal: si existe endpoint canónico /api/activities lo usamos
+  // Si no existe, no rompe la página.
+  try {
+    const j = await fetchJson("/api/activities?onlyActive=1&limit=2000");
+    const rows = Array.isArray(j) ? j : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : [];
+    return dedupeById(
+      rows
+        .map((a) => ({
+          ...a,
+          id: a.id,
+          name: (a.name || a.nombre || "").trim() || a.id,
+        }))
+        .filter((a) => a?.id)
+    );
+  } catch {
+    return null;
+  }
+}
+
+function normalizePersonalFromBundle(catalogs) {
+  const personal = Array.isArray(catalogs?.personal) ? catalogs.personal : [];
+  const peopleLegacy = Array.isArray(catalogs?.people) ? catalogs.people : [];
+
+  const normalized =
+    personal.length > 0
+      ? personal
+      : peopleLegacy.map((p) => ({
+          id: p.org_people_id,
+          nombre: p.nombre,
+          apellido: p.apellido,
+          email: p.email,
+          org_id: p.org_id || null,
+        }));
+
+  return dedupeById(
+    normalized
+      .map((p) => ({
+        ...p,
+        id: p.id,
+        nombre: p.nombre || "",
+        apellido: p.apellido || "",
+        email: p.email || "",
+      }))
+      .filter((p) => p?.id)
+  );
+}
+
+// Normaliza asignaciones aunque el backend cambie nombres
+function normalizeAsignacionRow(a) {
+  if (!a || typeof a !== "object") return a;
+
+  const start =
+    a.start_time ||
+    a.inicio ||
+    a.start ||
+    a.fecha_inicio ||
+    a.startTime ||
+    null;
+
+  const end =
+    a.end_time ||
+    a.fin ||
+    a.end ||
+    a.fecha_fin ||
+    a.endTime ||
+    null;
+
+  let freqSec = a.frecuencia_envio_sec ?? a.freq_sec ?? null;
+  if (freqSec == null && a.frecuencia_envio_min != null) {
+    const n = Number(a.frecuencia_envio_min);
+    if (Number.isFinite(n)) freqSec = n * 60;
+  }
+  if (freqSec == null && a.freq_min != null) {
+    const n = Number(a.freq_min);
+    if (Number.isFinite(n)) freqSec = n * 60;
+  }
+
+  return {
+    ...a,
+    start_time: start,
+    end_time: end,
+    frecuencia_envio_sec: freqSec,
+    status: a.status || a.estado || a.state || a.status_asignacion || a.status,
+  };
 }
 
 export default function AsignacionesPage() {
@@ -137,40 +240,53 @@ export default function AsignacionesPage() {
     }
 
     const bundle = data || {};
-    const rows = bundle.asignaciones || [];
+    const rowsRaw = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
     const catalogs = bundle.catalogs || {};
 
-    setAsignaciones(Array.isArray(rows) ? rows : []);
+    // ✅ Normaliza asignaciones (campos)
+    const rows = rowsRaw.map(normalizeAsignacionRow);
+    setAsignaciones(rows);
 
-    const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
-    const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
-    const normalizedPersonal =
-      personal.length > 0
-        ? personal
-        : fallback.map((p) => ({
-            id: p.org_people_id,
-            nombre: p.nombre,
-            apellido: p.apellido,
-            email: p.email,
-            org_id: p.org_id,
-          }));
-    setPersonalOptions(Array.isArray(normalizedPersonal) ? normalizedPersonal : []);
+    // Personal
+    const normalizedPersonal = normalizePersonalFromBundle(catalogs);
+    setPersonalOptions(normalizedPersonal);
 
+    // Geocercas
     const bundleGeos = normalizeGeocercas(catalogs.geocercas);
     setGeocercaOptions(bundleGeos);
 
-    setActivityOptions(Array.isArray(catalogs.activities) ? catalogs.activities : []);
+    // Activities
+    const acts = Array.isArray(catalogs.activities) ? dedupeById(catalogs.activities) : [];
+    setActivityOptions(acts);
 
-    if (!selectedActivityId && Array.isArray(catalogs.activities) && catalogs.activities.length === 1) {
-      setSelectedActivityId(catalogs.activities[0].id);
-    }
+    // ✅ Auto-ensure: si faltan geocercas/activities referenciadas, hacemos fallback y merge
+    const referencedGeoIds = new Set(rows.map((a) => a.geocerca_id).filter(Boolean));
+    const referencedActIds = new Set(rows.map((a) => a.activity_id).filter(Boolean));
 
-    if (bundleGeos.length === 0) {
+    const geoMap = toIdMap(bundleGeos);
+    const actMap = toIdMap(acts);
+
+    const missingGeo = Array.from(referencedGeoIds).some((id) => !geoMap.has(id));
+    const missingAct = Array.from(referencedActIds).some((id) => !actMap.has(id));
+
+    if (bundleGeos.length === 0 || missingGeo) {
       try {
         const geos = await fetchGeocercasFallback();
-        if (geos.length > 0) setGeocercaOptions(geos);
+        if (geos?.length) {
+          // merge
+          const merged = dedupeById([...geos, ...bundleGeos]);
+          setGeocercaOptions(merged);
+        }
       } catch (e) {
         console.warn("[AsignacionesPage] geocercas fallback failed:", e?.message || e);
+      }
+    }
+
+    if (acts.length === 0 || missingAct) {
+      const activities = await fetchActivitiesFallback();
+      if (activities?.length) {
+        const merged = dedupeById([...activities, ...acts]);
+        setActivityOptions(merged);
       }
     }
 
@@ -190,13 +306,15 @@ export default function AsignacionesPage() {
     return rows;
   }, [asignaciones, estadoFilter, selectedPersonalId]);
 
-  // ✅ ENRICHMENT UNIVERSAL para que AsignacionesTable muestre todo
+  // ✅ ENRICHMENT FINAL (siempre)
   const enrichedAsignaciones = useMemo(() => {
     const geoMap = toIdMap(geocercaOptions);
     const actMap = toIdMap(activityOptions);
     const perMap = toIdMap(personalOptions);
 
-    return (Array.isArray(filteredAsignaciones) ? filteredAsignaciones : []).map((a) => {
+    return (Array.isArray(filteredAsignaciones) ? filteredAsignaciones : []).map((a0) => {
+      const a = normalizeAsignacionRow(a0);
+
       const geocerca = a.geocerca || geoMap.get(a.geocerca_id) || null;
       const activity = a.activity || actMap.get(a.activity_id) || null;
       const personal = a.personal || perMap.get(a.personal_id) || null;
@@ -206,8 +324,10 @@ export default function AsignacionesPage() {
         geocerca,
         activity,
         personal,
-        geocerca_nombre: a.geocerca_nombre || geocerca?.nombre || geocerca?.name || "",
-        activity_name: a.activity_name || activity?.name || activity?.nombre || "",
+        geocerca_nombre:
+          a.geocerca_nombre || geocerca?.nombre || geocerca?.name || (a.geocerca_id ? String(a.geocerca_id).slice(0, 8) : ""),
+        activity_name:
+          a.activity_name || activity?.name || activity?.nombre || (a.activity_id ? String(a.activity_id).slice(0, 8) : ""),
       };
     });
   }, [filteredAsignaciones, geocercaOptions, activityOptions, personalOptions]);
@@ -331,68 +451,26 @@ export default function AsignacionesPage() {
   return (
     <div className="w-full">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Assignments" })}</h1>
+        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
         <p className="text-xs text-gray-500 mt-1">
-          {t("asignaciones.currentOrgLabel", { defaultValue: "Current organization" })}:{" "}
-          <span className="font-medium">{currentOrg?.name || "—"}</span>
+          {t("asignaciones.currentOrgLabel", { defaultValue: "Org actual" })}:{" "}
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
         </p>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <label className="font-medium">{t("asignaciones.filters.statusLabel", { defaultValue: "Status" })}</label>
-          <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
-            {ESTADOS.map((v) => (
-              <option key={v} value={v}>
-                {labelForEstado(v)}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
         <h2 className="text-lg font-semibold mb-4">
           {editingId
-            ? t("asignaciones.form.editTitle", { defaultValue: "Edit assignment" })
-            : t("asignaciones.form.newTitle", { defaultValue: "New assignment" })}
+            ? t("asignaciones.form.editTitle", { defaultValue: "Editar asignación" })
+            : t("asignaciones.form.newTitle", { defaultValue: "Nueva asignación" })}
         </h2>
-
-        {loading && (
-          <p className="text-sm text-gray-500 mb-3">
-            {t("asignaciones.messages.loadingData", { defaultValue: "Loading assignment data…" })}
-          </p>
-        )}
-
-        {personalOptions.length === 0 && (
-          <p className="text-red-600 font-semibold mb-3">
-            {t("asignaciones.messages.noPersonal", {
-              defaultValue:
-                "There is no active personnel in this organization. Create or reactivate at least one person.",
-            })}
-          </p>
-        )}
-
-        {geocercaOptions.length === 0 && (
-          <p className="text-amber-700 font-semibold mb-3">
-            No se cargaron geocercas para esta organización. Si en “Geocercas” sí aparecen, este módulo ya intentó fallback a /api/geocercas.
-          </p>
-        )}
-
-        {activityOptions.length === 0 && (
-          <p className="text-red-600 font-semibold mb-3">
-            {t("asignaciones.messages.noActivities", {
-              defaultValue: "There are no activities created. Create at least one activity to assign.",
-            })}
-          </p>
-        )}
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Persona */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.personLabel", { defaultValue: "Person" })}</label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.personLabel", { defaultValue: "Persona" })}</label>
             <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)} required>
-              <option value="">{t("asignaciones.form.personPlaceholder", { defaultValue: "Select a person" })}</option>
+              <option value="">{t("asignaciones.form.personPlaceholder", { defaultValue: "Selecciona una persona" })}</option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {`${p.nombre || ""} ${p.apellido || ""}`.trim()}
@@ -403,9 +481,9 @@ export default function AsignacionesPage() {
 
           {/* Geocerca */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.geofenceLabel", { defaultValue: "Geofence" })}</label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.geofenceLabel", { defaultValue: "Geocerca" })}</label>
             <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
-              <option value="">{t("asignaciones.form.geofencePlaceholder", { defaultValue: "Select a geofence" })}</option>
+              <option value="">{t("asignaciones.form.geofencePlaceholder", { defaultValue: "Selecciona una geocerca" })}</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre || g.id}
@@ -416,7 +494,7 @@ export default function AsignacionesPage() {
 
           {/* Actividad */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.activityLabel", { defaultValue: "Activity" })}</label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.activityLabel", { defaultValue: "Actividad" })}</label>
             <select
               className="border rounded px-3 py-2"
               value={selectedActivityId}
@@ -424,12 +502,10 @@ export default function AsignacionesPage() {
               required
               disabled={activityOptions.length === 0}
             >
-              <option value="">
-                {t("asignaciones.form.activityPlaceholder", { defaultValue: "Select an activity" })}
-              </option>
+              <option value="">{t("asignaciones.form.activityPlaceholder", { defaultValue: "Selecciona una actividad" })}</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name || a.id}
+                  {a.name || a.nombre || a.id}
                 </option>
               ))}
             </select>
@@ -437,7 +513,7 @@ export default function AsignacionesPage() {
 
           {/* Inicio */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.startLabel", { defaultValue: "Start date/time" })}</label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.startLabel", { defaultValue: "Inicio" })}</label>
             <div className="relative">
               <input
                 ref={startInputRef}
@@ -451,8 +527,8 @@ export default function AsignacionesPage() {
                 type="button"
                 onClick={() => openNativePicker(startInputRef.current)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                aria-label={t("asignaciones.form.openStartCalendar", { defaultValue: "Open start date/time picker" })}
-                title={t("asignaciones.form.openStartCalendar", { defaultValue: "Open start date/time picker" })}
+                aria-label="Abrir calendario"
+                title="Abrir calendario"
               >
                 <CalendarIcon />
               </button>
@@ -461,7 +537,7 @@ export default function AsignacionesPage() {
 
           {/* Fin */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.endLabel", { defaultValue: "End date/time" })}</label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.endLabel", { defaultValue: "Fin" })}</label>
             <div className="relative">
               <input
                 ref={endInputRef}
@@ -475,8 +551,8 @@ export default function AsignacionesPage() {
                 type="button"
                 onClick={() => openNativePicker(endInputRef.current)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                aria-label={t("asignaciones.form.openEndCalendar", { defaultValue: "Open end date/time picker" })}
-                title={t("asignaciones.form.openEndCalendar", { defaultValue: "Open end date/time picker" })}
+                aria-label="Abrir calendario"
+                title="Abrir calendario"
               >
                 <CalendarIcon />
               </button>
@@ -485,16 +561,16 @@ export default function AsignacionesPage() {
 
           {/* Estado */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.statusLabel", { defaultValue: "Status" })}</label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.statusLabel", { defaultValue: "Estado" })}</label>
             <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="activa">{t("asignaciones.form.statusActive", { defaultValue: "Active" })}</option>
-              <option value="inactiva">{t("asignaciones.form.statusInactive", { defaultValue: "Inactive" })}</option>
+              <option value="activa">{t("asignaciones.form.statusActive", { defaultValue: "Activa" })}</option>
+              <option value="inactiva">{t("asignaciones.form.statusInactive", { defaultValue: "Inactiva" })}</option>
             </select>
           </div>
 
           {/* Frecuencia */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.frequencyLabel", { defaultValue: "Frequency (min)" })}</label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.frequencyLabel", { defaultValue: "Frecuencia (min)" })}</label>
             <input
               type="number"
               className="border rounded px-3 py-2"
@@ -510,14 +586,12 @@ export default function AsignacionesPage() {
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
               disabled={loading || activityOptions.length === 0 || personalOptions.length === 0 || geocercaOptions.length === 0}
             >
-              {editingId
-                ? t("asignaciones.form.updateButton", { defaultValue: "Update assignment" })
-                : t("asignaciones.form.saveButton", { defaultValue: "Save assignment" })}
+              {editingId ? "Actualizar" : "Guardar"}
             </button>
 
             {editingId && (
-              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
-                {t("asignaciones.form.cancelEditButton", { defaultValue: "Cancel editing" })}
+              <button type="button" onClick={() => setEditingId(null)} className="border px-4 py-2 rounded">
+                Cancelar
               </button>
             )}
           </div>
@@ -545,16 +619,14 @@ export default function AsignacionesPage() {
           setSuccessMessage(null);
         }}
         onDelete={async (id) => {
-          const ok = window.confirm(
-            t("asignaciones.messages.confirmDelete", { defaultValue: "Are you sure you want to delete this assignment?" })
-          );
+          const ok = window.confirm("¿Eliminar asignación?");
           if (!ok) return;
 
           const resp = await deleteAsignacion(id);
           if (resp.error) {
-            setError(t("asignaciones.messages.deleteError", { defaultValue: "Could not delete the assignment." }));
+            setError("No se pudo eliminar.");
           } else {
-            setSuccessMessage(t("asignaciones.banner.deleted", { defaultValue: "Assignment deleted." }));
+            setSuccessMessage("Asignación eliminada.");
             loadAll();
           }
         }}
