@@ -1,14 +1,14 @@
 // api/asignaciones.js
 // ============================================================
-// TENANT-SAFE Asignaciones API (CANONICAL) - CommonJS safe
+// TENANT-SAFE Asignaciones API (CANONICAL) - ESM safe (sin ?. ni ??)
 // - cookie HttpOnly tg_at
 // - bootstrap_session_context() devuelve org_id/role
-// - tenant_id se deriva SIEMPRE de org_id (tenant==org en tu BD actual)
+// - tenant_id = org_id (tenant==org)
 // - Activities via RPC activities_list
 // - Geocercas via RPC get_geocercas_for_current_org
 // ============================================================
 
-const { createClient } = require("@supabase/supabase-js");
+import { createClient } from "@supabase/supabase-js";
 
 function parseCookies(req) {
   const header = (req && req.headers && req.headers.cookie) ? req.headers.cookie : "";
@@ -22,7 +22,7 @@ function parseCookies(req) {
     const v = pieces.join("=") || "";
     try {
       out[k] = decodeURIComponent(v);
-    } catch (_) {
+    } catch {
       out[k] = v;
     }
   });
@@ -42,10 +42,8 @@ function normalizeCtx(ctxRaw) {
 }
 
 function pickOrgId(ctx) {
-  return (
-    (ctx && (ctx.current_org_id || ctx.currentOrgId || ctx.org_id || ctx.orgId)) ||
-    null
-  );
+  if (!ctx) return null;
+  return ctx.current_org_id || ctx.currentOrgId || ctx.org_id || ctx.orgId || null;
 }
 
 function supabaseForToken(accessToken) {
@@ -90,8 +88,7 @@ async function getContextOr401(req) {
   const orgId = pickOrgId(ctx);
   if (!orgId) return { ok: false, status: 401, error: "ctx missing org_id" };
 
-  // ✅ UNIVERSAL: en tu modelo actual tenant == org
-  const tenantId = orgId;
+  const tenantId = orgId; // tenant==org
 
   return { ok: true, supabase, orgId, tenantId };
 }
@@ -107,14 +104,12 @@ function normalizeGeocercas(rows) {
 }
 
 async function loadCatalogs(supabase) {
-  // Personal: por org (RLS/ctx se encarga)
   const pResp = await supabase
     .from("personal")
     .select("id,nombre,apellido,email,org_id,is_deleted")
     .eq("is_deleted", false)
     .order("nombre", { ascending: true });
 
-  // Geocercas: RPC CANÓNICO
   let geocercas = [];
   const gResp = await supabase.rpc("get_geocercas_for_current_org");
   if (gResp.error) {
@@ -123,7 +118,6 @@ async function loadCatalogs(supabase) {
     geocercas = normalizeGeocercas(gResp.data);
   }
 
-  // Activities: RPC tenant-safe
   let activities = [];
   const aResp = await supabase.rpc("activities_list", { p_include_inactive: false });
   if (!aResp.error && Array.isArray(aResp.data)) {
@@ -134,7 +128,6 @@ async function loadCatalogs(supabase) {
 
   const personal = pResp.error ? [] : (pResp.data || []);
 
-  // Alias compat
   const people = personal.map((p) => ({
     org_people_id: p.id,
     nombre: p.nombre,
@@ -145,7 +138,7 @@ async function loadCatalogs(supabase) {
   return { personal, geocercas, activities, people };
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   try {
     const ctxRes = await getContextOr401(req);
     if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error });
@@ -195,10 +188,7 @@ module.exports = async function handler(req, res) {
       if (!body.geocerca_id) return json(res, 400, { ok: false, error: "geocerca_id is required" });
       if (!body.activity_id) return json(res, 400, { ok: false, error: "activity_id is required" });
 
-      const payload = Object.assign({}, body, {
-        org_id: orgId,
-        tenant_id: tenantId,
-      });
+      const payload = { ...body, org_id: orgId, tenant_id: tenantId };
 
       const ins = await supabase.from("asignaciones").insert(payload).select("*").single();
       if (ins.error) return json(res, 400, { ok: false, error: ins.error.message });
@@ -212,11 +202,18 @@ module.exports = async function handler(req, res) {
 
       if (!id || !patch) return json(res, 400, { ok: false, error: "missing id/patch" });
 
-      const safe = Object.assign({}, patch);
+      const safe = { ...patch };
       delete safe.org_id;
       delete safe.tenant_id;
 
-      const up = await supabase.from("asignaciones").update(safe).eq("id", id).eq("org_id", orgId).select("*").single();
+      const up = await supabase
+        .from("asignaciones")
+        .update(safe)
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .select("*")
+        .single();
+
       if (up.error) return json(res, 400, { ok: false, error: up.error.message });
       return json(res, 200, { ok: true, data: up.data });
     }
@@ -241,4 +238,4 @@ module.exports = async function handler(req, res) {
     console.error("[api/asignaciones] fatal:", e);
     return json(res, 500, { ok: false, error: (e && e.message) ? e.message : "fatal" });
   }
-};
+}
