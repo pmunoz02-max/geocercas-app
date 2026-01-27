@@ -1,10 +1,12 @@
 // api/asignaciones.js
-// DEFINITIVO: Asignaciones usa catálogo "personal" y guarda personal_id
+// ============================================================
+// TENANT-SAFE Asignaciones API (CANONICAL)
 // - cookie HttpOnly tg_at
-// - contexto via public.bootstrap_session_context()
-// - normaliza array vs objeto
-// - NO accede directo a activities (usa RPC activities_list) ✅
-// - Geocercas via RPC list_geocercas_for_assign ✅
+// - bootstrap_session_context() devuelve org_id/role
+// - tenant_id se deriva SIEMPRE de org_id (tenant==org en tu BD actual)
+// - Activities via RPC activities_list
+// - Geocercas via RPC list_geocercas_for_assign
+// ============================================================
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -22,22 +24,13 @@ function parseCookies(req) {
 function json(res, status, body) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
   res.end(JSON.stringify(body));
 }
 
 function normalizeCtx(ctxRaw) {
   const ctxObj = Array.isArray(ctxRaw) ? ctxRaw[0] : ctxRaw;
   return ctxObj && typeof ctxObj === "object" ? ctxObj : null;
-}
-
-function pickTenantId(ctx) {
-  return (
-    ctx?.tenant_id ??
-    ctx?.tenantId ??
-    ctx?.org_tenant_id ??
-    ctx?.orgTenantId ??
-    null
-  );
 }
 
 function pickOrgId(ctx) {
@@ -89,93 +82,60 @@ async function getContextOr401(req) {
   const ctx = normalizeCtx(ctxRaw);
   if (!ctx) return { ok: false, status: 401, error: "invalid ctx" };
 
-  const tenantId = pickTenantId(ctx);
   const orgId = pickOrgId(ctx);
+  if (!orgId) return { ok: false, status: 401, error: "ctx missing org_id" };
 
-  if (!orgId && !tenantId) return { ok: false, status: 401, error: "ctx missing org/tenant" };
+  // ✅ UNIVERSAL: en tu modelo actual tenant == org
+  const tenantId = orgId;
 
-  return { ok: true, supabase, tenantId, orgId };
+  return { ok: true, supabase, orgId, tenantId };
 }
 
 function normalizeGeocercas(rows) {
   if (!Array.isArray(rows)) return [];
   return rows
     .map((g) => ({
-      id: g.id ?? g.geocerca_id ?? g.fence_id ?? g.uuid ?? null,
-      nombre: g.nombre ?? g.name ?? g.label ?? g.title ?? null,
+      id: g.id ?? g.geocerca_id ?? g.fence_id ?? null,
+      nombre: g.nombre ?? g.name ?? g.label ?? null,
     }))
     .filter((g) => g.id);
 }
 
-async function loadCatalogs(supabase, { orgId, tenantId }) {
-  // ✅ Personal
-  let personal = [];
-  {
-    let q = supabase
-      .from("personal")
-      .select("id,nombre,apellido,email,org_id,is_deleted")
-      .eq("is_deleted", false)
-      .order("nombre", { ascending: true });
+async function loadCatalogs(supabase) {
+  // Personal: por org (fuente)
+  const { data: personal, error: pErr } = await supabase
+    .from("personal")
+    .select("id,nombre,apellido,email,org_id,is_deleted")
+    .eq("is_deleted", false)
+    .order("nombre", { ascending: true });
 
-    if (orgId) q = q.eq("org_id", orgId);
-    else q = q.eq("tenant_id", tenantId);
-
-    const r = await q;
-    if (!r.error) personal = r.data || [];
-  }
-
-  // ✅ Geocercas via RPC (tenant-safe)
+  // Geocercas: RPC tenant-safe
   let geocercas = [];
   {
     const { data, error } = await supabase.rpc("list_geocercas_for_assign");
-    if (!error) {
-      geocercas = normalizeGeocercas(data);
-    } else {
-      // Fallback ultra defensivo (por si la RPC no existiera en algún entorno)
-      let r1 = await supabase
-        .from("geocercas")
-        .select("id,nombre,org_id,tenant_id")
-        .order("nombre", { ascending: true });
-
-      // Intentar ambos filtros si vienen valores
-      if (!r1.error) {
-        let rows = r1.data || [];
-        if (orgId) {
-          const byOrg = rows.filter((x) => x.org_id === orgId);
-          if (byOrg.length) geocercas = byOrg.map((x) => ({ id: x.id, nombre: x.nombre }));
-        }
-        if (!geocercas.length && tenantId) {
-          const byTenant = rows.filter((x) => x.tenant_id === tenantId);
-          if (byTenant.length) geocercas = byTenant.map((x) => ({ id: x.id, nombre: x.nombre }));
-        }
-      }
-    }
+    if (!error) geocercas = normalizeGeocercas(data);
   }
 
-  // ✅ Activities via RPC
+  // Activities: RPC tenant-safe
   let activities = [];
   {
     const { data, error } = await supabase.rpc("activities_list", {
       p_include_inactive: false,
     });
-
     if (!error && Array.isArray(data)) {
-      activities = data.map((a) => ({
-        id: a.id,
-        name: a.name,
-      }));
+      activities = data.map((a) => ({ id: a.id, name: a.name }));
     }
   }
 
   // Alias compat
-  const people = personal.map((p) => ({
+  const people = (personal || []).map((p) => ({
     org_people_id: p.id,
     nombre: p.nombre,
     apellido: p.apellido,
     email: p.email,
   }));
 
-  return { personal, geocercas, activities, people };
+  return { personal: pErr ? [] : (personal || []), geocercas, activities, people };
 }
 
 export default async function handler(req, res) {
@@ -194,7 +154,6 @@ export default async function handler(req, res) {
           org_id,
           tenant_id,
           personal_id,
-          org_people_id,
           geocerca_id,
           activity_id,
           start_time,
@@ -210,33 +169,36 @@ export default async function handler(req, res) {
         `
         )
         .eq("is_deleted", false)
+        .eq("org_id", orgId)
         .order("start_time", { ascending: true });
-
-      if (orgId) q = q.eq("org_id", orgId);
-      else q = q.eq("tenant_id", tenantId);
 
       const { data: asignaciones, error } = await q;
       if (error) return json(res, 500, { ok: false, error: error.message });
 
-      const catalogs = await loadCatalogs(supabase, { orgId, tenantId });
-
+      const catalogs = await loadCatalogs(supabase);
       return json(res, 200, { ok: true, data: { asignaciones: asignaciones || [], catalogs } });
     }
 
     if (req.method === "POST") {
       const body = (await readJson(req)) || {};
 
+      if (!body.personal_id) return json(res, 400, { ok: false, error: "personal_id is required" });
+      if (!body.geocerca_id) return json(res, 400, { ok: false, error: "geocerca_id is required" });
+      if (!body.activity_id) return json(res, 400, { ok: false, error: "activity_id is required" });
+
+      // ✅ UNIVERSAL: siempre forzar org+tenant desde backend
       const payload = {
         ...body,
-        org_id: orgId ?? null,
-        tenant_id: tenantId ?? body.tenant_id ?? null,
+        org_id: orgId,
+        tenant_id: tenantId, // <- clave para no romper asignaciones_tenant_fk
       };
 
-      if (!payload.personal_id) return json(res, 400, { ok: false, error: "personal_id is required" });
+      const { data, error } = await supabase
+        .from("asignaciones")
+        .insert(payload)
+        .select("*")
+        .single();
 
-      delete payload.org_people_id;
-
-      const { data, error } = await supabase.from("asignaciones").insert(payload).select("*").single();
       if (error) return json(res, 400, { ok: false, error: error.message });
       return json(res, 200, { ok: true, data });
     }
@@ -249,13 +211,15 @@ export default async function handler(req, res) {
       if (!id || !patch) return json(res, 400, { ok: false, error: "missing id/patch" });
 
       const safe = { ...patch };
+      // Nunca permitir override desde cliente
       delete safe.org_id;
       delete safe.tenant_id;
-      delete safe.org_people_id;
 
-      let q = supabase.from("asignaciones").update(safe).eq("id", id);
-      if (orgId) q = q.eq("org_id", orgId);
-      else q = q.eq("tenant_id", tenantId);
+      let q = supabase
+        .from("asignaciones")
+        .update(safe)
+        .eq("id", id)
+        .eq("org_id", orgId);
 
       const { data, error } = await q.select("*").single();
       if (error) return json(res, 400, { ok: false, error: error.message });
@@ -267,15 +231,12 @@ export default async function handler(req, res) {
       const id = body.id;
       if (!id) return json(res, 400, { ok: false, error: "missing id" });
 
-      let q = supabase
+      const { error } = await supabase
         .from("asignaciones")
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("org_id", orgId);
 
-      if (orgId) q = q.eq("org_id", orgId);
-      else q = q.eq("tenant_id", tenantId);
-
-      const { error } = await q;
       if (error) return json(res, 400, { ok: false, error: error.message });
       return json(res, 200, { ok: true });
     }
