@@ -2,9 +2,10 @@
 // ============================================================
 // TENANT-SAFE Asignaciones API (CANONICAL) - ESM safe
 // Fix Enero 2026:
-//  - activities table usa tenant_id (NOT NULL). org_id puede ser NULL.
-//  - Catálogo activities y validación cross-org deben basarse en tenant_id.
-//  - Evita contaminación cross-org por fallbacks / catálogos no filtrados.
+//  - Evita dependencia de RPC bootstrap_session_context (puede tocar app_user_roles y chocar con RLS).
+//  - Determina org actual desde memberships (is_default) usando el user del JWT.
+//  - activities usa tenant_id (NOT NULL). org_id puede ser NULL.
+//  - Catálogo activities y validación cross-org basadas en tenant_id.
 //  - Mantiene campos planos resilientes para UI.
 // ============================================================
 
@@ -35,22 +36,6 @@ function json(res, status, body) {
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("cache-control", "no-store");
   res.end(JSON.stringify(body));
-}
-
-function normalizeCtx(ctxRaw) {
-  const ctxObj = Array.isArray(ctxRaw) ? ctxRaw[0] : ctxRaw;
-  return ctxObj && typeof ctxObj === "object" ? ctxObj : null;
-}
-
-function pickOrgId(ctx) {
-  if (!ctx) return null;
-  return (
-    ctx.current_org_id ||
-    ctx.currentOrgId ||
-    ctx.org_id ||
-    ctx.orgId ||
-    null
-  );
 }
 
 function supabaseForToken(accessToken) {
@@ -85,6 +70,15 @@ function readJson(req) {
   });
 }
 
+/**
+ * Determina el "org actual" de forma tenant-safe SIN depender de RPCs que puedan
+ * tocar app_user_roles (y chocar con RLS).
+ *
+ * Regla:
+ * 1) user = auth.getUser() usando el JWT del cookie tg_at
+ * 2) org = memberships.is_default=true (si existe)
+ * 3) fallback: primer membership por created_at desc
+ */
 async function getContextOr401(req) {
   const cookies = parseCookies(req);
   const token = cookies.tg_at || null;
@@ -92,22 +86,51 @@ async function getContextOr401(req) {
 
   const supabase = supabaseForToken(token);
 
-  const ctxResp = await supabase.rpc("bootstrap_session_context");
-  if (ctxResp.error)
+  const u = await supabase.auth.getUser();
+  if (u.error || !u.data?.user?.id) {
     return {
       ok: false,
       status: 401,
-      error: ctxResp.error.message || "ctx rpc error",
+      error: (u.error && u.error.message) || "invalid user",
     };
+  }
+  const userId = u.data.user.id;
 
-  const ctx = normalizeCtx(ctxResp.data);
-  if (!ctx) return { ok: false, status: 401, error: "invalid ctx" };
+  // 1) default org
+  const qDefault = await supabase
+    .from("memberships")
+    .select("org_id, role, is_default, created_at")
+    .eq("user_id", userId)
+    .eq("is_default", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const orgId = pickOrgId(ctx);
-  if (!orgId) return { ok: false, status: 401, error: "ctx missing org_id" };
+  let orgId = qDefault.data?.org_id || null;
 
-  const tenantId = orgId; // tenant==org
-  return { ok: true, supabase, orgId, tenantId };
+  // 2) fallback: any membership
+  if (!orgId) {
+    const qAny = await supabase
+      .from("memberships")
+      .select("org_id, role, is_default, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    orgId = qAny.data?.org_id || null;
+  }
+
+  if (!orgId) {
+    return {
+      ok: false,
+      status: 403,
+      error: "no memberships found for current user",
+    };
+  }
+
+  const tenantId = orgId; // tenant==org (tu arquitectura actual)
+  return { ok: true, supabase, orgId, tenantId, userId };
 }
 
 function normalizeGeocercas(rows) {
@@ -129,7 +152,7 @@ async function loadCatalogs(supabase, tenantId) {
     .eq("is_deleted", false)
     .order("nombre", { ascending: true });
 
-  // Geocercas por org (RPC canónica)
+  // Geocercas por org (RPC canónica). Si falla, la UI usa fallback /api/geocercas
   let geocercas = [];
   const gResp = await supabase.rpc("get_geocercas_for_current_org");
   if (gResp.error) {
@@ -139,7 +162,6 @@ async function loadCatalogs(supabase, tenantId) {
   }
 
   // Activities por org (NO usar org_id; usar tenant_id)
-  // Evita contaminación cross-org si algún RPC devolvía global.
   const aResp = await supabase
     .from("activities")
     .select("id,name,tenant_id,active")
@@ -272,13 +294,17 @@ export default async function handler(req, res) {
         .eq("org_id", orgId)
         .order("start_time", { ascending: true });
 
-      if (resp.error) return json(res, 500, { ok: false, error: resp.error.message });
+      if (resp.error)
+        return json(res, 500, { ok: false, error: resp.error.message });
 
       const rows = Array.isArray(resp.data) ? resp.data : [];
       const enriched = rows.map(enrichAsignacionRow);
 
       const catalogs = await loadCatalogs(supabase, tenantId);
-      return json(res, 200, { ok: true, data: { asignaciones: enriched, catalogs } });
+      return json(res, 200, {
+        ok: true,
+        data: { asignaciones: enriched, catalogs },
+      });
     }
 
     // =========================
@@ -327,7 +353,8 @@ export default async function handler(req, res) {
         )
         .single();
 
-      if (ins.error) return json(res, 400, { ok: false, error: ins.error.message });
+      if (ins.error)
+        return json(res, 400, { ok: false, error: ins.error.message });
 
       return json(res, 200, { ok: true, data: enrichAsignacionRow(ins.data) });
     }
@@ -383,7 +410,9 @@ export default async function handler(req, res) {
         )
         .single();
 
-      if (up.error) return json(res, 400, { ok: false, error: up.error.message });
+      if (up.error)
+        return json(res, 400, { ok: false, error: up.error.message });
+
       return json(res, 200, { ok: true, data: enrichAsignacionRow(up.data) });
     }
 
@@ -401,13 +430,18 @@ export default async function handler(req, res) {
         .eq("id", id)
         .eq("org_id", orgId);
 
-      if (del.error) return json(res, 400, { ok: false, error: del.error.message });
+      if (del.error)
+        return json(res, 400, { ok: false, error: del.error.message });
+
       return json(res, 200, { ok: true });
     }
 
     return json(res, 405, { ok: false, error: "method not allowed" });
   } catch (e) {
     console.error("[api/asignaciones] fatal:", e);
-    return json(res, 500, { ok: false, error: e && e.message ? e.message : "fatal" });
+    return json(res, 500, {
+      ok: false,
+      error: e && e.message ? e.message : "fatal",
+    });
   }
 }
