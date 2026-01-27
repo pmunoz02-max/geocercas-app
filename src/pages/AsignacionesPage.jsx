@@ -1,5 +1,6 @@
 // src/pages/AsignacionesPage.jsx
 // DEFINITIVO: Asignaciones usa personal (personal_id) + /api/asignaciones
+// + Fallback universal para geocercas: si bundle no trae catálogo, consulta /api/geocercas
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,10 +22,8 @@ function localDateTimeToISO(localDateTime) {
   return new Date(y, m - 1, day, hh, mm, 0, 0).toISOString();
 }
 
-// Importante: valores internos siguen siendo "activa/inactiva" (compat backend).
 const ESTADOS = ["todos", "activa", "inactiva"];
 
-// Icono calendario (SVG inline, sin dependencias)
 function CalendarIcon({ className = "h-4 w-4" }) {
   return (
     <svg
@@ -44,18 +43,37 @@ function CalendarIcon({ className = "h-4 w-4" }) {
 
 function openNativePicker(inputEl) {
   if (!inputEl) return;
-  // showPicker() funciona en Chromium modernos para inputs date/datetime-local
   try {
     if (typeof inputEl.showPicker === "function") {
       inputEl.showPicker();
       return;
     }
-  } catch (_) {
-    // ignore
-  }
-  // Fallback
+  } catch (_) {}
   inputEl.focus();
   inputEl.click();
+}
+
+function normalizeGeocercas(rows) {
+  const arr = Array.isArray(rows) ? rows : [];
+  return arr
+    .map((g) => ({
+      id: g.id,
+      nombre: (g.nombre || g.name || "").trim() || null,
+    }))
+    .filter((g) => g.id);
+}
+
+async function fetchGeocercasFallback() {
+  // /api/geocercas devuelve array plano según tu implementación
+  const r = await fetch("/api/geocercas", { credentials: "include" });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) {
+    const msg = (j && j.error) || `HTTP ${r.status}`;
+    throw new Error(msg);
+  }
+  // j puede ser array o {data:[]}; soportamos ambas
+  const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
+  return normalizeGeocercas(rows);
 }
 
 export default function AsignacionesPage() {
@@ -71,7 +89,7 @@ export default function AsignacionesPage() {
 
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
-  // FORM (✅ personal_id)
+  // FORM
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
@@ -81,7 +99,6 @@ export default function AsignacionesPage() {
   const [status, setStatus] = useState("activa");
   const [editingId, setEditingId] = useState(null);
 
-  // Refs para abrir el picker con el icono
   const startInputRef = useRef(null);
   const endInputRef = useRef(null);
 
@@ -115,31 +132,42 @@ export default function AsignacionesPage() {
 
     setAsignaciones(Array.isArray(rows) ? rows : []);
 
-    // ✅ Fuente de verdad
     const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
-
-    // Fallback de compat: si por algún motivo llega vacío pero hay "people" (alias), lo usamos
     const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
     const normalizedPersonal =
       personal.length > 0
         ? personal
         : fallback.map((p) => ({
-            id: p.org_people_id, // alias
+            id: p.org_people_id,
             nombre: p.nombre,
             apellido: p.apellido,
             email: p.email,
           }));
-
     setPersonalOptions(normalizedPersonal);
-    setGeocercaOptions(Array.isArray(catalogs.geocercas) ? catalogs.geocercas : []);
+
+    // ✅ Geocercas del bundle (si llegan)
+    const bundleGeos = normalizeGeocercas(catalogs.geocercas);
+    setGeocercaOptions(bundleGeos);
+
+    // ✅ Activities
     setActivityOptions(Array.isArray(catalogs.activities) ? catalogs.activities : []);
 
-    if (
-      !selectedActivityId &&
-      Array.isArray(catalogs.activities) &&
-      catalogs.activities.length === 1
-    ) {
+    if (!selectedActivityId && Array.isArray(catalogs.activities) && catalogs.activities.length === 1) {
       setSelectedActivityId(catalogs.activities[0].id);
+    }
+
+    // ✅ FALLBACK UNIVERSAL: si bundle no trajo geocercas, consultamos /api/geocercas
+    // Esto repara casos donde el bundle cambió forma/retorno o falló parcialmente.
+    if (bundleGeos.length === 0) {
+      try {
+        const geos = await fetchGeocercasFallback();
+        if (geos.length > 0) {
+          setGeocercaOptions(geos);
+        }
+      } catch (e) {
+        console.warn("[AsignacionesPage] geocercas fallback failed:", e?.message || e);
+        // no bloqueamos la pantalla; solo quedará vacío si realmente no hay geocercas o falla la API
+      }
     }
 
     setLoading(false);
@@ -153,9 +181,7 @@ export default function AsignacionesPage() {
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
-    if (estadoFilter !== "todos") {
-      rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
-    }
+    if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
     if (selectedPersonalId) rows = rows.filter((a) => a.personal_id === selectedPersonalId);
     return rows;
   }, [asignaciones, estadoFilter, selectedPersonalId]);
@@ -219,18 +245,16 @@ export default function AsignacionesPage() {
     }
 
     const payload = {
-      personal_id: selectedPersonalId, // ✅ definitivo
+      personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
       frecuencia_envio_sec: freqMin * 60,
-      status, // "activa" | "inactiva"
+      status,
     };
 
-    const resp = editingId
-      ? await updateAsignacion(editingId, payload)
-      : await createAsignacion(payload);
+    const resp = editingId ? await updateAsignacion(editingId, payload) : await createAsignacion(payload);
 
     if (resp.error) {
       console.error("[AsignacionesPage] save error:", resp.error);
@@ -271,21 +295,17 @@ export default function AsignacionesPage() {
     );
   }
 
-  // Traducción de filtro sin tocar valores internos:
   const labelForEstado = (v) => {
     if (v === "todos") return t("asignaciones.filters.status.todos", { defaultValue: "All" });
     if (v === "activa") return t("asignaciones.filters.status.activo", { defaultValue: "Active" });
-    if (v === "inactiva")
-      return t("asignaciones.filters.status.inactivo", { defaultValue: "Inactive" });
+    if (v === "inactiva") return t("asignaciones.filters.status.inactivo", { defaultValue: "Inactive" });
     return v;
   };
 
   return (
     <div className="w-full">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">
-          {t("asignaciones.title", { defaultValue: "Assignments" })}
-        </h1>
+        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Assignments" })}</h1>
         <p className="text-xs text-gray-500 mt-1">
           {t("asignaciones.currentOrgLabel", { defaultValue: "Current organization" })}:{" "}
           <span className="font-medium">{currentOrg?.name || "—"}</span>
@@ -294,14 +314,8 @@ export default function AsignacionesPage() {
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <label className="font-medium">
-            {t("asignaciones.filters.statusLabel", { defaultValue: "Status" })}
-          </label>
-          <select
-            className="border rounded px-3 py-2"
-            value={estadoFilter}
-            onChange={(e) => setEstadoFilter(e.target.value)}
-          >
+          <label className="font-medium">{t("asignaciones.filters.statusLabel", { defaultValue: "Status" })}</label>
+          <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
             {ESTADOS.map((v) => (
               <option key={v} value={v}>
                 {labelForEstado(v)}
@@ -333,11 +347,16 @@ export default function AsignacionesPage() {
           </p>
         )}
 
+        {geocercaOptions.length === 0 && (
+          <p className="text-amber-700 font-semibold mb-3">
+            No se cargaron geocercas para esta organización. Si en “Geocercas” sí aparecen, este módulo ya intentó fallback a /api/geocercas.
+          </p>
+        )}
+
         {activityOptions.length === 0 && (
           <p className="text-red-600 font-semibold mb-3">
             {t("asignaciones.messages.noActivities", {
-              defaultValue:
-                "There are no activities created. Create at least one activity to assign.",
+              defaultValue: "There are no activities created. Create at least one activity to assign.",
             })}
           </p>
         )}
@@ -345,18 +364,9 @@ export default function AsignacionesPage() {
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Persona */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              {t("asignaciones.form.personLabel", { defaultValue: "Person" })}
-            </label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedPersonalId}
-              onChange={(e) => setSelectedPersonalId(e.target.value)}
-              required
-            >
-              <option value="">
-                {t("asignaciones.form.personPlaceholder", { defaultValue: "Select a person" })}
-              </option>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.personLabel", { defaultValue: "Person" })}</label>
+            <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)} required>
+              <option value="">{t("asignaciones.form.personPlaceholder", { defaultValue: "Select a person" })}</option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {`${p.nombre || ""} ${p.apellido || ""}`.trim()}
@@ -367,18 +377,9 @@ export default function AsignacionesPage() {
 
           {/* Geocerca */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              {t("asignaciones.form.geofenceLabel", { defaultValue: "Geofence" })}
-            </label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedGeocercaId}
-              onChange={(e) => setSelectedGeocercaId(e.target.value)}
-              required
-            >
-              <option value="">
-                {t("asignaciones.form.geofencePlaceholder", { defaultValue: "Select a geofence" })}
-              </option>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.geofenceLabel", { defaultValue: "Geofence" })}</label>
+            <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
+              <option value="">{t("asignaciones.form.geofencePlaceholder", { defaultValue: "Select a geofence" })}</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre || g.id}
@@ -389,9 +390,7 @@ export default function AsignacionesPage() {
 
           {/* Actividad */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              {t("asignaciones.form.activityLabel", { defaultValue: "Activity" })}
-            </label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.activityLabel", { defaultValue: "Activity" })}</label>
             <select
               className="border rounded px-3 py-2"
               value={selectedActivityId}
@@ -400,9 +399,7 @@ export default function AsignacionesPage() {
               disabled={activityOptions.length === 0}
             >
               <option value="">
-                {t("asignaciones.form.activityPlaceholder", {
-                  defaultValue: "Select an activity",
-                })}
+                {t("asignaciones.form.activityPlaceholder", { defaultValue: "Select an activity" })}
               </option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -414,10 +411,7 @@ export default function AsignacionesPage() {
 
           {/* Inicio */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              {t("asignaciones.form.startLabel", { defaultValue: "Start date/time" })}
-            </label>
-
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.startLabel", { defaultValue: "Start date/time" })}</label>
             <div className="relative">
               <input
                 ref={startInputRef}
@@ -431,12 +425,8 @@ export default function AsignacionesPage() {
                 type="button"
                 onClick={() => openNativePicker(startInputRef.current)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                aria-label={t("asignaciones.form.openStartCalendar", {
-                  defaultValue: "Open start date/time picker",
-                })}
-                title={t("asignaciones.form.openStartCalendar", {
-                  defaultValue: "Open start date/time picker",
-                })}
+                aria-label={t("asignaciones.form.openStartCalendar", { defaultValue: "Open start date/time picker" })}
+                title={t("asignaciones.form.openStartCalendar", { defaultValue: "Open start date/time picker" })}
               >
                 <CalendarIcon />
               </button>
@@ -445,10 +435,7 @@ export default function AsignacionesPage() {
 
           {/* Fin */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              {t("asignaciones.form.endLabel", { defaultValue: "End date/time" })}
-            </label>
-
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.endLabel", { defaultValue: "End date/time" })}</label>
             <div className="relative">
               <input
                 ref={endInputRef}
@@ -462,12 +449,8 @@ export default function AsignacionesPage() {
                 type="button"
                 onClick={() => openNativePicker(endInputRef.current)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                aria-label={t("asignaciones.form.openEndCalendar", {
-                  defaultValue: "Open end date/time picker",
-                })}
-                title={t("asignaciones.form.openEndCalendar", {
-                  defaultValue: "Open end date/time picker",
-                })}
+                aria-label={t("asignaciones.form.openEndCalendar", { defaultValue: "Open end date/time picker" })}
+                title={t("asignaciones.form.openEndCalendar", { defaultValue: "Open end date/time picker" })}
               >
                 <CalendarIcon />
               </button>
@@ -476,28 +459,16 @@ export default function AsignacionesPage() {
 
           {/* Estado */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              {t("asignaciones.form.statusLabel", { defaultValue: "Status" })}
-            </label>
-            <select
-              className="border rounded px-3 py-2"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="activa">
-                {t("asignaciones.form.statusActive", { defaultValue: "Active" })}
-              </option>
-              <option value="inactiva">
-                {t("asignaciones.form.statusInactive", { defaultValue: "Inactive" })}
-              </option>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.statusLabel", { defaultValue: "Status" })}</label>
+            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="activa">{t("asignaciones.form.statusActive", { defaultValue: "Active" })}</option>
+              <option value="inactiva">{t("asignaciones.form.statusInactive", { defaultValue: "Inactive" })}</option>
             </select>
           </div>
 
           {/* Frecuencia */}
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              {t("asignaciones.form.frequencyLabel", { defaultValue: "Frequency (min)" })}
-            </label>
+            <label className="mb-1 font-medium text-sm">{t("asignaciones.form.frequencyLabel", { defaultValue: "Frequency (min)" })}</label>
             <input
               type="number"
               className="border rounded px-3 py-2"
@@ -511,7 +482,7 @@ export default function AsignacionesPage() {
             <button
               type="submit"
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-              disabled={loading || activityOptions.length === 0 || personalOptions.length === 0}
+              disabled={loading || activityOptions.length === 0 || personalOptions.length === 0 || geocercaOptions.length === 0}
             >
               {editingId
                 ? t("asignaciones.form.updateButton", { defaultValue: "Update assignment" })
@@ -549,19 +520,13 @@ export default function AsignacionesPage() {
         }}
         onDelete={async (id) => {
           const ok = window.confirm(
-            t("asignaciones.messages.confirmDelete", {
-              defaultValue: "Are you sure you want to delete this assignment?",
-            })
+            t("asignaciones.messages.confirmDelete", { defaultValue: "Are you sure you want to delete this assignment?" })
           );
           if (!ok) return;
 
           const resp = await deleteAsignacion(id);
           if (resp.error) {
-            setError(
-              t("asignaciones.messages.deleteError", {
-                defaultValue: "Could not delete the assignment.",
-              })
-            );
+            setError(t("asignaciones.messages.deleteError", { defaultValue: "Could not delete the assignment." }));
           } else {
             setSuccessMessage(t("asignaciones.banner.deleted", { defaultValue: "Assignment deleted." }));
             loadAll();
