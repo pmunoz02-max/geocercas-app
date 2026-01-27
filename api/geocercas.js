@@ -1,10 +1,12 @@
 // api/geocercas.js
+// ============================================================
+// TENANT-SAFE Geocercas API (CANONICAL)
+// - NO orgId / tenantId desde el cliente
+// - Contexto resuelto vía bootstrap_session_context()
+// - Todas las operaciones delegan a RPCs
+// ============================================================
+
 import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 function send(res, status, payload) {
   res.setHeader("Content-Type", "application/json");
@@ -15,152 +17,103 @@ function send(res, status, payload) {
   return res.status(status).json(payload);
 }
 
-function normalizePayload(body) {
-  const p = typeof body === "string" ? JSON.parse(body) : (body || {});
-
-  // orgId -> org_id
-  if (!p.org_id && p.orgId) p.org_id = p.orgId;
-
-  // name -> nombre
-  if (!p.nombre && p.name) p.nombre = p.name;
-
-  // geojson aliases
-  if (!p.geojson && p.geometry) p.geojson = p.geometry;
-  if (!p.geojson && p.geom) p.geojson = p.geom;
-
-  // defaults
-  if (p.activa === undefined) p.activa = true;
-  if (p.visible === undefined) p.visible = true;
-
-  return p;
+function parseCookies(req) {
+  const header = req.headers?.cookie || "";
+  const out = {};
+  header.split(";").forEach((part) => {
+    const [k, ...rest] = part.trim().split("=");
+    if (!k) return;
+    out[k] = decodeURIComponent(rest.join("=") || "");
+  });
+  return out;
 }
 
-function errorMsg(error) {
-  if (!error) return "Unknown error";
-  return error.message || String(error);
+function supabaseForToken(accessToken) {
+  const url = process.env.SUPABASE_URL;
+  const anon = process.env.SUPABASE_ANON_KEY;
+  if (!url || !anon) throw new Error("Missing SUPABASE env vars");
+
+  return createClient(url, anon, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
+  });
+}
+
+async function getContextOr401(req) {
+  const cookies = parseCookies(req);
+  const token = cookies.tg_at || null;
+  if (!token) return { ok: false, status: 401, error: "missing tg_at cookie" };
+
+  const supabase = supabaseForToken(token);
+
+  const { error } = await supabase.rpc("bootstrap_session_context");
+  if (error) return { ok: false, status: 401, error: error.message || "ctx error" };
+
+  return { ok: true, supabase };
 }
 
 export default async function handler(req, res) {
   try {
+    const ctx = await getContextOr401(req);
+    if (!ctx.ok) return send(res, ctx.status, { ok: false, error: ctx.error });
+
+    const { supabase } = ctx;
+
     // -------------------------
-    // GET /api/geocercas
+    // GET → list geocercas
     // -------------------------
     if (req.method === "GET") {
-      const orgId = req.query.orgId || req.query.org_id;
-      const id = req.query.id || null;
-      const onlyActive = req.query.onlyActive;
-
-      if (!orgId) return send(res, 422, { ok: false, error: "orgId is required" });
-
-      let q = supabase.from("geocercas").select("*").eq("org_id", orgId);
-      if (id) q = q.eq("id", id);
-      if (onlyActive === "true") q = q.eq("activa", true);
-
-      const { data, error } = await q.order("nombre");
-
+      const { data, error } = await supabase.rpc("geocercas_list");
       if (error) {
         console.error("[api/geocercas][GET]", error);
-        return send(res, 500, { ok: false, error: errorMsg(error), details: error.details || null });
+        return send(res, 500, { ok: false, error: error.message });
       }
-
       return send(res, 200, data || []);
     }
 
     // -------------------------
-    // DELETE /api/geocercas?id=...&orgId=...
+    // POST → upsert geocerca
     // -------------------------
-    if (req.method === "DELETE") {
-      const orgId = req.query.orgId || req.query.org_id;
-      const id = req.query.id;
+    if (req.method === "POST") {
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-      if (!orgId || !id) {
-        return send(res, 422, { ok: false, error: "orgId and id are required" });
-      }
-
-      const { error } = await supabase
-        .from("geocercas")
-        .delete()
-        .eq("org_id", orgId)
-        .eq("id", id);
+      const { data, error } = await supabase.rpc("geocercas_upsert", {
+        p_id: body.id || null,
+        p_nombre: body.nombre || body.name || null,
+        p_geojson: body.geojson || body.geometry || body.geom || null,
+        p_visible: body.visible ?? true,
+        p_activa: body.activa ?? true,
+        p_color: body.color || null,
+      });
 
       if (error) {
-        console.error("[api/geocercas][DELETE]", error);
-        return send(res, 500, { ok: false, error: errorMsg(error), details: error.details || null });
+        console.error("[api/geocercas][POST]", error);
+        return send(res, 500, { ok: false, error: error.message });
       }
 
-      return send(res, 200, { ok: true });
+      return send(res, 200, data);
     }
 
     // -------------------------
-    // POST /api/geocercas
-    // - UPSERT normal (SIN nombre_ci porque es GENERATED)
-    // - BULK DELETE por nombres_ci
+    // DELETE → delete geocerca
     // -------------------------
-    if (req.method === "POST") {
-      const body = normalizePayload(req.body);
+    if (req.method === "DELETE") {
+      const id = req.query.id;
+      if (!id) return send(res, 422, { ok: false, error: "id is required" });
 
-      // ---- BULK DELETE ----
-      if (body.delete === true) {
-        if (!body.org_id) return send(res, 422, { ok: false, error: "orgId is required for delete" });
-        if (!Array.isArray(body.nombres_ci) || body.nombres_ci.length === 0) {
-          return send(res, 422, { ok: false, error: "nombres_ci[] is required for delete" });
-        }
-
-        const nombres_ci = body.nombres_ci
-          .map((x) => String(x || "").trim().toLowerCase())
-          .filter(Boolean);
-
-        const { error } = await supabase
-          .from("geocercas")
-          .delete()
-          .eq("org_id", body.org_id)
-          .in("nombre_ci", nombres_ci); // ✅ OK: nombre_ci existe (generated), sirve para filtrar
-
-        if (error) {
-          console.error("[api/geocercas][POST delete]", error);
-          return send(res, 500, { ok: false, error: errorMsg(error), details: error.details || null });
-        }
-
-        return send(res, 200, { ok: true, deleted: nombres_ci.length });
-      }
-
-      // ---- UPSERT normal ----
-      if (!body.org_id) return send(res, 422, { ok: false, error: "orgId is required" });
-      if (!body.nombre) return send(res, 422, { ok: false, error: "nombre is required" });
-      if (!body.geojson) return send(res, 422, { ok: false, error: "geojson is required" });
-
-      // ⚠️ CRÍTICO: NO incluir nombre_ci (generated column)
-      const row = {
-        id: body.id || undefined,
-        org_id: body.org_id,
-        nombre: body.nombre,
-        geojson: body.geojson,
-        activa: body.activa,
-        visible: body.visible,
-        color: body.color || undefined,
-        // agrega otros campos reales si existen en tu tabla (created_by, etc.)
-      };
-
-      // Si tu unique conflict está basado en org_id + nombre_ci (generated), igual sirve.
-      // Postgres calculará nombre_ci automáticamente.
-      const { data, error } = await supabase
-        .from("geocercas")
-        .upsert(row, { onConflict: "org_id,nombre_ci" })
-        .select()
-        .single();
-
+      const { error } = await supabase.rpc("geocercas_delete", { p_id: id });
       if (error) {
-        console.error("[api/geocercas][POST upsert]", error);
-        return send(res, 500, { ok: false, error: errorMsg(error), details: error.details || null });
+        console.error("[api/geocercas][DELETE]", error);
+        return send(res, 500, { ok: false, error: error.message });
       }
 
-      return send(res, 200, data); // ✅ formato simple para el frontend
+      return send(res, 200, { ok: true });
     }
 
     res.setHeader("Allow", ["GET", "POST", "DELETE"]);
     return send(res, 405, { ok: false, error: "Method not allowed" });
   } catch (err) {
     console.error("[api/geocercas][FATAL]", err);
-    return send(res, 500, { ok: false, error: err?.message || "Internal server error" });
+    return send(res, 500, { ok: false, error: err?.message || "fatal" });
   }
 }
