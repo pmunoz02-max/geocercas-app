@@ -8,7 +8,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Evita dobles submits y permite "cancelar" intentos previos lógicamente
   const attemptIdRef = useRef(0);
 
   const canSubmit = useMemo(() => {
@@ -18,7 +17,6 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Nuevo intento
     attemptIdRef.current += 1;
     const myAttempt = attemptIdRef.current;
 
@@ -33,38 +31,30 @@ export default function Login() {
         password,
       });
 
-      // Si ya hubo otro intento posterior, ignoramos este resultado
-      if (myAttempt !== attemptIdRef.current) {
-        console.warn("[Login] attempt", myAttempt, "ignorado (hay intento más nuevo)");
-        return;
-      }
-
-      console.log("[Login] attempt", myAttempt, "signIn result:", res);
+      if (myAttempt !== attemptIdRef.current) return;
 
       if (res.error) throw res.error;
 
-      // Confirmación de sesión real (esto es la verdad)
+      // ✅ Session real (sin imprimir tokens)
       const sessionRes = await supabase.auth.getSession();
-      console.log("[Login] attempt", myAttempt, "getSession:", sessionRes);
+      const hasSession = !!sessionRes?.data?.session?.access_token;
+      console.log("[Login] attempt", myAttempt, "getSession hasSession:", hasSession);
 
+      // ✅ storage token key (sin imprimir contenido)
       const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
       console.log("[Login] attempt", myAttempt, "localStorage auth keys:", keys);
 
-      // Llamada a contexto
+      // ✅ Contexto org/rol
       const ctxRes = await supabase.rpc("get_my_context");
       console.log("[Login] attempt", myAttempt, "CTX:", ctxRes);
 
-      // No redirigimos aún en modo debug.
-      // Cuando CTX salga ok:true, reactivamos redirect y limpiamos logs.
+      // ⚠️ No redirigimos todavía. Cuando CTX sea ok:true, lo activamos.
     } catch (e: any) {
       console.error("[Login] attempt", myAttempt, "ERROR:", e);
       const msg = e?.message || e?.error_description || e?.error || "Error al iniciar sesión";
       setErr(msg);
     } finally {
-      // Solo el intento vigente puede apagar loading
-      if (myAttempt === attemptIdRef.current) {
-        setLoading(false);
-      }
+      if (myAttempt === attemptIdRef.current) setLoading(false);
       console.log("[Login] attempt", myAttempt, "finally");
     }
   };
@@ -84,7 +74,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN Debug vFinal) — sin timeout, log de sesión real + CTX.
+          (LOGIN Debug vFinal) — log session (sin tokens) + CTX get_my_context().
         </p>
 
         {err && (
