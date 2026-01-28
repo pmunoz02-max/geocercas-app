@@ -119,6 +119,35 @@ async function fetchActivitiesSafeByOrg(orgId) {
   return Array.isArray(data) ? data : [];
 }
 
+
+// ✅ Fallback adicional vía API (usa cookies/credenciales del backend)
+async function fetchActivitiesViaApi(orgId) {
+  if (!orgId) return [];
+  // Intento 1: endpoint con query params
+  const tryUrls = [
+    `/api/activities?org_id=${encodeURIComponent(orgId)}&active=true`,
+    `/api/activities?org_id=${encodeURIComponent(orgId)}`,
+    `/api/activities`,
+  ];
+
+  for (const url of tryUrls) {
+    try {
+      const j = await fetchJson(url);
+      const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
+      const filtered = rows
+        .filter((r) => !orgId || r.org_id === orgId)
+        .filter((r) => r.active === true || r.active === "true" || r.active === 1 || r.active === "1");
+      if (filtered.length) return filtered;
+      // si el endpoint devuelve data pero sin active/filters, aún devolvemos todo para normalizar
+      if (rows.length && url === `/api/activities`) return rows;
+    } catch (_) {
+      // seguimos probando
+    }
+  }
+  return [];
+}
+
+
 function normalizeActivities(rows, orgId) {
   const arr = Array.isArray(rows) ? rows : [];
   return dedupeById(
@@ -388,10 +417,18 @@ export default function AsignacionesPage() {
       try {
         const actsSafe = await fetchActivitiesSafeByOrg(orgId);
         const actsNorm = normalizeActivities(actsSafe, orgId);
-        if (actsNorm?.length) setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
+
+        if (actsNorm?.length) {
+          setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
+        } else {
+          // Si Supabase devuelve vacío (posible sesión client/RLS), intentamos vía API (backend con cookies)
+          const actsApi = await fetchActivitiesViaApi(orgId);
+          const actsApiNorm = normalizeActivities(actsApi, orgId);
+          if (actsApiNorm?.length) setActivityOptions(dedupeById([...actsApiNorm, ...bundleActs]));
+        }
       } catch (e) {
         // IMPORTANTE: si falla, NO mostrar "no hay actividades", sino error real
-        console.warn("[AsignacionesPage] activities safe fallback failed:", e?.message || e);
+        console.warn("[AsignacionesPage] activities fallback failed:", e?.message || e);
         setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
       }
     }
