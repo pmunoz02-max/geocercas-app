@@ -167,4 +167,5 @@ export default function Login() {
       </form>
     </div>
   );
+  window.supabase = supabase;
 }
