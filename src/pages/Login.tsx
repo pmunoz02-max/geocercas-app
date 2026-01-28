@@ -1,14 +1,12 @@
 // src/pages/Login.tsx
 import React, { useMemo, useRef, useState } from "react";
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/supabaseClient";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/supabaseClient";
 
 async function fetchWithTimeout(url: string, options: RequestInit, ms: number) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), ms);
-
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    return res;
+    return await fetch(url, { ...options, signal: controller.signal });
   } finally {
     clearTimeout(t);
   }
@@ -36,10 +34,11 @@ export default function Login() {
 
     setErr(null);
     setLoading(true);
-    setCtxText("PASO 1/4: fetch /auth/v1/token…");
+    setCtxText("PASO 1/2: fetch /auth/v1/token…");
 
     try {
-      const tokenUrl = `${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/token?grant_type=password`;
+      const base = SUPABASE_URL.replace(/\/$/, "");
+      const tokenUrl = `${base}/auth/v1/token?grant_type=password`;
 
       const res = await fetchWithTimeout(
         tokenUrl,
@@ -63,49 +62,50 @@ export default function Login() {
 
       const json = await res.json();
       const access_token = json?.access_token;
-      const refresh_token = json?.refresh_token;
 
-      if (!access_token || !refresh_token) {
-        throw new Error("[Auth token] Respuesta sin access_token/refresh_token");
-      }
+      if (!access_token) throw new Error("[Auth token] Respuesta sin access_token");
 
-      setCtxText("PASO 1/4: OK ✅\nPASO 2/4: supabase.auth.setSession…");
+      setCtxText("PASO 1/2: OK ✅\nPASO 2/2: fetch rpc get_my_context…");
 
-      const setRes = await supabase.auth.setSession({ access_token, refresh_token });
-      if (setRes.error) throw setRes.error;
+      // ✅ Llamada a RPC vía REST usando Bearer token (sin setSession)
+      const rpcUrl = `${base}/rest/v1/rpc/get_my_context`;
 
-      setCtxText("PASO 2/4: OK ✅\nPASO 3/4: getSession…");
-
-      const sessionRes = await supabase.auth.getSession();
-      const hasSession = !!sessionRes?.data?.session?.access_token;
-
-      const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
-
-      setCtxText(
-        `PASO 3/4: OK ✅ (hasSession=${hasSession})\nPASO 4/4: rpc get_my_context…`
+      const rpcRes = await fetchWithTimeout(
+        rpcUrl,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${access_token}`,
+          },
+          body: "{}",
+        },
+        25000
       );
 
-      const ctxRes = await supabase.rpc("get_my_context");
+      const rpcText = await rpcRes.text();
+      let rpcJson: any = null;
+      try {
+        rpcJson = rpcText ? JSON.parse(rpcText) : null;
+      } catch {
+        rpcJson = rpcText;
+      }
 
       const safe = {
-        hasSession,
-        authKeys: keys,
-        ctx: ctxRes?.data ?? null,
-        ctxError: ctxRes?.error ?? null,
+        rpcStatus: rpcRes.status,
+        rpcBody: rpcJson,
       };
 
-      console.log("[Login] SAFE:", safe);
-
       setCtxText(
-        `PASO 1/4: OK ✅\nPASO 2/4: OK ✅\nPASO 3/4: OK ✅ (hasSession=${hasSession})\nPASO 4/4: OK ✅\n\n` +
+        `PASO 1/2: OK ✅\nPASO 2/2: OK ✅ (HTTP ${rpcRes.status})\n\n` +
           JSON.stringify(safe, null, 2)
       );
     } catch (e: any) {
       const msg =
         e?.name === "AbortError"
-          ? "Timeout: la llamada a Auth tardó demasiado (AbortError)"
+          ? "Timeout (AbortError): la llamada tardó demasiado"
           : e?.message || "Error al iniciar sesión";
-      console.error("[Login] ERROR:", e);
       setErr(msg);
       setCtxText(`FALLÓ ❌\n${msg}`);
     } finally {
@@ -128,7 +128,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN Rescue) — token por fetch + setSession + CTX (sin tokens).
+          (LOGIN Rescue v2) — token por fetch + RPC con Bearer (sin setSession).
         </p>
 
         {err && (
