@@ -1,150 +1,82 @@
 // src/context/AuthContext.jsx
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
-  useCallback,
-  useState,
   useRef,
+  useState,
 } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext(null);
+
+// Mantengo tu key para org activa (usada en varios módulos)
 const LS_ORG_KEY = "tg_current_org_id";
 
-const PUBLIC_ROUTES = [
-  "/login",
-  "/reset-password",
-  "/forgot-password",
-  "/auth/callback",
-];
+const PUBLIC_ROUTES = ["/login", "/reset-password", "/forgot-password", "/auth/callback"];
 
 function isPublicRoutePath(pathname) {
   const p = (pathname || "").toLowerCase();
   return PUBLIC_ROUTES.some((r) => p === r || p.startsWith(r + "/"));
 }
 
-async function fetchSession() {
-  const res = await fetch("/api/auth/session", {
-    credentials: "include",
-    headers: { "cache-control": "no-cache", pragma: "no-cache" },
-  });
-
-  const raw = await res.text();
-  let data = null;
-  try {
-    data = raw ? JSON.parse(raw) : null;
-  } catch {
-    data = null;
-  }
-  return { ok: res.ok, data };
-}
-
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+
+  const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
 
+  // Mantengo estos campos por compatibilidad; por ahora salen desde metadata si existe
   const [currentRole, setCurrentRole] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
 
-  const [organizations, setOrganizations] = useState([]);
-  const [currentOrg, setCurrentOrg] = useState(null);
+  // Org: mantenemos selección local (hasta que el módulo de orgs se alimente 100% desde DB)
+  const [currentOrgId, setCurrentOrgId] = useState(null);
 
-  const authenticated = Boolean(user);
-  const [ready, setReady] = useState(false);
   const didBootstrapOnceRef = useRef(false);
 
-  const bootstrap = useCallback(async () => {
-    if (
-      typeof window !== "undefined" &&
-      isPublicRoutePath(window.location.pathname)
-    ) {
-      setLoading(false);
-      setUser(null);
-      setCurrentRole(null);
-      setIsAppRoot(false);
-      setOrganizations([]);
-      setCurrentOrg(null);
+  const resolveRoleAndRoot = useCallback((u) => {
+    // Soporta varios lugares donde puede vivir la info
+    const meta = (u?.user_metadata || u?.app_metadata || {}) ?? {};
+    const role =
+      meta.currentRole ??
+      meta.current_role ??
+      meta.role ??
+      meta.app_role ??
+      null;
 
-      if (!didBootstrapOnceRef.current) {
-        didBootstrapOnceRef.current = true;
-        setReady(true);
-      }
-      return;
+    const isRoot = Boolean(meta.is_app_root ?? meta.isAppRoot ?? false);
+
+    setCurrentRole(role ? String(role).toLowerCase() : null);
+    setIsAppRoot(isRoot);
+  }, []);
+
+  const loadOrgFromStorage = useCallback(() => {
+    try {
+      const v = localStorage.getItem(LS_ORG_KEY);
+      setCurrentOrgId(v || null);
+    } catch {
+      setCurrentOrgId(null);
     }
+  }, []);
 
+  const bootstrap = useCallback(async () => {
+    // En rutas públicas igual dejamos que Supabase hidrate sesión si existe.
+    // Solo evitamos lógica de “forzar auth” aquí (la protección real debe estar en el router/layout).
     setLoading(true);
 
     try {
-      const { ok, data } = await fetchSession();
+      const { data } = await supabase.auth.getSession();
+      const nextSession = data?.session ?? null;
 
-      if (!ok || !data || data.authenticated !== true) {
-        setUser(null);
-        setCurrentRole(null);
-        setIsAppRoot(false);
-        setOrganizations([]);
-        setCurrentOrg(null);
-        return;
-      }
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      resolveRoleAndRoot(nextSession?.user ?? null);
 
-      setUser(data.user ?? null);
-
-      const resolvedRole =
-        data.currentRole ??
-        data.current_role ??
-        data.role ??
-        data.app_role ??
-        null;
-
-      setCurrentRole(resolvedRole ? String(resolvedRole).toLowerCase() : null);
-      setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
-
-      // ✅ ORG: SOLO DESDE BACKEND
-      const serverOrgId =
-        data.current_org_id ??
-        data.currentOrgId ??
-        data.org_id ??
-        data.orgId ??
-        null;
-
-      const orgsFromServer = Array.isArray(data.organizations)
-        ? data.organizations
-        : serverOrgId
-        ? [{ id: serverOrgId }]
-        : [];
-
-      setOrganizations(orgsFromServer);
-
-      // ✅ NUEVO: si backend no manda current_org_id, escoger una org válida
-      let orgObj = null;
-
-      if (serverOrgId) {
-        orgObj = orgsFromServer.find((o) => String(o?.id) === String(serverOrgId)) || null;
-      }
-
-      // Si no hay serverOrgId, pero solo hay 1 org, usarla
-      if (!orgObj && orgsFromServer.length === 1 && orgsFromServer[0]?.id) {
-        orgObj = orgsFromServer[0];
-      }
-
-      // Si no hay serverOrgId, intentar recuperar última org guardada
-      if (!orgObj && orgsFromServer.length > 1) {
-        try {
-          const last = localStorage.getItem(LS_ORG_KEY);
-          if (last) {
-            orgObj = orgsFromServer.find((o) => String(o?.id) === String(last)) || null;
-          }
-        } catch {}
-      }
-
-      setCurrentOrg(orgObj);
-
-      // Guardar SOLO la org válida
-      if (orgObj?.id) {
-        try {
-          localStorage.setItem(LS_ORG_KEY, String(orgObj.id));
-        } catch {}
-      }
+      loadOrgFromStorage();
     } finally {
       setLoading(false);
       if (!didBootstrapOnceRef.current) {
@@ -152,68 +84,104 @@ export function AuthProvider({ children }) {
         setReady(true);
       }
     }
-  }, []);
+  }, [loadOrgFromStorage, resolveRoleAndRoot]);
 
   useEffect(() => {
     bootstrap();
-  }, [bootstrap]);
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession ?? null);
+      setUser(nextSession?.user ?? null);
+      resolveRoleAndRoot(nextSession?.user ?? null);
+
+      // Si el usuario cambió, re-cargamos org seleccionada (por si se limpia en logout)
+      loadOrgFromStorage();
+    });
+
+    return () => {
+      try {
+        sub?.subscription?.unsubscribe();
+      } catch {}
+    };
+  }, [bootstrap, loadOrgFromStorage, resolveRoleAndRoot]);
+
+  const setOrg = useCallback((orgId) => {
+    const v = orgId ? String(orgId) : "";
+    setCurrentOrgId(v || null);
+    try {
+      if (v) localStorage.setItem(LS_ORG_KEY, v);
+      else localStorage.removeItem(LS_ORG_KEY);
+    } catch {}
+  }, []);
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+      await supabase.auth.signOut();
     } catch {}
 
     try {
       localStorage.removeItem(LS_ORG_KEY);
     } catch {}
 
+    setSession(null);
     setUser(null);
     setCurrentRole(null);
     setIsAppRoot(false);
-    setOrganizations([]);
-    setCurrentOrg(null);
+    setCurrentOrgId(null);
 
+    // Mantengo el redirect directo como tu patrón actual
     window.location.href = "/login";
   }, []);
 
+  const authenticated = Boolean(user);
+
   const value = useMemo(
     () => ({
+      // core flags
       loading,
       ready,
       authenticated,
-      user,
-      isLoggedIn: Boolean(user),
+      isLoggedIn: authenticated,
 
+      // supabase session
+      session,
+      user,
+
+      // roles (compat)
       currentRole,
       isAppRoot,
-      organizations,
-      currentOrg,
-
-      // legacy aliases
       role: currentRole,
-      currentOrgId: currentOrg?.id || null,
-      orgId: currentOrg?.id || null,
 
+      // org (compat)
+      currentOrg: currentOrgId ? { id: currentOrgId } : null,
+      currentOrgId: currentOrgId || null,
+      orgId: currentOrgId || null,
+      setCurrentOrgId: setOrg,
+
+      // actions
       refreshSession: bootstrap,
       logout,
+
+      // helper (a veces útil en guards)
+      isPublicRoutePath,
     }),
     [
       loading,
       ready,
       authenticated,
+      session,
       user,
       currentRole,
       isAppRoot,
-      organizations,
-      currentOrg,
+      currentOrgId,
+      setOrg,
       bootstrap,
       logout,
     ]
   );
 
+  // Si estás en ruta pública, NO bloqueamos render.
+  // La protección real debe ser un AuthGuard en rutas privadas.
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

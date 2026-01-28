@@ -1,33 +1,30 @@
-// src/lib/supabaseClient.js
-import { createClient } from "@supabase/supabase-js";
+// src/lib/supabaseClient.ts
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// ✅ Canónico Vite
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// ✅ Vite env vars (prefer these)
+const url =
+  (import.meta as any).env?.VITE_SUPABASE_URL ||
+  (import.meta as any).env?.VITE_PUBLIC_SUPABASE_URL ||
+  (import.meta as any).env?.SUPABASE_URL;
 
-function assertEnv(name, value) {
-  if (!value || typeof value !== "string" || !value.trim()) {
-    throw new Error(
-      `[supabaseClient] Missing ${name}. Check Vercel env vars (VITE_*) and redeploy.`
-    );
-  }
+const anonKey =
+  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ||
+  (import.meta as any).env?.VITE_PUBLIC_SUPABASE_ANON_KEY ||
+  (import.meta as any).env?.SUPABASE_ANON_KEY;
+
+if (!url || !anonKey) {
+  // Throwing here makes misconfig obvious in dev/build logs
+  throw new Error(
+    "Missing Supabase env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+  );
 }
 
-assertEnv("VITE_SUPABASE_URL", supabaseUrl);
-assertEnv("VITE_SUPABASE_ANON_KEY", supabaseAnonKey);
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase: SupabaseClient = createClient(url, anonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    flowType: "pkce",
+    // localStorage is default in browsers; keep explicit for clarity
+    storage: typeof window !== "undefined" ? window.localStorage : undefined,
   },
 });
-
-// 🔎 DEBUG SOLO EN DEV (NO PRODUCCIÓN)
-if (import.meta.env.DEV) {
-  window.__supabase = supabase;
-}
-
-export default supabase;
