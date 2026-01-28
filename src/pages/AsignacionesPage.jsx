@@ -2,8 +2,8 @@
 // Fix Enero 2026 (hotfix UI):
 // - Se elimina dependencia de "ready" (causaba pantalla en blanco).
 // - Se usan estados robustos de Auth: loading/isAuthenticated/user/currentOrg.
-// - Se mantiene fallback tenant-safe para activities y people por org.
-// - No se muestra "no hay actividades" si hubo error real.
+// - Tenant-safe estricto en dropdowns (Personas/Geocercas/Actividades) por orgId.
+// - Fallbacks por API incluyen org_id y se filtra en cliente como segunda barrera.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -80,9 +80,17 @@ function normalizeGeocercas(rows) {
         ...g,
         id: g.id,
         nombre: (g.nombre || g.name || "").trim() || null,
+        org_id: g.org_id || null,
       }))
       .filter((g) => g?.id)
   );
+}
+
+function filterByOrg(rows, orgId) {
+  const arr = Array.isArray(rows) ? rows : [];
+  if (!orgId) return [];
+  // tenant-safe: SOLO registros del org actual (no aceptamos null org_id)
+  return arr.filter((r) => r?.org_id === orgId);
 }
 
 async function fetchJson(url) {
@@ -95,13 +103,17 @@ async function fetchJson(url) {
   return j;
 }
 
-async function fetchGeocercasFallback() {
-  const j = await fetchJson("/api/geocercas");
+async function fetchGeocercasFallback(orgId) {
+  if (!orgId) return [];
+  // ✅ Pedimos por org_id (si el endpoint lo soporta)
+  const j = await fetchJson(`/api/geocercas?org_id=${encodeURIComponent(orgId)}`);
   const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-  return normalizeGeocercas(rows);
+  const norm = normalizeGeocercas(rows);
+  // ✅ Segunda barrera: filtrado en cliente
+  return filterByOrg(norm, orgId);
 }
 
-// ✅ Fallback tenant-safe para activities: directo a Supabase por org_id + active=true
+// ✅ tenant-safe para activities: directo a Supabase por org_id + active=true
 async function fetchActivitiesSafeByOrg(orgId) {
   if (!orgId) return [];
   const { data, error } = await supabase
@@ -131,7 +143,7 @@ async function fetchActivitiesApiFallback(orgId) {
     try {
       const j = await fetchJson(url);
       const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-      const filtered = rows.filter((r) => !r?.org_id || r.org_id === orgId);
+      const filtered = rows.filter((r) => r?.org_id === orgId);
       if (filtered.length) return filtered;
     } catch (_) {}
   }
@@ -150,7 +162,7 @@ function normalizeActivities(rows, orgId) {
         org_id: a.org_id || null,
       }))
       .filter((a) => a?.id)
-      .filter((a) => (orgId ? (a.org_id ? a.org_id === orgId : true) : true))
+      .filter((a) => a.org_id === orgId)
       .filter((a) => a.active !== false)
   );
 }
@@ -229,14 +241,15 @@ function normalizePersonalFromBundle(catalogs, orgId) {
     }))
     .filter((p) => p?.id);
 
-  const withOrg = cleaned.filter((p) => p.org_id && p.org_id === orgId);
-  return dedupeById(withOrg);
+  // tenant-safe: SOLO org actual
+  return dedupeById(cleaned.filter((p) => p.org_id === orgId));
 }
 
 function normalizeAsignacionRow(a) {
   if (!a || typeof a !== "object") return a;
 
-  const start = a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
+  const start =
+    a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
   const end = a.end_time || a.fin || a.end || a.fecha_fin || a.endTime || null;
 
   let freqSec = a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
@@ -268,7 +281,6 @@ export default function AsignacionesPage() {
 
   // ✅ NO USAMOS ready (evita blanco)
   const { loading, isAuthenticated, user, currentOrg } = useAuth();
-
   const orgId = useMemo(() => getOrgIdSafe(currentOrg), [currentOrg]);
 
   const [asignaciones, setAsignaciones] = useState([]);
@@ -352,26 +364,27 @@ export default function AsignacionesPage() {
     const rows = rowsRaw.map(normalizeAsignacionRow);
     setAsignaciones(rows);
 
-    // PERSONAL desde bundle (solo si trae org_id, si no se ignora)
+    // PERSONAL desde bundle (tenant-safe)
     setPersonalOptions(normalizePersonalFromBundle(catalogs, orgId));
 
-    // GEOCERCAS desde bundle
-    const bundleGeos = normalizeGeocercas(catalogs.geocercas);
+    // GEOCERCAS desde bundle (tenant-safe estricto)
+    const bundleGeosAll = normalizeGeocercas(catalogs.geocercas);
+    const bundleGeos = filterByOrg(bundleGeosAll, orgId);
     setGeocercaOptions(bundleGeos);
 
-    // ACTIVITIES desde bundle
+    // ACTIVITIES desde bundle (tenant-safe estricto)
     const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
     const bundleActs = normalizeActivities(bundleActsRaw, orgId);
     setActivityOptions(bundleActs);
 
-    // 2) Fallback geocercas
+    // 2) Fallback geocercas (por org)
     const referencedGeoIds = new Set(rows.map((a) => a.geocerca_id).filter(Boolean));
     const geoMap = toIdMap(bundleGeos);
     const missingGeo = Array.from(referencedGeoIds).some((id) => !geoMap.has(id));
 
     if (bundleGeos.length === 0 || missingGeo) {
       try {
-        const geos = await fetchGeocercasFallback();
+        const geos = await fetchGeocercasFallback(orgId);
         if (geos?.length) setGeocercaOptions(dedupeById([...geos, ...bundleGeos]));
       } catch (e) {
         console.warn("[AsignacionesPage] geocercas fallback failed:", e?.message || e);
@@ -519,7 +532,6 @@ export default function AsignacionesPage() {
     await loadAll();
   }
 
-  // ✅ Estados de Auth visibles (no blanco)
   if (loading) {
     return (
       <div className="p-4 max-w-5xl mx-auto">
@@ -604,6 +616,12 @@ export default function AsignacionesPage() {
                 </option>
               ))}
             </select>
+
+            {geocercaOptions.length === 0 && !loadingData && (
+              <p className="text-xs text-amber-700 mt-1">
+                Esta organización no tiene geocercas. Crea una en “Geocercas” para poder asignar.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col">
@@ -673,7 +691,11 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Estado</label>
-            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select
+              className="border rounded px-3 py-2"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
@@ -710,7 +732,11 @@ export default function AsignacionesPage() {
 
       <div className="mb-4 flex items-center gap-3">
         <label className="font-medium">Estado</label>
-        <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+        <select
+          className="border rounded px-3 py-2"
+          value={estadoFilter}
+          onChange={(e) => setEstadoFilter(e.target.value)}
+        >
           {ESTADOS.map((v) => (
             <option key={v} value={v}>
               {v}
