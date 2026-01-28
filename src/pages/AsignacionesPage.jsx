@@ -148,33 +148,6 @@ async function fetchActivitiesApiFallback(orgId) {
 
 
 // ✅ Fallback adicional vía API (usa cookies/credenciales del backend)
-async function fetchActivitiesApiFallback(orgId) {
-  if (!orgId) return [];
-  // Intento 1: endpoint con query params
-  const tryUrls = [
-    `/api/activities?org_id=${encodeURIComponent(orgId)}&active=true`,
-    `/api/activities?org_id=${encodeURIComponent(orgId)}`,
-    `/api/activities`,
-  ];
-
-  for (const url of tryUrls) {
-    try {
-      const j = await fetchJson(url);
-      const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-      const filtered = rows
-        .filter((r) => !orgId || r.org_id === orgId)
-        .filter((r) => r.active === true || r.active === "true" || r.active === 1 || r.active === "1");
-      if (filtered.length) return filtered;
-      // si el endpoint devuelve data pero sin active/filters, aún devolvemos todo para normalizar
-      if (rows.length && url === `/api/activities`) return rows;
-    } catch (_) {
-      // seguimos probando
-    }
-  }
-  return [];
-}
-
-
 function normalizeActivities(rows, orgId) {
   const arr = Array.isArray(rows) ? rows : [];
   return dedupeById(
