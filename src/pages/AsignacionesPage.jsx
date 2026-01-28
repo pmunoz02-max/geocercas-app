@@ -1,15 +1,13 @@
 // src/pages/AsignacionesPage.jsx
 // Fix Enero 2026 (hotfix UI):
-// - Root cause: catálogos (bundle) no garantizan "activities" y "personal" por org, aunque existan en DB.
-// - Se refuerza bootstrap de org: usa currentOrg.id y cae a localStorage("tg_current_org_id").
-// - Se agrega fallback tenant-safe a Supabase:
-//    * activities por org_id + active=true
-//    * people por org_id desde org_people JOIN people (modelo real: org_people.person_id -> people.id)
-// - Se evita mensaje falso de "no hay actividades" cuando en realidad hubo error de query.
+// - Se elimina dependencia de "ready" (causaba pantalla en blanco).
+// - Se usan estados robustos de Auth: loading/isAuthenticated/user/currentOrg.
+// - Se mantiene fallback tenant-safe para activities y people por org.
+// - No se muestra "no hay actividades" si hubo error real.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.jsx";
 import {
   getAsignacionesBundle,
   createAsignacion,
@@ -17,8 +15,6 @@ import {
   deleteAsignacion,
 } from "../lib/asignacionesApi";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
-
-// ✅ Ajusta este import si tu proyecto usa otro path/nombre
 import { supabase } from "../lib/supabaseClient";
 
 function localDateTimeToISO(localDateTime) {
@@ -112,7 +108,7 @@ async function fetchActivitiesSafeByOrg(orgId) {
     .from("activities")
     .select("id, name, active, org_id, created_at")
     .eq("org_id", orgId)
-    .eq("active", true) // boolean REAL
+    .eq("active", true)
     .order("name", { ascending: true });
 
   if (error) throw error;
@@ -120,7 +116,6 @@ async function fetchActivitiesSafeByOrg(orgId) {
 }
 
 // ✅ Fallback adicional via API (cuando el client Supabase no trae sesión o devuelve vacío)
-// Intentamos varios endpoints comunes sin romper nada si no existen (404/500).
 async function fetchActivitiesApiFallback(orgId) {
   if (!orgId) return [];
   const endpoints = [
@@ -136,18 +131,13 @@ async function fetchActivitiesApiFallback(orgId) {
     try {
       const j = await fetchJson(url);
       const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-      // Filtra por org si viene org_id en los rows
       const filtered = rows.filter((r) => !r?.org_id || r.org_id === orgId);
       if (filtered.length) return filtered;
-    } catch (_) {
-      // si falla, probamos siguiente endpoint
-    }
+    } catch (_) {}
   }
   return [];
 }
 
-
-// ✅ Fallback adicional vía API (usa cookies/credenciales del backend)
 function normalizeActivities(rows, orgId) {
   const arr = Array.isArray(rows) ? rows : [];
   return dedupeById(
@@ -169,10 +159,6 @@ function normalizeActivities(rows, orgId) {
  * Personal (modelo real):
  *   org_people.id = vínculo (por org)
  *   org_people.person_id -> people.id
- *
- * Nota: No asumimos a ciegas si asignaciones.personal_id apunta a org_people.id o people.id.
- * - Si ya existen asignaciones, autodetectamos el "id mode" comparando ids.
- * - Si no hay asignaciones, default: org_people.id (lo más común en multi-tenant).
  */
 async function fetchPersonalSafeByOrg(orgId) {
   if (!orgId) return [];
@@ -202,15 +188,15 @@ async function fetchPersonalSafeByOrg(orgId) {
     .map((row) => {
       const p = row.person || {};
       const nombre =
-        `${p.nombre || ""} ${p.apellido || ""}`.trim()
-          || (p.email || "").trim()
-          || row.person_id;
+        `${p.nombre || ""} ${p.apellido || ""}`.trim() ||
+        (p.email || "").trim() ||
+        row.person_id;
 
       return {
         org_people_id: row.id,
         people_id: row.person_id,
-        nombre: nombre,
-        apellido: "", // ya viene embebido en "nombre" si aplica
+        nombre,
+        apellido: "",
         email: (p.email || "").trim(),
       };
     })
@@ -218,11 +204,6 @@ async function fetchPersonalSafeByOrg(orgId) {
 }
 
 function normalizePersonalFromBundle(catalogs, orgId) {
-  // IMPORTANTE:
-  // El bundle histórico puede traer "people/personal" globales (sin org) => eso rompe multi-tenant.
-  // Por seguridad, solo aceptamos filas que tengan org_id === orgId.
-  // Si no vienen con org_id, devolvemos [] para forzar fallback seguro desde org_people.
-
   const personal = Array.isArray(catalogs?.personal) ? catalogs.personal : [];
   const peopleLegacy = Array.isArray(catalogs?.people) ? catalogs.people : [];
 
@@ -249,21 +230,16 @@ function normalizePersonalFromBundle(catalogs, orgId) {
     .filter((p) => p?.id);
 
   const withOrg = cleaned.filter((p) => p.org_id && p.org_id === orgId);
-
-  // Si el bundle no es confiable (sin org_id), no lo usamos.
   return dedupeById(withOrg);
 }
 
-// Normaliza asignaciones aunque el backend cambie nombres
 function normalizeAsignacionRow(a) {
   if (!a || typeof a !== "object") return a;
 
-  const start =
-    a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
+  const start = a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
   const end = a.end_time || a.fin || a.end || a.fecha_fin || a.endTime || null;
 
-  let freqSec =
-    a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
+  let freqSec = a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
 
   if (freqSec == null && a.frecuencia_envio_min != null) {
     const n = Number(a.frecuencia_envio_min);
@@ -284,22 +260,19 @@ function normalizeAsignacionRow(a) {
 }
 
 function getOrgIdSafe(currentOrg) {
-  return (
-    currentOrg?.id ||
-    localStorage.getItem("tg_current_org_id") ||
-    null
-  );
+  return currentOrg?.id || localStorage.getItem("tg_current_org_id") || null;
 }
 
 export default function AsignacionesPage() {
   const { t } = useTranslation();
-  const { ready, currentOrg } = useAuth();
 
-  // ✅ orgId robusto: currentOrg.id o localStorage
+  // ✅ NO USAMOS ready (evita blanco)
+  const { loading, isAuthenticated, user, currentOrg } = useAuth();
+
   const orgId = useMemo(() => getOrgIdSafe(currentOrg), [currentOrg]);
 
   const [asignaciones, setAsignaciones] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
 
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -324,13 +297,9 @@ export default function AsignacionesPage() {
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
-  // autodetección de qué id usa asignaciones.personal_id (org_people.id vs people.id)
   const [personalIdMode, setPersonalIdMode] = useState("org_people"); // default
 
   function detectPersonalIdMode(rows, safePersonalRows) {
-    // Si hay asignaciones, intentamos inferir el modo:
-    // - si cualquier personal_id coincide con org_people_id => org_people
-    // - si coincide con people_id => people
     const ids = new Set((rows || []).map((r) => r?.personal_id).filter(Boolean));
     if (!ids.size) return "org_people";
 
@@ -345,7 +314,7 @@ export default function AsignacionesPage() {
   }
 
   async function loadAll() {
-    setLoading(true);
+    setLoadingData(true);
     setError(null);
 
     if (!orgId) {
@@ -353,26 +322,26 @@ export default function AsignacionesPage() {
       setPersonalOptions([]);
       setGeocercaOptions([]);
       setActivityOptions([]);
-      setLoading(false);
+      setLoadingData(false);
       setError("No hay organización activa (orgId).");
       return;
     }
 
-    // ✅ coherencia: si currentOrg existe y localStorage no, lo setea
     try {
       const ls = localStorage.getItem("tg_current_org_id");
       if (!ls && currentOrg?.id) localStorage.setItem("tg_current_org_id", currentOrg.id);
     } catch (_) {}
 
-    const { data, error } = await getAsignacionesBundle();
-    if (error) {
-      console.error("[AsignacionesPage] bundle error:", error);
-      setError(error.message || "Error cargando asignaciones.");
+    // 1) Bundle principal
+    const { data, error: bundleError } = await getAsignacionesBundle();
+    if (bundleError) {
+      console.error("[AsignacionesPage] bundle error:", bundleError);
+      setError(bundleError.message || "Error cargando asignaciones.");
       setAsignaciones([]);
       setPersonalOptions([]);
       setGeocercaOptions([]);
       setActivityOptions([]);
-      setLoading(false);
+      setLoadingData(false);
       return;
     }
 
@@ -383,30 +352,23 @@ export default function AsignacionesPage() {
     const rows = rowsRaw.map(normalizeAsignacionRow);
     setAsignaciones(rows);
 
-    // PERSONAL desde bundle
-    const normalizedPersonal = normalizePersonalFromBundle(catalogs, orgId);
-    setPersonalOptions(normalizedPersonal);
+    // PERSONAL desde bundle (solo si trae org_id, si no se ignora)
+    setPersonalOptions(normalizePersonalFromBundle(catalogs, orgId));
 
     // GEOCERCAS desde bundle
     const bundleGeos = normalizeGeocercas(catalogs.geocercas);
     setGeocercaOptions(bundleGeos);
 
-    // ACTIVITIES desde bundle (filtra por org + active)
+    // ACTIVITIES desde bundle
     const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
     const bundleActs = normalizeActivities(bundleActsRaw, orgId);
     setActivityOptions(bundleActs);
 
-    // Ensure catalog contains referenced ids
+    // 2) Fallback geocercas
     const referencedGeoIds = new Set(rows.map((a) => a.geocerca_id).filter(Boolean));
-    const referencedActIds = new Set(rows.map((a) => a.activity_id).filter(Boolean));
-
     const geoMap = toIdMap(bundleGeos);
-    const actMap = toIdMap(bundleActs);
-
     const missingGeo = Array.from(referencedGeoIds).some((id) => !geoMap.has(id));
-    const missingAct = Array.from(referencedActIds).some((id) => !actMap.has(id));
 
-    // Geocercas fallback
     if (bundleGeos.length === 0 || missingGeo) {
       try {
         const geos = await fetchGeocercasFallback();
@@ -416,30 +378,24 @@ export default function AsignacionesPage() {
       }
     }
 
-    // Activities fallback SAFE (Supabase directo por org)
-    if (true) {
-      try {
-        const actsSafe = await fetchActivitiesSafeByOrg(orgId);
-        const actsNorm = normalizeActivities(actsSafe, orgId);
+    // 3) Fallback activities (Supabase -> API)
+    try {
+      const actsSafe = await fetchActivitiesSafeByOrg(orgId);
+      const actsNorm = normalizeActivities(actsSafe, orgId);
 
-        if (actsNorm?.length) {
-          setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
-        } else {
-          // Si Supabase devuelve vacío (posible sesión client/RLS), intentamos vía API (backend con cookies)
-          const actsApi = await fetchActivitiesApiFallback(orgId);
-          const actsApiNorm = normalizeActivities(actsApi, orgId);
-          if (actsApiNorm?.length) setActivityOptions(dedupeById([...actsApiNorm, ...bundleActs]));
-        }
-      } catch (e) {
-        // IMPORTANTE: si falla, NO mostrar "no hay actividades", sino error real
-        console.warn("[AsignacionesPage] activities fallback failed:", e?.message || e);
-        setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
+      if (actsNorm?.length) {
+        setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
+      } else {
+        const actsApi = await fetchActivitiesApiFallback(orgId);
+        const actsApiNorm = normalizeActivities(actsApi, orgId);
+        if (actsApiNorm?.length) setActivityOptions(dedupeById([...actsApiNorm, ...bundleActs]));
       }
+    } catch (e) {
+      console.warn("[AsignacionesPage] activities fallback failed:", e?.message || e);
+      setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
     }
 
-    // ✅ Personal tenant-safe (Supabase: org_people JOIN people)
-// Siempre se usa esta fuente para evitar "personas de otra org".
-// El bundle solo se usa para mantener compatibilidad, pero no para poblar el selector.
+    // 4) Personal tenant-safe definitivo (org_people join people)
     try {
       const safeRows = await fetchPersonalSafeByOrg(orgId);
       const mode = detectPersonalIdMode(rows, safeRows);
@@ -458,27 +414,26 @@ export default function AsignacionesPage() {
     } catch (e) {
       console.warn("[AsignacionesPage] personal safe fallback failed:", e?.message || e);
       setError((prev) => prev || `Error consultando personas: ${e?.message || e}`);
-      setPersonalOptions([]); // no mostramos personas cruzadas
+      setPersonalOptions([]);
     }
 
-setLoading(false);
+    setLoadingData(false);
   }
 
   useEffect(() => {
-    if (!ready) return;
+    if (loading) return;
+    if (!isAuthenticated || !user) return;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, orgId]);
+  }, [loading, isAuthenticated, user?.id, orgId]);
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
-    if (estadoFilter !== "todos")
-      rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
+    if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
     if (selectedPersonalId) rows = rows.filter((a) => a.personal_id === selectedPersonalId);
     return rows;
   }, [asignaciones, estadoFilter, selectedPersonalId]);
 
-  // ENRICHMENT FINAL (flat-first)
   const enrichedAsignaciones = useMemo(() => {
     const geoMap = toIdMap(geocercaOptions);
     const actMap = toIdMap(activityOptions);
@@ -491,11 +446,8 @@ setLoading(false);
       const activity = a.activity || actMap.get(a.activity_id) || null;
       const personal = a.personal || perMap.get(a.personal_id) || null;
 
-      const geocercaNombre =
-        a.geocerca_nombre || geocerca?.nombre || geocerca?.name || "";
-
-      const activityName =
-        a.activity_name || activity?.name || activity?.nombre || "";
+      const geocercaNombre = a.geocerca_nombre || geocerca?.nombre || geocerca?.name || "";
+      const activityName = a.activity_name || activity?.name || activity?.nombre || "";
 
       return {
         ...a,
@@ -544,7 +496,6 @@ setLoading(false);
     }
 
     const payload = {
-      // OJO: personal_id se envía según "modo" detectado (org_people vs people)
       personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
@@ -568,24 +519,46 @@ setLoading(false);
     await loadAll();
   }
 
-  if (!ready) return null;
+  // ✅ Estados de Auth visibles (no blanco)
+  if (loading) {
+    return (
+      <div className="p-4 max-w-5xl mx-auto">
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">Cargando…</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="p-4 max-w-3xl mx-auto">
+        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
+          Debes iniciar sesión.
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full">
+    <div className="w-full p-4">
       <div className="mb-4">
         <h1 className="text-2xl font-bold">
           {t("asignaciones.title", { defaultValue: "Asignaciones" })}
         </h1>
         <p className="text-xs text-gray-500 mt-1">
           Org actual:{" "}
-          <span className="font-medium">
-            {currentOrg?.name || currentOrg?.id || orgId || "—"}
-          </span>
-          <span className="ml-2 text-gray-400">
-            (idMode: {personalIdMode})
-          </span>
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id || orgId || "—"}</span>
+          <span className="ml-2 text-gray-400">(idMode: {personalIdMode})</span>
         </p>
       </div>
+
+      {error && (
+        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      )}
+      {successMessage && (
+        <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">
+          {successMessage}
+        </div>
+      )}
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
         <h2 className="text-lg font-semibold mb-4">
@@ -609,7 +582,7 @@ setLoading(false);
               ))}
             </select>
 
-            {personalOptions.length === 0 && !loading && (
+            {personalOptions.length === 0 && !loadingData && (
               <p className="text-xs text-amber-700 mt-1">
                 No hay personas visibles para esta org (o falló la consulta). Revisa el error arriba.
               </p>
@@ -649,10 +622,9 @@ setLoading(false);
               ))}
             </select>
 
-            {/* Mensaje SOLO si realmente no hay activities y NO hubo error */}
-            {activityOptions.length === 0 && !loading && !error && (
+            {activityOptions.length === 0 && !loadingData && !error && (
               <p className="text-xs text-amber-700 mt-1">
-                No hay actividades activas para esta org. Crea una en “Actividades” o revisa que esté Active=true.
+                No hay actividades activas para esta org. Crea una en “Actividades”.
               </p>
             )}
           </div>
@@ -701,11 +673,7 @@ setLoading(false);
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Estado</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
+            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
@@ -726,7 +694,7 @@ setLoading(false);
             <button
               type="submit"
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-              disabled={loading}
+              disabled={loadingData}
             >
               {editingId ? "Actualizar" : "Guardar"}
             </button>
@@ -737,21 +705,12 @@ setLoading(false);
               </button>
             )}
           </div>
-
-          <div className="md:col-span-2">
-            {successMessage && <p className="text-green-600 font-semibold">{successMessage}</p>}
-            {error && <p className="text-red-600 font-semibold">{error}</p>}
-          </div>
         </form>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
         <label className="font-medium">Estado</label>
-        <select
-          className="border rounded px-3 py-2"
-          value={estadoFilter}
-          onChange={(e) => setEstadoFilter(e.target.value)}
-        >
+        <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
           {ESTADOS.map((v) => (
             <option key={v} value={v}>
               {v}
@@ -762,7 +721,7 @@ setLoading(false);
 
       <AsignacionesTable
         asignaciones={enrichedAsignaciones}
-        loading={loading}
+        loading={loadingData}
         onEdit={(a) => {
           setEditingId(a.id);
           setSelectedPersonalId(a.personal_id || "");
