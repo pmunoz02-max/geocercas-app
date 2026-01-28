@@ -1,10 +1,19 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext(null);
 
+function withTimeout(promise, ms, label = "timeout") {
+  let t;
+  const timeout = new Promise((_, reject) => {
+    t = setTimeout(() => reject(new Error(label)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+
 export function AuthProvider({ children }) {
+  // loading = solo “boot” de auth (NUNCA debe colgar)
   const [loading, setLoading] = useState(true);
 
   const [session, setSession] = useState(null);
@@ -12,84 +21,121 @@ export function AuthProvider({ children }) {
 
   // ctx = { ok, org_id, role, org_name, org_code, user_id } | { ok:false, error:... }
   const [ctx, setCtx] = useState(null);
-
   const [currentOrg, setCurrentOrg] = useState(null); // { id, name, code? }
   const [role, setRole] = useState(null);
 
+  // (opcional) para mostrar “cargando contexto…”
+  const [contextLoading, setContextLoading] = useState(false);
+
+  const mountedRef = useRef(true);
+
+  const applyCtx = (data) => {
+    setCtx(data);
+
+    if (data?.ok) {
+      setRole(data.role || null);
+      setCurrentOrg({
+        id: data.org_id,
+        name: data.org_name || null,
+        code: data.org_code || null,
+      });
+    } else {
+      setRole(null);
+      setCurrentOrg(null);
+    }
+  };
+
   const fetchContext = async () => {
+    if (!mountedRef.current) return;
+
+    // Si no hay sesión, no pedir contexto
+    const { data: sessData } = await supabase.auth.getSession();
+    const sess = sessData?.session ?? null;
+    if (!sess) {
+      applyCtx(null);
+      return;
+    }
+
+    setContextLoading(true);
     try {
-      const { data, error } = await supabase.rpc("get_my_context");
+      const { data, error } = await withTimeout(
+        supabase.rpc("get_my_context"),
+        8000,
+        "rpc_timeout_get_my_context"
+      );
+
+      if (!mountedRef.current) return;
+
       if (error) {
-        setCtx({ ok: false, error: error.message || "rpc_error" });
-        setCurrentOrg(null);
-        setRole(null);
+        applyCtx({ ok: false, error: error.message || "rpc_error" });
         return;
       }
 
-      setCtx(data);
-
-      if (data?.ok) {
-        setRole(data.role || null);
-        setCurrentOrg({
-          id: data.org_id,
-          name: data.org_name || null,
-          code: data.org_code || null,
-        });
-      } else {
-        setRole(null);
-        setCurrentOrg(null);
-      }
+      applyCtx(data);
     } catch (e) {
-      setCtx({ ok: false, error: e?.message || "rpc_exception" });
-      setCurrentOrg(null);
-      setRole(null);
+      if (!mountedRef.current) return;
+      applyCtx({ ok: false, error: e?.message || "rpc_exception" });
+    } finally {
+      if (mountedRef.current) setContextLoading(false);
     }
   };
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
 
-    const init = async () => {
+    const boot = async () => {
       setLoading(true);
       try {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
+        // 1) Boot de sesión (NO esperar contexto)
+        const { data, error } = await withTimeout(
+          supabase.auth.getSession(),
+          6000,
+          "getSession_timeout"
+        );
+
+        if (!mountedRef.current) return;
+
+        if (error) {
+          // raro, pero no bloquear UI
+          setSession(null);
+          setUser(null);
+          applyCtx({ ok: false, error: error.message || "getSession_error" });
+          return;
+        }
 
         const sess = data?.session ?? null;
         setSession(sess);
         setUser(sess?.user ?? null);
 
-        if (sess) {
-          await fetchContext();
-        } else {
-          setCtx(null);
-          setCurrentOrg(null);
-          setRole(null);
-        }
+        // 2) Cargar contexto sin bloquear el boot
+        if (sess) fetchContext();
+        else applyCtx(null);
+      } catch (e) {
+        if (!mountedRef.current) return;
+        setSession(null);
+        setUser(null);
+        applyCtx({ ok: false, error: e?.message || "boot_exception" });
       } finally {
-        if (mounted) setLoading(false);
+        // ✅ SIEMPRE liberar loading del boot
+        if (mountedRef.current) setLoading(false);
       }
     };
 
-    init();
+    boot();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!mountedRef.current) return;
+
       setSession(newSession);
       setUser(newSession?.user ?? null);
 
-      if (newSession) {
-        await fetchContext();
-      } else {
-        setCtx(null);
-        setCurrentOrg(null);
-        setRole(null);
-      }
-
-      setLoading(false);
+      // ✅ No bloquear UI esperando RPC
+      if (newSession) fetchContext();
+      else applyCtx(null);
     });
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
@@ -100,7 +146,8 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      loading,
+      loading, // boot auth
+      contextLoading, // ctx org
       session,
       user,
       ctx,
@@ -110,7 +157,7 @@ export function AuthProvider({ children }) {
       signOut,
       isAuthenticated: !!session,
     }),
-    [loading, session, user, ctx, currentOrg, role]
+    [loading, contextLoading, session, user, ctx, currentOrg, role]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
