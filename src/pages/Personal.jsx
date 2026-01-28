@@ -1,31 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
+import { supabase } from "../lib/supabaseClient";
 
 /**
- * src/pages/Personal.jsx (canónico, API-first)
- * - Usa /api/personal (same-origin) con credentials: "include"
- * - Acciones: list / upsert / toggle / delete
+ * src/pages/Personal.jsx (RLS-first, sin /api)
+ * - Lee/escribe directo a Supabase con RLS (multi-tenant por org_id)
+ * - Evita el error 500 "Failed to refresh token" de /api/personal (cookies)
  * - ✅ AuthContext NUEVO: loading, isAuthenticated, user, currentOrg, role, refreshContext
  * - ✅ UI: contraste alto (mensajes y botones legibles)
  */
 
 function cls(...a) {
   return a.filter(Boolean).join(" ");
-}
-
-async function apiPersonal(payload) {
-  const r = await fetch("/api/personal", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok || data?.ok === false) {
-    throw new Error(data?.error || `HTTP ${r.status}`);
-  }
-  return data;
 }
 
 function Modal({ open, title, children, onClose }) {
@@ -49,6 +36,24 @@ function Modal({ open, title, children, onClose }) {
       </div>
     </div>
   );
+}
+
+function buildOrFilter(q) {
+  const s = String(q || "").trim();
+  if (!s) return null;
+  // escape % and , minimally
+  const esc = s.replace(/%/g, "\\%").replace(/,/g, "\\,");
+  const like = `%${esc}%`;
+
+  // Ajusta campos si tu tabla usa otros nombres.
+  // Se usa OR para nombre/apellido/cedula/telefono/email.
+  return [
+    `nombre.ilike.${like}`,
+    `apellido.ilike.${like}`,
+    `cedula.ilike.${like}`,
+    `telefono.ilike.${like}`,
+    `email.ilike.${like}`,
+  ].join(",");
 }
 
 export default function Personal() {
@@ -115,13 +120,22 @@ export default function Personal() {
 
     setBusy(true);
     try {
-      const data = await apiPersonal({
-        action: "list",
-        org_id: currentOrg.id,
-        q: q?.trim() || "",
-      });
-      setRows(Array.isArray(data?.rows) ? data.rows : []);
+      let qy = supabase
+        .from("personal")
+        .select("*")
+        .eq("org_id", currentOrg.id)
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      const or = buildOrFilter(q);
+      if (or) qy = qy.or(or);
+
+      const { data, error } = await qy;
+      if (error) throw error;
+
+      setRows(Array.isArray(data) ? data : []);
     } catch (e) {
+      console.error("[Personal] load error", e);
       setMsg(e?.message || t("personal.errorLoad", { defaultValue: "No se pudo cargar el listado." }));
     } finally {
       setBusy(false);
@@ -144,24 +158,32 @@ export default function Personal() {
     setMsg("");
     setBusy(true);
     try {
-      const payload = {
-        action: "upsert",
+      const row = {
         org_id: currentOrg.id,
-        row: {
-          id: editing?.id,
-          nombre: form.nombre?.trim(),
-          apellido: form.apellido?.trim(),
-          cedula: form.cedula?.trim(),
-          telefono: form.telefono?.trim(),
-          email: form.email?.trim(),
-          activo: !!form.activo,
-        },
+        nombre: form.nombre?.trim() || null,
+        apellido: form.apellido?.trim() || null,
+        cedula: form.cedula?.trim() || null,
+        telefono: form.telefono?.trim() || null,
+        email: form.email?.trim() || null,
+        activo: !!form.activo,
       };
 
-      await apiPersonal(payload);
+      if (editing?.id) {
+        const { error } = await supabase
+          .from("personal")
+          .update(row)
+          .eq("id", editing.id)
+          .eq("org_id", currentOrg.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("personal").insert([row]);
+        if (error) throw error;
+      }
+
       closeModal();
       await load();
     } catch (e) {
+      console.error("[Personal] save error", e);
       setMsg(e?.message || t("personal.errorSave", { defaultValue: "No se pudo guardar." }));
     } finally {
       setBusy(false);
@@ -173,14 +195,17 @@ export default function Personal() {
     setMsg("");
     setBusy(true);
     try {
-      await apiPersonal({
-        action: "toggle",
-        org_id: currentOrg.id,
-        id: row.id,
-        activo: !(row.activo !== false),
-      });
+      const next = !(row.activo !== false);
+      const { error } = await supabase
+        .from("personal")
+        .update({ activo: next })
+        .eq("id", row.id)
+        .eq("org_id", currentOrg.id);
+      if (error) throw error;
+
       await load();
     } catch (e) {
+      console.error("[Personal] toggle error", e);
       setMsg(e?.message || t("personal.errorToggle", { defaultValue: "No se pudo cambiar el estado." }));
     } finally {
       setBusy(false);
@@ -195,9 +220,16 @@ export default function Personal() {
     setMsg("");
     setBusy(true);
     try {
-      await apiPersonal({ action: "delete", org_id: currentOrg.id, id: row.id });
+      const { error } = await supabase
+        .from("personal")
+        .delete()
+        .eq("id", row.id)
+        .eq("org_id", currentOrg.id);
+      if (error) throw error;
+
       await load();
     } catch (e) {
+      console.error("[Personal] delete error", e);
       setMsg(e?.message || t("personal.errorDelete", { defaultValue: "No se pudo eliminar." }));
     } finally {
       setBusy(false);
