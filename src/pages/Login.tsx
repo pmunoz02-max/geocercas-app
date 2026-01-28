@@ -1,5 +1,5 @@
 // src/pages/Login.tsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label = "timeout"): Promise<T> {
@@ -18,10 +18,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label = "timeout"): Pro
 }
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState("ruebageo@gmail.com");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const inFlightRef = useRef(false);
 
   const canSubmit = useMemo(() => {
     return email.trim().length > 3 && password.length >= 6 && !loading;
@@ -29,11 +31,13 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
     setErr(null);
     setLoading(true);
 
     try {
-      // Log mínimo para depurar en consola sin ensuciar.
       console.log("[Login] intentando signInWithPassword…", { email });
 
       const { data, error } = await withTimeout(
@@ -45,23 +49,20 @@ export default function Login() {
         "Supabase signInWithPassword no respondió"
       );
 
-      if (error) {
-        console.error("[Login] error signInWithPassword:", error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // data.session debe venir si login OK
-      if (!data?.session) {
-        console.warn("[Login] login OK pero sin session en respuesta:", data);
-      }
-
-      // Verificación rápida: token en localStorage
+      // Verificación token en localStorage
       const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
       console.log("[Login] localStorage auth keys:", keys);
 
-      // Redirección: deja que tu AuthContext/router se encargue
-      // (si ya tienes guard/redirect en App.jsx, esto es suficiente)
+      // ✅ PRUEBA DEFINITIVA: get_my_context desde el mismo cliente
+      const ctxRes = await supabase.rpc("get_my_context");
+      console.log("[Login] CTX:", ctxRes);
+
+      // Si el contexto está OK, redirige
+      window.location.assign("/");
     } catch (e: any) {
+      console.error("[Login] ERROR:", e);
       const msg =
         e?.message ||
         e?.error_description ||
@@ -69,8 +70,8 @@ export default function Login() {
         "Error desconocido al iniciar sesión";
       setErr(msg);
     } finally {
-      // ✅ esto evita el “colgado”
       setLoading(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -89,7 +90,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN-V32 Supabase Auth) — crea sesión persistente y habilita RLS automáticamente.
+          (LOGIN Debug) — imprime CTX get_my_context() en consola.
         </p>
 
         {err && (
@@ -159,13 +160,7 @@ export default function Login() {
         >
           {loading ? "Ingresando..." : "Ingresar"}
         </button>
-
-        <div style={{ marginTop: 14, opacity: 0.85, fontSize: 13, lineHeight: 1.35 }}>
-          Después del login, revisa consola: debe existir <b>sb-geocercas-auth-token</b> en localStorage.
-          Si no aparece, revisa Env Vars en Vercel.
-        </div>
       </form>
     </div>
   );
-  window.supabase = supabase;
 }
