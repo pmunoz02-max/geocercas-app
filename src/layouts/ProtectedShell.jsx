@@ -10,7 +10,7 @@ import TopTabs from "../components/TopTabs.jsx";
  * - La pantalla hub/listado queda en /geocercas (sin tab)
  */
 
-function buildTabs({ role, isAppRoot }) {
+function buildTabs({ role }) {
   const r = String(role || "").toLowerCase();
 
   const isTrackerOnly = r === "tracker";
@@ -18,8 +18,7 @@ function buildTabs({ role, isAppRoot }) {
     r === "admin" ||
     r === "owner" ||
     r === "root" ||
-    r === "root_owner" ||
-    isAppRoot;
+    r === "root_owner";
 
   if (isTrackerOnly) {
     return [{ path: "/tracker", labelKey: "app.tabs.tracker" }];
@@ -43,7 +42,8 @@ function buildTabs({ role, isAppRoot }) {
     tabs.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
   }
 
-  if (isAppRoot) {
+  // Root (app-level) puede ver /admins si tu App.jsx lo permite por AdminRoute.
+  if (r === "root" || r === "root_owner") {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
 
@@ -51,12 +51,12 @@ function buildTabs({ role, isAppRoot }) {
 }
 
 export default function ProtectedShell() {
-  const { loading, user, currentRole, isAppRoot } = useAuth();
+  const { loading, user, role } = useAuth();
 
   if (loading) return null;
   if (!user) return null;
 
-  const tabs = buildTabs({ role: currentRole, isAppRoot });
+  const tabs = buildTabs({ role });
 
   return (
     <div className="min-h-screen bg-slate-50">

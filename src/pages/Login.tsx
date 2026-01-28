@@ -1,57 +1,41 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/pages/Login.tsx
+import React, { useMemo, useState } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { loading: authLoading, isAuthenticated } = useAuth();
+  const [sp] = useSearchParams();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState("ruebageo@gmail.com");
   const [password, setPassword] = useState("");
-
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // ✅ Redirect correcto (NO en render)
-  useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      navigate("/", { replace: true });
-    }
-  }, [authLoading, isAuthenticated, navigate]);
-
   const canSubmit = useMemo(() => {
-    return email.trim().length > 3 && password.length >= 6 && !submitting;
-  }, [email, password, submitting]);
+    return email.trim().length > 3 && password.length >= 6 && !loading;
+  }, [email, password, loading]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    setSubmitting(true);
-
-    // Fail-safe: si algo externo se queda colgado, liberamos el botón
-    const failSafe = window.setTimeout(() => {
-      setSubmitting(false);
-      setErr("Se demoró demasiado iniciando sesión. Reintenta (y revisa la consola/Network).");
-    }, 20000);
+    setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
       if (error) throw error;
-      if (!data?.session) throw new Error("No se creó sesión (session=null).");
 
-      // AuthContext debe captar el cambio por onAuthStateChange y redirigir por useEffect.
-      // Aun así, por seguridad, apagamos el loading.
-      setSubmitting(false);
+      // ✅ AuthContext toma control por onAuthStateChange.
+      const next = sp.get("next");
+      navigate(next ? String(next) : "/inicio", { replace: true });
     } catch (e: any) {
       setErr(e?.message || "Error al iniciar sesión");
-      setSubmitting(false);
     } finally {
-      window.clearTimeout(failSafe);
+      setLoading(false);
     }
   };
 
@@ -60,7 +44,7 @@ export default function Login() {
       <form
         onSubmit={handleLogin}
         style={{
-          width: "min(520px, 100%)",
+          width: "min(720px, 100%)",
           padding: 24,
           borderRadius: 16,
           border: "1px solid rgba(255,255,255,0.12)",
@@ -68,7 +52,10 @@ export default function Login() {
           color: "white",
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800 }}>Iniciar sesión</h1>
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
+        <p style={{ marginTop: 8, opacity: 0.85 }}>
+          Accede con tu correo y contraseña (Supabase Auth).
+        </p>
 
         {err && (
           <div
@@ -78,6 +65,7 @@ export default function Login() {
               borderRadius: 12,
               border: "1px solid rgba(255,80,80,0.35)",
               background: "rgba(255,80,80,0.12)",
+              color: "white",
             }}
           >
             {err}
@@ -88,7 +76,7 @@ export default function Login() {
           <label style={{ display: "block", marginBottom: 6, opacity: 0.9 }}>Correo</label>
           <input
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(ev) => setEmail(ev.target.value)}
             autoComplete="email"
             inputMode="email"
             style={{
@@ -107,7 +95,7 @@ export default function Login() {
           <input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(ev) => setPassword(ev.target.value)}
             autoComplete="current-password"
             style={{
               width: "100%",
@@ -134,11 +122,16 @@ export default function Login() {
             opacity: canSubmit ? 1 : 0.55,
           }}
         >
-          {submitting ? "Ingresando..." : "Ingresar"}
+          {loading ? "Ingresando..." : "Ingresar"}
         </button>
 
-        <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
-          Estado AuthContext: {authLoading ? "cargando…" : isAuthenticated ? "autenticado ✅" : "no autenticado"}
+        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <Link to="/forgot-password" style={{ color: "white", opacity: 0.85, textDecoration: "underline" }}>
+            ¿Olvidaste tu contraseña?
+          </Link>
+          <Link to="/" style={{ color: "white", opacity: 0.85, textDecoration: "underline" }}>
+            Volver al inicio
+          </Link>
         </div>
       </form>
     </div>

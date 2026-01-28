@@ -5,11 +5,19 @@ import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
+/**
+ * Landing UNIVERSAL:
+ * - Público: NO consulta sesión, NO usa useAuth, NO hace getSession.
+ * - ES/EN/FR siempre visible (LanguageSwitcher)
+ * - Navegación SPA con <Link>
+ * - i18n robusto: fallback si falta traducción
+ */
+
 function safeT(value, fallback = "") {
   if (value == null) return fallback;
   if (typeof value === "string") {
     const s = value.trim();
-    return s && s !== fallback ? s : fallback;
+    return s ? s : fallback;
   }
   try {
     return JSON.stringify(value);
@@ -21,6 +29,7 @@ function safeT(value, fallback = "") {
 export default function Landing() {
   const { t } = useTranslation();
 
+  // helper i18n: nunca mostrar la key
   const tt = useMemo(() => {
     return (key, fallback) => {
       const v = t(key, { defaultValue: fallback });
@@ -85,7 +94,7 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* ES/EN/FR + Entrar */}
+          {/* ✅ ES/EN/FR + Entrar */}
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
             <Link
@@ -119,10 +128,7 @@ export default function Landing() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                to="/login"
-                className="px-5 py-2.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-500 transition"
-              >
+              <Link to="/login" className="px-5 py-2.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-500 transition">
                 {safeT(tt("landing.goPanel", "Ir al panel de control"), "Ir al panel de control")}
               </Link>
 
@@ -163,14 +169,19 @@ export default function Landing() {
                 disabled={loading}
                 className="mt-4 w-full px-4 py-2.5 rounded-xl font-semibold bg-white text-slate-900 hover:bg-white/90 disabled:opacity-60 transition"
               >
-                {loading ? safeT(tt("landing.sending", "Enviando..."), "Enviando...") : safeT(tt("landing.sendMagic", "Enviar Magic Link"), "Enviar Magic Link")}
+                {loading
+                  ? safeT(tt("landing.sending", "Enviando..."), "Enviando...")
+                  : safeT(tt("landing.sendMagic", "Enviar Magic Link"), "Enviar Magic Link")}
               </button>
 
               {statusMsg && <div className="mt-4 text-sm text-emerald-300">{statusMsg}</div>}
               {errorMsg && <div className="mt-4 text-sm text-red-300">{errorMsg}</div>}
 
               <p className="mt-4 text-xs text-white/50">
-                {safeT(tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."), "Importante: el acceso funciona solo con el Magic Link real.")}
+                {safeT(
+                  tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."),
+                  "Importante: el acceso funciona solo con el Magic Link real."
+                )}
               </p>
 
               <Link className="mt-2 inline-block text-xs text-white/60 underline" to="/help/support">
@@ -181,7 +192,9 @@ export default function Landing() {
         </div>
 
         <footer className="mt-14 pt-6 border-t border-white/10 text-xs text-white/50 flex items-center justify-between">
-          <span>© {new Date().getFullYear()} {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}</span>
+          <span>
+            © {new Date().getFullYear()} {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}
+          </span>
           <span>Fenice Ecuador S.A.S.</span>
         </footer>
       </main>

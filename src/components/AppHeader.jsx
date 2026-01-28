@@ -4,6 +4,9 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
 
+/** =========================
+ * Helpers (a prueba de i18n)
+ * ========================= */
 function safeText(v) {
   if (v == null) return "";
   if (typeof v === "string") return v;
@@ -17,31 +20,34 @@ function safeText(v) {
 
 export default function AppHeader() {
   const navigate = useNavigate();
+  const { session, role, signOut } = useAuth();
   const { t } = useTranslation();
 
-  // ✅ Alineado con tu AuthContext REAL
-  const { session, user, role, signOut, isAuthenticated } = useAuth();
-
-  const isLogged = !!session && isAuthenticated;
-  const email = user?.email || session?.user?.email || "";
+  const isLogged = !!session;
   const rawRole = String(role || "").toLowerCase();
+  const email = session?.user?.email || "";
 
   const handleLogout = async () => {
     try {
       await signOut();
+    } catch (err) {
+      console.error("[AppHeader] Error al cerrar sesión:", err);
     } finally {
       navigate("/", { replace: true });
     }
   };
 
+  // Traducción básica de roles (fallback al valor original si no matchea)
   let roleLabel = rawRole;
   if (rawRole === "owner") roleLabel = t("app.header.roleOwner", { defaultValue: "Propietario" });
   if (rawRole === "admin") roleLabel = t("app.header.roleAdmin", { defaultValue: "Administrador" });
   if (rawRole === "tracker") roleLabel = t("app.header.roleTracker", { defaultValue: "Tracker" });
+  if (rawRole === "root" || rawRole === "root_owner") roleLabel = t("app.header.roleRoot", { defaultValue: "Root" });
 
   return (
     <header className="w-full border-b border-slate-200 bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        {/* Branding */}
         <Link to={isLogged ? "/inicio" : "/"} className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold">
             AG
@@ -56,11 +62,14 @@ export default function AppHeader() {
           </div>
         </Link>
 
+        {/* Zona derecha: idioma + info de usuario + acciones */}
         <div className="flex items-center gap-3 text-xs">
+          {/* Selector de idioma SIEMPRE visible */}
           <LanguageSwitcher />
 
           {isLogged ? (
             <>
+              {/* Email + rol */}
               <div className="hidden sm:flex flex-col items-end">
                 {email && <span className="font-medium text-slate-700">{email}</span>}
                 {rawRole && (
@@ -70,7 +79,8 @@ export default function AppHeader() {
                 )}
               </div>
 
-              {rawRole === "owner" && (
+              {/* Botón Administrador solo para owner/root */}
+              {(rawRole === "owner" || rawRole === "root" || rawRole === "root_owner") && (
                 <Link
                   to="/admins"
                   className="px-3 py-1.5 rounded-md text-xs font-semibold bg-amber-500 text-white hover:bg-amber-400"
@@ -79,6 +89,7 @@ export default function AppHeader() {
                 </Link>
               )}
 
+              {/* Botón Salir */}
               <button
                 type="button"
                 onClick={handleLogout}
