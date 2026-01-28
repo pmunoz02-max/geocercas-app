@@ -1,7 +1,7 @@
 // src/lib/supabaseClient.js
 import { createClient } from "@supabase/supabase-js";
 
-// ✅ Canónico Vite: sin optional chaining
+// ✅ Canónico Vite
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -24,5 +24,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: "pkce",
   },
 });
+
+// 🔎 DEBUG SOLO EN DEV (NO PRODUCCIÓN)
+if (import.meta.env.DEV) {
+  window.__supabase = supabase;
+}
 
 export default supabase;
