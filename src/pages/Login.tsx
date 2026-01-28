@@ -23,6 +23,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Evita dobles submits reales
   const inFlightRef = useRef(false);
 
   const canSubmit = useMemo(() => {
@@ -51,16 +52,16 @@ export default function Login() {
 
       if (error) throw error;
 
-      // Verificación token en localStorage
+      // Verificación token en localStorage (debug)
       const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
       console.log("[Login] localStorage auth keys:", keys);
 
-      // ✅ PRUEBA DEFINITIVA: get_my_context desde el mismo cliente
+      // ✅ PRUEBA DEFINITIVA: get_my_context desde el mismo cliente (sin window.supabase)
       const ctxRes = await supabase.rpc("get_my_context");
       console.log("[Login] CTX:", ctxRes);
 
-      // Si el contexto está OK, redirige
-      window.location.assign("/");
+      // ⚠️ IMPORTANTE: NO redirigimos todavía para evitar loop mientras depuramos contexto.
+      // Cuando CTX salga ok:true, reactivamos redirect a "/" en el siguiente paso.
     } catch (e: any) {
       console.error("[Login] ERROR:", e);
       const msg =
@@ -70,6 +71,7 @@ export default function Login() {
         "Error desconocido al iniciar sesión";
       setErr(msg);
     } finally {
+      console.log("[Login] finally ejecutado");
       setLoading(false);
       inFlightRef.current = false;
     }
@@ -90,7 +92,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN Debug) — imprime CTX get_my_context() en consola.
+          (LOGIN Debug) — imprime CTX get_my_context() en consola (sin redirect).
         </p>
 
         {err && (
