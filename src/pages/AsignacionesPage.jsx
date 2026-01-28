@@ -280,7 +280,6 @@ function normalizePersonalFromBundle(catalogs, orgId) {
   // Si el bundle no es confiable (sin org_id), no lo usamos.
   return dedupeById(withOrg);
 }
-}
 
 // Normaliza asignaciones aunque el backend cambie nombres
 function normalizeAsignacionRow(a) {
