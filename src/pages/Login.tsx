@@ -2,6 +2,19 @@
 import React, { useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+function stepTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`[Timeout] ${label} (${ms}ms)`)), ms);
+    p.then((v) => {
+      clearTimeout(t);
+      resolve(v);
+    }).catch((e) => {
+      clearTimeout(t);
+      reject(e);
+    });
+  });
+}
+
 export default function Login() {
   const [email, setEmail] = useState("ruebageo@gmail.com");
   const [password, setPassword] = useState("");
@@ -23,31 +36,48 @@ export default function Login() {
     const myAttempt = attemptIdRef.current;
 
     setErr(null);
-    setCtxText("Ejecutando login…");
     setLoading(true);
+    setCtxText("PASO 1/3: signInWithPassword…");
 
     try {
-      console.log("[Login] attempt", myAttempt, "signInWithPassword…", { email });
-
-      const res = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      // PASO 1: Login (timeout largo)
+      const signRes = await stepTimeout(
+        supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }),
+        45000,
+        "signInWithPassword"
+      );
 
       if (myAttempt !== attemptIdRef.current) return;
+      if (signRes.error) throw signRes.error;
 
-      if (res.error) throw res.error;
+      setCtxText("PASO 1/3: OK ✅\nPASO 2/3: getSession…");
 
-      // Session real (sin tokens)
-      const sessionRes = await supabase.auth.getSession();
+      // PASO 2: Session real (timeout corto)
+      const sessionRes = await stepTimeout(
+        supabase.auth.getSession(),
+        20000,
+        "getSession"
+      );
+
       const hasSession = !!sessionRes?.data?.session?.access_token;
+
+      setCtxText(
+        `PASO 1/3: OK ✅\nPASO 2/3: OK ✅ (hasSession=${hasSession})\nPASO 3/3: rpc get_my_context…`
+      );
+
+      // PASO 3: RPC Contexto (timeout largo)
+      const ctxRes = await stepTimeout(
+        supabase.rpc("get_my_context"),
+        45000,
+        "rpc(get_my_context)"
+      );
 
       const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
 
-      // Contexto org/rol
-      const ctxRes = await supabase.rpc("get_my_context");
-
-      // Solo imprimir info segura (sin tokens)
+      // “Seguro”: sin tokens
       const safe = {
         hasSession,
         authKeys: keys,
@@ -55,17 +85,18 @@ export default function Login() {
         ctxError: ctxRes?.error ?? null,
       };
 
-      console.log("[Login] attempt", myAttempt, "SAFE:", safe);
-
-      setCtxText(JSON.stringify(safe, null, 2));
+      console.log("[Login] SAFE:", safe);
+      setCtxText(
+        `PASO 1/3: OK ✅\nPASO 2/3: OK ✅ (hasSession=${hasSession})\nPASO 3/3: OK ✅\n\n` +
+          JSON.stringify(safe, null, 2)
+      );
     } catch (e: any) {
-      console.error("[Login] attempt", myAttempt, "ERROR:", e);
+      console.error("[Login] ERROR:", e);
       const msg = e?.message || e?.error_description || e?.error || "Error al iniciar sesión";
       setErr(msg);
-      setCtxText(`Error: ${msg}`);
+      setCtxText(`FALLÓ ❌\n${msg}`);
     } finally {
       if (myAttempt === attemptIdRef.current) setLoading(false);
-      console.log("[Login] attempt", myAttempt, "finally");
     }
   };
 
@@ -84,7 +115,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN Debug UI) — muestra CTX get_my_context() aquí mismo (sin tokens).
+          (LOGIN Step Tracer) — muestra en qué paso se cuelga (sin tokens).
         </p>
 
         {err && (
