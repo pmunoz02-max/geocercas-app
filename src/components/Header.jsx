@@ -20,7 +20,15 @@ function NavItem({ to, children }) {
 }
 
 export default function Header() {
-  const { user, loading, currentOrg, role, signOut, isAuthenticated } = useAuth();
+  const {
+    user,
+    loading,
+    currentOrg,
+    role, // ⚠️ puede venir null/undefined
+    signOut,
+    isAuthenticated,
+  } = useAuth();
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -31,11 +39,27 @@ export default function Header() {
     }
   };
 
+  // 🔐 Rol a mostrar (robusto)
+  let displayRole = "Cargando…";
+
+  if (!loading) {
+    if (!currentOrg) {
+      displayRole = "Sin organización";
+    } else if (role) {
+      displayRole = role;
+    } else {
+      displayRole = "Sin rol asignado";
+    }
+  }
+
   return (
     <header className="w-full border-b bg-white">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-4 min-w-0">
-          <Link to="/" className="text-lg font-semibold text-gray-900 whitespace-nowrap">
+          <Link
+            to="/"
+            className="text-lg font-semibold text-gray-900 whitespace-nowrap"
+          >
             App Geocercas
           </Link>
 
@@ -60,8 +84,10 @@ export default function Header() {
                 <span className="font-medium text-gray-800">
                   {currentOrg?.name ?? "Sin organización"}
                 </span>
-                <span className="text-gray-600">{user.email}</span>
-                <span className="text-gray-600">Rol: {role ?? "N/D"}</span>
+                <span className="text-gray-600">{user?.email}</span>
+                <span className="text-gray-600">
+                  Rol: <strong>{displayRole}</strong>
+                </span>
               </div>
 
               <button
