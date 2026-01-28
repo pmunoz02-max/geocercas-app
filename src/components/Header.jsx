@@ -20,12 +20,12 @@ function NavItem({ to, children }) {
 }
 
 export default function Header() {
-  const { user, loading, currentOrg, currentRole, logout } = useAuth();
+  const { user, loading, currentOrg, role, signOut, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
     if (location.pathname !== "/login") {
       navigate("/login", { replace: true });
     }
@@ -33,49 +33,35 @@ export default function Header() {
 
   return (
     <header className="w-full border-b bg-white">
-      {/* ===== DEBUG / MARCA DE BUILD ===== */}
-      <div className="bg-red-600 text-white text-xs px-3 py-1 font-bold">
-        HEADER_BUILD_OK – ADMIN FORZADO
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-4 min-w-0">
-          <Link to="/inicio" className="text-lg font-semibold text-gray-900 whitespace-nowrap">
+          <Link to="/" className="text-lg font-semibold text-gray-900 whitespace-nowrap">
             App Geocercas
           </Link>
 
-          {user && (
-            <nav
-              className="flex flex-wrap items-center gap-1"
-              aria-label="Navegación principal"
-            >
-              {/* ===== ADMIN FORZADO (SIEMPRE VISIBLE) ===== */}
-              <NavItem to="/admin">ADMINISTRADOR</NavItem>
-
+          {isAuthenticated && (
+            <nav className="flex flex-wrap items-center gap-1">
               <NavItem to="/inicio">Inicio</NavItem>
               <NavItem to="/geocerca">Geocercas</NavItem>
               <NavItem to="/personal">Personal</NavItem>
               <NavItem to="/actividades">Actividades</NavItem>
               <NavItem to="/asignaciones">Asignaciones</NavItem>
               <NavItem to="/reportes">Reportes</NavItem>
-              <NavItem to="/costos-dashboard">Costos</NavItem>
+              <NavItem to="/dashboard">Costos</NavItem>
               <NavItem to="/tracker">Tracker</NavItem>
-              <NavItem to="/invite-tracker">Invitar Tracker</NavItem>
             </nav>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          {!loading && user ? (
+          {isAuthenticated ? (
             <>
               <div className="hidden sm:flex flex-col text-right text-xs px-2 py-1 rounded bg-gray-100">
                 <span className="font-medium text-gray-800">
                   {currentOrg?.name ?? "Sin organización"}
                 </span>
                 <span className="text-gray-600">{user.email}</span>
-                <span className="text-gray-600">
-                  Rol: {currentRole ?? "N/D"}
-                </span>
+                <span className="text-gray-600">Rol: {role ?? "N/D"}</span>
               </div>
 
               <button
@@ -90,7 +76,7 @@ export default function Header() {
               to="/login"
               className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm whitespace-nowrap"
             >
-              Iniciar sesión
+              Entrar
             </Link>
           )}
         </div>
