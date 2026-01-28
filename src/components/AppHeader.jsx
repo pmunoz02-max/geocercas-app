@@ -1,13 +1,9 @@
 // src/components/AppHeader.jsx
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { supabase } from "../supabaseClient";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
 
-/** =========================
- * Helpers (a prueba de i18n)
- * ========================= */
 function safeText(v) {
   if (v == null) return "";
   if (typeof v === "string") return v;
@@ -21,25 +17,23 @@ function safeText(v) {
 
 export default function AppHeader() {
   const navigate = useNavigate();
-  const { session, currentRole, profile } = useAuth();
   const { t } = useTranslation();
 
-  const isLogged = !!session;
-  const rawRole = (currentRole || profile?.role || "").toLowerCase();
-  const email = session?.user?.email || profile?.email || "";
+  // ✅ Alineado con tu AuthContext REAL
+  const { session, user, role, signOut, isAuthenticated } = useAuth();
+
+  const isLogged = !!session && isAuthenticated;
+  const email = user?.email || session?.user?.email || "";
+  const rawRole = String(role || "").toLowerCase();
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error("[AppHeader] Error al cerrar sesión:", err);
+      await signOut();
     } finally {
-      // AuthContext al recibir session=null ya limpia orgs, etc.
       navigate("/", { replace: true });
     }
   };
 
-  // Traducción básica de roles (fallback al valor original si no matchea)
   let roleLabel = rawRole;
   if (rawRole === "owner") roleLabel = t("app.header.roleOwner", { defaultValue: "Propietario" });
   if (rawRole === "admin") roleLabel = t("app.header.roleAdmin", { defaultValue: "Administrador" });
@@ -48,7 +42,6 @@ export default function AppHeader() {
   return (
     <header className="w-full border-b border-slate-200 bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* Branding */}
         <Link to={isLogged ? "/inicio" : "/"} className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold">
             AG
@@ -63,14 +56,11 @@ export default function AppHeader() {
           </div>
         </Link>
 
-        {/* Zona derecha: idioma + info de usuario + acciones */}
         <div className="flex items-center gap-3 text-xs">
-          {/* Selector de idioma SIEMPRE visible */}
           <LanguageSwitcher />
 
           {isLogged ? (
             <>
-              {/* Email + rol */}
               <div className="hidden sm:flex flex-col items-end">
                 {email && <span className="font-medium text-slate-700">{email}</span>}
                 {rawRole && (
@@ -80,7 +70,6 @@ export default function AppHeader() {
                 )}
               </div>
 
-              {/* Botón Administrador solo para owner */}
               {rawRole === "owner" && (
                 <Link
                   to="/admins"
@@ -90,7 +79,6 @@ export default function AppHeader() {
                 </Link>
               )}
 
-              {/* Botón Salir */}
               <button
                 type="button"
                 onClick={handleLogout}
@@ -100,14 +88,12 @@ export default function AppHeader() {
               </button>
             </>
           ) : (
-            <>
-              <Link
-                to="/login"
-                className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
-              >
-                {safeText(t("app.header.login", { defaultValue: "Entrar" }))}
-              </Link>
-            </>
+            <Link
+              to="/login"
+              className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
+            >
+              {safeText(t("app.header.login", { defaultValue: "Entrar" }))}
+            </Link>
           )}
         </div>
       </div>

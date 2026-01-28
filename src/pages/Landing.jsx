@@ -2,16 +2,8 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import LanguageSwitcher from "../components/LanguageSwitcher";
-
-/**
- * Landing UNIVERSAL:
- * - Público: NO consulta sesión, NO usa useAuth, NO hace getSession.
- * - ES/EN/FR siempre visible (LanguageSwitcher)
- * - Navegación SPA con <Link>
- * - i18n robusto: fallback si falta traducción
- */
 
 function safeT(value, fallback = "") {
   if (value == null) return fallback;
@@ -29,7 +21,6 @@ function safeT(value, fallback = "") {
 export default function Landing() {
   const { t } = useTranslation();
 
-  // helper i18n: nunca mostrar la key
   const tt = useMemo(() => {
     return (key, fallback) => {
       const v = t(key, { defaultValue: fallback });
@@ -85,14 +76,16 @@ export default function Landing() {
               AG
             </div>
             <div className="leading-tight">
-              <div className="font-semibold">{safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}</div>
+              <div className="font-semibold">
+                {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}
+              </div>
               <div className="text-xs text-white/60">
                 {safeT(tt("landing.brandTagline", "Control de personal por geocercas"), "Control de personal por geocercas")}
               </div>
             </div>
           </div>
 
-          {/* ✅ ES/EN/FR + Entrar */}
+          {/* ES/EN/FR + Entrar */}
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
             <Link
