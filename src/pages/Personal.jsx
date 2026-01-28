@@ -3,15 +3,13 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
 
 /**
- * src/pages/Personal.jsx — v4 (compatible con columna GENERATED "activo")
+ * src/pages/Personal.jsx — v5
  *
  * FIXES:
- * - ❌ No inserta/actualiza columna "activo" (es GENERATED) -> evita error 428C9
+ * - ❌ No inserta/actualiza columna "activo" (GENERATED)
  * - Usa "vigente" como estado editable
- * - Mantiene RLS multi-tenant por org_id (frontend siempre envía org_id)
- *
- * NOTA:
- * - Si aún aparece "stack depth limit exceeded" en SELECT, es de RLS (app_user_roles view) y NO del frontend.
+ * - Mantiene filtro org_id
+ * - ✅ Fallback de rol: si AuthContext no entrega role, lo lee de app_user_roles / memberships
  */
 
 function cls(...a) {
@@ -57,9 +55,79 @@ function buildOrFilter(q) {
 }
 
 export default function Personal() {
-  const { loading, isAuthenticated, user, currentOrg, role, refreshContext } = useAuth();
+  const { loading, isAuthenticated, user, currentOrg, role, refreshContext } =
+    useAuth();
 
-  const roleLower = useMemo(() => String(role || "").toLowerCase(), [role]);
+  // ✅ Rol efectivo (si AuthContext falla, lo resolvemos acá)
+  const [effectiveRole, setEffectiveRole] = useState(role ?? null);
+  const [roleBusy, setRoleBusy] = useState(false);
+
+  useEffect(() => {
+    setEffectiveRole(role ?? null);
+  }, [role]);
+
+  async function resolveRoleFallback() {
+    if (!isAuthenticated || !user?.id || !currentOrg?.id) return;
+    if (role) return; // ya hay rol en contexto
+    if (roleBusy) return;
+
+    setRoleBusy(true);
+    try {
+      // 1) Intentar desde app_user_roles
+      const { data: aur, error: aurErr } = await supabase
+        .from("app_user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("org_id", currentOrg.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (aurErr) throw aurErr;
+
+      if (aur?.role) {
+        setEffectiveRole(aur.role);
+        // opcional: pedir re-sync del contexto
+        refreshContext?.();
+        return;
+      }
+
+      // 2) Fallback a memberships
+      const { data: mem, error: memErr } = await supabase
+        .from("memberships")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("org_id", currentOrg.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (memErr) throw memErr;
+
+      if (mem?.role) {
+        setEffectiveRole(mem.role);
+        refreshContext?.();
+        return;
+      }
+
+      setEffectiveRole(null);
+    } catch (e) {
+      console.error("[Personal] resolveRoleFallback error", e);
+      setEffectiveRole(null);
+    } finally {
+      setRoleBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!loading && isAuthenticated && user?.id && currentOrg?.id && !role) {
+      resolveRoleFallback();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, isAuthenticated, user?.id, currentOrg?.id, role]);
+
+  const roleLower = useMemo(
+    () => String(effectiveRole || "").toLowerCase(),
+    [effectiveRole]
+  );
   const canEdit = roleLower === "owner" || roleLower === "admin";
 
   const [rows, setRows] = useState([]);
@@ -278,13 +346,16 @@ export default function Personal() {
     );
   }
 
+  const roleLabelUi =
+    roleBusy && !effectiveRole ? "CARGANDO…" : (roleLower || "sin rol").toUpperCase();
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold mb-1 text-slate-900">Personal</h1>
           <div className="text-sm text-slate-700">
-            Rol: <span className="font-semibold text-slate-900">{(roleLower || "sin rol").toUpperCase()}</span>{" "}
+            Rol: <span className="font-semibold text-slate-900">{roleLabelUi}</span>{" "}
             · Org: <span className="font-mono text-slate-700">{currentOrg.id}</span>
           </div>
         </div>
@@ -342,11 +413,21 @@ export default function Personal() {
         <table className="w-full text-sm text-slate-800">
           <thead className="bg-slate-50">
             <tr>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Nombre</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Teléfono</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Email</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Estado</th>
-              <th className="text-right px-4 py-3 font-semibold text-slate-700">Acciones</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Nombre
+              </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Teléfono
+              </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Email
+              </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Estado
+              </th>
+              <th className="text-right px-4 py-3 font-semibold text-slate-700">
+                Acciones
+              </th>
             </tr>
           </thead>
 
@@ -355,7 +436,10 @@ export default function Personal() {
               const deleted = !!r.is_deleted;
               const vigente = r.vigente !== false && !deleted;
               return (
-                <tr key={r.id} className="border-t border-slate-200 hover:bg-slate-50 transition">
+                <tr
+                  key={r.id}
+                  className="border-t border-slate-200 hover:bg-slate-50 transition"
+                >
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900">
                       {r.nombre || ""} {r.apellido || ""}
@@ -412,7 +496,10 @@ export default function Personal() {
 
             {!busy && rows.length === 0 && (
               <tr className="border-t border-slate-200">
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50"
+                >
                   No hay registros en esta organización.
                 </td>
               </tr>
@@ -421,7 +508,11 @@ export default function Personal() {
         </table>
       </div>
 
-      <Modal open={openNew || !!editing} title={editing ? "Editar personal" : "Nuevo personal"} onClose={closeModal}>
+      <Modal
+        open={openNew || !!editing}
+        title={editing ? "Editar personal" : "Nuevo personal"}
+        onClose={closeModal}
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-slate-700">Nombre *</label>
@@ -463,7 +554,9 @@ export default function Personal() {
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) => setForm((s) => ({ ...s, vigente: e.target.checked }))}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, vigente: e.target.checked }))
+              }
             />
             <span className="text-slate-800">Vigente</span>
           </div>
