@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -9,23 +9,31 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const canSubmit = useMemo(() => {
-    return email.trim().length > 3 && password.length >= 6 && !loading;
-  }, [email, password, loading]);
+  // ✅ Redirect correcto (NO en render)
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigate("/", { replace: true });
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
-  // Si ya hay sesión, no mostrar login
-  if (!authLoading && isAuthenticated) {
-    navigate("/", { replace: true });
-    return null;
-  }
+  const canSubmit = useMemo(() => {
+    return email.trim().length > 3 && password.length >= 6 && !submitting;
+  }, [email, password, submitting]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    setLoading(true);
+    setSubmitting(true);
+
+    // Fail-safe: si algo externo se queda colgado, liberamos el botón
+    const failSafe = window.setTimeout(() => {
+      setSubmitting(false);
+      setErr("Se demoró demasiado iniciando sesión. Reintenta (y revisa la consola/Network).");
+    }, 20000);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -33,20 +41,17 @@ export default function Login() {
         password,
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw error;
+      if (!data?.session) throw new Error("No se creó sesión (session=null).");
 
-      if (!data?.session) {
-        throw new Error("No se creó sesión");
-      }
-
-      // AuthContext captará la sesión vía onAuthStateChange
-      navigate("/", { replace: true });
+      // AuthContext debe captar el cambio por onAuthStateChange y redirigir por useEffect.
+      // Aun así, por seguridad, apagamos el loading.
+      setSubmitting(false);
     } catch (e: any) {
       setErr(e?.message || "Error al iniciar sesión");
+      setSubmitting(false);
     } finally {
-      setLoading(false);
+      window.clearTimeout(failSafe);
     }
   };
 
@@ -80,23 +85,38 @@ export default function Login() {
         )}
 
         <div style={{ marginTop: 16 }}>
-          <label>Correo</label>
+          <label style={{ display: "block", marginBottom: 6, opacity: 0.9 }}>Correo</label>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
-            style={{ width: "100%", padding: 12, borderRadius: 12 }}
+            inputMode="email"
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+            }}
           />
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <label>Contraseña</label>
+          <label style={{ display: "block", marginBottom: 6, opacity: 0.9 }}>Contraseña</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
-            style={{ width: "100%", padding: 12, borderRadius: 12 }}
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+            }}
           />
         </div>
 
@@ -106,14 +126,20 @@ export default function Login() {
           style={{
             width: "100%",
             marginTop: 18,
-            padding: 12,
+            padding: "12px 14px",
             borderRadius: 12,
+            border: "none",
             fontWeight: 800,
             cursor: canSubmit ? "pointer" : "not-allowed",
+            opacity: canSubmit ? 1 : 0.55,
           }}
         >
-          {loading ? "Ingresando..." : "Ingresar"}
+          {submitting ? "Ingresando..." : "Ingresar"}
         </button>
+
+        <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
+          Estado AuthContext: {authLoading ? "cargando…" : isAuthenticated ? "autenticado ✅" : "no autenticado"}
+        </div>
       </form>
     </div>
   );
