@@ -1,18 +1,17 @@
 // src/pages/Login.tsx
 import React, { useMemo, useRef, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/supabaseClient";
 
-function stepTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`[Timeout] ${label} (${ms}ms)`)), ms);
-    p.then((v) => {
-      clearTimeout(t);
-      resolve(v);
-    }).catch((e) => {
-      clearTimeout(t);
-      reject(e);
-    });
-  });
+async function fetchWithTimeout(url: string, options: RequestInit, ms: number) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 export default function Login() {
@@ -37,47 +36,57 @@ export default function Login() {
 
     setErr(null);
     setLoading(true);
-    setCtxText("PASO 1/3: signInWithPassword…");
+    setCtxText("PASO 1/4: fetch /auth/v1/token…");
 
     try {
-      // PASO 1: Login (timeout largo)
-      const signRes = await stepTimeout(
-        supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }),
-        45000,
-        "signInWithPassword"
+      const tokenUrl = `${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/token?grant_type=password`;
+
+      const res = await fetchWithTimeout(
+        tokenUrl,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ email: email.trim(), password }),
+        },
+        25000
       );
 
       if (myAttempt !== attemptIdRef.current) return;
-      if (signRes.error) throw signRes.error;
 
-      setCtxText("PASO 1/3: OK ✅\nPASO 2/3: getSession…");
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`[Auth token] HTTP ${res.status}: ${text}`);
+      }
 
-      // PASO 2: Session real (timeout corto)
-      const sessionRes = await stepTimeout(
-        supabase.auth.getSession(),
-        20000,
-        "getSession"
-      );
+      const json = await res.json();
+      const access_token = json?.access_token;
+      const refresh_token = json?.refresh_token;
 
+      if (!access_token || !refresh_token) {
+        throw new Error("[Auth token] Respuesta sin access_token/refresh_token");
+      }
+
+      setCtxText("PASO 1/4: OK ✅\nPASO 2/4: supabase.auth.setSession…");
+
+      const setRes = await supabase.auth.setSession({ access_token, refresh_token });
+      if (setRes.error) throw setRes.error;
+
+      setCtxText("PASO 2/4: OK ✅\nPASO 3/4: getSession…");
+
+      const sessionRes = await supabase.auth.getSession();
       const hasSession = !!sessionRes?.data?.session?.access_token;
-
-      setCtxText(
-        `PASO 1/3: OK ✅\nPASO 2/3: OK ✅ (hasSession=${hasSession})\nPASO 3/3: rpc get_my_context…`
-      );
-
-      // PASO 3: RPC Contexto (timeout largo)
-      const ctxRes = await stepTimeout(
-        supabase.rpc("get_my_context"),
-        45000,
-        "rpc(get_my_context)"
-      );
 
       const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
 
-      // “Seguro”: sin tokens
+      setCtxText(
+        `PASO 3/4: OK ✅ (hasSession=${hasSession})\nPASO 4/4: rpc get_my_context…`
+      );
+
+      const ctxRes = await supabase.rpc("get_my_context");
+
       const safe = {
         hasSession,
         authKeys: keys,
@@ -86,13 +95,17 @@ export default function Login() {
       };
 
       console.log("[Login] SAFE:", safe);
+
       setCtxText(
-        `PASO 1/3: OK ✅\nPASO 2/3: OK ✅ (hasSession=${hasSession})\nPASO 3/3: OK ✅\n\n` +
+        `PASO 1/4: OK ✅\nPASO 2/4: OK ✅\nPASO 3/4: OK ✅ (hasSession=${hasSession})\nPASO 4/4: OK ✅\n\n` +
           JSON.stringify(safe, null, 2)
       );
     } catch (e: any) {
+      const msg =
+        e?.name === "AbortError"
+          ? "Timeout: la llamada a Auth tardó demasiado (AbortError)"
+          : e?.message || "Error al iniciar sesión";
       console.error("[Login] ERROR:", e);
-      const msg = e?.message || e?.error_description || e?.error || "Error al iniciar sesión";
       setErr(msg);
       setCtxText(`FALLÓ ❌\n${msg}`);
     } finally {
@@ -115,7 +128,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN Step Tracer) — muestra en qué paso se cuelga (sin tokens).
+          (LOGIN Rescue) — token por fetch + setSession + CTX (sin tokens).
         </p>
 
         {err && (
