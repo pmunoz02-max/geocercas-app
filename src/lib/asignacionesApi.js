@@ -1,44 +1,72 @@
 // src/lib/asignacionesApi.js
-// CANONICO: solo /api/asignaciones (cookie tg_at)
+import { supabase } from "./supabaseClient";
 
-async function parseJsonSafe(res) {
-  const txt = await res.text();
-  if (!txt) return null;
-  try {
-    return JSON.parse(txt);
-  } catch {
-    return null;
-  }
-}
-
-async function apiFetch(method, body) {
-  const res = await fetch("/api/asignaciones", {
-    method,
-    credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const payload = await parseJsonSafe(res);
-  if (!res.ok || payload?.ok === false) {
-    const msg = payload?.error || `HTTP ${res.status} ${res.statusText}` || "Request failed";
-    return { data: null, error: { message: msg } };
-  }
-  return { data: payload?.data ?? null, error: null };
+function currentOrgId() {
+  return localStorage.getItem("tg_current_org_id");
 }
 
 export async function getAsignacionesBundle() {
-  return apiFetch("GET");
+  const orgId = currentOrgId();
+  if (!orgId) {
+    return { data: null, error: { message: "No active org" } };
+  }
+
+  const { data, error } = await supabase
+    .from("asignaciones")
+    .select(`
+      id,
+      org_id,
+      personal_id,
+      geocerca_id,
+      activity_id,
+      start_time,
+      end_time,
+      frecuencia_envio_sec,
+      status,
+      created_at,
+      personal:personal_id ( id, nombre, apellido, email ),
+      geocerca:geocerca_id ( id, nombre, name ),
+      activity:activity_id ( id, name )
+    `)
+    .eq("org_id", orgId)
+    .eq("is_deleted", false)
+    .order("start_time", { ascending: true });
+
+  if (error) return { data: null, error };
+  return { data: { asignaciones: data, catalogs: {} }, error: null };
 }
 
 export async function createAsignacion(payload) {
-  return apiFetch("POST", payload);
+  const orgId = currentOrgId();
+  const { data, error } = await supabase
+    .from("asignaciones")
+    .insert({ ...payload, org_id: orgId })
+    .select()
+    .single();
+
+  return { data, error };
 }
 
 export async function updateAsignacion(id, patch) {
-  return apiFetch("PATCH", { id, patch });
+  const orgId = currentOrgId();
+  const { data, error } = await supabase
+    .from("asignaciones")
+    .update(patch)
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .select()
+    .single();
+
+  return { data, error };
 }
 
 export async function deleteAsignacion(id) {
-  return apiFetch("DELETE", { id });
+  const orgId = currentOrgId();
+  const { error } = await supabase
+    .from("asignaciones")
+    .update({ is_deleted: true })
+    .eq("id", id)
+    .eq("org_id", orgId);
+
+  return { data: null, error };
 }
