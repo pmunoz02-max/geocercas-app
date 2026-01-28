@@ -157,7 +157,6 @@ async function fetchPersonalSafeByOrg(orgId) {
       person_id,
       person:people (
         id,
-        name,
         nombre,
         apellido,
         email
@@ -174,7 +173,7 @@ async function fetchPersonalSafeByOrg(orgId) {
     .map((row) => {
       const p = row.person || {};
       const nombre =
-        `${p.nombre || p.name || ""} ${p.apellido || ""}`.trim()
+        `${p.nombre || ""} ${p.apellido || ""}`.trim()
           || (p.email || "").trim()
           || row.person_id;
 
