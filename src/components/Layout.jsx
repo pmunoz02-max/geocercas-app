@@ -6,7 +6,21 @@ import { useAuth } from "../context/AuthContext.jsx";
 export default function Layout() {
   const { user, loading, currentOrg, role } = useAuth();
 
-  const roleLabel = role ? String(role).toUpperCase() : "SIN ROL";
+  // Rol robusto (evita "SIN ROL" por estados intermedios)
+  let roleLabel = "Cargando…";
+
+  if (!loading) {
+    if (!user) {
+      roleLabel = "NO AUTENTICADO";
+    } else if (!currentOrg) {
+      roleLabel = "SIN ORGANIZACIÓN";
+    } else if (role) {
+      roleLabel = String(role).toUpperCase();
+    } else {
+      // Aquí ya terminó de cargar, hay org, pero el rol no llegó o no existe
+      roleLabel = "CARGANDO ROL…";
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -28,7 +42,9 @@ export default function Layout() {
               <MainNav role={role} />
             </div>
           ) : (
-            <div className="text-sm text-slate-600">No autenticado</div>
+            <div className="text-sm text-slate-600">
+              {loading ? "Cargando sesión…" : "No autenticado"}
+            </div>
           )}
         </div>
       </header>
