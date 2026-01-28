@@ -52,7 +52,9 @@ function resolveLabel(t, tab) {
 export default function TopTabs({ tabs = [] }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const { user, currentRole, isAppRoot } = useAuth();
+
+  // ✅ FIX: Tomar role desde currentRole o role (compatibilidad total)
+  const { user, currentRole, role, isAppRoot } = useAuth();
 
   const flags = useMemo(() => {
     try {
@@ -70,8 +72,9 @@ export default function TopTabs({ tabs = [] }) {
 
   const items = Array.isArray(tabs) ? tabs : [];
 
-  const roleRaw = safeText(currentRole).trim().toLowerCase();
-  const roleLabel = isAppRoot ? "ROOT" : roleRaw ? roleRaw.toUpperCase() : "SIN ROL";
+  const effectiveRole = safeText(currentRole || role).trim();
+  const roleRaw = effectiveRole.toLowerCase();
+  const roleLabel = isAppRoot ? "ROOT" : roleRaw ? roleRaw.toUpperCase() : "CARGANDO ROL…";
 
   const isActive = (path) => {
     const p = safeText(path).trim();
@@ -87,7 +90,7 @@ export default function TopTabs({ tabs = [] }) {
   const inactiveCls = "border-slate-300 hover:bg-slate-50 hover:border-slate-400";
 
   return (
-    <div className="w-full" data-top-tabs="v9">
+    <div className="w-full" data-top-tabs="v10">
       <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
@@ -103,7 +106,8 @@ export default function TopTabs({ tabs = [] }) {
                 if (!path) return null;
 
                 const on = isActive(path);
-                const label = safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
+                const label =
+                  safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
 
                 const style = on
                   ? { background: "#0f172a", color: "#ffffff" }
@@ -126,7 +130,9 @@ export default function TopTabs({ tabs = [] }) {
 
           {user && (
             <div className="hidden md:flex flex-col text-right text-xs px-2 py-1 rounded bg-slate-100">
-              <span className="font-medium text-slate-800">{user.email ?? "Sin email"}</span>
+              <span className="font-medium text-slate-800">
+                {user.email ?? "Sin email"}
+              </span>
               <span className="text-slate-600">{roleLabel}</span>
             </div>
           )}
