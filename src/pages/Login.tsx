@@ -1,168 +1,170 @@
 // src/pages/Login.tsx
-// LOGIN-V32 (Supabase Auth) — unificado, crea sb-*-auth-token y habilita RLS
-import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "../components/LanguageSwitcher";
+import React, { useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext";
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label = "timeout"): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`[Login] ${label} (${ms}ms)`)), ms);
+    promise
+      .then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      })
+      .catch((e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+  });
+}
 
 export default function Login() {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
-
-  const { authenticated, loading: authLoading } = useAuth();
-
-  const [email, setEmail] = useState("pruebatugeo@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Si ya hay sesión, fuera del login
-    if (!authLoading && authenticated) {
-      navigate(next, { replace: true });
-    }
-  }, [authLoading, authenticated, navigate, next]);
+  const canSubmit = useMemo(() => {
+    return email.trim().length > 3 && password.length >= 6 && !loading;
+  }, [email, password, loading]);
 
-  const inputClass =
-    "w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 " +
-    "text-white placeholder:text-slate-400 outline-none";
-
-  const buttonClass =
-    "w-full mt-8 py-4 rounded-2xl bg-white/90 text-slate-900 font-semibold text-center " +
-    "active:bg-white select-none disabled:opacity-60 disabled:cursor-not-allowed";
-
-  const linkClass = "text-xs underline opacity-80 hover:opacity-100";
-
-  async function handleSubmit(e: React.FormEvent) {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg("");
-    setSubmitting(true);
+    setErr(null);
+    setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: String(email || "").trim(),
-        password: String(password || ""),
-      });
+      // Log mínimo para depurar en consola sin ensuciar.
+      console.log("[Login] intentando signInWithPassword…", { email });
+
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }),
+        15000,
+        "Supabase signInWithPassword no respondió"
+      );
 
       if (error) {
-        setErrorMsg(error.message || "Login failed");
-        return;
+        console.error("[Login] error signInWithPassword:", error);
+        throw error;
       }
 
-      // ✅ si hay sesión, ya existe sb-*-auth-token (persistSession=true)
-      if (data?.session) {
-        navigate(next, { replace: true });
-        return;
+      // data.session debe venir si login OK
+      if (!data?.session) {
+        console.warn("[Login] login OK pero sin session en respuesta:", data);
       }
 
-      // Caso raro: sin sesión
-      setErrorMsg(t("login.noSession", { defaultValue: "No se creó sesión. Reintenta." }));
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Login failed");
+      // Verificación rápida: token en localStorage
+      const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
+      console.log("[Login] localStorage auth keys:", keys);
+
+      // Redirección: deja que tu AuthContext/router se encargue
+      // (si ya tienes guard/redirect en App.jsx, esto es suficiente)
+    } catch (e: any) {
+      const msg =
+        e?.message ||
+        e?.error_description ||
+        e?.error ||
+        "Error desconocido al iniciar sesión";
+      setErr(msg);
     } finally {
-      setSubmitting(false);
+      // ✅ esto evita el “colgado”
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      <div className="w-full max-w-xl">
-        <div className="flex items-center justify-between mb-4 px-1">
-          <Link to="/" className={linkClass}>
-            {t("login.back", { defaultValue: "Volver" })}
-          </Link>
-          <LanguageSwitcher />
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 16 }}>
+      <form
+        onSubmit={handleLogin}
+        style={{
+          width: "min(520px, 100%)",
+          padding: 24,
+          borderRadius: 16,
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(10,16,28,0.65)",
+          color: "white",
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
+        <p style={{ marginTop: 8, opacity: 0.85 }}>
+          (LOGIN-V32 Supabase Auth) — crea sesión persistente y habilita RLS automáticamente.
+        </p>
+
+        {err && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid rgba(255,80,80,0.35)",
+              background: "rgba(255,80,80,0.12)",
+              color: "white",
+            }}
+          >
+            {err}
+          </div>
+        )}
+
+        <div style={{ marginTop: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, opacity: 0.9 }}>Correo</label>
+          <input
+            value={email}
+            onChange={(ev) => setEmail(ev.target.value)}
+            autoComplete="email"
+            inputMode="email"
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+            }}
+          />
         </div>
 
-        <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
-          <h1 className="text-3xl font-semibold mb-6">
-            {t("login.title", { defaultValue: "Iniciar sesión" })}{" "}
-            <span className="text-xs opacity-60">
-              {t("login.badge", { defaultValue: "(LOGIN-V32 Supabase Auth)" })}
-            </span>
-          </h1>
-
-          <div className="mb-6 text-xs p-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-100">
-            {t("login.info", {
-              defaultValue:
-                "Login unificado con Supabase Auth: crea sesión persistente (sb-*-auth-token) y habilita RLS automáticamente.",
-            })}
-          </div>
-
-          {errorMsg ? (
-            <div className="mb-5 text-xs p-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 text-rose-100">
-              {errorMsg}
-            </div>
-          ) : null}
-
-          <form onSubmit={handleSubmit}>
-            <input type="hidden" name="next" value={next} />
-
-            <label className="block mb-2 text-sm">
-              {t("login.email", { defaultValue: "Correo" })}
-            </label>
-            <input
-              className={inputClass}
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-
-            <div className="h-6" />
-
-            <label className="block mb-2 text-sm">
-              {t("login.password", { defaultValue: "Contraseña" })}
-            </label>
-            <input
-              className={inputClass}
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-
-            <button type="submit" className={buttonClass} disabled={submitting}>
-              {submitting
-                ? t("login.submitting", { defaultValue: "Entrando..." })
-                : t("login.submit", { defaultValue: "Entrar" })}
-            </button>
-          </form>
-
-          <div className="mt-4 flex items-center justify-between text-xs px-1">
-            <Link to="/forgot-password" className={linkClass}>
-              {t("login.forgot", { defaultValue: "¿Olvidaste tu contraseña?" })}
-            </Link>
-
-            <Link to="/reset-password" className={`${linkClass} opacity-60`}>
-              {t("login.reset", { defaultValue: "Ya tengo el link" })}
-            </Link>
-          </div>
-
-          <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4">
-            <div>
-              {t("login.modeTitle", {
-                defaultValue: "Modo: Supabase Auth (persistSession)",
-              })}
-            </div>
-            <div>
-              {t("login.modeDesc", {
-                defaultValue:
-                  "Después del login, verifica localStorage: debe existir sb-*-auth-token. Si existe, RLS permitirá INSERT/UPDATE según policies.",
-              })}
-            </div>
-          </div>
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: "block", marginBottom: 6, opacity: 0.9 }}>Contraseña</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(ev) => setPassword(ev.target.value)}
+            autoComplete="current-password"
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+            }}
+          />
         </div>
-      </div>
+
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          style={{
+            width: "100%",
+            marginTop: 18,
+            padding: "12px 14px",
+            borderRadius: 12,
+            border: "none",
+            fontWeight: 800,
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            opacity: canSubmit ? 1 : 0.55,
+          }}
+        >
+          {loading ? "Ingresando..." : "Ingresar"}
+        </button>
+
+        <div style={{ marginTop: 14, opacity: 0.85, fontSize: 13, lineHeight: 1.35 }}>
+          Después del login, revisa consola: debe existir <b>sb-geocercas-auth-token</b> en localStorage.
+          Si no aparece, revisa Env Vars en Vercel.
+        </div>
+      </form>
     </div>
   );
 }
