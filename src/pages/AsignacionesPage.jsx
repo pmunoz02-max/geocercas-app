@@ -119,9 +119,36 @@ async function fetchActivitiesSafeByOrg(orgId) {
   return Array.isArray(data) ? data : [];
 }
 
+// ✅ Fallback adicional via API (cuando el client Supabase no trae sesión o devuelve vacío)
+// Intentamos varios endpoints comunes sin romper nada si no existen (404/500).
+async function fetchActivitiesApiFallback(orgId) {
+  if (!orgId) return [];
+  const endpoints = [
+    `/api/activities?org_id=${encodeURIComponent(orgId)}`,
+    `/api/activities`,
+    `/api/actividades?org_id=${encodeURIComponent(orgId)}`,
+    `/api/actividades`,
+    `/api/catalogs/activities?org_id=${encodeURIComponent(orgId)}`,
+    `/api/catalogs/activities`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const j = await fetchJson(url);
+      const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
+      // Filtra por org si viene org_id en los rows
+      const filtered = rows.filter((r) => !r?.org_id || r.org_id === orgId);
+      if (filtered.length) return filtered;
+    } catch (_) {
+      // si falla, probamos siguiente endpoint
+    }
+  }
+  return [];
+}
+
 
 // ✅ Fallback adicional vía API (usa cookies/credenciales del backend)
-async function fetchActivitiesViaApi(orgId) {
+async function fetchActivitiesApiFallback(orgId) {
   if (!orgId) return [];
   // Intento 1: endpoint con query params
   const tryUrls = [
@@ -217,10 +244,12 @@ async function fetchPersonalSafeByOrg(orgId) {
     .filter((x) => x.org_people_id && x.people_id);
 }
 
-function normalizePersonalFromBundle(catalogs) {
-  // bundle puede traer:
-  // - catalogs.personal (nuevo)
-  // - catalogs.people (legacy) con org_people_id
+function normalizePersonalFromBundle(catalogs, orgId) {
+  // IMPORTANTE:
+  // El bundle histórico puede traer "people/personal" globales (sin org) => eso rompe multi-tenant.
+  // Por seguridad, solo aceptamos filas que tengan org_id === orgId.
+  // Si no vienen con org_id, devolvemos [] para forzar fallback seguro desde org_people.
+
   const personal = Array.isArray(catalogs?.personal) ? catalogs.personal : [];
   const peopleLegacy = Array.isArray(catalogs?.people) ? catalogs.people : [];
 
@@ -228,8 +257,7 @@ function normalizePersonalFromBundle(catalogs) {
     personal.length > 0
       ? personal
       : peopleLegacy.map((p) => ({
-          // legacy: usa org_people_id si existe
-          id: p.org_people_id,
+          id: p.org_people_id || p.id,
           nombre: p.nombre,
           apellido: p.apellido,
           email: p.email,
@@ -243,11 +271,15 @@ function normalizePersonalFromBundle(catalogs) {
       nombre: p.nombre || "",
       apellido: p.apellido || "",
       email: p.email || "",
+      org_id: p.org_id || null,
     }))
     .filter((p) => p?.id);
 
-  // Dedup conservador por ID (evita colapsar modos distintos)
-  return dedupeById(cleaned);
+  const withOrg = cleaned.filter((p) => p.org_id && p.org_id === orgId);
+
+  // Si el bundle no es confiable (sin org_id), no lo usamos.
+  return dedupeById(withOrg);
+}
 }
 
 // Normaliza asignaciones aunque el backend cambie nombres
@@ -380,7 +412,7 @@ export default function AsignacionesPage() {
     setAsignaciones(rows);
 
     // PERSONAL desde bundle
-    const normalizedPersonal = normalizePersonalFromBundle(catalogs);
+    const normalizedPersonal = normalizePersonalFromBundle(catalogs, orgId);
     setPersonalOptions(normalizedPersonal);
 
     // GEOCERCAS desde bundle
@@ -413,7 +445,7 @@ export default function AsignacionesPage() {
     }
 
     // Activities fallback SAFE (Supabase directo por org)
-    if (bundleActs.length === 0 || missingAct) {
+    if (true) {
       try {
         const actsSafe = await fetchActivitiesSafeByOrg(orgId);
         const actsNorm = normalizeActivities(actsSafe, orgId);
@@ -422,7 +454,7 @@ export default function AsignacionesPage() {
           setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
         } else {
           // Si Supabase devuelve vacío (posible sesión client/RLS), intentamos vía API (backend con cookies)
-          const actsApi = await fetchActivitiesViaApi(orgId);
+          const actsApi = await fetchActivitiesApiFallback(orgId);
           const actsApiNorm = normalizeActivities(actsApi, orgId);
           if (actsApiNorm?.length) setActivityOptions(dedupeById([...actsApiNorm, ...bundleActs]));
         }
@@ -433,32 +465,31 @@ export default function AsignacionesPage() {
       }
     }
 
-    // ✅ Personal fallback SAFE (Supabase: org_people JOIN people)
-    if (normalizedPersonal.length === 0) {
-      try {
-        const safeRows = await fetchPersonalSafeByOrg(orgId);
-        const mode = detectPersonalIdMode(rows, safeRows);
-        setPersonalIdMode(mode);
+    // ✅ Personal tenant-safe (Supabase: org_people JOIN people)
+// Siempre se usa esta fuente para evitar "personas de otra org".
+// El bundle solo se usa para mantener compatibilidad, pero no para poblar el selector.
+    try {
+      const safeRows = await fetchPersonalSafeByOrg(orgId);
+      const mode = detectPersonalIdMode(rows, safeRows);
+      setPersonalIdMode(mode);
 
-        // Construye opciones según modo detectado
-        const opts = safeRows.map((p) => ({
-          id: mode === "people" ? p.people_id : p.org_people_id,
-          nombre: p.nombre || "",
-          apellido: "",
-          email: p.email || "",
-          // guardamos ambos por si quieres debug
-          org_people_id: p.org_people_id,
-          people_id: p.people_id,
-        }));
+      const opts = safeRows.map((p) => ({
+        id: mode === "people" ? p.people_id : p.org_people_id,
+        nombre: p.nombre || "",
+        apellido: "",
+        email: p.email || "",
+        org_people_id: p.org_people_id,
+        people_id: p.people_id,
+      }));
 
-        setPersonalOptions(dedupeById(opts));
-      } catch (e) {
-        console.warn("[AsignacionesPage] personal safe fallback failed:", e?.message || e);
-        setError((prev) => prev || `Error consultando personas: ${e?.message || e}`);
-      }
+      setPersonalOptions(dedupeById(opts));
+    } catch (e) {
+      console.warn("[AsignacionesPage] personal safe fallback failed:", e?.message || e);
+      setError((prev) => prev || `Error consultando personas: ${e?.message || e}`);
+      setPersonalOptions([]); // no mostramos personas cruzadas
     }
 
-    setLoading(false);
+setLoading(false);
   }
 
   useEffect(() => {
