@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
 
 /**
- * src/pages/Personal.jsx (RLS-first, sin /api) — v3
- * - Lee/escribe directo a Supabase con RLS (multi-tenant por org_id)
- * - ✅ Elimina campo "cedula" (UI + payload + filtros + columna)
- * - ✅ AuthContext NUEVO: loading, isAuthenticated, user, currentOrg, role, refreshContext
- * - ✅ UI: contraste alto (mensajes y botones legibles)
+ * src/pages/Personal.jsx — v4 (compatible con columna GENERATED "activo")
+ *
+ * FIXES:
+ * - ❌ No inserta/actualiza columna "activo" (es GENERATED) -> evita error 428C9
+ * - Usa "vigente" como estado editable
+ * - Mantiene RLS multi-tenant por org_id (frontend siempre envía org_id)
+ *
+ * NOTA:
+ * - Si aún aparece "stack depth limit exceeded" en SELECT, es de RLS (app_user_roles view) y NO del frontend.
  */
 
 function cls(...a) {
@@ -45,7 +48,6 @@ function buildOrFilter(q) {
   const esc = s.replace(/%/g, "\\%").replace(/,/g, "\\,");
   const like = `%${esc}%`;
 
-  // Campos soportados (sin cedula)
   return [
     `nombre.ilike.${like}`,
     `apellido.ilike.${like}`,
@@ -55,21 +57,16 @@ function buildOrFilter(q) {
 }
 
 export default function Personal() {
-  const { t } = useTranslation();
-
-  // ✅ AuthContext NUEVO
   const { loading, isAuthenticated, user, currentOrg, role, refreshContext } = useAuth();
 
   const roleLower = useMemo(() => String(role || "").toLowerCase(), [role]);
   const canEdit = roleLower === "owner" || roleLower === "admin";
 
-  // UI state
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Modal Nuevo / Editar
   const [openNew, setOpenNew] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -78,7 +75,7 @@ export default function Personal() {
     apellido: "",
     telefono: "",
     email: "",
-    activo: true,
+    vigente: true,
   });
 
   function resetForm() {
@@ -87,7 +84,7 @@ export default function Personal() {
       apellido: "",
       telefono: "",
       email: "",
-      activo: true,
+      vigente: true,
     });
   }
 
@@ -98,7 +95,7 @@ export default function Personal() {
       apellido: row.apellido || "",
       telefono: row.telefono || "",
       email: row.email || "",
-      activo: row.activo !== false,
+      vigente: row.vigente !== false,
     });
   }
 
@@ -107,6 +104,14 @@ export default function Personal() {
     setEditing(null);
     resetForm();
     setMsg("");
+  }
+
+  function validate() {
+    const nombre = (form.nombre || "").trim();
+    const email = (form.email || "").trim();
+    if (!nombre) return "Nombre es obligatorio.";
+    if (!email) return "Email es obligatorio.";
+    return null;
   }
 
   async function load() {
@@ -131,7 +136,7 @@ export default function Personal() {
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("[Personal] load error", e);
-      setMsg(e?.message || t("personal.errorLoad", { defaultValue: "No se pudo cargar el listado." }));
+      setMsg(e?.message || "No se pudo cargar el listado.");
     } finally {
       setBusy(false);
     }
@@ -150,16 +155,23 @@ export default function Personal() {
   async function onSave() {
     if (!canEdit) return;
 
+    const v = validate();
+    if (v) {
+      setMsg(v);
+      return;
+    }
+
     setMsg("");
     setBusy(true);
     try {
       const row = {
         org_id: currentOrg.id,
-        nombre: form.nombre?.trim() || null,
+        nombre: form.nombre.trim(),
         apellido: form.apellido?.trim() || null,
         telefono: form.telefono?.trim() || null,
-        email: form.email?.trim() || null,
-        activo: !!form.activo,
+        email: form.email.trim(),
+        vigente: !!form.vigente,
+        // ✅ NO enviar "activo" (GENERATED)
       };
 
       if (editing?.id) {
@@ -178,29 +190,29 @@ export default function Personal() {
       await load();
     } catch (e) {
       console.error("[Personal] save error", e);
-      setMsg(e?.message || t("personal.errorSave", { defaultValue: "No se pudo guardar." }));
+      setMsg(e?.message || "No se pudo guardar.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function onToggleActive(row) {
+  async function onToggleVigente(row) {
     if (!canEdit) return;
     setMsg("");
     setBusy(true);
     try {
-      const next = !(row.activo !== false);
+      const next = !(row.vigente !== false);
       const { error } = await supabase
         .from("personal")
-        .update({ activo: next })
+        .update({ vigente: next })
         .eq("id", row.id)
         .eq("org_id", currentOrg.id);
       if (error) throw error;
 
       await load();
     } catch (e) {
-      console.error("[Personal] toggle error", e);
-      setMsg(e?.message || t("personal.errorToggle", { defaultValue: "No se pudo cambiar el estado." }));
+      console.error("[Personal] toggle vigente error", e);
+      setMsg(e?.message || "No se pudo cambiar el estado.");
     } finally {
       setBusy(false);
     }
@@ -208,41 +220,43 @@ export default function Personal() {
 
   async function onDelete(row) {
     if (!canEdit) return;
-    const ok = window.confirm(t("personal.confirmDelete", { defaultValue: "¿Eliminar este registro?" }));
+    const ok = window.confirm("¿Eliminar este registro?");
     if (!ok) return;
 
     setMsg("");
     setBusy(true);
     try {
-      const { error } = await supabase
-        .from("personal")
-        .delete()
-        .eq("id", row.id)
-        .eq("org_id", currentOrg.id);
-      if (error) throw error;
+      if ("is_deleted" in row) {
+        const { error } = await supabase
+          .from("personal")
+          .update({ is_deleted: true, vigente: false })
+          .eq("id", row.id)
+          .eq("org_id", currentOrg.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("personal")
+          .delete()
+          .eq("id", row.id)
+          .eq("org_id", currentOrg.id);
+        if (error) throw error;
+      }
 
       await load();
     } catch (e) {
       console.error("[Personal] delete error", e);
-      setMsg(e?.message || t("personal.errorDelete", { defaultValue: "No se pudo eliminar." }));
+      setMsg(e?.message || "No se pudo eliminar.");
     } finally {
       setBusy(false);
     }
   }
 
-  // ✅ Guardas NUEVOS
-  if (loading) {
-    return (
-      <div className="p-6 text-slate-600">
-        {t("personal.bannerLoadingSession", { defaultValue: "Cargando sesión…" })}
-      </div>
-    );
-  }
+  if (loading) return <div className="p-6 text-slate-600">Cargando sesión…</div>;
 
   if (!isAuthenticated || !user) {
     return (
       <div className="p-6 text-red-700 bg-red-50 border border-red-200 rounded-xl">
-        {t("personal.bannerLoginRequired", { defaultValue: "Debes iniciar sesión." })}
+        Debes iniciar sesión.
       </div>
     );
   }
@@ -250,7 +264,7 @@ export default function Personal() {
   if (!currentOrg?.id) {
     return (
       <div className="p-6 text-red-700 bg-red-50 border border-red-200 rounded-xl">
-        {t("personal.errorMissingTenant", { defaultValue: "No hay organización activa." })}
+        No hay organización activa.
         <div className="mt-3">
           <button
             type="button"
@@ -268,14 +282,9 @@ export default function Personal() {
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold mb-1 text-slate-900">
-            {t("personal.title", { defaultValue: "Personal" })}
-          </h1>
+          <h1 className="text-2xl font-semibold mb-1 text-slate-900">Personal</h1>
           <div className="text-sm text-slate-700">
-            {t("personal.roleLabel", { defaultValue: "Rol:" })}{" "}
-            <span className="font-semibold text-slate-900">
-              {(roleLower || "sin rol").toUpperCase()}
-            </span>{" "}
+            Rol: <span className="font-semibold text-slate-900">{(roleLower || "sin rol").toUpperCase()}</span>{" "}
             · Org: <span className="font-mono text-slate-700">{currentOrg.id}</span>
           </div>
         </div>
@@ -286,7 +295,7 @@ export default function Personal() {
             onClick={() => setOpenNew(true)}
             type="button"
           >
-            + {t("personal.buttonNew", { defaultValue: "Nuevo" })}
+            + Nuevo
           </button>
         )}
       </div>
@@ -294,7 +303,7 @@ export default function Personal() {
       <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
         <input
           className="w-full md:w-[520px] rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
-          placeholder={t("personal.searchPlaceholder", { defaultValue: "Buscar por nombre, apellido, email o teléfono…" })}
+          placeholder="Buscar por nombre, apellido, email o teléfono…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -306,9 +315,7 @@ export default function Personal() {
             onClick={() => load()}
             disabled={busy}
           >
-            {busy
-              ? t("personal.loading", { defaultValue: "Cargando…" })
-              : t("personal.refresh", { defaultValue: "Actualizar" })}
+            {busy ? "Cargando…" : "Actualizar"}
           </button>
 
           <button
@@ -320,7 +327,7 @@ export default function Personal() {
             }}
             disabled={busy}
           >
-            {t("personal.clear", { defaultValue: "Limpiar" })}
+            Limpiar
           </button>
         </div>
       </div>
@@ -335,86 +342,78 @@ export default function Personal() {
         <table className="w-full text-sm text-slate-800">
           <thead className="bg-slate-50">
             <tr>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                {t("personal.colNombre", { defaultValue: "Nombre" })}
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                {t("personal.colTelefono", { defaultValue: "Teléfono" })}
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                {t("personal.colEmail", { defaultValue: "Email" })}
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                {t("personal.colEstado", { defaultValue: "Estado" })}
-              </th>
-              <th className="text-right px-4 py-3 font-semibold text-slate-700">
-                {t("personal.colAcciones", { defaultValue: "Acciones" })}
-              </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">Nombre</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">Teléfono</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">Email</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">Estado</th>
+              <th className="text-right px-4 py-3 font-semibold text-slate-700">Acciones</th>
             </tr>
           </thead>
 
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-slate-200 hover:bg-slate-50 transition">
-                <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900">
-                    {r.nombre || ""} {r.apellido || ""}
-                  </div>
-                </td>
-                <td className="px-4 py-3">{r.telefono || ""}</td>
-                <td className="px-4 py-3">{r.email || ""}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={cls(
-                      "px-2 py-1 rounded-full text-xs border font-medium",
-                      r.activo !== false
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                        : "bg-slate-100 border-slate-200 text-slate-700"
-                    )}
-                  >
-                    {r.activo !== false
-                      ? t("personal.active", { defaultValue: "Activo" })
-                      : t("personal.inactive", { defaultValue: "Inactivo" })}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="inline-flex gap-2">
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
-                      onClick={() => openEdit(r)}
-                      disabled={!canEdit || busy}
-                      title="Editar"
+            {rows.map((r) => {
+              const deleted = !!r.is_deleted;
+              const vigente = r.vigente !== false && !deleted;
+              return (
+                <tr key={r.id} className="border-t border-slate-200 hover:bg-slate-50 transition">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-900">
+                      {r.nombre || ""} {r.apellido || ""}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{r.telefono || ""}</td>
+                  <td className="px-4 py-3">{r.email || ""}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={cls(
+                        "px-2 py-1 rounded-full text-xs border font-medium",
+                        vigente
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                          : "bg-slate-100 border-slate-200 text-slate-700"
+                      )}
                     >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
-                      onClick={() => onToggleActive(r)}
-                      disabled={!canEdit || busy}
-                      title="Activar/Desactivar"
-                    >
-                      ⏻
-                    </button>
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-60"
-                      onClick={() => onDelete(r)}
-                      disabled={!canEdit || busy}
-                      title="Eliminar"
-                    >
-                      🗑
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {vigente ? "Vigente" : deleted ? "Eliminado" : "No vigente"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex gap-2">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+                        onClick={() => openEdit(r)}
+                        disabled={!canEdit || busy}
+                        title="Editar"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+                        onClick={() => onToggleVigente(r)}
+                        disabled={!canEdit || busy || deleted}
+                        title="Vigente / No vigente"
+                      >
+                        ⏻
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-60"
+                        onClick={() => onDelete(r)}
+                        disabled={!canEdit || busy}
+                        title="Eliminar"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
 
             {!busy && rows.length === 0 && (
               <tr className="border-t border-slate-200">
                 <td colSpan={5} className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50">
-                  {t("personal.empty", { defaultValue: "No hay registros en esta organización." })}
+                  No hay registros en esta organización.
                 </td>
               </tr>
             )}
@@ -422,18 +421,10 @@ export default function Personal() {
         </table>
       </div>
 
-      <Modal
-        open={openNew || !!editing}
-        title={
-          editing
-            ? t("personal.modalEdit", { defaultValue: "Editar personal" })
-            : t("personal.modalNew", { defaultValue: "Nuevo personal" })
-        }
-        onClose={closeModal}
-      >
+      <Modal open={openNew || !!editing} title={editing ? "Editar personal" : "Nuevo personal"} onClose={closeModal}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-700">{t("personal.fNombre", { defaultValue: "Nombre" })}</label>
+            <label className="text-xs text-slate-700">Nombre *</label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.nombre}
@@ -442,7 +433,7 @@ export default function Personal() {
           </div>
 
           <div>
-            <label className="text-xs text-slate-700">{t("personal.fApellido", { defaultValue: "Apellido" })}</label>
+            <label className="text-xs text-slate-700">Apellido</label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.apellido}
@@ -451,7 +442,7 @@ export default function Personal() {
           </div>
 
           <div>
-            <label className="text-xs text-slate-700">{t("personal.fTelefono", { defaultValue: "Teléfono" })}</label>
+            <label className="text-xs text-slate-700">Teléfono</label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.telefono}
@@ -460,7 +451,7 @@ export default function Personal() {
           </div>
 
           <div>
-            <label className="text-xs text-slate-700">{t("personal.fEmail", { defaultValue: "Email" })}</label>
+            <label className="text-xs text-slate-700">Email *</label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.email}
@@ -471,10 +462,10 @@ export default function Personal() {
           <div className="md:col-span-2 flex items-center gap-2 mt-2">
             <input
               type="checkbox"
-              checked={!!form.activo}
-              onChange={(e) => setForm((s) => ({ ...s, activo: e.target.checked }))}
+              checked={!!form.vigente}
+              onChange={(e) => setForm((s) => ({ ...s, vigente: e.target.checked }))}
             />
-            <span className="text-slate-800">{t("personal.fActivo", { defaultValue: "Activo" })}</span>
+            <span className="text-slate-800">Vigente</span>
           </div>
         </div>
 
@@ -485,7 +476,7 @@ export default function Personal() {
             onClick={closeModal}
             disabled={busy}
           >
-            {t("common.cancel", { defaultValue: "Cancelar" })}
+            Cancelar
           </button>
           <button
             type="button"
@@ -493,7 +484,7 @@ export default function Personal() {
             onClick={onSave}
             disabled={busy || !canEdit}
           >
-            {busy ? t("common.saving", { defaultValue: "Guardando…" }) : t("common.save", { defaultValue: "Guardar" })}
+            {busy ? "Guardando…" : "Guardar"}
           </button>
         </div>
       </Modal>
