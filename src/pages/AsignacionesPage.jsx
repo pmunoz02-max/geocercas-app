@@ -1,9 +1,11 @@
 // src/pages/AsignacionesPage.jsx
 // Fix Enero 2026 (hotfix UI):
-// - Activities dropdown estaba vacío porque dependía solo del bundle.catalogs.activities.
-// - Se agrega fallback tenant-safe directo a Supabase: activities por org_id + active=true.
-// - Se normaliza catálogo activities del bundle (id/name/active/org_id) y se filtra por org.
-// - Mantiene comportamiento del módulo y tus dedup/flat-first.
+// - Root cause: catálogos (bundle) no garantizan "activities" y "personal" por org, aunque existan en DB.
+// - Se refuerza bootstrap de org: usa currentOrg.id y cae a localStorage("tg_current_org_id").
+// - Se agrega fallback tenant-safe a Supabase:
+//    * activities por org_id + active=true
+//    * people por org_id desde org_people JOIN people (modelo real: org_people.person_id -> people.id)
+// - Se evita mensaje falso de "no hay actividades" cuando en realidad hubo error de query.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -74,28 +76,6 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-function dedupePersonalByEmail(arr) {
-  const map = new Map();
-  (Array.isArray(arr) ? arr : []).forEach((p) => {
-    const id = p?.id || null;
-    const email = String(p?.email || "").trim().toLowerCase();
-    if (!id) return;
-
-    const key = email || id; // si no hay email, cae a id
-    if (!map.has(key)) {
-      map.set(key, p);
-      return;
-    }
-
-    // Preferencia: si uno tiene email y el otro no, gana el que tiene email.
-    const cur = map.get(key);
-    const curHasEmail = String(cur?.email || "").trim().length > 0;
-    const newHasEmail = String(p?.email || "").trim().length > 0;
-    if (!curHasEmail && newHasEmail) map.set(key, p);
-  });
-  return Array.from(map.values());
-}
-
 function normalizeGeocercas(rows) {
   const arr = Array.isArray(rows) ? rows : [];
   return dedupeById(
@@ -130,9 +110,9 @@ async function fetchActivitiesSafeByOrg(orgId) {
   if (!orgId) return [];
   const { data, error } = await supabase
     .from("activities")
-    .select("id, name, active, org_id")
+    .select("id, name, active, org_id, created_at")
     .eq("org_id", orgId)
-    .eq("active", true)
+    .eq("active", true) // boolean REAL
     .order("name", { ascending: true });
 
   if (error) throw error;
@@ -156,7 +136,66 @@ function normalizeActivities(rows, orgId) {
   );
 }
 
+/**
+ * Personal (modelo real):
+ *   org_people.id = vínculo (por org)
+ *   org_people.person_id -> people.id
+ *
+ * Nota: No asumimos a ciegas si asignaciones.personal_id apunta a org_people.id o people.id.
+ * - Si ya existen asignaciones, autodetectamos el "id mode" comparando ids.
+ * - Si no hay asignaciones, default: org_people.id (lo más común en multi-tenant).
+ */
+async function fetchPersonalSafeByOrg(orgId) {
+  if (!orgId) return [];
+
+  const { data, error } = await supabase
+    .from("org_people")
+    .select(
+      `
+      id,
+      org_id,
+      person_id,
+      person:people (
+        id,
+        full_name,
+        name,
+        nombre,
+        apellido,
+        email
+      )
+    `
+    )
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows
+    .map((row) => {
+      const p = row.person || {};
+      const nombre =
+        (p.full_name || "")
+          .trim()
+          || `${p.nombre || p.name || ""} ${p.apellido || ""}`.trim()
+          || (p.email || "").trim()
+          || row.person_id;
+
+      return {
+        org_people_id: row.id,
+        people_id: row.person_id,
+        nombre: nombre,
+        apellido: "", // ya viene embebido en "nombre" si aplica
+        email: (p.email || "").trim(),
+      };
+    })
+    .filter((x) => x.org_people_id && x.people_id);
+}
+
 function normalizePersonalFromBundle(catalogs) {
+  // bundle puede traer:
+  // - catalogs.personal (nuevo)
+  // - catalogs.people (legacy) con org_people_id
   const personal = Array.isArray(catalogs?.personal) ? catalogs.personal : [];
   const peopleLegacy = Array.isArray(catalogs?.people) ? catalogs.people : [];
 
@@ -164,6 +203,7 @@ function normalizePersonalFromBundle(catalogs) {
     personal.length > 0
       ? personal
       : peopleLegacy.map((p) => ({
+          // legacy: usa org_people_id si existe
           id: p.org_people_id,
           nombre: p.nombre,
           apellido: p.apellido,
@@ -171,7 +211,7 @@ function normalizePersonalFromBundle(catalogs) {
           org_id: p.org_id || null,
         }));
 
-  const cleaned = normalized
+  const cleaned = (Array.isArray(normalized) ? normalized : [])
     .map((p) => ({
       ...p,
       id: p.id,
@@ -181,8 +221,8 @@ function normalizePersonalFromBundle(catalogs) {
     }))
     .filter((p) => p?.id);
 
-  // Dedup por email (evita "2 Pietro")
-  return dedupePersonalByEmail(cleaned);
+  // Dedup conservador por ID (evita colapsar modos distintos)
+  return dedupeById(cleaned);
 }
 
 // Normaliza asignaciones aunque el backend cambie nombres
@@ -214,10 +254,20 @@ function normalizeAsignacionRow(a) {
   };
 }
 
+function getOrgIdSafe(currentOrg) {
+  return (
+    currentOrg?.id ||
+    localStorage.getItem("tg_current_org_id") ||
+    null
+  );
+}
+
 export default function AsignacionesPage() {
   const { t } = useTranslation();
   const { ready, currentOrg } = useAuth();
-  const orgId = currentOrg?.id || null;
+
+  // ✅ orgId robusto: currentOrg.id o localStorage
+  const orgId = useMemo(() => getOrgIdSafe(currentOrg), [currentOrg]);
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -245,9 +295,45 @@ export default function AsignacionesPage() {
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
+  // autodetección de qué id usa asignaciones.personal_id (org_people.id vs people.id)
+  const [personalIdMode, setPersonalIdMode] = useState("org_people"); // default
+
+  function detectPersonalIdMode(rows, safePersonalRows) {
+    // Si hay asignaciones, intentamos inferir el modo:
+    // - si cualquier personal_id coincide con org_people_id => org_people
+    // - si coincide con people_id => people
+    const ids = new Set((rows || []).map((r) => r?.personal_id).filter(Boolean));
+    if (!ids.size) return "org_people";
+
+    const orgPeopleIds = new Set((safePersonalRows || []).map((p) => p.org_people_id));
+    const peopleIds = new Set((safePersonalRows || []).map((p) => p.people_id));
+
+    for (const id of ids) {
+      if (orgPeopleIds.has(id)) return "org_people";
+      if (peopleIds.has(id)) return "people";
+    }
+    return "org_people";
+  }
+
   async function loadAll() {
     setLoading(true);
     setError(null);
+
+    if (!orgId) {
+      setAsignaciones([]);
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
+      setActivityOptions([]);
+      setLoading(false);
+      setError("No hay organización activa (orgId).");
+      return;
+    }
+
+    // ✅ coherencia: si currentOrg existe y localStorage no, lo setea
+    try {
+      const ls = localStorage.getItem("tg_current_org_id");
+      if (!ls && currentOrg?.id) localStorage.setItem("tg_current_org_id", currentOrg.id);
+    } catch (_) {}
 
     const { data, error } = await getAsignacionesBundle();
     if (error) {
@@ -268,13 +354,15 @@ export default function AsignacionesPage() {
     const rows = rowsRaw.map(normalizeAsignacionRow);
     setAsignaciones(rows);
 
+    // PERSONAL desde bundle
     const normalizedPersonal = normalizePersonalFromBundle(catalogs);
     setPersonalOptions(normalizedPersonal);
 
+    // GEOCERCAS desde bundle
     const bundleGeos = normalizeGeocercas(catalogs.geocercas);
     setGeocercaOptions(bundleGeos);
 
-    // ✅ Normalizar activities del bundle y filtrar por org + active
+    // ACTIVITIES desde bundle (filtra por org + active)
     const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
     const bundleActs = normalizeActivities(bundleActsRaw, orgId);
     setActivityOptions(bundleActs);
@@ -289,7 +377,7 @@ export default function AsignacionesPage() {
     const missingGeo = Array.from(referencedGeoIds).some((id) => !geoMap.has(id));
     const missingAct = Array.from(referencedActIds).some((id) => !actMap.has(id));
 
-    // Geocercas fallback (ya lo tenías)
+    // Geocercas fallback
     if (bundleGeos.length === 0 || missingGeo) {
       try {
         const geos = await fetchGeocercasFallback();
@@ -299,14 +387,41 @@ export default function AsignacionesPage() {
       }
     }
 
-    // ✅ Activities fallback SAFE (Supabase directo por org)
+    // Activities fallback SAFE (Supabase directo por org)
     if (bundleActs.length === 0 || missingAct) {
       try {
         const actsSafe = await fetchActivitiesSafeByOrg(orgId);
         const actsNorm = normalizeActivities(actsSafe, orgId);
         if (actsNorm?.length) setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
       } catch (e) {
+        // IMPORTANTE: si falla, NO mostrar "no hay actividades", sino error real
         console.warn("[AsignacionesPage] activities safe fallback failed:", e?.message || e);
+        setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
+      }
+    }
+
+    // ✅ Personal fallback SAFE (Supabase: org_people JOIN people)
+    if (normalizedPersonal.length === 0) {
+      try {
+        const safeRows = await fetchPersonalSafeByOrg(orgId);
+        const mode = detectPersonalIdMode(rows, safeRows);
+        setPersonalIdMode(mode);
+
+        // Construye opciones según modo detectado
+        const opts = safeRows.map((p) => ({
+          id: mode === "people" ? p.people_id : p.org_people_id,
+          nombre: p.nombre || "",
+          apellido: "",
+          email: p.email || "",
+          // guardamos ambos por si quieres debug
+          org_people_id: p.org_people_id,
+          people_id: p.people_id,
+        }));
+
+        setPersonalOptions(dedupeById(opts));
+      } catch (e) {
+        console.warn("[AsignacionesPage] personal safe fallback failed:", e?.message || e);
+        setError((prev) => prev || `Error consultando personas: ${e?.message || e}`);
       }
     }
 
@@ -314,7 +429,7 @@ export default function AsignacionesPage() {
   }
 
   useEffect(() => {
-    if (!ready || !orgId) return;
+    if (!ready) return;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, orgId]);
@@ -393,6 +508,7 @@ export default function AsignacionesPage() {
     }
 
     const payload = {
+      // OJO: personal_id se envía según "modo" detectado (org_people vs people)
       personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
@@ -427,7 +543,10 @@ export default function AsignacionesPage() {
         <p className="text-xs text-gray-500 mt-1">
           Org actual:{" "}
           <span className="font-medium">
-            {currentOrg?.name || currentOrg?.id || "—"}
+            {currentOrg?.name || currentOrg?.id || orgId || "—"}
+          </span>
+          <span className="ml-2 text-gray-400">
+            (idMode: {personalIdMode})
           </span>
         </p>
       </div>
@@ -449,10 +568,16 @@ export default function AsignacionesPage() {
               <option value="">Selecciona una persona</option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {`${p.nombre || ""} ${p.apellido || ""}`.trim()}
+                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id}
                 </option>
               ))}
             </select>
+
+            {personalOptions.length === 0 && !loading && (
+              <p className="text-xs text-amber-700 mt-1">
+                No hay personas visibles para esta org (o falló la consulta). Revisa el error arriba.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col">
@@ -488,8 +613,8 @@ export default function AsignacionesPage() {
               ))}
             </select>
 
-            {/* Debug útil si vuelve a vaciarse */}
-            {activityOptions.length === 0 && !loading && (
+            {/* Mensaje SOLO si realmente no hay activities y NO hubo error */}
+            {activityOptions.length === 0 && !loading && !error && (
               <p className="text-xs text-amber-700 mt-1">
                 No hay actividades activas para esta org. Crea una en “Actividades” o revisa que esté Active=true.
               </p>
