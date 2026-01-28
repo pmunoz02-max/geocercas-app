@@ -2,29 +2,14 @@
 import React, { useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label = "timeout"): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`[Login] ${label} (${ms}ms)`)), ms);
-    promise
-      .then((v) => {
-        clearTimeout(t);
-        resolve(v);
-      })
-      .catch((e) => {
-        clearTimeout(t);
-        reject(e);
-      });
-  });
-}
-
 export default function Login() {
   const [email, setEmail] = useState("ruebageo@gmail.com");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Evita dobles submits reales
-  const inFlightRef = useRef(false);
+  // Evita dobles submits y permite "cancelar" intentos previos lógicamente
+  const attemptIdRef = useRef(0);
 
   const canSubmit = useMemo(() => {
     return email.trim().length > 3 && password.length >= 6 && !loading;
@@ -32,48 +17,55 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+
+    // Nuevo intento
+    attemptIdRef.current += 1;
+    const myAttempt = attemptIdRef.current;
 
     setErr(null);
     setLoading(true);
 
     try {
-      console.log("[Login] intentando signInWithPassword…", { email });
+      console.log("[Login] attempt", myAttempt, "signInWithPassword…", { email });
 
-      const { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }),
-        15000,
-        "Supabase signInWithPassword no respondió"
-      );
+      const res = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-      if (error) throw error;
+      // Si ya hubo otro intento posterior, ignoramos este resultado
+      if (myAttempt !== attemptIdRef.current) {
+        console.warn("[Login] attempt", myAttempt, "ignorado (hay intento más nuevo)");
+        return;
+      }
 
-      // Verificación token en localStorage (debug)
+      console.log("[Login] attempt", myAttempt, "signIn result:", res);
+
+      if (res.error) throw res.error;
+
+      // Confirmación de sesión real (esto es la verdad)
+      const sessionRes = await supabase.auth.getSession();
+      console.log("[Login] attempt", myAttempt, "getSession:", sessionRes);
+
       const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
-      console.log("[Login] localStorage auth keys:", keys);
+      console.log("[Login] attempt", myAttempt, "localStorage auth keys:", keys);
 
-      // ✅ PRUEBA DEFINITIVA: get_my_context desde el mismo cliente (sin window.supabase)
+      // Llamada a contexto
       const ctxRes = await supabase.rpc("get_my_context");
-      console.log("[Login] CTX:", ctxRes);
+      console.log("[Login] attempt", myAttempt, "CTX:", ctxRes);
 
-      // ⚠️ IMPORTANTE: NO redirigimos todavía para evitar loop mientras depuramos contexto.
-      // Cuando CTX salga ok:true, reactivamos redirect a "/" en el siguiente paso.
+      // No redirigimos aún en modo debug.
+      // Cuando CTX salga ok:true, reactivamos redirect y limpiamos logs.
     } catch (e: any) {
-      console.error("[Login] ERROR:", e);
-      const msg =
-        e?.message ||
-        e?.error_description ||
-        e?.error ||
-        "Error desconocido al iniciar sesión";
+      console.error("[Login] attempt", myAttempt, "ERROR:", e);
+      const msg = e?.message || e?.error_description || e?.error || "Error al iniciar sesión";
       setErr(msg);
     } finally {
-      console.log("[Login] finally ejecutado");
-      setLoading(false);
-      inFlightRef.current = false;
+      // Solo el intento vigente puede apagar loading
+      if (myAttempt === attemptIdRef.current) {
+        setLoading(false);
+      }
+      console.log("[Login] attempt", myAttempt, "finally");
     }
   };
 
@@ -92,7 +84,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN Debug) — imprime CTX get_my_context() en consola (sin redirect).
+          (LOGIN Debug vFinal) — sin timeout, log de sesión real + CTX.
         </p>
 
         {err && (
