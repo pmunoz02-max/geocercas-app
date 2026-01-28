@@ -4,9 +4,9 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
 
 /**
- * src/pages/Personal.jsx (RLS-first, sin /api)
+ * src/pages/Personal.jsx (RLS-first, sin /api) — v3
  * - Lee/escribe directo a Supabase con RLS (multi-tenant por org_id)
- * - Evita el error 500 "Failed to refresh token" de /api/personal (cookies)
+ * - ✅ Elimina campo "cedula" (UI + payload + filtros + columna)
  * - ✅ AuthContext NUEVO: loading, isAuthenticated, user, currentOrg, role, refreshContext
  * - ✅ UI: contraste alto (mensajes y botones legibles)
  */
@@ -41,16 +41,14 @@ function Modal({ open, title, children, onClose }) {
 function buildOrFilter(q) {
   const s = String(q || "").trim();
   if (!s) return null;
-  // escape % and , minimally
+
   const esc = s.replace(/%/g, "\\%").replace(/,/g, "\\,");
   const like = `%${esc}%`;
 
-  // Ajusta campos si tu tabla usa otros nombres.
-  // Se usa OR para nombre/apellido/cedula/telefono/email.
+  // Campos soportados (sin cedula)
   return [
     `nombre.ilike.${like}`,
     `apellido.ilike.${like}`,
-    `cedula.ilike.${like}`,
     `telefono.ilike.${like}`,
     `email.ilike.${like}`,
   ].join(",");
@@ -78,7 +76,6 @@ export default function Personal() {
   const [form, setForm] = useState({
     nombre: "",
     apellido: "",
-    cedula: "",
     telefono: "",
     email: "",
     activo: true,
@@ -88,7 +85,6 @@ export default function Personal() {
     setForm({
       nombre: "",
       apellido: "",
-      cedula: "",
       telefono: "",
       email: "",
       activo: true,
@@ -100,7 +96,6 @@ export default function Personal() {
     setForm({
       nombre: row.nombre || "",
       apellido: row.apellido || "",
-      cedula: row.cedula || "",
       telefono: row.telefono || "",
       email: row.email || "",
       activo: row.activo !== false,
@@ -162,7 +157,6 @@ export default function Personal() {
         org_id: currentOrg.id,
         nombre: form.nombre?.trim() || null,
         apellido: form.apellido?.trim() || null,
-        cedula: form.cedula?.trim() || null,
         telefono: form.telefono?.trim() || null,
         email: form.email?.trim() || null,
         activo: !!form.activo,
@@ -345,9 +339,6 @@ export default function Personal() {
                 {t("personal.colNombre", { defaultValue: "Nombre" })}
               </th>
               <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                {t("personal.colCedula", { defaultValue: "Cédula" })}
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">
                 {t("personal.colTelefono", { defaultValue: "Teléfono" })}
               </th>
               <th className="text-left px-4 py-3 font-semibold text-slate-700">
@@ -370,7 +361,6 @@ export default function Personal() {
                     {r.nombre || ""} {r.apellido || ""}
                   </div>
                 </td>
-                <td className="px-4 py-3">{r.cedula || ""}</td>
                 <td className="px-4 py-3">{r.telefono || ""}</td>
                 <td className="px-4 py-3">{r.email || ""}</td>
                 <td className="px-4 py-3">
@@ -423,7 +413,7 @@ export default function Personal() {
 
             {!busy && rows.length === 0 && (
               <tr className="border-t border-slate-200">
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50">
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50">
                   {t("personal.empty", { defaultValue: "No hay registros en esta organización." })}
                 </td>
               </tr>
@@ -461,15 +451,6 @@ export default function Personal() {
           </div>
 
           <div>
-            <label className="text-xs text-slate-700">{t("personal.fCedula", { defaultValue: "Cédula" })}</label>
-            <input
-              className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
-              value={form.cedula}
-              onChange={(e) => setForm((s) => ({ ...s, cedula: e.target.value }))}
-            />
-          </div>
-
-          <div>
             <label className="text-xs text-slate-700">{t("personal.fTelefono", { defaultValue: "Teléfono" })}</label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
@@ -478,7 +459,7 @@ export default function Personal() {
             />
           </div>
 
-          <div className="md:col-span-2">
+          <div>
             <label className="text-xs text-slate-700">{t("personal.fEmail", { defaultValue: "Email" })}</label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
