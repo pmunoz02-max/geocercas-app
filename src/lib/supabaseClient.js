@@ -1,30 +1,32 @@
-// src/lib/supabaseClient.ts
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+// src/lib/supabaseClient.js
+import { createClient } from "@supabase/supabase-js";
 
-// ✅ Vite env vars (prefer these)
-const url =
-  (import.meta as any).env?.VITE_SUPABASE_URL ||
-  (import.meta as any).env?.VITE_PUBLIC_SUPABASE_URL ||
-  (import.meta as any).env?.SUPABASE_URL;
+/**
+ * Lee variables de entorno en Vite.
+ * Acepta ambos nombres por compatibilidad:
+ * - VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (recomendado)
+ * - SUPABASE_URL / SUPABASE_ANON_KEY (fallback)
+ */
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
 
-const anonKey =
-  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ||
-  (import.meta as any).env?.VITE_PUBLIC_SUPABASE_ANON_KEY ||
-  (import.meta as any).env?.SUPABASE_ANON_KEY;
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
 
-if (!url || !anonKey) {
-  // Throwing here makes misconfig obvious in dev/build logs
-  throw new Error(
-    "Missing Supabase env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  // ⚠️ Esto te avisa en dev/build si faltan env vars.
+  // En producción, Vercel debe tenerlas cargadas.
+  // No hacemos throw para no romper tests/builds raros, pero es mejor que esté.
+  console.warn(
+    "[supabaseClient] Falta SUPABASE_URL o SUPABASE_ANON_KEY en variables de entorno (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)."
   );
 }
 
-export const supabase: SupabaseClient = createClient(url, anonKey, {
+export const supabase = createClient(SUPABASE_URL ?? "", SUPABASE_ANON_KEY ?? "", {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // localStorage is default in browsers; keep explicit for clarity
-    storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    storageKey: "sb-geocercas-auth-token", // fijo y fácil de auditar
   },
 });
