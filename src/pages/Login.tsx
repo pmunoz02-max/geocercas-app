@@ -6,7 +6,9 @@ export default function Login() {
   const [email, setEmail] = useState("ruebageo@gmail.com");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
   const [err, setErr] = useState<string | null>(null);
+  const [ctxText, setCtxText] = useState<string>("(sin ejecutar aún)");
 
   const attemptIdRef = useRef(0);
 
@@ -21,6 +23,7 @@ export default function Login() {
     const myAttempt = attemptIdRef.current;
 
     setErr(null);
+    setCtxText("Ejecutando login…");
     setLoading(true);
 
     try {
@@ -35,24 +38,31 @@ export default function Login() {
 
       if (res.error) throw res.error;
 
-      // ✅ Session real (sin imprimir tokens)
+      // Session real (sin tokens)
       const sessionRes = await supabase.auth.getSession();
       const hasSession = !!sessionRes?.data?.session?.access_token;
-      console.log("[Login] attempt", myAttempt, "getSession hasSession:", hasSession);
 
-      // ✅ storage token key (sin imprimir contenido)
       const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
-      console.log("[Login] attempt", myAttempt, "localStorage auth keys:", keys);
 
-      // ✅ Contexto org/rol
+      // Contexto org/rol
       const ctxRes = await supabase.rpc("get_my_context");
-      console.log("[Login] attempt", myAttempt, "CTX:", ctxRes);
 
-      // ⚠️ No redirigimos todavía. Cuando CTX sea ok:true, lo activamos.
+      // Solo imprimir info segura (sin tokens)
+      const safe = {
+        hasSession,
+        authKeys: keys,
+        ctx: ctxRes?.data ?? null,
+        ctxError: ctxRes?.error ?? null,
+      };
+
+      console.log("[Login] attempt", myAttempt, "SAFE:", safe);
+
+      setCtxText(JSON.stringify(safe, null, 2));
     } catch (e: any) {
       console.error("[Login] attempt", myAttempt, "ERROR:", e);
       const msg = e?.message || e?.error_description || e?.error || "Error al iniciar sesión";
       setErr(msg);
+      setCtxText(`Error: ${msg}`);
     } finally {
       if (myAttempt === attemptIdRef.current) setLoading(false);
       console.log("[Login] attempt", myAttempt, "finally");
@@ -64,7 +74,7 @@ export default function Login() {
       <form
         onSubmit={handleLogin}
         style={{
-          width: "min(520px, 100%)",
+          width: "min(720px, 100%)",
           padding: 24,
           borderRadius: 16,
           border: "1px solid rgba(255,255,255,0.12)",
@@ -74,7 +84,7 @@ export default function Login() {
       >
         <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800 }}>Iniciar sesión</h1>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          (LOGIN Debug vFinal) — log session (sin tokens) + CTX get_my_context().
+          (LOGIN Debug UI) — muestra CTX get_my_context() aquí mismo (sin tokens).
         </p>
 
         {err && (
@@ -144,6 +154,21 @@ export default function Login() {
         >
           {loading ? "Ingresando..." : "Ingresar"}
         </button>
+
+        <div
+          style={{
+            marginTop: 18,
+            padding: 12,
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.06)",
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>CTX / Debug (seguro)</div>
+          <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12 }}>
+            {ctxText}
+          </pre>
+        </div>
       </form>
     </div>
   );
