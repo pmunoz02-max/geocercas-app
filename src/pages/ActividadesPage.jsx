@@ -1,13 +1,10 @@
-// src/pages/ActividadesPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 
-// Tabla real
 const TABLE = "activities";
 
-// Monedas rápidas (puedes ampliarlo luego)
 const CURRENCIES = ["USD", "EUR", "MXN", "COP", "PEN", "CLP", "ARS", "BRL", "CAD", "GBP"];
 
 function toNumber(v) {
@@ -17,7 +14,9 @@ function toNumber(v) {
 
 export default function ActividadesPage() {
   const { t } = useTranslation();
-  const { ready, currentOrg, user, role, currentRole } = useAuth();
+
+  // ⚠️ Usamos loading (no ready), porque ready puede no existir
+  const { loading, isAuthenticated, user, currentOrg, role, currentRole } = useAuth();
 
   const effectiveRole = useMemo(
     () => String(currentRole || role || "").toLowerCase(),
@@ -27,8 +26,8 @@ export default function ActividadesPage() {
 
   const [includeInactive, setIncludeInactive] = useState(true);
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
   const [mode, setMode] = useState("create"); // create | edit
@@ -60,18 +59,15 @@ export default function ActividadesPage() {
 
   async function load() {
     if (!currentOrg?.id) return;
-    setLoading(true);
-    setErrorMsg("");
 
+    setLoadingList(true);
+    setErrorMsg("");
     try {
       const orgId = currentOrg.id;
 
-      // ✅ Filtra por tenant_id OR org_id (por compatibilidad histórica)
       let q = supabase
         .from(TABLE)
-        .select(
-          "id, tenant_id, org_id, name, description, active, hourly_rate, currency_code, created_at, created_by"
-        )
+        .select("id, tenant_id, org_id, name, description, active, hourly_rate, currency_code, created_at, created_by")
         .or(`tenant_id.eq.${orgId},org_id.eq.${orgId}`)
         .order("created_at", { ascending: false });
 
@@ -83,17 +79,17 @@ export default function ActividadesPage() {
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("[ActividadesPage] load error", e);
-      setErrorMsg(e?.message || "No se pudo cargar actividades.");
       setRows([]);
+      setErrorMsg(e?.message || "No se pudo cargar actividades.");
     } finally {
-      setLoading(false);
+      setLoadingList(false);
     }
   }
 
   useEffect(() => {
-    if (ready && currentOrg?.id) load();
+    if (!loading && isAuthenticated && currentOrg?.id) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, currentOrg?.id, includeInactive]);
+  }, [loading, isAuthenticated, currentOrg?.id, includeInactive]);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -121,10 +117,9 @@ export default function ActividadesPage() {
       const orgId = currentOrg.id;
 
       if (mode === "create") {
-        // ✅ Universal: escribe tenant_id (NOT NULL) y org_id (RLS que depende de org_id)
         const payload = {
-          tenant_id: orgId,
-          org_id: orgId,
+          tenant_id: orgId, // ✅ NOT NULL
+          org_id: orgId,    // ✅ tu RLS suele mirar org_id
           name: name.trim(),
           description: description.trim() || null,
           active: true,
@@ -143,7 +138,6 @@ export default function ActividadesPage() {
           currency_code: currencyCode,
         };
 
-        // ✅ Blindaje: limita por id + tenant/org
         const { error } = await supabase
           .from(TABLE)
           .update(payload)
@@ -202,11 +196,22 @@ export default function ActividadesPage() {
     }
   }
 
-  if (!ready) {
+  // --- UI estados ---
+  if (loading) {
     return (
       <div className="p-4 max-w-5xl mx-auto">
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
           {t("common.actions.loading", { defaultValue: "Cargando…" })}
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="p-4 max-w-3xl mx-auto">
+        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
+          Debes iniciar sesión.
         </div>
       </div>
     );
@@ -278,9 +283,7 @@ export default function ActividadesPage() {
               onChange={(e) => setCurrencyCode(e.target.value)}
             >
               {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
 
@@ -316,7 +319,7 @@ export default function ActividadesPage() {
         </form>
       )}
 
-      {loading ? (
+      {loadingList ? (
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
           {t("actividades.loading", { defaultValue: "Cargando…" })}
         </div>
@@ -332,23 +335,18 @@ export default function ActividadesPage() {
             <div key={a.id} className="border rounded p-3 flex items-center justify-between">
               <div>
                 <div className="font-medium text-gray-900">{a.name}</div>
-
                 <div className="mt-0.5 flex flex-wrap items-center gap-2 text-sm">
                   <span className="text-gray-800 font-medium">
                     {(a.currency_code || "USD")} · {a.hourly_rate ?? ""}
                   </span>
-
                   <span
                     className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                       a.active ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-700"
                     }`}
                   >
-                    {a.active
-                      ? t("actividades.statusActive", { defaultValue: "Activa" })
-                      : t("actividades.statusInactive", { defaultValue: "Inactiva" })}
+                    {a.active ? "Activa" : "Inactiva"}
                   </span>
                 </div>
-
                 {a.description && (
                   <div className="mt-1 text-sm text-gray-700">{a.description}</div>
                 )}
@@ -361,7 +359,7 @@ export default function ActividadesPage() {
                     onClick={() => startEdit(a)}
                     className="text-xs px-2 py-1 rounded bg-yellow-500 text-white"
                   >
-                    {t("actividades.actionEdit", { defaultValue: "Editar" })}
+                    Editar
                   </button>
 
                   <button
@@ -369,9 +367,7 @@ export default function ActividadesPage() {
                     onClick={() => toggleActive(a.id, !a.active)}
                     className="text-xs px-2 py-1 rounded bg-blue-500 text-white"
                   >
-                    {a.active
-                      ? t("actividades.actionDeactivate", { defaultValue: "Desactivar" })
-                      : t("actividades.actionActivate", { defaultValue: "Activar" })}
+                    {a.active ? "Desactivar" : "Activar"}
                   </button>
 
                   <button
@@ -379,7 +375,7 @@ export default function ActividadesPage() {
                     onClick={() => deleteOne(a.id)}
                     className="text-xs px-2 py-1 rounded bg-red-600 text-white"
                   >
-                    {t("actividades.actionDelete", { defaultValue: "Eliminar" })}
+                    Eliminar
                   </button>
                 </div>
               )}
