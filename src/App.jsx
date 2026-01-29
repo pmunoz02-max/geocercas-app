@@ -16,6 +16,8 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 
 // Tracker GPS (página “solo trackers”)
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
+// ✅ Bridge público para crear sesión Supabase del tracker
+import TrackerAuthBridge from "./pages/TrackerAuthBridge.jsx";
 
 // App pages (protegidas)
 import Inicio from "./pages/Inicio.jsx";
@@ -76,8 +78,11 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* ✅ TRACKER GPS: fuera del shell protegido (clave) */}
+        {/* ✅ TRACKER GPS: fuera del shell protegido */}
         <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+
+        {/* ✅ TRACKER AUTH BRIDGE: fuera del shell protegido (CRÍTICO) */}
+        <Route path="/tracker-auth-bridge" element={<TrackerAuthBridge />} />
 
         {/* 🔐 Password flows */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
