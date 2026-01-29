@@ -389,30 +389,41 @@ export default function InvitarTracker() {
           </button>
         </form>
 
-        {magicLink && (
-          <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
-            <div className="text-sm font-medium text-emerald-800 mb-2">Magic link (Tracker)</div>
+       {inviteData?.magic_link && !inviteData?.email_sent && (
+  <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
+    <div className="text-sm font-medium text-emerald-800 mb-2">
+      Magic link (Tracker)
+    </div>
 
-            <textarea
-              readOnly
-              value={magicLink}
-              className="w-full h-28 border rounded-lg p-3 font-mono text-xs bg-white"
-            />
+    <textarea
+      readOnly
+      value={inviteData.magic_link}
+      className="w-full h-28 border rounded-lg p-3 font-mono text-xs bg-white"
+    />
 
-            <div className="flex gap-2 mt-3 flex-wrap">
-              <button
-                type="button"
-                onClick={copyLink}
-                className="px-4 py-2 rounded-lg border bg-white text-sm"
-              >
-                {copied ? "✅ Copiado" : "Copiar link"}
-              </button>
+    <div className="flex gap-2 mt-3 flex-wrap">
+      <button
+        type="button"
+        onClick={copyLink}
+        className="px-4 py-2 rounded-lg border bg-white text-sm"
+      >
+        {copied ? "✅ Copiado" : "Copiar link"}
+      </button>
 
-              <button
-                type="button"
-                onClick={openWhatsApp}
-                className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm"
-              >
+      <button
+        type="button"
+        onClick={openWhatsApp}
+        className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm"
+      >
+        Enviar por WhatsApp
+      </button>
+    </div>
+
+    <div className="text-xs text-emerald-900 mt-3">
+      El usuario ya existía. Envíale este link por WhatsApp o Email.
+    </div>
+  </div>
+)}
                 Enviar por WhatsApp
               </button>
 
