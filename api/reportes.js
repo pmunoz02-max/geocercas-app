@@ -34,18 +34,15 @@ export default async function handler(req, res) {
     if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
     const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
-    const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
     const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return res.status(500).json({ error: "Missing Supabase env vars" });
-    }
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return res.status(500).json({
-        error: "Missing Supabase service role env var (SUPABASE_SERVICE_ROLE_KEY)",
+        error: "Missing Supabase env vars (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)",
       });
     }
 
+    // ===== AUTH =====
     const authHeader = req.headers.authorization || "";
     if (!authHeader.toLowerCase().startsWith("bearer ")) {
       return res.status(401).json({ error: "Missing authentication" });
@@ -55,7 +52,7 @@ export default async function handler(req, res) {
     const orgId = req.headers["x-org-id"];
     if (!orgId) return res.status(400).json({ error: "Missing x-org-id header" });
 
-    // Admin client (bypass RLS) - universal, estable para endpoints server
+    // ===== ADMIN CLIENT (bypass RLS) =====
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
@@ -65,21 +62,45 @@ export default async function handler(req, res) {
     const user = userData?.user;
     if (userErr || !user) return res.status(401).json({ error: "Invalid user" });
 
-    // Validar membresía contra org_users (canónico)
-    const { data: membership, error: memberErr } = await admin
-      .from("org_users")
-      .select("org_id, role")
-      .eq("user_id", user.id)
-      .eq("org_id", orgId)
-      .single();
+    // ===== MEMBERSHIP (compat: org_users OR org_members) =====
+    let membership = null;
 
-    if (memberErr || !membership) {
-      return res.status(403).json({ error: "User not member of organization" });
+    // 1) intentar org_users
+    {
+      const { data, error } = await admin
+        .from("org_users")
+        .select("org_id, role")
+        .eq("user_id", user.id)
+        .eq("org_id", orgId)
+        .maybeSingle();
+
+      if (!error && data) membership = { source: "org_users", ...data };
+    }
+
+    // 2) fallback a org_members (legacy)
+    if (!membership) {
+      const { data, error } = await admin
+        .from("org_members")
+        .select("org_id, role, is_active")
+        .eq("user_id", user.id)
+        .eq("org_id", orgId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!error && data) membership = { source: "org_members", ...data };
+    }
+
+    if (!membership) {
+      return res.status(403).json({
+        error: "User not member of organization",
+      });
     }
 
     const action = String(req.query.action || "").toLowerCase();
 
+    // ======================
     // FILTERS
+    // ======================
     if (action === "filters") {
       const [geocercasRes, personasRes, activitiesRes, asignacionesRes] = await Promise.all([
         admin.from("geocercas").select("id, nombre, org_id").eq("org_id", orgId).eq("is_deleted", false).order("nombre"),
@@ -106,7 +127,9 @@ export default async function handler(req, res) {
       });
     }
 
+    // ======================
     // REPORT
+    // ======================
     if (action === "report") {
       const start = req.query.start ? String(req.query.start) : "";
       const end = req.query.end ? String(req.query.end) : "";
@@ -138,7 +161,10 @@ export default async function handler(req, res) {
       const { data, error } = await query;
       if (error) return res.status(400).json({ error: error.message });
 
-      return res.status(200).json({ data: data || [], meta: { limit, offset, returned: (data || []).length } });
+      return res.status(200).json({
+        data: data || [],
+        meta: { limit, offset, returned: (data || []).length },
+      });
     }
 
     return res.status(400).json({ error: "Invalid action" });
@@ -147,3 +173,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Server error", details: e.message });
   }
 }
+
