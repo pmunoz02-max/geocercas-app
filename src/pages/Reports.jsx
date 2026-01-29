@@ -126,14 +126,16 @@ export default function Reports() {
     [loading, isAuthenticated, orgId, token]
   );
 
-  // ✅ Ahora manda Authorization Bearer
+  // ✅ manda Authorization + x-org-id
   async function apiGet(url) {
     if (!token) throw new Error("Missing authentication");
+    if (!orgId) throw new Error("Cannot resolve current organization");
 
     const resp = await fetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
+        "x-org-id": String(orgId),
         "cache-control": "no-cache",
         pragma: "no-cache",
       },
@@ -192,22 +194,11 @@ export default function Reports() {
       if (contaminated) {
         setWarningMsg(
           "Detecté catálogos de otras organizaciones y fueron filtrados por la org actual. " +
-            "Recomendación: corregir /api/reportes?action=filters para que siempre filtre por current_org_id."
+            "Recomendación: corregir /api/reportes?action=filters para que siempre filtre por org_id."
         );
       }
 
       setFilters({ geocercas, personas, activities, asignaciones });
-
-      const validSet = (arr) => new Set(arr.map((x) => String(x.id)));
-      const gSet = validSet(geocercas);
-      const pSet = validSet(personas);
-      const aSet = validSet(activities);
-      const asSet = validSet(asignaciones);
-
-      setSelectedGeocercaIds((prev) => prev.filter((id) => gSet.has(String(id))));
-      setSelectedPersonalIds((prev) => prev.filter((id) => pSet.has(String(id))));
-      setSelectedActivityIds((prev) => prev.filter((id) => aSet.has(String(id))));
-      setSelectedAsignacionIds((prev) => prev.filter((id) => asSet.has(String(id))));
     } catch (e) {
       console.error("[Reports] loadFilters:", e);
       setErrorMsg(e?.message || "Error cargando filtros.");
@@ -224,7 +215,7 @@ export default function Reports() {
 
     try {
       if (!canRun) {
-        setErrorMsg("Missing authentication");
+        setErrorMsg(!token ? "Missing authentication" : "Cannot resolve current organization");
         return;
       }
       if (start && end && start > end) {
@@ -255,13 +246,6 @@ export default function Reports() {
     }
   }
 
-  function onMultiSelectChange(setter) {
-    return (e) => {
-      const values = Array.from(e.target.selectedOptions).map((o) => o.value);
-      setter(values);
-    };
-  }
-
   if (loading) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -287,26 +271,6 @@ export default function Reports() {
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
           Cargando organización…
-        </div>
-      </div>
-    );
-  }
-
-  if (!orgId) {
-    return (
-      <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          No hay organización activa para este usuario.
-        </div>
-      </div>
-    );
-  }
-
-  if (!token) {
-    return (
-      <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Missing authentication
         </div>
       </div>
     );
@@ -362,14 +326,6 @@ export default function Reports() {
           </button>
 
           <button
-            onClick={() => exportRowsToCSV(rows, "reportes")}
-            disabled={!rows.length}
-            className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
-          >
-            Exportar CSV
-          </button>
-
-          <button
             onClick={loadFilters}
             disabled={loadingFilters}
             className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
@@ -379,131 +335,14 @@ export default function Reports() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium text-slate-700">Geocercas (multi)</label>
-            <select
-              multiple
-              value={selectedGeocercaIds}
-              onChange={onMultiSelectChange(setSelectedGeocercaIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.geocercas.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nombre}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-gray-400 mt-1">Tip: Ctrl/Command para seleccionar múltiples.</p>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700">Personas (multi)</label>
-            <select
-              multiple
-              value={selectedPersonalIds}
-              onChange={onMultiSelectChange(setSelectedPersonalIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.personas.map((p) => {
-                const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
-                return (
-                  <option key={p.id} value={p.id}>
-                    {label}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700">Actividades (multi)</label>
-            <select
-              multiple
-              value={selectedActivityIds}
-              onChange={onMultiSelectChange(setSelectedActivityIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.activities.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                  {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700">Asignaciones (multi)</label>
-            <select
-              multiple
-              value={selectedAsignacionIds}
-              onChange={onMultiSelectChange(setSelectedAsignacionIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.asignaciones.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.status || a.estado || "asignación"} — {String(a.id).slice(0, 8)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <p className="text-xs text-gray-500">
+          (Este paso solo envía el orgId al backend; el backend debe validarlo contra el usuario autenticado.)
+        </p>
       </div>
 
-      <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-        {loadingReport ? (
-          <p className="p-4 text-sm text-slate-500">Cargando…</p>
-        ) : rows.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">No hay datos con los filtros seleccionados.</p>
-        ) : (
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-100 text-slate-700">
-              <tr>
-                <th className="p-2 text-left">Día</th>
-                <th className="p-2 text-left">Persona</th>
-                <th className="p-2 text-left">Email</th>
-                <th className="p-2 text-left">Geocerca</th>
-                <th className="p-2 text-left">Actividad</th>
-                <th className="p-2 text-left">Asignación</th>
-                <th className="p-2 text-left">Entrada</th>
-                <th className="p-2 text-left">Salida</th>
-                <th className="p-2 text-center">Marcajes</th>
-                <th className="p-2 text-center">Dentro</th>
-                <th className="p-2 text-center">Dist (m)</th>
-                <th className="p-2 text-left">Tarifa</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr
-                  key={r.attendance_id ? `${r.attendance_id}-${i}` : i}
-                  className={`border-t hover:bg-slate-50 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
-                >
-                  <td className="p-2">{r.work_day || "—"}</td>
-                  <td className="p-2">{r.personal_nombre || "—"}</td>
-                  <td className="p-2">{r.email || "—"}</td>
-                  <td className="p-2">{r.geofence_name || "—"}</td>
-                  <td className="p-2">{r.activity_name || "—"}</td>
-                  <td className="p-2">
-                    {r.asignacion_id ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})` : "—"}
-                  </td>
-                  <td className="p-2">{r.first_check_in || "—"}</td>
-                  <td className="p-2">{r.last_check_out || "—"}</td>
-                  <td className="p-2 text-center">{r.total_marks ?? "—"}</td>
-                  <td className="p-2 text-center">{r.inside_count ?? "—"}</td>
-                  <td className="p-2 text-center">{r.avg_distance_m ?? "—"}</td>
-                  <td className="p-2">{r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+      <div className="rounded-xl border bg-white p-4 text-sm text-slate-500">
+        {rows.length ? `Filas: ${rows.length}` : "Genera un reporte para ver datos."}
+      </div>
     </div>
   );
 }
