@@ -1,15 +1,14 @@
 // src/pages/AsignacionesPage.jsx
-// Fix definitivo Asignaciones (Enero 2026)
+// Fix definitivo Asignaciones (Enero 2026) — UNIVERSAL
 // - Persona: public.personal (FK-safe: asignaciones.personal_id -> personal.id)
-// - Geocercas: Supabase client (no /api 401)
-// - Listado: ENRIQUECIDO (nombres + fechas) para que no salgan columnas vacías
-// - Payload: manda start_time/end_time + start_date/end_date (universal y compatible)
+// - Geocercas/Actividades/Personal/Asignaciones: DIRECTO Supabase (sin depender de getAsignacionesBundle)
+// - Listado: trae joins (personal/geocercas/activities) => no más campos vacíos
+// - Payload: manda start_time/end_time + start_date/end_date
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
-  getAsignacionesBundle,
   createAsignacion,
   updateAsignacion,
   deleteAsignacion,
@@ -27,7 +26,6 @@ function localDateTimeToISO(localDateTime) {
 }
 
 function localDateTimeToDate(localDateTime) {
-  // "YYYY-MM-DDTHH:mm" -> "YYYY-MM-DD"
   if (!localDateTime) return null;
   const [d] = String(localDateTime).split("T");
   return d || null;
@@ -37,7 +35,14 @@ const ESTADOS = ["todos", "activa", "inactiva"];
 
 function CalendarIcon({ className = "h-4 w-4" }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M8 3v2M16 3v2" />
       <path d="M3 9h18" />
       <path d="M6 5h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z" />
@@ -63,110 +68,19 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-function toIdMap(arr) {
-  const m = new Map();
-  (Array.isArray(arr) ? arr : []).forEach((x) => x?.id && m.set(x.id, x));
-  return m;
-}
-
-function normalizeGeocercas(rows) {
-  const arr = Array.isArray(rows) ? rows : [];
-  return dedupeById(
-    arr
-      .map((g) => ({
-        ...g,
-        id: g.id,
-        nombre: (g.nombre || g.name || "").trim() || null,
-        org_id: g.org_id || null,
-      }))
-      .filter((g) => g?.id)
-  );
-}
-
-function filterByOrg(rows, orgId) {
-  const arr = Array.isArray(rows) ? rows : [];
-  if (!orgId) return [];
-  return arr.filter((r) => r?.org_id === orgId);
-}
-
-async function fetchGeocercasSafeByOrg(orgId) {
-  if (!orgId) return [];
-  const { data, error } = await supabase
-    .from("geocercas")
-    .select("id, nombre, org_id, created_at")
-    .eq("org_id", orgId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return normalizeGeocercas(data);
-}
-
-async function fetchActivitiesSafeByOrg(orgId) {
-  if (!orgId) return [];
-  const { data, error } = await supabase
-    .from("activities")
-    .select("id, name, active, org_id, created_at")
-    .eq("org_id", orgId)
-    .eq("active", true)
-    .order("name", { ascending: true });
-  if (error) throw error;
-  return Array.isArray(data) ? data : [];
-}
-
-function normalizeActivities(rows, orgId) {
-  const arr = Array.isArray(rows) ? rows : [];
-  return dedupeById(
-    arr
-      .map((a) => ({
-        ...a,
-        id: a.id || a.activity_id || a.activityId || null,
-        name: (a.name || a.nombre || "").trim() || null,
-        active: a.active ?? true,
-        org_id: a.org_id || null,
-      }))
-      .filter((a) => a?.id)
-      .filter((a) => a.org_id === orgId)
-      .filter((a) => a.active !== false)
-  );
-}
-
-/**
- * ✅ PERSONAL CORRECTO PARA ASIGNACIONES
- * Lee SOLO de public.personal y devuelve personal.id
- */
-async function fetchPersonalSafeByOrg(orgId) {
-  if (!orgId) return [];
-  const { data, error } = await supabase
-    .from("personal")
-    .select("id, org_id, nombre, apellido, email")
-    .eq("org_id", orgId)
-    .order("nombre", { ascending: true });
-  if (error) throw error;
-
-  return (data || []).map((p) => ({
-    id: p.id,
-    nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
-    email: p.email || "",
-    org_id: p.org_id || null,
-  }));
-}
-
 function normalizeAsignacionRow(a) {
   if (!a || typeof a !== "object") return a;
 
+  // Soporta múltiples shapes por si llegan de otras fuentes
   const startTime = a.start_time || a.inicio || a.start || a.startTime || null;
   const endTime = a.end_time || a.fin || a.end || a.endTime || null;
 
-  // Compat: si vienen start_date/end_date (date), mantenlos
   const startDate = a.start_date || a.fecha_inicio || null;
   const endDate = a.end_date || a.fecha_fin || null;
 
   let freqSec = a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
   if (freqSec == null && a.frecuencia_envio_min != null) {
     const n = Number(a.frecuencia_envio_min);
-    if (Number.isFinite(n)) freqSec = n * 60;
-  }
-  if (freqSec == null && a.freq_min != null) {
-    const n = Number(a.freq_min);
     if (Number.isFinite(n)) freqSec = n * 60;
   }
 
@@ -223,54 +137,100 @@ export default function AsignacionesPage() {
       return;
     }
 
-    try { localStorage.setItem("tg_current_org_id", orgId); } catch (_) {}
+    try {
+      localStorage.setItem("tg_current_org_id", orgId);
+    } catch (_) {}
 
-    const { data, error: bundleError } = await getAsignacionesBundle();
-    if (bundleError) {
-      setError(bundleError.message || "Error cargando asignaciones.");
+    try {
+      // ✅ Cargar catálogos desde tablas reales (universal)
+      const [pRes, gRes, aRes] = await Promise.all([
+        supabase
+          .from("personal")
+          .select("id, org_id, nombre, apellido, email")
+          .eq("org_id", orgId)
+          .order("nombre", { ascending: true }),
+
+        supabase
+          .from("geocercas")
+          .select("id, nombre, org_id, created_at")
+          .eq("org_id", orgId)
+          .order("created_at", { ascending: false }),
+
+        supabase
+          .from("activities")
+          .select("id, name, active, org_id, created_at")
+          .eq("org_id", orgId)
+          .eq("active", true)
+          .order("name", { ascending: true }),
+      ]);
+
+      if (pRes.error) throw pRes.error;
+      if (gRes.error) throw gRes.error;
+      if (aRes.error) throw aRes.error;
+
+      const personal = (pRes.data || []).map((p) => ({
+        id: p.id,
+        org_id: p.org_id,
+        nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
+        apellido: p.apellido || "",
+        email: p.email || "",
+      }));
+
+      setPersonalOptions(dedupeById(personal));
+      setGeocercaOptions(dedupeById(gRes.data || []));
+      setActivityOptions(dedupeById(aRes.data || []));
+
+      // ✅ Cargar ASIGNACIONES con JOINS (soluciona vacíos)
+      const asigRes = await supabase
+        .from("asignaciones")
+        .select(
+          `
+          id,
+          org_id,
+          personal_id,
+          geocerca_id,
+          activity_id,
+          start_time,
+          end_time,
+          start_date,
+          end_date,
+          frecuencia_envio_sec,
+          status,
+          created_at,
+          personal:personal ( id, nombre, apellido, email, org_id ),
+          geocerca:geocercas ( id, nombre, org_id ),
+          activity:activities ( id, name, org_id )
+        `
+        )
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false });
+
+      if (asigRes.error) throw asigRes.error;
+
+      const rows = (asigRes.data || []).map((r) => {
+        const rr = normalizeAsignacionRow(r);
+
+        // Normaliza nombres para que la tabla sea feliz SIEMPRE
+        const geocerca_nombre = rr.geocerca_nombre || rr.geocerca?.nombre || "";
+        const activity_name = rr.activity_name || rr.activity?.name || "";
+        const inicio = rr.inicio || rr.start_time || rr.start_date || null;
+        const fin = rr.fin || rr.end_time || rr.end_date || null;
+
+        return {
+          ...rr,
+          geocerca_nombre,
+          activity_name,
+          inicio,
+          fin,
+        };
+      });
+
+      setAsignaciones(rows);
       setLoadingData(false);
-      return;
-    }
-
-    const bundle = data || {};
-    const rowsRaw = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
-    const catalogs = bundle.catalogs || {};
-
-    setAsignaciones(rowsRaw.map(normalizeAsignacionRow));
-
-    const bundleGeosAll = normalizeGeocercas(catalogs.geocercas);
-    setGeocercaOptions(filterByOrg(bundleGeosAll, orgId));
-
-    const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
-    setActivityOptions(normalizeActivities(bundleActsRaw, orgId));
-
-    // Geocercas SAFE
-    try {
-      const geosSafe = await fetchGeocercasSafeByOrg(orgId);
-      setGeocercaOptions(dedupeById([...geosSafe, ...filterByOrg(bundleGeosAll, orgId)]));
     } catch (e) {
-      setError((prev) => prev || `Error consultando geocercas: ${e?.message || e}`);
+      setLoadingData(false);
+      setError(e?.message || String(e));
     }
-
-    // Activities SAFE
-    try {
-      const actsSafe = await fetchActivitiesSafeByOrg(orgId);
-      const actsNorm = normalizeActivities(actsSafe, orgId);
-      if (actsNorm?.length) setActivityOptions(dedupeById([...actsNorm, ...normalizeActivities(bundleActsRaw, orgId)]));
-    } catch (e) {
-      setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
-    }
-
-    // Personal SAFE (public.personal)
-    try {
-      const p = await fetchPersonalSafeByOrg(orgId);
-      setPersonalOptions(p);
-    } catch (e) {
-      setError((prev) => prev || `Error consultando personal: ${e?.message || e}`);
-      setPersonalOptions([]);
-    }
-
-    setLoadingData(false);
   }
 
   useEffect(() => {
@@ -282,39 +242,11 @@ export default function AsignacionesPage() {
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
-    if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
+    if (estadoFilter !== "todos") {
+      rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
+    }
     return rows;
   }, [asignaciones, estadoFilter]);
-
-  // ✅ ENRIQUECIMIENTO PARA LISTADO (evita columnas vacías)
-  const enrichedAsignaciones = useMemo(() => {
-    const geoMap = toIdMap(geocercaOptions);
-    const actMap = toIdMap(activityOptions);
-    const perMap = toIdMap(personalOptions);
-
-    return (Array.isArray(filteredAsignaciones) ? filteredAsignaciones : []).map((a0) => {
-      const a = normalizeAsignacionRow(a0);
-
-      const geocerca = a.geocerca || geoMap.get(a.geocerca_id) || null;
-      const activity = a.activity || actMap.get(a.activity_id) || null;
-      const personal = a.personal || perMap.get(a.personal_id) || null;
-
-      // Inicio/Fin: usa time si existe, si no usa date
-      const inicio = a.start_time || a.start_date || null;
-      const fin = a.end_time || a.end_date || null;
-
-      return {
-        ...a,
-        geocerca,
-        activity,
-        personal,
-        geocerca_nombre: a.geocerca_nombre || geocerca?.nombre || "",
-        activity_name: a.activity_name || activity?.name || "",
-        inicio,
-        fin,
-      };
-    });
-  }, [filteredAsignaciones, geocercaOptions, activityOptions, personalOptions]);
 
   function resetForm() {
     setSelectedPersonalId("");
@@ -333,23 +265,23 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     if (!orgId) return setError("No hay organización activa.");
-    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId)
+    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId) {
       return setError("Selecciona persona, geocerca y actividad.");
+    }
     if (!startTime || !endTime) return setError("Selecciona Inicio y Fin.");
 
     const freqMin = Number(frecuenciaEnvioMin) || 0;
     if (freqMin < 5) return setError("La frecuencia mínima es 5 minutos.");
 
     const payload = {
-      personal_id: selectedPersonalId, // ✅ FK personal(id)
+      org_id: orgId, // ✅ importante para RLS/tenant (si tu API lo usa)
+      personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
 
-      // ✅ Precisión
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
 
-      // ✅ Compatibilidad (si la tabla/listado usa DATE)
       start_date: localDateTimeToDate(startTime),
       end_date: localDateTimeToDate(endTime),
 
@@ -357,8 +289,11 @@ export default function AsignacionesPage() {
       status,
     };
 
-    const resp = editingId ? await updateAsignacion(editingId, payload) : await createAsignacion(payload);
-    if (resp.error) return setError(resp.error.message || "Error guardando asignación.");
+    const resp = editingId
+      ? await updateAsignacion(editingId, payload)
+      : await createAsignacion(payload);
+
+    if (resp?.error) return setError(resp.error.message || "Error guardando asignación.");
 
     setSuccessMessage(editingId ? "Asignación actualizada." : "Asignación creada.");
     resetForm();
@@ -390,12 +325,17 @@ export default function AsignacionesPage() {
           {t("asignaciones.title", { defaultValue: "Asignaciones" })}
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+          Org actual:{" "}
+          <span className="font-medium">
+            {currentOrg?.name || currentOrg?.id || "—"}
+          </span>
         </p>
       </div>
 
       {error && (
-        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
       )}
       {successMessage && (
         <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">
@@ -509,7 +449,11 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Estado</label>
-            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select
+              className="border rounded px-3 py-2"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
@@ -557,16 +501,15 @@ export default function AsignacionesPage() {
       </div>
 
       <AsignacionesTable
-        asignaciones={enrichedAsignaciones}
+        asignaciones={filteredAsignaciones}
         loading={loadingData}
         onEdit={(a) => {
           setEditingId(a.id);
           setSelectedPersonalId(a.personal_id || "");
           setSelectedGeocercaId(a.geocerca_id || "");
           setSelectedActivityId(a.activity_id || "");
-          setStartTime(a.start_time?.slice(0, 16) || "");
-          setEndTime(a.end_time?.slice(0, 16) || "");
-          // Si vienen solo DATE, no rompe: dejamos vacío (usuario puede elegir)
+          setStartTime(a.start_time?.slice?.(0, 16) || "");
+          setEndTime(a.end_time?.slice?.(0, 16) || "");
           setFrecuenciaEnvioMin(Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60)));
           setStatus(a.status || "activa");
           setError(null);
@@ -576,7 +519,7 @@ export default function AsignacionesPage() {
           const ok = window.confirm("¿Eliminar asignación?");
           if (!ok) return;
           const resp = await deleteAsignacion(id);
-          if (resp.error) setError(resp.error.message || "No se pudo eliminar.");
+          if (resp?.error) setError(resp.error.message || "No se pudo eliminar.");
           else {
             setSuccessMessage("Asignación eliminada.");
             await loadAll();
