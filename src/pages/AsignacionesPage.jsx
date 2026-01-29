@@ -1,9 +1,9 @@
 // src/pages/AsignacionesPage.jsx
 // Fix definitivo Asignaciones (Enero 2026) — UNIVERSAL Y PERMANENTE
-// - Listado determinístico: SELECT con JOIN embebido (personal/geocerca/activity)
-// - Compatibilidad total: expone keys nuevas y legacy (inicio/fin/freq_min, geocerca_nombre, activity_name, etc.)
-// - A11y: id/name + label htmlFor en todos los campos
-// - CRUD directo a public.asignaciones (soft delete + fallback hard delete)
+// - Listado: SELECT con JOIN embebido + BLINDAJE de shape (nunca columnas vacías)
+// - Catálogos: solo para selects del formulario
+// - A11y: id/name + label htmlFor
+// - Debug opcional en UI: agrega ?debug=1 a la URL
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,24 +13,16 @@ import { supabase } from "../lib/supabaseClient";
 
 const ESTADOS = ["todos", "activa", "inactiva"];
 
-function localDateTimeToISO(localDateTime) {
-  if (!localDateTime) return null;
-  const [d, t] = String(localDateTime).split("T");
-  if (!d || !t) return null;
-  const [y, m, day] = d.split("-").map(Number);
-  const [hh, mm] = t.split(":").map(Number);
-  return new Date(y, m - 1, day, hh, mm, 0, 0).toISOString();
-}
-
-function localDateTimeToDate(localDateTime) {
-  if (!localDateTime) return null;
-  const [d] = String(localDateTime).split("T");
-  return d || null;
-}
-
 function CalendarIcon({ className = "h-4 w-4" }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M8 3v2M16 3v2" />
       <path d="M3 9h18" />
       <path d="M6 5h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z" />
@@ -56,23 +48,89 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-function normalize(a) {
-  if (!a || typeof a !== "object") return a;
+// Normaliza fechas para datetime-local (ISO sin segundos)
+function toDatetimeLocal(value) {
+  if (!value) return "";
+  // soporta "2026-01-29 03:07:00+00" -> "2026-01-29T03:07"
+  const s = String(value);
+  if (s.includes("T")) return s.slice(0, 16);
+  // "YYYY-MM-DD HH:MM:SS+00" => "YYYY-MM-DDTHH:MM"
+  const parts = s.split(" ");
+  if (parts.length >= 2) return `${parts[0]}T${parts[1].slice(0, 5)}`;
+  return s.slice(0, 16);
+}
 
-  const start_time = a.start_time ?? a.inicio ?? a.start ?? null;
-  const end_time = a.end_time ?? a.fin ?? a.end ?? null;
+function localDateTimeToISO(localDateTime) {
+  if (!localDateTime) return null;
+  const [d, t] = String(localDateTime).split("T");
+  if (!d || !t) return null;
+  const [y, m, day] = d.split("-").map(Number);
+  const [hh, mm] = t.split(":").map(Number);
+  return new Date(y, m - 1, day, hh, mm, 0, 0).toISOString();
+}
 
+function localDateTimeToDate(localDateTime) {
+  if (!localDateTime) return null;
+  const [d] = String(localDateTime).split("T");
+  return d || null;
+}
+
+// 🔒 BLINDAJE: garantiza que cada row tenga SIEMPRE las claves base
+function normalizeRow(raw, { perMap, geoMap, actMap }) {
+  const r = raw && typeof raw === "object" ? raw : {};
+
+  const personalObj = r.personal || r.persona || perMap.get(r.personal_id) || null;
+  const geocercaObj =
+    r.geocerca || r.geofence || geoMap.get(r.geocerca_id) || null;
+  const activityObj =
+    r.activity || r.actividad || actMap.get(r.activity_id) || null;
+
+  // IDs: si faltan, intenta sacarlos del objeto embebido
+  const personal_id = r.personal_id || personalObj?.id || null;
+  const geocerca_id = r.geocerca_id || geocercaObj?.id || null;
+  const activity_id = r.activity_id || activityObj?.id || null;
+
+  // Fechas: soporta variantes legacy
+  const start_time =
+    r.start_time || r.inicio || r.start || r.startTime || r.start_date || null;
+  const end_time =
+    r.end_time || r.fin || r.end || r.endTime || r.end_date || null;
+
+  // Frecuencia: sec o min
   let frecuencia_envio_sec =
-    a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
-
-  if (frecuencia_envio_sec == null && a.frecuencia_envio_min != null) {
-    const n = Number(a.frecuencia_envio_min);
+    r.frecuencia_envio_sec ?? r.freq_sec ?? r.frecuenciaEnvioSec ?? null;
+  if (frecuencia_envio_sec == null && r.frecuencia_envio_min != null) {
+    const n = Number(r.frecuencia_envio_min);
+    if (Number.isFinite(n)) frecuencia_envio_sec = n * 60;
+  }
+  if (frecuencia_envio_sec == null && r.freq_min != null) {
+    const n = Number(r.freq_min);
     if (Number.isFinite(n)) frecuencia_envio_sec = n * 60;
   }
 
-  const status = a.status || a.estado || a.state || "inactiva";
+  const status = r.status || r.estado || r.state || "inactiva";
 
-  return { ...a, start_time, end_time, frecuencia_envio_sec, status };
+  return {
+    ...r,
+
+    // Base keys (las que tu tabla debe poder leer)
+    personal_id,
+    geocerca_id,
+    activity_id,
+    start_time,
+    end_time,
+    frecuencia_envio_sec,
+    status,
+
+    // Objetos estándar
+    personal: personalObj,
+    geocerca: geocercaObj,
+    activity: activityObj,
+
+    // Strings de respaldo
+    geocerca_nombre: r.geocerca_nombre || geocercaObj?.nombre || "",
+    activity_name: r.activity_name || activityObj?.name || "",
+  };
 }
 
 export default function AsignacionesPage() {
@@ -102,72 +160,13 @@ export default function AsignacionesPage() {
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
-  async function loadCatalogos() {
-    if (!orgId) {
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setActivityOptions([]);
-      return;
+  const debugEnabled = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("debug") === "1";
+    } catch {
+      return false;
     }
-
-    const [pRes, gRes, aRes] = await Promise.all([
-      supabase.from("personal").select("id, org_id, nombre, apellido, email").eq("org_id", orgId).order("nombre", { ascending: true }),
-      supabase.from("geocercas").select("id, nombre, org_id, created_at").eq("org_id", orgId).order("created_at", { ascending: false }),
-      supabase.from("activities").select("id, name, active, org_id, created_at").eq("org_id", orgId).eq("active", true).order("name", { ascending: true }),
-    ]);
-
-    if (pRes.error) throw pRes.error;
-    if (gRes.error) throw gRes.error;
-    if (aRes.error) throw aRes.error;
-
-    const personal = (pRes.data || []).map((p) => ({
-      id: p.id,
-      org_id: p.org_id,
-      nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
-      apellido: p.apellido || "",
-      email: p.email || "",
-    }));
-
-    setPersonalOptions(dedupeById(personal));
-    setGeocercaOptions(dedupeById(gRes.data || []));
-    setActivityOptions(dedupeById(aRes.data || []));
-  }
-
-  async function loadAsignacionesJoin() {
-    if (!orgId) {
-      setAsignaciones([]);
-      return;
-    }
-
-    const { data, error: asigErr } = await supabase
-      .from("asignaciones")
-      .select(`
-        id,
-        org_id,
-        personal_id,
-        geocerca_id,
-        activity_id,
-        start_time,
-        end_time,
-        start_date,
-        end_date,
-        frecuencia_envio_sec,
-        status,
-        created_at,
-        is_deleted,
-        deleted_at,
-        personal:personal_id ( id, nombre, apellido, email ),
-        geocerca:geocerca_id ( id, nombre ),
-        activity:activity_id ( id, name )
-      `)
-      .eq("org_id", orgId)
-      .or("is_deleted.is.null,is_deleted.eq.false")
-      .order("created_at", { ascending: false });
-
-    if (asigErr) throw asigErr;
-
-    setAsignaciones((data || []).map(normalize));
-  }
+  }, []);
 
   async function loadAll() {
     setLoadingData(true);
@@ -184,8 +183,84 @@ export default function AsignacionesPage() {
     }
 
     try {
-      await loadCatalogos();
-      await loadAsignacionesJoin();
+      // 1) Catálogos (para selects)
+      const [pRes, gRes, aRes] = await Promise.all([
+        supabase
+          .from("personal")
+          .select("id, org_id, nombre, apellido, email")
+          .eq("org_id", orgId)
+          .order("nombre", { ascending: true }),
+
+        supabase
+          .from("geocercas")
+          .select("id, nombre, org_id, created_at")
+          .eq("org_id", orgId)
+          .order("created_at", { ascending: false }),
+
+        supabase
+          .from("activities")
+          .select("id, name, active, org_id, created_at")
+          .eq("org_id", orgId)
+          .order("name", { ascending: true }),
+      ]);
+
+      if (pRes.error) throw pRes.error;
+      if (gRes.error) throw gRes.error;
+      if (aRes.error) throw aRes.error;
+
+      const personal = (pRes.data || []).map((p) => ({
+        id: p.id,
+        org_id: p.org_id,
+        nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
+        apellido: p.apellido || "",
+        email: p.email || "",
+      }));
+
+      const personalOpts = dedupeById(personal);
+      const geocercaOpts = dedupeById(gRes.data || []);
+      const activityOpts = dedupeById(aRes.data || []);
+
+      setPersonalOptions(personalOpts);
+      setGeocercaOptions(geocercaOpts);
+      setActivityOptions(activityOpts);
+
+      const perMap = new Map(personalOpts.map((p) => [p.id, p]));
+      const geoMap = new Map(geocercaOpts.map((g) => [g.id, g]));
+      const actMap = new Map(activityOpts.map((a) => [a.id, a]));
+
+      // 2) Asignaciones con JOIN embebido (pero igual blindamos shape)
+      const { data, error: asigErr } = await supabase
+        .from("asignaciones")
+        .select(
+          `
+          id,
+          org_id,
+          personal_id,
+          geocerca_id,
+          activity_id,
+          start_time,
+          end_time,
+          frecuencia_envio_sec,
+          status,
+          created_at,
+          is_deleted,
+          deleted_at,
+          personal:personal_id ( id, nombre, apellido, email ),
+          geocerca:geocerca_id ( id, nombre ),
+          activity:activity_id ( id, name )
+        `
+        )
+        .eq("org_id", orgId)
+        .or("is_deleted.is.null,is_deleted.eq.false")
+        .order("created_at", { ascending: false });
+
+      if (asigErr) throw asigErr;
+
+      const normalized = (data || []).map((r) =>
+        normalizeRow(r, { perMap, geoMap, actMap })
+      );
+
+      setAsignaciones(normalized);
       setLoadingData(false);
     } catch (e) {
       setLoadingData(false);
@@ -202,49 +277,11 @@ export default function AsignacionesPage() {
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
-    if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
+    if (estadoFilter !== "todos") {
+      rows = rows.filter((a) => (a.status || "inactiva") === estadoFilter);
+    }
     return rows;
   }, [asignaciones, estadoFilter]);
-
-  // ULTRA-COMPAT: entrega keys nuevas + legacy para que cualquier AsignacionesTable pinte
-  const enrichedAsignaciones = useMemo(() => {
-    const geoMap = new Map((geocercaOptions || []).map((g) => [g.id, g]));
-    const actMap = new Map((activityOptions || []).map((a) => [a.id, a]));
-    const perMap = new Map((personalOptions || []).map((p) => [p.id, p]));
-
-    return (filteredAsignaciones || []).map((r0) => {
-      const r = normalize(r0);
-
-      const personal = r.personal || perMap.get(r.personal_id) || null;
-      const geocerca = r.geocerca || geoMap.get(r.geocerca_id) || null;
-      const activity = r.activity || actMap.get(r.activity_id) || null;
-
-      const freqSec = r.frecuencia_envio_sec ?? null;
-      const freqMin = freqSec != null ? Math.round(Number(freqSec) / 60) : null;
-
-      return {
-        ...r,
-
-        // Objetos estándar
-        personal,
-        geocerca,
-        activity,
-
-        // Strings de respaldo
-        geocerca_nombre: geocerca?.nombre || "",
-        activity_name: activity?.name || "",
-
-        // Legacy keys (por si tu tabla vieja las usa)
-        persona: personal,
-        geofence: geocerca,
-        actividad: activity,
-        inicio: r.start_time || r.start_date || null,
-        fin: r.end_time || r.end_date || null,
-        freq_min: freqMin,
-        frecuencia_envio_min: freqMin,
-      };
-    });
-  }, [filteredAsignaciones, geocercaOptions, activityOptions, personalOptions]);
 
   function resetForm() {
     setSelectedPersonalId("");
@@ -263,7 +300,9 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     if (!orgId) return setError("No hay organización activa.");
-    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId) return setError("Selecciona persona, geocerca y actividad.");
+    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId) {
+      return setError("Selecciona persona, geocerca y actividad.");
+    }
     if (!startTime || !endTime) return setError("Selecciona Inicio y Fin.");
 
     const freqMin = Number(frecuenciaEnvioMin) || 0;
@@ -284,11 +323,16 @@ export default function AsignacionesPage() {
 
     try {
       if (editingId) {
-        const { error: upErr } = await supabase.from("asignaciones").update(payload).eq("id", editingId);
+        const { error: upErr } = await supabase
+          .from("asignaciones")
+          .update(payload)
+          .eq("id", editingId);
         if (upErr) throw upErr;
         setSuccessMessage("Asignación actualizada.");
       } else {
-        const { error: inErr } = await supabase.from("asignaciones").insert(payload);
+        const { error: inErr } = await supabase
+          .from("asignaciones")
+          .insert(payload);
         if (inErr) throw inErr;
         setSuccessMessage("Asignación creada.");
       }
@@ -311,7 +355,10 @@ export default function AsignacionesPage() {
         .eq("id", id);
 
       if (delErr) {
-        const { error: hardErr } = await supabase.from("asignaciones").delete().eq("id", id);
+        const { error: hardErr } = await supabase
+          .from("asignaciones")
+          .delete()
+          .eq("id", id);
         if (hardErr) throw hardErr;
       }
 
@@ -325,7 +372,9 @@ export default function AsignacionesPage() {
   if (loading) {
     return (
       <div className="p-4 max-w-5xl mx-auto">
-        <div className="border rounded px-4 py-3 text-sm text-gray-600">Cargando…</div>
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">
+          Cargando…
+        </div>
       </div>
     );
   }
@@ -333,7 +382,9 @@ export default function AsignacionesPage() {
   if (!isAuthenticated || !user) {
     return (
       <div className="p-4 max-w-3xl mx-auto">
-        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">Debes iniciar sesión.</div>
+        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
+          Debes iniciar sesión.
+        </div>
       </div>
     );
   }
@@ -341,89 +392,208 @@ export default function AsignacionesPage() {
   return (
     <div className="w-full p-4">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
+        <h1 className="text-2xl font-bold">
+          {t("asignaciones.title", { defaultValue: "Asignaciones" })}
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+          Org actual:{" "}
+          <span className="font-medium">
+            {currentOrg?.name || currentOrg?.id || "—"}
+          </span>
         </p>
       </div>
 
-      {error && <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-      {successMessage && <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">{successMessage}</div>}
+      {error && (
+        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">
+          {successMessage}
+        </div>
+      )}
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
-        <h2 className="text-lg font-semibold mb-4">{editingId ? "Editar asignación" : "Nueva asignación"}</h2>
+        <h2 className="text-lg font-semibold mb-4">
+          {editingId ? "Editar asignación" : "Nueva asignación"}
+        </h2>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
           <div className="flex flex-col">
-            <label htmlFor="personal_id" className="mb-1 font-medium text-sm">Persona</label>
-            <select id="personal_id" name="personal_id" className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)} required autoComplete="off">
+            <label htmlFor="personal_id" className="mb-1 font-medium text-sm">
+              Persona
+            </label>
+            <select
+              id="personal_id"
+              name="personal_id"
+              className="border rounded px-3 py-2"
+              value={selectedPersonalId}
+              onChange={(e) => setSelectedPersonalId(e.target.value)}
+              required
+              autoComplete="off"
+            >
               <option value="">Selecciona una persona</option>
               {personalOptions.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre || p.email || p.id}</option>
+                <option key={p.id} value={p.id}>
+                  {p.nombre || p.email || p.id}
+                </option>
               ))}
             </select>
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="geocerca_id" className="mb-1 font-medium text-sm">Geocerca</label>
-            <select id="geocerca_id" name="geocerca_id" className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required autoComplete="off">
+            <label htmlFor="geocerca_id" className="mb-1 font-medium text-sm">
+              Geocerca
+            </label>
+            <select
+              id="geocerca_id"
+              name="geocerca_id"
+              className="border rounded px-3 py-2"
+              value={selectedGeocercaId}
+              onChange={(e) => setSelectedGeocercaId(e.target.value)}
+              required
+              autoComplete="off"
+            >
               <option value="">Selecciona una geocerca</option>
               {geocercaOptions.map((g) => (
-                <option key={g.id} value={g.id}>{g.nombre || g.id}</option>
+                <option key={g.id} value={g.id}>
+                  {g.nombre || g.id}
+                </option>
               ))}
             </select>
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="activity_id" className="mb-1 font-medium text-sm">Actividad</label>
-            <select id="activity_id" name="activity_id" className="border rounded px-3 py-2" value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)} required autoComplete="off">
+            <label htmlFor="activity_id" className="mb-1 font-medium text-sm">
+              Actividad
+            </label>
+            <select
+              id="activity_id"
+              name="activity_id"
+              className="border rounded px-3 py-2"
+              value={selectedActivityId}
+              onChange={(e) => setSelectedActivityId(e.target.value)}
+              required
+              autoComplete="off"
+            >
               <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
-                <option key={a.id} value={a.id}>{a.name || a.id}</option>
+                <option key={a.id} value={a.id}>
+                  {a.name || a.id}
+                </option>
               ))}
             </select>
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="start_time" className="mb-1 font-medium text-sm">Inicio</label>
+            <label htmlFor="start_time" className="mb-1 font-medium text-sm">
+              Inicio
+            </label>
             <div className="relative">
-              <input id="start_time" name="start_time" ref={startInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={startTime} onChange={(e) => setStartTime(e.target.value)} required autoComplete="off" />
-              <button type="button" aria-label="Abrir selector de inicio" onClick={() => openNativePicker(startInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
+              <input
+                id="start_time"
+                name="start_time"
+                ref={startInputRef}
+                type="datetime-local"
+                className="border rounded px-3 py-2 w-full pr-10"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                required
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                aria-label="Abrir selector de inicio"
+                onClick={() => openNativePicker(startInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
+              >
                 <CalendarIcon />
               </button>
             </div>
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="end_time" className="mb-1 font-medium text-sm">Fin</label>
+            <label htmlFor="end_time" className="mb-1 font-medium text-sm">
+              Fin
+            </label>
             <div className="relative">
-              <input id="end_time" name="end_time" ref={endInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={endTime} onChange={(e) => setEndTime(e.target.value)} required autoComplete="off" />
-              <button type="button" aria-label="Abrir selector de fin" onClick={() => openNativePicker(endInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
+              <input
+                id="end_time"
+                name="end_time"
+                ref={endInputRef}
+                type="datetime-local"
+                className="border rounded px-3 py-2 w-full pr-10"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                required
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                aria-label="Abrir selector de fin"
+                onClick={() => openNativePicker(endInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
+              >
                 <CalendarIcon />
               </button>
             </div>
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="status" className="mb-1 font-medium text-sm">Estado</label>
-            <select id="status" name="status" className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)} autoComplete="off">
+            <label htmlFor="status" className="mb-1 font-medium text-sm">
+              Estado
+            </label>
+            <select
+              id="status"
+              name="status"
+              className="border rounded px-3 py-2"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              autoComplete="off"
+            >
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="frecuencia_min" className="mb-1 font-medium text-sm">Frecuencia (min)</label>
-            <input id="frecuencia_min" name="frecuencia_min" type="number" className="border rounded px-3 py-2" min={5} value={frecuenciaEnvioMin} onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)} autoComplete="off" inputMode="numeric" />
+            <label htmlFor="frecuencia_min" className="mb-1 font-medium text-sm">
+              Frecuencia (min)
+            </label>
+            <input
+              id="frecuencia_min"
+              name="frecuencia_min"
+              type="number"
+              className="border rounded px-3 py-2"
+              min={5}
+              value={frecuenciaEnvioMin}
+              onChange={(e) =>
+                setFrecuenciaEnvioMin(Number(e.target.value) || 5)
+              }
+              autoComplete="off"
+              inputMode="numeric"
+            />
           </div>
 
           <div className="md:col-span-2 flex flex-wrap gap-3 mt-2">
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60" disabled={loadingData}>
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
+              disabled={loadingData}
+            >
               {editingId ? "Actualizar" : "Guardar"}
             </button>
 
             {editingId && (
-              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="border px-4 py-2 rounded"
+              >
                 Cancelar
               </button>
             )}
@@ -432,25 +602,47 @@ export default function AsignacionesPage() {
       </div>
 
       <div className="mb-4 flex items-center gap-3">
-        <label htmlFor="estado_filter" className="font-medium">Estado</label>
-        <select id="estado_filter" name="estado_filter" className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)} autoComplete="off">
+        <label htmlFor="estado_filter" className="font-medium">
+          Estado
+        </label>
+        <select
+          id="estado_filter"
+          name="estado_filter"
+          className="border rounded px-3 py-2"
+          value={estadoFilter}
+          onChange={(e) => setEstadoFilter(e.target.value)}
+          autoComplete="off"
+        >
           {ESTADOS.map((v) => (
-            <option key={v} value={v}>{v}</option>
+            <option key={v} value={v}>
+              {v}
+            </option>
           ))}
         </select>
       </div>
 
+      {debugEnabled && (
+        <div className="mb-4 border rounded bg-gray-50 p-3 text-xs overflow-auto">
+          <div className="font-semibold mb-2">DEBUG asignaciones[0]</div>
+          <pre className="whitespace-pre-wrap">
+            {JSON.stringify(filteredAsignaciones?.[0] || null, null, 2)}
+          </pre>
+        </div>
+      )}
+
       <AsignacionesTable
-        asignaciones={enrichedAsignaciones}
+        asignaciones={filteredAsignaciones}
         loading={loadingData}
         onEdit={(a) => {
           setEditingId(a.id);
           setSelectedPersonalId(a.personal_id || "");
           setSelectedGeocercaId(a.geocerca_id || "");
           setSelectedActivityId(a.activity_id || "");
-          setStartTime(a.start_time?.slice?.(0, 16) || "");
-          setEndTime(a.end_time?.slice?.(0, 16) || "");
-          setFrecuenciaEnvioMin(Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60)));
+          setStartTime(toDatetimeLocal(a.start_time));
+          setEndTime(toDatetimeLocal(a.end_time));
+          setFrecuenciaEnvioMin(
+            Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
+          );
           setStatus(a.status || "activa");
           setError(null);
           setSuccessMessage(null);
