@@ -7,77 +7,47 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-
-    const token_hash = params.get("token_hash");
-    const type = (params.get("type") as "magiclink" | "recovery" | null) ?? null;
-
-    // next puede NO venir (porque Supabase lo “limpia”)
-    const next = params.get("next") || "/tracker-gps";
-
-    let redirected = false;
-
-    const resolveOrgId = async (userId: string): Promise<string | null> => {
-      // 1) Preferido: tu RPC canonical (multi-tenant)
+    const run = async () => {
       try {
-        const { data, error } = await supabase.rpc("get_my_context");
-        if (!error && data?.ok && data?.org_id) return data.org_id as string;
-      } catch {
-        // ignore
-      }
+        // ✅ marcador para saber si ESTE archivo se ejecutó en producción
+        try {
+          localStorage.setItem("auth_callback_ran_at", new Date().toISOString());
+        } catch {}
 
-      // 2) Fallback: memberships del propio usuario (último)
-      try {
-        const { data, error } = await supabase
-          .from("memberships")
-          .select("org_id, created_at")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const params = new URLSearchParams(window.location.search);
 
-        if (!error && data?.org_id) return data.org_id as string;
-      } catch {
-        // ignore
-      }
+        const token_hash = params.get("token_hash");
+        const type = (params.get("type") as "magiclink" | "recovery" | null) ?? null;
+        const code = params.get("code");
+        const next = params.get("next") || "/tracker-gps";
 
-      return null;
-    };
-
-    const finalizeRedirect = async () => {
-      // confirmar user
-      const { data: u } = await supabase.auth.getUser();
-      const user = u?.user;
-      if (!user) {
-        setError("No se pudo establecer sesión (getUser null).");
-        return;
-      }
-
-      const orgId = await resolveOrgId(user.id);
-
-      // si logramos org_id, lo pasamos al tracker-gps (clave)
-      const target = orgId ? `${next}?org_id=${orgId}` : next;
-
-      redirected = true;
-      navigate(target, { replace: true });
-    };
-
-    const handleAuth = async () => {
-      try {
-        // ✅ Caso real: token_hash + type=magiclink
+        // 1) MAGIC LINK REAL: token_hash + type
         if (token_hash && type) {
-          const { error } = await supabase.auth.verifyOtp({
+          const { data, error } = await supabase.auth.verifyOtp({
             type,
             token_hash,
           });
+
           if (error) {
             setError(error.message);
             return;
           }
+
+          // ✅ FIX DEFINITIVO: forzar persistencia si viene session
+          // (en algunos entornos verifyOtp NO “hidrata” storage automáticamente)
+          if (data?.session?.access_token && data?.session?.refresh_token) {
+            const { error: setErr } = await supabase.auth.setSession({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            });
+            if (setErr) {
+              setError(setErr.message);
+              return;
+            }
+          }
         }
 
-        // 🟡 PKCE (por si llega code)
-        const code = params.get("code");
+        // 2) PKCE: code
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
@@ -86,26 +56,25 @@ export default function AuthCallback() {
           }
         }
 
-        // ✅ Esperar confirmación real de SIGNED_IN
-        const {
-          data: { subscription },
-        } = supabase.auth.onAuthStateChange(async (event) => {
-          if (event === "SIGNED_IN" && !redirected) {
-            subscription.unsubscribe();
-            await finalizeRedirect();
-          }
-        });
+        // 3) Confirmar que YA hay user
+        const { data: u, error: uErr } = await supabase.auth.getUser();
+        if (uErr) {
+          setError(uErr.message);
+          return;
+        }
+        if (!u?.user) {
+          setError("No se pudo establecer sesión (getUser null).");
+          return;
+        }
 
-        // ⛑ Fallback por si el evento ya ocurrió
-        setTimeout(() => {
-          if (!redirected) finalizeRedirect();
-        }, 900);
+        // 4) Redirigir
+        navigate(next, { replace: true });
       } catch (e: any) {
         setError(e?.message || "Error desconocido en AuthCallback");
       }
     };
 
-    handleAuth();
+    run();
   }, [navigate]);
 
   return (
