@@ -1,19 +1,21 @@
 // src/components/asignaciones/AsignacionesTable.jsx
 // Table UNIVERSAL: soporta shapes nuevos (joins) y legacy (strings)
-// Enero 2026 — Fix permanente para render de columnas
+// Enero 2026 — Fix permanente para render (incluye fallbacks a IDs para evitar columnas vacías)
 
 import React, { useMemo } from "react";
+
+function safeText(v) {
+  if (v == null) return "";
+  const s = String(v).trim();
+  return s;
+}
 
 function formatDateTime(value) {
   if (!value) return "";
   try {
     // value puede venir como ISO, timestamptz, o "YYYY-MM-DD"
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) {
-      // si no parsea, mostrar raw
-      return String(value);
-    }
-    // Formato legible local (Ecuador)
+    if (Number.isNaN(d.getTime())) return String(value);
     return d.toLocaleString(undefined, {
       year: "numeric",
       month: "2-digit",
@@ -28,48 +30,56 @@ function formatDateTime(value) {
 
 function getPersonaLabel(row) {
   const p = row?.personal || row?.persona || null;
-  const nombre =
+
+  const nombreBase =
     p?.nombre ||
     p?.name ||
     row?.personal_nombre ||
     row?.persona_nombre ||
+    row?.nombre ||
     "";
-  const apellido = p?.apellido || "";
+
+  const apellido = p?.apellido || row?.apellido || "";
   const email = p?.email || row?.personal_email || row?.email || "";
-  return {
-    nombre: `${nombre} ${apellido}`.trim() || email || row?.personal_id || "—",
-    email: email || "",
-  };
+
+  const nombre = safeText(`${nombreBase} ${apellido}`) || safeText(email) || safeText(row?.personal_id) || "—";
+  return { nombre, email: safeText(email) };
 }
 
 function getGeocercaLabel(row) {
-  return (
+  const nombre =
     row?.geocerca?.nombre ||
     row?.geocerca_nombre ||
     row?.geofence?.nombre ||
     row?.geofence_name ||
     row?.geocercaName ||
-    ""
-  );
+    row?.geofenceName ||
+    "";
+
+  // Fallback: si no hay nombre, al menos mostrar el ID (evita “vacío”)
+  return safeText(nombre) || safeText(row?.geocerca_id) || safeText(row?.geofence_id) || safeText(row?.geocercaId) || "";
 }
 
 function getActividadLabel(row) {
-  return (
+  const nombre =
     row?.activity?.name ||
     row?.activity_name ||
     row?.actividad?.name ||
     row?.actividad_name ||
     row?.activityName ||
-    ""
-  );
+    row?.actividadName ||
+    "";
+
+  // Fallback: mostrar ID si no hay name
+  return safeText(nombre) || safeText(row?.activity_id) || safeText(row?.actividad_id) || safeText(row?.activityId) || "";
 }
 
 function getStart(row) {
-  return row?.start_time || row?.inicio || row?.start || row?.start_date || "";
+  return row?.start_time || row?.inicio || row?.start || row?.start_date || row?.fecha_inicio || "";
 }
 
 function getEnd(row) {
-  return row?.end_time || row?.fin || row?.end || row?.end_date || "";
+  return row?.end_time || row?.fin || row?.end || row?.end_date || row?.fecha_fin || "";
 }
 
 function getFreqMin(row) {
@@ -90,15 +100,13 @@ function getFreqMin(row) {
 }
 
 function StatusPill({ status }) {
-  const s = (status || "").toLowerCase();
+  const s = safeText(status).toLowerCase();
   const isActive = s === "activa" || s === "active" || s === "on";
   return (
     <span
       className={
         "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold " +
-        (isActive
-          ? "bg-green-100 text-green-800"
-          : "bg-gray-100 text-gray-800")
+        (isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800")
       }
     >
       {isActive ? "Activa" : "Inactiva"}
@@ -106,15 +114,8 @@ function StatusPill({ status }) {
   );
 }
 
-export default function AsignacionesTable({
-  asignaciones,
-  loading,
-  onEdit,
-  onDelete,
-}) {
-  const rows = useMemo(() => (Array.isArray(asignaciones) ? asignaciones : []), [
-    asignaciones,
-  ]);
+export default function AsignacionesTable({ asignaciones, loading, onEdit, onDelete }) {
+  const rows = useMemo(() => (Array.isArray(asignaciones) ? asignaciones : []), [asignaciones]);
 
   return (
     <div className="w-full">
@@ -126,9 +127,7 @@ export default function AsignacionesTable({
         {loading ? (
           <div className="px-4 py-6 text-sm text-gray-600">Cargando…</div>
         ) : rows.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-gray-600">
-            No hay asignaciones.
-          </div>
+          <div className="px-4 py-6 text-sm text-gray-600">No hay asignaciones.</div>
         ) : (
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-gray-700">
@@ -154,49 +153,33 @@ export default function AsignacionesTable({
                 const freqMin = getFreqMin(row);
                 const status = row?.status || row?.estado || "inactiva";
 
+                const key = row?.id || `${row?.personal_id || "p"}-${row?.geocerca_id || "g"}-${row?.activity_id || "a"}`;
+
                 return (
-                  <tr key={row.id || `${row.personal_id}-${row.geocerca_id}`}>
+                  <tr key={key}>
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-gray-900">
-                        {persona.nombre}
-                      </div>
-                      {persona.email ? (
-                        <div className="text-xs text-gray-500">
-                          {persona.email}
-                        </div>
-                      ) : null}
+                      <div className="font-semibold text-gray-900">{persona.nombre}</div>
+                      {persona.email ? <div className="text-xs text-gray-500">{persona.email}</div> : null}
                     </td>
 
                     <td className="px-4 py-3">
-                      {geocerca || <span className="text-gray-400">—</span>}
+                      {geocerca ? geocerca : <span className="text-gray-400">—</span>}
                     </td>
 
                     <td className="px-4 py-3">
-                      {actividad || <span className="text-gray-400">—</span>}
+                      {actividad ? actividad : <span className="text-gray-400">—</span>}
                     </td>
 
                     <td className="px-4 py-3">
-                      {inicio ? (
-                        formatDateTime(inicio)
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
+                      {inicio ? formatDateTime(inicio) : <span className="text-gray-400">—</span>}
                     </td>
 
                     <td className="px-4 py-3">
-                      {fin ? (
-                        formatDateTime(fin)
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
+                      {fin ? formatDateTime(fin) : <span className="text-gray-400">—</span>}
                     </td>
 
                     <td className="px-4 py-3">
-                      {freqMin !== "" ? (
-                        freqMin
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
+                      {freqMin !== "" ? freqMin : <span className="text-gray-400">—</span>}
                     </td>
 
                     <td className="px-4 py-3">
