@@ -1,18 +1,13 @@
 // src/pages/AsignacionesPage.jsx
-// Fix definitivo Asignaciones (Enero 2026) — UNIVERSAL
-// - Persona: public.personal (FK-safe: asignaciones.personal_id -> personal.id)
-// - Geocercas/Actividades/Personal/Asignaciones: DIRECTO Supabase (sin depender de getAsignacionesBundle)
-// - Listado: trae joins (personal/geocercas/activities) => no más campos vacíos
-// - Payload: manda start_time/end_time + start_date/end_date
+// Fix definitivo Asignaciones (Enero 2026) — UNIVERSAL Y PERMANENTE
+// - CRUD DIRECTO Supabase (no depende de /api ni asignacionesApi)
+// - Lista con joins: personal/geocercas/activities
+// - Guarda SIEMPRE: start_time/end_time + start_date/end_date + frecuencia_envio_sec + status
+// - personal_id FK-safe (public.personal.id)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
-import {
-  createAsignacion,
-  updateAsignacion,
-  deleteAsignacion,
-} from "../lib/asignacionesApi";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
 import { supabase } from "../lib/supabaseClient";
 
@@ -35,14 +30,7 @@ const ESTADOS = ["todos", "activa", "inactiva"];
 
 function CalendarIcon({ className = "h-4 w-4" }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M8 3v2M16 3v2" />
       <path d="M3 9h18" />
       <path d="M6 5h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z" />
@@ -71,7 +59,6 @@ function dedupeById(arr) {
 function normalizeAsignacionRow(a) {
   if (!a || typeof a !== "object") return a;
 
-  // Soporta múltiples shapes por si llegan de otras fuentes
   const startTime = a.start_time || a.inicio || a.start || a.startTime || null;
   const endTime = a.end_time || a.fin || a.end || a.endTime || null;
 
@@ -107,7 +94,7 @@ export default function AsignacionesPage() {
   const [successMessage, setSuccessMessage] = useState(null);
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
-  const [selectedPersonalId, setSelectedPersonalId] = useState(""); // personal.id
+  const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -138,30 +125,11 @@ export default function AsignacionesPage() {
     }
 
     try {
-      localStorage.setItem("tg_current_org_id", orgId);
-    } catch (_) {}
-
-    try {
-      // ✅ Cargar catálogos desde tablas reales (universal)
+      // catálogos reales
       const [pRes, gRes, aRes] = await Promise.all([
-        supabase
-          .from("personal")
-          .select("id, org_id, nombre, apellido, email")
-          .eq("org_id", orgId)
-          .order("nombre", { ascending: true }),
-
-        supabase
-          .from("geocercas")
-          .select("id, nombre, org_id, created_at")
-          .eq("org_id", orgId)
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("activities")
-          .select("id, name, active, org_id, created_at")
-          .eq("org_id", orgId)
-          .eq("active", true)
-          .order("name", { ascending: true }),
+        supabase.from("personal").select("id, org_id, nombre, apellido, email").eq("org_id", orgId).order("nombre", { ascending: true }),
+        supabase.from("geocercas").select("id, nombre, org_id, created_at").eq("org_id", orgId).order("created_at", { ascending: false }),
+        supabase.from("activities").select("id, name, active, org_id").eq("org_id", orgId).eq("active", true).order("name", { ascending: true }),
       ]);
 
       if (pRes.error) throw pRes.error;
@@ -170,9 +138,7 @@ export default function AsignacionesPage() {
 
       const personal = (pRes.data || []).map((p) => ({
         id: p.id,
-        org_id: p.org_id,
         nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
-        apellido: p.apellido || "",
         email: p.email || "",
       }));
 
@@ -180,48 +146,34 @@ export default function AsignacionesPage() {
       setGeocercaOptions(dedupeById(gRes.data || []));
       setActivityOptions(dedupeById(aRes.data || []));
 
-      // ✅ Cargar ASIGNACIONES con JOINS (soluciona vacíos)
+      // asignaciones con joins
       const asigRes = await supabase
         .from("asignaciones")
         .select(
           `
-          id,
-          org_id,
-          personal_id,
-          geocerca_id,
-          activity_id,
-          start_time,
-          end_time,
-          start_date,
-          end_date,
-          frecuencia_envio_sec,
-          status,
-          created_at,
+          id, org_id, personal_id, geocerca_id, activity_id,
+          start_time, end_time, start_date, end_date,
+          frecuencia_envio_sec, status, created_at,
+          is_deleted, deleted_at,
           personal:personal ( id, nombre, apellido, email, org_id ),
           geocerca:geocercas ( id, nombre, org_id ),
           activity:activities ( id, name, org_id )
         `
         )
         .eq("org_id", orgId)
+        .or("is_deleted.is.null,is_deleted.eq.false")
         .order("created_at", { ascending: false });
 
       if (asigRes.error) throw asigRes.error;
 
       const rows = (asigRes.data || []).map((r) => {
         const rr = normalizeAsignacionRow(r);
-
-        // Normaliza nombres para que la tabla sea feliz SIEMPRE
-        const geocerca_nombre = rr.geocerca_nombre || rr.geocerca?.nombre || "";
-        const activity_name = rr.activity_name || rr.activity?.name || "";
-        const inicio = rr.inicio || rr.start_time || rr.start_date || null;
-        const fin = rr.fin || rr.end_time || rr.end_date || null;
-
         return {
           ...rr,
-          geocerca_nombre,
-          activity_name,
-          inicio,
-          fin,
+          geocerca_nombre: rr.geocerca?.nombre || rr.geocerca_nombre || "",
+          activity_name: rr.activity?.name || rr.activity_name || "",
+          inicio: rr.start_time || rr.start_date || null,
+          fin: rr.end_time || rr.end_date || null,
         };
       });
 
@@ -242,9 +194,7 @@ export default function AsignacionesPage() {
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
-    if (estadoFilter !== "todos") {
-      rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
-    }
+    if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
     return rows;
   }, [asignaciones, estadoFilter]);
 
@@ -265,39 +215,65 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     if (!orgId) return setError("No hay organización activa.");
-    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId) {
-      return setError("Selecciona persona, geocerca y actividad.");
-    }
+    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId) return setError("Selecciona persona, geocerca y actividad.");
     if (!startTime || !endTime) return setError("Selecciona Inicio y Fin.");
 
     const freqMin = Number(frecuenciaEnvioMin) || 0;
     if (freqMin < 5) return setError("La frecuencia mínima es 5 minutos.");
 
     const payload = {
-      org_id: orgId, // ✅ importante para RLS/tenant (si tu API lo usa)
+      org_id: orgId,
       personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
-
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
-
       start_date: localDateTimeToDate(startTime),
       end_date: localDateTimeToDate(endTime),
-
       frecuencia_envio_sec: freqMin * 60,
       status,
     };
 
-    const resp = editingId
-      ? await updateAsignacion(editingId, payload)
-      : await createAsignacion(payload);
+    try {
+      if (editingId) {
+        const { error: upErr } = await supabase.from("asignaciones").update(payload).eq("id", editingId);
+        if (upErr) throw upErr;
+        setSuccessMessage("Asignación actualizada.");
+      } else {
+        const { error: inErr } = await supabase.from("asignaciones").insert(payload);
+        if (inErr) throw inErr;
+        setSuccessMessage("Asignación creada.");
+      }
 
-    if (resp?.error) return setError(resp.error.message || "Error guardando asignación.");
+      resetForm();
+      await loadAll();
+    } catch (e2) {
+      setError(e2?.message || String(e2));
+    }
+  }
 
-    setSuccessMessage(editingId ? "Asignación actualizada." : "Asignación creada.");
-    resetForm();
-    await loadAll();
+  async function handleDelete(id) {
+    const ok = window.confirm("¿Eliminar asignación?");
+    if (!ok) return;
+
+    // Preferimos soft-delete si existe el esquema
+    try {
+      const { error: delErr } = await supabase
+        .from("asignaciones")
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq("id", id);
+
+      // Si falla (por columna inexistente), caemos a delete duro
+      if (delErr) {
+        const { error: hardErr } = await supabase.from("asignaciones").delete().eq("id", id);
+        if (hardErr) throw hardErr;
+      }
+
+      setSuccessMessage("Asignación eliminada.");
+      await loadAll();
+    } catch (e) {
+      setError(e?.message || String(e));
+    }
   }
 
   if (loading) {
@@ -311,9 +287,7 @@ export default function AsignacionesPage() {
   if (!isAuthenticated || !user) {
     return (
       <div className="p-4 max-w-3xl mx-auto">
-        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
-          Debes iniciar sesión.
-        </div>
+        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">Debes iniciar sesión.</div>
       </div>
     );
   }
@@ -321,42 +295,22 @@ export default function AsignacionesPage() {
   return (
     <div className="w-full p-4">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">
-          {t("asignaciones.title", { defaultValue: "Asignaciones" })}
-        </h1>
+        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
         <p className="text-xs text-gray-500 mt-1">
-          Org actual:{" "}
-          <span className="font-medium">
-            {currentOrg?.name || currentOrg?.id || "—"}
-          </span>
+          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
         </p>
       </div>
 
-      {error && (
-        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-      {successMessage && (
-        <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">
-          {successMessage}
-        </div>
-      )}
+      {error && <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {successMessage && <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">{successMessage}</div>}
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
-        <h2 className="text-lg font-semibold mb-4">
-          {editingId ? "Editar asignación" : "Nueva asignación"}
-        </h2>
+        <h2 className="text-lg font-semibold mb-4">{editingId ? "Editar asignación" : "Nueva asignación"}</h2>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Persona</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedPersonalId}
-              onChange={(e) => setSelectedPersonalId(e.target.value)}
-              required
-            >
+            <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)} required>
               <option value="">Selecciona una persona</option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -368,12 +322,7 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Geocerca</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedGeocercaId}
-              onChange={(e) => setSelectedGeocercaId(e.target.value)}
-              required
-            >
+            <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
               <option value="">Selecciona una geocerca</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -381,21 +330,11 @@ export default function AsignacionesPage() {
                 </option>
               ))}
             </select>
-            {geocercaOptions.length === 0 && !loadingData && !error && (
-              <p className="text-xs text-amber-700 mt-1">
-                Esta organización no tiene geocercas. Crea una en “Geocercas” para poder asignar.
-              </p>
-            )}
           </div>
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Actividad</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedActivityId}
-              onChange={(e) => setSelectedActivityId(e.target.value)}
-              required
-            >
+            <select className="border rounded px-3 py-2" value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)} required>
               <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -408,19 +347,8 @@ export default function AsignacionesPage() {
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Inicio</label>
             <div className="relative">
-              <input
-                ref={startInputRef}
-                type="datetime-local"
-                className="border rounded px-3 py-2 w-full pr-10"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => openNativePicker(startInputRef.current)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
-              >
+              <input ref={startInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+              <button type="button" onClick={() => openNativePicker(startInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
                 <CalendarIcon />
               </button>
             </div>
@@ -429,19 +357,8 @@ export default function AsignacionesPage() {
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Fin</label>
             <div className="relative">
-              <input
-                ref={endInputRef}
-                type="datetime-local"
-                className="border rounded px-3 py-2 w-full pr-10"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => openNativePicker(endInputRef.current)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
-              >
+              <input ref={endInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+              <button type="button" onClick={() => openNativePicker(endInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
                 <CalendarIcon />
               </button>
             </div>
@@ -449,11 +366,7 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Estado</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
+            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
@@ -461,39 +374,21 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Frecuencia (min)</label>
-            <input
-              type="number"
-              className="border rounded px-3 py-2"
-              min={5}
-              value={frecuenciaEnvioMin}
-              onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
-            />
+            <input type="number" className="border rounded px-3 py-2" min={5} value={frecuenciaEnvioMin} onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)} />
           </div>
 
           <div className="md:col-span-2 flex flex-wrap gap-3 mt-2">
-            <button
-              type="submit"
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-              disabled={loadingData}
-            >
+            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60" disabled={loadingData}>
               {editingId ? "Actualizar" : "Guardar"}
             </button>
-            {editingId && (
-              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
-                Cancelar
-              </button>
-            )}
+            {editingId && <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">Cancelar</button>}
           </div>
         </form>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
         <label className="font-medium">Estado</label>
-        <select
-          className="border rounded px-3 py-2"
-          value={estadoFilter}
-          onChange={(e) => setEstadoFilter(e.target.value)}
-        >
+        <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
           {ESTADOS.map((v) => (
             <option key={v} value={v}>{v}</option>
           ))}
@@ -515,16 +410,7 @@ export default function AsignacionesPage() {
           setError(null);
           setSuccessMessage(null);
         }}
-        onDelete={async (id) => {
-          const ok = window.confirm("¿Eliminar asignación?");
-          if (!ok) return;
-          const resp = await deleteAsignacion(id);
-          if (resp?.error) setError(resp.error.message || "No se pudo eliminar.");
-          else {
-            setSuccessMessage("Asignación eliminada.");
-            await loadAll();
-          }
-        }}
+        onDelete={handleDelete}
       />
     </div>
   );
