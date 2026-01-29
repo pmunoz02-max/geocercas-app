@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
-const BUILD_TAG = "invite-tracker-v4-redirect-next-tracker";
+const BUILD_TAG = "invite-tracker-v5-ts-fix-redirect-next-tracker";
 const DEFAULT_APP_URL = "https://app.tugeocercas.com";
 
 function normalizeEmail(email: string) {
@@ -44,16 +44,14 @@ export default async function handler(req: any, res: any) {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const email = normalizeEmail(body.email);
     const org_id = String(body.org_id || "").trim();
-    const person_id = String(body.person_id || "").trim(); // opcional, pero lo recibimos
-    const forceTrackerDefault = isTruthy(body.force_tracker_default); // opcional (tu caso)
-    const onlyIfNoDefault = isTruthy(body.only_if_no_default ?? true); // por defecto: NO rompe defaults existentes
+    const person_id = String(body.person_id || "").trim();
+    const forceTrackerDefault = isTruthy(body.force_tracker_default);
+    const onlyIfNoDefault = isTruthy(body.only_if_no_default ?? true);
 
     if (!email || !email.includes("@")) return json(res, 400, { ok: false, error: "Email inválido" });
     if (!org_id) return json(res, 400, { ok: false, error: "org_id requerido" });
 
-    // =========================
-    // 1) Validar quién está invitando (Bearer token)
-    // =========================
+    // 1) Validar invitador (Bearer)
     const accessToken = getBearer(req);
     if (!accessToken) return json(res, 401, { ok: false, error: "No autenticado (falta Authorization: Bearer ...)" });
 
@@ -66,14 +64,12 @@ export default async function handler(req: any, res: any) {
     const inviter = uData?.user;
     if (uErr || !inviter?.id) return json(res, 401, { ok: false, error: "Sesión inválida" });
 
-    // =========================
-    // 2) Service client (DB + admin ops)
-    // =========================
+    // 2) Admin client
     const sbAdmin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
 
-    // 2.1) Verificar permisos del invitador en esa org
+    // 2.1) Permisos del invitador en esa org
     const { data: inviterMem, error: memErr } = await sbAdmin
       .from("memberships")
       .select("role")
@@ -87,14 +83,24 @@ export default async function handler(req: any, res: any) {
     const canInvite = inviterRole === "owner" || inviterRole === "admin" || inviterRole === "root" || inviterRole === "root_owner";
     if (!canInvite) return json(res, 403, { ok: false, error: "Sin permisos para invitar tracker" });
 
-    // =========================
-    // 3) Encontrar usuario por email (o crearlo)
-    // =========================
-    // Nota: listUsers({ email }) funciona, pero retorna lista; filtramos exacto.
-    const { data: usersResp, error: listErr } = await sbAdmin.auth.admin.listUsers({ email });
-    if (listErr) return json(res, 500, { ok: false, error: "No se pudo listar usuarios", details: listErr.message });
+    // 3) Encontrar o crear usuario por email (FIX TS)
+    let userId: string | null = null;
 
-    let userId: string | null = usersResp?.users?.find((u: any) => String(u.email || "").toLowerCase() === email)?.id || null;
+    // preferido (tipado correcto)
+    const adminAny: any = sbAdmin.auth.admin as any;
+
+    if (typeof adminAny.getUserByEmail === "function") {
+      const { data, error } = await adminAny.getUserByEmail(email);
+      if (error) return json(res, 500, { ok: false, error: "No se pudo obtener usuario por email", details: error.message });
+      userId = data?.user?.id || null;
+    } else {
+      // fallback universal: listUsers sin params y filtrar
+      const { data: usersResp, error: listErr } = await sbAdmin.auth.admin.listUsers();
+      if (listErr) return json(res, 500, { ok: false, error: "No se pudo listar usuarios", details: listErr.message });
+
+      userId =
+        usersResp?.users?.find((u: any) => String(u.email || "").toLowerCase() === email)?.id || null;
+    }
 
     if (!userId) {
       const { data: created, error: createErr } = await sbAdmin.auth.admin.createUser({
@@ -107,13 +113,7 @@ export default async function handler(req: any, res: any) {
 
     if (!userId) return json(res, 500, { ok: false, error: "No se pudo determinar user_id" });
 
-    // =========================
-    // 4) Decidir si tracker debe ser default
-    // =========================
-    // Regla segura:
-    // - Si force_tracker_default=true => tracker será default (y apagamos otros defaults)
-    // - Si only_if_no_default=true => tracker será default solo si NO hay ningún default existente
-    // - Si only_if_no_default=false => tracker siempre será default (equivalente a force)
+    // 4) Default logic
     let shouldSetDefault = false;
 
     const { data: existingDefaults, error: defErr } = await sbAdmin
@@ -130,9 +130,7 @@ export default async function handler(req: any, res: any) {
     else if (!onlyIfNoDefault) shouldSetDefault = true;
     else shouldSetDefault = !hasAnyDefault;
 
-    // =========================
-    // 5) Upsert membership tracker en la org
-    // =========================
+    // 5) Upsert membership
     const { error: upErr } = await sbAdmin
       .from("memberships")
       .upsert(
@@ -142,7 +140,6 @@ export default async function handler(req: any, res: any) {
 
     if (upErr) return json(res, 500, { ok: false, error: "No se pudo asignar rol tracker", details: upErr.message });
 
-    // 5.1) Si será default, apagar otros defaults del usuario
     if (shouldSetDefault) {
       const { error: offErr } = await sbAdmin
         .from("memberships")
@@ -153,16 +150,13 @@ export default async function handler(req: any, res: any) {
 
       if (offErr) return json(res, 500, { ok: false, error: "No se pudo ajustar default", details: offErr.message });
 
-      // También alinear profiles (por si get_my_context usa ensure_active_org_for_user)
       await sbAdmin
         .from("profiles")
         .update({ current_org_id: org_id, default_org_id: org_id })
         .eq("user_id", userId);
     }
 
-    // =========================
-    // 6) Enviar magic link: auth/callback?next=/tracker-gps&org_id=...
-    // =========================
+    // 6) Redirect a tracker-gps via auth/callback
     const appUrl = (process.env.APP_URL || DEFAULT_APP_URL).trim();
     const redirectTo =
       `${appUrl}/auth/callback?next=${encodeURIComponent("/tracker-gps")}` +

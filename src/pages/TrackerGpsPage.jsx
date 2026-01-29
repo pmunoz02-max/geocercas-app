@@ -20,20 +20,25 @@ function getSupabaseAccessTokenFromLocalStorage() {
   }
 }
 
+function getSupabaseUrl() {
+  return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+}
+
 export default function TrackerGpsPage() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
   const [error, setError] = useState(null);
 
-  const [permission, setPermission] = useState("unknown"); // unknown | granted | denied | prompt
+  const [permission, setPermission] = useState("unknown");
   const [gpsActive, setGpsActive] = useState(false);
 
   const [lastPosition, setLastPosition] = useState(null);
   const [lastSend, setLastSend] = useState(null);
-  const [sendStatus, setSendStatus] = useState("idle"); // idle | sending | ok | error
+  const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
 
-  const [intervalSec, setIntervalSec] = useState(30); // fallback; luego lo lee de personal.position_interval_sec
+  const [intervalSec, setIntervalSec] = useState(30);
+
   const lastSentAtRef = useRef(0);
   const watchIdRef = useRef(null);
 
@@ -43,7 +48,6 @@ export default function TrackerGpsPage() {
     setSession(json);
 
     if (!json?.authenticated) throw new Error("No autenticado");
-
     const role = String(json?.role || "").toLowerCase();
     if (role !== "tracker") throw new Error(`Rol inválido para tracker-gps: ${role || "(vacío)"}`);
 
@@ -51,7 +55,6 @@ export default function TrackerGpsPage() {
   }
 
   async function loadInterval(org_id, email) {
-    // Usa tu /api/personal ya funcionando (dual auth). Buscamos por email.
     try {
       const token = getSupabaseAccessTokenFromLocalStorage();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -67,9 +70,7 @@ export default function TrackerGpsPage() {
 
       const sec = Number(found?.position_interval_sec);
       if (Number.isFinite(sec) && sec > 0) setIntervalSec(sec);
-    } catch {
-      // fallback queda en 30s
-    }
+    } catch {}
   }
 
   useEffect(() => {
@@ -82,18 +83,16 @@ export default function TrackerGpsPage() {
 
         setLoading(false);
 
-        // intentamos detectar permiso (si el navegador soporta Permissions API)
         if ("permissions" in navigator) {
           try {
             const p = await navigator.permissions.query({ name: "geolocation" });
             if (!alive) return;
-            setPermission(p.state); // granted | denied | prompt
+            setPermission(p.state);
           } catch {
             setPermission("unknown");
           }
         }
 
-        // cargar intervalo desde personal (si existe)
         const orgId = s?.org_id;
         const email = s?.user?.email || s?.email || "";
         if (orgId && email) loadInterval(orgId, email);
@@ -110,17 +109,18 @@ export default function TrackerGpsPage() {
   async function sendPosition(pos, org_id) {
     const now = Date.now();
     const minMs = Math.max(5, Number(intervalSec || 30)) * 1000;
-
     if (now - lastSentAtRef.current < minMs) return;
-
     lastSentAtRef.current = now;
 
     const token = getSupabaseAccessTokenFromLocalStorage();
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (!token) {
+      setSendStatus("error");
+      setSendError("No access_token (localStorage). Re-login.");
+      return;
+    }
 
-    setSendStatus("sending");
-    setSendError(null);
+    const supabaseUrl = getSupabaseUrl();
+    const url = `${supabaseUrl}/functions/v1/send_position`;
 
     const payload = {
       org_id,
@@ -134,18 +134,23 @@ export default function TrackerGpsPage() {
       source: "tracker-gps",
     };
 
-    const r = await fetch("/api/send_position", {
+    setSendStatus("sending");
+    setSendError(null);
+
+    const r = await fetch(url, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(payload),
-      credentials: "include",
     });
 
     const j = await r.json().catch(() => ({}));
 
     if (!r.ok || !j?.ok) {
       setSendStatus("error");
-      setSendError(j?.error || "Error enviando posición");
+      setSendError(j?.error || j?.details || "Error enviando posición");
       return;
     }
 
@@ -205,11 +210,7 @@ export default function TrackerGpsPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Cargando tracker…</div>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center text-gray-600">Cargando tracker…</div>;
   }
 
   if (error) {
@@ -232,7 +233,8 @@ export default function TrackerGpsPage() {
         <h1 className="text-lg font-semibold text-emerald-700">Tracker activo</h1>
 
         <p className="text-sm text-emerald-700 mt-2">
-          Estado del GPS: <b>{permission === "granted" ? "Permitido" : permission === "denied" ? "Bloqueado" : "Pendiente"}</b>
+          Estado del GPS:{" "}
+          <b>{permission === "granted" ? "Permitido" : permission === "denied" ? "Bloqueado" : "Pendiente"}</b>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
@@ -240,10 +242,7 @@ export default function TrackerGpsPage() {
         </p>
 
         {!gpsActive && (
-          <button
-            onClick={startTracking}
-            className="mt-4 w-full bg-emerald-600 text-white py-3 rounded-lg"
-          >
+          <button onClick={startTracking} className="mt-4 w-full bg-emerald-600 text-white py-3 rounded-lg">
             Activar ubicación
           </button>
         )}
@@ -254,17 +253,26 @@ export default function TrackerGpsPage() {
             <div>Lat: {lastPosition.lat}</div>
             <div>Lng: {lastPosition.lng}</div>
             <div>Última lectura: {lastPosition.ts}</div>
+
             <div className="mt-2">
               Envío:{" "}
               <b>
-                {sendStatus === "idle" ? "—" : sendStatus === "sending" ? "Enviando…" : sendStatus === "ok" ? "OK" : "Error"}
+                {sendStatus === "idle"
+                  ? "—"
+                  : sendStatus === "sending"
+                  ? "Enviando…"
+                  : sendStatus === "ok"
+                  ? "OK"
+                  : "Error"}
               </b>
             </div>
+
             {lastSend?.ts && (
               <div className="text-xs">
                 Último envío: {lastSend.ts} (tabla: {lastSend.table})
               </div>
             )}
+
             {sendError && <div className="text-xs text-red-700 mt-1">{sendError}</div>}
           </div>
         )}
