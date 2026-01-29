@@ -1,3 +1,4 @@
+// src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
@@ -90,13 +91,12 @@ function normalizeActivities(arr) {
 }
 
 function normalizeAsignaciones(arr) {
-  return dedupeById(
-    (Array.isArray(arr) ? arr : []).filter((a) => a?.id)
-  );
+  return dedupeById((Array.isArray(arr) ? arr : []).filter((a) => a?.id));
 }
 
 export default function Reports() {
-  const { ready, authenticated, currentOrg } = useAuth();
+  // ✅ FIX: usar las props reales del AuthContext
+  const { loading, isAuthenticated, currentOrg, contextLoading } = useAuth();
   const orgId = currentOrg?.id || null;
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -122,19 +122,14 @@ export default function Reports() {
 
   const [rows, setRows] = useState([]);
 
-  const canRun = useMemo(
-    () => ready && authenticated && !!orgId,
-    [ready, authenticated, orgId]
-  );
+  // ✅ canRun correcto
+  const canRun = useMemo(() => !loading && isAuthenticated && !!orgId, [loading, isAuthenticated, orgId]);
 
   async function apiGet(url) {
     const resp = await fetch(url, {
       method: "GET",
       credentials: "include",
-      headers: {
-        "cache-control": "no-cache",
-        pragma: "no-cache",
-      },
+      headers: { "cache-control": "no-cache", pragma: "no-cache" },
     });
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
@@ -198,7 +193,7 @@ export default function Reports() {
 
       setFilters({ geocercas, personas, activities, asignaciones });
 
-      // Si lo seleccionado ya no existe tras filtrar, limpiamos selecciones inválidas
+      // Limpiar selecciones inválidas
       const validSet = (arr) => new Set(arr.map((x) => String(x.id)));
       const gSet = validSet(geocercas);
       const pSet = validSet(personas);
@@ -264,7 +259,8 @@ export default function Reports() {
     };
   }
 
-  if (!ready) {
+  // ✅ FIX: usar "loading" real
+  if (loading) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
@@ -274,11 +270,23 @@ export default function Reports() {
     );
   }
 
-  if (!authenticated) {
+  // ✅ FIX: usar "isAuthenticated" real
+  if (!isAuthenticated) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           No hay sesión activa. Inicia sesión nuevamente.
+        </div>
+      </div>
+    );
+  }
+
+  // si el contexto está cargando, lo mostramos (no colgar)
+  if (contextLoading && !orgId) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          Cargando organización…
         </div>
       </div>
     );
@@ -304,9 +312,7 @@ export default function Reports() {
       </div>
 
       {errorMsg && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMsg}
-        </div>
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMsg}</div>
       )}
 
       {warningMsg && (
@@ -420,7 +426,8 @@ export default function Reports() {
             </select>
             {filters.activities.length === 0 && (
               <p className="text-[11px] text-amber-700 mt-1">
-                En tu organización existe al menos 1 actividad en DB, pero el endpoint no la está devolviendo. Hay que corregir /api/reportes?action=filters.
+                En tu organización existe al menos 1 actividad en DB, pero el endpoint no la está devolviendo. Hay que
+                corregir /api/reportes?action=filters.
               </p>
             )}
           </div>
@@ -499,4 +506,3 @@ export default function Reports() {
     </div>
   );
 }
-
