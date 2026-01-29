@@ -191,10 +191,10 @@ export default function TrackerGpsPage() {
     if (!token) token = await ensureSupabaseSession();
 
     if (!token) {
-      setSendStatus("error");
-      setSendError("No access_token (localStorage) incluso tras bootstrap. Re-login.");
-      return;
-    }
+    if (!token) {
+  window.location.href = "/tracker-auth-bridge";
+  return;
+}
 
     const supabaseUrl = getSupabaseUrl();
     if (!supabaseUrl) {
