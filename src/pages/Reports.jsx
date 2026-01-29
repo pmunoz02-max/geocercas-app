@@ -48,7 +48,6 @@ function filterByOrgIfPossible(arr, orgId) {
   const list = Array.isArray(arr) ? arr : [];
   if (!orgId) return list;
 
-  // Si los items traen org_id/tenant_id, filtramos estricto.
   const hasOrgField = list.some((it) => !!getItemOrgId(it));
   if (!hasOrgField) return list;
 
@@ -95,8 +94,7 @@ function normalizeAsignaciones(arr) {
 }
 
 export default function Reports() {
-  // ✅ FIX: usar las props reales del AuthContext
-  const { loading, isAuthenticated, currentOrg, contextLoading } = useAuth();
+  const { loading, isAuthenticated, currentOrg, contextLoading, session } = useAuth();
   const orgId = currentOrg?.id || null;
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -104,7 +102,6 @@ export default function Reports() {
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
 
-  // filtros
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
 
@@ -122,21 +119,31 @@ export default function Reports() {
 
   const [rows, setRows] = useState([]);
 
-  // ✅ canRun correcto
-  const canRun = useMemo(() => !loading && isAuthenticated && !!orgId, [loading, isAuthenticated, orgId]);
+  const token = session?.access_token || null;
 
+  const canRun = useMemo(
+    () => !loading && isAuthenticated && !!orgId && !!token,
+    [loading, isAuthenticated, orgId, token]
+  );
+
+  // ✅ Ahora manda Authorization Bearer
   async function apiGet(url) {
+    if (!token) throw new Error("Missing authentication");
+
     const resp = await fetch(url, {
       method: "GET",
-      credentials: "include",
-      headers: { "cache-control": "no-cache", pragma: "no-cache" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "cache-control": "no-cache",
+        pragma: "no-cache",
+      },
     });
+
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
     return json;
   }
 
-  // ===== cargar filtros =====
   useEffect(() => {
     if (!canRun) return;
     loadFilters();
@@ -152,13 +159,11 @@ export default function Reports() {
       const json = await apiGet("/api/reportes?action=filters");
       const data = json?.data || {};
 
-      // Normalizar + dedupe
       let geocercas = normalizeGeocercas(data.geocercas);
       let personas = normalizePersonas(data.personas);
       let activities = normalizeActivities(data.activities);
       let asignaciones = normalizeAsignaciones(data.asignaciones);
 
-      // Filtrado por org cuando sea posible (si el backend incluye org_id/tenant_id)
       const beforeCounts = {
         geocercas: geocercas.length,
         personas: personas.length,
@@ -193,7 +198,6 @@ export default function Reports() {
 
       setFilters({ geocercas, personas, activities, asignaciones });
 
-      // Limpiar selecciones inválidas
       const validSet = (arr) => new Set(arr.map((x) => String(x.id)));
       const gSet = validSet(geocercas);
       const pSet = validSet(personas);
@@ -213,7 +217,6 @@ export default function Reports() {
     }
   }
 
-  // ===== generar reporte =====
   async function loadReport() {
     setErrorMsg("");
     setRows([]);
@@ -221,7 +224,7 @@ export default function Reports() {
 
     try {
       if (!canRun) {
-        setErrorMsg("No hay organización activa o la sesión no está lista.");
+        setErrorMsg("Missing authentication");
         return;
       }
       if (start && end && start > end) {
@@ -259,7 +262,6 @@ export default function Reports() {
     };
   }
 
-  // ✅ FIX: usar "loading" real
   if (loading) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -270,7 +272,6 @@ export default function Reports() {
     );
   }
 
-  // ✅ FIX: usar "isAuthenticated" real
   if (!isAuthenticated) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -281,7 +282,6 @@ export default function Reports() {
     );
   }
 
-  // si el contexto está cargando, lo mostramos (no colgar)
   if (contextLoading && !orgId) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -297,6 +297,16 @@ export default function Reports() {
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           No hay organización activa para este usuario.
+        </div>
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Missing authentication
         </div>
       </div>
     );
@@ -424,12 +434,6 @@ export default function Reports() {
                 </option>
               ))}
             </select>
-            {filters.activities.length === 0 && (
-              <p className="text-[11px] text-amber-700 mt-1">
-                En tu organización existe al menos 1 actividad en DB, pero el endpoint no la está devolviendo. Hay que
-                corregir /api/reportes?action=filters.
-              </p>
-            )}
           </div>
 
           <div>
@@ -447,9 +451,6 @@ export default function Reports() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Nota: si tus asignaciones no tienen personal_id, el cruce con marcajes puede salir vacío.
-            </p>
           </div>
         </div>
       </div>
