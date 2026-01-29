@@ -9,21 +9,6 @@ function isUuid(v) {
   );
 }
 
-function resolveOrgId(currentOrg) {
-  const candidates = [
-    currentOrg?.id,
-    currentOrg?.org_id,
-    currentOrg?.tenant_id,
-    currentOrg?.current_org_id,
-    currentOrg?.default_org_id,
-  ]
-    .map((x) => (x ? String(x).trim() : ""))
-    .filter(Boolean);
-
-  const hit = candidates.find(isUuid);
-  return hit || "";
-}
-
 function getSupabaseAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
@@ -93,7 +78,10 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
+                <span className="text-gray-600">
+                  {" "}
+                  — {selected.email || "(sin email)"}
+                </span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -132,7 +120,9 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
                   }}
                 >
                   <div className="text-sm font-medium">{p.full_name}</div>
-                  <div className="text-xs text-gray-600">{p.email || "(sin email)"}</div>
+                  <div className="text-xs text-gray-600">
+                    {p.email || "(sin email)"}
+                  </div>
                 </button>
               ))
             )}
@@ -160,8 +150,13 @@ export default function InvitarTracker() {
   const [inviteData, setInviteData] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  const orgId = resolveOrgId(currentOrg);
-  const orgName = currentOrg?.name || currentOrg?.org_name || currentOrg?.title || "";
+  // ✅ FIX DEFINITIVO: orgId SOLO sale de currentOrg.id (sin heurísticas)
+  const orgId =
+    currentOrg && isUuid(currentOrg.id)
+      ? String(currentOrg.id).trim()
+      : "";
+
+  const orgName = currentOrg?.name || "";
 
   const personal = useMemo(() => {
     if (!orgId) return [];
@@ -210,7 +205,7 @@ export default function InvitarTracker() {
       if (!orgId) {
         setPersonalRaw([]);
         setPersonalError(
-          "Org actual no válida (org_id no es UUID). Cambia de org o vuelve a iniciar sesión."
+          "Org actual no válida (currentOrg.id no es UUID). Refresca contexto o vuelve a iniciar sesión."
         );
         return;
       }
@@ -291,7 +286,7 @@ export default function InvitarTracker() {
     setInviteData(null);
     setCopied(false);
 
-    if (!orgId) return setError("Organización no válida (org_id no es UUID).");
+    if (!orgId) return setError("Organización no válida (currentOrg.id no es UUID).");
     if (!selectedPersonId) return setError("Selecciona una persona.");
     if (!email || !email.includes("@")) return setError("Email inválido.");
 
@@ -306,7 +301,7 @@ export default function InvitarTracker() {
         },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
-          org_id: orgId,
+          org_id: orgId, // ✅ estrictamente el UUID real
           person_id: selectedPersonId,
           force_tracker_default: true,
         }),
@@ -339,12 +334,11 @@ export default function InvitarTracker() {
 
       {!orgId && (
         <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
-          ⚠️ La organización actual no tiene un <b>UUID válido</b>. Esto genera links con org_id corrupto y rompe el gating.
+          ⚠️ La organización actual no tiene un <b>UUID válido</b> en <code>currentOrg.id</code>. Esto
+          rompe el gating y la auto-asignación.
           <div className="mt-1 text-xs">
-            Org actual (raw):{" "}
-            <span className="font-mono">
-              {String(currentOrg?.id || currentOrg?.org_id || currentOrg?.tenant_id || "(vacío)")}
-            </span>
+            Org actual (currentOrg.id):{" "}
+            <span className="font-mono">{String(currentOrg?.id || "(vacío)")}</span>
           </div>
         </div>
       )}
