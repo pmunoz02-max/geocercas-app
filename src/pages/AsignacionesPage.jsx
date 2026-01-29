@@ -1,9 +1,9 @@
 // src/pages/AsignacionesPage.jsx
-// Fix definitivo Asignaciones (Enero 2026) — UNIVERSAL Y PERMANENTE
-// - Listado: SELECT con JOIN embebido + BLINDAJE de shape (nunca columnas vacías)
-// - Catálogos: solo para selects del formulario
+// Fix definitivo Asignaciones (Enero 2026)
+// - Listado RLS-safe: trae asignaciones planas + catálogos y enriquece en frontend
+// - Define enrichedAsignaciones (evita ReferenceError)
 // - A11y: id/name + label htmlFor
-// - Debug opcional en UI: agrega ?debug=1 a la URL
+// - Debug opcional: /asignaciones?debug=1
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -48,18 +48,6 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-// Normaliza fechas para datetime-local (ISO sin segundos)
-function toDatetimeLocal(value) {
-  if (!value) return "";
-  // soporta "2026-01-29 03:07:00+00" -> "2026-01-29T03:07"
-  const s = String(value);
-  if (s.includes("T")) return s.slice(0, 16);
-  // "YYYY-MM-DD HH:MM:SS+00" => "YYYY-MM-DDTHH:MM"
-  const parts = s.split(" ");
-  if (parts.length >= 2) return `${parts[0]}T${parts[1].slice(0, 5)}`;
-  return s.slice(0, 16);
-}
-
 function localDateTimeToISO(localDateTime) {
   if (!localDateTime) return null;
   const [d, t] = String(localDateTime).split("T");
@@ -75,61 +63,35 @@ function localDateTimeToDate(localDateTime) {
   return d || null;
 }
 
-// 🔒 BLINDAJE: garantiza que cada row tenga SIEMPRE las claves base
-function normalizeRow(raw, { perMap, geoMap, actMap }) {
-  const r = raw && typeof raw === "object" ? raw : {};
+function toDatetimeLocal(value) {
+  if (!value) return "";
+  const s = String(value);
+  if (s.includes("T")) return s.slice(0, 16);
+  const parts = s.split(" ");
+  if (parts.length >= 2) return `${parts[0]}T${parts[1].slice(0, 5)}`;
+  return s.slice(0, 16);
+}
 
-  const personalObj = r.personal || r.persona || perMap.get(r.personal_id) || null;
-  const geocercaObj =
-    r.geocerca || r.geofence || geoMap.get(r.geocerca_id) || null;
-  const activityObj =
-    r.activity || r.actividad || actMap.get(r.activity_id) || null;
+function normalizeAsignacionRow(a) {
+  if (!a || typeof a !== "object") return a;
 
-  // IDs: si faltan, intenta sacarlos del objeto embebido
-  const personal_id = r.personal_id || personalObj?.id || null;
-  const geocerca_id = r.geocerca_id || geocercaObj?.id || null;
-  const activity_id = r.activity_id || activityObj?.id || null;
+  const start_time = a.start_time || a.inicio || a.start || a.startTime || null;
+  const end_time = a.end_time || a.fin || a.end || a.endTime || null;
 
-  // Fechas: soporta variantes legacy
-  const start_time =
-    r.start_time || r.inicio || r.start || r.startTime || r.start_date || null;
-  const end_time =
-    r.end_time || r.fin || r.end || r.endTime || r.end_date || null;
-
-  // Frecuencia: sec o min
   let frecuencia_envio_sec =
-    r.frecuencia_envio_sec ?? r.freq_sec ?? r.frecuenciaEnvioSec ?? null;
-  if (frecuencia_envio_sec == null && r.frecuencia_envio_min != null) {
-    const n = Number(r.frecuencia_envio_min);
-    if (Number.isFinite(n)) frecuencia_envio_sec = n * 60;
-  }
-  if (frecuencia_envio_sec == null && r.freq_min != null) {
-    const n = Number(r.freq_min);
-    if (Number.isFinite(n)) frecuencia_envio_sec = n * 60;
-  }
+    a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
 
-  const status = r.status || r.estado || r.state || "inactiva";
+  if (frecuencia_envio_sec == null && a.frecuencia_envio_min != null) {
+    const n = Number(a.frecuencia_envio_min);
+    if (Number.isFinite(n)) frecuencia_envio_sec = n * 60;
+  }
 
   return {
-    ...r,
-
-    // Base keys (las que tu tabla debe poder leer)
-    personal_id,
-    geocerca_id,
-    activity_id,
+    ...a,
     start_time,
     end_time,
     frecuencia_envio_sec,
-    status,
-
-    // Objetos estándar
-    personal: personalObj,
-    geocerca: geocercaObj,
-    activity: activityObj,
-
-    // Strings de respaldo
-    geocerca_nombre: r.geocerca_nombre || geocercaObj?.nombre || "",
-    activity_name: r.activity_name || activityObj?.name || "",
+    status: a.status || a.estado || a.state || "inactiva",
   };
 }
 
@@ -183,7 +145,7 @@ export default function AsignacionesPage() {
     }
 
     try {
-      // 1) Catálogos (para selects)
+      // Catálogos para selects + enrichment
       const [pRes, gRes, aRes] = await Promise.all([
         supabase
           .from("personal")
@@ -224,43 +186,25 @@ export default function AsignacionesPage() {
       setGeocercaOptions(geocercaOpts);
       setActivityOptions(activityOpts);
 
-      const perMap = new Map(personalOpts.map((p) => [p.id, p]));
-      const geoMap = new Map(geocercaOpts.map((g) => [g.id, g]));
-      const actMap = new Map(activityOpts.map((a) => [a.id, a]));
-
-      // 2) Asignaciones con JOIN embebido (pero igual blindamos shape)
-      const { data, error: asigErr } = await supabase
+      // ✅ Asignaciones PLANAS (sin joins) => RLS-safe
+      const asigRes = await supabase
         .from("asignaciones")
         .select(
           `
-          id,
-          org_id,
-          personal_id,
-          geocerca_id,
-          activity_id,
-          start_time,
-          end_time,
-          frecuencia_envio_sec,
-          status,
-          created_at,
-          is_deleted,
-          deleted_at,
-          personal:personal_id ( id, nombre, apellido, email ),
-          geocerca:geocerca_id ( id, nombre ),
-          activity:activity_id ( id, name )
+          id, org_id, personal_id, geocerca_id, activity_id,
+          start_time, end_time,
+          start_date, end_date,
+          frecuencia_envio_sec, status,
+          created_at, is_deleted, deleted_at
         `
         )
         .eq("org_id", orgId)
         .or("is_deleted.is.null,is_deleted.eq.false")
         .order("created_at", { ascending: false });
 
-      if (asigErr) throw asigErr;
+      if (asigRes.error) throw asigRes.error;
 
-      const normalized = (data || []).map((r) =>
-        normalizeRow(r, { perMap, geoMap, actMap })
-      );
-
-      setAsignaciones(normalized);
+      setAsignaciones((asigRes.data || []).map(normalizeAsignacionRow));
       setLoadingData(false);
     } catch (e) {
       setLoadingData(false);
@@ -282,6 +226,42 @@ export default function AsignacionesPage() {
     }
     return rows;
   }, [asignaciones, estadoFilter]);
+
+  // ✅ AQUÍ SE DEFINE enrichedAsignaciones (antes NO existía y por eso se cayó la página)
+  const enrichedAsignaciones = useMemo(() => {
+    const geoMap = new Map((geocercaOptions || []).map((g) => [g.id, g]));
+    const actMap = new Map((activityOptions || []).map((a) => [a.id, a]));
+    const perMap = new Map((personalOptions || []).map((p) => [p.id, p]));
+
+    return (Array.isArray(filteredAsignaciones) ? filteredAsignaciones : []).map(
+      (a0) => {
+        const a = normalizeAsignacionRow(a0);
+
+        const geocerca = geoMap.get(a.geocerca_id) || null;
+        const activity = actMap.get(a.activity_id) || null;
+        const personal = perMap.get(a.personal_id) || null;
+
+        return {
+          ...a,
+
+          personal,
+          geocerca,
+          activity,
+
+          geocerca_nombre: geocerca?.nombre || "",
+          activity_name: activity?.name || "",
+
+          // legacy fallback keys por si la tabla vieja las busca
+          inicio: a.start_time || a.start_date || null,
+          fin: a.end_time || a.end_date || null,
+          freq_min:
+            a.frecuencia_envio_sec != null
+              ? Math.round(Number(a.frecuencia_envio_sec) / 60)
+              : null,
+        };
+      }
+    );
+  }, [filteredAsignaciones, geocercaOptions, activityOptions, personalOptions]);
 
   function resetForm() {
     setSelectedPersonalId("");
@@ -330,9 +310,7 @@ export default function AsignacionesPage() {
         if (upErr) throw upErr;
         setSuccessMessage("Asignación actualizada.");
       } else {
-        const { error: inErr } = await supabase
-          .from("asignaciones")
-          .insert(payload);
+        const { error: inErr } = await supabase.from("asignaciones").insert(payload);
         if (inErr) throw inErr;
         setSuccessMessage("Asignación creada.");
       }
@@ -571,9 +549,7 @@ export default function AsignacionesPage() {
               className="border rounded px-3 py-2"
               min={5}
               value={frecuenciaEnvioMin}
-              onChange={(e) =>
-                setFrecuenciaEnvioMin(Number(e.target.value) || 5)
-              }
+              onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
               autoComplete="off"
               inputMode="numeric"
             />
@@ -625,30 +601,30 @@ export default function AsignacionesPage() {
         <div className="mb-4 border rounded bg-gray-50 p-3 text-xs overflow-auto">
           <div className="font-semibold mb-2">DEBUG asignaciones[0]</div>
           <pre className="whitespace-pre-wrap">
-            {JSON.stringify(filteredAsignaciones?.[0] || null, null, 2)}
+            {JSON.stringify(enrichedAsignaciones?.[0] || null, null, 2)}
           </pre>
         </div>
       )}
 
-    <AsignacionesTable
-  asignaciones={enrichedAsignaciones}
-  loading={loadingData}
-  onEdit={(a) => {
-    setEditingId(a.id);
-    setSelectedPersonalId(a.personal_id || "");
-    setSelectedGeocercaId(a.geocerca_id || "");
-    setSelectedActivityId(a.activity_id || "");
-    setStartTime((a.start_time || "").slice(0, 16));
-    setEndTime((a.end_time || "").slice(0, 16));
-    setFrecuenciaEnvioMin(
-      Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
-    );
-    setStatus(a.status || "activa");
-    setError(null);
-    setSuccessMessage(null);
-  }}
-  onDelete={handleDelete}
-/>
+      <AsignacionesTable
+        asignaciones={enrichedAsignaciones}
+        loading={loadingData}
+        onEdit={(a) => {
+          setEditingId(a.id);
+          setSelectedPersonalId(a.personal_id || "");
+          setSelectedGeocercaId(a.geocerca_id || "");
+          setSelectedActivityId(a.activity_id || "");
+          setStartTime(toDatetimeLocal(a.start_time));
+          setEndTime(toDatetimeLocal(a.end_time));
+          setFrecuenciaEnvioMin(
+            Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
+          );
+          setStatus(a.status || "activa");
+          setError(null);
+          setSuccessMessage(null);
+        }}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }
