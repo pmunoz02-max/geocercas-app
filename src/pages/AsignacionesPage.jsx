@@ -1,8 +1,9 @@
 // src/pages/AsignacionesPage.jsx
 // Fix definitivo Asignaciones (Enero 2026) — UNIVERSAL Y PERMANENTE
-// - Listado: SELECT con JOIN embebido (personal/geocerca/activity) => NO columnas vacías
+// - Listado: SELECT con JOIN embebido (personal/geocerca/activity) => evita columnas vacías
 // - Catálogos: solo para los selects del formulario
-// - Mantiene CRUD directo a public.asignaciones
+// - A11y: todos los campos con id + name y labels con htmlFor (evita warnings)
+// - CRUD directo a public.asignaciones (soft delete con fallback hard delete)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -170,7 +171,6 @@ export default function AsignacionesPage() {
       return;
     }
 
-    // LISTADO DETERMINÍSTICO: trae todo lo que la tabla necesita
     const { data, error: asigErr } = await supabase
       .from("asignaciones")
       .select(
@@ -247,8 +247,7 @@ export default function AsignacionesPage() {
     return rows;
   }, [asignaciones, estadoFilter]);
 
-  // Para compatibilidad total con AsignacionesTable:
-  // - asegura objetos personal/geocerca/activity aunque vengan null
+  // Shape final para tabla: preferir join embebido, fallback a catálogos si viniera null
   const enrichedAsignaciones = useMemo(() => {
     const geoMap = new Map((geocercaOptions || []).map((g) => [g.id, g]));
     const actMap = new Map((activityOptions || []).map((a) => [a.id, a]));
@@ -258,7 +257,6 @@ export default function AsignacionesPage() {
       (a0) => {
         const a = normalizeAsignacionRow(a0);
 
-        // Preferir lo embebido (JOIN). Si viene null por RLS, caer a catálogo.
         const personal =
           a.personal || perMap.get(a.personal_id) || a.personal || null;
         const geocerca =
@@ -424,12 +422,17 @@ export default function AsignacionesPage() {
           className="grid grid-cols-1 md:grid-cols-2 gap-4"
         >
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Persona</label>
+            <label htmlFor="personal_id" className="mb-1 font-medium text-sm">
+              Persona
+            </label>
             <select
+              id="personal_id"
+              name="personal_id"
               className="border rounded px-3 py-2"
               value={selectedPersonalId}
               onChange={(e) => setSelectedPersonalId(e.target.value)}
               required
+              autoComplete="off"
             >
               <option value="">Selecciona una persona</option>
               {personalOptions.map((p) => (
@@ -441,12 +444,17 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Geocerca</label>
+            <label htmlFor="geocerca_id" className="mb-1 font-medium text-sm">
+              Geocerca
+            </label>
             <select
+              id="geocerca_id"
+              name="geocerca_id"
               className="border rounded px-3 py-2"
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
               required
+              autoComplete="off"
             >
               <option value="">Selecciona una geocerca</option>
               {geocercaOptions.map((g) => (
@@ -465,12 +473,17 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Actividad</label>
+            <label htmlFor="activity_id" className="mb-1 font-medium text-sm">
+              Actividad
+            </label>
             <select
+              id="activity_id"
+              name="activity_id"
               className="border rounded px-3 py-2"
               value={selectedActivityId}
               onChange={(e) => setSelectedActivityId(e.target.value)}
               required
+              autoComplete="off"
             >
               <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
@@ -482,18 +495,24 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Inicio</label>
+            <label htmlFor="start_time" className="mb-1 font-medium text-sm">
+              Inicio
+            </label>
             <div className="relative">
               <input
+                id="start_time"
+                name="start_time"
                 ref={startInputRef}
                 type="datetime-local"
                 className="border rounded px-3 py-2 w-full pr-10"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 required
+                autoComplete="off"
               />
               <button
                 type="button"
+                aria-label="Abrir selector de fecha/hora de inicio"
                 onClick={() => openNativePicker(startInputRef.current)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
               >
@@ -503,18 +522,24 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Fin</label>
+            <label htmlFor="end_time" className="mb-1 font-medium text-sm">
+              Fin
+            </label>
             <div className="relative">
               <input
+                id="end_time"
+                name="end_time"
                 ref={endInputRef}
                 type="datetime-local"
                 className="border rounded px-3 py-2 w-full pr-10"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
                 required
+                autoComplete="off"
               />
               <button
                 type="button"
+                aria-label="Abrir selector de fecha/hora de fin"
                 onClick={() => openNativePicker(endInputRef.current)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
               >
@@ -524,11 +549,16 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Estado</label>
+            <label htmlFor="status" className="mb-1 font-medium text-sm">
+              Estado
+            </label>
             <select
+              id="status"
+              name="status"
               className="border rounded px-3 py-2"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
+              autoComplete="off"
             >
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
@@ -536,13 +566,21 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">Frecuencia (min)</label>
+            <label htmlFor="frecuencia_min" className="mb-1 font-medium text-sm">
+              Frecuencia (min)
+            </label>
             <input
+              id="frecuencia_min"
+              name="frecuencia_min"
               type="number"
               className="border rounded px-3 py-2"
               min={5}
               value={frecuenciaEnvioMin}
-              onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
+              onChange={(e) =>
+                setFrecuenciaEnvioMin(Number(e.target.value) || 5)
+              }
+              autoComplete="off"
+              inputMode="numeric"
             />
           </div>
 
@@ -569,11 +607,16 @@ export default function AsignacionesPage() {
       </div>
 
       <div className="mb-4 flex items-center gap-3">
-        <label className="font-medium">Estado</label>
+        <label htmlFor="estado_filter" className="font-medium">
+          Estado
+        </label>
         <select
+          id="estado_filter"
+          name="estado_filter"
           className="border rounded px-3 py-2"
           value={estadoFilter}
           onChange={(e) => setEstadoFilter(e.target.value)}
+          autoComplete="off"
         >
           {ESTADOS.map((v) => (
             <option key={v} value={v}>
@@ -600,7 +643,9 @@ export default function AsignacionesPage() {
           setError(null);
           setSuccessMessage(null);
         }}
-        onDelete={handleDelete}
+        onDelete={async (id) => {
+          await handleDelete(id);
+        }}
       />
     </div>
   );
