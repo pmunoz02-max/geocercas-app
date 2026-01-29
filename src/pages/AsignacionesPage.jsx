@@ -1,9 +1,11 @@
 // src/pages/AsignacionesPage.jsx
-// Fix Enero 2026 (hotfix UI):
-// - Se elimina dependencia de "ready" (causaba pantalla en blanco).
-// - Se usan estados robustos de Auth: loading/isAuthenticated/user/currentOrg.
-// - Tenant-safe estricto en dropdowns (Personas/Geocercas/Actividades) por orgId.
-// - Fallbacks por API incluyen org_id y se filtra en cliente como segunda barrera.
+// Fix Enero 2026 (universal):
+// - Sin "ready" (evita blanco)
+// - Tenant-safe estricto por currentOrg.id
+// - Geocercas: NO usar /api/geocercas (401 por cookies). Usar Supabase client directo.
+// - Personal: org_people join people (tenant-safe)
+// - Actividades: supabase directo + fallback API opcional
+// - Estados explícitos, sin return null silencioso
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -89,7 +91,6 @@ function normalizeGeocercas(rows) {
 function filterByOrg(rows, orgId) {
   const arr = Array.isArray(rows) ? rows : [];
   if (!orgId) return [];
-  // tenant-safe: SOLO registros del org actual (no aceptamos null org_id)
   return arr.filter((r) => r?.org_id === orgId);
 }
 
@@ -103,17 +104,23 @@ async function fetchJson(url) {
   return j;
 }
 
-async function fetchGeocercasFallback(orgId) {
+/**
+ * ✅ FIX UNIVERSAL:
+ * Geocercas se consultan por Supabase client (session segura),
+ * NO por /api/geocercas (que depende de cookies tg_at y puede dar 401).
+ */
+async function fetchGeocercasSafeByOrg(orgId) {
   if (!orgId) return [];
-  // ✅ Pedimos por org_id (si el endpoint lo soporta)
-  const j = await fetchJson(`/api/geocercas?org_id=${encodeURIComponent(orgId)}`);
-  const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-  const norm = normalizeGeocercas(rows);
-  // ✅ Segunda barrera: filtrado en cliente
-  return filterByOrg(norm, orgId);
+  const { data, error } = await supabase
+    .from("geocercas")
+    .select("id, nombre, org_id, created_at")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return normalizeGeocercas(data);
 }
 
-// ✅ tenant-safe para activities: directo a Supabase por org_id + active=true
 async function fetchActivitiesSafeByOrg(orgId) {
   if (!orgId) return [];
   const { data, error } = await supabase
@@ -127,7 +134,6 @@ async function fetchActivitiesSafeByOrg(orgId) {
   return Array.isArray(data) ? data : [];
 }
 
-// ✅ Fallback adicional via API (cuando el client Supabase no trae sesión o devuelve vacío)
 async function fetchActivitiesApiFallback(orgId) {
   if (!orgId) return [];
   const endpoints = [
@@ -168,9 +174,8 @@ function normalizeActivities(rows, orgId) {
 }
 
 /**
- * Personal (modelo real):
- *   org_people.id = vínculo (por org)
- *   org_people.person_id -> people.id
+ * Personal real:
+ * org_people (por org) -> people
  */
 async function fetchPersonalSafeByOrg(orgId) {
   if (!orgId) return [];
@@ -241,7 +246,6 @@ function normalizePersonalFromBundle(catalogs, orgId) {
     }))
     .filter((p) => p?.id);
 
-  // tenant-safe: SOLO org actual
   return dedupeById(cleaned.filter((p) => p.org_id === orgId));
 }
 
@@ -272,16 +276,13 @@ function normalizeAsignacionRow(a) {
   };
 }
 
-function getOrgIdSafe(currentOrg) {
-  return currentOrg?.id || localStorage.getItem("tg_current_org_id") || null;
-}
-
 export default function AsignacionesPage() {
   const { t } = useTranslation();
 
-  // ✅ NO USAMOS ready (evita blanco)
   const { loading, isAuthenticated, user, currentOrg } = useAuth();
-  const orgId = useMemo(() => getOrgIdSafe(currentOrg), [currentOrg]);
+
+  // ✅ UNIVERSAL: orgId SIEMPRE desde currentOrg.id (no depender de localStorage para filtrar)
+  const orgId = useMemo(() => currentOrg?.id || null, [currentOrg?.id]);
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -309,7 +310,7 @@ export default function AsignacionesPage() {
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
-  const [personalIdMode, setPersonalIdMode] = useState("org_people"); // default
+  const [personalIdMode, setPersonalIdMode] = useState("org_people");
 
   function detectPersonalIdMode(rows, safePersonalRows) {
     const ids = new Set((rows || []).map((r) => r?.personal_id).filter(Boolean));
@@ -335,16 +336,16 @@ export default function AsignacionesPage() {
       setGeocercaOptions([]);
       setActivityOptions([]);
       setLoadingData(false);
-      setError("No hay organización activa (orgId).");
+      setError("No hay organización activa (currentOrg).");
       return;
     }
 
+    // ✅ Mantener localStorage sincronizado (solo como cache, NO como fuente)
     try {
-      const ls = localStorage.getItem("tg_current_org_id");
-      if (!ls && currentOrg?.id) localStorage.setItem("tg_current_org_id", currentOrg.id);
+      localStorage.setItem("tg_current_org_id", orgId);
     } catch (_) {}
 
-    // 1) Bundle principal
+    // 1) Bundle
     const { data, error: bundleError } = await getAsignacionesBundle();
     if (bundleError) {
       console.error("[AsignacionesPage] bundle error:", bundleError);
@@ -364,34 +365,35 @@ export default function AsignacionesPage() {
     const rows = rowsRaw.map(normalizeAsignacionRow);
     setAsignaciones(rows);
 
-    // PERSONAL desde bundle (tenant-safe)
+    // Personal desde bundle (tenant-safe) mientras llega el safe fetch
     setPersonalOptions(normalizePersonalFromBundle(catalogs, orgId));
 
-    // GEOCERCAS desde bundle (tenant-safe estricto)
+    // Geocercas desde bundle (tenant-safe)
     const bundleGeosAll = normalizeGeocercas(catalogs.geocercas);
     const bundleGeos = filterByOrg(bundleGeosAll, orgId);
     setGeocercaOptions(bundleGeos);
 
-    // ACTIVITIES desde bundle (tenant-safe estricto)
+    // Activities desde bundle (tenant-safe)
     const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
     const bundleActs = normalizeActivities(bundleActsRaw, orgId);
     setActivityOptions(bundleActs);
 
-    // 2) Fallback geocercas (por org)
-    const referencedGeoIds = new Set(rows.map((a) => a.geocerca_id).filter(Boolean));
-    const geoMap = toIdMap(bundleGeos);
-    const missingGeo = Array.from(referencedGeoIds).some((id) => !geoMap.has(id));
-
-    if (bundleGeos.length === 0 || missingGeo) {
-      try {
-        const geos = await fetchGeocercasFallback(orgId);
-        if (geos?.length) setGeocercaOptions(dedupeById([...geos, ...bundleGeos]));
-      } catch (e) {
-        console.warn("[AsignacionesPage] geocercas fallback failed:", e?.message || e);
+    // 2) ✅ Geocercas SAFE (Supabase client) - arregla el 401 del /api/geocercas
+    try {
+      const geosSafe = await fetchGeocercasSafeByOrg(orgId);
+      if (geosSafe?.length) {
+        setGeocercaOptions(dedupeById([...geosSafe, ...bundleGeos]));
+      } else {
+        // Si no hay geocercas en DB para esta org, dejamos vacío y la UI avisará correctamente
+        setGeocercaOptions(dedupeById([...bundleGeos]));
       }
+    } catch (e) {
+      console.warn("[AsignacionesPage] geocercas safe failed:", e?.message || e);
+      // No inventamos “no tiene geocercas”; mostramos error real
+      setError((prev) => prev || `Error consultando geocercas: ${e?.message || e}`);
     }
 
-    // 3) Fallback activities (Supabase -> API)
+    // 3) Activities SAFE (Supabase -> API)
     try {
       const actsSafe = await fetchActivitiesSafeByOrg(orgId);
       const actsNorm = normalizeActivities(actsSafe, orgId);
@@ -408,7 +410,7 @@ export default function AsignacionesPage() {
       setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
     }
 
-    // 4) Personal tenant-safe definitivo (org_people join people)
+    // 4) Personal SAFE (org_people join people)
     try {
       const safeRows = await fetchPersonalSafeByOrg(orgId);
       const mode = detectPersonalIdMode(rows, safeRows);
@@ -425,7 +427,7 @@ export default function AsignacionesPage() {
 
       setPersonalOptions(dedupeById(opts));
     } catch (e) {
-      console.warn("[AsignacionesPage] personal safe fallback failed:", e?.message || e);
+      console.warn("[AsignacionesPage] personal safe failed:", e?.message || e);
       setError((prev) => prev || `Error consultando personas: ${e?.message || e}`);
       setPersonalOptions([]);
     }
@@ -558,7 +560,7 @@ export default function AsignacionesPage() {
         </h1>
         <p className="text-xs text-gray-500 mt-1">
           Org actual:{" "}
-          <span className="font-medium">{currentOrg?.name || currentOrg?.id || orgId || "—"}</span>
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
           <span className="ml-2 text-gray-400">(idMode: {personalIdMode})</span>
         </p>
       </div>
@@ -593,12 +595,6 @@ export default function AsignacionesPage() {
                 </option>
               ))}
             </select>
-
-            {personalOptions.length === 0 && !loadingData && (
-              <p className="text-xs text-amber-700 mt-1">
-                No hay personas visibles para esta org (o falló la consulta). Revisa el error arriba.
-              </p>
-            )}
           </div>
 
           <div className="flex flex-col">
@@ -617,7 +613,7 @@ export default function AsignacionesPage() {
               ))}
             </select>
 
-            {geocercaOptions.length === 0 && !loadingData && (
+            {geocercaOptions.length === 0 && !loadingData && !error && (
               <p className="text-xs text-amber-700 mt-1">
                 Esta organización no tiene geocercas. Crea una en “Geocercas” para poder asignar.
               </p>
@@ -639,12 +635,6 @@ export default function AsignacionesPage() {
                 </option>
               ))}
             </select>
-
-            {activityOptions.length === 0 && !loadingData && !error && (
-              <p className="text-xs text-amber-700 mt-1">
-                No hay actividades activas para esta org. Crea una en “Actividades”.
-              </p>
-            )}
           </div>
 
           <div className="flex flex-col">
