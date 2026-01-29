@@ -1,9 +1,8 @@
 // src/pages/AsignacionesPage.jsx
-// Fix Enero 2026 (universal):
+// Fix definitivo Asignaciones (Enero 2026)
+// - Persona: usa public.personal (FK-safe)
 // - Geocercas: Supabase client (no /api 401)
-// - Personal: org_people join people (tenant-safe)
-// - IMPORTANT: asignaciones.personal_id guarda PEOPLE.ID (para cumplir FK asignaciones_personal_fk)
-// - Sin ready, estados explícitos
+// - Sin ready, estados explícitos, tenant-safe por currentOrg.id
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -76,13 +75,6 @@ function filterByOrg(rows, orgId) {
   return arr.filter((r) => r?.org_id === orgId);
 }
 
-async function fetchJson(url) {
-  const r = await fetch(url, { credentials: "include" });
-  const j = await r.json().catch(() => null);
-  if (!r.ok) throw new Error((j && j.error) || `HTTP ${r.status}`);
-  return j;
-}
-
 async function fetchGeocercasSafeByOrg(orgId) {
   if (!orgId) return [];
   const { data, error } = await supabase
@@ -90,7 +82,6 @@ async function fetchGeocercasSafeByOrg(orgId) {
     .select("id, nombre, org_id, created_at")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false });
-
   if (error) throw error;
   return normalizeGeocercas(data);
 }
@@ -103,30 +94,8 @@ async function fetchActivitiesSafeByOrg(orgId) {
     .eq("org_id", orgId)
     .eq("active", true)
     .order("name", { ascending: true });
-
   if (error) throw error;
   return Array.isArray(data) ? data : [];
-}
-
-async function fetchActivitiesApiFallback(orgId) {
-  if (!orgId) return [];
-  const endpoints = [
-    `/api/activities?org_id=${encodeURIComponent(orgId)}`,
-    `/api/activities`,
-    `/api/actividades?org_id=${encodeURIComponent(orgId)}`,
-    `/api/actividades`,
-    `/api/catalogs/activities?org_id=${encodeURIComponent(orgId)}`,
-    `/api/catalogs/activities`,
-  ];
-  for (const url of endpoints) {
-    try {
-      const j = await fetchJson(url);
-      const rows = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
-      const filtered = rows.filter((r) => r?.org_id === orgId);
-      if (filtered.length) return filtered;
-    } catch (_) {}
-  }
-  return [];
 }
 
 function normalizeActivities(rows, orgId) {
@@ -147,49 +116,23 @@ function normalizeActivities(rows, orgId) {
 }
 
 /**
- * ✅ Personal tenant-safe por org_people join people
- * ✅ Para asignaciones, guardamos people_id (cumple FK a people)
+ * ✅ PERSONAL CORRECTO PARA ASIGNACIONES
+ * Lee SOLO de public.personal y devuelve personal.id
  */
 async function fetchPersonalSafeByOrg(orgId) {
   if (!orgId) return [];
   const { data, error } = await supabase
-    .from("org_people")
-    .select(
-      `
-      id,
-      org_id,
-      person_id,
-      person:people (
-        id,
-        nombre,
-        apellido,
-        email
-      )
-    `
-    )
+    .from("personal")
+    .select("id, org_id, nombre, apellido, email")
     .eq("org_id", orgId)
-    .order("created_at", { ascending: false });
-
+    .order("nombre", { ascending: true });
   if (error) throw error;
 
-  const rows = Array.isArray(data) ? data : [];
-  return rows
-    .map((row) => {
-      const p = row.person || {};
-      const display =
-        `${p.nombre || ""} ${p.apellido || ""}`.trim() ||
-        (p.email || "").trim() ||
-        row.person_id;
-
-      return {
-        id: row.person_id, // ✅ value del select = people_id
-        people_id: row.person_id,
-        org_people_id: row.id,
-        nombre: display,
-        email: (p.email || "").trim(),
-      };
-    })
-    .filter((x) => x.id);
+  return (data || []).map((p) => ({
+    id: p.id, // ✅ personal.id (FK-safe)
+    nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
+    email: p.email || "",
+  }));
 }
 
 function normalizeAsignacionRow(a) {
@@ -226,7 +169,7 @@ export default function AsignacionesPage() {
   const [successMessage, setSuccessMessage] = useState(null);
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
-  const [selectedPersonalId, setSelectedPersonalId] = useState(""); // ✅ people_id
+  const [selectedPersonalId, setSelectedPersonalId] = useState(""); // personal.id
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -256,9 +199,8 @@ export default function AsignacionesPage() {
       return;
     }
 
-    try {
-      localStorage.setItem("tg_current_org_id", orgId);
-    } catch (_) {}
+    // Cache benigno
+    try { localStorage.setItem("tg_current_org_id", orgId); } catch (_) {}
 
     const { data, error: bundleError } = await getAsignacionesBundle();
     if (bundleError) {
@@ -278,7 +220,7 @@ export default function AsignacionesPage() {
     const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
     setActivityOptions(normalizeActivities(bundleActsRaw, orgId));
 
-    // ✅ Geocercas safe
+    // Geocercas SAFE
     try {
       const geosSafe = await fetchGeocercasSafeByOrg(orgId);
       setGeocercaOptions(dedupeById([...geosSafe, ...filterByOrg(bundleGeosAll, orgId)]));
@@ -286,26 +228,21 @@ export default function AsignacionesPage() {
       setError((prev) => prev || `Error consultando geocercas: ${e?.message || e}`);
     }
 
-    // ✅ Activities safe
+    // Activities SAFE
     try {
       const actsSafe = await fetchActivitiesSafeByOrg(orgId);
       const actsNorm = normalizeActivities(actsSafe, orgId);
       if (actsNorm?.length) setActivityOptions(dedupeById([...actsNorm, ...normalizeActivities(bundleActsRaw, orgId)]));
-      else {
-        const actsApi = await fetchActivitiesApiFallback(orgId);
-        const actsApiNorm = normalizeActivities(actsApi, orgId);
-        if (actsApiNorm?.length) setActivityOptions(dedupeById([...actsApiNorm, ...normalizeActivities(bundleActsRaw, orgId)]));
-      }
     } catch (e) {
       setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
     }
 
-    // ✅ Personal safe (people_id)
+    // Personal SAFE (public.personal)
     try {
       const p = await fetchPersonalSafeByOrg(orgId);
       setPersonalOptions(p);
     } catch (e) {
-      setError((prev) => prev || `Error consultando personas: ${e?.message || e}`);
+      setError((prev) => prev || `Error consultando personal: ${e?.message || e}`);
       setPersonalOptions([]);
     }
 
@@ -350,7 +287,7 @@ export default function AsignacionesPage() {
     if (freqMin < 5) return setError("La frecuencia mínima es 5 minutos.");
 
     const payload = {
-      personal_id: selectedPersonalId, // ✅ people_id para cumplir FK
+      personal_id: selectedPersonalId, // ✅ personal.id (FK-safe)
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
       start_time: localDateTimeToISO(startTime),
@@ -367,29 +304,58 @@ export default function AsignacionesPage() {
     await loadAll();
   }
 
-  if (loading) return <div className="p-4 max-w-5xl mx-auto"><div className="border rounded px-4 py-3 text-sm text-gray-600">Cargando…</div></div>;
-  if (!isAuthenticated || !user) return <div className="p-4 max-w-3xl mx-auto"><div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">Debes iniciar sesión.</div></div>;
+  if (loading) {
+    return (
+      <div className="p-4 max-w-5xl mx-auto">
+        <div className="border rounded px-4 py-3 text-sm text-gray-600">Cargando…</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="p-4 max-w-3xl mx-auto">
+        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
+          Debes iniciar sesión.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full p-4">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
+        <h1 className="text-2xl font-bold">
+          {t("asignaciones.title", { defaultValue: "Asignaciones" })}
+        </h1>
         <p className="text-xs text-gray-500 mt-1">
           Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
-          <span className="ml-2 text-gray-400">(idMode: people)</span>
         </p>
       </div>
 
-      {error && <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-      {successMessage && <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">{successMessage}</div>}
+      {error && (
+        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      )}
+      {successMessage && (
+        <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">
+          {successMessage}
+        </div>
+      )}
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
-        <h2 className="text-lg font-semibold mb-4">{editingId ? "Editar asignación" : "Nueva asignación"}</h2>
+        <h2 className="text-lg font-semibold mb-4">
+          {editingId ? "Editar asignación" : "Nueva asignación"}
+        </h2>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Persona</label>
-            <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedPersonalId}
+              onChange={(e) => setSelectedPersonalId(e.target.value)}
+              required
+            >
               <option value="">Selecciona una persona</option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -401,7 +367,12 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Geocerca</label>
-            <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedGeocercaId}
+              onChange={(e) => setSelectedGeocercaId(e.target.value)}
+              required
+            >
               <option value="">Selecciona una geocerca</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -418,7 +389,12 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Actividad</label>
-            <select className="border rounded px-3 py-2" value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)} required>
+            <select
+              className="border rounded px-3 py-2"
+              value={selectedActivityId}
+              onChange={(e) => setSelectedActivityId(e.target.value)}
+              required
+            >
               <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -431,8 +407,19 @@ export default function AsignacionesPage() {
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Inicio</label>
             <div className="relative">
-              <input ref={startInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
-              <button type="button" onClick={() => openNativePicker(startInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
+              <input
+                ref={startInputRef}
+                type="datetime-local"
+                className="border rounded px-3 py-2 w-full pr-10"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => openNativePicker(startInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
+              >
                 <CalendarIcon />
               </button>
             </div>
@@ -441,8 +428,19 @@ export default function AsignacionesPage() {
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Fin</label>
             <div className="relative">
-              <input ref={endInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
-              <button type="button" onClick={() => openNativePicker(endInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
+              <input
+                ref={endInputRef}
+                type="datetime-local"
+                className="border rounded px-3 py-2 w-full pr-10"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => openNativePicker(endInputRef.current)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
+              >
                 <CalendarIcon />
               </button>
             </div>
@@ -458,25 +456,41 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Frecuencia (min)</label>
-            <input type="number" className="border rounded px-3 py-2" min={5} value={frecuenciaEnvioMin} onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)} />
+            <input
+              type="number"
+              className="border rounded px-3 py-2"
+              min={5}
+              value={frecuenciaEnvioMin}
+              onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
+            />
           </div>
 
           <div className="md:col-span-2 flex flex-wrap gap-3 mt-2">
-            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60" disabled={loadingData}>
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
+              disabled={loadingData}
+            >
               {editingId ? "Actualizar" : "Guardar"}
             </button>
-            {editingId && <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">Cancelar</button>}
+            {editingId && (
+              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
+                Cancelar
+              </button>
+            )}
           </div>
         </form>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
         <label className="font-medium">Estado</label>
-        <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+        <select
+          className="border rounded px-3 py-2"
+          value={estadoFilter}
+          onChange={(e) => setEstadoFilter(e.target.value)}
+        >
           {ESTADOS.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
+            <option key={v} value={v}>{v}</option>
           ))}
         </select>
       </div>
@@ -486,7 +500,7 @@ export default function AsignacionesPage() {
         loading={loadingData}
         onEdit={(a) => {
           setEditingId(a.id);
-          setSelectedPersonalId(a.personal_id || ""); // ✅ asumiendo que DB guarda people_id
+          setSelectedPersonalId(a.personal_id || "");
           setSelectedGeocercaId(a.geocerca_id || "");
           setSelectedActivityId(a.activity_id || "");
           setStartTime(a.start_time?.slice(0, 16) || "");
