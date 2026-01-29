@@ -3,6 +3,27 @@ import { useAuth } from "../context/AuthContext";
 
 const LS_LAST_INVITE_KEY = "last_tracker_invite_link_v1";
 
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v || "").trim()
+  );
+}
+
+function resolveOrgId(currentOrg) {
+  const candidates = [
+    currentOrg?.id,
+    currentOrg?.org_id,
+    currentOrg?.tenant_id,
+    currentOrg?.current_org_id,
+    currentOrg?.default_org_id,
+  ]
+    .map((x) => (x ? String(x).trim() : ""))
+    .filter(Boolean);
+
+  const hit = candidates.find(isUuid);
+  return hit || "";
+}
+
 function getSupabaseAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
@@ -139,7 +160,8 @@ export default function InvitarTracker() {
   const [inviteData, setInviteData] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  const orgId = currentOrg?.id ? String(currentOrg.id) : "";
+  const orgId = resolveOrgId(currentOrg);
+  const orgName = currentOrg?.name || currentOrg?.org_name || currentOrg?.title || "";
 
   const personal = useMemo(() => {
     if (!orgId) return [];
@@ -187,7 +209,9 @@ export default function InvitarTracker() {
     try {
       if (!orgId) {
         setPersonalRaw([]);
-        setPersonalError("Org actual no definida.");
+        setPersonalError(
+          "Org actual no válida (org_id no es UUID). Cambia de org o vuelve a iniciar sesión."
+        );
         return;
       }
 
@@ -220,7 +244,6 @@ export default function InvitarTracker() {
     else if (selectedPersonId) setEmail("");
   }, [selectedPersonId, selectedPerson]);
 
-  // cargar último link guardado
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_LAST_INVITE_KEY);
@@ -239,7 +262,6 @@ export default function InvitarTracker() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // fallback
       const ta = document.createElement("textarea");
       ta.value = link;
       document.body.appendChild(ta);
@@ -269,7 +291,7 @@ export default function InvitarTracker() {
     setInviteData(null);
     setCopied(false);
 
-    if (!orgId) return setError("Organización no válida.");
+    if (!orgId) return setError("Organización no válida (org_id no es UUID).");
     if (!selectedPersonId) return setError("Selecciona una persona.");
     if (!email || !email.includes("@")) return setError("Email inválido.");
 
@@ -315,6 +337,18 @@ export default function InvitarTracker() {
     <div className="max-w-3xl mx-auto p-6">
       <h1 className="text-2xl font-semibold mb-6">Invitar Tracker</h1>
 
+      {!orgId && (
+        <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
+          ⚠️ La organización actual no tiene un <b>UUID válido</b>. Esto genera links con org_id corrupto y rompe el gating.
+          <div className="mt-1 text-xs">
+            Org actual (raw):{" "}
+            <span className="font-mono">
+              {String(currentOrg?.id || currentOrg?.org_id || currentOrg?.tenant_id || "(vacío)")}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
         <div className="flex justify-between items-center mb-3">
           <div className="text-sm font-medium">Personal activo ({personal.length})</div>
@@ -354,8 +388,8 @@ export default function InvitarTracker() {
 
           <button
             type="submit"
-            disabled={sending}
-            className="w-full mt-4 bg-emerald-600 text-white rounded-lg py-3"
+            disabled={sending || !orgId}
+            className="w-full mt-4 bg-emerald-600 text-white rounded-lg py-3 disabled:opacity-60"
           >
             {sending ? "Generando link..." : "Generar link de invitación"}
           </button>
@@ -406,7 +440,11 @@ export default function InvitarTracker() {
       </div>
 
       <div className="text-xs text-gray-500">
-        Org actual: <span className="font-mono">{orgId || "(vacío)"}</span>
+        Org actual:{" "}
+        <span className="font-mono">
+          {orgName ? `${orgName} — ` : ""}
+          {orgId || "(vacío / inválido)"}
+        </span>
       </div>
     </div>
   );
