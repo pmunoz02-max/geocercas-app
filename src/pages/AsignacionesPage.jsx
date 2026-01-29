@@ -630,25 +630,25 @@ export default function AsignacionesPage() {
         </div>
       )}
 
-      <AsignacionesTable
-        asignaciones={filteredAsignaciones}
-        loading={loadingData}
-        onEdit={(a) => {
-          setEditingId(a.id);
-          setSelectedPersonalId(a.personal_id || "");
-          setSelectedGeocercaId(a.geocerca_id || "");
-          setSelectedActivityId(a.activity_id || "");
-          setStartTime(toDatetimeLocal(a.start_time));
-          setEndTime(toDatetimeLocal(a.end_time));
-          setFrecuenciaEnvioMin(
-            Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
-          );
-          setStatus(a.status || "activa");
-          setError(null);
-          setSuccessMessage(null);
-        }}
-        onDelete={handleDelete}
-      />
+    <AsignacionesTable
+  asignaciones={enrichedAsignaciones}
+  loading={loadingData}
+  onEdit={(a) => {
+    setEditingId(a.id);
+    setSelectedPersonalId(a.personal_id || "");
+    setSelectedGeocercaId(a.geocerca_id || "");
+    setSelectedActivityId(a.activity_id || "");
+    setStartTime((a.start_time || "").slice(0, 16));
+    setEndTime((a.end_time || "").slice(0, 16));
+    setFrecuenciaEnvioMin(
+      Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
+    );
+    setStatus(a.status || "activa");
+    setError(null);
+    setSuccessMessage(null);
+  }}
+  onDelete={handleDelete}
+/>
     </div>
   );
 }
