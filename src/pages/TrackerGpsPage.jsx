@@ -1,113 +1,84 @@
-// src/pages/TrackerGpsPage.jsx
 import { useEffect, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-function getSupabaseAccessTokenFromLocalStorage() {
-  try {
-    const keys = Object.keys(window.localStorage || {});
-    const candidates = keys.filter((x) => /^sb-.*-auth-token$/i.test(String(x)));
-    for (const k of candidates) {
-      const raw = window.localStorage.getItem(k);
-      if (!raw) continue;
-      const j = JSON.parse(raw);
-      const t =
-        j?.access_token ||
-        j?.currentSession?.access_token ||
-        j?.data?.session?.access_token ||
-        "";
-      if (t) return t;
-    }
-    return "";
-  } catch {
-    return "";
-  }
+function supa() {
+  const url = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  return createClient(url, key, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
 }
 
-function getSupabaseUrl() {
-  return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
-}
-
-function resolveOrgId(sess) {
+function resolveOrgFromCtx(ctx) {
   return (
-    sess?.org_id ||
-    sess?.current_org_id ||
-    sess?.org?.id ||
-    sess?.organizations?.[0]?.id ||
+    ctx?.org_id ||
+    ctx?.current_org_id ||
+    ctx?.organization_id ||
+    (Array.isArray(ctx?.organizations) ? ctx.organizations?.[0]?.id : null) ||
     null
   );
 }
 
-function resolveEmail(sess) {
-  return sess?.user?.email || sess?.email || sess?.profile?.email || "";
-}
-
 export default function TrackerGpsPage() {
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState(null);
   const [error, setError] = useState(null);
 
   const [permission, setPermission] = useState("unknown");
   const [gpsActive, setGpsActive] = useState(false);
+
+  const [orgId, setOrgId] = useState(null);
+  const [intervalSec, setIntervalSec] = useState(300);
 
   const [lastPosition, setLastPosition] = useState(null);
   const [lastSend, setLastSend] = useState(null);
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
 
-  const [intervalSec, setIntervalSec] = useState(30);
-
   const lastSentAtRef = useRef(0);
   const watchIdRef = useRef(null);
 
-  async function loadSession() {
-    const res = await fetch("/api/auth/session", { credentials: "include" });
-    const json = await res.json().catch(() => ({}));
-    setSession(json);
-
-    if (!json?.authenticated) throw new Error("No autenticado");
-
-    const role = String(json?.role || "").toLowerCase();
-    if (role !== "tracker") throw new Error(`Rol inválido para tracker-gps: ${role || "(vacío)"}`);
-
-    return json;
-  }
-
-  async function loadInterval(org_id, email) {
-    try {
-      const token = getSupabaseAccessTokenFromLocalStorage();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-      const url = `/api/personal?onlyActive=1&limit=50&org_id=${encodeURIComponent(
-        org_id
-      )}&q=${encodeURIComponent(email)}`;
-      const res = await fetch(url, { headers });
-      const j = await res.json().catch(() => ({}));
-      const items = j?.items || j?.data || [];
-
-      const found = Array.isArray(items)
-        ? items.find(
-            (p) =>
-              String(p.email_norm || p.email || "").toLowerCase() ===
-              String(email).toLowerCase()
-          )
-        : null;
-
-      const sec = Number(found?.position_interval_sec);
-      if (Number.isFinite(sec) && sec > 0) setIntervalSec(sec);
-    } catch {
-      // silencio: es solo para intervalo
-    }
-  }
+  const clientRef = useRef(null);
+  if (!clientRef.current) clientRef.current = supa();
+  const client = clientRef.current;
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
-        const s = await loadSession();
+        if (!import.meta.env.VITE_SUPABASE_URL) throw new Error("Falta VITE_SUPABASE_URL");
+        if (!import.meta.env.VITE_SUPABASE_ANON_KEY) throw new Error("Falta VITE_SUPABASE_ANON_KEY");
+
+        // 1) asegurar que si vienes del link OTP, se capture la sesión en URL y se persista
+        const { data: sessData } = await client.auth.getSession();
+        const token = sessData?.session?.access_token;
+
+        if (!token) {
+          // No hay sesión Supabase => manda al bridge para pedir OTP (pero el guard NO debe bloquear esta ruta)
+          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/tracker-auth-bridge?next=${next}`;
+          return;
+        }
+
+        // 2) validar usuario
+        const { data: u, error: ue } = await client.auth.getUser();
+        if (ue || !u?.user) throw new Error("Supabase: usuario no válido");
+
+        // 3) validar rol tracker por RPC
+        const { data: ctx, error: ce } = await client.rpc("get_my_context");
+        if (ce) throw new Error(`RPC get_my_context falló: ${ce.message}`);
+
+        const role =
+          String(ctx?.role || ctx?.my_role || ctx?.membership_role || "").toLowerCase();
+        if (role !== "tracker") throw new Error(`Rol inválido (no tracker): ${role || "(vacío)"}`);
+
+        const oid = resolveOrgFromCtx(ctx);
+        if (!oid) throw new Error("No se pudo resolver org_id desde contexto");
+
         if (!alive) return;
+        setOrgId(oid);
 
-        setLoading(false);
-
+        // permiso (solo visual)
         if ("permissions" in navigator) {
           try {
             const p = await navigator.permissions.query({ name: "geolocation" });
@@ -118,47 +89,36 @@ export default function TrackerGpsPage() {
           }
         }
 
-        const orgId = resolveOrgId(s);
-        const email = resolveEmail(s);
-
-        if (orgId && email) loadInterval(orgId, email);
+        setLoading(false);
       } catch (e) {
         if (!alive) return;
-        setError(e.message || "Error cargando sesión");
+        setError(String(e?.message || e));
         setLoading(false);
       }
     })();
 
-    return () => {
-      alive = false;
-    };
-  }, []);
+    return () => { alive = false; };
+  }, [client]);
 
-  async function sendPosition(pos, org_id) {
+  async function sendPosition(pos) {
     const now = Date.now();
-    const minMs = Math.max(5, Number(intervalSec || 30)) * 1000;
+    const minMs = Math.max(5, Number(intervalSec || 300)) * 1000;
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
-    const token = getSupabaseAccessTokenFromLocalStorage();
+    const { data: sessData } = await client.auth.getSession();
+    const token = sessData?.session?.access_token;
     if (!token) {
-      // Bridge: crear sesión Supabase para obtener sb-*-auth-token
       const next = encodeURIComponent(window.location.pathname + window.location.search);
       window.location.href = `/tracker-auth-bridge?next=${next}`;
       return;
     }
 
-    const supabaseUrl = getSupabaseUrl();
-    if (!supabaseUrl) {
-      setSendStatus("error");
-      setSendError("Falta VITE_SUPABASE_URL.");
-      return;
-    }
-
+    const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
     const url = `${supabaseUrl}/functions/v1/send_position`;
 
     const payload = {
-      org_id,
+      org_id: orgId,
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: pos.coords.accuracy ?? null,
@@ -174,18 +134,14 @@ export default function TrackerGpsPage() {
 
     const r = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
     });
 
     const j = await r.json().catch(() => ({}));
-
     if (!r.ok || !j?.ok) {
       setSendStatus("error");
-      setSendError(j?.error || j?.details || `Error enviando posición (HTTP ${r.status})`);
+      setSendError(j?.error || j?.details || `Error enviando (HTTP ${r.status})`);
       return;
     }
 
@@ -198,29 +154,25 @@ export default function TrackerGpsPage() {
       setError("Este dispositivo no soporta GPS.");
       return;
     }
+    if (!orgId) {
+      setError("OrgId aún no disponible.");
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       () => {
         setPermission("granted");
 
-        const orgId = resolveOrgId(session);
-        if (!orgId) {
-          setError("org_id no disponible en sesión (usa current_org_id).");
-          return;
-        }
-
         watchIdRef.current = navigator.geolocation.watchPosition(
           async (pos) => {
             setGpsActive(true);
-
             const current = {
               lat: pos.coords.latitude,
               lng: pos.coords.longitude,
               ts: new Date().toISOString(),
             };
             setLastPosition(current);
-
-            await sendPosition(pos, orgId);
+            await sendPosition(pos);
           },
           (err) => {
             setGpsActive(false);
@@ -238,29 +190,20 @@ export default function TrackerGpsPage() {
 
   useEffect(() => {
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
   }, []);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-gray-600">
-        Cargando tracker…
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center text-gray-600">Cargando tracker…</div>;
   }
 
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="max-w-md w-full bg-white border rounded-xl p-6 shadow">
-          <h2 className="text-lg font-semibold text-red-600 mb-3">Acceso restringido</h2>
+          <h2 className="text-lg font-semibold text-red-600 mb-3">Tracker</h2>
           <p className="text-sm text-gray-700 mb-4">{error}</p>
-          <pre className="text-xs bg-gray-100 p-3 rounded overflow-auto">
-{JSON.stringify(session, null, 2)}
-          </pre>
         </div>
       </div>
     );
@@ -273,17 +216,11 @@ export default function TrackerGpsPage() {
 
         <p className="text-sm text-emerald-700 mt-2">
           Estado del GPS:{" "}
-          <b>
-            {permission === "granted"
-              ? "Permitido"
-              : permission === "denied"
-              ? "Bloqueado"
-              : "Pendiente"}
-          </b>
+          <b>{permission === "granted" ? "Permitido" : permission === "denied" ? "Bloqueado" : "Pendiente"}</b>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
-          Org: <b>{resolveOrgId(session) || "—"}</b>
+          Org: <b>{orgId || "—"}</b>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
@@ -291,10 +228,7 @@ export default function TrackerGpsPage() {
         </p>
 
         {!gpsActive && (
-          <button
-            onClick={startTracking}
-            className="mt-4 w-full bg-emerald-600 text-white py-3 rounded-lg"
-          >
+          <button onClick={startTracking} className="mt-4 w-full bg-emerald-600 text-white py-3 rounded-lg">
             Activar ubicación
           </button>
         )}
@@ -307,16 +241,7 @@ export default function TrackerGpsPage() {
             <div>Última lectura: {lastPosition.ts}</div>
 
             <div className="mt-2">
-              Envío:{" "}
-              <b>
-                {sendStatus === "idle"
-                  ? "—"
-                  : sendStatus === "sending"
-                  ? "Enviando…"
-                  : sendStatus === "ok"
-                  ? "OK"
-                  : "Error"}
-              </b>
+              Envío: <b>{sendStatus === "idle" ? "—" : sendStatus === "sending" ? "Enviando…" : sendStatus === "ok" ? "OK" : "Error"}</b>
             </div>
 
             {lastSend?.ts && (
