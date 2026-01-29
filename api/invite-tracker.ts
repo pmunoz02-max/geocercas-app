@@ -3,9 +3,15 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const PUBLIC_SITE_URL = process.env.PUBLIC_SITE_URL || ""; // e.g. https://app.tugeocercas.com
+const anonKey = process.env.SUPABASE_ANON_KEY!;
+const PUBLIC_SITE_URL = process.env.PUBLIC_SITE_URL || "";
 
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false },
+});
+
+// Cliente "anon" SOLO para disparar el email OTP/magiclink (Supabase manda el correo)
+const supabaseAnon = createClient(supabaseUrl, anonKey, {
   auth: { persistSession: false },
 });
 
@@ -19,25 +25,25 @@ function normEmail(v: any) {
   return String(v || "").trim().toLowerCase();
 }
 
+function buildRedirectTo(org_id: string) {
+  return (
+    `${PUBLIC_SITE_URL}/auth/callback` +
+    `?next=/tracker-gps&org_id=${org_id}&tg_flow=tracker`
+  );
+}
+
 async function findUserIdByEmail(email: string): Promise<string | null> {
-  // Supabase Admin API no tiene "get user by email" directo,
-  // así que listamos y buscamos. Para tu escala actual sirve perfecto.
   let page = 1;
   const perPage = 200;
 
-  for (let i = 0; i < 20; i++) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page,
-      perPage,
-    });
-
+  for (let i = 0; i < 30; i++) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
     if (error) throw error;
 
     const users = data?.users || [];
     const hit = users.find((u) => normEmail(u.email) === email);
     if (hit?.id) return hit.id;
 
-    // si ya no hay más usuarios, terminar
     if (users.length < perPage) break;
     page++;
   }
@@ -45,11 +51,20 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
+    if (!PUBLIC_SITE_URL) {
+      return res.status(500).json({
+        error: "Missing env PUBLIC_SITE_URL (e.g. https://app.tugeocercas.com)",
+      });
+    }
+    if (!anonKey) {
+      return res.status(500).json({
+        error: "Missing env SUPABASE_ANON_KEY (required to send OTP email via Supabase)",
+      });
+    }
+
     const authHeader = req.headers.authorization || "";
     const token = authHeader.replace("Bearer ", "").trim();
     if (!token) return res.status(401).json({ error: "Missing Authorization header" });
@@ -71,74 +86,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!email || !email.includes("@")) return res.status(400).json({ error: "Invalid email" });
     if (!isUuid(org_id)) return res.status(400).json({ error: "Invalid org_id (must be UUID)" });
 
-    if (!PUBLIC_SITE_URL) {
-      return res.status(500).json({
-        error: "Missing env PUBLIC_SITE_URL (e.g. https://app.tugeocercas.com)",
+    const redirectTo = buildRedirectTo(org_id);
+
+    // 2) Asegurar que el usuario exista (si no existe, lo creamos sin confirmar)
+    //    Luego mandamos el magic link por email con signInWithOtp (Supabase envía).
+    let trackerUserId = await findUserIdByEmail(email);
+
+    if (!trackerUserId) {
+      const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        email_confirm: false,
       });
-    }
-
-    const redirectTo =
-      `${PUBLIC_SITE_URL}/auth/callback` +
-      `?next=/tracker-gps&org_id=${org_id}&tg_flow=tracker`;
-
-    let trackerUserId: string | null = null;
-    let email_sent = false;
-    let magic_link: string | null = null;
-
-    // 2) Intentar invitar por email (manda correo SOLO si el usuario no existe)
-    const { data: inviteData, error: inviteErr } =
-      await supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo });
-
-    if (!inviteErr) {
-      email_sent = true;
-      trackerUserId = inviteData?.user?.id || null;
-    } else {
-      const msg = String(inviteErr.message || "").toLowerCase();
-
-      // 3) Fallback si ya existe: generar magic link (no manda correo automáticamente)
-      if (msg.includes("already been registered") || msg.includes("already registered")) {
-        trackerUserId = await findUserIdByEmail(email);
-        if (!trackerUserId) {
-          return res.status(400).json({
-            error: "User already registered but could not be found via admin listUsers()",
-          });
-        }
-
-        const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-          type: "magiclink",
-          email,
-          options: { redirectTo },
-        });
-
-        if (linkErr) {
-          return res.status(400).json({ error: linkErr.message || "Error generating magic link" });
-        }
-
-        magic_link =
-          (linkData as any)?.properties?.action_link ||
-          (linkData as any)?.action_link ||
-          null;
-
-        if (!magic_link) {
-          return res.status(500).json({ error: "Generated link but action_link not found" });
-        }
-      } else {
-        // otro error real
-        return res.status(400).json({ error: inviteErr.message || "Error sending invite email" });
+      if (createErr) {
+        return res.status(400).json({ error: createErr.message || "Error creating user" });
       }
+      trackerUserId = created?.user?.id || null;
     }
 
     if (!trackerUserId) {
-      return res.status(500).json({ error: "Tracker user id not resolved" });
+      // fallback duro
+      trackerUserId = await findUserIdByEmail(email);
+    }
+    if (!trackerUserId) {
+      return res.status(500).json({ error: "Could not resolve tracker user id" });
     }
 
-    // 4) Asegurar membership como tracker (idempotente)
-    await supabaseAdmin.from("memberships").upsert(
-      { user_id: trackerUserId, org_id, role: "tracker" },
-      { onConflict: "user_id,org_id" }
-    );
+    // 3) Asegurar membership tracker (idempotente)
+    await supabaseAdmin
+      .from("memberships")
+      .upsert({ user_id: trackerUserId, org_id, role: "tracker" }, { onConflict: "user_id,org_id" });
 
-    // 5) Auto-asignación (si se pidió)
+    // 4) Auto-asignación (si se pidió)
     let assignment_id: string | null = null;
     if (force_tracker_default) {
       const { data: assignId, error: assignErr } = await supabaseAdmin.rpc(
@@ -149,23 +127,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           p_frequency_minutes: 1,
         }
       );
-
       if (!assignErr && assignId) assignment_id = String(assignId);
     }
 
-    // 6) Respuesta
+    // 5) ENVIAR EMAIL SIEMPRE (Supabase)
+    //    - shouldCreateUser: false porque ya lo aseguramos arriba
+    const { error: otpErr } = await supabaseAnon.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: false,
+      },
+    });
+
+    if (otpErr) {
+      return res.status(400).json({ error: otpErr.message || "Error sending Supabase email" });
+    }
+
     return res.status(200).json({
       ok: true,
       email,
-      email_sent,          // true si Supabase mandó correo (usuario nuevo)
-      magic_link,          // presente si usuario ya existía (para copiar/WhatsApp)
+      email_sent: true,
       tracker_user_id: trackerUserId,
       person_id,
       assignment_id,
       redirect_to: redirectTo,
-      note: email_sent
-        ? "Invite email sent by Supabase."
-        : "User already existed: generated magic_link for manual delivery (WhatsApp/Email).",
     });
   } catch (e: any) {
     console.error("invite-tracker error", e);
