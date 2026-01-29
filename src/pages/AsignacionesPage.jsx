@@ -1,9 +1,8 @@
 // src/pages/AsignacionesPage.jsx
 // Fix definitivo Asignaciones (Enero 2026) — UNIVERSAL Y PERMANENTE
-// - CRUD + Listado DIRECTO Supabase (no depende de /api ni de bundles incompletos)
-// - Persona: public.personal (FK-safe: asignaciones.personal_id -> personal.id)
-// - Geocercas/Actividades: tablas reales por org_id
-// - Listado: enriquecido con mapas => nunca columnas vacías aunque no vengan joins
+// - Listado: SELECT con JOIN embebido (personal/geocerca/activity) => NO columnas vacías
+// - Catálogos: solo para los selects del formulario
+// - Mantiene CRUD directo a public.asignaciones
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -87,13 +86,7 @@ function normalizeAsignacionRow(a) {
     start_date: startDate,
     end_date: endDate,
     frecuencia_envio_sec: freqSec,
-    status:
-      a.status ||
-      a.estado ||
-      a.state ||
-      a.status_asignacion ||
-      a.status ||
-      null,
+    status: a.status || a.estado || a.state || a.status_asignacion || null,
   };
 }
 
@@ -125,6 +118,91 @@ export default function AsignacionesPage() {
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
+  async function loadCatalogos() {
+    if (!orgId) {
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
+      setActivityOptions([]);
+      return;
+    }
+
+    const [pRes, gRes, aRes] = await Promise.all([
+      supabase
+        .from("personal")
+        .select("id, org_id, nombre, apellido, email")
+        .eq("org_id", orgId)
+        .order("nombre", { ascending: true }),
+
+      supabase
+        .from("geocercas")
+        .select("id, nombre, org_id, created_at")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false }),
+
+      supabase
+        .from("activities")
+        .select("id, name, active, org_id, created_at")
+        .eq("org_id", orgId)
+        .eq("active", true)
+        .order("name", { ascending: true }),
+    ]);
+
+    if (pRes.error) throw pRes.error;
+    if (gRes.error) throw gRes.error;
+    if (aRes.error) throw aRes.error;
+
+    const personal = (pRes.data || []).map((p) => ({
+      id: p.id,
+      org_id: p.org_id,
+      nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
+      apellido: p.apellido || "",
+      email: p.email || "",
+    }));
+
+    setPersonalOptions(dedupeById(personal));
+    setGeocercaOptions(dedupeById(gRes.data || []));
+    setActivityOptions(dedupeById(aRes.data || []));
+  }
+
+  async function loadAsignacionesJoin() {
+    if (!orgId) {
+      setAsignaciones([]);
+      return;
+    }
+
+    // LISTADO DETERMINÍSTICO: trae todo lo que la tabla necesita
+    const { data, error: asigErr } = await supabase
+      .from("asignaciones")
+      .select(
+        `
+        id,
+        org_id,
+        personal_id,
+        geocerca_id,
+        activity_id,
+        start_time,
+        end_time,
+        start_date,
+        end_date,
+        frecuencia_envio_sec,
+        status,
+        created_at,
+        is_deleted,
+        deleted_at,
+        personal:personal_id ( id, nombre, apellido, email ),
+        geocerca:geocerca_id ( id, nombre ),
+        activity:activity_id ( id, name )
+      `
+      )
+      .eq("org_id", orgId)
+      .or("is_deleted.is.null,is_deleted.eq.false")
+      .order("created_at", { ascending: false });
+
+    if (asigErr) throw asigErr;
+
+    setAsignaciones((data || []).map(normalizeAsignacionRow));
+  }
+
   async function loadAll() {
     setLoadingData(true);
     setError(null);
@@ -144,62 +222,9 @@ export default function AsignacionesPage() {
         localStorage.setItem("tg_current_org_id", orgId);
       } catch (_) {}
 
-      // 1) Catálogos reales
-      const [pRes, gRes, aRes] = await Promise.all([
-        supabase
-          .from("personal")
-          .select("id, org_id, nombre, apellido, email")
-          .eq("org_id", orgId)
-          .order("nombre", { ascending: true }),
+      await loadCatalogos();
+      await loadAsignacionesJoin();
 
-        supabase
-          .from("geocercas")
-          .select("id, nombre, org_id, created_at")
-          .eq("org_id", orgId)
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("activities")
-          .select("id, name, active, org_id, created_at")
-          .eq("org_id", orgId)
-          .eq("active", true)
-          .order("name", { ascending: true }),
-      ]);
-
-      if (pRes.error) throw pRes.error;
-      if (gRes.error) throw gRes.error;
-      if (aRes.error) throw aRes.error;
-
-      const personal = (pRes.data || []).map((p) => ({
-        id: p.id,
-        org_id: p.org_id,
-        nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
-        apellido: p.apellido || "",
-        email: p.email || "",
-      }));
-
-      setPersonalOptions(dedupeById(personal));
-      setGeocercaOptions(dedupeById(gRes.data || []));
-      setActivityOptions(dedupeById(aRes.data || []));
-
-      // 2) Asignaciones (NO dependemos de joins; solo IDs + campos propios)
-      const asigRes = await supabase
-        .from("asignaciones")
-        .select(
-          `
-          id, org_id, personal_id, geocerca_id, activity_id,
-          start_time, end_time, start_date, end_date,
-          frecuencia_envio_sec, status, created_at,
-          is_deleted, deleted_at
-        `
-        )
-        .eq("org_id", orgId)
-        .or("is_deleted.is.null,is_deleted.eq.false")
-        .order("created_at", { ascending: false });
-
-      if (asigRes.error) throw asigRes.error;
-
-      setAsignaciones((asigRes.data || []).map(normalizeAsignacionRow));
       setLoadingData(false);
     } catch (e) {
       setLoadingData(false);
@@ -222,7 +247,8 @@ export default function AsignacionesPage() {
     return rows;
   }, [asignaciones, estadoFilter]);
 
-  // ✅ ENRIQUECIMIENTO UNIVERSAL PARA TABLA (nombres + fechas + freq)
+  // Para compatibilidad total con AsignacionesTable:
+  // - asegura objetos personal/geocerca/activity aunque vengan null
   const enrichedAsignaciones = useMemo(() => {
     const geoMap = new Map((geocercaOptions || []).map((g) => [g.id, g]));
     const actMap = new Map((activityOptions || []).map((a) => [a.id, a]));
@@ -232,29 +258,23 @@ export default function AsignacionesPage() {
       (a0) => {
         const a = normalizeAsignacionRow(a0);
 
-        const geocerca = geoMap.get(a.geocerca_id) || null;
-        const activity = actMap.get(a.activity_id) || null;
-        const personal = perMap.get(a.personal_id) || null;
+        // Preferir lo embebido (JOIN). Si viene null por RLS, caer a catálogo.
+        const personal =
+          a.personal || perMap.get(a.personal_id) || a.personal || null;
+        const geocerca =
+          a.geocerca || geoMap.get(a.geocerca_id) || a.geocerca || null;
+        const activity =
+          a.activity || actMap.get(a.activity_id) || a.activity || null;
 
         return {
           ...a,
-
-          // Para mostrar persona como objeto (la tabla ya lo soporta)
           personal,
-
-          // Para mostrar geocerca/actividad por nombre SIEMPRE
           geocerca,
           activity,
-          geocerca_nombre: a.geocerca_nombre || geocerca?.nombre || "",
-          activity_name: a.activity_name || activity?.name || "",
-
-          // Para mostrar fechas SIEMPRE
+          geocerca_nombre: geocerca?.nombre || "",
+          activity_name: activity?.name || "",
           start_time: a.start_time || null,
           end_time: a.end_time || null,
-          start_date: a.start_date || null,
-          end_date: a.end_date || null,
-
-          // Para mostrar frecuencia SIEMPRE
           frecuencia_envio_sec: a.frecuencia_envio_sec ?? null,
         };
       }
@@ -291,14 +311,10 @@ export default function AsignacionesPage() {
       personal_id: selectedPersonalId,
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
-
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
-
-      // compatibilidad adicional
       start_date: localDateTimeToDate(startTime),
       end_date: localDateTimeToDate(endTime),
-
       frecuencia_envio_sec: freqMin * 60,
       status,
     };
@@ -333,14 +349,12 @@ export default function AsignacionesPage() {
     if (!ok) return;
 
     try {
-      // soft delete si existe esquema
       const { error: delErr } = await supabase
         .from("asignaciones")
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq("id", id);
 
       if (delErr) {
-        // fallback hard delete
         const { error: hardErr } = await supabase
           .from("asignaciones")
           .delete()
@@ -522,17 +536,13 @@ export default function AsignacionesPage() {
           </div>
 
           <div className="flex flex-col">
-            <label className="mb-1 font-medium text-sm">
-              Frecuencia (min)
-            </label>
+            <label className="mb-1 font-medium text-sm">Frecuencia (min)</label>
             <input
               type="number"
               className="border rounded px-3 py-2"
               min={5}
               value={frecuenciaEnvioMin}
-              onChange={(e) =>
-                setFrecuenciaEnvioMin(Number(e.target.value) || 5)
-              }
+              onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
             />
           </div>
 
