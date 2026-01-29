@@ -22,105 +22,102 @@ function safeNextPath(raw: string | null, fallback: string) {
   if (!s) return fallback;
   if (!s.startsWith("/")) return fallback;
   if (s.startsWith("//")) return fallback;
-  // opcional: restringir más
   return s;
 }
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState("Validando acceso…");
+  const [fatal, setFatal] = useState<string | null>(null);
 
   useEffect(() => {
+    let alive = true;
+
     (async () => {
       try {
         const err = qp("error") || qp("err");
-        if (err) {
-          navigate(`/login?err=${encodeURIComponent(err)}`, { replace: true });
-          return;
+        if (err) throw new Error(err);
+
+        // Si viene org_id en el redirect_to, lo guardamos para TrackerGpsPage
+        const orgId = qp("org_id");
+        if (orgId) {
+          try {
+            localStorage.setItem("tracker_org_id", orgId);
+          } catch {
+            // ignore
+          }
         }
 
-        const next = safeNextPath(qp("next"), "/inicio");
+        const tgFlow = String(qp("tg_flow") || "").toLowerCase();
+        const nextRaw = qp("next");
+        const fallback = tgFlow === "tracker" ? "/tracker-gps" : "/inicio";
+        const next = safeNextPath(nextRaw, fallback);
 
         // 1) PKCE (?code=...)
         const code = qp("code");
         if (code) {
           setStatus("Confirmando código…");
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error || !data?.session) {
-            navigate(`/login?err=${encodeURIComponent(error?.message || "exchange_failed")}`, { replace: true });
-            return;
-          }
+          if (error || !data?.session) throw new Error(error?.message || "exchange_failed");
         } else {
-          // 2) Magic link / invite (?token_hash=...&type=...)
+          // 2) OTP style (?token_hash=...&type=...)
           const token_hash = qp("token_hash");
           const type = qp("type") as "invite" | "magiclink" | "recovery" | "signup" | null;
 
           if (token_hash && type) {
             setStatus("Verificando enlace…");
             const { data, error } = await supabase.auth.verifyOtp({ token_hash, type });
-            if (error || !data?.session) {
-              navigate(`/login?err=${encodeURIComponent(error?.message || "verify_failed")}`, { replace: true });
-              return;
-            }
+            if (error || !data?.session) throw new Error(error?.message || "verify_failed");
           } else {
             // 3) Hash tokens (#access_token=...&refresh_token=...)
             const { access_token, refresh_token } = parseHash();
             if (access_token && refresh_token) {
               setStatus("Estableciendo sesión…");
               const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
-              if (error || !data?.session) {
-                navigate(`/login?err=${encodeURIComponent(error?.message || "set_session_failed")}`, { replace: true });
-                return;
-              }
+              if (error || !data?.session) throw new Error(error?.message || "set_session_failed");
             } else {
-              navigate(`/login?err=${encodeURIComponent("missing_code_or_token_hash")}`, { replace: true });
-              return;
+              throw new Error("missing_code_or_token_hash");
             }
           }
         }
 
-        // 4) Obtener tokens reales desde Supabase (fuente de verdad)
+        // Confirmar sesión real (fuente de verdad)
         setStatus("Preparando sesión…");
-        const { data: sessData } = await supabase.auth.getSession();
-        const s = sessData?.session;
+        const { data: sessData, error: sessErr } = await supabase.auth.getSession();
+        if (sessErr) throw new Error(sessErr.message);
+        if (!sessData?.session?.access_token) throw new Error("missing_access_token");
 
-        if (!s?.access_token) {
-          navigate(`/login?err=${encodeURIComponent("missing_access_token")}`, { replace: true });
-          return;
-        }
+        if (!alive) return;
 
-        // 5) (Compat) setear cookies HttpOnly si tu backend las usa
-        setStatus("Iniciando sesión…");
-        await fetch("/api/auth/session", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            access_token: s.access_token,
-            refresh_token: s.refresh_token,
-          }),
-        });
-
-        // 6) Leer rol/org real desde backend y redirigir
-        setStatus("Cargando perfil…");
-        const r = await fetch("/api/auth/session", { credentials: "include" });
-        const j = await r.json().catch(() => ({}));
-
-        const role = String(j?.role || "").toLowerCase();
-
-        // Tracker => directo al next (por defecto /tracker-gps)
-        if (j?.authenticated && role === "tracker") {
-          window.location.replace(safeNextPath(qp("next"), "/tracker-gps"));
-          return;
-        }
-
-        // Otros roles => next (si venía) o /inicio
+        // ✅ Redirección directa (sin /api/*, sin /login)
         window.location.replace(next);
       } catch (e: any) {
-        navigate(`/login?err=${encodeURIComponent(e?.message || "callback_error")}`, { replace: true });
+        if (!alive) return;
+        setFatal(e?.message || "callback_error");
       }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, [navigate]);
+
+  if (fatal) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-4">
+        <div className="max-w-md w-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-red-600">No se pudo validar el acceso</h2>
+          <p className="mt-2 text-sm text-slate-700">{fatal}</p>
+          <button
+            className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-white"
+            onClick={() => window.location.replace("/")}
+          >
+            Volver al inicio
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
