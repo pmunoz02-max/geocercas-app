@@ -1,27 +1,67 @@
 // src/pages/TrackerGpsPage.jsx
 import { useEffect, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// --- Supabase client (para bootstrap de sesión en localStorage) ---
+function getSupabaseUrl() {
+  return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+}
+function getSupabaseAnonKey() {
+  return import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+}
+
+const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
+
+// --- Helpers ---
+function safeJsonParse(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 function getSupabaseAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
-    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
-    if (!k) return "";
-    const raw = window.localStorage.getItem(k);
-    if (!raw) return "";
-    const j = JSON.parse(raw);
-    return (
-      j?.access_token ||
-      j?.currentSession?.access_token ||
-      j?.data?.session?.access_token ||
-      ""
-    );
+    // soporta sb-xxx-auth-token (supabase-js)
+    const candidates = keys.filter((x) => /^sb-.*-auth-token$/i.test(String(x)));
+    for (const k of candidates) {
+      const raw = window.localStorage.getItem(k);
+      if (!raw) continue;
+      const j = safeJsonParse(raw);
+      const t =
+        j?.access_token ||
+        j?.currentSession?.access_token ||
+        j?.data?.session?.access_token ||
+        "";
+      if (t) return t;
+    }
+    return "";
   } catch {
     return "";
   }
 }
 
-function getSupabaseUrl() {
-  return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+async function ensureSupabaseSession() {
+  // fuerza a Supabase a leer sesión existente (si la hay) y persistirla en localStorage
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token || "";
+    if (token) return token;
+
+    // fallback: a veces tarda un momento en persistir
+    await new Promise((r) => setTimeout(r, 250));
+    return getSupabaseAccessTokenFromLocalStorage();
+  } catch {
+    return getSupabaseAccessTokenFromLocalStorage();
+  }
 }
 
 function resolveOrgId(sess) {
@@ -35,12 +75,7 @@ function resolveOrgId(sess) {
 }
 
 function resolveEmail(sess) {
-  return (
-    sess?.user?.email ||
-    sess?.email ||
-    sess?.profile?.email ||
-    ""
-  );
+  return sess?.user?.email || sess?.email || sess?.profile?.email || "";
 }
 
 export default function TrackerGpsPage() {
@@ -76,16 +111,22 @@ export default function TrackerGpsPage() {
 
   async function loadInterval(org_id, email) {
     try {
-      const token = getSupabaseAccessTokenFromLocalStorage();
+      const token = await ensureSupabaseSession();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const url = `/api/personal?onlyActive=1&limit=50&org_id=${encodeURIComponent(org_id)}&q=${encodeURIComponent(email)}`;
+      const url = `/api/personal?onlyActive=1&limit=50&org_id=${encodeURIComponent(
+        org_id
+      )}&q=${encodeURIComponent(email)}`;
       const res = await fetch(url, { headers });
       const j = await res.json().catch(() => ({}));
       const items = j?.items || j?.data || [];
 
       const found = Array.isArray(items)
-        ? items.find((p) => String(p.email_norm || p.email || "").toLowerCase() === String(email).toLowerCase())
+        ? items.find(
+            (p) =>
+              String(p.email_norm || p.email || "").toLowerCase() ===
+              String(email).toLowerCase()
+          )
         : null;
 
       const sec = Number(found?.position_interval_sec);
@@ -98,8 +139,18 @@ export default function TrackerGpsPage() {
 
     (async () => {
       try {
+        // 1) validar sesión server-side (tu flujo actual)
         const s = await loadSession();
         if (!alive) return;
+
+        // 2) bootstrap de sesión Supabase (para que exista access_token en localStorage)
+        const anon = getSupabaseAnonKey();
+        if (!anon) {
+          setError("Falta VITE_SUPABASE_ANON_KEY (requerida para Edge Function).");
+          setLoading(false);
+          return;
+        }
+        await ensureSupabaseSession();
 
         setLoading(false);
 
@@ -124,7 +175,9 @@ export default function TrackerGpsPage() {
       }
     })();
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   async function sendPosition(pos, org_id) {
@@ -133,14 +186,23 @@ export default function TrackerGpsPage() {
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
-    const token = getSupabaseAccessTokenFromLocalStorage();
+    // token (bootstrap incluido)
+    let token = getSupabaseAccessTokenFromLocalStorage();
+    if (!token) token = await ensureSupabaseSession();
+
     if (!token) {
       setSendStatus("error");
-      setSendError("No access_token (localStorage). Re-login.");
+      setSendError("No access_token (localStorage) incluso tras bootstrap. Re-login.");
       return;
     }
 
     const supabaseUrl = getSupabaseUrl();
+    if (!supabaseUrl) {
+      setSendStatus("error");
+      setSendError("Falta VITE_SUPABASE_URL.");
+      return;
+    }
+
     const url = `${supabaseUrl}/functions/v1/send_position`;
 
     const payload = {
@@ -171,7 +233,7 @@ export default function TrackerGpsPage() {
 
     if (!r.ok || !j?.ok) {
       setSendStatus("error");
-      setSendError(j?.error || j?.details || "Error enviando posición");
+      setSendError(j?.error || j?.details || `Error enviando posición (HTTP ${r.status})`);
       return;
     }
 
@@ -231,7 +293,11 @@ export default function TrackerGpsPage() {
   }, []);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-600">Cargando tracker…</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-600">
+        Cargando tracker…
+      </div>
+    );
   }
 
   if (error) {
@@ -255,7 +321,13 @@ export default function TrackerGpsPage() {
 
         <p className="text-sm text-emerald-700 mt-2">
           Estado del GPS:{" "}
-          <b>{permission === "granted" ? "Permitido" : permission === "denied" ? "Bloqueado" : "Pendiente"}</b>
+          <b>
+            {permission === "granted"
+              ? "Permitido"
+              : permission === "denied"
+              ? "Bloqueado"
+              : "Pendiente"}
+          </b>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
@@ -267,7 +339,10 @@ export default function TrackerGpsPage() {
         </p>
 
         {!gpsActive && (
-          <button onClick={startTracking} className="mt-4 w-full bg-emerald-600 text-white py-3 rounded-lg">
+          <button
+            onClick={startTracking}
+            className="mt-4 w-full bg-emerald-600 text-white py-3 rounded-lg"
+          >
             Activar ubicación
           </button>
         )}
