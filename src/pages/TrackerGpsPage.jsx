@@ -1,41 +1,14 @@
 // src/pages/TrackerGpsPage.jsx
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-// --- Supabase client (para bootstrap de sesión en localStorage) ---
-function getSupabaseUrl() {
-  return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
-}
-function getSupabaseAnonKey() {
-  return import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-}
-
-const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
-
-// --- Helpers ---
-function safeJsonParse(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
 
 function getSupabaseAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
-    // soporta sb-xxx-auth-token (supabase-js)
     const candidates = keys.filter((x) => /^sb-.*-auth-token$/i.test(String(x)));
     for (const k of candidates) {
       const raw = window.localStorage.getItem(k);
       if (!raw) continue;
-      const j = safeJsonParse(raw);
+      const j = JSON.parse(raw);
       const t =
         j?.access_token ||
         j?.currentSession?.access_token ||
@@ -49,19 +22,8 @@ function getSupabaseAccessTokenFromLocalStorage() {
   }
 }
 
-async function ensureSupabaseSession() {
-  // fuerza a Supabase a leer sesión existente (si la hay) y persistirla en localStorage
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data?.session?.access_token || "";
-    if (token) return token;
-
-    // fallback: a veces tarda un momento en persistir
-    await new Promise((r) => setTimeout(r, 250));
-    return getSupabaseAccessTokenFromLocalStorage();
-  } catch {
-    return getSupabaseAccessTokenFromLocalStorage();
-  }
+function getSupabaseUrl() {
+  return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 }
 
 function resolveOrgId(sess) {
@@ -111,7 +73,7 @@ export default function TrackerGpsPage() {
 
   async function loadInterval(org_id, email) {
     try {
-      const token = await ensureSupabaseSession();
+      const token = getSupabaseAccessTokenFromLocalStorage();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
       const url = `/api/personal?onlyActive=1&limit=50&org_id=${encodeURIComponent(
@@ -131,7 +93,9 @@ export default function TrackerGpsPage() {
 
       const sec = Number(found?.position_interval_sec);
       if (Number.isFinite(sec) && sec > 0) setIntervalSec(sec);
-    } catch {}
+    } catch {
+      // silencio: es solo para intervalo
+    }
   }
 
   useEffect(() => {
@@ -139,18 +103,8 @@ export default function TrackerGpsPage() {
 
     (async () => {
       try {
-        // 1) validar sesión server-side (tu flujo actual)
         const s = await loadSession();
         if (!alive) return;
-
-        // 2) bootstrap de sesión Supabase (para que exista access_token en localStorage)
-        const anon = getSupabaseAnonKey();
-        if (!anon) {
-          setError("Falta VITE_SUPABASE_ANON_KEY (requerida para Edge Function).");
-          setLoading(false);
-          return;
-        }
-        await ensureSupabaseSession();
 
         setLoading(false);
 
@@ -186,15 +140,13 @@ export default function TrackerGpsPage() {
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
-    // token (bootstrap incluido)
-    let token = getSupabaseAccessTokenFromLocalStorage();
-    if (!token) token = await ensureSupabaseSession();
-
+    const token = getSupabaseAccessTokenFromLocalStorage();
     if (!token) {
-    if (!token) {
-  window.location.href = "/tracker-auth-bridge";
-  return;
-}
+      // Bridge: crear sesión Supabase para obtener sb-*-auth-token
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/tracker-auth-bridge?next=${next}`;
+      return;
+    }
 
     const supabaseUrl = getSupabaseUrl();
     if (!supabaseUrl) {
