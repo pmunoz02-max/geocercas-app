@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
+const LS_LAST_INVITE_KEY = "last_tracker_invite_link_v1";
+
 function getSupabaseAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
@@ -70,10 +72,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600">
-                  {" "}
-                  — {selected.email || "(sin email)"}
-                </span>
+                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -112,9 +111,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
                   }}
                 >
                   <div className="text-sm font-medium">{p.full_name}</div>
-                  <div className="text-xs text-gray-600">
-                    {p.email || "(sin email)"}
-                  </div>
+                  <div className="text-xs text-gray-600">{p.email || "(sin email)"}</div>
                 </button>
               ))
             )}
@@ -137,7 +134,10 @@ export default function InvitarTracker() {
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+
   const [success, setSuccess] = useState(null);
+  const [inviteData, setInviteData] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const orgId = currentOrg?.id ? String(currentOrg.id) : "";
 
@@ -196,7 +196,6 @@ export default function InvitarTracker() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) throw new Error(data?.error || "No se pudo cargar el personal");
-
       setPersonalRaw(normalizeRows(data));
     } catch (e) {
       setPersonalError(e.message || "Error cargando personal");
@@ -214,15 +213,61 @@ export default function InvitarTracker() {
   useEffect(() => {
     setError(null);
     setSuccess(null);
+    setInviteData(null);
+    setCopied(false);
 
     if (selectedPerson?.email) setEmail(selectedPerson.email);
     else if (selectedPersonId) setEmail("");
   }, [selectedPersonId, selectedPerson]);
 
+  // cargar último link guardado
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_LAST_INVITE_KEY);
+      if (!raw) return;
+      const j = JSON.parse(raw);
+      if (j?.magic_link) setInviteData(j);
+    } catch {}
+  }, []);
+
+  async function copyLink() {
+    const link = inviteData?.magic_link || "";
+    if (!link) return;
+
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = link;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  }
+
+  function openWhatsApp() {
+    const link = inviteData?.magic_link || "";
+    if (!link) return;
+
+    const msg =
+      `Hola. Este es tu link de acceso como Tracker a App Geocercas:\n\n${link}\n\n` +
+      `Al abrirlo, llegarás directo a Tracker GPS.`;
+    const wa = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(wa, "_blank", "noopener,noreferrer");
+  }
+
   async function handleInvite(e) {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setInviteData(null);
+    setCopied(false);
 
     if (!orgId) return setError("Organización no válida.");
     if (!selectedPersonId) return setError("Selecciona una persona.");
@@ -246,15 +291,25 @@ export default function InvitarTracker() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Error al enviar invitación");
+      if (!res.ok) throw new Error(data?.error || "Error al invitar tracker");
 
-      setSuccess("Invitación enviada. Revisa el correo del tracker.");
+      const link = String(data?.magic_link || "").trim();
+      if (!link) throw new Error("La invitación fue OK, pero el backend no devolvió magic_link.");
+
+      setInviteData(data);
+      try {
+        localStorage.setItem(LS_LAST_INVITE_KEY, JSON.stringify(data));
+      } catch {}
+
+      setSuccess("Link generado ✅ Cópialo y envíalo al tracker (WhatsApp/Email).");
     } catch (err) {
       setError(err.message || "Error inesperado");
     } finally {
       setSending(false);
     }
   }
+
+  const magicLink = inviteData?.magic_link || "";
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -295,16 +350,59 @@ export default function InvitarTracker() {
 
         <form onSubmit={handleInvite} className="mt-5">
           {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
-          {success && <div className="text-green-600 text-sm mb-2">{success}</div>}
+          {success && <div className="text-green-700 text-sm mb-2">{success}</div>}
 
           <button
             type="submit"
             disabled={sending}
             className="w-full mt-4 bg-emerald-600 text-white rounded-lg py-3"
           >
-            {sending ? "Enviando..." : "Enviar invitación"}
+            {sending ? "Generando link..." : "Generar link de invitación"}
           </button>
         </form>
+
+        {magicLink && (
+          <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
+            <div className="text-sm font-medium text-emerald-800 mb-2">Magic link (Tracker)</div>
+
+            <textarea
+              readOnly
+              value={magicLink}
+              className="w-full h-28 border rounded-lg p-3 font-mono text-xs bg-white"
+            />
+
+            <div className="flex gap-2 mt-3 flex-wrap">
+              <button
+                type="button"
+                onClick={copyLink}
+                className="px-4 py-2 rounded-lg border bg-white text-sm"
+              >
+                {copied ? "✅ Copiado" : "Copiar link"}
+              </button>
+
+              <button
+                type="button"
+                onClick={openWhatsApp}
+                className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm"
+              >
+                Enviar por WhatsApp
+              </button>
+
+              <a
+                href={magicLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm"
+              >
+                Abrir link (prueba)
+              </a>
+            </div>
+
+            <div className="text-xs text-emerald-900 mt-3">
+              Tip: abre el link en incógnito para probar el flujo del tracker.
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="text-xs text-gray-500">
