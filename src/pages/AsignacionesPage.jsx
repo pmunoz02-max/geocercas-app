@@ -1,11 +1,9 @@
 // src/pages/AsignacionesPage.jsx
 // Fix Enero 2026 (universal):
-// - Sin "ready" (evita blanco)
-// - Tenant-safe estricto por currentOrg.id
-// - Geocercas: NO usar /api/geocercas (401 por cookies). Usar Supabase client directo.
+// - Geocercas: Supabase client (no /api 401)
 // - Personal: org_people join people (tenant-safe)
-// - Actividades: supabase directo + fallback API opcional
-// - Estados explícitos, sin return null silencioso
+// - IMPORTANT: asignaciones.personal_id guarda PEOPLE.ID (para cumplir FK asignaciones_personal_fk)
+// - Sin ready, estados explícitos
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,14 +30,7 @@ const ESTADOS = ["todos", "activa", "inactiva"];
 
 function CalendarIcon({ className = "h-4 w-4" }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M8 3v2M16 3v2" />
       <path d="M3 9h18" />
       <path d="M6 5h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z" />
@@ -50,19 +41,10 @@ function CalendarIcon({ className = "h-4 w-4" }) {
 function openNativePicker(inputEl) {
   if (!inputEl) return;
   try {
-    if (typeof inputEl.showPicker === "function") {
-      inputEl.showPicker();
-      return;
-    }
+    if (typeof inputEl.showPicker === "function") return inputEl.showPicker();
   } catch (_) {}
   inputEl.focus();
   inputEl.click();
-}
-
-function toIdMap(arr) {
-  const m = new Map();
-  (Array.isArray(arr) ? arr : []).forEach((x) => x?.id && m.set(x.id, x));
-  return m;
 }
 
 function dedupeById(arr) {
@@ -97,18 +79,10 @@ function filterByOrg(rows, orgId) {
 async function fetchJson(url) {
   const r = await fetch(url, { credentials: "include" });
   const j = await r.json().catch(() => null);
-  if (!r.ok) {
-    const msg = (j && j.error) || `HTTP ${r.status}`;
-    throw new Error(msg);
-  }
+  if (!r.ok) throw new Error((j && j.error) || `HTTP ${r.status}`);
   return j;
 }
 
-/**
- * ✅ FIX UNIVERSAL:
- * Geocercas se consultan por Supabase client (session segura),
- * NO por /api/geocercas (que depende de cookies tg_at y puede dar 401).
- */
 async function fetchGeocercasSafeByOrg(orgId) {
   if (!orgId) return [];
   const { data, error } = await supabase
@@ -144,7 +118,6 @@ async function fetchActivitiesApiFallback(orgId) {
     `/api/catalogs/activities?org_id=${encodeURIComponent(orgId)}`,
     `/api/catalogs/activities`,
   ];
-
   for (const url of endpoints) {
     try {
       const j = await fetchJson(url);
@@ -174,12 +147,11 @@ function normalizeActivities(rows, orgId) {
 }
 
 /**
- * Personal real:
- * org_people (por org) -> people
+ * ✅ Personal tenant-safe por org_people join people
+ * ✅ Para asignaciones, guardamos people_id (cumple FK a people)
  */
 async function fetchPersonalSafeByOrg(orgId) {
   if (!orgId) return [];
-
   const { data, error } = await supabase
     .from("org_people")
     .select(
@@ -204,60 +176,27 @@ async function fetchPersonalSafeByOrg(orgId) {
   return rows
     .map((row) => {
       const p = row.person || {};
-      const nombre =
+      const display =
         `${p.nombre || ""} ${p.apellido || ""}`.trim() ||
         (p.email || "").trim() ||
         row.person_id;
 
       return {
-        org_people_id: row.id,
+        id: row.person_id, // ✅ value del select = people_id
         people_id: row.person_id,
-        nombre,
-        apellido: "",
+        org_people_id: row.id,
+        nombre: display,
         email: (p.email || "").trim(),
       };
     })
-    .filter((x) => x.org_people_id && x.people_id);
-}
-
-function normalizePersonalFromBundle(catalogs, orgId) {
-  const personal = Array.isArray(catalogs?.personal) ? catalogs.personal : [];
-  const peopleLegacy = Array.isArray(catalogs?.people) ? catalogs.people : [];
-
-  const normalized =
-    personal.length > 0
-      ? personal
-      : peopleLegacy.map((p) => ({
-          id: p.org_people_id || p.id,
-          nombre: p.nombre,
-          apellido: p.apellido,
-          email: p.email,
-          org_id: p.org_id || null,
-        }));
-
-  const cleaned = (Array.isArray(normalized) ? normalized : [])
-    .map((p) => ({
-      ...p,
-      id: p.id,
-      nombre: p.nombre || "",
-      apellido: p.apellido || "",
-      email: p.email || "",
-      org_id: p.org_id || null,
-    }))
-    .filter((p) => p?.id);
-
-  return dedupeById(cleaned.filter((p) => p.org_id === orgId));
+    .filter((x) => x.id);
 }
 
 function normalizeAsignacionRow(a) {
   if (!a || typeof a !== "object") return a;
-
-  const start =
-    a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
+  const start = a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
   const end = a.end_time || a.fin || a.end || a.fecha_fin || a.endTime || null;
-
   let freqSec = a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
-
   if (freqSec == null && a.frecuencia_envio_min != null) {
     const n = Number(a.frecuencia_envio_min);
     if (Number.isFinite(n)) freqSec = n * 60;
@@ -266,7 +205,6 @@ function normalizeAsignacionRow(a) {
     const n = Number(a.freq_min);
     if (Number.isFinite(n)) freqSec = n * 60;
   }
-
   return {
     ...a,
     start_time: start,
@@ -278,22 +216,17 @@ function normalizeAsignacionRow(a) {
 
 export default function AsignacionesPage() {
   const { t } = useTranslation();
-
   const { loading, isAuthenticated, user, currentOrg } = useAuth();
 
-  // ✅ UNIVERSAL: orgId SIEMPRE desde currentOrg.id (no depender de localStorage para filtrar)
   const orgId = useMemo(() => currentOrg?.id || null, [currentOrg?.id]);
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
-
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
-
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
-  // FORM
-  const [selectedPersonalId, setSelectedPersonalId] = useState("");
+  const [selectedPersonalId, setSelectedPersonalId] = useState(""); // ✅ people_id
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -305,26 +238,9 @@ export default function AsignacionesPage() {
   const startInputRef = useRef(null);
   const endInputRef = useRef(null);
 
-  // CATALOGOS
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
-
-  const [personalIdMode, setPersonalIdMode] = useState("org_people");
-
-  function detectPersonalIdMode(rows, safePersonalRows) {
-    const ids = new Set((rows || []).map((r) => r?.personal_id).filter(Boolean));
-    if (!ids.size) return "org_people";
-
-    const orgPeopleIds = new Set((safePersonalRows || []).map((p) => p.org_people_id));
-    const peopleIds = new Set((safePersonalRows || []).map((p) => p.people_id));
-
-    for (const id of ids) {
-      if (orgPeopleIds.has(id)) return "org_people";
-      if (peopleIds.has(id)) return "people";
-    }
-    return "org_people";
-  }
 
   async function loadAll() {
     setLoadingData(true);
@@ -340,20 +256,13 @@ export default function AsignacionesPage() {
       return;
     }
 
-    // ✅ Mantener localStorage sincronizado (solo como cache, NO como fuente)
     try {
       localStorage.setItem("tg_current_org_id", orgId);
     } catch (_) {}
 
-    // 1) Bundle
     const { data, error: bundleError } = await getAsignacionesBundle();
     if (bundleError) {
-      console.error("[AsignacionesPage] bundle error:", bundleError);
       setError(bundleError.message || "Error cargando asignaciones.");
-      setAsignaciones([]);
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setActivityOptions([]);
       setLoadingData(false);
       return;
     }
@@ -361,73 +270,41 @@ export default function AsignacionesPage() {
     const bundle = data || {};
     const rowsRaw = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
     const catalogs = bundle.catalogs || {};
+    setAsignaciones(rowsRaw.map(normalizeAsignacionRow));
 
-    const rows = rowsRaw.map(normalizeAsignacionRow);
-    setAsignaciones(rows);
-
-    // Personal desde bundle (tenant-safe) mientras llega el safe fetch
-    setPersonalOptions(normalizePersonalFromBundle(catalogs, orgId));
-
-    // Geocercas desde bundle (tenant-safe)
     const bundleGeosAll = normalizeGeocercas(catalogs.geocercas);
-    const bundleGeos = filterByOrg(bundleGeosAll, orgId);
-    setGeocercaOptions(bundleGeos);
+    setGeocercaOptions(filterByOrg(bundleGeosAll, orgId));
 
-    // Activities desde bundle (tenant-safe)
     const bundleActsRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
-    const bundleActs = normalizeActivities(bundleActsRaw, orgId);
-    setActivityOptions(bundleActs);
+    setActivityOptions(normalizeActivities(bundleActsRaw, orgId));
 
-    // 2) ✅ Geocercas SAFE (Supabase client) - arregla el 401 del /api/geocercas
+    // ✅ Geocercas safe
     try {
       const geosSafe = await fetchGeocercasSafeByOrg(orgId);
-      if (geosSafe?.length) {
-        setGeocercaOptions(dedupeById([...geosSafe, ...bundleGeos]));
-      } else {
-        // Si no hay geocercas en DB para esta org, dejamos vacío y la UI avisará correctamente
-        setGeocercaOptions(dedupeById([...bundleGeos]));
-      }
+      setGeocercaOptions(dedupeById([...geosSafe, ...filterByOrg(bundleGeosAll, orgId)]));
     } catch (e) {
-      console.warn("[AsignacionesPage] geocercas safe failed:", e?.message || e);
-      // No inventamos “no tiene geocercas”; mostramos error real
       setError((prev) => prev || `Error consultando geocercas: ${e?.message || e}`);
     }
 
-    // 3) Activities SAFE (Supabase -> API)
+    // ✅ Activities safe
     try {
       const actsSafe = await fetchActivitiesSafeByOrg(orgId);
       const actsNorm = normalizeActivities(actsSafe, orgId);
-
-      if (actsNorm?.length) {
-        setActivityOptions(dedupeById([...actsNorm, ...bundleActs]));
-      } else {
+      if (actsNorm?.length) setActivityOptions(dedupeById([...actsNorm, ...normalizeActivities(bundleActsRaw, orgId)]));
+      else {
         const actsApi = await fetchActivitiesApiFallback(orgId);
         const actsApiNorm = normalizeActivities(actsApi, orgId);
-        if (actsApiNorm?.length) setActivityOptions(dedupeById([...actsApiNorm, ...bundleActs]));
+        if (actsApiNorm?.length) setActivityOptions(dedupeById([...actsApiNorm, ...normalizeActivities(bundleActsRaw, orgId)]));
       }
     } catch (e) {
-      console.warn("[AsignacionesPage] activities fallback failed:", e?.message || e);
       setError((prev) => prev || `Error consultando actividades: ${e?.message || e}`);
     }
 
-    // 4) Personal SAFE (org_people join people)
+    // ✅ Personal safe (people_id)
     try {
-      const safeRows = await fetchPersonalSafeByOrg(orgId);
-      const mode = detectPersonalIdMode(rows, safeRows);
-      setPersonalIdMode(mode);
-
-      const opts = safeRows.map((p) => ({
-        id: mode === "people" ? p.people_id : p.org_people_id,
-        nombre: p.nombre || "",
-        apellido: "",
-        email: p.email || "",
-        org_people_id: p.org_people_id,
-        people_id: p.people_id,
-      }));
-
-      setPersonalOptions(dedupeById(opts));
+      const p = await fetchPersonalSafeByOrg(orgId);
+      setPersonalOptions(p);
     } catch (e) {
-      console.warn("[AsignacionesPage] personal safe failed:", e?.message || e);
       setError((prev) => prev || `Error consultando personas: ${e?.message || e}`);
       setPersonalOptions([]);
     }
@@ -445,35 +322,8 @@ export default function AsignacionesPage() {
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
     if (estadoFilter !== "todos") rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
-    if (selectedPersonalId) rows = rows.filter((a) => a.personal_id === selectedPersonalId);
     return rows;
-  }, [asignaciones, estadoFilter, selectedPersonalId]);
-
-  const enrichedAsignaciones = useMemo(() => {
-    const geoMap = toIdMap(geocercaOptions);
-    const actMap = toIdMap(activityOptions);
-    const perMap = toIdMap(personalOptions);
-
-    return (Array.isArray(filteredAsignaciones) ? filteredAsignaciones : []).map((a0) => {
-      const a = normalizeAsignacionRow(a0);
-
-      const geocerca = a.geocerca || geoMap.get(a.geocerca_id) || null;
-      const activity = a.activity || actMap.get(a.activity_id) || null;
-      const personal = a.personal || perMap.get(a.personal_id) || null;
-
-      const geocercaNombre = a.geocerca_nombre || geocerca?.nombre || geocerca?.name || "";
-      const activityName = a.activity_name || activity?.name || activity?.nombre || "";
-
-      return {
-        ...a,
-        geocerca,
-        activity,
-        personal,
-        geocerca_nombre: geocercaNombre,
-        activity_name: activityName,
-      };
-    });
-  }, [filteredAsignaciones, geocercaOptions, activityOptions, personalOptions]);
+  }, [asignaciones, estadoFilter]);
 
   function resetForm() {
     setSelectedPersonalId("");
@@ -491,27 +341,16 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!orgId) {
-      setError("No hay organización activa.");
-      return;
-    }
-    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId) {
-      setError("Selecciona persona, geocerca y actividad.");
-      return;
-    }
-    if (!startTime || !endTime) {
-      setError("Selecciona Inicio y Fin.");
-      return;
-    }
+    if (!orgId) return setError("No hay organización activa.");
+    if (!selectedPersonalId || !selectedGeocercaId || !selectedActivityId)
+      return setError("Selecciona persona, geocerca y actividad.");
+    if (!startTime || !endTime) return setError("Selecciona Inicio y Fin.");
 
     const freqMin = Number(frecuenciaEnvioMin) || 0;
-    if (freqMin < 5) {
-      setError("La frecuencia mínima es 5 minutos.");
-      return;
-    }
+    if (freqMin < 5) return setError("La frecuencia mínima es 5 minutos.");
 
     const payload = {
-      personal_id: selectedPersonalId,
+      personal_id: selectedPersonalId, // ✅ people_id para cumplir FK
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
       start_time: localDateTimeToISO(startTime),
@@ -520,78 +359,41 @@ export default function AsignacionesPage() {
       status,
     };
 
-    const resp = editingId
-      ? await updateAsignacion(editingId, payload)
-      : await createAsignacion(payload);
-
-    if (resp.error) {
-      setError(resp.error.message || "Error guardando asignación.");
-      return;
-    }
+    const resp = editingId ? await updateAsignacion(editingId, payload) : await createAsignacion(payload);
+    if (resp.error) return setError(resp.error.message || "Error guardando asignación.");
 
     setSuccessMessage(editingId ? "Asignación actualizada." : "Asignación creada.");
     resetForm();
     await loadAll();
   }
 
-  if (loading) {
-    return (
-      <div className="p-4 max-w-5xl mx-auto">
-        <div className="border rounded px-4 py-3 text-sm text-gray-600">Cargando…</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="p-4 max-w-3xl mx-auto">
-        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
-          Debes iniciar sesión.
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-4 max-w-5xl mx-auto"><div className="border rounded px-4 py-3 text-sm text-gray-600">Cargando…</div></div>;
+  if (!isAuthenticated || !user) return <div className="p-4 max-w-3xl mx-auto"><div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">Debes iniciar sesión.</div></div>;
 
   return (
     <div className="w-full p-4">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">
-          {t("asignaciones.title", { defaultValue: "Asignaciones" })}
-        </h1>
+        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
         <p className="text-xs text-gray-500 mt-1">
-          Org actual:{" "}
-          <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
-          <span className="ml-2 text-gray-400">(idMode: {personalIdMode})</span>
+          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+          <span className="ml-2 text-gray-400">(idMode: people)</span>
         </p>
       </div>
 
-      {error && (
-        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-      )}
-      {successMessage && (
-        <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">
-          {successMessage}
-        </div>
-      )}
+      {error && <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {successMessage && <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">{successMessage}</div>}
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
-        <h2 className="text-lg font-semibold mb-4">
-          {editingId ? "Editar asignación" : "Nueva asignación"}
-        </h2>
+        <h2 className="text-lg font-semibold mb-4">{editingId ? "Editar asignación" : "Nueva asignación"}</h2>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Persona</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedPersonalId}
-              onChange={(e) => setSelectedPersonalId(e.target.value)}
-              required
-            >
+            <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)} required>
               <option value="">Selecciona una persona</option>
               {personalOptions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {`${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id}
+                  {p.nombre || p.email || p.id}
                 </option>
               ))}
             </select>
@@ -599,12 +401,7 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Geocerca</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedGeocercaId}
-              onChange={(e) => setSelectedGeocercaId(e.target.value)}
-              required
-            >
+            <select className="border rounded px-3 py-2" value={selectedGeocercaId} onChange={(e) => setSelectedGeocercaId(e.target.value)} required>
               <option value="">Selecciona una geocerca</option>
               {geocercaOptions.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -612,7 +409,6 @@ export default function AsignacionesPage() {
                 </option>
               ))}
             </select>
-
             {geocercaOptions.length === 0 && !loadingData && !error && (
               <p className="text-xs text-amber-700 mt-1">
                 Esta organización no tiene geocercas. Crea una en “Geocercas” para poder asignar.
@@ -622,12 +418,7 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Actividad</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={selectedActivityId}
-              onChange={(e) => setSelectedActivityId(e.target.value)}
-              required
-            >
+            <select className="border rounded px-3 py-2" value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)} required>
               <option value="">Selecciona una actividad</option>
               {activityOptions.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -640,19 +431,8 @@ export default function AsignacionesPage() {
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Inicio</label>
             <div className="relative">
-              <input
-                ref={startInputRef}
-                type="datetime-local"
-                className="border rounded px-3 py-2 w-full pr-10"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => openNativePicker(startInputRef.current)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
-              >
+              <input ref={startInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+              <button type="button" onClick={() => openNativePicker(startInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
                 <CalendarIcon />
               </button>
             </div>
@@ -661,19 +441,8 @@ export default function AsignacionesPage() {
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Fin</label>
             <div className="relative">
-              <input
-                ref={endInputRef}
-                type="datetime-local"
-                className="border rounded px-3 py-2 w-full pr-10"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => openNativePicker(endInputRef.current)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100"
-              >
+              <input ref={endInputRef} type="datetime-local" className="border rounded px-3 py-2 w-full pr-10" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+              <button type="button" onClick={() => openNativePicker(endInputRef.current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-600 hover:bg-gray-100">
                 <CalendarIcon />
               </button>
             </div>
@@ -681,11 +450,7 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Estado</label>
-            <select
-              className="border rounded px-3 py-2"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
+            <select className="border rounded px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="activa">Activa</option>
               <option value="inactiva">Inactiva</option>
             </select>
@@ -693,40 +458,21 @@ export default function AsignacionesPage() {
 
           <div className="flex flex-col">
             <label className="mb-1 font-medium text-sm">Frecuencia (min)</label>
-            <input
-              type="number"
-              className="border rounded px-3 py-2"
-              min={5}
-              value={frecuenciaEnvioMin}
-              onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
-            />
+            <input type="number" className="border rounded px-3 py-2" min={5} value={frecuenciaEnvioMin} onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)} />
           </div>
 
           <div className="md:col-span-2 flex flex-wrap gap-3 mt-2">
-            <button
-              type="submit"
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-              disabled={loadingData}
-            >
+            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60" disabled={loadingData}>
               {editingId ? "Actualizar" : "Guardar"}
             </button>
-
-            {editingId && (
-              <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">
-                Cancelar
-              </button>
-            )}
+            {editingId && <button type="button" onClick={resetForm} className="border px-4 py-2 rounded">Cancelar</button>}
           </div>
         </form>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
         <label className="font-medium">Estado</label>
-        <select
-          className="border rounded px-3 py-2"
-          value={estadoFilter}
-          onChange={(e) => setEstadoFilter(e.target.value)}
-        >
+        <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
           {ESTADOS.map((v) => (
             <option key={v} value={v}>
               {v}
@@ -736,11 +482,11 @@ export default function AsignacionesPage() {
       </div>
 
       <AsignacionesTable
-        asignaciones={enrichedAsignaciones}
+        asignaciones={filteredAsignaciones}
         loading={loadingData}
         onEdit={(a) => {
           setEditingId(a.id);
-          setSelectedPersonalId(a.personal_id || "");
+          setSelectedPersonalId(a.personal_id || ""); // ✅ asumiendo que DB guarda people_id
           setSelectedGeocercaId(a.geocerca_id || "");
           setSelectedActivityId(a.activity_id || "");
           setStartTime(a.start_time?.slice(0, 16) || "");
