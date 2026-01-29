@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-const LS_LAST_INVITE_KEY = "last_tracker_invite_link_v1";
-
 function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     String(v || "").trim()
@@ -78,10 +76,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600">
-                  {" "}
-                  — {selected.email || "(sin email)"}
-                </span>
+                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -120,9 +115,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
                   }}
                 >
                   <div className="text-sm font-medium">{p.full_name}</div>
-                  <div className="text-xs text-gray-600">
-                    {p.email || "(sin email)"}
-                  </div>
+                  <div className="text-xs text-gray-600">{p.email || "(sin email)"}</div>
                 </button>
               ))
             )}
@@ -148,11 +141,11 @@ export default function InvitarTracker() {
 
   const [success, setSuccess] = useState(null);
   const [inviteData, setInviteData] = useState(null);
-  const [copied, setCopied] = useState(false);
 
   // ✅ orgId SOLO desde currentOrg.id
   const orgId =
     currentOrg && isUuid(currentOrg.id) ? String(currentOrg.id).trim() : "";
+
   const orgName = currentOrg?.name || "";
 
   const personal = useMemo(() => {
@@ -190,10 +183,7 @@ export default function InvitarTracker() {
 
   function getAuthHeadersOrThrow() {
     const token = getSupabaseAccessTokenFromLocalStorage();
-    if (!token)
-      throw new Error(
-        "No autenticado (sin access_token). Cierra sesión y vuelve a entrar."
-      );
+    if (!token) throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
     return { Authorization: `Bearer ${token}` };
   }
 
@@ -210,9 +200,7 @@ export default function InvitarTracker() {
         return;
       }
 
-      const url = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(
-        orgId
-      )}`;
+      const url = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`;
       const res = await fetch(url, { headers: { ...getAuthHeadersOrThrow() } });
       const data = await res.json().catch(() => ({}));
 
@@ -235,59 +223,16 @@ export default function InvitarTracker() {
     setError(null);
     setSuccess(null);
     setInviteData(null);
-    setCopied(false);
 
     if (selectedPerson?.email) setEmail(selectedPerson.email);
     else if (selectedPersonId) setEmail("");
   }, [selectedPersonId, selectedPerson]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_LAST_INVITE_KEY);
-      if (!raw) return;
-      const j = JSON.parse(raw);
-      // guardamos tanto si es email_sent o magic_link
-      if (j) setInviteData(j);
-    } catch {}
-  }, []);
-
-  async function copyLink() {
-    const link = String(inviteData?.magic_link || "").trim();
-    if (!link) return;
-
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = link;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }
-  }
-
-  function openWhatsApp() {
-    const link = String(inviteData?.magic_link || "").trim();
-    if (!link) return;
-
-    const msg =
-      `Hola. Este es tu link de acceso como Tracker a App Geocercas:\n\n${link}\n\n` +
-      `Al abrirlo, llegarás directo a Tracker GPS.`;
-    const wa = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-    window.open(wa, "_blank", "noopener,noreferrer");
-  }
 
   async function handleInvite(e) {
     e.preventDefault();
     setError(null);
     setSuccess(null);
     setInviteData(null);
-    setCopied(false);
 
     if (!orgId) return setError("Organización no válida (currentOrg.id no es UUID).");
     if (!selectedPersonId) return setError("Selecciona una persona.");
@@ -314,18 +259,7 @@ export default function InvitarTracker() {
       if (!res.ok) throw new Error(data?.error || "Error al invitar tracker");
 
       setInviteData(data);
-      try {
-        localStorage.setItem(LS_LAST_INVITE_KEY, JSON.stringify(data));
-      } catch {}
-
-      // Mensaje UX claro según el caso
-      if (data?.email_sent) {
-        setSuccess("Email enviado ✅ Revisa bandeja de entrada / spam.");
-      } else if (data?.magic_link) {
-        setSuccess("Link generado ✅ Envíalo por WhatsApp/Email al tracker.");
-      } else {
-        setSuccess("Invitación OK ✅");
-      }
+      setSuccess("Email enviado ✅ Revisa bandeja de entrada / spam.");
     } catch (err) {
       setError(err.message || "Error inesperado");
     } finally {
@@ -333,17 +267,13 @@ export default function InvitarTracker() {
     }
   }
 
-  const showMagicLink = !!inviteData?.magic_link && !inviteData?.email_sent;
-  const magicLink = String(inviteData?.magic_link || "").trim();
-
   return (
     <div className="max-w-3xl mx-auto p-6">
       <h1 className="text-2xl font-semibold mb-6">Invitar Tracker</h1>
 
       {!orgId && (
         <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
-          ⚠️ La organización actual no tiene un <b>UUID válido</b> en{" "}
-          <code>currentOrg.id</code>.
+          ⚠️ La organización actual no tiene un <b>UUID válido</b> en <code>currentOrg.id</code>.
           <div className="mt-1 text-xs">
             Org actual (currentOrg.id):{" "}
             <span className="font-mono">{String(currentOrg?.id || "(vacío)")}</span>
@@ -393,64 +323,17 @@ export default function InvitarTracker() {
             disabled={sending || !orgId}
             className="w-full mt-4 bg-emerald-600 text-white rounded-lg py-3 disabled:opacity-60"
           >
-            {sending ? "Generando..." : "Generar invitación"}
+            {sending ? "Enviando email..." : "Enviar invitación por email"}
           </button>
         </form>
 
-        {/* ✅ Mostrar Magic Link SOLO si usuario ya existía (fallback) */}
-        {showMagicLink && (
-          <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
-            <div className="text-sm font-medium text-emerald-800 mb-2">
-              Magic link (Tracker)
-            </div>
-
-            <textarea
-              readOnly
-              value={magicLink}
-              className="w-full h-28 border rounded-lg p-3 font-mono text-xs bg-white"
-            />
-
-            <div className="flex gap-2 mt-3 flex-wrap">
-              <button
-                type="button"
-                onClick={copyLink}
-                className="px-4 py-2 rounded-lg border bg-white text-sm"
-              >
-                {copied ? "✅ Copiado" : "Copiar link"}
-              </button>
-
-              <button
-                type="button"
-                onClick={openWhatsApp}
-                className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm"
-              >
-                Enviar por WhatsApp
-              </button>
-
-              <a
-                href={magicLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm"
-              >
-                Abrir link (prueba)
-              </a>
-            </div>
-
-            <div className="text-xs text-emerald-900 mt-3">
-              Nota: el usuario ya existía en Auth. Envíale este link manualmente.
-            </div>
-          </div>
-        )}
-
-        {/* ✅ Mensaje cuando Supabase sí envió email */}
         {!!inviteData?.email_sent && (
           <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
-            <div className="text-sm font-medium text-emerald-800 mb-1">
-              Email enviado ✅
-            </div>
+            <div className="text-sm font-medium text-emerald-800 mb-1">Email enviado ✅</div>
             <div className="text-xs text-emerald-900">
-              Revisa bandeja de entrada / spam. El link lleva directo a Tracker GPS.
+              El tracker recibirá un link que lo lleva directo a <b>Tracker GPS</b>.
+              <br />
+              Si no lo ve, revisar <b>Spam</b>.
             </div>
           </div>
         )}
