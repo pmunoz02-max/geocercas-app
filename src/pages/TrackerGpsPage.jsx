@@ -24,6 +24,25 @@ function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 }
 
+function resolveOrgId(sess) {
+  return (
+    sess?.org_id ||
+    sess?.current_org_id ||
+    sess?.org?.id ||
+    sess?.organizations?.[0]?.id ||
+    null
+  );
+}
+
+function resolveEmail(sess) {
+  return (
+    sess?.user?.email ||
+    sess?.email ||
+    sess?.profile?.email ||
+    ""
+  );
+}
+
 export default function TrackerGpsPage() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
@@ -48,6 +67,7 @@ export default function TrackerGpsPage() {
     setSession(json);
 
     if (!json?.authenticated) throw new Error("No autenticado");
+
     const role = String(json?.role || "").toLowerCase();
     if (role !== "tracker") throw new Error(`Rol inválido para tracker-gps: ${role || "(vacío)"}`);
 
@@ -93,8 +113,9 @@ export default function TrackerGpsPage() {
           }
         }
 
-        const orgId = s?.org_id;
-        const email = s?.user?.email || s?.email || "";
+        const orgId = resolveOrgId(s);
+        const email = resolveEmail(s);
+
         if (orgId && email) loadInterval(orgId, email);
       } catch (e) {
         if (!alive) return;
@@ -168,9 +189,9 @@ export default function TrackerGpsPage() {
       () => {
         setPermission("granted");
 
-        const orgId = session?.org_id;
+        const orgId = resolveOrgId(session);
         if (!orgId) {
-          setError("org_id no disponible en sesión");
+          setError("org_id no disponible en sesión (usa current_org_id).");
           return;
         }
 
@@ -235,6 +256,10 @@ export default function TrackerGpsPage() {
         <p className="text-sm text-emerald-700 mt-2">
           Estado del GPS:{" "}
           <b>{permission === "granted" ? "Permitido" : permission === "denied" ? "Bloqueado" : "Pendiente"}</b>
+        </p>
+
+        <p className="text-xs text-emerald-800 mt-1">
+          Org: <b>{resolveOrgId(session) || "—"}</b>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
