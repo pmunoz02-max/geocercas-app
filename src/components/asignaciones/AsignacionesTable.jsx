@@ -1,8 +1,9 @@
 // src/components/asignaciones/AsignacionesTable.jsx
-// v4 — Enero 2026
-// - Nunca deja celdas vacías: si no hay dato => "—"
-// - Fallback a IDs cortos
-// - Marca visible "v4" para confirmar que ESTA versión está en producción
+// v5 — Enero 2026
+// Objetivo: NUNCA columnas “vacías invisibles” por CSS.
+// - Fuerza color/visibilidad en celdas.
+// - Incluye celda de prueba "TEXTO_FORZADO_OK" (rojo/amarillo) en Geocerca si no hay valor.
+// - Fallbacks a IDs cortos y “—”.
 
 import React, { useMemo } from "react";
 
@@ -37,7 +38,7 @@ function formatDateTime(value) {
   }
 }
 
-function cellText(v) {
+function cell(v) {
   const s = safe(v);
   return s ? s : DASH;
 }
@@ -53,7 +54,9 @@ function personaInfo(row) {
     shortId(row?.personal_id) ||
     DASH;
 
-  const email = safe(p?.email) || safe(row?.personal_email) || safe(row?.email) || "";
+  const email =
+    safe(p?.email) || safe(row?.personal_email) || safe(row?.email) || "";
+
   return { nombre, email };
 }
 
@@ -98,11 +101,7 @@ function freqMin(row) {
     return String(Math.round(Number(sec) / 60));
   }
 
-  const min =
-    row?.frecuencia_envio_min ??
-    row?.freq_min ??
-    null;
-
+  const min = row?.frecuencia_envio_min ?? row?.freq_min ?? null;
   if (min != null && Number.isFinite(Number(min)) && Number(min) > 0) {
     return String(Number(min));
   }
@@ -115,57 +114,135 @@ function StatusPill({ status }) {
   const isActive = s === "activa" || s === "active" || s === "on";
   return (
     <span
-      className={
-        "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold " +
-        (isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800")
-      }
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "4px 10px",
+        borderRadius: "999px",
+        fontSize: "12px",
+        fontWeight: 700,
+        background: isActive ? "#dcfce7" : "#f3f4f6",
+        color: isActive ? "#166534" : "#111827",
+        opacity: 1,
+        visibility: "visible",
+      }}
     >
       {isActive ? "Activa" : "Inactiva"}
     </span>
   );
 }
 
-export default function AsignacionesTable({ asignaciones, loading, onEdit, onDelete }) {
-  const rows = useMemo(() => (Array.isArray(asignaciones) ? asignaciones : []), [asignaciones]);
+// Estilo inline “anti-CSS invisible”
+const tdForce = {
+  color: "#111827",
+  opacity: 1,
+  visibility: "visible",
+  WebkitTextFillColor: "#111827",
+};
+
+export default function AsignacionesTable({
+  asignaciones,
+  loading,
+  onEdit,
+  onDelete,
+}) {
+  const rows = useMemo(
+    () => (Array.isArray(asignaciones) ? asignaciones : []),
+    [asignaciones]
+  );
 
   return (
     <div className="w-full">
       <div className="border rounded-lg bg-white overflow-x-auto">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <h3 className="font-semibold">Listado de asignaciones (v4)</h3>
-          <span className="text-xs text-gray-500">
+        <div
+          className="px-4 py-3 border-b flex items-center justify-between"
+          style={{ ...tdForce }}
+        >
+          <h3 className="font-semibold" style={{ ...tdForce }}>
+            Listado de asignaciones (v5)
+          </h3>
+          <span className="text-xs text-gray-500" style={{ ...tdForce }}>
             rows: {rows.length}
           </span>
         </div>
 
         {loading ? (
-          <div className="px-4 py-6 text-sm text-gray-600">Cargando…</div>
+          <div className="px-4 py-6 text-sm text-gray-600" style={{ ...tdForce }}>
+            Cargando…
+          </div>
         ) : rows.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-gray-600">No hay asignaciones.</div>
+          <div className="px-4 py-6 text-sm text-gray-600" style={{ ...tdForce }}>
+            No hay asignaciones.
+          </div>
         ) : (
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-gray-700">
+          <table
+            className="min-w-full text-sm"
+            style={{
+              width: "100%",
+              color: "#111827",
+              opacity: 1,
+              visibility: "visible",
+            }}
+          >
+            <thead
+              className="bg-gray-50 text-gray-700"
+              style={{ color: "#111827", opacity: 1, visibility: "visible" }}
+            >
               <tr className="text-left">
-                <th className="px-4 py-3 font-semibold">Persona</th>
-                <th className="px-4 py-3 font-semibold">Geocerca</th>
-                <th className="px-4 py-3 font-semibold">Actividad</th>
-                <th className="px-4 py-3 font-semibold">Inicio</th>
-                <th className="px-4 py-3 font-semibold">Fin</th>
-                <th className="px-4 py-3 font-semibold">Freq (min)</th>
-                <th className="px-4 py-3 font-semibold">Estado</th>
-                <th className="px-4 py-3 font-semibold text-right">Acciones</th>
+                <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
+                  Persona
+                </th>
+                <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
+                  Geocerca
+                </th>
+                <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
+                  Actividad
+                </th>
+                <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
+                  Inicio
+                </th>
+                <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
+                  Fin
+                </th>
+                <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
+                  Freq (min)
+                </th>
+                <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
+                  Estado
+                </th>
+                <th
+                  className="px-4 py-3 font-semibold text-right"
+                  style={{ ...tdForce }}
+                >
+                  Acciones
+                </th>
               </tr>
             </thead>
 
-            <tbody className="divide-y">
+            <tbody
+              className="divide-y"
+              style={{ color: "#111827", opacity: 1, visibility: "visible" }}
+            >
               {rows.map((row) => {
                 const { nombre, email } = personaInfo(row);
 
                 const geo = geocercaText(row);
                 const act = actividadText(row);
 
-                const inicioRaw = row?.start_time || row?.inicio || row?.start || row?.start_date || row?.fecha_inicio || "";
-                const finRaw = row?.end_time || row?.fin || row?.end || row?.end_date || row?.fecha_fin || "";
+                const inicioRaw =
+                  row?.start_time ||
+                  row?.inicio ||
+                  row?.start ||
+                  row?.start_date ||
+                  row?.fecha_inicio ||
+                  "";
+                const finRaw =
+                  row?.end_time ||
+                  row?.fin ||
+                  row?.end ||
+                  row?.end_date ||
+                  row?.fecha_fin ||
+                  "";
 
                 const inicio = inicioRaw ? formatDateTime(inicioRaw) : "";
                 const fin = finRaw ? formatDateTime(finRaw) : "";
@@ -173,26 +250,66 @@ export default function AsignacionesTable({ asignaciones, loading, onEdit, onDel
                 const freq = freqMin(row);
                 const status = row?.status || row?.estado || "inactiva";
 
-                const key = row?.id || `${row?.personal_id || "p"}-${row?.geocerca_id || "g"}-${row?.activity_id || "a"}`;
+                const key =
+                  row?.id ||
+                  `${row?.personal_id || "p"}-${row?.geocerca_id || "g"}-${
+                    row?.activity_id || "a"
+                  }`;
 
                 return (
                   <tr key={key}>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-gray-900">{cellText(nombre)}</div>
-                      {email ? <div className="text-xs text-gray-500">{email}</div> : null}
+                    <td className="px-4 py-3" style={{ ...tdForce }}>
+                      <div
+                        className="font-semibold text-gray-900"
+                        style={{ ...tdForce }}
+                      >
+                        {cell(nombre)}
+                      </div>
+                      {email ? (
+                        <div className="text-xs text-gray-500" style={{ ...tdForce }}>
+                          {email}
+                        </div>
+                      ) : null}
                     </td>
 
-                    <td className="px-4 py-3">{cellText(geo)}</td>
-                    <td className="px-4 py-3">{cellText(act)}</td>
-                    <td className="px-4 py-3">{cellText(inicio)}</td>
-                    <td className="px-4 py-3">{cellText(fin)}</td>
-                    <td className="px-4 py-3">{cellText(freq)}</td>
+                    {/* Geocerca: si no hay valor, muestra TEXTO_FORZADO_OK visible */}
+                    <td
+                      className="px-4 py-3"
+                      style={{
+                        ...tdForce,
+                        ...(geo
+                          ? {}
+                          : {
+                              color: "#ff0000",
+                              fontWeight: "bold",
+                              background: "#ffff00",
+                            }),
+                      }}
+                    >
+                      {geo ? geo : "TEXTO_FORZADO_OK"}
+                    </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" style={{ ...tdForce }}>
+                      {cell(act)}
+                    </td>
+
+                    <td className="px-4 py-3" style={{ ...tdForce }}>
+                      {cell(inicio)}
+                    </td>
+
+                    <td className="px-4 py-3" style={{ ...tdForce }}>
+                      {cell(fin)}
+                    </td>
+
+                    <td className="px-4 py-3" style={{ ...tdForce }}>
+                      {cell(freq)}
+                    </td>
+
+                    <td className="px-4 py-3" style={{ ...tdForce }}>
                       <StatusPill status={status} />
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" style={{ ...tdForce }}>
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
