@@ -1,35 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
-/**
- * UNIVERSAL (SPA):
- * Supabase en apps Vite/React guarda sesión en localStorage con llave:
- *   sb-<project-ref>-auth-token
- * Esta función lo detecta sin conocer el project-ref.
- */
-function getSupabaseAccessTokenFromLocalStorage() {
-  try {
-    // Busca la primera llave "sb-...-auth-token"
-    const keys = Object.keys(window.localStorage || {});
-    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
-    if (!k) return "";
-    const raw = window.localStorage.getItem(k);
-    if (!raw) return "";
-    const j = JSON.parse(raw);
-
-    // Formatos comunes
-    const token =
-      j?.access_token ||
-      j?.currentSession?.access_token ||
-      j?.data?.session?.access_token ||
-      "";
-
-    return String(token || "").trim();
-  } catch {
-    return "";
-  }
-}
-
 function useClickOutside(ref, onOutside) {
   useEffect(() => {
     function onDown(e) {
@@ -80,10 +51,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600">
-                  {" "}
-                  — {selected.email || "(sin email)"}
-                </span>
+                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -122,9 +90,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
                   }}
                 >
                   <div className="text-sm font-medium">{p.full_name}</div>
-                  <div className="text-xs text-gray-600">
-                    {p.email || "(sin email)"}
-                  </div>
+                  <div className="text-xs text-gray-600">{p.email || "(sin email)"}</div>
                 </button>
               ))
             )}
@@ -145,6 +111,8 @@ export default function InvitarTracker() {
 
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [email, setEmail] = useState("");
+
+  const [forceDefault, setForceDefault] = useState(true); // ✅ por defecto ON (tu requisito)
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -185,21 +153,8 @@ export default function InvitarTracker() {
       .filter((p) => p.id);
   }
 
-  function getAuthHeadersOrThrow() {
-    const token = getSupabaseAccessTokenFromLocalStorage();
-    if (!token) {
-      throw new Error(
-        "No se encontró access_token en el navegador. Cierra sesión y vuelve a iniciar sesión."
-      );
-    }
-    return { Authorization: `Bearer ${token}` };
-  }
-
   async function fetchPersonal(url, label) {
-    const headers = {
-      ...getAuthHeadersOrThrow(),
-    };
-    const res = await fetch(url, { headers }); // ya no usamos credentials/cookies
+    const res = await fetch(url, { credentials: "include" });
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, data, label, url };
   }
@@ -216,15 +171,12 @@ export default function InvitarTracker() {
         return;
       }
 
-      // A) org_id + onlyActive
       const aUrl = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`;
       const A = await fetchPersonal(aUrl, "A org_id+onlyActive");
-
       if (!A.ok) throw new Error(A.data?.error || "No se pudo cargar el personal (A)");
 
       let rows = normalizeRows(A.data);
 
-      // Fallback B) sin org_id
       if (rows.length === 0) {
         const bUrl = `/api/personal?onlyActive=1&limit=500`;
         const B = await fetchPersonal(bUrl, "B onlyActive (sin org_id)");
@@ -232,7 +184,6 @@ export default function InvitarTracker() {
         setPersonalDebug({ tried: ["A", "B"], A: A.data, B: B.data });
       }
 
-      // Fallback C) org_id sin onlyActive
       if (rows.length === 0) {
         const cUrl = `/api/personal?limit=500&org_id=${encodeURIComponent(orgId)}`;
         const C = await fetchPersonal(cUrl, "C org_id (sin onlyActive)");
@@ -278,18 +229,15 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      const headers = {
-        "Content-Type": "application/json",
-        ...getAuthHeadersOrThrow(),
-      };
-
       const res = await fetch("/api/invite-tracker", {
         method: "POST",
-        headers,
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           org_id: orgId,
           person_id: selectedPersonId,
+          force_tracker_default: forceDefault ? true : false, // ✅ CLAVE
         }),
       });
 
@@ -345,6 +293,18 @@ export default function InvitarTracker() {
             onChange={(e) => setEmail(e.target.value)}
             className="w-full border rounded-lg px-3 py-2 mt-1 bg-white"
           />
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            id="forceDefault"
+            type="checkbox"
+            checked={forceDefault}
+            onChange={(e) => setForceDefault(e.target.checked)}
+          />
+          <label htmlFor="forceDefault" className="text-sm text-gray-700">
+            Forzar que este usuario quede como <b>TRACKER</b> por defecto (recomendado si ya tenía otras orgs/roles)
+          </label>
         </div>
 
         <form onSubmit={handleInvite} className="mt-5">
