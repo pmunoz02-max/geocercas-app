@@ -1,6 +1,7 @@
 // src/components/asignaciones/AsignacionesTable.jsx
 // Table UNIVERSAL: soporta shapes nuevos (joins) y legacy (strings)
 // Enero 2026 — Fix permanente para render (incluye fallbacks a IDs para evitar columnas vacías)
+console.log("### ASIGNACIONES TABLE — VERSION ACTIVA ###");
 
 import React, { useMemo } from "react";
 
