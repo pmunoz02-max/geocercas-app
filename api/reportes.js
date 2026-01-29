@@ -9,17 +9,6 @@ function getEnv(nameList) {
   return null;
 }
 
-function parseCookie(cookieHeader, key) {
-  if (!cookieHeader) return null;
-  const m = cookieHeader.match(new RegExp(`(?:^|;\\s*)${key}=([^;]+)`));
-  if (!m || !m[1]) return null;
-  try {
-    return decodeURIComponent(m[1]);
-  } catch {
-    return m[1];
-  }
-}
-
 function parseCsvParam(value) {
   if (!value) return [];
   return String(value)
@@ -59,43 +48,48 @@ export default async function handler(req, res) {
     ]);
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return res.status(500).json({
-        error: "Missing Supabase env vars",
-      });
+      return res.status(500).json({ error: "Missing Supabase env vars" });
     }
 
-    // ========= AUTH =========
-    const cookieHeader = req.headers.cookie || "";
-    let token = parseCookie(cookieHeader, "tg_at");
-
-    if (!token) {
-      const authHeader = req.headers.authorization || "";
-      if (authHeader.toLowerCase().startsWith("bearer ")) {
-        token = authHeader.slice(7);
-      }
-    }
-
-    if (!token) {
+    // ===== AUTH =====
+    const authHeader = req.headers.authorization || "";
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
       return res.status(401).json({ error: "Missing authentication" });
     }
+
+    const token = authHeader.slice(7);
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },
     });
 
-    // ========= CONTEXTO CANONICO =========
-    const { data: ctx, error: ctxErr } = await supabase
-      .rpc("bootstrap_session_context")
-      .single();
+    // ===== USER =====
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
 
-    if (ctxErr || !ctx?.current_org_id) {
-      return res.status(403).json({
-        error: "Cannot resolve current organization",
-      });
+    if (userErr || !user) {
+      return res.status(401).json({ error: "Invalid user" });
     }
 
-    const orgId = ctx.current_org_id;
+    // ===== ORG (CANÓNICO) =====
+    const orgId = req.headers["x-org-id"];
+    if (!orgId) {
+      return res.status(400).json({ error: "Missing x-org-id header" });
+    }
+
+    const { data: membership, error: memberErr } = await supabase
+      .from("org_users")
+      .select("org_id, role")
+      .eq("user_id", user.id)
+      .eq("org_id", orgId)
+      .single();
+
+    if (memberErr || !membership) {
+      return res.status(403).json({ error: "User not member of organization" });
+    }
 
     const action = String(req.query.action || "").toLowerCase();
 
@@ -181,7 +175,6 @@ export default async function handler(req, res) {
 
       if (start) query = query.gte("work_day", start);
       if (end) query = query.lte("work_day", end);
-
       if (geocercaIds.length) query = query.in("geocerca_id", geocercaIds);
       if (personalIds.length) query = query.in("personal_id", personalIds);
       if (activityIds.length) query = query.in("activity_id", activityIds);
