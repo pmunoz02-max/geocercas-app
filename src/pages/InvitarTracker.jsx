@@ -1,6 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
+/**
+ * UNIVERSAL (SPA):
+ * Supabase en apps Vite/React guarda sesión en localStorage con llave:
+ *   sb-<project-ref>-auth-token
+ * Esta función lo detecta sin conocer el project-ref.
+ */
+function getSupabaseAccessTokenFromLocalStorage() {
+  try {
+    // Busca la primera llave "sb-...-auth-token"
+    const keys = Object.keys(window.localStorage || {});
+    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
+    if (!k) return "";
+    const raw = window.localStorage.getItem(k);
+    if (!raw) return "";
+    const j = JSON.parse(raw);
+
+    // Formatos comunes
+    const token =
+      j?.access_token ||
+      j?.currentSession?.access_token ||
+      j?.data?.session?.access_token ||
+      "";
+
+    return String(token || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function useClickOutside(ref, onOutside) {
   useEffect(() => {
     function onDown(e) {
@@ -156,8 +185,21 @@ export default function InvitarTracker() {
       .filter((p) => p.id);
   }
 
+  function getAuthHeadersOrThrow() {
+    const token = getSupabaseAccessTokenFromLocalStorage();
+    if (!token) {
+      throw new Error(
+        "No se encontró access_token en el navegador. Cierra sesión y vuelve a iniciar sesión."
+      );
+    }
+    return { Authorization: `Bearer ${token}` };
+  }
+
   async function fetchPersonal(url, label) {
-    const res = await fetch(url, { credentials: "include" });
+    const headers = {
+      ...getAuthHeadersOrThrow(),
+    };
+    const res = await fetch(url, { headers }); // ya no usamos credentials/cookies
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, data, label, url };
   }
@@ -182,7 +224,7 @@ export default function InvitarTracker() {
 
       let rows = normalizeRows(A.data);
 
-      // Fallback B) sin org_id (si backend ignora org_id o usa org server-side distinto)
+      // Fallback B) sin org_id
       if (rows.length === 0) {
         const bUrl = `/api/personal?onlyActive=1&limit=500`;
         const B = await fetchPersonal(bUrl, "B onlyActive (sin org_id)");
@@ -190,12 +232,16 @@ export default function InvitarTracker() {
         setPersonalDebug({ tried: ["A", "B"], A: A.data, B: B.data });
       }
 
-      // Fallback C) org_id sin onlyActive (si filtro activo está mal)
+      // Fallback C) org_id sin onlyActive
       if (rows.length === 0) {
         const cUrl = `/api/personal?limit=500&org_id=${encodeURIComponent(orgId)}`;
         const C = await fetchPersonal(cUrl, "C org_id (sin onlyActive)");
         if (C.ok) rows = normalizeRows(C.data);
-        setPersonalDebug((d) => ({ ...(d || {}), tried: [...(d?.tried || ["A","B"]), "C"], C: C.data }));
+        setPersonalDebug((d) => ({
+          ...(d || {}),
+          tried: [...(d?.tried || ["A", "B"]), "C"],
+          C: C.data,
+        }));
       }
 
       setPersonalRaw(rows);
@@ -232,10 +278,14 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
+      const headers = {
+        "Content-Type": "application/json",
+        ...getAuthHeadersOrThrow(),
+      };
+
       const res = await fetch("/api/invite-tracker", {
         method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           org_id: orgId,
