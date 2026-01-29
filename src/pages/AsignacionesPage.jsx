@@ -1,8 +1,9 @@
 // src/pages/AsignacionesPage.jsx
 // Fix definitivo Asignaciones (Enero 2026)
-// - Persona: usa public.personal (FK-safe)
+// - Persona: public.personal (FK-safe: asignaciones.personal_id -> personal.id)
 // - Geocercas: Supabase client (no /api 401)
-// - Sin ready, estados explícitos, tenant-safe por currentOrg.id
+// - Listado: ENRIQUECIDO (nombres + fechas) para que no salgan columnas vacías
+// - Payload: manda start_time/end_time + start_date/end_date (universal y compatible)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,6 +24,13 @@ function localDateTimeToISO(localDateTime) {
   const [y, m, day] = d.split("-").map(Number);
   const [hh, mm] = t.split(":").map(Number);
   return new Date(y, m - 1, day, hh, mm, 0, 0).toISOString();
+}
+
+function localDateTimeToDate(localDateTime) {
+  // "YYYY-MM-DDTHH:mm" -> "YYYY-MM-DD"
+  if (!localDateTime) return null;
+  const [d] = String(localDateTime).split("T");
+  return d || null;
 }
 
 const ESTADOS = ["todos", "activa", "inactiva"];
@@ -53,6 +61,12 @@ function dedupeById(arr) {
     if (!map.has(x.id)) map.set(x.id, x);
   });
   return Array.from(map.values());
+}
+
+function toIdMap(arr) {
+  const m = new Map();
+  (Array.isArray(arr) ? arr : []).forEach((x) => x?.id && m.set(x.id, x));
+  return m;
 }
 
 function normalizeGeocercas(rows) {
@@ -129,16 +143,23 @@ async function fetchPersonalSafeByOrg(orgId) {
   if (error) throw error;
 
   return (data || []).map((p) => ({
-    id: p.id, // ✅ personal.id (FK-safe)
+    id: p.id,
     nombre: `${p.nombre || ""} ${p.apellido || ""}`.trim(),
     email: p.email || "",
+    org_id: p.org_id || null,
   }));
 }
 
 function normalizeAsignacionRow(a) {
   if (!a || typeof a !== "object") return a;
-  const start = a.start_time || a.inicio || a.start || a.fecha_inicio || a.startTime || null;
-  const end = a.end_time || a.fin || a.end || a.fecha_fin || a.endTime || null;
+
+  const startTime = a.start_time || a.inicio || a.start || a.startTime || null;
+  const endTime = a.end_time || a.fin || a.end || a.endTime || null;
+
+  // Compat: si vienen start_date/end_date (date), mantenlos
+  const startDate = a.start_date || a.fecha_inicio || null;
+  const endDate = a.end_date || a.fecha_fin || null;
+
   let freqSec = a.frecuencia_envio_sec ?? a.frecuenciaEnvioSec ?? a.freq_sec ?? null;
   if (freqSec == null && a.frecuencia_envio_min != null) {
     const n = Number(a.frecuencia_envio_min);
@@ -148,10 +169,13 @@ function normalizeAsignacionRow(a) {
     const n = Number(a.freq_min);
     if (Number.isFinite(n)) freqSec = n * 60;
   }
+
   return {
     ...a,
-    start_time: start,
-    end_time: end,
+    start_time: startTime,
+    end_time: endTime,
+    start_date: startDate,
+    end_date: endDate,
     frecuencia_envio_sec: freqSec,
     status: a.status || a.estado || a.state || a.status_asignacion || a.status,
   };
@@ -199,7 +223,6 @@ export default function AsignacionesPage() {
       return;
     }
 
-    // Cache benigno
     try { localStorage.setItem("tg_current_org_id", orgId); } catch (_) {}
 
     const { data, error: bundleError } = await getAsignacionesBundle();
@@ -212,6 +235,7 @@ export default function AsignacionesPage() {
     const bundle = data || {};
     const rowsRaw = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
     const catalogs = bundle.catalogs || {};
+
     setAsignaciones(rowsRaw.map(normalizeAsignacionRow));
 
     const bundleGeosAll = normalizeGeocercas(catalogs.geocercas);
@@ -262,6 +286,36 @@ export default function AsignacionesPage() {
     return rows;
   }, [asignaciones, estadoFilter]);
 
+  // ✅ ENRIQUECIMIENTO PARA LISTADO (evita columnas vacías)
+  const enrichedAsignaciones = useMemo(() => {
+    const geoMap = toIdMap(geocercaOptions);
+    const actMap = toIdMap(activityOptions);
+    const perMap = toIdMap(personalOptions);
+
+    return (Array.isArray(filteredAsignaciones) ? filteredAsignaciones : []).map((a0) => {
+      const a = normalizeAsignacionRow(a0);
+
+      const geocerca = a.geocerca || geoMap.get(a.geocerca_id) || null;
+      const activity = a.activity || actMap.get(a.activity_id) || null;
+      const personal = a.personal || perMap.get(a.personal_id) || null;
+
+      // Inicio/Fin: usa time si existe, si no usa date
+      const inicio = a.start_time || a.start_date || null;
+      const fin = a.end_time || a.end_date || null;
+
+      return {
+        ...a,
+        geocerca,
+        activity,
+        personal,
+        geocerca_nombre: a.geocerca_nombre || geocerca?.nombre || "",
+        activity_name: a.activity_name || activity?.name || "",
+        inicio,
+        fin,
+      };
+    });
+  }, [filteredAsignaciones, geocercaOptions, activityOptions, personalOptions]);
+
   function resetForm() {
     setSelectedPersonalId("");
     setSelectedGeocercaId("");
@@ -287,11 +341,18 @@ export default function AsignacionesPage() {
     if (freqMin < 5) return setError("La frecuencia mínima es 5 minutos.");
 
     const payload = {
-      personal_id: selectedPersonalId, // ✅ personal.id (FK-safe)
+      personal_id: selectedPersonalId, // ✅ FK personal(id)
       geocerca_id: selectedGeocercaId,
       activity_id: selectedActivityId,
+
+      // ✅ Precisión
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
+
+      // ✅ Compatibilidad (si la tabla/listado usa DATE)
+      start_date: localDateTimeToDate(startTime),
+      end_date: localDateTimeToDate(endTime),
+
       frecuencia_envio_sec: freqMin * 60,
       status,
     };
@@ -496,7 +557,7 @@ export default function AsignacionesPage() {
       </div>
 
       <AsignacionesTable
-        asignaciones={filteredAsignaciones}
+        asignaciones={enrichedAsignaciones}
         loading={loadingData}
         onEdit={(a) => {
           setEditingId(a.id);
@@ -505,6 +566,7 @@ export default function AsignacionesPage() {
           setSelectedActivityId(a.activity_id || "");
           setStartTime(a.start_time?.slice(0, 16) || "");
           setEndTime(a.end_time?.slice(0, 16) || "");
+          // Si vienen solo DATE, no rompe: dejamos vacío (usuario puede elegir)
           setFrecuenciaEnvioMin(Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60)));
           setStatus(a.status || "activa");
           setError(null);
