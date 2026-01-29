@@ -16,6 +16,16 @@ function parseHash() {
   };
 }
 
+// Solo permitimos rutas internas tipo "/tracker-gps" (evita open-redirect)
+function safeNextPath(raw: string | null, fallback: string) {
+  const s = String(raw || "").trim();
+  if (!s) return fallback;
+  if (!s.startsWith("/")) return fallback;
+  if (s.startsWith("//")) return fallback;
+  // opcional: restringir más
+  return s;
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState("Validando acceso…");
@@ -29,8 +39,7 @@ export default function AuthCallback() {
           return;
         }
 
-        // invite_id (nuestro ticket permanente)
-        const invite_id = qp("invite_id") || "";
+        const next = safeNextPath(qp("next"), "/inicio");
 
         // 1) PKCE (?code=...)
         const code = qp("code");
@@ -80,32 +89,17 @@ export default function AuthCallback() {
           return;
         }
 
-        // 5) Setear cookies HttpOnly (tg_at/tg_rt) + aceptar invite si viene invite_id
+        // 5) (Compat) setear cookies HttpOnly si tu backend las usa
         setStatus("Iniciando sesión…");
-
-        if (invite_id) {
-          await fetch("/api/auth/session", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "accept_tracker_invite",
-              invite_id,
-              access_token: s.access_token,
-              refresh_token: s.refresh_token,
-            }),
-          });
-        } else {
-          await fetch("/api/auth/session", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              access_token: s.access_token,
-              refresh_token: s.refresh_token,
-            }),
-          });
-        }
+        await fetch("/api/auth/session", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            access_token: s.access_token,
+            refresh_token: s.refresh_token,
+          }),
+        });
 
         // 6) Leer rol/org real desde backend y redirigir
         setStatus("Cargando perfil…");
@@ -114,12 +108,14 @@ export default function AuthCallback() {
 
         const role = String(j?.role || "").toLowerCase();
 
+        // Tracker => directo al next (por defecto /tracker-gps)
         if (j?.authenticated && role === "tracker") {
-          window.location.replace("/tracker-gps");
+          window.location.replace(safeNextPath(qp("next"), "/tracker-gps"));
           return;
         }
 
-        window.location.replace("/inicio");
+        // Otros roles => next (si venía) o /inicio
+        window.location.replace(next);
       } catch (e: any) {
         navigate(`/login?err=${encodeURIComponent(e?.message || "callback_error")}`, { replace: true });
       }
