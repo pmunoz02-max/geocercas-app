@@ -12,6 +12,34 @@ function withTimeout(promise, ms, label = "timeout") {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
+// ✅ Clave usada para recordar org del tracker (y evitar "orgId: -")
+const LAST_ORG_KEY = "app_geocercas_last_org_id";
+
+function readOrgIdFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("org_id");
+  } catch {
+    return null;
+  }
+}
+
+function readLastOrgId() {
+  try {
+    return localStorage.getItem(LAST_ORG_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeLastOrgId(orgId) {
+  try {
+    if (orgId) localStorage.setItem(LAST_ORG_KEY, orgId);
+  } catch {
+    // ignore
+  }
+}
+
 export function AuthProvider({ children }) {
   // loading = solo “boot” de auth (NUNCA debe colgar)
   const [loading, setLoading] = useState(true);
@@ -29,18 +57,46 @@ export function AuthProvider({ children }) {
 
   const mountedRef = useRef(true);
 
+  // ✅ org_id “candidato” (viene del magic link o último conocido)
+  const preferredOrgIdRef = useRef(null);
+
+  const setPreferredOrgId = (orgId) => {
+    if (!orgId) return;
+    preferredOrgIdRef.current = orgId;
+    writeLastOrgId(orgId);
+    // Set inmediato para que /tracker-gps no quede en orgId: -
+    setCurrentOrg((prev) => {
+      if (prev?.id === orgId) return prev;
+      return { id: orgId, name: prev?.name || null, code: prev?.code || null };
+    });
+  };
+
   const applyCtx = (data) => {
     setCtx(data);
 
     if (data?.ok) {
       setRole(data.role || null);
+
+      // ✅ Si el backend devuelve org_id, es la verdad final
+      if (data.org_id) setPreferredOrgId(data.org_id);
+
       setCurrentOrg({
         id: data.org_id,
         name: data.org_name || null,
         code: data.org_code || null,
       });
     } else {
+      // ❗ IMPORTANTE: si ya tenemos un org preferido, no lo borres en trackers
+      // Solo borra si no existe preferido.
       setRole(null);
+
+      const fallbackOrgId = preferredOrgIdRef.current || readLastOrgId() || readOrgIdFromUrl();
+      if (fallbackOrgId) {
+        setPreferredOrgId(fallbackOrgId);
+        // mantenemos currentOrg para que Tracker GPS pueda operar (gating / RPC)
+        return;
+      }
+
       setCurrentOrg(null);
     }
   };
@@ -55,6 +111,12 @@ export function AuthProvider({ children }) {
       applyCtx(null);
       return;
     }
+
+    // ✅ Asegura org_id preferido lo antes posible (magic link /tracker-gps?org_id=...)
+    const orgIdFromUrl = readOrgIdFromUrl();
+    const orgIdFromStorage = readLastOrgId();
+    const preferred = orgIdFromUrl || orgIdFromStorage || preferredOrgIdRef.current;
+    if (preferred) setPreferredOrgId(preferred);
 
     setContextLoading(true);
     try {
@@ -83,6 +145,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     mountedRef.current = true;
 
+    // ✅ Captura org_id desde el inicio (antes de que haya sesión incluso)
+    const initialOrgId = readOrgIdFromUrl() || readLastOrgId();
+    if (initialOrgId) setPreferredOrgId(initialOrgId);
+
     const boot = async () => {
       setLoading(true);
       try {
@@ -107,9 +173,14 @@ export function AuthProvider({ children }) {
         setSession(sess);
         setUser(sess?.user ?? null);
 
-        // 2) Cargar contexto sin bloquear el boot
-        if (sess) fetchContext();
-        else applyCtx(null);
+        // ✅ Si hay sesión y hay org_id en URL/storage, bootstrap inmediato
+        if (sess) {
+          const orgId = readOrgIdFromUrl() || readLastOrgId() || preferredOrgIdRef.current;
+          if (orgId) setPreferredOrgId(orgId);
+          fetchContext();
+        } else {
+          applyCtx(null);
+        }
       } catch (e) {
         if (!mountedRef.current) return;
         setSession(null);
@@ -129,9 +200,14 @@ export function AuthProvider({ children }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
 
-      // ✅ No bloquear UI esperando RPC
-      if (newSession) fetchContext();
-      else applyCtx(null);
+      // ✅ Si llega sesión por magic link, fija org_id antes del RPC
+      if (newSession) {
+        const orgId = readOrgIdFromUrl() || readLastOrgId() || preferredOrgIdRef.current;
+        if (orgId) setPreferredOrgId(orgId);
+        fetchContext();
+      } else {
+        applyCtx(null);
+      }
     });
 
     return () => {
@@ -141,7 +217,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      // Limpieza suave
+      setSession(null);
+      setUser(null);
+      setCtx(null);
+      setRole(null);
+      setCurrentOrg(null);
+    }
   };
 
   const value = useMemo(
