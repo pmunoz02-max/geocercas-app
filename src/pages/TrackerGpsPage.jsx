@@ -1,84 +1,158 @@
+// src/pages/TrackerGpsPage.jsx
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabaseClient";
 
-function supa() {
-  const url = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-  return createClient(url, key, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
-  });
+function getSupabaseUrl() {
+  return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 }
 
-function resolveOrgFromCtx(ctx) {
+function resolveOrgId(sess) {
   return (
-    ctx?.org_id ||
-    ctx?.current_org_id ||
-    ctx?.organization_id ||
-    (Array.isArray(ctx?.organizations) ? ctx.organizations?.[0]?.id : null) ||
+    sess?.org_id ||
+    sess?.current_org_id ||
+    sess?.org?.id ||
+    sess?.organizations?.[0]?.id ||
     null
   );
 }
 
+function resolveEmail(sess) {
+  return (
+    sess?.user?.email ||
+    sess?.email ||
+    sess?.profile?.email ||
+    ""
+  );
+}
+
+function getAccessTokenFromLocalStorage() {
+  try {
+    const keys = Object.keys(window.localStorage || {});
+    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
+    if (!k) return "";
+    const raw = window.localStorage.getItem(k);
+    if (!raw) return "";
+    const j = JSON.parse(raw);
+    return (
+      j?.access_token ||
+      j?.currentSession?.access_token ||
+      j?.data?.session?.access_token ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+async function getAccessTokenBestEffort() {
+  const ls = getAccessTokenFromLocalStorage();
+  if (ls) return ls;
+
+  // fallback: supabase session (cuando el storage no está listo aún)
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function TrackerGpsPage() {
   const [loading, setLoading] = useState(true);
+  const [sessionApi, setSessionApi] = useState(null);
   const [error, setError] = useState(null);
 
   const [permission, setPermission] = useState("unknown");
   const [gpsActive, setGpsActive] = useState(false);
-
-  const [orgId, setOrgId] = useState(null);
-  const [intervalSec, setIntervalSec] = useState(300);
 
   const [lastPosition, setLastPosition] = useState(null);
   const [lastSend, setLastSend] = useState(null);
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
 
+  const [intervalSec, setIntervalSec] = useState(30);
+
+  // gating
+  const [canSend, setCanSend] = useState(false);
+  const [gateMsg, setGateMsg] = useState("Esperando asignación…");
+  const [gateInfo, setGateInfo] = useState(null);
+
   const lastSentAtRef = useRef(0);
   const watchIdRef = useRef(null);
+  const gatePollRef = useRef(null);
 
-  const clientRef = useRef(null);
-  if (!clientRef.current) clientRef.current = supa();
-  const client = clientRef.current;
+  async function loadSessionApi() {
+    const res = await fetch("/api/auth/session", { credentials: "include" });
+    const json = await res.json().catch(() => ({}));
+    setSessionApi(json);
+
+    if (!json?.authenticated) throw new Error("No autenticado");
+    const role = String(json?.role || "").toLowerCase();
+    if (role !== "tracker") throw new Error(`Rol inválido para tracker-gps: ${role || "(vacío)"}`);
+    return json;
+  }
+
+  async function loadIntervalFromPersonal(org_id, email) {
+    try {
+      const token = await getAccessTokenBestEffort();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const url = `/api/personal?onlyActive=1&limit=50&org_id=${encodeURIComponent(org_id)}&q=${encodeURIComponent(email)}`;
+      const res = await fetch(url, { headers });
+      const j = await res.json().catch(() => ({}));
+      const items = j?.items || j?.data || [];
+
+      const found = Array.isArray(items)
+        ? items.find((p) => String(p.email_norm || p.email || "").toLowerCase() === String(email).toLowerCase())
+        : null;
+
+      const sec = Number(found?.position_interval_sec);
+      if (Number.isFinite(sec) && sec > 0) setIntervalSec(sec);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function refreshGate(orgId) {
+    try {
+      // ✅ RPC: tracker_can_send() basado en tracker_assignments
+      const { data, error } = await supabase.rpc("tracker_can_send", { p_org_id: orgId });
+
+      if (error) {
+        setCanSend(false);
+        setGateMsg(`Gate error: ${error.message || "rpc_error"}`);
+        setGateInfo(null);
+        return;
+      }
+
+      const ok = !!data?.can_send;
+      setCanSend(ok);
+      setGateInfo(data || null);
+
+      if (!ok) {
+        setGateMsg(data?.reason || "Esperando asignación…");
+      } else {
+        const sec = Number(data?.frequency_sec);
+        if (Number.isFinite(sec) && sec > 0) setIntervalSec(sec);
+        setGateMsg("Asignación activa ✅ (enviando según frecuencia)");
+      }
+    } catch (e) {
+      setCanSend(false);
+      setGateMsg(`Gate exception: ${e?.message || "exception"}`);
+      setGateInfo(null);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
-        if (!import.meta.env.VITE_SUPABASE_URL) throw new Error("Falta VITE_SUPABASE_URL");
-        if (!import.meta.env.VITE_SUPABASE_ANON_KEY) throw new Error("Falta VITE_SUPABASE_ANON_KEY");
-
-        // 1) asegurar que si vienes del link OTP, se capture la sesión en URL y se persista
-        const { data: sessData } = await client.auth.getSession();
-        const token = sessData?.session?.access_token;
-
-        if (!token) {
-          // No hay sesión Supabase => manda al bridge para pedir OTP (pero el guard NO debe bloquear esta ruta)
-          const next = encodeURIComponent(window.location.pathname + window.location.search);
-          window.location.href = `/tracker-auth-bridge?next=${next}`;
-          return;
-        }
-
-        // 2) validar usuario
-        const { data: u, error: ue } = await client.auth.getUser();
-        if (ue || !u?.user) throw new Error("Supabase: usuario no válido");
-
-        // 3) validar rol tracker por RPC
-        const { data: ctx, error: ce } = await client.rpc("get_my_context");
-        if (ce) throw new Error(`RPC get_my_context falló: ${ce.message}`);
-
-        const role =
-          String(ctx?.role || ctx?.my_role || ctx?.membership_role || "").toLowerCase();
-        if (role !== "tracker") throw new Error(`Rol inválido (no tracker): ${role || "(vacío)"}`);
-
-        const oid = resolveOrgFromCtx(ctx);
-        if (!oid) throw new Error("No se pudo resolver org_id desde contexto");
-
+        const s = await loadSessionApi();
         if (!alive) return;
-        setOrgId(oid);
 
-        // permiso (solo visual)
+        setLoading(false);
+
         if ("permissions" in navigator) {
           try {
             const p = await navigator.permissions.query({ name: "geolocation" });
@@ -89,36 +163,50 @@ export default function TrackerGpsPage() {
           }
         }
 
-        setLoading(false);
+        const orgId = resolveOrgId(s);
+        const email = resolveEmail(s);
+
+        if (orgId) {
+          await refreshGate(orgId);
+          gatePollRef.current = setInterval(() => refreshGate(orgId), 15000);
+        }
+
+        if (orgId && email) loadIntervalFromPersonal(orgId, email);
       } catch (e) {
         if (!alive) return;
-        setError(String(e?.message || e));
+        setError(e.message || "Error cargando sesión");
         setLoading(false);
       }
     })();
 
-    return () => { alive = false; };
-  }, [client]);
+    return () => {
+      alive = false;
+      if (gatePollRef.current) clearInterval(gatePollRef.current);
+    };
+  }, []);
 
-  async function sendPosition(pos) {
+  async function sendPosition(pos, org_id) {
+    // 1) gating
+    if (!canSend) return;
+
+    // 2) throttle
     const now = Date.now();
-    const minMs = Math.max(5, Number(intervalSec || 300)) * 1000;
+    const minMs = Math.max(5, Number(intervalSec || 30)) * 1000;
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
-    const { data: sessData } = await client.auth.getSession();
-    const token = sessData?.session?.access_token;
+    const token = await getAccessTokenBestEffort();
     if (!token) {
-      const next = encodeURIComponent(window.location.pathname + window.location.search);
-      window.location.href = `/tracker-auth-bridge?next=${next}`;
+      setSendStatus("error");
+      setSendError("No access_token. El tracker debe entrar por el magic link de invitación.");
       return;
     }
 
-    const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+    const supabaseUrl = getSupabaseUrl();
     const url = `${supabaseUrl}/functions/v1/send_position`;
 
     const payload = {
-      org_id: orgId,
+      org_id,
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: pos.coords.accuracy ?? null,
@@ -127,6 +215,9 @@ export default function TrackerGpsPage() {
       altitude: pos.coords.altitude ?? null,
       ts: new Date().toISOString(),
       source: "tracker-gps",
+      // opcional (si tu edge lo usa):
+      geofence_id: gateInfo?.geofence_id ?? null,
+      assignment_id: gateInfo?.assignment_id ?? null,
     };
 
     setSendStatus("sending");
@@ -134,14 +225,18 @@ export default function TrackerGpsPage() {
 
     const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(payload),
     });
 
     const j = await r.json().catch(() => ({}));
+
     if (!r.ok || !j?.ok) {
       setSendStatus("error");
-      setSendError(j?.error || j?.details || `Error enviando (HTTP ${r.status})`);
+      setSendError(j?.error || j?.details || "Error enviando posición");
       return;
     }
 
@@ -154,25 +249,32 @@ export default function TrackerGpsPage() {
       setError("Este dispositivo no soporta GPS.");
       return;
     }
-    if (!orgId) {
-      setError("OrgId aún no disponible.");
-      return;
-    }
 
     navigator.geolocation.getCurrentPosition(
-      () => {
+      async () => {
         setPermission("granted");
+
+        const orgId = resolveOrgId(sessionApi);
+        if (!orgId) {
+          setError("org_id no disponible en sesión (usa current_org_id).");
+          return;
+        }
+
+        // refresh gate al momento de activar
+        await refreshGate(orgId);
 
         watchIdRef.current = navigator.geolocation.watchPosition(
           async (pos) => {
             setGpsActive(true);
+
             const current = {
               lat: pos.coords.latitude,
               lng: pos.coords.longitude,
               ts: new Date().toISOString(),
             };
             setLastPosition(current);
-            await sendPosition(pos);
+
+            await sendPosition(pos, orgId);
           },
           (err) => {
             setGpsActive(false);
@@ -190,7 +292,9 @@ export default function TrackerGpsPage() {
 
   useEffect(() => {
     return () => {
-      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
     };
   }, []);
 
@@ -202,8 +306,11 @@ export default function TrackerGpsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="max-w-md w-full bg-white border rounded-xl p-6 shadow">
-          <h2 className="text-lg font-semibold text-red-600 mb-3">Tracker</h2>
+          <h2 className="text-lg font-semibold text-red-600 mb-3">Acceso restringido</h2>
           <p className="text-sm text-gray-700 mb-4">{error}</p>
+          <pre className="text-xs bg-gray-100 p-3 rounded overflow-auto">
+{JSON.stringify(sessionApi, null, 2)}
+          </pre>
         </div>
       </div>
     );
@@ -220,7 +327,11 @@ export default function TrackerGpsPage() {
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
-          Org: <b>{orgId || "—"}</b>
+          Org: <b>{resolveOrgId(sessionApi) || "—"}</b>
+        </p>
+
+        <p className="text-xs text-emerald-800 mt-1">
+          Gate: <b>{canSend ? "OK ✅" : "NO"}</b> — {gateMsg}
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
@@ -241,7 +352,16 @@ export default function TrackerGpsPage() {
             <div>Última lectura: {lastPosition.ts}</div>
 
             <div className="mt-2">
-              Envío: <b>{sendStatus === "idle" ? "—" : sendStatus === "sending" ? "Enviando…" : sendStatus === "ok" ? "OK" : "Error"}</b>
+              Envío:{" "}
+              <b>
+                {sendStatus === "idle"
+                  ? "—"
+                  : sendStatus === "sending"
+                  ? "Enviando…"
+                  : sendStatus === "ok"
+                  ? "OK"
+                  : "Error"}
+              </b>
             </div>
 
             {lastSend?.ts && (

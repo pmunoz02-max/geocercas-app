@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
-const BUILD_TAG = "invite-tracker-v5-ts-fix-redirect-next-tracker";
+const BUILD_TAG = "invite-tracker-v6-direct-magiclink-to-tracker-gps";
 const DEFAULT_APP_URL = "https://app.tugeocercas.com";
 
 function normalizeEmail(email: string) {
@@ -80,13 +80,12 @@ export default async function handler(req: any, res: any) {
     if (memErr) return json(res, 500, { ok: false, error: "No se pudo validar permisos", details: memErr.message });
 
     const inviterRole = String(inviterMem?.role || "").toLowerCase();
-    const canInvite = inviterRole === "owner" || inviterRole === "admin" || inviterRole === "root" || inviterRole === "root_owner";
+    const canInvite =
+      inviterRole === "owner" || inviterRole === "admin" || inviterRole === "root" || inviterRole === "root_owner";
     if (!canInvite) return json(res, 403, { ok: false, error: "Sin permisos para invitar tracker" });
 
-    // 3) Encontrar o crear usuario por email (FIX TS)
+    // 3) Encontrar o crear usuario por email
     let userId: string | null = null;
-
-    // preferido (tipado correcto)
     const adminAny: any = sbAdmin.auth.admin as any;
 
     if (typeof adminAny.getUserByEmail === "function") {
@@ -94,12 +93,9 @@ export default async function handler(req: any, res: any) {
       if (error) return json(res, 500, { ok: false, error: "No se pudo obtener usuario por email", details: error.message });
       userId = data?.user?.id || null;
     } else {
-      // fallback universal: listUsers sin params y filtrar
       const { data: usersResp, error: listErr } = await sbAdmin.auth.admin.listUsers();
       if (listErr) return json(res, 500, { ok: false, error: "No se pudo listar usuarios", details: listErr.message });
-
-      userId =
-        usersResp?.users?.find((u: any) => String(u.email || "").toLowerCase() === email)?.id || null;
+      userId = usersResp?.users?.find((u: any) => String(u.email || "").toLowerCase() === email)?.id || null;
     }
 
     if (!userId) {
@@ -133,10 +129,7 @@ export default async function handler(req: any, res: any) {
     // 5) Upsert membership
     const { error: upErr } = await sbAdmin
       .from("memberships")
-      .upsert(
-        { org_id, user_id: userId, role: "tracker", is_default: shouldSetDefault },
-        { onConflict: "org_id,user_id" }
-      );
+      .upsert({ org_id, user_id: userId, role: "tracker", is_default: shouldSetDefault }, { onConflict: "org_id,user_id" });
 
     if (upErr) return json(res, 500, { ok: false, error: "No se pudo asignar rol tracker", details: upErr.message });
 
@@ -150,31 +143,30 @@ export default async function handler(req: any, res: any) {
 
       if (offErr) return json(res, 500, { ok: false, error: "No se pudo ajustar default", details: offErr.message });
 
-      await sbAdmin
-        .from("profiles")
-        .update({ current_org_id: org_id, default_org_id: org_id })
-        .eq("user_id", userId);
+      await sbAdmin.from("profiles").update({ current_org_id: org_id, default_org_id: org_id }).eq("user_id", userId);
     }
 
-    // 6) Redirect a tracker-gps via auth/callback
+    // 6) ✅ Magic link directo (SIN OTP cooldown / SIN pantalla “Enviar link”)
     const appUrl = (process.env.APP_URL || DEFAULT_APP_URL).trim();
     const redirectTo =
       `${appUrl}/auth/callback?next=${encodeURIComponent("/tracker-gps")}` +
-      `&org_id=${encodeURIComponent(org_id)}`;
+      `&org_id=${encodeURIComponent(org_id)}` +
+      `&tg_flow=tracker`;
 
-    const sbAnon = createClient(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
-
-    const { error: otpErr } = await sbAnon.auth.signInWithOtp({
+    const { data: linkData, error: linkErr } = await sbAdmin.auth.admin.generateLink({
+      type: "magiclink",
       email,
-      options: {
-        emailRedirectTo: redirectTo,
-        shouldCreateUser: false,
-      },
+      options: { redirectTo },
     });
 
-    if (otpErr) return json(res, 500, { ok: false, error: "No se pudo enviar el enlace", details: otpErr.message });
+    if (linkErr) return json(res, 500, { ok: false, error: "No se pudo generar magic link", details: linkErr.message });
+
+    const magic_link =
+      (linkData as any)?.properties?.action_link ||
+      (linkData as any)?.action_link ||
+      null;
+
+    if (!magic_link) return json(res, 500, { ok: false, error: "Magic link vacío (generateLink sin action_link)" });
 
     return json(res, 200, {
       ok: true,
@@ -184,6 +176,8 @@ export default async function handler(req: any, res: any) {
       person_id: person_id || null,
       tracker_default: shouldSetDefault,
       redirect_to: redirectTo,
+      magic_link, // 👈 este es el que debes enviar al tracker
+      note: "Este endpoint ya NO envía OTP. Copia/manda magic_link al tracker.",
     });
   } catch (e: any) {
     console.error("[api/invite-tracker] error:", e);
