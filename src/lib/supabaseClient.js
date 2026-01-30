@@ -15,17 +15,23 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 /**
- * ✅ Config universal para tu flujo:
- * - PKCE ON (links traen ?code=...)
- * - detectSessionInUrl OFF (la sesión la procesa /auth/callback con exchangeCodeForSession)
- * - NO sobrescribimos storageKey (deja el default sb-<project>-auth-token)
- *   para que tu UI/backend puedan leer el access_token correctamente.
+ * ✅ Config universal para App Geocercas (Web SPA + Magic Link + PKCE):
+ * - flowType: "pkce" (mantiene tu auth moderna)
+ * - persistSession: true (necesario para trackers)
+ * - autoRefreshToken: true (sesión estable)
+ * - detectSessionInUrl: true ✅ (CLAVE: permite que Supabase detecte/hidrate sesión cuando el URL trae tokens/códigos)
+ * - storage: localStorage (explícito, evita edge cases en algunos navegadores)
+ *
+ * Nota:
+ * Aunque tú proceses token_hash en /auth/callback con verifyOtp(),
+ * activar detectSessionInUrl NO rompe ese flujo y ayuda a que la sesión quede persistida.
  */
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     flowType: "pkce",
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true, // ✅ CAMBIO CLAVE
+    storage: typeof window !== "undefined" ? window.localStorage : undefined,
   },
 });
