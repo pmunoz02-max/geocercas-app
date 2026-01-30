@@ -49,11 +49,24 @@ function resolveLabel(t, tab) {
   return fallbackFromPath(tab?.path);
 }
 
+function uniqByPath(tabs) {
+  const seen = new Set();
+  const out = [];
+  for (const it of tabs || []) {
+    const p = safeText(it?.path).trim();
+    if (!p) continue;
+    if (seen.has(p)) continue;
+    seen.add(p);
+    out.push(it);
+  }
+  return out;
+}
+
 export default function TopTabs({ tabs = [] }) {
   const { t } = useTranslation();
   const location = useLocation();
 
-  // ✅ FIX: Tomar role desde currentRole o role (compatibilidad total)
+  // role/isAppRoot vienen del AuthContext
   const { user, currentRole, role, isAppRoot } = useAuth();
 
   const flags = useMemo(() => {
@@ -70,7 +83,22 @@ export default function TopTabs({ tabs = [] }) {
 
   if (flags.notabs) return null;
 
-  const items = Array.isArray(tabs) ? tabs : [];
+  const baseItems = Array.isArray(tabs) ? tabs : [];
+
+  // ✅ Inyecta el tab /admins cuando isAppRoot=true (no depende de ProtectedShell)
+  const items = useMemo(() => {
+    const injected = [...baseItems];
+
+    if (isAppRoot) {
+      injected.push({
+        path: "/admins",
+        labelKey: "app.tabs.admins",
+        label: "Administrador",
+      });
+    }
+
+    return uniqByPath(injected);
+  }, [baseItems, isAppRoot]);
 
   const effectiveRole = safeText(currentRole || role).trim();
   const roleRaw = effectiveRole.toLowerCase();
@@ -90,7 +118,7 @@ export default function TopTabs({ tabs = [] }) {
   const inactiveCls = "border-slate-300 hover:bg-slate-50 hover:border-slate-400";
 
   return (
-    <div className="w-full" data-top-tabs="v10">
+    <div className="w-full" data-top-tabs="v11">
       <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
