@@ -5,7 +5,11 @@ import { supabase } from "../supabaseClient";
 const LAST_ORG_KEY = "app_geocercas_last_org_id";
 
 function safeSet(k: string, v: string) {
-  try { localStorage.setItem(k, v); } catch {}
+  try {
+    localStorage.setItem(k, v);
+  } catch {
+    // ignore
+  }
 }
 
 export default function AuthCallback() {
@@ -15,93 +19,90 @@ export default function AuthCallback() {
   useEffect(() => {
     const run = async () => {
       try {
+        // Marca de vida (útil si algo vuelve a fallar)
         safeSet("auth_callback_ran_at", new Date().toISOString());
-        safeSet("auth_callback_href", window.location.href);
 
         const params = new URLSearchParams(window.location.search);
         const token_hash = params.get("token_hash");
         const type = (params.get("type") as "magiclink" | "recovery" | null) ?? null;
 
+        // Tu destino fijo para tracker
+        const nextBase = "/tracker-gps?tg_flow=tracker";
+
         if (!token_hash || !type) {
           const msg = "missing_code_or_token_hash";
-          safeSet("auth_callback_err", msg);
           setError(msg);
+          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
           return;
         }
 
-        // 1) Verificar magiclink
-        const { data, error: vErr } = await supabase.auth.verifyOtp({ type, token_hash });
+        // 1) Verificar magic link
+        const { data, error: vErr } = await supabase.auth.verifyOtp({
+          type,
+          token_hash,
+        });
+
         if (vErr) {
-          safeSet("auth_callback_err", vErr.message);
-          setError(vErr.message);
+          const msg = vErr.message || "verifyOtp_error";
+          setError(msg);
+          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
           return;
         }
 
-        // 2) Forzar persistencia si viene session (hardening)
+        // 2) Hardening: forzar persistencia si verifyOtp entrega session
         if (data?.session?.access_token && data?.session?.refresh_token) {
           const { error: setErr } = await supabase.auth.setSession({
             access_token: data.session.access_token,
             refresh_token: data.session.refresh_token,
           });
+
           if (setErr) {
-            safeSet("auth_callback_err", setErr.message);
-            setError(setErr.message);
+            const msg = setErr.message || "setSession_error";
+            setError(msg);
+            navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
             return;
           }
         }
 
         // 3) Confirmar user
         const { data: u, error: uErr } = await supabase.auth.getUser();
-        const user = u?.user;
-        if (uErr || !user) {
-          const msg = uErr?.message || "getUser null after verifyOtp";
-          safeSet("auth_callback_err", msg);
+        if (uErr || !u?.user) {
+          const msg = uErr?.message || "getUser_null_after_verifyOtp";
           setError(msg);
+          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
           return;
         }
 
-        // 4) Resolver org_id (NO depender de URL)
-        let orgId: string | null = null;
+        // 4) Obtener contexto (org_id) — ahora debe funcionar también para trackers
+        const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
 
-        // 4a) Preferido: RPC canonical
-        try {
-          const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
-          if (!ctxErr && ctx?.ok && ctx?.org_id) orgId = String(ctx.org_id);
-        } catch {}
-
-        // 4b) Fallback: memberships
-        if (!orgId) {
-          try {
-            const { data: m, error: mErr } = await supabase
-              .from("memberships")
-              .select("org_id, created_at")
-              .eq("user_id", user.id)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (!mErr && m?.org_id) orgId = String(m.org_id);
-          } catch {}
+        if (ctxErr) {
+          const msg = ctxErr.message || "get_my_context_error";
+          setError(msg);
+          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+          return;
         }
+
+        const orgId = ctx?.org_id ? String(ctx.org_id) : null;
 
         if (!orgId) {
           const msg = "org_id_not_resolved";
-          safeSet("auth_callback_err", msg);
-          setError("No se pudo resolver org_id para este tracker.");
+          setError(msg);
+          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
           return;
         }
 
-        // 5) Persistir org_id para TrackerGPS/AuthContext
+        // 5) Persistir org para AuthContext/TrackerGPS
         safeSet(LAST_ORG_KEY, orgId);
         safeSet("auth_callback_ok", "1");
-        safeSet("auth_callback_org_id", orgId);
 
-        // 6) Redirigir a tracker con org_id explícito
-        navigate(`/tracker-gps?tg_flow=tracker&org_id=${encodeURIComponent(orgId)}`, { replace: true });
+        // 6) Redirigir al tracker con org_id
+        const target = `${nextBase}&org_id=${encodeURIComponent(orgId)}`;
+        navigate(target, { replace: true });
       } catch (e: any) {
-        const msg = e?.message || "AuthCallback exception";
-        safeSet("auth_callback_err", msg);
+        const msg = e?.message || "auth_callback_exception";
         setError(msg);
+        navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
       }
     };
 
@@ -109,7 +110,17 @@ export default function AuthCallback() {
   }, [navigate]);
 
   return (
-    <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", fontFamily: "sans-serif", padding: 16 }}>
+    <div
+      style={{
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        fontFamily: "sans-serif",
+        padding: 16,
+      }}
+    >
       {!error ? (
         <>
           <h3>Autenticando…</h3>
