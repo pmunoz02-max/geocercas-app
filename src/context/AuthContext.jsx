@@ -52,6 +52,9 @@ export function AuthProvider({ children }) {
   const [currentOrg, setCurrentOrg] = useState(null); // { id, name, code? }
   const [role, setRole] = useState(null);
 
+  // ✅ ROOT global (App owner) - fuente de verdad: public.app_root_owners
+  const [isAppRoot, setIsAppRoot] = useState(false);
+
   // (opcional) para mostrar “cargando contexto…”
   const [contextLoading, setContextLoading] = useState(false);
 
@@ -69,6 +72,44 @@ export function AuthProvider({ children }) {
       if (prev?.id === orgId) return prev;
       return { id: orgId, name: prev?.name || null, code: prev?.code || null };
     });
+  };
+
+  // ✅ Check root owner (universal). No depende de orgs ni memberships.
+  const fetchIsAppRoot = async (u) => {
+    if (!mountedRef.current) return false;
+    const uid = u?.id;
+    if (!uid) {
+      if (mountedRef.current) setIsAppRoot(false);
+      return false;
+    }
+
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from("app_root_owners")
+          .select("user_id, active")
+          .eq("user_id", uid)
+          .maybeSingle(),
+        6000,
+        "root_check_timeout"
+      );
+
+      if (!mountedRef.current) return false;
+
+      if (error) {
+        // No bloquear UI por esto
+        setIsAppRoot(false);
+        return false;
+      }
+
+      const ok = !!(data && data.user_id && data.active === true);
+      setIsAppRoot(ok);
+      return ok;
+    } catch {
+      if (!mountedRef.current) return false;
+      setIsAppRoot(false);
+      return false;
+    }
   };
 
   const applyCtx = (data) => {
@@ -112,7 +153,7 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    // ✅ Asegura org_id preferido lo antes posible (magic link /tracker-gps?org_id=...)
+    // ✅ Asegura org_id preferido lo antes posible (magic link /tracker-gps?org_id=... / storage)
     const orgIdFromUrl = readOrgIdFromUrl();
     const orgIdFromStorage = readLastOrgId();
     const preferred = orgIdFromUrl || orgIdFromStorage || preferredOrgIdRef.current;
@@ -165,6 +206,7 @@ export function AuthProvider({ children }) {
           // raro, pero no bloquear UI
           setSession(null);
           setUser(null);
+          setIsAppRoot(false);
           applyCtx({ ok: false, error: error.message || "getSession_error" });
           return;
         }
@@ -172,6 +214,10 @@ export function AuthProvider({ children }) {
         const sess = data?.session ?? null;
         setSession(sess);
         setUser(sess?.user ?? null);
+
+        // ✅ Root check (independiente del contexto/org)
+        if (sess?.user) fetchIsAppRoot(sess.user);
+        else setIsAppRoot(false);
 
         // ✅ Si hay sesión y hay org_id en URL/storage, bootstrap inmediato
         if (sess) {
@@ -185,6 +231,7 @@ export function AuthProvider({ children }) {
         if (!mountedRef.current) return;
         setSession(null);
         setUser(null);
+        setIsAppRoot(false);
         applyCtx({ ok: false, error: e?.message || "boot_exception" });
       } finally {
         // ✅ SIEMPRE liberar loading del boot
@@ -199,6 +246,10 @@ export function AuthProvider({ children }) {
 
       setSession(newSession);
       setUser(newSession?.user ?? null);
+
+      // ✅ Root check en cada cambio de auth
+      if (newSession?.user) fetchIsAppRoot(newSession.user);
+      else setIsAppRoot(false);
 
       // ✅ Si llega sesión por magic link, fija org_id antes del RPC
       if (newSession) {
@@ -226,6 +277,7 @@ export function AuthProvider({ children }) {
       setCtx(null);
       setRole(null);
       setCurrentOrg(null);
+      setIsAppRoot(false);
     }
   };
 
@@ -238,11 +290,14 @@ export function AuthProvider({ children }) {
       ctx,
       currentOrg,
       role,
+      currentRole: role, // ✅ compatibilidad con componentes que usan currentRole
+      isAppRoot, // ✅ ROOT global (para /admins y UI)
       refreshContext: fetchContext,
+      refreshRoot: () => fetchIsAppRoot(user), // por si quieres refrescar manualmente
       signOut,
       isAuthenticated: !!session,
     }),
-    [loading, contextLoading, session, user, ctx, currentOrg, role]
+    [loading, contextLoading, session, user, ctx, currentOrg, role, isAppRoot]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
