@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
@@ -8,157 +8,205 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function parseParams(): URLSearchParams {
-  // Soporta ?query y también #hash (por si llega access_token o similares)
+function getSbTokenKeys(): string[] {
+  try {
+    return Object.keys(window.localStorage || {}).filter((k) =>
+      /^sb-.*-auth-token$/i.test(String(k))
+    );
+  } catch {
+    return [];
+  }
+}
+
+function parseParamsBoth() {
   const search = window.location.search || "";
   const hash = (window.location.hash || "").replace(/^#/, "");
   const combined = [search.replace(/^\?/, ""), hash].filter(Boolean).join("&");
-  return new URLSearchParams(combined);
+  return {
+    search,
+    hash: window.location.hash || "",
+    combined,
+    params: new URLSearchParams(combined),
+  };
 }
 
-async function waitForSession(maxMs = 6000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) return true;
-    } catch {
-      // ignore
-    }
-    await sleep(150);
-  }
-  return false;
-}
-
-function normalizeType(raw: string | null): "magiclink" | "recovery" | null {
-  if (raw === "magiclink" || raw === "recovery") return raw;
+function normalizeType(raw: string | null): "magiclink" | "recovery" | "signup" | "invite" | null {
+  if (!raw) return null;
+  const v = raw.toLowerCase();
+  if (v === "magiclink" || v === "recovery" || v === "signup" || v === "invite") return v as any;
   return null;
 }
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
+
+  const parsed = useMemo(() => parseParamsBoth(), []);
+  const [step, setStep] = useState("init");
+  const [err, setErr] = useState<string | null>(null);
+  const [sessionExists, setSessionExists] = useState(false);
+  const [sbKeys, setSbKeys] = useState<string[]>([]);
+  const [orgId, setOrgId] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
       try {
-        const params = parseParams();
+        setStep("reading_params");
 
-        // Si viene error desde Supabase, lo mostramos
+        // 0) Mostrar si Supabase manda error por URL
         const urlErr =
-          params.get("error_description") ||
-          params.get("error") ||
-          params.get("message");
+          parsed.params.get("error_description") ||
+          parsed.params.get("error") ||
+          parsed.params.get("message");
 
         if (urlErr) {
-          const msg = String(urlErr);
-          setError(msg);
-          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+          setErr(String(urlErr));
+          setStep("url_error");
           return;
         }
 
-        const code = params.get("code");
-        const token_hash = params.get("token_hash");
-        const type = normalizeType(params.get("type"));
+        // 1) Detectar parámetros reales
+        const code = parsed.params.get("code");
+        const token_hash = parsed.params.get("token_hash");
+        const type = normalizeType(parsed.params.get("type"));
 
-        // ✅ Caso A: PKCE code
+        setStep(
+          `params_detected: code=${code ? "YES" : "NO"} token_hash=${token_hash ? "YES" : "NO"} type=${
+            type || "null"
+          }`
+        );
+
+        // 2) Ejecutar el intercambio correcto
         if (code) {
-          const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (exErr) {
-            const msg = exErr.message || "exchange_code_error";
-            setError(msg);
-            navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+          setStep("exchangeCodeForSession...");
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            setErr(error.message || "exchange_code_error");
+            setStep("exchange_failed");
             return;
           }
-        }
-
-        // ✅ Caso B: OTP token_hash
-        if (!code && token_hash && type) {
-          const { error: vErr } = await supabase.auth.verifyOtp({ type, token_hash });
-          if (vErr) {
-            const msg = vErr.message || "verifyOtp_error";
-            setError(msg);
-            navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+        } else if (token_hash && type) {
+          setStep("verifyOtp...");
+          const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any });
+          if (error) {
+            setErr(error.message || "verifyOtp_error");
+            setStep("verify_failed");
             return;
           }
-        }
-
-        // Si no vino nada, está mal formado
-        if (!code && !(token_hash && type)) {
-          const msg = "missing_code_or_token_hash";
-          setError(msg);
-          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+        } else {
+          setErr("missing_code_or_token_hash_in_callback_url");
+          setStep("missing_params");
           return;
         }
 
-        // ✅ Esperar sesión REAL
-        const ok = await waitForSession(6500);
+        // 3) Esperar sesión
+        setStep("waiting_session...");
+        const start = Date.now();
+        let ok = false;
+        while (Date.now() - start < 7000) {
+          const { data } = await supabase.auth.getSession();
+          const s = !!data?.session;
+          setSessionExists(s);
+          setSbKeys(getSbTokenKeys());
+          if (s) {
+            ok = true;
+            break;
+          }
+          await sleep(200);
+        }
+
         if (!ok) {
-          const msg = "session_not_created";
-          setError(msg);
-          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+          setErr("session_not_created_after_exchange_or_verify");
+          setStep("session_missing");
           return;
         }
 
-        // ✅ Resolver org
+        // 4) Resolver org_id (si ya hay sesión)
+        setStep("rpc_get_my_context...");
         const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
         if (ctxErr) {
-          const msg = ctxErr.message || "get_my_context_error";
-          setError(msg);
-          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+          setErr(ctxErr.message || "get_my_context_error");
+          setStep("rpc_failed");
           return;
         }
 
-        const orgId = ctx?.org_id ? String(ctx.org_id) : null;
-        if (!orgId) {
-          const msg = "org_id_not_resolved";
-          setError(msg);
-          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+        const oid = ctx?.org_id ? String(ctx.org_id) : null;
+        setOrgId(oid);
+
+        if (!oid) {
+          setErr("org_id_not_resolved");
+          setStep("org_missing");
           return;
         }
 
         try {
-          localStorage.setItem(LAST_ORG_KEY, orgId);
+          localStorage.setItem(LAST_ORG_KEY, oid);
         } catch {
           // ignore
         }
 
-        navigate(`/tracker-gps?tg_flow=tracker&org_id=${encodeURIComponent(orgId)}`, {
-          replace: true,
-        });
+        setStep("ready_to_continue");
       } catch (e: any) {
-        const msg = e?.message || "auth_callback_exception";
-        setError(msg);
-        navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+        setErr(e?.message || "auth_callback_exception");
+        setStep("exception");
       }
     };
 
     run();
-  }, [navigate]);
+  }, [parsed]);
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "column",
-        fontFamily: "sans-serif",
-        padding: 16,
-      }}
-    >
-      {!error ? (
-        <>
-          <h3>Autenticando…</h3>
-          <p>Preparando GPS</p>
-        </>
-      ) : (
-        <>
-          <h3>Error de autenticación</h3>
-          <pre style={{ whiteSpace: "pre-wrap", maxWidth: 560 }}>{error}</pre>
-        </>
-      )}
+    <div style={{ minHeight: "100vh", padding: 16, fontFamily: "sans-serif" }}>
+      <h2>AuthCallback Debug</h2>
+
+      <div style={{ marginTop: 8, padding: 12, background: "#f5f5f5", borderRadius: 8 }}>
+        <div><b>step:</b> {step}</div>
+        <div><b>sessionExists:</b> {String(sessionExists)}</div>
+        <div><b>sbKeys:</b> {sbKeys.length ? sbKeys.join(", ") : "[]"}</div>
+        <div><b>orgId:</b> {orgId || "—"}</div>
+        {err && <div style={{ color: "#b00020", marginTop: 8 }}><b>error:</b> {err}</div>}
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div><b>location.href</b></div>
+        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
+{String(window.location.href)}
+        </pre>
+
+        <div><b>location.search</b></div>
+        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
+{parsed.search}
+        </pre>
+
+        <div><b>location.hash</b></div>
+        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
+{parsed.hash}
+        </pre>
+
+        <div><b>parsed param keys</b></div>
+        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
+{Array.from(parsed.params.keys()).join(", ")}
+        </pre>
+      </div>
+
+      <button
+        style={{
+          marginTop: 16,
+          padding: "12px 16px",
+          borderRadius: 8,
+          border: "none",
+          background: "#0f172a",
+          color: "white",
+          cursor: "pointer",
+          opacity: step === "ready_to_continue" ? 1 : 0.5,
+        }}
+        disabled={step !== "ready_to_continue"}
+        onClick={() => {
+          if (!orgId) return;
+          navigate(`/tracker-gps?tg_flow=tracker&org_id=${encodeURIComponent(orgId)}`, { replace: true });
+        }}
+      >
+        Continuar a Tracker GPS
+      </button>
     </div>
   );
 }
