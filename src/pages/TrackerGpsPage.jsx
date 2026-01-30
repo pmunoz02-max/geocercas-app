@@ -83,6 +83,16 @@ async function getAccessTokenBestEffort() {
   }
 }
 
+function getSbTokenKeys() {
+  try {
+    return Object.keys(window.localStorage || {}).filter((k) =>
+      /^sb-.*-auth-token$/i.test(String(k))
+    );
+  } catch {
+    return [];
+  }
+}
+
 export default function TrackerGpsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -204,16 +214,24 @@ export default function TrackerGpsPage() {
     setSendStatus("sending");
     setSendError(null);
 
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    let r;
+    let j = {};
+    try {
+      r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    const j = await r.json().catch(() => ({}));
+      j = await r.json().catch(() => ({}));
+    } catch (e) {
+      setSendStatus("error");
+      setSendError(e?.message || "Network error enviando posición");
+      return;
+    }
 
     if (!r.ok || !j?.ok) {
       setSendStatus("error");
@@ -283,6 +301,10 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     let alive = true;
 
+    // ✅ Debug runtime instance + storage
+    console.log("SUPABASE CLIENT ID (TrackerGps)", supabase);
+    console.log("SB token keys (TrackerGps)", getSbTokenKeys());
+
     (async () => {
       try {
         setLoading(true);
@@ -291,6 +313,10 @@ export default function TrackerGpsPage() {
         if (error) throw new Error(error.message);
 
         const s = data?.session;
+
+        // Debug session presence
+        console.log("SESSION (TrackerGps) exists?", !!s);
+
         if (!s) {
           // ✅ Guard definitivo: no iniciar tracker sin sesión
           throw new Error("No autenticado. Abre el link de invitación nuevamente.");
@@ -305,7 +331,9 @@ export default function TrackerGpsPage() {
         }
 
         if (!o) {
-          throw new Error("org_id no disponible (abre el link de invitación para inicializar la organización).");
+          throw new Error(
+            "org_id no disponible (abre el link de invitación para inicializar la organización)."
+          );
         }
 
         // Persistimos org para siguientes aperturas
@@ -336,6 +364,7 @@ export default function TrackerGpsPage() {
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
       startedRef.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -354,10 +383,18 @@ export default function TrackerGpsPage() {
           <p className="text-sm text-gray-700 mb-4">{error}</p>
 
           <div className="text-xs bg-gray-100 p-3 rounded overflow-auto">
-            <div><b>permission:</b> {permission}</div>
-            <div><b>orgId:</b> {orgId || "—"}</div>
-            <div><b>canSend:</b> {String(canSend)}</div>
-            <div><b>gateMsg:</b> {gateMsg}</div>
+            <div>
+              <b>permission:</b> {permission}
+            </div>
+            <div>
+              <b>orgId:</b> {orgId || "—"}
+            </div>
+            <div>
+              <b>canSend:</b> {String(canSend)}
+            </div>
+            <div>
+              <b>gateMsg:</b> {gateMsg}
+            </div>
           </div>
 
           <button
