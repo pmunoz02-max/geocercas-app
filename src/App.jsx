@@ -1,112 +1,147 @@
-import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+// src/App.jsx
+import React, { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
-import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "./LanguageSwitcher";
 
-/** =========================
- * Helpers (a prueba de i18n)
- * ========================= */
-function safeText(v) {
-  if (v == null) return "";
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
+import ProtectedShell from "./layouts/ProtectedShell.jsx";
+import RequireOrg from "./components/RequireOrg.jsx";
+import AuthGuard from "./components/AuthGuard.jsx";
+
+// Public pages
+import Landing from "./pages/Landing.jsx";
+import Login from "./pages/Login.tsx";
+import AuthCallback from "./pages/AuthCallback.tsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
+
+// Tracker GPS (página “solo trackers”)
+import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
+// Bridge público para crear sesión Supabase del tracker
+import TrackerAuthBridge from "./pages/TrackerAuthBridge.jsx";
+
+// App pages (protegidas)
+import Inicio from "./pages/Inicio.jsx";
+import GeocercasPage from "./pages/GeocercasPage.jsx";
+import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";
+import Personal from "./pages/Personal.jsx";
+import ActividadesPage from "./pages/ActividadesPage.jsx";
+import AsignacionesPage from "./pages/AsignacionesPage.jsx";
+import Reports from "./pages/Reports.jsx";
+import TrackerDashboard from "./pages/TrackerDashboard.jsx";
+import InvitarTracker from "./pages/InvitarTracker.jsx";
+import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
+
+// Admins
+import AdminAssign from "./pages/AdminAssign.tsx";
+
+// Help pages
+import InstructionsPage from "./pages/help/InstructionsPage.jsx";
+import FaqPage from "./pages/help/FaqPage.jsx";
+import SupportPage from "./pages/help/SupportPage.jsx";
+import ChangelogPage from "./pages/help/ChangelogPage.jsx";
+
+function CallbackCatcher() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const pathname = location.pathname || "";
+    const search = location.search || "";
+    const hash = typeof location.hash === "string" ? location.hash : "";
+
+    const hasAccessToken = hash.includes("access_token=");
+    const hasCode = search.includes("code=");
+    const hasTokenHash = search.includes("token_hash=");
+
+    // Si llega callback params en cualquier ruta, forzamos /auth/callback
+    if ((hasAccessToken || hasCode || hasTokenHash) && pathname !== "/auth/callback") {
+      const target = `/auth/callback${search || ""}${hash || ""}`;
+      window.location.replace(target);
+    }
+  }, [location.pathname, location.search, location.hash]);
+
+  return null;
 }
 
-export default function AppHeader() {
-  const navigate = useNavigate();
-  const { session, role, isAppRoot, signOut } = useAuth(); // 👈 agregamos isAppRoot
-  const { t } = useTranslation();
+function AdminRoute({ children }) {
+  const { loading, user, isAppRoot } = useAuth();
+  const location = useLocation();
 
-  const isLogged = !!session;
-  const rawRole = String(role || "").toLowerCase();
-  const email = session?.user?.email || "";
+  if (loading) return null;
+  if (!user) {
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+  if (!isAppRoot) return <Navigate to="/inicio" replace />;
+  return children;
+}
 
-  const handleLogout = async () => {
-    try {
-      await signOut();
-    } catch (err) {
-      console.error("[AppHeader] Error al cerrar sesión:", err);
-    } finally {
-      navigate("/", { replace: true });
-    }
-  };
-
-  // Traducción básica de roles (fallback al valor original si no matchea)
-  let roleLabel = rawRole;
-  if (rawRole === "owner") roleLabel = t("app.header.roleOwner", { defaultValue: "Propietario" });
-  if (rawRole === "admin") roleLabel = t("app.header.roleAdmin", { defaultValue: "Administrador" });
-  if (rawRole === "tracker") roleLabel = t("app.header.roleTracker", { defaultValue: "Tracker" });
-  if (rawRole === "root" || rawRole === "root_owner") roleLabel = t("app.header.roleRoot", { defaultValue: "Root" });
-
+export default function App() {
   return (
-    <header className="w-full border-b border-slate-200 bg-white">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* Branding */}
-        <Link to={isLogged ? "/inicio" : "/"} className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold">
-            AG
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-slate-900">
-              {safeText(t("landing.brandName", { defaultValue: "App Geocercas" }))}
-            </span>
-            <span className="text-[11px] text-slate-500">
-              {safeText(t("landing.brandTagline", { defaultValue: "Control de personal por geocercas" }))}
-            </span>
-          </div>
-        </Link>
+    <BrowserRouter>
+      <CallbackCatcher />
 
-        {/* Zona derecha */}
-        <div className="flex items-center gap-3 text-xs">
-          <LanguageSwitcher />
+      <Routes>
+        {/* 🌐 Public */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
-          {isLogged ? (
-            <>
-              {/* Email + rol */}
-              <div className="hidden sm:flex flex-col items-end">
-                {email && <span className="font-medium text-slate-700">{email}</span>}
-                {rawRole && (
-                  <span className="uppercase tracking-wide text-[10px] text-slate-400">
-                    {safeText(roleLabel)}
-                  </span>
-                )}
-              </div>
+        {/* ✅ TRACKER GPS: fuera del shell protegido */}
+        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
-              {/* ✅ Botón Administrador SOLO para App Root (alineado con AdminRoute) */}
-              {isAppRoot && (
-                <Link
-                  to="/admins"
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold bg-amber-500 text-white hover:bg-amber-400"
-                >
-                  {safeText(t("app.tabs.admins", { defaultValue: "Administrador" }))}
-                </Link>
-              )}
+        {/* ✅ TRACKER AUTH BRIDGE: fuera del shell protegido (CRÍTICO) */}
+        <Route path="/tracker-auth-bridge" element={<TrackerAuthBridge />} />
 
-              {/* Salir */}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
-              >
-                {safeText(t("app.header.logout", { defaultValue: "Salir" }))}
-              </button>
-            </>
-          ) : (
-            <Link
-              to="/login"
-              className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
-            >
-              {safeText(t("app.header.login", { defaultValue: "Entrar" }))}
-            </Link>
-          )}
-        </div>
-      </div>
-    </header>
+        {/* 🔐 Password flows */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* Legacy redirects */}
+        <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
+        <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
+        <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
+        <Route path="/admin" element={<Navigate to="/admins" replace />} />
+        <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
+
+        {/* 🔒 Protected app */}
+        <Route
+          element={
+            <AuthGuard>
+              <ProtectedShell />
+            </AuthGuard>
+          }
+        >
+          <Route path="/inicio" element={<Inicio />} />
+          <Route path="/geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
+          <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+          <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
+          <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
+          <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
+          <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
+          <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+          <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+          <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+
+          {/* Help */}
+          <Route path="/help/instructions" element={<InstructionsPage />} />
+          <Route path="/help/faq" element={<FaqPage />} />
+          <Route path="/help/support" element={<SupportPage />} />
+          <Route path="/help/changelog" element={<ChangelogPage />} />
+
+          {/* Admins (ROOT only) */}
+          <Route
+            path="/admins"
+            element={
+              <AdminRoute>
+                <AdminAssign />
+              </AdminRoute>
+            }
+          />
+        </Route>
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
