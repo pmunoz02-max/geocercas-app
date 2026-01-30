@@ -9,68 +9,57 @@ export default function AuthCallback() {
   useEffect(() => {
     const run = async () => {
       try {
-        // ✅ marcador para saber si ESTE archivo se ejecutó en producción
+        // Marca de diagnóstico (para saber que el callback realmente corrió)
         try {
           localStorage.setItem("auth_callback_ran_at", new Date().toISOString());
         } catch {}
 
         const params = new URLSearchParams(window.location.search);
-
         const token_hash = params.get("token_hash");
         const type = (params.get("type") as "magiclink" | "recovery" | null) ?? null;
-        const code = params.get("code");
-        const next = params.get("next") || "/tracker-gps";
 
-        // 1) MAGIC LINK REAL: token_hash + type
-        if (token_hash && type) {
-          const { data, error } = await supabase.auth.verifyOtp({
-            type,
-            token_hash,
+        // ✅ Como tu link NO trae next, lo fijamos aquí
+        const next = "/tracker-gps?tg_flow=tracker";
+
+        if (!token_hash || !type) {
+          setError("missing_code_or_token_hash");
+          return;
+        }
+
+        // 1) Verificar OTP (magiclink)
+        const { data, error } = await supabase.auth.verifyOtp({ type, token_hash });
+        if (error) {
+          setError(error.message);
+          return;
+        }
+
+        // 2) Forzar persistencia si viene session (hardening)
+        if (data?.session?.access_token && data?.session?.refresh_token) {
+          const { error: setErr } = await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
           });
-
-          if (error) {
-            setError(error.message);
-            return;
-          }
-
-          // ✅ FIX DEFINITIVO: forzar persistencia si viene session
-          // (en algunos entornos verifyOtp NO “hidrata” storage automáticamente)
-          if (data?.session?.access_token && data?.session?.refresh_token) {
-            const { error: setErr } = await supabase.auth.setSession({
-              access_token: data.session.access_token,
-              refresh_token: data.session.refresh_token,
-            });
-            if (setErr) {
-              setError(setErr.message);
-              return;
-            }
-          }
-        }
-
-        // 2) PKCE: code
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
-            setError(error.message);
+          if (setErr) {
+            setError(setErr.message);
             return;
           }
         }
 
-        // 3) Confirmar que YA hay user
+        // 3) Confirmar user real
         const { data: u, error: uErr } = await supabase.auth.getUser();
         if (uErr) {
           setError(uErr.message);
           return;
         }
         if (!u?.user) {
-          setError("No se pudo establecer sesión (getUser null).");
+          setError("getUser null after verifyOtp");
           return;
         }
 
-        // 4) Redirigir
+        // 4) Redirigir al tracker GPS
         navigate(next, { replace: true });
       } catch (e: any) {
-        setError(e?.message || "Error desconocido en AuthCallback");
+        setError(e?.message || "AuthCallback exception");
       }
     };
 
@@ -78,16 +67,7 @@ export default function AuthCallback() {
   }, [navigate]);
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "column",
-        fontFamily: "sans-serif",
-      }}
-    >
+    <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", fontFamily: "sans-serif" }}>
       {!error ? (
         <>
           <h3>Autenticando…</h3>
