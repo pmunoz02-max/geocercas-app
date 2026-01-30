@@ -1,12 +1,10 @@
 // src/lib/supabaseClient.js
 import { createClient } from "@supabase/supabase-js";
 
-// Helpers
 function normUrl(u) {
   return String(u || "").trim().replace(/\/$/, "");
 }
 
-// Env resolution (Vite-first, then generic fallbacks)
 const RAW_SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL ||
   import.meta.env.SUPABASE_URL ||
@@ -29,18 +27,9 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-// Local storage safe getter
 const storage =
-  typeof window !== "undefined" && window?.localStorage ? window.localStorage : undefined;
+  typeof window !== "undefined" && window.localStorage ? window.localStorage : undefined;
 
-/**
- * ✅ Config universal para App Geocercas (Web SPA + Magic Link + PKCE):
- * - flowType: "pkce"
- * - persistSession: true
- * - autoRefreshToken: true
- * - detectSessionInUrl: true ✅
- * - storage: localStorage (explícito)
- */
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     flowType: "pkce",
@@ -49,7 +38,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: true,
     storage,
   },
-  if (typeof window !== "undefined") {
+});
+
+// ✅ Debug ONLY (no rompe build; corre solo en browser)
+if (typeof window !== "undefined") {
   window.__supabase__ = supabase;
 }
-});
