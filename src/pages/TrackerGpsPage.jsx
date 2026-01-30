@@ -2,10 +2,19 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+/**
+ * TrackerGpsPage — Universal + permanente
+ * - Acepta invite_id (si viene) llamando /api/auth/session action=accept_tracker_invite
+ * - Luego el gate DB-driven (tracker_can_send) funciona con auth.uid() real
+ * - Frontend NO decide negocio: solo refleja el gate
+ */
+
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 }
 
+// Best-effort token (para Edge function). Si migras totalmente a cookies HttpOnly,
+// lo ideal es que tu Edge valide vía cookie/server, pero por ahora mantenemos esto.
 function getAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
@@ -34,6 +43,25 @@ async function getAccessTokenBestEffort() {
     return data?.session?.access_token || "";
   } catch {
     return "";
+  }
+}
+
+function readQuery() {
+  const url = new URL(window.location.href);
+  const invite_id = url.searchParams.get("invite_id") || "";
+  const org_id = url.searchParams.get("org_id") || "";
+  const tg_flow = url.searchParams.get("tg_flow") || "";
+  return { invite_id, org_id, tg_flow };
+}
+
+function stripQueryParams(keys = []) {
+  try {
+    const url = new URL(window.location.href);
+    keys.forEach((k) => url.searchParams.delete(k));
+    const next = url.pathname + (url.search ? url.search : "") + (url.hash || "");
+    window.history.replaceState({}, "", next);
+  } catch {
+    // noop
   }
 }
 
@@ -67,6 +95,12 @@ export default function TrackerGpsPage() {
   const intervalSecRef = useRef(30);
   const gateInfoRef = useRef(null);
 
+  // onboarding refs
+  const acceptedInviteRef = useRef(false);
+
+  // Guardamos org_id si viene en el link (SOLO contexto; backend valida con gate)
+  const orgIdFromUrlRef = useRef("");
+
   useEffect(() => {
     canSendRef.current = !!canSend;
   }, [canSend]);
@@ -91,7 +125,6 @@ export default function TrackerGpsPage() {
         return;
       }
 
-      // data puede venir como objeto o como fila (dependiendo de RPC)
       const row = Array.isArray(data) ? data?.[0] : data;
 
       const ok = !!row?.can_send;
@@ -103,7 +136,7 @@ export default function TrackerGpsPage() {
         return;
       }
 
-      // ✅ Tu DB usa frequency_minutes (tracker_assignments)
+      // DB usa frequency_minutes
       const fm = Number(row?.frequency_minutes);
       const sec = Number.isFinite(fm) && fm > 0 ? fm * 60 : 300; // default 5 min
       setIntervalSec(sec);
@@ -113,6 +146,47 @@ export default function TrackerGpsPage() {
       setCanSend(false);
       setGateInfo(null);
       setGateMsg(`Gate exception: ${e?.message || "exception"}`);
+    }
+  }
+
+  // ✅ Universal: aceptar invitación SI viene invite_id (vincula auth.uid real con org)
+  async function acceptInviteIfPresent() {
+    if (acceptedInviteRef.current) return;
+    acceptedInviteRef.current = true;
+
+    const { invite_id, org_id } = readQuery();
+    if (org_id) orgIdFromUrlRef.current = org_id;
+
+    if (!invite_id) return;
+
+    try {
+      // Llama al server (service role) que valida email, expiración, usado, etc.
+      const r = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "accept_tracker_invite",
+          invite_id,
+        }),
+      });
+
+      const j = await r.json().catch(() => ({}));
+
+      if (!r.ok || !j?.ok) {
+        // Si falla, mostramos error claro.
+        const msg =
+          j?.error ||
+          j?.message ||
+          "No se pudo aceptar la invitación. Abre el link nuevamente o pide un nuevo invite.";
+        throw new Error(msg);
+      }
+
+      // Limpieza de URL para que no se re-ejecute al refrescar
+      stripQueryParams(["invite_id", "org_id", "tg_flow"]);
+    } catch (e) {
+      // Si no acepta, mantenemos la pantalla pero con error explícito
+      throw e;
     }
   }
 
@@ -138,21 +212,23 @@ export default function TrackerGpsPage() {
 
     const gi = gateInfoRef.current;
 
-    // ✅ DB-Driven: el backend debería resolver tenant/permiso por auth.uid + tracker_assignments
-    // Mandamos solo lo necesario: posición + ids que ya vienen del gate
+    // ⚠️ Universal / robusto:
+    // - NO mandamos assignment_id (ya no existe en gate)
+    // - Mandamos org_id solo si vino en el link como CONTEXTO
+    //   (backend debe validar con tracker_can_send).
     const payload = {
+      org_id: orgIdFromUrlRef.current || undefined, // si tu Edge lo requiere
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: pos.coords.accuracy ?? null,
-      heading: pos.coords.heading ?? null,
-      speed: pos.coords.speed ?? null,
       captured_at: new Date().toISOString(),
       meta: {
         source: "tracker-gps",
         altitude: pos.coords.altitude ?? null,
+        heading: pos.coords.heading ?? null,
+        speed: pos.coords.speed ?? null,
       },
       geofence_id: gi?.geofence_id ?? null,
-      assignment_id: gi?.assignment_id ?? gi?.id ?? null,
     };
 
     setSendStatus("sending");
@@ -187,7 +263,6 @@ export default function TrackerGpsPage() {
     setLastSend({
       ts: payload.captured_at,
       inserted_id: j?.inserted_id ?? null,
-      assignment_id: j?.used_assignment_id ?? payload.assignment_id ?? null,
       geofence_id: j?.used_geofence_id ?? payload.geofence_id ?? null,
     });
   }
@@ -237,7 +312,11 @@ export default function TrackerGpsPage() {
       try {
         setLoading(true);
 
-        // ✅ solo necesitamos sesión; NO necesitamos org_id
+        // 0) Guardar org_id si vino (solo contexto)
+        const q = readQuery();
+        if (q.org_id) orgIdFromUrlRef.current = q.org_id;
+
+        // 1) Necesitamos sesión (auth)
         const { data, error } = await supabase.auth.getSession();
         if (error) throw new Error(error.message);
 
@@ -246,14 +325,17 @@ export default function TrackerGpsPage() {
           throw new Error("No autenticado. Abre el link de invitación nuevamente.");
         }
 
+        // 2) ✅ Universal: aceptar invitación si viene invite_id (vincula auth.uid real)
+        await acceptInviteIfPresent();
+
         if (!alive) return;
         setLoading(false);
 
-        // Gate inmediato + polling
+        // 3) Gate inmediato + polling
         await refreshGate();
         gatePollRef.current = setInterval(() => refreshGate(), 15000);
 
-        // Arranque automático del GPS
+        // 4) Arranque automático del GPS
         startTrackingAuto();
       } catch (e) {
         if (!alive) return;

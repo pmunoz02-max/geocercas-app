@@ -10,7 +10,7 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
-// Cliente "anon" SOLO para disparar el email OTP/magiclink (Supabase manda el correo)
+// Cliente "anon" SOLO para disparar el email OTP/magiclink
 const supabaseAnon = createClient(supabaseUrl, anonKey, {
   auth: { persistSession: false },
 });
@@ -23,13 +23,6 @@ function isUuid(v: any) {
 
 function normEmail(v: any) {
   return String(v || "").trim().toLowerCase();
-}
-
-function buildRedirectTo(org_id: string) {
-  return (
-    `${PUBLIC_SITE_URL}/auth/callback` +
-    `?next=/tracker-gps&org_id=${org_id}&tg_flow=tracker`
-  );
 }
 
 async function findUserIdByEmail(email: string): Promise<string | null> {
@@ -61,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (!anonKey) {
       return res.status(500).json({
-        error: "Missing env SUPABASE_ANON_KEY (required to send OTP email via Supabase)",
+        error: "Missing env SUPABASE_ANON_KEY",
       });
     }
 
@@ -80,18 +73,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = req.body || {};
     const email = normEmail(body.email);
     const org_id = String(body.org_id || "").trim();
-    const person_id = body.person_id ? String(body.person_id) : null;
-    const force_tracker_default = !!body.force_tracker_default;
 
     if (!email || !email.includes("@")) return res.status(400).json({ error: "Invalid email" });
     if (!isUuid(org_id)) return res.status(400).json({ error: "Invalid org_id (must be UUID)" });
 
-    const redirectTo = buildRedirectTo(org_id);
-
-    // 2) Asegurar que el usuario exista (si no existe, lo creamos sin confirmar)
-    //    Luego mandamos el magic link por email con signInWithOtp (Supabase envía).
+    // 2) Asegurar usuario (solo para que exista en auth y el link funcione)
     let trackerUserId = await findUserIdByEmail(email);
-
     if (!trackerUserId) {
       const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         email,
@@ -102,36 +89,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       trackerUserId = created?.user?.id || null;
     }
+    if (!trackerUserId) trackerUserId = await findUserIdByEmail(email);
+    if (!trackerUserId) return res.status(500).json({ error: "Could not resolve tracker user id" });
 
-    if (!trackerUserId) {
-      // fallback duro
-      trackerUserId = await findUserIdByEmail(email);
-    }
-    if (!trackerUserId) {
-      return res.status(500).json({ error: "Could not resolve tracker user id" });
-    }
+    // 3) Crear INVITE (fuente de verdad del onboarding)
+    const { data: inv, error: invErr } = await supabaseAdmin
+      .from("tracker_invites")
+      .insert({
+        org_id,
+        email_norm: email,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select("id")
+      .single();
 
-    // 3) Asegurar membership tracker (idempotente)
-    await supabaseAdmin
-      .from("memberships")
-      .upsert({ user_id: trackerUserId, org_id, role: "tracker" }, { onConflict: "user_id,org_id" });
-
-    // 4) Auto-asignación (si se pidió)
-    let assignment_id: string | null = null;
-    if (force_tracker_default) {
-      const { data: assignId, error: assignErr } = await supabaseAdmin.rpc(
-        "upsert_tracker_assignment_auto",
-        {
-          p_tenant_id: org_id,
-          p_tracker_user_id: trackerUserId,
-          p_frequency_minutes: 1,
-        }
-      );
-      if (!assignErr && assignId) assignment_id = String(assignId);
+    if (invErr || !inv?.id) {
+      return res.status(500).json({ error: invErr?.message || "Failed to create tracker invite" });
     }
 
-    // 5) ENVIAR EMAIL SIEMPRE (Supabase)
-    //    - shouldCreateUser: false porque ya lo aseguramos arriba
+    const invite_id = String(inv.id);
+
+    // 4) Redirect incluye invite_id (para aceptar y vincular auth.uid real)
+    const redirectTo =
+      `${PUBLIC_SITE_URL}/auth/callback` +
+      `?next=/tracker-gps&org_id=${org_id}&invite_id=${invite_id}&tg_flow=tracker`;
+
+    // 5) Enviar magic link
     const { error: otpErr } = await supabaseAnon.auth.signInWithOtp({
       email,
       options: {
@@ -140,18 +123,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    if (otpErr) {
-      return res.status(400).json({ error: otpErr.message || "Error sending Supabase email" });
-    }
+    if (otpErr) return res.status(400).json({ error: otpErr.message || "Error sending email" });
 
     return res.status(200).json({
       ok: true,
       email,
       email_sent: true,
-      tracker_user_id: trackerUserId,
-      person_id,
-      assignment_id,
+      org_id,
+      invite_id,
       redirect_to: redirectTo,
+      note: "Membership y asignaciones se crean SOLO al aceptar el invite (auth.uid real).",
     });
   } catch (e: any) {
     console.error("invite-tracker error", e);
