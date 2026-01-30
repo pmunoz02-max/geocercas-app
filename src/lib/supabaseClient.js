@@ -49,4 +49,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: true,
     storage,
   },
+  if (typeof window !== "undefined") {
+  window.__supabase__ = supabase;
+}
 });
