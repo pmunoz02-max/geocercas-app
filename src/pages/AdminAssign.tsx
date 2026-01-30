@@ -1,5 +1,6 @@
 // src/pages/AdminAssign.tsx
 import { useMemo, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 type Notice = { type: "ok" | "err" | "info"; text: string };
 
@@ -7,16 +8,6 @@ function errText(e: any) {
   if (!e) return "Error desconocido";
   if (typeof e === "string") return e;
   return e?.message || e?.error_description || e?.hint || JSON.stringify(e);
-}
-
-async function safeReadJson(res: Response) {
-  const text = await res.text().catch(() => "");
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
 }
 
 export default function AdminAssign() {
@@ -44,22 +35,25 @@ export default function AdminAssign() {
     setNotice({ type: "info", text: "Enviando invitación (Magic Link)..." });
 
     try {
-      const res = await fetch("/api/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include", // cookies tg_at / tg_rt
-        body: JSON.stringify({
-          action: "invite_new_admin",
-          email: targetEmail,
-        }),
+      // Asegura sesión
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+
+      if (!token) {
+        setNotice({ type: "err", text: "No hay sesión activa. Vuelve a iniciar sesión." });
+        return;
+      }
+
+      // ✅ Llamada directa a Edge Function (con Bearer explícito)
+      const { data, error } = await supabase.functions.invoke("invite_admin", {
+        body: { email: targetEmail },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      const json: any = await safeReadJson(res);
-
-      if (!res.ok || json?.ok === false) {
+      if (error || data?.ok === false) {
         setNotice({
           type: "err",
-          text: `❌ No se pudo enviar la invitación: ${json?.error || json?.raw || `HTTP ${res.status}`}`,
+          text: `❌ No se pudo enviar la invitación: ${data?.error || error?.message || "Error desconocido"}`,
         });
         return;
       }
