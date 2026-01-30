@@ -2,54 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-const LAST_ORG_KEY = "app_geocercas_last_org_id"; // ✅ key canónica
-const LEGACY_TRACKER_ORG_KEY = "tracker_org_id"; // compatibilidad
-
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
-}
-
-function qp(name) {
-  return new URLSearchParams(window.location.search).get(name);
-}
-
-// org_id: 1) query param, 2) localStorage (key canónica), 3) legacy localStorage, 4) metadata del usuario
-function resolveOrgIdFromSession(session) {
-  const fromQuery = qp("org_id");
-  if (fromQuery) return fromQuery;
-
-  try {
-    const ls = localStorage.getItem(LAST_ORG_KEY);
-    if (ls) return ls;
-
-    const legacy = localStorage.getItem(LEGACY_TRACKER_ORG_KEY);
-    if (legacy) return legacy;
-  } catch {
-    // ignore
-  }
-
-  const um = session?.user?.user_metadata || {};
-  const am = session?.user?.app_metadata || {};
-
-  return (
-    um?.org_id ||
-    um?.tenant_id ||
-    um?.current_org_id ||
-    am?.org_id ||
-    am?.tenant_id ||
-    am?.current_org_id ||
-    null
-  );
-}
-
-function persistOrgId(orgId) {
-  if (!orgId) return;
-  try {
-    localStorage.setItem(LAST_ORG_KEY, orgId);
-    localStorage.setItem(LEGACY_TRACKER_ORG_KEY, orgId); // legacy para no romper nada viejo
-  } catch {
-    // ignore
-  }
 }
 
 function getAccessTokenFromLocalStorage() {
@@ -83,16 +37,6 @@ async function getAccessTokenBestEffort() {
   }
 }
 
-function getSbTokenKeys() {
-  try {
-    return Object.keys(window.localStorage || {}).filter((k) =>
-      /^sb-.*-auth-token$/i.test(String(k))
-    );
-  } catch {
-    return [];
-  }
-}
-
 export default function TrackerGpsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -100,31 +44,28 @@ export default function TrackerGpsPage() {
   const [permission, setPermission] = useState("unknown");
   const [gpsActive, setGpsActive] = useState(false);
 
-  const [session, setSession] = useState(null);
-  const [orgId, setOrgId] = useState(null);
-
   const [lastPosition, setLastPosition] = useState(null);
   const [lastSend, setLastSend] = useState(null);
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
-
-  const [intervalSec, setIntervalSec] = useState(30);
 
   // gating
   const [canSend, setCanSend] = useState(false);
   const [gateMsg, setGateMsg] = useState("Esperando asignación…");
   const [gateInfo, setGateInfo] = useState(null);
 
+  // frecuencia en segundos (UI / throttle)
+  const [intervalSec, setIntervalSec] = useState(30);
+
   const lastSentAtRef = useRef(0);
   const watchIdRef = useRef(null);
   const gatePollRef = useRef(null);
   const startedRef = useRef(false);
 
-  // ✅ refs para evitar “stale closures”
+  // refs para evitar closures viejos
   const canSendRef = useRef(false);
   const intervalSecRef = useRef(30);
   const gateInfoRef = useRef(null);
-  const orgIdRef = useRef(null);
 
   useEffect(() => {
     canSendRef.current = !!canSend;
@@ -138,46 +79,48 @@ export default function TrackerGpsPage() {
     gateInfoRef.current = gateInfo || null;
   }, [gateInfo]);
 
-  useEffect(() => {
-    orgIdRef.current = orgId || null;
-  }, [orgId]);
-
-  async function refreshGate(currentOrgId) {
+  // ✅ Gate DB-Driven definitivo: SIN org_id / tenant_id desde frontend
+  async function refreshGate() {
     try {
-      const { data, error } = await supabase.rpc("tracker_can_send", {
-        p_org_id: currentOrgId,
-      });
+      const { data, error } = await supabase.rpc("tracker_can_send");
 
       if (error) {
         setCanSend(false);
-        setGateMsg(`Gate error: ${error.message || "rpc_error"}`);
         setGateInfo(null);
+        setGateMsg(`Gate error: ${error.message || "rpc_error"}`);
         return;
       }
 
-      const ok = !!data?.can_send;
+      // data puede venir como objeto o como fila (dependiendo de RPC)
+      const row = Array.isArray(data) ? data?.[0] : data;
+
+      const ok = !!row?.can_send;
       setCanSend(ok);
-      setGateInfo(data || null);
+      setGateInfo(row || null);
 
       if (!ok) {
-        setGateMsg(data?.reason || "Esperando asignación…");
-      } else {
-        const sec = Number(data?.frequency_sec);
-        if (Number.isFinite(sec) && sec > 0) setIntervalSec(sec);
-        setGateMsg("Asignación activa ✅ (enviando automáticamente)");
+        setGateMsg(row?.reason || "Esperando asignación…");
+        return;
       }
+
+      // ✅ Tu DB usa frequency_minutes (tracker_assignments)
+      const fm = Number(row?.frequency_minutes);
+      const sec = Number.isFinite(fm) && fm > 0 ? fm * 60 : 300; // default 5 min
+      setIntervalSec(sec);
+
+      setGateMsg("Asignación activa ✅ (enviando automáticamente)");
     } catch (e) {
       setCanSend(false);
-      setGateMsg(`Gate exception: ${e?.message || "exception"}`);
       setGateInfo(null);
+      setGateMsg(`Gate exception: ${e?.message || "exception"}`);
     }
   }
 
-  async function sendPosition(pos, currentOrgId) {
-    // 1) gating (REF, no state)
+  async function sendPosition(pos) {
+    // 1) gating (REF)
     if (!canSendRef.current) return;
 
-    // 2) throttle (REF, no state)
+    // 2) throttle (REF)
     const now = Date.now();
     const minMs = Math.max(5, Number(intervalSecRef.current || 30)) * 1000;
     if (now - lastSentAtRef.current < minMs) return;
@@ -186,7 +129,7 @@ export default function TrackerGpsPage() {
     const token = await getAccessTokenBestEffort();
     if (!token) {
       setSendStatus("error");
-      setSendError("No access_token. El tracker debe entrar por el magic link de invitación.");
+      setSendError("No access_token. Abre el magic link de invitación nuevamente.");
       return;
     }
 
@@ -195,8 +138,9 @@ export default function TrackerGpsPage() {
 
     const gi = gateInfoRef.current;
 
+    // ✅ DB-Driven: el backend debería resolver tenant/permiso por auth.uid + tracker_assignments
+    // Mandamos solo lo necesario: posición + ids que ya vienen del gate
     const payload = {
-      org_id: currentOrgId,
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: pos.coords.accuracy ?? null,
@@ -208,7 +152,7 @@ export default function TrackerGpsPage() {
         altitude: pos.coords.altitude ?? null,
       },
       geofence_id: gi?.geofence_id ?? null,
-      assignment_id: gi?.assignment_id ?? null,
+      assignment_id: gi?.assignment_id ?? gi?.id ?? null,
     };
 
     setSendStatus("sending");
@@ -243,12 +187,12 @@ export default function TrackerGpsPage() {
     setLastSend({
       ts: payload.captured_at,
       inserted_id: j?.inserted_id ?? null,
-      assignment_id: j?.used_assignment_id ?? null,
-      geofence_id: j?.used_geofence_id ?? null,
+      assignment_id: j?.used_assignment_id ?? payload.assignment_id ?? null,
+      geofence_id: j?.used_geofence_id ?? payload.geofence_id ?? null,
     });
   }
 
-  function startTrackingAuto(currentOrgId) {
+  function startTrackingAuto() {
     if (startedRef.current) return;
     startedRef.current = true;
 
@@ -276,7 +220,7 @@ export default function TrackerGpsPage() {
         };
         setLastPosition(current);
 
-        await sendPosition(pos, currentOrgId);
+        await sendPosition(pos);
       },
       (err) => {
         setGpsActive(false);
@@ -286,71 +230,31 @@ export default function TrackerGpsPage() {
     );
   }
 
-  async function resolveOrgIdFromBackendFallback() {
-    // ✅ Si ya corregiste get_my_context para trackers, aquí se resuelve org_id sin URL
-    try {
-      const { data: ctx, error } = await supabase.rpc("get_my_context");
-      if (error) return null;
-      const oid = ctx?.org_id ? String(ctx.org_id) : null;
-      return oid || null;
-    } catch {
-      return null;
-    }
-  }
-
   useEffect(() => {
     let alive = true;
-
-    // ✅ Debug runtime instance + storage
-    console.log("SUPABASE CLIENT ID (TrackerGps)", supabase);
-    console.log("SB token keys (TrackerGps)", getSbTokenKeys());
 
     (async () => {
       try {
         setLoading(true);
 
+        // ✅ solo necesitamos sesión; NO necesitamos org_id
         const { data, error } = await supabase.auth.getSession();
         if (error) throw new Error(error.message);
 
         const s = data?.session;
-
-        // Debug session presence
-        console.log("SESSION (TrackerGps) exists?", !!s);
-
         if (!s) {
-          // ✅ Guard definitivo: no iniciar tracker sin sesión
           throw new Error("No autenticado. Abre el link de invitación nuevamente.");
         }
 
-        // 1) Resolver org por URL/LS/metadata
-        let o = resolveOrgIdFromSession(s);
-
-        // 2) Si no hay org, resolver por backend (RPC)
-        if (!o) {
-          o = await resolveOrgIdFromBackendFallback();
-        }
-
-        if (!o) {
-          throw new Error(
-            "org_id no disponible (abre el link de invitación para inicializar la organización)."
-          );
-        }
-
-        // Persistimos org para siguientes aperturas
-        persistOrgId(o);
-
         if (!alive) return;
-
-        setSession(s);
-        setOrgId(o);
         setLoading(false);
 
         // Gate inmediato + polling
-        await refreshGate(o);
-        gatePollRef.current = setInterval(() => refreshGate(o), 15000);
+        await refreshGate();
+        gatePollRef.current = setInterval(() => refreshGate(), 15000);
 
-        // ✅ Arranque automático del GPS (sin botón)
-        startTrackingAuto(o);
+        // Arranque automático del GPS
+        startTrackingAuto();
       } catch (e) {
         if (!alive) return;
         setError(e?.message || "Error cargando tracker");
@@ -387,9 +291,6 @@ export default function TrackerGpsPage() {
               <b>permission:</b> {permission}
             </div>
             <div>
-              <b>orgId:</b> {orgId || "—"}
-            </div>
-            <div>
               <b>canSend:</b> {String(canSend)}
             </div>
             <div>
@@ -415,10 +316,6 @@ export default function TrackerGpsPage() {
 
         <p className="text-sm text-emerald-700 mt-2">
           GPS: <b>{gpsActive ? "Activo ✅" : "Iniciando…"}</b>
-        </p>
-
-        <p className="text-xs text-emerald-800 mt-1">
-          Org: <b>{orgId || "—"}</b>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
