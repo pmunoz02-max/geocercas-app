@@ -1,4 +1,3 @@
-// src/pages/AuthCallback.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -9,7 +8,7 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function waitForSessionFromUrl(maxMs = 4000): Promise<boolean> {
+async function waitForSession(maxMs = 4500): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     try {
@@ -23,6 +22,11 @@ async function waitForSessionFromUrl(maxMs = 4000): Promise<boolean> {
   return false;
 }
 
+function normalizeType(raw: string | null): "magiclink" | "recovery" | null {
+  if (raw === "magiclink" || raw === "recovery") return raw;
+  return null;
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
@@ -30,20 +34,64 @@ export default function AuthCallback() {
   useEffect(() => {
     const run = async () => {
       try {
-        // ✅ IMPORTANTE:
-        // Para magic links (email) en SPA + PKCE, NO usamos verifyOtp().
-        // Supabase hidrata la sesión automáticamente desde la URL
-        // (requiere detectSessionInUrl: true en el cliente).
+        const params = new URLSearchParams(window.location.search);
 
-        const ok = await waitForSessionFromUrl(4500);
-        if (!ok) {
-          const msg = "session_not_created_from_magic_link";
+        // Si Supabase devolvió errores por URL, los mostramos
+        const urlErr =
+          params.get("error_description") ||
+          params.get("error") ||
+          params.get("message");
+        if (urlErr) {
+          const msg = String(urlErr);
           setError(msg);
           navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
           return;
         }
 
-        // 1) Resolver org_id (RPC universal ya corregida)
+        const code = params.get("code");
+        const token_hash = params.get("token_hash");
+        const type = normalizeType(params.get("type"));
+
+        // ✅ Caso A: PKCE "code" -> exchangeCodeForSession
+        if (code) {
+          const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exErr) {
+            const msg = exErr.message || "exchange_code_error";
+            setError(msg);
+            navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+            return;
+          }
+        }
+
+        // ✅ Caso B: OTP "token_hash" -> verifyOtp
+        if (!code && token_hash && type) {
+          const { error: vErr } = await supabase.auth.verifyOtp({ type, token_hash });
+          if (vErr) {
+            const msg = vErr.message || "verifyOtp_error";
+            setError(msg);
+            navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+            return;
+          }
+        }
+
+        // Si no vino ni code ni token_hash, algo está mal
+        if (!code && !(token_hash && type)) {
+          const msg = "missing_code_or_token_hash";
+          setError(msg);
+          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+          return;
+        }
+
+        // ✅ Esperar a que exista sesión real (persistida/hidratada)
+        const ok = await waitForSession(5000);
+        if (!ok) {
+          const msg = "session_not_created";
+          setError(msg);
+          navigate(`/login?err=${encodeURIComponent(msg)}`, { replace: true });
+          return;
+        }
+
+        // ✅ Resolver org_id (RPC universal)
         const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
         if (ctxErr) {
           const msg = ctxErr.message || "get_my_context_error";
@@ -66,7 +114,7 @@ export default function AuthCallback() {
           // ignore
         }
 
-        // 2) Redirect final (único flujo válido)
+        // ✅ Redirect final
         navigate(`/tracker-gps?tg_flow=tracker&org_id=${encodeURIComponent(orgId)}`, {
           replace: true,
         });
