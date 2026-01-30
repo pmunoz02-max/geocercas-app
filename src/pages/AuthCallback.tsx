@@ -19,18 +19,28 @@ function hasSupabaseTokenInLS(): boolean {
 
 async function waitForSession(maxMs = 2500): Promise<boolean> {
   const start = Date.now();
+
   while (Date.now() - start < maxMs) {
+    // 1) token persisted?
     if (hasSupabaseTokenInLS()) return true;
 
+    // 2) session in memory?
     try {
       const { data } = await supabase.auth.getSession();
       if (data?.session) return true;
     } catch {
       // ignore
     }
+
     await sleep(150);
   }
+
   return false;
+}
+
+function normalizeType(raw: string | null): "magiclink" | "recovery" | null {
+  if (raw === "magiclink" || raw === "recovery") return raw;
+  return null;
 }
 
 export default function AuthCallback() {
@@ -38,11 +48,14 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Debug runtime instance (comparable with TrackerGpsPage)
+    console.log("SUPABASE CLIENT ID (AuthCallback)", supabase);
+
     const run = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
         const token_hash = params.get("token_hash");
-        const type = (params.get("type") as "magiclink" | "recovery" | null) ?? null;
+        const type = normalizeType(params.get("type"));
 
         if (!token_hash || !type) {
           const msg = "missing_code_or_token_hash";
@@ -66,6 +79,7 @@ export default function AuthCallback() {
             access_token: data.session.access_token,
             refresh_token: data.session.refresh_token,
           });
+
           if (setErr) {
             const msg = setErr.message || "setSession_error";
             setError(msg);
@@ -121,7 +135,17 @@ export default function AuthCallback() {
   }, [navigate]);
 
   return (
-    <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", fontFamily: "sans-serif", padding: 16 }}>
+    <div
+      style={{
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        fontFamily: "sans-serif",
+        padding: 16,
+      }}
+    >
       {!error ? (
         <>
           <h3>Autenticando…</h3>
