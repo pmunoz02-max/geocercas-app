@@ -79,8 +79,7 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   }
 
   if (!r.ok || !json?.access_token) {
-    const msg =
-      json?.error_description || json?.error || "Failed to refresh token";
+    const msg = json?.error_description || json?.error || "Failed to refresh token";
     const err = new Error(msg);
     err.status = 401;
     err.body = json || null;
@@ -147,9 +146,7 @@ async function callEdgeInviteAdmin({ supabaseUrl, userAccessToken, payload }) {
   }
 
   if (!r.ok || !json?.ok) {
-    const err = new Error(
-      json?.message || json?.error || `Edge invite_admin failed (HTTP ${r.status})`
-    );
+    const err = new Error(json?.message || json?.error || `Edge invite_admin failed (HTTP ${r.status})`);
     err.status = r.status;
     err.body = json;
     throw err;
@@ -212,7 +209,7 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
 
   const orgId = inv.org_id;
 
-  // Regla #2: admin NO puede ser tracker
+  // Regla: admin NO puede ser tracker
   const { data: existing, error: exErr } = await serviceClient
     .from("memberships")
     .select("role")
@@ -227,20 +224,15 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
   }
 
   if (existing?.role && existing.role !== "tracker") {
-    const e = new Error(
-      `Este usuario ya tiene rol '${existing.role}' en esta organización. No puede ser tracker.`
-    );
+    const e = new Error(`Este usuario ya tiene rol '${existing.role}' en esta organización. No puede ser tracker.`);
     e.status = 409;
     throw e;
   }
 
-  // Upsert tracker (idempotente)
+  // Upsert tracker (idempotente). NO tocamos is_default aquí.
   const { error: upErr } = await serviceClient
     .from("memberships")
-    .upsert(
-      { org_id: orgId, user_id: user.id, role: "tracker", is_default: false },
-      { onConflict: "org_id,user_id" }
-    );
+    .upsert({ org_id: orgId, user_id: user.id, role: "tracker", is_default: false }, { onConflict: "org_id,user_id" });
 
   if (upErr) {
     const e = new Error(upErr.message || "Error creando rol tracker");
@@ -262,22 +254,28 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
   return { org_id: orgId, role: "tracker" };
 }
 
-// ---------- NUEVO: fallback org desde memberships ----------
+// ---------- memberships helpers (UNIVERSAL) ----------
+
 async function listMembershipsForUser({ sbUser, serviceClient, userId }) {
-  // Intento: incluir is_default si existe; si falla, reintento sin is_default
   const base = serviceClient || sbUser;
 
-  let q = base
+  // Orden universal:
+  // 1) is_default primero (true arriba)
+  // 2) created_at ASC (más antiguo primero)
+  // Nota: si is_default no existe, reintentamos sin ella.
+  let r = await base
     .from("memberships")
     .select("org_id, role, is_default, created_at")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true });
 
-  let r = await q;
   if (r?.error && String(r.error.message || "").toLowerCase().includes("is_default")) {
     r = await base
       .from("memberships")
       .select("org_id, role, created_at")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
   }
 
   if (r.error) return { rows: [], error: r.error };
@@ -286,23 +284,74 @@ async function listMembershipsForUser({ sbUser, serviceClient, userId }) {
   return { rows, error: null };
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
 function pickOrgFromMemberships(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return null;
 
-  // Preferir is_default=true si existe
-  const hasIsDefault = rows.some((x) => Object.prototype.hasOwnProperty.call(x, "is_default"));
-  if (hasIsDefault) {
-    const def = rows.find((x) => x?.is_default === true && x?.org_id);
-    if (def?.org_id) return def.org_id;
-  }
+  // Preferir default
+  const def = rows.find((x) => x?.is_default === true && x?.org_id);
+  if (def?.org_id) return def.org_id;
+
+  // Preferir owner/admin si existe
+  const preferred = rows.find((x) => {
+    const r = normalizeRole(x?.role);
+    return (r === "owner" || r === "admin") && x?.org_id;
+  });
+  if (preferred?.org_id) return preferred.org_id;
 
   // Fallback: primera org_id válida
   const first = rows.find((x) => x?.org_id);
   return first?.org_id || null;
 }
 
+async function ensureDefaultMembership({ serviceClient, userId, rows }) {
+  if (!serviceClient) return { changed: false, org_id: null };
+
+  const hasDefault = rows.some((r) => r?.is_default === true);
+  if (hasDefault) {
+    const def = rows.find((r) => r?.is_default === true);
+    return { changed: false, org_id: def?.org_id || null };
+  }
+
+  // Elegimos default determinista:
+  // 1) el membership más antiguo owner/admin
+  // 2) si no, el más antiguo cualquiera
+  const candidate =
+    rows.find((r) => {
+      const rr = normalizeRole(r?.role);
+      return (rr === "owner" || rr === "admin") && r?.org_id;
+    }) || rows.find((r) => r?.org_id) || null;
+
+  if (!candidate?.org_id) return { changed: false, org_id: null };
+
+  // 1) Poner todos en false
+  // (idempotente; evita choques con índice único)
+  await serviceClient
+    .from("memberships")
+    .update({ is_default: false })
+    .eq("user_id", userId)
+    .eq("is_default", true);
+
+  // 2) Marcar candidato como default
+  const { error: upErr } = await serviceClient
+    .from("memberships")
+    .update({ is_default: true })
+    .eq("user_id", userId)
+    .eq("org_id", candidate.org_id);
+
+  if (upErr) {
+    // Si el índice único bloquea por condición de carrera, no reventamos sesión.
+    return { changed: false, org_id: candidate.org_id };
+  }
+
+  return { changed: true, org_id: candidate.org_id };
+}
+
 export default async function handler(req, res) {
-  const build_tag = "auth-session-v21-org-fallback-memberships";
+  const build_tag = "auth-session-v22-default-org-deterministic";
   const debug = process.env.AUTH_DEBUG === "1";
 
   try {
@@ -317,12 +366,14 @@ export default async function handler(req, res) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !anonKey) {
-      return res
-        .status(500)
-        .json({ build_tag, ok: false, error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
+      return res.status(500).json({
+        build_tag,
+        ok: false,
+        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY",
+      });
     }
 
-    const cookieDomain = process.env.COOKIE_DOMAIN || ""; // ejemplo: .tugeocercas.com
+    const cookieDomain = process.env.COOKIE_DOMAIN || "";
     const cookies = parseCookies(req.headers.cookie || "");
 
     let access_token = cookies.tg_at || "";
@@ -416,10 +467,20 @@ export default async function handler(req, res) {
 
         res.setHeader("Set-Cookie", [
           makeCookie("tg_at", refreshed.access_token, {
-            httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: accessMaxAge,
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+            path: "/",
+            domain: cookieDomain || undefined,
+            maxAge: accessMaxAge,
           }),
           makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
-            httpOnly: true, secure: true, sameSite: "Lax", path: "/", domain: cookieDomain || undefined, maxAge: refreshMaxAge,
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+            path: "/",
+            domain: cookieDomain || undefined,
+            maxAge: refreshMaxAge,
           }),
         ]);
 
@@ -433,11 +494,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ build_tag, ok: true, authenticated: false });
     }
 
-    const serviceClient = serviceKey
-      ? createClient(url, serviceKey, { auth: { persistSession: false } })
-      : null;
+    const serviceClient = serviceKey ? createClient(url, serviceKey, { auth: { persistSession: false } }) : null;
 
-    // POST Actions
+    // POST actions
     if (req.method === "POST") {
       const action = String(body?.action || "").trim();
 
@@ -505,10 +564,11 @@ export default async function handler(req, res) {
       return res.status(200).json({ build_tag, ok: true, authenticated: true });
     }
 
-    // GET Session
+    // GET session
     let current_org_id = null;
     let role = null;
 
+    // 1) Si hay forced_org (cookie), la respetamos pero VALIDAMOS role si podemos
     if (forced_org) {
       current_org_id = forced_org;
 
@@ -524,30 +584,39 @@ export default async function handler(req, res) {
       }
     }
 
-    // Fallback normal
+    // 2) bootstrap (si no forced)
     if (!current_org_id) {
       const { data: boot } = await sbUser.rpc("bootstrap_session_context");
       current_org_id = boot?.[0]?.org_id || null;
       role = role ?? (boot?.[0]?.role || null);
     }
 
-    // NUEVO: si boot no devolvió org, resolver por memberships
-    let membershipRows = [];
-    if (!current_org_id) {
-      const { rows, error } = await listMembershipsForUser({
-        sbUser,
-        serviceClient,
-        userId: user.id,
-      });
+    // 3) memberships (SIEMPRE las cargamos para lista + resolución determinista)
+    const { rows: membershipRows, error: memErr } = await listMembershipsForUser({
+      sbUser,
+      serviceClient,
+      userId: user.id,
+    });
 
-      if (!error) {
-        membershipRows = rows;
-        current_org_id = pickOrgFromMemberships(rows);
-        if (!role &&s(r => r.org_id === current_org_id)) role = membershipRows.find(r => r.org_id === current_org_id)?.role || role;
+    // 4) Si hay memberships y no hay default, lo fijamos (universal)
+    let defaultFix = { changed: false, org_id: null };
+    if (!memErr && membershipRows.length > 0) {
+      defaultFix = await ensureDefaultMembership({ serviceClient, userId: user.id, rows: membershipRows });
+    }
+
+    // 5) Resolver org final (si no forced_org)
+    if (!forced_org) {
+      const picked = pickOrgFromMemberships(membershipRows);
+      current_org_id = defaultFix.org_id || current_org_id || picked || null;
+
+      // Si role aún es null, derivarlo de memberships para la org elegida
+      if (!role && current_org_id) {
+        const hit = membershipRows.find((m) => m?.org_id === current_org_id);
+        role = hit?.role || role;
       }
     }
 
-    // Si resolvimos org y no hay tg_org, setear cookie sticky (30 días)
+    // 6) Set tg_org sticky si resolvimos org y no venía forced_org
     if (current_org_id && !forced_org) {
       res.setHeader("Set-Cookie", [
         makeCookie("tg_org", String(current_org_id), {
@@ -569,9 +638,7 @@ export default async function handler(req, res) {
 
     const organizations =
       membershipRows.length > 0
-        ? membershipRows
-            .map((m) => (m?.org_id ? { id: m.org_id } : null))
-            .filter(Boolean)
+        ? membershipRows.map((m) => (m?.org_id ? { id: m.org_id } : null)).filter(Boolean)
         : current_org_id
         ? [{ id: current_org_id }]
         : [];
@@ -586,12 +653,23 @@ export default async function handler(req, res) {
       role,
       is_app_root,
       organizations,
-      ...(debug ? { debug: { forced_org: forced_org || null } } : {}),
+      ...(debug
+        ? {
+            debug: {
+              forced_org: forced_org || null,
+              memberships: {
+                total: membershipRows.length,
+                fixed_default: defaultFix.changed,
+                fixed_to: defaultFix.org_id || null,
+              },
+            },
+          }
+        : {}),
     });
   } catch (e) {
     console.error("[api/auth/session] fatal:", e);
     return res.status(500).json({
-      build_tag: "auth-session-v21-org-fallback-memberships",
+      build_tag: "auth-session-v22-default-org-deterministic",
       ok: false,
       error: String(e?.message || e),
       ...(process.env.AUTH_DEBUG === "1"
@@ -600,3 +678,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
