@@ -40,14 +40,21 @@ import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
-function HashTokenCatcher() {
+function CallbackCatcher() {
   const location = useLocation();
 
   useEffect(() => {
+    const pathname = location.pathname || "";
+    const search = location.search || "";
     const hash = typeof location.hash === "string" ? location.hash : "";
+
     const hasAccessToken = hash.includes("access_token=");
-    if (hasAccessToken && location.pathname !== "/auth/callback") {
-      const target = `/auth/callback${location.search || ""}${hash || ""}`;
+    const hasCode = search.includes("code=");
+    const hasTokenHash = search.includes("token_hash=");
+
+    // Si llega callback params en cualquier ruta, forzamos /auth/callback
+    if ((hasAccessToken || hasCode || hasTokenHash) && pathname !== "/auth/callback") {
+      const target = `/auth/callback${search || ""}${hash || ""}`;
       window.location.replace(target);
     }
   }, [location.pathname, location.search, location.hash]);
@@ -70,7 +77,7 @@ function AdminRoute({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <HashTokenCatcher />
+      <CallbackCatcher />
 
       <Routes>
         {/* 🌐 Public */}

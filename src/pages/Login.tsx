@@ -1,5 +1,5 @@
 // src/pages/Login.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
@@ -11,6 +11,30 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // ✅ Si Supabase devuelve callback aquí, lo reenviamos a /auth/callback
+  useEffect(() => {
+    const search = window.location.search || "";
+    const hash = window.location.hash || "";
+
+    const hasCode = search.includes("code=");
+    const hasTokenHash = search.includes("token_hash=");
+    const hasAccessToken = hash.includes("access_token=");
+
+    if (hasCode || hasTokenHash || hasAccessToken) {
+      window.location.replace(`/auth/callback${search}${hash}`);
+      return;
+    }
+
+    // ✅ Si ya hay sesión, no debe quedarse en login
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) {
+        const next = sp.get("next");
+        navigate(next ? String(next) : "/inicio", { replace: true });
+      }
+    })();
+  }, [navigate, sp]);
 
   const canSubmit = useMemo(() => {
     return email.trim().length > 3 && password.length >= 6 && !loading;
@@ -29,7 +53,6 @@ export default function Login() {
 
       if (error) throw error;
 
-      // ✅ AuthContext toma control por onAuthStateChange.
       const next = sp.get("next");
       navigate(next ? String(next) : "/inicio", { replace: true });
     } catch (e: any) {

@@ -52,7 +52,6 @@ export default function AuthCallback() {
       try {
         setStep("reading_params");
 
-        // 0) Mostrar si Supabase manda error por URL
         const urlErr =
           parsed.params.get("error_description") ||
           parsed.params.get("error") ||
@@ -64,7 +63,6 @@ export default function AuthCallback() {
           return;
         }
 
-        // 1) Detectar parámetros reales
         const code = parsed.params.get("code");
         const token_hash = parsed.params.get("token_hash");
         const type = normalizeType(parsed.params.get("type"));
@@ -75,7 +73,6 @@ export default function AuthCallback() {
           }`
         );
 
-        // 2) Ejecutar el intercambio correcto
         if (code) {
           setStep("exchangeCodeForSession...");
           const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -98,7 +95,6 @@ export default function AuthCallback() {
           return;
         }
 
-        // 3) Esperar sesión
         setStep("waiting_session...");
         const start = Date.now();
         let ok = false;
@@ -120,31 +116,48 @@ export default function AuthCallback() {
           return;
         }
 
-        // 4) Resolver org_id (si ya hay sesión)
-        setStep("rpc_get_my_context...");
-        const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
-        if (ctxErr) {
-          setErr(ctxErr.message || "get_my_context_error");
-          setStep("rpc_failed");
+        // ✅ Si hay next=... lo respetamos (útil para flows internos)
+        const next = parsed.params.get("next");
+        if (next) {
+          setStep("redirect_next");
+          navigate(next, { replace: true });
           return;
         }
 
-        const oid = ctx?.org_id ? String(ctx.org_id) : null;
-        setOrgId(oid);
-
-        if (!oid) {
-          setErr("org_id_not_resolved");
-          setStep("org_missing");
-          return;
-        }
-
+        // ✅ Intentar contexto (si falla NO bloquea al tracker)
+        setStep("rpc_get_my_context (optional) ...");
         try {
-          localStorage.setItem(LAST_ORG_KEY, oid);
-        } catch {
-          // ignore
-        }
+          const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
+          if (ctxErr) {
+            setStep("get_my_context_failed_but_continue_tracker");
+            // tracker flow
+            navigate(`/tracker-gps?tg_flow=tracker`, { replace: true });
+            return;
+          }
 
-        setStep("ready_to_continue");
+          const oid = ctx?.org_id ? String(ctx.org_id) : null;
+          setOrgId(oid);
+
+          if (oid) {
+            try {
+              localStorage.setItem(LAST_ORG_KEY, oid);
+            } catch {
+              // ignore
+            }
+            setStep("redirect_inicio");
+            navigate(`/inicio`, { replace: true });
+            return;
+          }
+
+          // sin org_id => tracker
+          setStep("no_org_assume_tracker");
+          navigate(`/tracker-gps?tg_flow=tracker`, { replace: true });
+          return;
+        } catch {
+          setStep("rpc_exception_continue_tracker");
+          navigate(`/tracker-gps?tg_flow=tracker`, { replace: true });
+          return;
+        }
       } catch (e: any) {
         setErr(e?.message || "auth_callback_exception");
         setStep("exception");
@@ -152,8 +165,9 @@ export default function AuthCallback() {
     };
 
     run();
-  }, [parsed]);
+  }, [parsed, navigate]);
 
+  // Mantengo tu debug panel (por si necesitas ver fallos en prod)
   return (
     <div style={{ minHeight: "100vh", padding: 16, fontFamily: "sans-serif" }}>
       <h2>AuthCallback Debug</h2>
@@ -171,42 +185,7 @@ export default function AuthCallback() {
         <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
 {String(window.location.href)}
         </pre>
-
-        <div><b>location.search</b></div>
-        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
-{parsed.search}
-        </pre>
-
-        <div><b>location.hash</b></div>
-        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
-{parsed.hash}
-        </pre>
-
-        <div><b>parsed param keys</b></div>
-        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
-{Array.from(parsed.params.keys()).join(", ")}
-        </pre>
       </div>
-
-      <button
-        style={{
-          marginTop: 16,
-          padding: "12px 16px",
-          borderRadius: 8,
-          border: "none",
-          background: "#0f172a",
-          color: "white",
-          cursor: "pointer",
-          opacity: step === "ready_to_continue" ? 1 : 0.5,
-        }}
-        disabled={step !== "ready_to_continue"}
-        onClick={() => {
-          if (!orgId) return;
-          navigate(`/tracker-gps?tg_flow=tracker&org_id=${encodeURIComponent(orgId)}`, { replace: true });
-        }}
-      >
-        Continuar a Tracker GPS
-      </button>
     </div>
   );
 }
