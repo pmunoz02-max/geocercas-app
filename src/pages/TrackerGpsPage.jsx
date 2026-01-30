@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+const LAST_ORG_KEY = "app_geocercas_last_org_id"; // ✅ key canónica
+const LEGACY_TRACKER_ORG_KEY = "tracker_org_id"; // compatibilidad
+
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 }
@@ -10,14 +13,17 @@ function qp(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-// org_id: 1) query param, 2) localStorage guardado por AuthCallback, 3) metadata del usuario (si existiera)
+// org_id: 1) query param, 2) localStorage (key canónica), 3) legacy localStorage, 4) metadata del usuario
 function resolveOrgIdFromSession(session) {
   const fromQuery = qp("org_id");
   if (fromQuery) return fromQuery;
 
   try {
-    const ls = localStorage.getItem("tracker_org_id");
+    const ls = localStorage.getItem(LAST_ORG_KEY);
     if (ls) return ls;
+
+    const legacy = localStorage.getItem(LEGACY_TRACKER_ORG_KEY);
+    if (legacy) return legacy;
   } catch {
     // ignore
   }
@@ -34,6 +40,16 @@ function resolveOrgIdFromSession(session) {
     am?.current_org_id ||
     null
   );
+}
+
+function persistOrgId(orgId) {
+  if (!orgId) return;
+  try {
+    localStorage.setItem(LAST_ORG_KEY, orgId);
+    localStorage.setItem(LEGACY_TRACKER_ORG_KEY, orgId); // legacy para no romper nada viejo
+  } catch {
+    // ignore
+  }
 }
 
 function getAccessTokenFromLocalStorage() {
@@ -94,9 +110,33 @@ export default function TrackerGpsPage() {
   const gatePollRef = useRef(null);
   const startedRef = useRef(false);
 
+  // ✅ refs para evitar “stale closures”
+  const canSendRef = useRef(false);
+  const intervalSecRef = useRef(30);
+  const gateInfoRef = useRef(null);
+  const orgIdRef = useRef(null);
+
+  useEffect(() => {
+    canSendRef.current = !!canSend;
+  }, [canSend]);
+
+  useEffect(() => {
+    intervalSecRef.current = Number(intervalSec || 30);
+  }, [intervalSec]);
+
+  useEffect(() => {
+    gateInfoRef.current = gateInfo || null;
+  }, [gateInfo]);
+
+  useEffect(() => {
+    orgIdRef.current = orgId || null;
+  }, [orgId]);
+
   async function refreshGate(currentOrgId) {
     try {
-      const { data, error } = await supabase.rpc("tracker_can_send", { p_org_id: currentOrgId });
+      const { data, error } = await supabase.rpc("tracker_can_send", {
+        p_org_id: currentOrgId,
+      });
 
       if (error) {
         setCanSend(false);
@@ -124,12 +164,12 @@ export default function TrackerGpsPage() {
   }
 
   async function sendPosition(pos, currentOrgId) {
-    // 1) gating
-    if (!canSend) return;
+    // 1) gating (REF, no state)
+    if (!canSendRef.current) return;
 
-    // 2) throttle (usa intervalSec)
+    // 2) throttle (REF, no state)
     const now = Date.now();
-    const minMs = Math.max(5, Number(intervalSec || 30)) * 1000;
+    const minMs = Math.max(5, Number(intervalSecRef.current || 30)) * 1000;
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
@@ -143,6 +183,8 @@ export default function TrackerGpsPage() {
     const supabaseUrl = getSupabaseUrl();
     const url = `${supabaseUrl}/functions/v1/send_position`;
 
+    const gi = gateInfoRef.current;
+
     const payload = {
       org_id: currentOrgId,
       lat: pos.coords.latitude,
@@ -155,9 +197,8 @@ export default function TrackerGpsPage() {
         source: "tracker-gps",
         altitude: pos.coords.altitude ?? null,
       },
-      // opcional si tu edge lo guarda
-      geofence_id: gateInfo?.geofence_id ?? null,
-      assignment_id: gateInfo?.assignment_id ?? null,
+      geofence_id: gi?.geofence_id ?? null,
+      assignment_id: gi?.assignment_id ?? null,
     };
 
     setSendStatus("sending");
@@ -198,7 +239,7 @@ export default function TrackerGpsPage() {
       return;
     }
 
-    // Intento “suave” de leer permiso (no bloquea)
+    // intento suave de permisos
     if ("permissions" in navigator) {
       navigator.permissions
         .query({ name: "geolocation" })
@@ -206,7 +247,6 @@ export default function TrackerGpsPage() {
         .catch(() => setPermission("unknown"));
     }
 
-    // Inicia watchPosition de una vez
     watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
         setGpsActive(true);
@@ -222,12 +262,22 @@ export default function TrackerGpsPage() {
       },
       (err) => {
         setGpsActive(false);
-        // denegado / timeout / etc
-        const msg = err?.message || "Error obteniendo ubicación";
-        setError(msg);
+        setError(err?.message || "Error obteniendo ubicación");
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
+  }
+
+  async function resolveOrgIdFromBackendFallback() {
+    // ✅ Si ya corregiste get_my_context para trackers, aquí se resuelve org_id sin URL
+    try {
+      const { data: ctx, error } = await supabase.rpc("get_my_context");
+      if (error) return null;
+      const oid = ctx?.org_id ? String(ctx.org_id) : null;
+      return oid || null;
+    } catch {
+      return null;
+    }
   }
 
   useEffect(() => {
@@ -239,18 +289,27 @@ export default function TrackerGpsPage() {
 
         const { data, error } = await supabase.auth.getSession();
         if (error) throw new Error(error.message);
-        if (!data?.session) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
 
-        const s = data.session;
-        const o = resolveOrgIdFromSession(s);
-        if (!o) throw new Error("org_id no disponible (debe venir en el link o guardarse en localStorage).");
+        const s = data?.session;
+        if (!s) {
+          // ✅ Guard definitivo: no iniciar tracker sin sesión
+          throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+        }
+
+        // 1) Resolver org por URL/LS/metadata
+        let o = resolveOrgIdFromSession(s);
+
+        // 2) Si no hay org, resolver por backend (RPC)
+        if (!o) {
+          o = await resolveOrgIdFromBackendFallback();
+        }
+
+        if (!o) {
+          throw new Error("org_id no disponible (abre el link de invitación para inicializar la organización).");
+        }
 
         // Persistimos org para siguientes aperturas
-        try {
-          localStorage.setItem("tracker_org_id", o);
-        } catch {
-          // ignore
-        }
+        persistOrgId(o);
 
         if (!alive) return;
 
@@ -275,6 +334,7 @@ export default function TrackerGpsPage() {
       alive = false;
       if (gatePollRef.current) clearInterval(gatePollRef.current);
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+      startedRef.current = false;
     };
   }, []);
 
