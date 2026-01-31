@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
-const VERSION = "personal-api-v21-dual-auth-tenant-guc";
+const VERSION = "personal-api-v22-order-vigente-then-deleted";
 
 /* =========================
    Helpers
@@ -28,7 +28,11 @@ async function readBody(req) {
   for await (const c of req) chunks.push(c);
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }
 
 function normalizeCtx(data) {
@@ -58,7 +62,11 @@ function parseCookies(cookieHeader) {
     const k = p.slice(0, i).trim();
     const v = p.slice(i + 1).trim();
     if (!k) continue;
-    try { out[k] = decodeURIComponent(v); } catch { out[k] = v; }
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      out[k] = v;
+    }
   }
   return out;
 }
@@ -88,7 +96,11 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
 
   const text = await r.text();
   let j = {};
-  try { j = text ? JSON.parse(text) : {}; } catch { j = { raw: text }; }
+  try {
+    j = text ? JSON.parse(text) : {};
+  } catch {
+    j = { raw: text };
+  }
 
   if (!r.ok || !j?.access_token) {
     const msg = j?.error_description || j?.error || "Failed to refresh token";
@@ -174,8 +186,20 @@ async function resolveContext(req, res) {
 
     // keep legacy cookies updated for old modules
     res.setHeader("Set-Cookie", [
-      makeCookie("tg_at", r.access_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: Number(r.expires_in || 3600) }),
-      makeCookie("tg_rt", r.refresh_token || refresh_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 30 * 24 * 60 * 60 }),
+      makeCookie("tg_at", r.access_token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        path: "/",
+        maxAge: Number(r.expires_in || 3600),
+      }),
+      makeCookie("tg_rt", r.refresh_token || refresh_token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        path: "/",
+        maxAge: 30 * 24 * 60 * 60,
+      }),
     ]);
   }
 
@@ -191,21 +215,45 @@ async function resolveContext(req, res) {
   // validate user
   let sbUser, user;
   {
-    const r = await getUserFromAccessToken({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, accessToken: access_token });
+    const r = await getUserFromAccessToken({
+      url: SUPABASE_URL,
+      anonKey: SUPABASE_ANON_KEY,
+      accessToken: access_token,
+    });
     sbUser = r.sbUser;
     user = r.user;
 
     // legacy: if token invalid and refresh exists, refresh once
     if (!user && refresh_token && !getBearerToken(req)) {
-      const refreshed = await refreshAccessToken({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, refreshToken: refresh_token });
+      const refreshed = await refreshAccessToken({
+        supabaseUrl: SUPABASE_URL,
+        anonKey: SUPABASE_ANON_KEY,
+        refreshToken: refresh_token,
+      });
       access_token = refreshed.access_token;
 
       res.setHeader("Set-Cookie", [
-        makeCookie("tg_at", refreshed.access_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: Number(refreshed.expires_in || 3600) }),
-        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 30 * 24 * 60 * 60 }),
+        makeCookie("tg_at", refreshed.access_token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          maxAge: Number(refreshed.expires_in || 3600),
+        }),
+        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          maxAge: 30 * 24 * 60 * 60,
+        }),
       ]);
 
-      const r2 = await getUserFromAccessToken({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, accessToken: access_token });
+      const r2 = await getUserFromAccessToken({
+        url: SUPABASE_URL,
+        anonKey: SUPABASE_ANON_KEY,
+        accessToken: access_token,
+      });
       sbUser = r2.sbUser;
       user = r2.user;
     }
@@ -251,6 +299,49 @@ async function resolveEffectiveOrgId({ req, ctx, userId, supaSrv }) {
 }
 
 /* =========================
+   Sort helper (server-side)
+========================= */
+function cmpString(a, b) {
+  const A = String(a || "").trim().toLowerCase();
+  const B = String(b || "").trim().toLowerCase();
+  return A.localeCompare(B);
+}
+
+/**
+ * Ranking:
+ * 0 = vigente (vigente=true AND not deleted)
+ * 1 = no vigente (vigente=false AND not deleted)
+ * 2 = eliminado (is_deleted=true OR deleted_at not null)
+ */
+function rankPerson(p) {
+  const deleted = !!p?.is_deleted || !!p?.deleted_at;
+  if (deleted) return 2;
+  const vigente = p?.vigente !== false;
+  return vigente ? 0 : 1;
+}
+
+function sortPersonal(items) {
+  const arr = Array.isArray(items) ? [...items] : [];
+  arr.sort((a, b) => {
+    const ra = rankPerson(a);
+    const rb = rankPerson(b);
+    if (ra !== rb) return ra - rb;
+
+    const last = cmpString(a?.apellido, b?.apellido);
+    if (last !== 0) return last;
+
+    const first = cmpString(a?.nombre, b?.nombre);
+    if (first !== 0) return first;
+
+    const email = cmpString(a?.email, b?.email);
+    if (email !== 0) return email;
+
+    return cmpString(a?.id, b?.id);
+  });
+  return arr;
+}
+
+/* =========================
    GET (list)
 ========================= */
 async function handleList(req, res) {
@@ -261,23 +352,26 @@ async function handleList(req, res) {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   const q = (url.searchParams.get("q") || "").trim();
-  const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
+  const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0"; // default true
   const limit = Math.min(Number(url.searchParams.get("limit") || 500), 2000);
   const debug = url.searchParams.get("debug") === "1";
 
   const eff = await resolveEffectiveOrgId({ req, ctx, userId: user.id, supaSrv });
   const orgIdToUse = eff.org_id;
 
+  // Base query: siempre por org. Traemos lo necesario para ordenar.
   let query = supaSrv
     .from("personal")
     .select("*")
     .eq("org_id", orgIdToUse)
-    .eq("is_deleted", false)
-    .order("nombre", { ascending: true })
     .limit(limit);
 
-  if (onlyActive) query = query.eq("vigente", true);
+  // onlyActive=1 => como hoy: vigentes y NO eliminados
+  if (onlyActive) {
+    query = query.eq("is_deleted", false).eq("vigente", true);
+  }
 
+  // Búsqueda: aplicamos sobre el set actual (sea activo o completo)
   if (q) {
     const pattern = `%${q}%`;
     query = query.or(
@@ -294,10 +388,23 @@ async function handleList(req, res) {
   const { data, error } = await query;
   if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
 
+  // Orden universal requerido (vigentes -> no vigentes -> eliminados, luego apellido/nombre)
+  const ordered = sortPersonal(data || []);
+
   return json(res, 200, {
-    items: data || [],
+    items: ordered,
     ...(debug
-      ? { debug: { ctx_org_id: ctx.org_id, effective_org_id: orgIdToUse, org_source: eff.source, role: ctx.role, onlyActive, limit } }
+      ? {
+          debug: {
+            ctx_org_id: ctx.org_id,
+            effective_org_id: orgIdToUse,
+            org_source: eff.source,
+            role: ctx.role,
+            onlyActive,
+            limit,
+            returned: ordered.length,
+          },
+        }
       : {}),
   });
 }
