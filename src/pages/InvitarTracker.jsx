@@ -132,19 +132,15 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
 }
 
 /**
- * Intenta detectar el error del trigger / enforcement de plan
- * y convertirlo a un mensaje de UX claro.
+ * Convierte el error del trigger/enforcement en un mensaje UX claro.
  */
 function humanizePlanLimitError(errMsg) {
   const s = String(errMsg || "");
 
-  // Caso común: mensaje literal del trigger
   if (/plan limit reached/i.test(s)) {
-    // Ejemplo: "Plan limit reached: starter allows 1 tracker(s) vigente(s)..."
     const m = s.match(/plan limit reached:\s*([a-z0-9_-]+)\s*allows\s*(\d+)/i);
     const plan = (m?.[1] || "starter").trim();
     const limit = m?.[2] ? Number(m[2]) : null;
-
     const planLabel = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "Starter";
     if (Number.isFinite(limit)) {
       return `Has alcanzado el límite de tu plan ${planLabel} (${limit} tracker vigente).`;
@@ -152,12 +148,57 @@ function humanizePlanLimitError(errMsg) {
     return `Has alcanzado el límite de trackers vigentes de tu plan (${planLabel}).`;
   }
 
-  // Caso: backend devuelve código/keyword P0001 en el mensaje
   if (/P0001/.test(s) && /tracker/i.test(s) && /limit/i.test(s)) {
     return "Has alcanzado el límite de trackers vigentes de tu plan.";
   }
 
   return "";
+}
+
+/**
+ * Llama al RPC app.rpc_plan_tracker_vigente_usage(org_id) directo en Supabase (sin serverless Vercel).
+ * Requiere:
+ * - VITE_SUPABASE_URL
+ * - VITE_SUPABASE_ANON_KEY
+ * Y el access_token actual (Bearer).
+ */
+async function fetchPlanUsageDirect(orgId) {
+  const supabaseUrl = String(import.meta?.env?.VITE_SUPABASE_URL || "").trim();
+  const anonKey = String(import.meta?.env?.VITE_SUPABASE_ANON_KEY || "").trim();
+  const token = getSupabaseAccessTokenFromLocalStorage();
+
+  if (!supabaseUrl || !anonKey) {
+    // No rompemos la pantalla: solo no mostramos usage
+    return null;
+  }
+  if (!token) {
+    throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
+  }
+  if (!orgId) return null;
+
+  const url = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/rpc/rpc_plan_tracker_vigente_usage`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anonKey,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ org_id: orgId }),
+  });
+
+  // PostgREST suele devolver JSON directo (objeto)
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    // Si falló por permisos/RLS/RPC, preferimos no romper el flujo de invitación
+    // (el trigger seguirá siendo enforcement final en DB).
+    return null;
+  }
+
+  if (data && typeof data === "object" && "over_limit" in data) return data;
+  return null;
 }
 
 export default function InvitarTracker() {
@@ -176,10 +217,9 @@ export default function InvitarTracker() {
   const [success, setSuccess] = useState(null);
   const [inviteData, setInviteData] = useState(null);
 
-  // (Opcional) cache del usage para mostrar UX si existe endpoint
+  // Plan usage (para banner + disable button)
   const [planUsage, setPlanUsage] = useState(null);
 
-  // ✅ orgId SOLO desde currentOrg.id
   const orgId =
     currentOrg && isUuid(currentOrg.id) ? String(currentOrg.id).trim() : "";
 
@@ -220,10 +260,7 @@ export default function InvitarTracker() {
 
   function getAuthHeadersOrThrow() {
     const token = getSupabaseAccessTokenFromLocalStorage();
-    if (!token)
-      throw new Error(
-        "No autenticado (sin access_token). Cierra sesión y vuelve a entrar."
-      );
+    if (!token) throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
     return { Authorization: `Bearer ${token}` };
   }
 
@@ -254,42 +291,22 @@ export default function InvitarTracker() {
     }
   }
 
-  /**
-   * Pre-check (opcional): si existe un endpoint de usage, lo consultamos.
-   * Si no existe, no rompemos el flujo (seguimos).
-   *
-   * Endpoint sugerido (si lo implementas): GET /api/plan-tracker-usage?org_id=...
-   * Respuesta esperada (compatible con tu RPC): { plan, tracker_limit_vigente, trackers_vigentes_used, over_limit, ... }
-   */
-  async function tryLoadPlanUsage() {
+  async function refreshPlanUsage() {
     setPlanUsage(null);
-    if (!orgId) return null;
+    if (!orgId) return;
 
     try {
-      const url = `/api/plan-tracker-usage?org_id=${encodeURIComponent(orgId)}`;
-      const res = await fetch(url, { headers: { ...getAuthHeadersOrThrow() } });
-
-      // Si no existe el endpoint, no es error de UX: simplemente no mostramos usage.
-      if (res.status === 404) return null;
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return null;
-
-      // guardamos si tiene forma razonable
-      if (data && typeof data === "object" && "over_limit" in data) {
-        setPlanUsage(data);
-        return data;
-      }
-      return null;
+      const usage = await fetchPlanUsageDirect(orgId);
+      if (usage) setPlanUsage(usage);
     } catch {
-      return null;
+      // no rompemos UX si falla; el trigger seguirá protegiendo
+      setPlanUsage(null);
     }
   }
 
   useEffect(() => {
     loadPersonal();
-    // (Opcional) precargar usage para habilitar/deshabilitar botón
-    tryLoadPlanUsage();
+    refreshPlanUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
@@ -315,8 +332,8 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      // ✅ Pre-check suave (si el endpoint existe): bloquea antes de invitar
-      const usage = planUsage || (await tryLoadPlanUsage());
+      // ✅ Pre-check REAL (directo a Supabase, sin Vercel)
+      const usage = planUsage || (await fetchPlanUsageDirect(orgId));
       if (usage?.over_limit === true) {
         const planLabel = usage?.plan
           ? String(usage.plan).charAt(0).toUpperCase() + String(usage.plan).slice(1)
@@ -324,13 +341,12 @@ export default function InvitarTracker() {
         const limit = usage?.tracker_limit_vigente;
         if (Number.isFinite(Number(limit))) {
           setError(
-            `Has alcanzado el límite de tu plan ${planLabel} (${Number(
-              limit
-            )} tracker vigente).`
+            `Has alcanzado el límite de tu plan ${planLabel} (${Number(limit)} tracker vigente).`
           );
         } else {
           setError(`Has alcanzado el límite de trackers vigentes de tu plan ${planLabel}.`);
         }
+        setPlanUsage(usage);
         return;
       }
 
@@ -352,7 +368,7 @@ export default function InvitarTracker() {
       if (!res.ok) {
         const msg = data?.error || "Error al invitar tracker";
 
-        // ✅ Fallback: si el trigger bloqueó, mostrar mensaje claro
+        // ✅ Airbag: si el trigger bloqueó, mostrar mensaje claro
         const friendly = humanizePlanLimitError(msg);
         if (friendly) throw new Error(friendly);
 
@@ -362,8 +378,8 @@ export default function InvitarTracker() {
       setInviteData(data);
       setSuccess("Email enviado ✅ Revisa bandeja de entrada / spam.");
 
-      // refresca usage después de invitar (si endpoint existe)
-      tryLoadPlanUsage();
+      // refresca usage después de invitar
+      refreshPlanUsage();
     } catch (err) {
       setError(err.message || "Error inesperado");
     } finally {
@@ -387,7 +403,7 @@ export default function InvitarTracker() {
         </div>
       )}
 
-      {/* ✅ Banner de plan (solo si pudimos leer usage) */}
+      {/* ✅ Banner de plan (si pudimos leer usage) */}
       {planUsage && (
         <div
           className={`mb-4 p-3 rounded-lg border text-sm ${
@@ -406,11 +422,7 @@ export default function InvitarTracker() {
             Trackers vigentes:{" "}
             <b>{Number(planUsage?.trackers_vigentes_used ?? 0)}</b> /{" "}
             <b>{Number(planUsage?.tracker_limit_vigente ?? 0)}</b>
-            {overLimit ? (
-              <span className="ml-2 font-medium">
-                — Límite alcanzado
-              </span>
-            ) : null}
+            {overLimit ? <span className="ml-2 font-medium">— Límite alcanzado</span> : null}
           </div>
           {overLimit && (
             <div className="text-xs mt-1">
@@ -427,7 +439,7 @@ export default function InvitarTracker() {
           <button
             onClick={async () => {
               await loadPersonal();
-              await tryLoadPlanUsage();
+              await refreshPlanUsage();
             }}
             disabled={loadingPersonal}
             className="px-3 py-2 border rounded-lg text-sm"
