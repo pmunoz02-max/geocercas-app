@@ -1,5 +1,5 @@
 // src/pages/Tracker.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -9,7 +9,9 @@ import {
   getQueueStats,
 } from "../lib/trackerQueue";
 
+// Backend es la fuente de verdad: mínimo real permitido hoy
 const MIN_INTERVAL_SEC = 5 * 60; // 5 minutos
+const CAN_SEND_REFRESH_MS = 20_000; // refresco “barato” del guard
 
 export default function Tracker() {
   const { user } = useAuth();
@@ -19,19 +21,66 @@ export default function Tracker() {
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true
   );
+
+  // Intervalo efectivo (universal): viene del backend/assignments
   const [intervalSec, setIntervalSec] = useState(MIN_INTERVAL_SEC);
+
   const [statusMessage, setStatusMessage] = useState("Preparando tracker...");
-  const [queueInfo, setQueueInfo] = useState({
-    pending: 0,
-    lastSentAt: null,
+  const [queueInfo, setQueueInfo] = useState({ pending: 0, lastSentAt: null });
+
+  // Diagnóstico universal (DB-driven)
+  const [guard, setGuard] = useState({
+    checked: false,
+    ok: false,
+    reason: null,
+    role: null,
+    total: 0,
+    active: 0,
   });
 
   const watchIdRef = useRef(null);
   const flushTimerRef = useRef(null);
   const lastFlushTsRef = useRef(0);
 
+  const canOperate = useMemo(() => {
+    // Solo operamos si:
+    // - usuario existe
+    // - guard fue evaluado
+    // - guard ok
+    return Boolean(user?.id) && guard.checked && guard.ok;
+  }, [user?.id, guard.checked, guard.ok]);
+
   // ==============================
-  // Stats simples de la cola
+  // Helpers UI
+  // ==============================
+  function humanGuardReason(reason) {
+    switch (reason) {
+      case "no_auth":
+        return "No hay sesión activa.";
+      case "no_users_public_row":
+        return "Tu perfil aún no está listo (users_public).";
+      case "role_not_tracker":
+        return "Esta cuenta no es Tracker. Este dispositivo solo acepta cuentas tracker.";
+      case "no_assignments":
+        return "No tienes asignaciones de geocercas (tracker_assignments).";
+      case "no_active_assignments":
+        return "Tus asignaciones existen, pero están inactivas.";
+      default:
+        return reason ? `No autorizado: ${reason}` : "No autorizado.";
+    }
+  }
+
+  async function signOutHard(message) {
+    try {
+      setStatusMessage(message || "Cerrando sesión...");
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("signOut error:", e);
+    }
+  }
+
+  // ==============================
+  // Cola: stats simples
   // ==============================
   async function updateQueueInfo() {
     try {
@@ -40,13 +89,120 @@ export default function Tracker() {
         pending: stats?.pending ?? 0,
         lastSentAt: stats?.lastSentAt ?? null,
       });
+      return stats;
     } catch (err) {
       console.error("Error getQueueStats():", err);
+      return null;
     }
   }
 
   // ==============================
-  // Llamada directa a Edge Function send_position
+  // Guard universal: DB-driven
+  // - Usa RPC: public.rpc_tracker_can_send()
+  // ==============================
+  async function refreshGuard(reason = "auto") {
+    try {
+      if (!user?.id) {
+        setGuard((g) => ({
+          ...g,
+          checked: true,
+          ok: false,
+          reason: "no_auth",
+          role: null,
+          total: 0,
+          active: 0,
+        }));
+        return { ok: false, reason: "no_auth" };
+      }
+
+      const { data, error } = await supabase.rpc("rpc_tracker_can_send");
+
+      if (error) {
+        console.error("rpc_tracker_can_send error:", error);
+        setGuard((g) => ({
+          ...g,
+          checked: true,
+          ok: false,
+          reason: "rpc_error",
+        }));
+        setStatusMessage("Error consultando permisos del tracker (rpc).");
+        return { ok: false, reason: "rpc_error" };
+      }
+
+      // data es array (por returns table)
+      const row = Array.isArray(data) ? data[0] : data;
+
+      const next = {
+        checked: true,
+        ok: Boolean(row?.ok),
+        reason: row?.reason ?? null,
+        role: row?.role ?? null,
+        total: Number(row?.total ?? 0),
+        active: Number(row?.active ?? 0),
+      };
+
+      setGuard(next);
+
+      // Si no es tracker => logout forzado (universal)
+      if (!next.ok && next.reason === "role_not_tracker") {
+        await signOutHard(humanGuardReason(next.reason));
+        return { ok: false, reason: next.reason };
+      }
+
+      // Mensaje de estado si está bloqueado
+      if (!next.ok) {
+        setStatusMessage(`${humanGuardReason(next.reason)} (${reason})`);
+      }
+
+      return { ok: next.ok, reason: next.reason };
+    } catch (err) {
+      console.error("refreshGuard exception:", err);
+      setGuard((g) => ({ ...g, checked: true, ok: false, reason: "exception" }));
+      setStatusMessage("Error inesperado validando permisos.");
+      return { ok: false, reason: "exception" };
+    }
+  }
+
+  // ==============================
+  // Intervalo universal (desde tracker_assignments)
+  // - Máximo: el mínimo de frequency_minutes activos
+  // - Mínimo: 5 min
+  // ==============================
+  async function loadIntervalFromAssignments() {
+    try {
+      if (!user?.id) return MIN_INTERVAL_SEC;
+
+      const { data, error } = await supabase
+        .from("tracker_assignments")
+        .select("frequency_minutes, active")
+        .eq("tracker_user_id", user.id)
+        .eq("active", true);
+
+      if (error) {
+        console.error("Error leyendo tracker_assignments:", error);
+        return MIN_INTERVAL_SEC;
+      }
+
+      if (!data || data.length === 0) {
+        return MIN_INTERVAL_SEC;
+      }
+
+      const mins = data
+        .map((r) => Number(r.frequency_minutes))
+        .filter((n) => Number.isFinite(n) && n >= 5);
+
+      if (mins.length === 0) return MIN_INTERVAL_SEC;
+
+      const minMinutes = Math.min(...mins);
+      return Math.max(MIN_INTERVAL_SEC, minMinutes * 60);
+    } catch (err) {
+      console.error("loadIntervalFromAssignments exception:", err);
+      return MIN_INTERVAL_SEC;
+    }
+  }
+
+  // ==============================
+  // Llamada a Edge Function send_position
   // ==============================
   async function sendPositionEdge(payload) {
     try {
@@ -56,96 +212,66 @@ export default function Tracker() {
 
       if (error) {
         console.error("[send_position] error invoke:", error);
-        return {
-          ok: false,
-          error: error.message || "Error llamando a send_position",
-        };
+        return { ok: false, error: error.message || "Error send_position" };
       }
 
       return data; // { ok, stored, reason, min_interval_ms, ... }
     } catch (err) {
       console.error("[send_position] exception:", err);
-      return {
-        ok: false,
-        error: err?.message || "Error de red al llamar a send_position",
-      };
+      return { ok: false, error: err?.message || "Error de red send_position" };
     }
   }
 
   // ==============================
-  // Enviar cola usando flushQueueCore
+  // Flush cola (con guard)
   // ==============================
   async function flushQueue(reason = "auto") {
     try {
+      // 1) Si no hay red, no intentamos
       if (!isOnline) {
+        const stats = await updateQueueInfo();
         setStatusMessage(
-          `Sin conexión. Cola pendiente: ${queueInfo.pending} (motivo: ${reason})`
+          `Sin conexión. Cola pendiente: ${stats?.pending ?? queueInfo.pending} (motivo: ${reason})`
         );
         return;
       }
 
+      // 2) Validar guard antes de enviar (universal)
+      if (!canOperate) {
+        setStatusMessage(`${humanGuardReason(guard.reason)} (${reason})`);
+        return;
+      }
+
+      // 3) No “flushear” demasiado rápido
       setStatusMessage(`Enviando cola (${reason})...`);
 
       await flushQueueCore(async (item) => {
         const res = await sendPositionEdge(item);
-        if (!res.ok) {
-          throw new Error(res.error || "Error en send_position");
+
+        // Si backend responde min_interval_ms, lo respetamos (universal)
+        if (res?.min_interval_ms) {
+          const sec = Math.max(MIN_INTERVAL_SEC, Math.ceil(res.min_interval_ms / 1000));
+          setIntervalSec(sec);
         }
+
+        if (!res?.ok) {
+          // Diagnóstico: si backend dice no assignments/role, refrescamos guard
+          if (res?.reason === "no_assignments" || res?.reason === "role_not_tracker") {
+            await refreshGuard("send_position");
+          }
+          throw new Error(res?.error || res?.reason || "Error en send_position");
+        }
+
         return res;
       });
 
       lastFlushTsRef.current = Date.now();
-      await updateQueueInfo();
+      const stats = await updateQueueInfo();
 
-      setStatusMessage(
-        `Cola enviada. Pendientes: ${queueInfo.pending ?? 0}`
-      );
+      setStatusMessage(`Cola enviada. Pendientes: ${stats?.pending ?? 0}`);
     } catch (err) {
       console.error("Error enviando cola:", err);
       setStatusMessage("Error al enviar cola. Se reintentará automáticamente.");
-    }
-  }
-
-  // ==============================
-  // Cargar intervalo configurado
-  // ==============================
-  async function loadTrackerInterval() {
-    try {
-      if (!user) return;
-
-      const { data: persona, error } = await supabase
-        .from("personal")
-        .select("position_interval_sec")
-        .eq("email", user.email)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error leyendo intervalo personal:", error);
-      }
-
-      let baseIntervalSec = MIN_INTERVAL_SEC;
-
-      if (persona?.position_interval_sec) {
-        baseIntervalSec = Math.max(
-          MIN_INTERVAL_SEC,
-          Number(persona.position_interval_sec)
-        );
-      }
-
-      setIntervalSec(baseIntervalSec);
-      setStatusMessage(
-        `Tracker listo. Intervalo: ${Math.round(baseIntervalSec / 60)} min`
-      );
-    } catch (err) {
-      console.error("Error leyendo intervalo:", err);
-      setIntervalSec(MIN_INTERVAL_SEC);
-      setStatusMessage(
-        "No se pudo leer configuración. Usando 5 min por defecto."
-      );
-    } finally {
-      setIsReady(true);
     }
   }
 
@@ -161,6 +287,9 @@ export default function Tracker() {
     try {
       const id = navigator.geolocation.watchPosition(
         async (pos) => {
+          // No encolar si no podemos operar (ahorra batería y evita ruido)
+          if (!canOperate) return;
+
           const payload = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
@@ -169,10 +298,10 @@ export default function Tracker() {
           };
 
           await enqueuePosition(payload);
-          await updateQueueInfo();
+          const stats = await updateQueueInfo();
 
           setStatusMessage(
-            `Posición encolada: ${payload.lat.toFixed(
+            `Posición encolada (${stats?.pending ?? 0}): ${payload.lat.toFixed(
               6
             )}, ${payload.lng.toFixed(6)}`
           );
@@ -210,23 +339,82 @@ export default function Tracker() {
   // Efectos
   // ==============================
 
-  // Cargar intervalo desde BD
+  // 1) Al entrar/cambiar usuario: evaluar guard + intervalo universal
   useEffect(() => {
-    loadTrackerInterval();
+    let cancelled = false;
+
+    async function boot() {
+      setIsReady(false);
+      setStatusMessage("Preparando tracker...");
+
+      if (!user?.id) {
+        setGuard({
+          checked: true,
+          ok: false,
+          reason: "no_auth",
+          role: null,
+          total: 0,
+          active: 0,
+        });
+        setIsReady(true);
+        setIsTracking(false);
+        return;
+      }
+
+      // Guard primero (fuente de verdad)
+      const g = await refreshGuard("boot");
+      if (cancelled) return;
+
+      // Intervalo desde assignments (si no hay, queda en MIN)
+      const sec = await loadIntervalFromAssignments();
+      if (cancelled) return;
+
+      setIntervalSec(sec);
+
+      if (g.ok) {
+        setStatusMessage(`Tracker listo. Intervalo: ${Math.round(sec / 60)} min`);
+      } else {
+        setStatusMessage(humanGuardReason(g.reason));
+      }
+
+      setIsReady(true);
+    }
+
+    boot();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Activar tracking automático cuando está listo
+  // 2) Refresco periódico del guard (por si cambian assignments/roles)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const t = setInterval(() => {
+      refreshGuard("poll");
+    }, CAN_SEND_REFRESH_MS);
+
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // 3) Activar tracking automático cuando está listo y autorizado
   useEffect(() => {
     if (!isReady) return;
-    if (!user) {
-      setStatusMessage("No hay usuario autenticado.");
+
+    if (!user?.id) {
+      setIsTracking(false);
       return;
     }
-    setIsTracking(true);
-  }, [isReady, user]);
 
-  // Cuando tracking está activo: GPS + timer de flush
+    if (!guard.checked) return;
+
+    setIsTracking(guard.ok);
+  }, [isReady, user?.id, guard.checked, guard.ok]);
+
+  // 4) Cuando tracking está activo: GPS + timer de flush
   useEffect(() => {
     if (!isTracking) {
       stopWatch();
@@ -260,9 +448,9 @@ export default function Tracker() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTracking, intervalSec]);
+  }, [isTracking, intervalSec, canOperate]);
 
-  // Eventos online/offline
+  // 5) Eventos online/offline
   useEffect(() => {
     function handleOnline() {
       setIsOnline(true);
@@ -293,6 +481,10 @@ export default function Tracker() {
     ? "bg-green-100 text-green-800"
     : "bg-red-100 text-red-800";
 
+  const guardBadgeClass = guard.ok
+    ? "bg-green-100 text-green-800"
+    : "bg-yellow-100 text-yellow-800";
+
   return (
     <div className="max-w-xl mx-auto p-4">
       <h1 className="text-xl font-semibold mb-3">Tracker</h1>
@@ -304,12 +496,19 @@ export default function Tracker() {
       )}
 
       <div className="border rounded-lg p-4 bg-white shadow-sm">
-        <div className="flex justify-between items-center mb-3">
+        <div className="flex justify-between items-center mb-3 gap-2">
           <span
             className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${onlineBadgeClass}`}
           >
             {onlineLabel}
           </span>
+
+          <span
+            className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${guardBadgeClass}`}
+          >
+            {guard.ok ? "Autorizado" : "Bloqueado"}
+          </span>
+
           <span className="text-xs text-gray-500">
             Intervalo: {Math.round(intervalSec / 60)} min (mín. 5 min)
           </span>
@@ -319,18 +518,23 @@ export default function Tracker() {
 
         <div className="text-xs text-gray-500 space-y-1">
           <p>
+            <strong>Assignments:</strong> total {guard.total} / activos {guard.active}
+          </p>
+
+          <p>
             <strong>En cola:</strong> {queueInfo.pending ?? 0} posiciones
           </p>
+
           {queueInfo.lastSentAt && (
             <p>
               <strong>Último envío:</strong>{" "}
               {new Date(queueInfo.lastSentAt).toLocaleString()}
             </p>
           )}
+
           <p className="mt-2">
-            Tracking automático. Las posiciones se envían al servidor cuando hay
-            señal. El backend solo guarda los puntos que caen dentro de tus
-            geocercas asignadas.
+            Tracker DB-driven: el backend decide si puedes enviar (roles + assignments).
+            Este dispositivo fuerza cuentas <strong>tracker</strong> y bloquea owner/admin.
           </p>
         </div>
       </div>
