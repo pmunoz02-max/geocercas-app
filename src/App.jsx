@@ -14,12 +14,14 @@ import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// Tracker GPS (página “solo trackers”)
+// ✅ Claim Invite (nuevo)
+import ClaimInvite from "./pages/ClaimInvite.jsx";
+
+// Tracker GPS
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
-// Bridge público para crear sesión Supabase del tracker
 import TrackerAuthBridge from "./pages/TrackerAuthBridge.jsx";
 
-// App pages (protegidas)
+// App pages
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
 import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";
@@ -52,7 +54,6 @@ function CallbackCatcher() {
     const hasCode = search.includes("code=");
     const hasTokenHash = search.includes("token_hash=");
 
-    // Si llega callback params en cualquier ruta, forzamos /auth/callback
     if ((hasAccessToken || hasCode || hasTokenHash) && pathname !== "/auth/callback") {
       const target = `/auth/callback${search || ""}${hash || ""}`;
       window.location.replace(target);
@@ -67,9 +68,7 @@ function AdminRoute({ children }) {
   const location = useLocation();
 
   if (loading) return null;
-  if (!user) {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
-  }
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
   if (!isAppRoot) return <Navigate to="/inicio" replace />;
   return children;
 }
@@ -85,10 +84,11 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* ✅ TRACKER GPS: fuera del shell protegido */}
-        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+        {/* ✅ Claim invite (public, pero requiere que el usuario esté logueado para que RPC funcione) */}
+        <Route path="/claim" element={<ClaimInvite />} />
 
-        {/* ✅ TRACKER AUTH BRIDGE: fuera del shell protegido (CRÍTICO) */}
+        {/* ✅ TRACKER GPS */}
+        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
         <Route path="/tracker-auth-bridge" element={<TrackerAuthBridge />} />
 
         {/* 🔐 Password flows */}
@@ -119,6 +119,7 @@ export default function App() {
           <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
           <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
           <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+
           <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
           <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
 
@@ -128,7 +129,7 @@ export default function App() {
           <Route path="/help/support" element={<SupportPage />} />
           <Route path="/help/changelog" element={<ChangelogPage />} />
 
-          {/* Admins (ROOT only) */}
+          {/* Admins */}
           <Route
             path="/admins"
             element={
