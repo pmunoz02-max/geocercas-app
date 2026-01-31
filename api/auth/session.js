@@ -57,6 +57,13 @@ function safeJsonBody(req) {
   return {};
 }
 
+function getBearer(req) {
+  const h = String(req.headers?.authorization || req.headers?.Authorization || "").trim();
+  if (!h) return "";
+  const m = h.match(/^bearer\s+(.+)$/i);
+  return m ? String(m[1]).trim() : "";
+}
+
 async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   const url = `${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/token?grant_type=refresh_token`;
 
@@ -89,7 +96,16 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   return json;
 }
 
-async function getUserFromAccessToken({ url, anonKey, accessToken }) {
+// ✅ Usamos Admin API si tenemos service role: robusto, no requiere refresh cookie
+async function getUserFromAccessTokenAdmin({ supabaseUrl, serviceKey, accessToken }) {
+  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+  const { data, error } = await admin.auth.getUser(accessToken);
+  if (error) return { user: null, error };
+  return { user: data?.user || null, error: null };
+}
+
+// Fallback (si no hay service role): el método anterior con anonKey
+async function getUserFromAccessTokenAnon({ url, anonKey, accessToken }) {
   const sbUser = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -122,37 +138,6 @@ async function computeIsAppRoot({ userEmail, roleFromBoot, serviceClient }) {
   }
 
   return false;
-}
-
-async function callEdgeInviteAdmin({ supabaseUrl, userAccessToken, payload }) {
-  const fnName = "invite_admin";
-  const url = `${String(supabaseUrl).replace(/\/$/, "")}/functions/v1/${fnName}`;
-
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${userAccessToken}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await r.text().catch(() => "");
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { ok: false, error: "Invalid JSON from edge", raw: text };
-  }
-
-  if (!r.ok || !json?.ok) {
-    const err = new Error(json?.message || json?.error || `Edge invite_admin failed (HTTP ${r.status})`);
-    err.status = r.status;
-    err.body = json;
-    throw err;
-  }
-
-  return json;
 }
 
 async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
@@ -229,7 +214,6 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
     throw e;
   }
 
-  // Upsert tracker (idempotente). NO tocamos is_default aquí.
   const { error: upErr } = await serviceClient
     .from("memberships")
     .upsert({ org_id: orgId, user_id: user.id, role: "tracker", is_default: false }, { onConflict: "org_id,user_id" });
@@ -259,10 +243,6 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
 async function listMembershipsForUser({ sbUser, serviceClient, userId }) {
   const base = serviceClient || sbUser;
 
-  // Orden universal:
-  // 1) is_default primero (true arriba)
-  // 2) created_at ASC (más antiguo primero)
-  // Nota: si is_default no existe, reintentamos sin ella.
   let r = await base
     .from("memberships")
     .select("org_id, role, is_default, created_at")
@@ -291,18 +271,15 @@ function normalizeRole(role) {
 function pickOrgFromMemberships(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return null;
 
-  // Preferir default
   const def = rows.find((x) => x?.is_default === true && x?.org_id);
   if (def?.org_id) return def.org_id;
 
-  // Preferir owner/admin si existe
   const preferred = rows.find((x) => {
     const r = normalizeRole(x?.role);
     return (r === "owner" || r === "admin") && x?.org_id;
   });
   if (preferred?.org_id) return preferred.org_id;
 
-  // Fallback: primera org_id válida
   const first = rows.find((x) => x?.org_id);
   return first?.org_id || null;
 }
@@ -316,9 +293,6 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
     return { changed: false, org_id: def?.org_id || null };
   }
 
-  // Elegimos default determinista:
-  // 1) el membership más antiguo owner/admin
-  // 2) si no, el más antiguo cualquiera
   const candidate =
     rows.find((r) => {
       const rr = normalizeRole(r?.role);
@@ -327,15 +301,12 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
 
   if (!candidate?.org_id) return { changed: false, org_id: null };
 
-  // 1) Poner todos en false
-  // (idempotente; evita choques con índice único)
   await serviceClient
     .from("memberships")
     .update({ is_default: false })
     .eq("user_id", userId)
     .eq("is_default", true);
 
-  // 2) Marcar candidato como default
   const { error: upErr } = await serviceClient
     .from("memberships")
     .update({ is_default: true })
@@ -343,7 +314,6 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
     .eq("org_id", candidate.org_id);
 
   if (upErr) {
-    // Si el índice único bloquea por condición de carrera, no reventamos sesión.
     return { changed: false, org_id: candidate.org_id };
   }
 
@@ -351,7 +321,7 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
 }
 
 export default async function handler(req, res) {
-  const build_tag = "auth-session-v22-default-org-deterministic";
+  const build_tag = "auth-session-v23-bearer-first";
   const debug = process.env.AUTH_DEBUG === "1";
 
   try {
@@ -376,7 +346,11 @@ export default async function handler(req, res) {
     const cookieDomain = process.env.COOKIE_DOMAIN || "";
     const cookies = parseCookies(req.headers.cookie || "");
 
-    let access_token = cookies.tg_at || "";
+    // ✅ 1) Preferir Bearer token (frontend sb-*-auth-token)
+    const bearer = getBearer(req);
+
+    // ✅ 2) Fallback cookies (legacy)
+    let access_token = bearer || cookies.tg_at || "";
     const refresh_token = cookies.tg_rt || "";
     const forced_org = cookies.tg_org || "";
 
@@ -390,6 +364,7 @@ export default async function handler(req, res) {
 
     const setCookieParts = [];
 
+    // Si el cliente envía access_token explícito en body, lo aceptamos
     if (bodyAccess) {
       access_token = bodyAccess;
       setCookieParts.push(
@@ -417,6 +392,7 @@ export default async function handler(req, res) {
       );
     }
 
+    // ✅ Solo intentamos refresh si NO hay bearer/access y sí hay refresh cookie
     if (!access_token && refresh_token) {
       const r = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
       access_token = r.access_token;
@@ -452,39 +428,60 @@ export default async function handler(req, res) {
       return res.status(200).json({ build_tag, ok: true, authenticated: false });
     }
 
-    let sbUser, user;
-    {
-      const r = await getUserFromAccessToken({ url, anonKey, accessToken: access_token });
+    // ✅ Resolver user (prefer admin getUser si hay serviceKey)
+    let user = null;
+    let sbUser = null;
+
+    if (serviceKey) {
+      const r = await getUserFromAccessTokenAdmin({ supabaseUrl: url, serviceKey, accessToken: access_token });
+      user = r.user || null;
+      // Para RPCs (bootstrap_session_context) seguimos usando un cliente anon con header Authorization
+      sbUser = createClient(url, anonKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: `Bearer ${access_token}` } },
+      });
+    } else {
+      const r = await getUserFromAccessTokenAnon({ url, anonKey, accessToken: access_token });
       sbUser = r.sbUser;
       user = r.user;
+    }
 
-      if (!user && refresh_token) {
-        const refreshed = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
-        access_token = refreshed.access_token;
+    // Si aún no hay user y hay refresh cookie, intentamos refresh (legacy)
+    if (!user && refresh_token) {
+      const refreshed = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
+      access_token = refreshed.access_token;
 
-        const accessMaxAge = Number(refreshed.expires_in || 3600);
-        const refreshMaxAge = 30 * 24 * 60 * 60;
+      const accessMaxAge = Number(refreshed.expires_in || 3600);
+      const refreshMaxAge = 30 * 24 * 60 * 60;
 
-        res.setHeader("Set-Cookie", [
-          makeCookie("tg_at", refreshed.access_token, {
-            httpOnly: true,
-            secure: true,
-            sameSite: "Lax",
-            path: "/",
-            domain: cookieDomain || undefined,
-            maxAge: accessMaxAge,
-          }),
-          makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
-            httpOnly: true,
-            secure: true,
-            sameSite: "Lax",
-            path: "/",
-            domain: cookieDomain || undefined,
-            maxAge: refreshMaxAge,
-          }),
-        ]);
+      res.setHeader("Set-Cookie", [
+        makeCookie("tg_at", refreshed.access_token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          domain: cookieDomain || undefined,
+          maxAge: accessMaxAge,
+        }),
+        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          domain: cookieDomain || undefined,
+          maxAge: refreshMaxAge,
+        }),
+      ]);
 
-        const r2 = await getUserFromAccessToken({ url, anonKey, accessToken: access_token });
+      if (serviceKey) {
+        const r2 = await getUserFromAccessTokenAdmin({ supabaseUrl: url, serviceKey, accessToken: access_token });
+        user = r2.user || null;
+        sbUser = createClient(url, anonKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+          global: { headers: { Authorization: `Bearer ${access_token}` } },
+        });
+      } else {
+        const r2 = await getUserFromAccessTokenAnon({ url, anonKey, accessToken: access_token });
         sbUser = r2.sbUser;
         user = r2.user;
       }
@@ -531,44 +528,13 @@ export default async function handler(req, res) {
         });
       }
 
-      if (action === "invite_new_admin") {
-        const { data: boot } = await sbUser.rpc("bootstrap_session_context");
-        const roleFromBoot = boot?.[0]?.role || null;
-
-        const is_app_root = await computeIsAppRoot({
-          userEmail: user.email,
-          roleFromBoot,
-          serviceClient,
-        });
-
-        if (!is_app_root) {
-          return res.status(403).json({ build_tag, ok: false, error: "Forbidden (root only)" });
-        }
-
-        const email = normalizeEmail(body.email);
-        if (!email) return res.status(400).json({ build_tag, ok: false, error: "Email requerido" });
-
-        const edgeResp = await callEdgeInviteAdmin({
-          supabaseUrl: url,
-          userAccessToken: access_token,
-          payload: {
-            email,
-            role: "owner",
-            org_name: `Org de ${email.split("@")[0]}`,
-          },
-        });
-
-        return res.status(200).json({ build_tag, ok: true, invited_email: email, edge: edgeResp });
-      }
-
       return res.status(200).json({ build_tag, ok: true, authenticated: true });
     }
 
-    // GET session
+    // GET session (legacy)
     let current_org_id = null;
     let role = null;
 
-    // 1) Si hay forced_org (cookie), la respetamos pero VALIDAMOS role si podemos
     if (forced_org) {
       current_org_id = forced_org;
 
@@ -584,39 +550,37 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2) bootstrap (si no forced)
     if (!current_org_id) {
-      const { data: boot } = await sbUser.rpc("bootstrap_session_context");
-      current_org_id = boot?.[0]?.org_id || null;
-      role = role ?? (boot?.[0]?.role || null);
+      try {
+        const { data: boot } = await sbUser.rpc("bootstrap_session_context");
+        current_org_id = boot?.[0]?.org_id || null;
+        role = role ?? (boot?.[0]?.role || null);
+      } catch {
+        // ok: tracker flow no requiere esto estrictamente
+      }
     }
 
-    // 3) memberships (SIEMPRE las cargamos para lista + resolución determinista)
     const { rows: membershipRows, error: memErr } = await listMembershipsForUser({
       sbUser,
       serviceClient,
       userId: user.id,
     });
 
-    // 4) Si hay memberships y no hay default, lo fijamos (universal)
     let defaultFix = { changed: false, org_id: null };
     if (!memErr && membershipRows.length > 0) {
       defaultFix = await ensureDefaultMembership({ serviceClient, userId: user.id, rows: membershipRows });
     }
 
-    // 5) Resolver org final (si no forced_org)
     if (!forced_org) {
       const picked = pickOrgFromMemberships(membershipRows);
       current_org_id = defaultFix.org_id || current_org_id || picked || null;
 
-      // Si role aún es null, derivarlo de memberships para la org elegida
       if (!role && current_org_id) {
         const hit = membershipRows.find((m) => m?.org_id === current_org_id);
         role = hit?.role || role;
       }
     }
 
-    // 6) Set tg_org sticky si resolvimos org y no venía forced_org
     if (current_org_id && !forced_org) {
       res.setHeader("Set-Cookie", [
         makeCookie("tg_org", String(current_org_id), {
@@ -656,6 +620,7 @@ export default async function handler(req, res) {
       ...(debug
         ? {
             debug: {
+              auth_mode: bearer ? "bearer" : "cookie",
               forced_org: forced_org || null,
               memberships: {
                 total: membershipRows.length,
@@ -669,7 +634,7 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error("[api/auth/session] fatal:", e);
     return res.status(500).json({
-      build_tag: "auth-session-v22-default-org-deterministic",
+      build_tag: "auth-session-v23-bearer-first",
       ok: false,
       error: String(e?.message || e),
       ...(process.env.AUTH_DEBUG === "1"
@@ -678,4 +643,3 @@ export default async function handler(req, res) {
     });
   }
 }
-

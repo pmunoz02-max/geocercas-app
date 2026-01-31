@@ -8,16 +8,12 @@ import { supabase } from "../lib/supabaseClient";
  * - Fuente de arranque: storage local sb-*-auth-token (sin red).
  * - getSession/getUser: best-effort (no bloquean).
  * - Gate DB-driven: tracker_can_send() decide negocio.
- * - accept_tracker_invite: solo si hay uid real.
+ * - accept_tracker_invite: se ejecuta con Bearer token (no depende de cookies).
  * - Session Swap Guard (tg_flow=tracker + invited_email): evita heredar sesión previa.
  */
 
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 function withTimeout(promise, ms, label = "timeout") {
@@ -80,7 +76,6 @@ function readSessionFromLocalStorage() {
     if (!raw) return null;
 
     const j = JSON.parse(raw);
-
     const s = j?.currentSession || j?.data?.session || j?.session || j || null;
 
     const access_token = s?.access_token || "";
@@ -167,10 +162,7 @@ export default function TrackerGpsPage() {
   // swap guard
   const swapCheckedRef = useRef(false);
   const [swapBlocked, setSwapBlocked] = useState(false);
-  const [swapInfo, setSwapInfo] = useState({
-    expected: "",
-    current: "",
-  });
+  const [swapInfo, setSwapInfo] = useState({ expected: "", current: "" });
 
   useEffect(() => {
     canSendRef.current = !!canSend;
@@ -215,7 +207,7 @@ export default function TrackerGpsPage() {
     const isTrackerFlow = String(q.tg_flow || "").toLowerCase() === "tracker";
     const expected = (q.invited_email || "").trim().toLowerCase();
 
-    // Solo aplica si el link trae invited_email (flujo tracker directo)
+    // Solo aplica si el link trae invited_email
     if (!isTrackerFlow || !expected) return;
 
     setStep("swap_guard:check");
@@ -223,7 +215,6 @@ export default function TrackerGpsPage() {
     const a = await refreshAuthDiagStorageFirst();
     const current = (a?.email || "").trim().toLowerCase();
 
-    // Si no hay email, forzamos bloqueo (no confiable)
     if (!current || current !== expected) {
       setStep("swap_guard:mismatch_signout");
 
@@ -240,6 +231,7 @@ export default function TrackerGpsPage() {
     }
   }
 
+  // ✅ Gate DB-driven con timeout duro
   async function refreshGate() {
     try {
       setStep("gate:rpc tracker_can_send");
@@ -278,6 +270,7 @@ export default function TrackerGpsPage() {
     }
   }
 
+  // ✅ aceptar invitación si viene invite_id (Bearer-first)
   async function acceptInviteIfPresent() {
     if (acceptedInviteRef.current) return;
     acceptedInviteRef.current = true;
@@ -288,14 +281,22 @@ export default function TrackerGpsPage() {
 
     setStep("invite:accept_tracker_invite");
 
+    // requiere uid real
     const a = await refreshAuthDiagStorageFirst();
     if (!a?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+
+    const token = await getAccessTokenBestEffort();
+    if (!token) throw new Error("No access_token. Abre el link de invitación nuevamente.");
 
     const res = await fetchJsonWithTimeout(
       "/api/auth/session",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
         body: JSON.stringify({ action: "accept_tracker_invite", invite_id }),
       },
@@ -311,7 +312,8 @@ export default function TrackerGpsPage() {
       throw new Error(msg);
     }
 
-    stripQueryParams(["invite_id", "org_id", "tg_flow"]);
+    // ✅ limpiar params de invite (incluye invited_email)
+    stripQueryParams(["invite_id", "org_id", "tg_flow", "invited_email"]);
   }
 
   async function sendPosition(pos) {
@@ -450,7 +452,7 @@ export default function TrackerGpsPage() {
         // ✅ 1) Guard primero (si el link trae invited_email)
         await runSessionSwapGuardIfNeeded();
 
-        // ✅ 2) Auth base (si no hay sesión, error)
+        // ✅ 2) Auth base
         const a = await refreshAuthDiagStorageFirst();
         if (!a?.uid) {
           throw new Error("No autenticado. Abre el link de invitación nuevamente.");
@@ -474,7 +476,6 @@ export default function TrackerGpsPage() {
       } catch (e) {
         if (!alive) return;
 
-        // swap_guard_blocked no es error "rojo"; es bloqueo intencional con UI clara
         if (String(e?.message || "") === "swap_guard_blocked") {
           setLoading(false);
           return;
@@ -518,30 +519,27 @@ export default function TrackerGpsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white border rounded-xl p-6 shadow">
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">
-            Sesión incorrecta
-          </h2>
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Sesión incorrecta</h2>
 
-          <p className="text-sm text-slate-700">
-            Esta sesión no corresponde al tracker invitado.
-          </p>
+          <p className="text-sm text-slate-700">Esta sesión no corresponde al tracker invitado.</p>
 
           <div className="mt-3 text-xs bg-slate-50 border rounded p-3 overflow-auto">
-            <div><b>Esperado:</b> {swapInfo.expected || "—"}</div>
-            <div><b>Actual:</b> {swapInfo.current || "—"}</div>
+            <div>
+              <b>Esperado:</b> {swapInfo.expected || "—"}
+            </div>
+            <div>
+              <b>Actual:</b> {swapInfo.current || "—"}
+            </div>
           </div>
 
           <div className="mt-4 text-sm text-slate-700">
-            Abre el enlace del email nuevamente (idealmente en una ventana incógnito
-            o cerrando sesión del admin antes).
+            Abre el enlace del email nuevamente (idealmente en una ventana incógnito o cerrando
+            sesión del admin antes).
           </div>
 
           <button
             className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-white"
-            onClick={() => {
-              // recarga sin cache para que el usuario vuelva a abrir el link del email
-              window.location.reload();
-            }}
+            onClick={() => window.location.reload()}
           >
             Entendido
           </button>
@@ -556,18 +554,28 @@ export default function TrackerGpsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white border rounded-xl p-6 shadow">
-          <h2 className="text-lg font-semibold text-red-600 mb-3">
-            Tracker no disponible
-          </h2>
+          <h2 className="text-lg font-semibold text-red-600 mb-3">Tracker no disponible</h2>
           <p className="text-sm text-gray-700 mb-4">{error}</p>
 
           <div className="text-xs bg-gray-100 p-3 rounded overflow-auto">
-            <div><b>step:</b> {step}</div>
-            <div><b>uid:</b> {diag?.uid || "—"}</div>
-            <div><b>email:</b> {diag?.email || "—"}</div>
-            <div><b>permission:</b> {permission}</div>
-            <div><b>canSend:</b> {String(canSend)}</div>
-            <div><b>gateMsg:</b> {gateMsg}</div>
+            <div>
+              <b>step:</b> {step}
+            </div>
+            <div>
+              <b>uid:</b> {diag?.uid || "—"}
+            </div>
+            <div>
+              <b>email:</b> {diag?.email || "—"}
+            </div>
+            <div>
+              <b>permission:</b> {permission}
+            </div>
+            <div>
+              <b>canSend:</b> {String(canSend)}
+            </div>
+            <div>
+              <b>gateMsg:</b> {gateMsg}
+            </div>
           </div>
 
           <button
@@ -632,7 +640,8 @@ export default function TrackerGpsPage() {
         )}
 
         <div className="mt-4 text-[11px] text-emerald-900/80">
-          Tip: si no hay asignación activa, el tracker queda en espera y empieza a enviar automáticamente cuando se active.
+          Tip: si no hay asignación activa, el tracker queda en espera y empieza a enviar
+          automáticamente cuando se active.
         </div>
 
         <div className="mt-3 text-[11px] opacity-70">step: {step}</div>
