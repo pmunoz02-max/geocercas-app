@@ -1,3 +1,4 @@
+// src/pages/AuthCallback.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -55,6 +56,34 @@ function hasInviteTokensInHash(): boolean {
   return h.includes("access_token=") || h.includes("refresh_token=");
 }
 
+function extractInvitedEmailFromNext(next: string): string {
+  try {
+    if (!next) return "";
+    // next puede ser "/tracker-gps?tg_flow=tracker&invited_email=a@b.com"
+    const u = new URL(next, window.location.origin);
+    return (u.searchParams.get("invited_email") || "").trim();
+  } catch {
+    // si next no es URL parseable, intentamos manual
+    const idx = next.indexOf("invited_email=");
+    if (idx === -1) return "";
+    const chunk = next.slice(idx + "invited_email=".length);
+    const end = chunk.indexOf("&");
+    const raw = end === -1 ? chunk : chunk.slice(0, end);
+    try {
+      return decodeURIComponent(raw).trim();
+    } catch {
+      return String(raw || "").trim();
+    }
+  }
+}
+
+function buildTrackerUrl(invited_email?: string) {
+  const ie = (invited_email || "").trim();
+  return ie
+    ? `/tracker-gps?tg_flow=tracker&invited_email=${encodeURIComponent(ie)}`
+    : `/tracker-gps?tg_flow=tracker`;
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
 
@@ -81,17 +110,24 @@ export default function AuthCallback() {
           return;
         }
 
-        // ---- detectar flow tracker ----
         const next = parsed.params.get("next") || "";
+
+        // ---- detectar flow tracker ----
         const tg_flow =
           parsed.params.get("tg_flow") ||
           (next.includes("tg_flow=tracker") ? "tracker" : "");
+
         const force =
           parsed.params.get("force") ||
           (next.includes("force=1") ? "1" : "0");
 
         const isTrackerFlow = String(tg_flow).toLowerCase() === "tracker";
         const forceSwap = force === "1" || isTrackerFlow;
+
+        // invited_email: puede venir directo o dentro de next
+        const invited_email =
+          (parsed.params.get("invited_email") || "").trim() ||
+          extractInvitedEmailFromNext(next);
 
         const code = parsed.params.get("code");
         const token_hash = parsed.params.get("token_hash");
@@ -104,10 +140,10 @@ export default function AuthCallback() {
             isTrackerFlow ? "YES" : "NO"
           } forceSwap=${forceSwap ? "YES" : "NO"} hashTokens=${
             hasInviteTokensInHash() ? "YES" : "NO"
-          }`
+          } invited_email=${invited_email ? "YES" : "NO"}`
         );
 
-        // ✅ 0) Forzar swap de sesión SI es tracker flow
+        // ✅ 0) Forzar swap SI es tracker flow
         if (forceSwap) {
           setStep("force_swap:signOut+clearStorage");
           try {
@@ -116,19 +152,18 @@ export default function AuthCallback() {
             // ignore
           }
           clearSbTokensBestEffort();
-          // pequeña pausa para evitar race con storage
           await sleep(200);
         }
 
-        // ✅ 1) Consumir sesión desde URL (invite links vienen con tokens en hash)
+        // ✅ 1) Consumir sesión desde URL (invite links suelen venir con tokens en hash)
         setStep("getSessionFromUrl...");
         try {
           await supabase.auth.getSessionFromUrl({ storeSession: true });
         } catch {
-          // no bloquea; seguimos con code/token_hash si existen
+          // seguimos
         }
 
-        // ✅ 2) Fallbacks para otros tipos de callback
+        // ✅ 2) Fallbacks
         if (code) {
           setStep("exchangeCodeForSession...");
           const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -149,7 +184,6 @@ export default function AuthCallback() {
             return;
           }
         } else {
-          // si era invite link, debería haberse consumido ya; si no, error
           if (!hasInviteTokensInHash()) {
             setErr("missing_code_or_token_hash_in_callback_url");
             setStep("missing_params");
@@ -193,7 +227,7 @@ export default function AuthCallback() {
           const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
           if (ctxErr) {
             setStep("get_my_context_failed_continue_tracker");
-            navigate(`/tracker-gps?tg_flow=tracker`, { replace: true });
+            navigate(buildTrackerUrl(invited_email), { replace: true });
             return;
           }
 
@@ -210,11 +244,11 @@ export default function AuthCallback() {
           }
 
           setStep("no_org_assume_tracker");
-          navigate(`/tracker-gps?tg_flow=tracker`, { replace: true });
+          navigate(buildTrackerUrl(invited_email), { replace: true });
           return;
         } catch {
           setStep("rpc_exception_continue_tracker");
-          navigate(`/tracker-gps?tg_flow=tracker`, { replace: true });
+          navigate(buildTrackerUrl(invited_email), { replace: true });
           return;
         }
       } catch (e: any) {
@@ -230,18 +264,47 @@ export default function AuthCallback() {
     <div style={{ minHeight: "100vh", padding: 16, fontFamily: "sans-serif" }}>
       <h2>AuthCallback Debug</h2>
 
-      <div style={{ marginTop: 8, padding: 12, background: "#f5f5f5", borderRadius: 8 }}>
-        <div><b>step:</b> {step}</div>
-        <div><b>sessionExists:</b> {String(sessionExists)}</div>
-        <div><b>sbKeys:</b> {sbKeys.length ? sbKeys.join(", ") : "[]"}</div>
-        <div><b>orgId:</b> {orgId || "—"}</div>
-        {err && <div style={{ color: "#b00020", marginTop: 8 }}><b>error:</b> {err}</div>}
+      <div
+        style={{
+          marginTop: 8,
+          padding: 12,
+          background: "#f5f5f5",
+          borderRadius: 8,
+        }}
+      >
+        <div>
+          <b>step:</b> {step}
+        </div>
+        <div>
+          <b>sessionExists:</b> {String(sessionExists)}
+        </div>
+        <div>
+          <b>sbKeys:</b> {sbKeys.length ? sbKeys.join(", ") : "[]"}
+        </div>
+        <div>
+          <b>orgId:</b> {orgId || "—"}
+        </div>
+        {err && (
+          <div style={{ color: "#b00020", marginTop: 8 }}>
+            <b>error:</b> {err}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <div><b>location.href</b></div>
-        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
-{String(window.location.href)}
+        <div>
+          <b>location.href</b>
+        </div>
+        <pre
+          style={{
+            whiteSpace: "pre-wrap",
+            background: "#111",
+            color: "#0f0",
+            padding: 12,
+            borderRadius: 8,
+          }}
+        >
+          {String(window.location.href)}
         </pre>
       </div>
     </div>
