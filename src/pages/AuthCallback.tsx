@@ -18,28 +18,54 @@ function getSbTokenKeys(): string[] {
   }
 }
 
+function clearSbTokens() {
+  try {
+    const keys = getSbTokenKeys();
+    for (const k of keys) {
+      try {
+        window.localStorage.removeItem(k);
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function parseParamsBoth() {
   const search = window.location.search || "";
-  const hash = (window.location.hash || "").replace(/^#/, "");
+  const hashRaw = window.location.hash || "";
+  const hash = hashRaw.replace(/^#/, "");
   const combined = [search.replace(/^\?/, ""), hash].filter(Boolean).join("&");
   return {
     search,
-    hash: window.location.hash || "",
+    hash: hashRaw,
     combined,
     params: new URLSearchParams(combined),
   };
 }
 
-function normalizeType(raw: string | null): "magiclink" | "recovery" | "signup" | "invite" | null {
+function normalizeType(raw: string | null):
+  | "magiclink"
+  | "recovery"
+  | "signup"
+  | "invite"
+  | null {
   if (!raw) return null;
   const v = raw.toLowerCase();
   if (v === "magiclink" || v === "recovery" || v === "signup" || v === "invite") return v as any;
   return null;
 }
 
+function isSafeNextPath(next: string) {
+  // Solo permitimos rutas internas tipo "/tracker-gps?..."
+  // Evita open-redirects.
+  return typeof next === "string" && next.startsWith("/");
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
-
   const parsed = useMemo(() => parseParamsBoth(), []);
   const [step, setStep] = useState("init");
   const [err, setErr] = useState<string | null>(null);
@@ -73,6 +99,31 @@ export default function AuthCallback() {
           }`
         );
 
+        // ✅ 0) IMPORTANTE: si hay una sesión previa (admin), hay que forzar swap.
+        setStep("precheck_existing_session");
+        const pre = await supabase.auth.getSession();
+        const hadSession = !!pre?.data?.session;
+
+        setSessionExists(hadSession);
+        setSbKeys(getSbTokenKeys());
+
+        if (hadSession) {
+          setStep("signOut_existing_session_for_swap");
+          try {
+            // scope local para no afectar otros dispositivos
+            await supabase.auth.signOut({ scope: "local" });
+          } catch {
+            // ignore
+          }
+
+          // Limpiamos tokens locales para evitar que se quede pegado a la sesión anterior
+          clearSbTokens();
+
+          // Espera breve para que storage quede estable
+          await sleep(150);
+        }
+
+        // ✅ 1) Consumir callback (code o token_hash)
         if (code) {
           setStep("exchangeCodeForSession...");
           const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -95,10 +146,12 @@ export default function AuthCallback() {
           return;
         }
 
+        // ✅ 2) Esperar sesión nueva (confirmar que existe)
         setStep("waiting_session...");
         const start = Date.now();
         let ok = false;
-        while (Date.now() - start < 7000) {
+
+        while (Date.now() - start < 9000) {
           const { data } = await supabase.auth.getSession();
           const s = !!data?.session;
           setSessionExists(s);
@@ -116,21 +169,22 @@ export default function AuthCallback() {
           return;
         }
 
-        // ✅ Si hay next=... lo respetamos (útil para flows internos)
-        const next = parsed.params.get("next");
-        if (next) {
+        // ✅ 3) Si viene next=... lo respetamos (y SOLO si es ruta interna)
+        const nextRaw = parsed.params.get("next");
+        const next = nextRaw ? String(nextRaw) : null;
+
+        if (next && isSafeNextPath(next)) {
           setStep("redirect_next");
           navigate(next, { replace: true });
           return;
         }
 
-        // ✅ Intentar contexto (si falla NO bloquea al tracker)
+        // ✅ 4) Intentar contexto (si falla NO bloquea al tracker)
         setStep("rpc_get_my_context (optional) ...");
         try {
           const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
           if (ctxErr) {
             setStep("get_my_context_failed_but_continue_tracker");
-            // tracker flow
             navigate(`/tracker-gps?tg_flow=tracker`, { replace: true });
             return;
           }
@@ -167,7 +221,6 @@ export default function AuthCallback() {
     run();
   }, [parsed, navigate]);
 
-  // Mantengo tu debug panel (por si necesitas ver fallos en prod)
   return (
     <div style={{ minHeight: "100vh", padding: 16, fontFamily: "sans-serif" }}>
       <h2>AuthCallback Debug</h2>
