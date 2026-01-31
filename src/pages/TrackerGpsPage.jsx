@@ -4,10 +4,11 @@ import { supabase } from "../lib/supabaseClient";
 
 /**
  * TrackerGpsPage — Universal + permanente (DB-driven)
- * - SIEMPRE usa auth.uid() real (supabase.auth.getUser()) para diag y consistencia.
- * - Gate DB-driven (tracker_can_send) decide negocio. Frontend solo refleja.
- * - Acepta invite_id (si viene) llamando /api/auth/session action=accept_tracker_invite
- * - Envío GPS: usa session.access_token actual (fallback LS solo si no hay session).
+ * Fixes:
+ * - Nunca se queda pegado en "Cargando..." => timeouts duros + step debug
+ * - diag.uid/email SIEMPRE viene de supabase.auth.getUser() real
+ * - refreshGate y session con Promise.race timeout
+ * - fetch con AbortController timeout
  */
 
 function getSupabaseUrl() {
@@ -16,6 +17,14 @@ function getSupabaseUrl() {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function withTimeout(promise, ms, label = "timeout") {
+  let t;
+  const timeoutPromise = new Promise((_, reject) => {
+    t = setTimeout(() => reject(new Error(`${label}_after_${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(t));
 }
 
 // Fallback legacy (solo si NO hay session). Mantener por robustez.
@@ -39,7 +48,6 @@ function getAccessTokenFromLocalStorage() {
 }
 
 async function getAccessTokenBestEffort() {
-  // ✅ Prioridad: session actual (lo correcto)
   try {
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token || "";
@@ -47,8 +55,6 @@ async function getAccessTokenBestEffort() {
   } catch {
     // ignore
   }
-
-  // Fallback: localStorage (solo si no hay session)
   return getAccessTokenFromLocalStorage();
 }
 
@@ -71,8 +77,24 @@ function stripQueryParams(keys = []) {
   }
 }
 
+async function fetchJsonWithTimeout(url, opts, ms, label) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+
+  try {
+    const r = await fetch(url, { ...opts, signal: ac.signal });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, json: j };
+  } catch (e) {
+    throw new Error(`${label}_failed: ${e?.name === "AbortError" ? "aborted" : (e?.message || "network")}`);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export default function TrackerGpsPage() {
   const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState("init");
   const [error, setError] = useState(null);
 
   const [permission, setPermission] = useState("unknown");
@@ -83,7 +105,6 @@ export default function TrackerGpsPage() {
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
 
-  // ✅ diag real (auth user)
   const [diag, setDiag] = useState({ uid: null, email: null });
 
   // gating
@@ -91,7 +112,6 @@ export default function TrackerGpsPage() {
   const [gateMsg, setGateMsg] = useState("Esperando asignación…");
   const [gateInfo, setGateInfo] = useState(null);
 
-  // frecuencia en segundos (UI / throttle)
   const [intervalSec, setIntervalSec] = useState(30);
 
   const lastSentAtRef = useRef(0);
@@ -99,15 +119,12 @@ export default function TrackerGpsPage() {
   const gatePollRef = useRef(null);
   const startedRef = useRef(false);
 
-  // refs para evitar closures viejos
+  // refs anti-closure
   const canSendRef = useRef(false);
   const intervalSecRef = useRef(30);
   const gateInfoRef = useRef(null);
 
-  // onboarding refs
   const acceptedInviteRef = useRef(false);
-
-  // Guardamos org_id si viene en el link (SOLO contexto; backend valida con gate)
   const orgIdFromUrlRef = useRef("");
 
   useEffect(() => {
@@ -122,28 +139,35 @@ export default function TrackerGpsPage() {
     gateInfoRef.current = gateInfo || null;
   }, [gateInfo]);
 
-  // ✅ SIEMPRE leer usuario real de Supabase (no de estado/caché)
+  // ✅ SIEMPRE leer usuario real de Supabase
   async function refreshAuthDiag() {
-    try {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) {
-        setDiag({ uid: null, email: null });
-        return { uid: null, email: null };
-      }
-      const u = data?.user || null;
-      const next = { uid: u?.id || null, email: u?.email || null };
-      setDiag(next);
-      return next;
-    } catch {
+    setStep("auth:getUser");
+    const { data, error } = await withTimeout(
+      supabase.auth.getUser(),
+      8000,
+      "getUser"
+    );
+
+    if (error) {
       setDiag({ uid: null, email: null });
       return { uid: null, email: null };
     }
+
+    const u = data?.user || null;
+    const next = { uid: u?.id || null, email: u?.email || null };
+    setDiag(next);
+    return next;
   }
 
-  // ✅ Gate DB-Driven definitivo: SIN org_id / tenant_id desde frontend
+  // ✅ Gate DB-driven con timeout duro
   async function refreshGate() {
     try {
-      const { data, error } = await supabase.rpc("tracker_can_send");
+      setStep("gate:rpc tracker_can_send");
+      const { data, error } = await withTimeout(
+        supabase.rpc("tracker_can_send"),
+        9000,
+        "tracker_can_send"
+      );
 
       if (error) {
         setCanSend(false);
@@ -163,9 +187,8 @@ export default function TrackerGpsPage() {
         return;
       }
 
-      // DB usa frequency_minutes
       const fm = Number(row?.frequency_minutes);
-      const sec = Number.isFinite(fm) && fm > 0 ? fm * 60 : 300; // default 5 min
+      const sec = Number.isFinite(fm) && fm > 0 ? fm * 60 : 300;
       setIntervalSec(sec);
 
       setGateMsg("Asignación activa ✅ (enviando automáticamente)");
@@ -176,60 +199,49 @@ export default function TrackerGpsPage() {
     }
   }
 
-  // ✅ Universal: aceptar invitación SI viene invite_id (vincula auth.uid real con org)
   async function acceptInviteIfPresent() {
     if (acceptedInviteRef.current) return;
     acceptedInviteRef.current = true;
 
     const { invite_id, org_id } = readQuery();
     if (org_id) orgIdFromUrlRef.current = org_id;
-
     if (!invite_id) return;
 
-    // Requiere sesión ya creada (auth.uid real)
+    setStep("invite:accept_tracker_invite");
     const u = await refreshAuthDiag();
-    if (!u?.uid) {
-      throw new Error("No autenticado. Abre el link de invitación nuevamente.");
-    }
+    if (!u?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
 
-    try {
-      const r = await fetch("/api/auth/session", {
+    const res = await fetchJsonWithTimeout(
+      "/api/auth/session",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          action: "accept_tracker_invite",
-          invite_id,
-        }),
-      });
+        body: JSON.stringify({ action: "accept_tracker_invite", invite_id }),
+      },
+      12000,
+      "accept_invite"
+    );
 
-      const j = await r.json().catch(() => ({}));
-
-      if (!r.ok || !j?.ok) {
-        const msg =
-          j?.error ||
-          j?.message ||
-          "No se pudo aceptar la invitación. Abre el link nuevamente o pide un nuevo invite.";
-        throw new Error(msg);
-      }
-
-      stripQueryParams(["invite_id", "org_id", "tg_flow"]);
-    } catch (e) {
-      throw e;
+    if (!res.ok || !res.json?.ok) {
+      const msg =
+        res.json?.error ||
+        res.json?.message ||
+        "No se pudo aceptar la invitación. Abre el link nuevamente o pide un nuevo invite.";
+      throw new Error(msg);
     }
+
+    stripQueryParams(["invite_id", "org_id", "tg_flow"]);
   }
 
   async function sendPosition(pos) {
-    // 1) gating (REF)
     if (!canSendRef.current) return;
 
-    // 2) throttle (REF)
     const now = Date.now();
     const minMs = Math.max(5, Number(intervalSecRef.current || 30)) * 1000;
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
-    // 3) token
     const token = await getAccessTokenBestEffort();
     if (!token) {
       setSendStatus("error");
@@ -243,7 +255,7 @@ export default function TrackerGpsPage() {
     const gi = gateInfoRef.current;
 
     const payload = {
-      org_id: orgIdFromUrlRef.current || undefined, // solo contexto si tu Edge lo requiere
+      org_id: orgIdFromUrlRef.current || undefined,
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: pos.coords.accuracy ?? null,
@@ -260,37 +272,43 @@ export default function TrackerGpsPage() {
     setSendStatus("sending");
     setSendError(null);
 
-    let r;
-    let j = {};
     try {
-      r = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 12000);
 
-      j = await r.json().catch(() => ({}));
+      let r;
+      let j = {};
+      try {
+        r = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+          signal: ac.signal,
+        });
+        j = await r.json().catch(() => ({}));
+      } finally {
+        clearTimeout(t);
+      }
+
+      if (!r.ok || !j?.ok) {
+        setSendStatus("error");
+        setSendError(j?.error || j?.details || "Error enviando posición");
+        return;
+      }
+
+      setSendStatus("ok");
+      setLastSend({
+        ts: payload.captured_at,
+        inserted_id: j?.inserted_id ?? null,
+        geofence_id: j?.used_geofence_id ?? payload.geofence_id ?? null,
+      });
     } catch (e) {
       setSendStatus("error");
-      setSendError(e?.message || "Network error enviando posición");
-      return;
+      setSendError(e?.name === "AbortError" ? "Timeout enviando posición" : (e?.message || "Network error"));
     }
-
-    if (!r.ok || !j?.ok) {
-      setSendStatus("error");
-      setSendError(j?.error || j?.details || "Error enviando posición");
-      return;
-    }
-
-    setSendStatus("ok");
-    setLastSend({
-      ts: payload.captured_at,
-      inserted_id: j?.inserted_id ?? null,
-      geofence_id: j?.used_geofence_id ?? payload.geofence_id ?? null,
-    });
   }
 
   function startTrackingAuto() {
@@ -333,7 +351,7 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     let alive = true;
 
-    // ✅ Al cambiar auth, refrescar diag + gate (para que admin→tracker se refleje)
+    // ✅ Si cambia auth, refrescar diag + gate
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       if (!alive) return;
       await refreshAuthDiag();
@@ -343,38 +361,44 @@ export default function TrackerGpsPage() {
     (async () => {
       try {
         setLoading(true);
-
-        // 0) Guardar org_id si vino (solo contexto)
+        setStep("init:readQuery");
         const q = readQuery();
         if (q.org_id) orgIdFromUrlRef.current = q.org_id;
 
-        // 1) Necesitamos sesión (auth)
-        const { data, error } = await supabase.auth.getSession();
+        setStep("auth:getSession");
+        const { data, error } = await withTimeout(
+          supabase.auth.getSession(),
+          8000,
+          "getSession"
+        );
         if (error) throw new Error(error.message);
 
         const s = data?.session;
-        if (!s) {
-          throw new Error("No autenticado. Abre el link de invitación nuevamente.");
-        }
+        if (!s) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
 
-        // ✅ 1b) diag real (uid/email) desde Supabase
         await refreshAuthDiag();
 
-        // 2) aceptar invitación si viene invite_id
+        // aceptar invite si viene (no siempre)
         await acceptInviteIfPresent();
 
         if (!alive) return;
+
+        setStep("ready:setLoadingFalse");
         setLoading(false);
 
-        // 3) Gate inmediato + polling
+        // Gate inmediato + polling
         await refreshGate();
         gatePollRef.current = setInterval(() => refreshGate(), 15000);
 
-        // 4) Arranque automático del GPS
+        // Arranque GPS
+        setStep("gps:start");
         startTrackingAuto();
+
+        setStep("running");
       } catch (e) {
         if (!alive) return;
         setError(e?.message || "Error cargando tracker");
+        setStep("error");
         setLoading(false);
       }
     })();
@@ -391,8 +415,14 @@ export default function TrackerGpsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-600">
-        Cargando tracker…
+      <div className="min-h-screen flex items-center justify-center text-gray-400">
+        <div className="text-center">
+          <div className="text-sm">Cargando tracker…</div>
+          <div className="text-xs opacity-70 mt-2">step: {step}</div>
+          <div className="text-xs opacity-70 mt-1">
+            diag: {JSON.stringify({ uid: diag?.uid, email: diag?.email })}
+          </div>
+        </div>
       </div>
     );
   }
@@ -405,6 +435,7 @@ export default function TrackerGpsPage() {
           <p className="text-sm text-gray-700 mb-4">{error}</p>
 
           <div className="text-xs bg-gray-100 p-3 rounded overflow-auto">
+            <div><b>step:</b> {step}</div>
             <div><b>uid:</b> {diag?.uid || "—"}</div>
             <div><b>email:</b> {diag?.email || "—"}</div>
             <div><b>permission:</b> {permission}</div>
@@ -475,6 +506,10 @@ export default function TrackerGpsPage() {
 
         <div className="mt-4 text-[11px] text-emerald-900/80">
           Tip: si no hay asignación activa, el tracker queda en espera y empieza a enviar automáticamente cuando se active.
+        </div>
+
+        <div className="mt-3 text-[11px] opacity-70">
+          step: {step}
         </div>
       </div>
     </div>
