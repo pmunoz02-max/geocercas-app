@@ -1,16 +1,17 @@
+// api/invite-tracker.ts
 import { createClient } from "@supabase/supabase-js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const anonKey = process.env.SUPABASE_ANON_KEY!;
-const PUBLIC_SITE_URL = process.env.PUBLIC_SITE_URL || "";
+const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || "").replace(/\/+$/, "");
 
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
-// Cliente "anon" SOLO para disparar el email OTP/magiclink
+// Cliente "anon" SOLO para disparar el email OTP/magiclink (si mantienes este endpoint)
 const supabaseAnon = createClient(supabaseUrl, anonKey, {
   auth: { persistSession: false },
 });
@@ -41,6 +42,35 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
     page++;
   }
   return null;
+}
+
+/**
+ * Construye redirectTo CANÓNICO para AuthCallback (React).
+ * Muy importante: TODO lo que TrackerGpsPage necesita debe ir dentro de "next".
+ */
+function buildRedirectTo(params: {
+  org_id: string;
+  invite_id: string;
+  email: string;
+}) {
+  const { org_id, invite_id, email } = params;
+
+  // next: incluye query completa
+  const next =
+    `/tracker-gps` +
+    `?tg_flow=tracker` +
+    `&org_id=${encodeURIComponent(org_id)}` +
+    `&invite_id=${encodeURIComponent(invite_id)}` +
+    `&invited_email=${encodeURIComponent(email)}`;
+
+  // callback frontend
+  const redirectTo =
+    `${PUBLIC_SITE_URL}/auth/callback` +
+    `?next=${encodeURIComponent(next)}` +
+    `&tg_flow=tracker` +
+    `&invited_email=${encodeURIComponent(email)}`;
+
+  return redirectTo;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -109,10 +139,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const invite_id = String(inv.id);
 
-    // 4) Redirect incluye invite_id (para aceptar y vincular auth.uid real)
-    const redirectTo =
-      `${PUBLIC_SITE_URL}/auth/callback` +
-      `?next=/tracker-gps&org_id=${org_id}&invite_id=${invite_id}&tg_flow=tracker`;
+    // ✅ 4) redirectTo correcto (TODO dentro de next)
+    const redirectTo = buildRedirectTo({ org_id, invite_id, email });
 
     // 5) Enviar magic link
     const { error: otpErr } = await supabaseAnon.auth.signInWithOtp({
@@ -132,7 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       org_id,
       invite_id,
       redirect_to: redirectTo,
-      note: "Membership y asignaciones se crean SOLO al aceptar el invite (auth.uid real).",
+      note: "Invite tracker: next incluye org_id+invite_id+invited_email, para llegar directo a /tracker-gps.",
     });
   } catch (e: any) {
     console.error("invite-tracker error", e);
