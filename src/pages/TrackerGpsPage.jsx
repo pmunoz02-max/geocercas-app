@@ -5,11 +5,12 @@ import { supabase } from "../lib/supabaseClient";
 /**
  * TrackerGpsPage — Universal + permanente (DB-driven)
  *
- * Fix definitivo:
- * - NO bloquea en supabase.auth.getUser() (en algunos entornos puede colgarse).
- * - Usa getSession() como fuente principal de uid/email (estable, sin red).
- * - getUser() queda como "best-effort" en background (no bloqueante).
- * - Timeouts duros + step debug visible.
+ * FIX CANÓNICO para entornos donde supabase.auth.getSession() / getUser() se cuelgan:
+ * - Fuente de arranque: storage local sb-*-auth-token (sin red, sin bloqueos).
+ * - getSession/getUser: solo best-effort en background (no bloquean).
+ * - Gate DB-driven decide negocio (tracker_can_send).
+ * - accept_tracker_invite: se ejecuta solo si hay uid real.
+ * - Timeouts duros + step debug para nunca quedar en "Cargando..." sin razón.
  */
 
 function getSupabaseUrl() {
@@ -47,35 +48,65 @@ function stripQueryParams(keys = []) {
   }
 }
 
-// Fallback legacy (solo si NO hay session). Mantener por robustez.
-function getAccessTokenFromLocalStorage() {
+// --------------------
+// AUTH: storage-first
+// --------------------
+
+function getSbAuthTokenKey() {
   try {
     const keys = Object.keys(window.localStorage || {});
-    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
-    if (!k) return "";
-    const raw = window.localStorage.getItem(k);
-    if (!raw) return "";
-    const j = JSON.parse(raw);
-    return (
-      j?.access_token ||
-      j?.currentSession?.access_token ||
-      j?.data?.session?.access_token ||
-      ""
-    );
+    return keys.find((x) => /^sb-.*-auth-token$/i.test(String(x))) || "";
   } catch {
     return "";
   }
 }
 
-async function getAccessTokenBestEffort() {
+function readSessionFromLocalStorage() {
   try {
-    const { data } = await supabase.auth.getSession();
-    const token = data?.session?.access_token || "";
-    if (token) return token;
+    const k = getSbAuthTokenKey();
+    if (!k) return null;
+
+    const raw = window.localStorage.getItem(k);
+    if (!raw) return null;
+
+    const j = JSON.parse(raw);
+
+    // soporta varias formas
+    const s =
+      j?.currentSession ||
+      j?.data?.session ||
+      j?.session ||
+      j ||
+      null;
+
+    const access_token = s?.access_token || "";
+    const user = s?.user || null;
+
+    const uid = user?.id || null;
+    const email = user?.email || null;
+
+    if (!access_token || !uid) {
+      return null;
+    }
+
+    return { access_token, uid, email };
   } catch {
-    // ignore
+    return null;
   }
-  return getAccessTokenFromLocalStorage();
+}
+
+async function getAccessTokenBestEffort() {
+  // ✅ fuente principal: storage (si el SDK está colgado, esto sigue funcionando)
+  const ls = readSessionFromLocalStorage();
+  if (ls?.access_token) return ls.access_token;
+
+  // best-effort: SDK
+  try {
+    const { data } = await withTimeout(supabase.auth.getSession(), 6000, "getSession");
+    return data?.session?.access_token || "";
+  } catch {
+    return "";
+  }
 }
 
 async function fetchJsonWithTimeout(url, opts, ms, label) {
@@ -106,7 +137,7 @@ export default function TrackerGpsPage() {
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
 
-  // diag real (principal: session.user)
+  // diag real (uid/email)
   const [diag, setDiag] = useState({ uid: null, email: null });
 
   // gating
@@ -133,38 +164,30 @@ export default function TrackerGpsPage() {
   useEffect(() => { intervalSecRef.current = Number(intervalSec || 30); }, [intervalSec]);
   useEffect(() => { gateInfoRef.current = gateInfo || null; }, [gateInfo]);
 
-  // ✅ Fuente estable de uid/email (NO bloquea): getSession()
-  async function refreshAuthDiagFromSession() {
-    setStep("auth:getSession_for_diag");
-    const { data, error } = await withTimeout(supabase.auth.getSession(), 8000, "getSession");
-    if (error) {
-      setDiag({ uid: null, email: null });
-      return { uid: null, email: null, access_token: null };
+  // ✅ Auth diag: storage-first, SDK best-effort background
+  async function refreshAuthDiagStorageFirst() {
+    setStep("auth:read_storage");
+    const ls = readSessionFromLocalStorage();
+    if (ls?.uid) {
+      setDiag({ uid: ls.uid, email: ls.email || null });
+      return { uid: ls.uid, email: ls.email || null };
     }
-    const s = data?.session || null;
-    const u = s?.user || null;
-    const next = { uid: u?.id || null, email: u?.email || null };
-    setDiag(next);
-    return { ...next, access_token: s?.access_token || null };
-  }
 
-  // ✅ Best-effort: getUser() en background (NO bloquea)
-  function refreshAuthDiagBestEffortInBackground() {
-    setStep("auth:getUser_background");
-    // No await. No bloquear.
-    (async () => {
-      try {
-        const { data } = await withTimeout(supabase.auth.getUser(), 6000, "getUser");
-        const u = data?.user || null;
-        if (u?.id) {
-          setDiag({ uid: u.id, email: u.email || null });
-        }
-      } catch {
-        // ignoramos: no puede bloquear el tracker
-      } finally {
-        setStep("auth:diag_ok");
+    // Si no hay en storage, intentamos session best-effort (pero no bloquea el arranque demasiado)
+    setStep("auth:getSession_best_effort");
+    try {
+      const { data } = await withTimeout(supabase.auth.getSession(), 6000, "getSession");
+      const u = data?.session?.user || null;
+      if (u?.id) {
+        setDiag({ uid: u.id, email: u.email || null });
+        return { uid: u.id, email: u.email || null };
       }
-    })();
+    } catch {
+      // ignore
+    }
+
+    setDiag({ uid: null, email: null });
+    return { uid: null, email: null };
   }
 
   // ✅ Gate DB-driven con timeout duro
@@ -213,9 +236,9 @@ export default function TrackerGpsPage() {
 
     setStep("invite:accept_tracker_invite");
 
-    // Requiere uid real (desde session)
-    const sdiag = await refreshAuthDiagFromSession();
-    if (!sdiag?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+    // requiere uid real
+    const a = await refreshAuthDiagStorageFirst();
+    if (!a?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
 
     const res = await fetchJsonWithTimeout(
       "/api/auth/session",
@@ -357,11 +380,10 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     let alive = true;
 
-    // ✅ Si cambia auth, refrescar diag + gate
+    // Best-effort: si llega a dispararse el evento, refrescamos diag y gate.
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       if (!alive) return;
-      await refreshAuthDiagFromSession();
-      refreshAuthDiagBestEffortInBackground();
+      await refreshAuthDiagStorageFirst();
       await refreshGate();
     });
 
@@ -373,15 +395,13 @@ export default function TrackerGpsPage() {
         const q = readQuery();
         if (q.org_id) orgIdFromUrlRef.current = q.org_id;
 
-        // 1) Sesión (estable)
-        setStep("auth:ensure_session");
-        const sdiag = await refreshAuthDiagFromSession();
-        if (!sdiag?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+        // ✅ Auth: storage-first
+        const a = await refreshAuthDiagStorageFirst();
+        if (!a?.uid) {
+          throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+        }
 
-        // 2) Best-effort getUser (sin bloquear)
-        refreshAuthDiagBestEffortInBackground();
-
-        // 3) aceptar invite si viene
+        // aceptar invite si viene
         await acceptInviteIfPresent();
 
         if (!alive) return;
@@ -389,11 +409,9 @@ export default function TrackerGpsPage() {
         setStep("ready");
         setLoading(false);
 
-        // 4) gate + polling
         await refreshGate();
         gatePollRef.current = setInterval(() => refreshGate(), 15000);
 
-        // 5) gps
         setStep("gps:start");
         startTrackingAuto();
 
