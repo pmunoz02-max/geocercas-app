@@ -3,18 +3,22 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 /**
- * TrackerGpsPage — Universal + permanente
+ * TrackerGpsPage — Universal + permanente (DB-driven)
+ * - SIEMPRE usa auth.uid() real (supabase.auth.getUser()) para diag y consistencia.
+ * - Gate DB-driven (tracker_can_send) decide negocio. Frontend solo refleja.
  * - Acepta invite_id (si viene) llamando /api/auth/session action=accept_tracker_invite
- * - Luego el gate DB-driven (tracker_can_send) funciona con auth.uid() real
- * - Frontend NO decide negocio: solo refleja el gate
+ * - Envío GPS: usa session.access_token actual (fallback LS solo si no hay session).
  */
 
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 }
 
-// Best-effort token (para Edge function). Si migras totalmente a cookies HttpOnly,
-// lo ideal es que tu Edge valide vía cookie/server, pero por ahora mantenemos esto.
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Fallback legacy (solo si NO hay session). Mantener por robustez.
 function getAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
@@ -35,15 +39,17 @@ function getAccessTokenFromLocalStorage() {
 }
 
 async function getAccessTokenBestEffort() {
-  const ls = getAccessTokenFromLocalStorage();
-  if (ls) return ls;
-
+  // ✅ Prioridad: session actual (lo correcto)
   try {
     const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || "";
+    const token = data?.session?.access_token || "";
+    if (token) return token;
   } catch {
-    return "";
+    // ignore
   }
+
+  // Fallback: localStorage (solo si no hay session)
+  return getAccessTokenFromLocalStorage();
 }
 
 function readQuery() {
@@ -76,6 +82,9 @@ export default function TrackerGpsPage() {
   const [lastSend, setLastSend] = useState(null);
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
+
+  // ✅ diag real (auth user)
+  const [diag, setDiag] = useState({ uid: null, email: null });
 
   // gating
   const [canSend, setCanSend] = useState(false);
@@ -112,6 +121,24 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     gateInfoRef.current = gateInfo || null;
   }, [gateInfo]);
+
+  // ✅ SIEMPRE leer usuario real de Supabase (no de estado/caché)
+  async function refreshAuthDiag() {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        setDiag({ uid: null, email: null });
+        return { uid: null, email: null };
+      }
+      const u = data?.user || null;
+      const next = { uid: u?.id || null, email: u?.email || null };
+      setDiag(next);
+      return next;
+    } catch {
+      setDiag({ uid: null, email: null });
+      return { uid: null, email: null };
+    }
+  }
 
   // ✅ Gate DB-Driven definitivo: SIN org_id / tenant_id desde frontend
   async function refreshGate() {
@@ -159,8 +186,13 @@ export default function TrackerGpsPage() {
 
     if (!invite_id) return;
 
+    // Requiere sesión ya creada (auth.uid real)
+    const u = await refreshAuthDiag();
+    if (!u?.uid) {
+      throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+    }
+
     try {
-      // Llama al server (service role) que valida email, expiración, usado, etc.
       const r = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -174,7 +206,6 @@ export default function TrackerGpsPage() {
       const j = await r.json().catch(() => ({}));
 
       if (!r.ok || !j?.ok) {
-        // Si falla, mostramos error claro.
         const msg =
           j?.error ||
           j?.message ||
@@ -182,10 +213,8 @@ export default function TrackerGpsPage() {
         throw new Error(msg);
       }
 
-      // Limpieza de URL para que no se re-ejecute al refrescar
       stripQueryParams(["invite_id", "org_id", "tg_flow"]);
     } catch (e) {
-      // Si no acepta, mantenemos la pantalla pero con error explícito
       throw e;
     }
   }
@@ -200,10 +229,11 @@ export default function TrackerGpsPage() {
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
+    // 3) token
     const token = await getAccessTokenBestEffort();
     if (!token) {
       setSendStatus("error");
-      setSendError("No access_token. Abre el magic link de invitación nuevamente.");
+      setSendError("No access_token. Abre el link de invitación nuevamente.");
       return;
     }
 
@@ -212,12 +242,8 @@ export default function TrackerGpsPage() {
 
     const gi = gateInfoRef.current;
 
-    // ⚠️ Universal / robusto:
-    // - NO mandamos assignment_id (ya no existe en gate)
-    // - Mandamos org_id solo si vino en el link como CONTEXTO
-    //   (backend debe validar con tracker_can_send).
     const payload = {
-      org_id: orgIdFromUrlRef.current || undefined, // si tu Edge lo requiere
+      org_id: orgIdFromUrlRef.current || undefined, // solo contexto si tu Edge lo requiere
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: pos.coords.accuracy ?? null,
@@ -276,7 +302,6 @@ export default function TrackerGpsPage() {
       return;
     }
 
-    // intento suave de permisos
     if ("permissions" in navigator) {
       navigator.permissions
         .query({ name: "geolocation" })
@@ -308,6 +333,13 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     let alive = true;
 
+    // ✅ Al cambiar auth, refrescar diag + gate (para que admin→tracker se refleje)
+    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
+      if (!alive) return;
+      await refreshAuthDiag();
+      await refreshGate();
+    });
+
     (async () => {
       try {
         setLoading(true);
@@ -325,7 +357,10 @@ export default function TrackerGpsPage() {
           throw new Error("No autenticado. Abre el link de invitación nuevamente.");
         }
 
-        // 2) ✅ Universal: aceptar invitación si viene invite_id (vincula auth.uid real)
+        // ✅ 1b) diag real (uid/email) desde Supabase
+        await refreshAuthDiag();
+
+        // 2) aceptar invitación si viene invite_id
         await acceptInviteIfPresent();
 
         if (!alive) return;
@@ -346,6 +381,7 @@ export default function TrackerGpsPage() {
 
     return () => {
       alive = false;
+      sub?.subscription?.unsubscribe?.();
       if (gatePollRef.current) clearInterval(gatePollRef.current);
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
       startedRef.current = false;
@@ -369,15 +405,11 @@ export default function TrackerGpsPage() {
           <p className="text-sm text-gray-700 mb-4">{error}</p>
 
           <div className="text-xs bg-gray-100 p-3 rounded overflow-auto">
-            <div>
-              <b>permission:</b> {permission}
-            </div>
-            <div>
-              <b>canSend:</b> {String(canSend)}
-            </div>
-            <div>
-              <b>gateMsg:</b> {gateMsg}
-            </div>
+            <div><b>uid:</b> {diag?.uid || "—"}</div>
+            <div><b>email:</b> {diag?.email || "—"}</div>
+            <div><b>permission:</b> {permission}</div>
+            <div><b>canSend:</b> {String(canSend)}</div>
+            <div><b>gateMsg:</b> {gateMsg}</div>
           </div>
 
           <button
@@ -401,7 +433,10 @@ export default function TrackerGpsPage() {
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
-          Estado: <b>{canSend ? "Enviando ✅" : "En espera…"}</b> — {gateMsg}
+          Estado: <b>{canSend ? "Enviando ✅" : "En espera…"}</b> — {gateMsg}{" "}
+          <span className="opacity-80">
+            diag={JSON.stringify({ uid: diag?.uid, email: diag?.email })}
+          </span>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
