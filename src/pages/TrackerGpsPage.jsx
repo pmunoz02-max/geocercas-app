@@ -4,11 +4,12 @@ import { supabase } from "../lib/supabaseClient";
 
 /**
  * TrackerGpsPage — Universal + permanente (DB-driven)
- * Fixes:
- * - Nunca se queda pegado en "Cargando..." => timeouts duros + step debug
- * - diag.uid/email SIEMPRE viene de supabase.auth.getUser() real
- * - refreshGate y session con Promise.race timeout
- * - fetch con AbortController timeout
+ *
+ * Fix definitivo:
+ * - NO bloquea en supabase.auth.getUser() (en algunos entornos puede colgarse).
+ * - Usa getSession() como fuente principal de uid/email (estable, sin red).
+ * - getUser() queda como "best-effort" en background (no bloqueante).
+ * - Timeouts duros + step debug visible.
  */
 
 function getSupabaseUrl() {
@@ -25,6 +26,25 @@ function withTimeout(promise, ms, label = "timeout") {
     t = setTimeout(() => reject(new Error(`${label}_after_${ms}ms`)), ms);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(t));
+}
+
+function readQuery() {
+  const url = new URL(window.location.href);
+  const invite_id = url.searchParams.get("invite_id") || "";
+  const org_id = url.searchParams.get("org_id") || "";
+  const tg_flow = url.searchParams.get("tg_flow") || "";
+  return { invite_id, org_id, tg_flow };
+}
+
+function stripQueryParams(keys = []) {
+  try {
+    const url = new URL(window.location.href);
+    keys.forEach((k) => url.searchParams.delete(k));
+    const next = url.pathname + (url.search ? url.search : "") + (url.hash || "");
+    window.history.replaceState({}, "", next);
+  } catch {
+    // noop
+  }
 }
 
 // Fallback legacy (solo si NO hay session). Mantener por robustez.
@@ -58,25 +78,6 @@ async function getAccessTokenBestEffort() {
   return getAccessTokenFromLocalStorage();
 }
 
-function readQuery() {
-  const url = new URL(window.location.href);
-  const invite_id = url.searchParams.get("invite_id") || "";
-  const org_id = url.searchParams.get("org_id") || "";
-  const tg_flow = url.searchParams.get("tg_flow") || "";
-  return { invite_id, org_id, tg_flow };
-}
-
-function stripQueryParams(keys = []) {
-  try {
-    const url = new URL(window.location.href);
-    keys.forEach((k) => url.searchParams.delete(k));
-    const next = url.pathname + (url.search ? url.search : "") + (url.hash || "");
-    window.history.replaceState({}, "", next);
-  } catch {
-    // noop
-  }
-}
-
 async function fetchJsonWithTimeout(url, opts, ms, label) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
@@ -105,6 +106,7 @@ export default function TrackerGpsPage() {
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
 
+  // diag real (principal: session.user)
   const [diag, setDiag] = useState({ uid: null, email: null });
 
   // gating
@@ -127,47 +129,49 @@ export default function TrackerGpsPage() {
   const acceptedInviteRef = useRef(false);
   const orgIdFromUrlRef = useRef("");
 
-  useEffect(() => {
-    canSendRef.current = !!canSend;
-  }, [canSend]);
+  useEffect(() => { canSendRef.current = !!canSend; }, [canSend]);
+  useEffect(() => { intervalSecRef.current = Number(intervalSec || 30); }, [intervalSec]);
+  useEffect(() => { gateInfoRef.current = gateInfo || null; }, [gateInfo]);
 
-  useEffect(() => {
-    intervalSecRef.current = Number(intervalSec || 30);
-  }, [intervalSec]);
-
-  useEffect(() => {
-    gateInfoRef.current = gateInfo || null;
-  }, [gateInfo]);
-
-  // ✅ SIEMPRE leer usuario real de Supabase
-  async function refreshAuthDiag() {
-    setStep("auth:getUser");
-    const { data, error } = await withTimeout(
-      supabase.auth.getUser(),
-      8000,
-      "getUser"
-    );
-
+  // ✅ Fuente estable de uid/email (NO bloquea): getSession()
+  async function refreshAuthDiagFromSession() {
+    setStep("auth:getSession_for_diag");
+    const { data, error } = await withTimeout(supabase.auth.getSession(), 8000, "getSession");
     if (error) {
       setDiag({ uid: null, email: null });
-      return { uid: null, email: null };
+      return { uid: null, email: null, access_token: null };
     }
-
-    const u = data?.user || null;
+    const s = data?.session || null;
+    const u = s?.user || null;
     const next = { uid: u?.id || null, email: u?.email || null };
     setDiag(next);
-    return next;
+    return { ...next, access_token: s?.access_token || null };
+  }
+
+  // ✅ Best-effort: getUser() en background (NO bloquea)
+  function refreshAuthDiagBestEffortInBackground() {
+    setStep("auth:getUser_background");
+    // No await. No bloquear.
+    (async () => {
+      try {
+        const { data } = await withTimeout(supabase.auth.getUser(), 6000, "getUser");
+        const u = data?.user || null;
+        if (u?.id) {
+          setDiag({ uid: u.id, email: u.email || null });
+        }
+      } catch {
+        // ignoramos: no puede bloquear el tracker
+      } finally {
+        setStep("auth:diag_ok");
+      }
+    })();
   }
 
   // ✅ Gate DB-driven con timeout duro
   async function refreshGate() {
     try {
       setStep("gate:rpc tracker_can_send");
-      const { data, error } = await withTimeout(
-        supabase.rpc("tracker_can_send"),
-        9000,
-        "tracker_can_send"
-      );
+      const { data, error } = await withTimeout(supabase.rpc("tracker_can_send"), 9000, "tracker_can_send");
 
       if (error) {
         setCanSend(false);
@@ -177,8 +181,8 @@ export default function TrackerGpsPage() {
       }
 
       const row = Array.isArray(data) ? data?.[0] : data;
-
       const ok = !!row?.can_send;
+
       setCanSend(ok);
       setGateInfo(row || null);
 
@@ -190,7 +194,6 @@ export default function TrackerGpsPage() {
       const fm = Number(row?.frequency_minutes);
       const sec = Number.isFinite(fm) && fm > 0 ? fm * 60 : 300;
       setIntervalSec(sec);
-
       setGateMsg("Asignación activa ✅ (enviando automáticamente)");
     } catch (e) {
       setCanSend(false);
@@ -199,6 +202,7 @@ export default function TrackerGpsPage() {
     }
   }
 
+  // ✅ aceptar invitación si viene invite_id
   async function acceptInviteIfPresent() {
     if (acceptedInviteRef.current) return;
     acceptedInviteRef.current = true;
@@ -208,8 +212,10 @@ export default function TrackerGpsPage() {
     if (!invite_id) return;
 
     setStep("invite:accept_tracker_invite");
-    const u = await refreshAuthDiag();
-    if (!u?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+
+    // Requiere uid real (desde session)
+    const sdiag = await refreshAuthDiagFromSession();
+    if (!sdiag?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
 
     const res = await fetchJsonWithTimeout(
       "/api/auth/session",
@@ -354,43 +360,40 @@ export default function TrackerGpsPage() {
     // ✅ Si cambia auth, refrescar diag + gate
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       if (!alive) return;
-      await refreshAuthDiag();
+      await refreshAuthDiagFromSession();
+      refreshAuthDiagBestEffortInBackground();
       await refreshGate();
     });
 
     (async () => {
       try {
         setLoading(true);
+
         setStep("init:readQuery");
         const q = readQuery();
         if (q.org_id) orgIdFromUrlRef.current = q.org_id;
 
-        setStep("auth:getSession");
-        const { data, error } = await withTimeout(
-          supabase.auth.getSession(),
-          8000,
-          "getSession"
-        );
-        if (error) throw new Error(error.message);
+        // 1) Sesión (estable)
+        setStep("auth:ensure_session");
+        const sdiag = await refreshAuthDiagFromSession();
+        if (!sdiag?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
 
-        const s = data?.session;
-        if (!s) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
+        // 2) Best-effort getUser (sin bloquear)
+        refreshAuthDiagBestEffortInBackground();
 
-        await refreshAuthDiag();
-
-        // aceptar invite si viene (no siempre)
+        // 3) aceptar invite si viene
         await acceptInviteIfPresent();
 
         if (!alive) return;
 
-        setStep("ready:setLoadingFalse");
+        setStep("ready");
         setLoading(false);
 
-        // Gate inmediato + polling
+        // 4) gate + polling
         await refreshGate();
         gatePollRef.current = setInterval(() => refreshGate(), 15000);
 
-        // Arranque GPS
+        // 5) gps
         setStep("gps:start");
         startTrackingAuto();
 
@@ -508,9 +511,7 @@ export default function TrackerGpsPage() {
           Tip: si no hay asignación activa, el tracker queda en espera y empieza a enviar automáticamente cuando se active.
         </div>
 
-        <div className="mt-3 text-[11px] opacity-70">
-          step: {step}
-        </div>
+        <div className="mt-3 text-[11px] opacity-70">step: {step}</div>
       </div>
     </div>
   );
