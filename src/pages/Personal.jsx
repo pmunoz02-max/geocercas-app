@@ -3,12 +3,18 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
 
 /**
- * src/pages/Personal.jsx — v7
- * - ✅ Orden al presionar ACTUALIZAR:
- *   1) Vigentes y activos (vigente=true AND activo_bool=true AND !is_deleted)
+ * src/pages/Personal.jsx — v22
+ *
+ * FIXES:
+ * - ❌ No inserta/actualiza columna "activo" (GENERATED)
+ * - Usa "vigente" como estado editable
+ * - Mantiene filtro org_id
+ * - ✅ Fallback de rol: si AuthContext no entrega role, lo lee de app_user_roles / memberships
+ * - ✅ ORDEN ESTABLE al cargar y al presionar ACTUALIZAR:
+ *   1) Vigentes + activos (vigente=true AND activo_bool=true AND NOT deleted)
  *   2) No vigentes (pero no eliminados)
- *   3) Eliminados al final
- *   Dentro de cada grupo: apellido, nombre (alfabético)
+ *   3) Eliminados al final (is_deleted=true OR deleted_at not null)
+ *   Dentro de cada grupo: apellido, nombre, email
  */
 
 function cls(...a) {
@@ -53,7 +59,11 @@ function buildOrFilter(q) {
   ].join(",");
 }
 
-function normStr(v) {
+/* =========================
+   ORDEN UNIVERSAL (cliente)
+========================= */
+
+function norm(v) {
   return String(v || "").trim().toLowerCase();
 }
 
@@ -62,36 +72,41 @@ function isDeletedRow(r) {
 }
 
 function isVigenteActivaRow(r) {
-  const deleted = isDeletedRow(r);
-  if (deleted) return false;
+  if (isDeletedRow(r)) return false;
+
   const vigente = r?.vigente !== false;
+  // activo_bool existe en tu dataset; por si viene "activo" también lo aceptamos
   const activo = r?.activo_bool === true || r?.activo === true;
+
   return vigente && activo;
 }
 
 function rankRow(r) {
+  // 0: vigentes+activos
+  // 1: no vigentes (no eliminados)
+  // 2: eliminados
   if (isDeletedRow(r)) return 2;
   if (isVigenteActivaRow(r)) return 0;
   return 1;
 }
 
-function sortRows(rows) {
+function sortPersonal(rows) {
   const arr = Array.isArray(rows) ? [...rows] : [];
   arr.sort((a, b) => {
     const ra = rankRow(a);
     const rb = rankRow(b);
     if (ra !== rb) return ra - rb;
 
-    const last = normStr(a?.apellido).localeCompare(normStr(b?.apellido));
+    const last = norm(a?.apellido).localeCompare(norm(b?.apellido));
     if (last !== 0) return last;
 
-    const first = normStr(a?.nombre).localeCompare(normStr(b?.nombre));
+    const first = norm(a?.nombre).localeCompare(norm(b?.nombre));
     if (first !== 0) return first;
 
-    const email = normStr(a?.email).localeCompare(normStr(b?.email));
+    const email = norm(a?.email).localeCompare(norm(b?.email));
     if (email !== 0) return email;
 
-    return normStr(a?.id).localeCompare(normStr(b?.id));
+    return norm(a?.id).localeCompare(norm(b?.id));
   });
   return arr;
 }
@@ -100,18 +115,22 @@ export default function Personal() {
   const { loading, isAuthenticated, user, currentOrg, role, refreshContext } =
     useAuth();
 
+  // ✅ Rol efectivo (si AuthContext falla, lo resolvemos acá)
   const [effectiveRole, setEffectiveRole] = useState(role ?? null);
   const [roleBusy, setRoleBusy] = useState(false);
 
-  useEffect(() => setEffectiveRole(role ?? null), [role]);
+  useEffect(() => {
+    setEffectiveRole(role ?? null);
+  }, [role]);
 
   async function resolveRoleFallback() {
     if (!isAuthenticated || !user?.id || !currentOrg?.id) return;
-    if (role) return;
+    if (role) return; // ya hay rol en contexto
     if (roleBusy) return;
 
     setRoleBusy(true);
     try {
+      // 1) Intentar desde app_user_roles
       const { data: aur, error: aurErr } = await supabase
         .from("app_user_roles")
         .select("role")
@@ -119,6 +138,7 @@ export default function Personal() {
         .eq("org_id", currentOrg.id)
         .limit(1)
         .maybeSingle();
+
       if (aurErr) throw aurErr;
 
       if (aur?.role) {
@@ -127,6 +147,7 @@ export default function Personal() {
         return;
       }
 
+      // 2) Fallback a memberships
       const { data: mem, error: memErr } = await supabase
         .from("memberships")
         .select("role")
@@ -134,6 +155,7 @@ export default function Personal() {
         .eq("org_id", currentOrg.id)
         .limit(1)
         .maybeSingle();
+
       if (memErr) throw memErr;
 
       if (mem?.role) {
@@ -181,7 +203,13 @@ export default function Personal() {
   });
 
   function resetForm() {
-    setForm({ nombre: "", apellido: "", telefono: "", email: "", vigente: true });
+    setForm({
+      nombre: "",
+      apellido: "",
+      telefono: "",
+      email: "",
+      vigente: true,
+    });
   }
 
   function openEdit(row) {
@@ -228,7 +256,7 @@ export default function Personal() {
       const { data, error } = await qy;
       if (error) throw error;
 
-      setRows(sortRows(data || []));
+      setRows(sortPersonal(Array.isArray(data) ? data : []));
     } catch (e) {
       console.error("[Personal] load error", e);
       setMsg(e?.message || "No se pudo cargar el listado.");
@@ -238,7 +266,12 @@ export default function Personal() {
   }
 
   useEffect(() => {
-    if (!loading && isAuthenticated && currentOrg?.id) load();
+    const run = async () => {
+      if (!loading && isAuthenticated && currentOrg?.id) {
+        await load();
+      }
+    };
+    run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, isAuthenticated, currentOrg?.id]);
 
@@ -246,7 +279,10 @@ export default function Personal() {
     if (!canEdit) return;
 
     const v = validate();
-    if (v) return setMsg(v);
+    if (v) {
+      setMsg(v);
+      return;
+    }
 
     setMsg("");
     setBusy(true);
@@ -258,6 +294,7 @@ export default function Personal() {
         telefono: form.telefono?.trim() || null,
         email: form.email.trim(),
         vigente: !!form.vigente,
+        // ✅ NO enviar "activo" (GENERATED)
       };
 
       if (editing?.id) {
@@ -294,6 +331,7 @@ export default function Personal() {
         .eq("id", row.id)
         .eq("org_id", currentOrg.id);
       if (error) throw error;
+
       await load();
     } catch (e) {
       console.error("[Personal] toggle vigente error", e);
@@ -305,7 +343,8 @@ export default function Personal() {
 
   async function onDelete(row) {
     if (!canEdit) return;
-    if (!window.confirm("¿Eliminar este registro?")) return;
+    const ok = window.confirm("¿Eliminar este registro?");
+    if (!ok) return;
 
     setMsg("");
     setBusy(true);
@@ -325,6 +364,7 @@ export default function Personal() {
           .eq("org_id", currentOrg.id);
         if (error) throw error;
       }
+
       await load();
     } catch (e) {
       console.error("[Personal] delete error", e);
@@ -362,7 +402,9 @@ export default function Personal() {
   }
 
   const roleLabelUi =
-    roleBusy && !effectiveRole ? "CARGANDO…" : (roleLower || "sin rol").toUpperCase();
+    roleBusy && !effectiveRole
+      ? "CARGANDO…"
+      : (roleLower || "sin rol").toUpperCase();
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
@@ -370,8 +412,10 @@ export default function Personal() {
         <div>
           <h1 className="text-2xl font-semibold mb-1 text-slate-900">Personal</h1>
           <div className="text-sm text-slate-700">
-            Rol: <span className="font-semibold text-slate-900">{roleLabelUi}</span>{" "}
-            · Org: <span className="font-mono text-slate-700">{currentOrg.id}</span>
+            Rol:{" "}
+            <span className="font-semibold text-slate-900">{roleLabelUi}</span>{" "}
+            · Org:{" "}
+            <span className="font-mono text-slate-700">{currentOrg.id}</span>
           </div>
         </div>
 
@@ -428,20 +472,33 @@ export default function Personal() {
         <table className="w-full text-sm text-slate-800">
           <thead className="bg-slate-50">
             <tr>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Nombre</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Teléfono</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Email</th>
-              <th className="text-left px-4 py-3 font-semibold text-slate-700">Estado</th>
-              <th className="text-right px-4 py-3 font-semibold text-slate-700">Acciones</th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Nombre
+              </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Teléfono
+              </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Email
+              </th>
+              <th className="text-left px-4 py-3 font-semibold text-slate-700">
+                Estado
+              </th>
+              <th className="text-right px-4 py-3 font-semibold text-slate-700">
+                Acciones
+              </th>
             </tr>
           </thead>
 
           <tbody>
             {rows.map((r) => {
-              const deleted = !!r.is_deleted || !!r.deleted_at;
+              const deleted = isDeletedRow(r);
               const vigente = r.vigente !== false && !deleted;
               return (
-                <tr key={r.id} className="border-t border-slate-200 hover:bg-slate-50 transition">
+                <tr
+                  key={r.id}
+                  className="border-t border-slate-200 hover:bg-slate-50 transition"
+                >
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900">
                       {r.nombre || ""} {r.apellido || ""}
@@ -498,7 +555,10 @@ export default function Personal() {
 
             {!busy && rows.length === 0 && (
               <tr className="border-t border-slate-200">
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50"
+                >
                   No hay registros en esta organización.
                 </td>
               </tr>
@@ -527,7 +587,9 @@ export default function Personal() {
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.apellido}
-              onChange={(e) => setForm((s) => ({ ...s, apellido: e.target.value }))}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, apellido: e.target.value }))
+              }
             />
           </div>
 
@@ -536,7 +598,9 @@ export default function Personal() {
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.telefono}
-              onChange={(e) => setForm((s) => ({ ...s, telefono: e.target.value }))}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, telefono: e.target.value }))
+              }
             />
           </div>
 
@@ -553,7 +617,9 @@ export default function Personal() {
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) => setForm((s) => ({ ...s, vigente: e.target.checked }))}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, vigente: e.target.checked }))
+              }
             />
             <span className="text-slate-800">Vigente</span>
           </div>
