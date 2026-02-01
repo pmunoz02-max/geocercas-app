@@ -1,9 +1,8 @@
 // src/lib/geocercasApi.js
 // ============================================================
 // CANONICAL client for /api/geocercas (TENANT-SAFE)
-// - NO orgId
-// - NO tenantId
-// - Backend resuelve contexto vía RPC
+// - Backend puede devolver múltiples orgs (si el usuario es miembro de varias)
+// - La UI debe scoping por orgId activo (para evitar mezcla visual)
 // ============================================================
 
 function pickErrorMessage(payload) {
@@ -56,13 +55,7 @@ async function requestJson(url, { method = "GET", body } = {}) {
   return payload;
 }
 
-/**
- * LIST (canonical)
- * Backend decides tenant + org
- */
-export async function listGeocercas() {
-  const data = await requestJson("/api/geocercas", { method: "GET" });
-
+function normalizeRows(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.rows)) return data.rows;
   if (Array.isArray(data?.data)) return data.data;
@@ -70,17 +63,40 @@ export async function listGeocercas() {
 }
 
 /**
+ * LIST (canonical)
+ * Backend decides tenant + org(s)
+ */
+export async function listGeocercas() {
+  const data = await requestJson("/api/geocercas", { method: "GET" });
+  return normalizeRows(data);
+}
+
+/**
+ * LIST (scoped by active org)
+ * Universal fix for "mix" when user belongs to multiple orgs.
+ * This does NOT trust the client for access — it only scopes UI.
+ */
+export async function listGeocercasForOrg(orgId) {
+  if (!orgId) return [];
+  const rows = await listGeocercas();
+  // Importante: requiere que el backend incluya org_id en las filas.
+  return rows.filter((r) => String(r.org_id ?? "") === String(orgId));
+}
+
+/**
  * GET ONE
  */
 export async function getGeocerca(id) {
   if (!id) throw new Error("getGeocerca requiere id");
-  const data = await requestJson(`/api/geocercas?id=${id}`, { method: "GET" });
+  const data = await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, {
+    method: "GET",
+  });
   return data?.row || data?.data || data;
 }
 
 /**
  * UPSERT (canonical)
- * Backend ignora org/tenant del cliente
+ * Backend ignora org/tenant del cliente (si lo valida por sesión)
  */
 export async function upsertGeocerca(payload = {}) {
   if (!payload?.nombre && !payload?.name) {
@@ -105,5 +121,7 @@ export async function upsertGeocerca(payload = {}) {
  */
 export async function deleteGeocerca(id) {
   if (!id) throw new Error("deleteGeocerca requiere id");
-  return await requestJson(`/api/geocercas?id=${id}`, { method: "DELETE" });
+  return await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
