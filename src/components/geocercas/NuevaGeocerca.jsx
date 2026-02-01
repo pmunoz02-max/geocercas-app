@@ -891,25 +891,24 @@ export default function NuevaGeocerca() {
 
             {filterSoftDeleted(geofenceList).map((g) => (
               <label
-                key={`${g.source}-${g.id || ""}-${g.nombre}`}
-                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedNames.has(g.nombre)}
-                  onChange={() => {
-                    setSelectedNames((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(g.nombre)) next.delete(g.nombre);
-                      else next.add(g.nombre);
-                      return next;
-                    });
-                    setLastSelectedName(g.nombre);
-                  }}
-                />
-                report
-                <span className="text-[11px] md:text-xs text-slate-100">{g.nombre}</span>
-              </label>
+  key={`${g.source}-${g.id || ""}-${g.nombre}`}
+  className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
+>
+  <input
+    type="checkbox"
+    checked={selectedNames.has(g.nombre)}
+    onChange={() => {
+      setSelectedNames((prev) => {
+        const next = new Set(prev);
+        if (next.has(g.nombre)) next.delete(g.nombre);
+        else next.add(g.nombre);
+        return next;
+      });
+      setLastSelectedName(g.nombre);
+    }}
+  />
+  <span className="text-[11px] md:text-xs text-slate-100">{g.nombre}</span>
+</label>
             ))}
           </div>
 
