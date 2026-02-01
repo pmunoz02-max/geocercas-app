@@ -11,7 +11,6 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
-// Cliente "anon" SOLO para disparar el email OTP/magiclink (si mantienes este endpoint)
 const supabaseAnon = createClient(supabaseUrl, anonKey, {
   auth: { persistSession: false },
 });
@@ -46,16 +45,11 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 
 /**
  * Construye redirectTo CANÓNICO para AuthCallback (React).
- * Muy importante: TODO lo que TrackerGpsPage necesita debe ir dentro de "next".
+ * Todo lo que TrackerGpsPage necesita debe ir dentro de "next".
  */
-function buildRedirectTo(params: {
-  org_id: string;
-  invite_id: string;
-  email: string;
-}) {
+function buildRedirectTo(params: { org_id: string; invite_id: string; email: string }) {
   const { org_id, invite_id, email } = params;
 
-  // next: incluye query completa
   const next =
     `/tracker-gps` +
     `?tg_flow=tracker` +
@@ -63,7 +57,6 @@ function buildRedirectTo(params: {
     `&invite_id=${encodeURIComponent(invite_id)}` +
     `&invited_email=${encodeURIComponent(email)}`;
 
-  // callback frontend
   const redirectTo =
     `${PUBLIC_SITE_URL}/auth/callback` +
     `?next=${encodeURIComponent(next)}` +
@@ -71,6 +64,19 @@ function buildRedirectTo(params: {
     `&invited_email=${encodeURIComponent(email)}`;
 
   return redirectTo;
+}
+
+type TrackerInviteRow = {
+  id: string;
+  created_at: string | null;
+  expires_at: string | null;
+};
+
+function msSince(iso: string | null | undefined) {
+  if (!iso) return Number.POSITIVE_INFINITY;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
+  return Date.now() - t;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -83,9 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
     if (!anonKey) {
-      return res.status(500).json({
-        error: "Missing env SUPABASE_ANON_KEY",
-      });
+      return res.status(500).json({ error: "Missing env SUPABASE_ANON_KEY" });
     }
 
     const authHeader = req.headers.authorization || "";
@@ -104,10 +108,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const email = normEmail(body.email);
     const org_id = String(body.org_id || "").trim();
 
+    // modo opcional (no obligatorio)
+    // "invite" o "resend" (para UX). La lógica es idéntica (idempotente).
+    const mode = String(body.mode || "invite").trim().toLowerCase();
+
     if (!email || !email.includes("@")) return res.status(400).json({ error: "Invalid email" });
     if (!isUuid(org_id)) return res.status(400).json({ error: "Invalid org_id (must be UUID)" });
 
-    // 2) Asegurar usuario (solo para que exista en auth y el link funcione)
+    // 2) Asegurar usuario en auth (para que el magiclink funcione)
     let trackerUserId = await findUserIdByEmail(email);
     if (!trackerUserId) {
       const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -122,27 +130,79 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!trackerUserId) trackerUserId = await findUserIdByEmail(email);
     if (!trackerUserId) return res.status(500).json({ error: "Could not resolve tracker user id" });
 
-    // 3) Crear INVITE (fuente de verdad del onboarding)
-    const { data: inv, error: invErr } = await supabaseAdmin
-      .from("tracker_invites")
-      .insert({
-        org_id,
-        email_norm: email,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .select("id")
-      .single();
+    // 3) IDPOTENCIA: reusar invite vigente si existe
+    // Cooldown anti-spam: si hay uno creado hace < 60s, reusar también
+    const COOLDOWN_MS = 60_000;
 
-    if (invErr || !inv?.id) {
-      return res.status(500).json({ error: invErr?.message || "Failed to create tracker invite" });
+    const { data: existing, error: exErr } = await supabaseAdmin
+      .from("tracker_invites")
+      .select("id, created_at, expires_at")
+      .eq("org_id", org_id)
+      .eq("email_norm", email)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (exErr) {
+      return res.status(500).json({ error: exErr.message || "Failed to query tracker invites" });
     }
 
-    const invite_id = String(inv.id);
+    let invite_id: string;
+    let reused_invite = false;
 
-    // ✅ 4) redirectTo correcto (TODO dentro de next)
+    if (existing?.id) {
+      // Si está vigente, lo reusamos (y evitamos spamear la tabla)
+      invite_id = String(existing.id);
+      reused_invite = true;
+
+      // Si está vigente pero fue creado hace muchísimo, igual lo reusamos (tu requerimiento).
+      // (Si alguna vez quieres que reenvío genere un nuevo invite, me lo dices y lo ajustamos).
+    } else {
+      // No hay vigente → crear uno nuevo
+      const { data: inv, error: invErr } = await supabaseAdmin
+        .from("tracker_invites")
+        .insert({
+          org_id,
+          email_norm: email,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .select("id")
+        .single();
+
+      if (invErr || !inv?.id) {
+        return res.status(500).json({ error: invErr?.message || "Failed to create tracker invite" });
+      }
+
+      invite_id = String(inv.id);
+      reused_invite = false;
+    }
+
+    // 3.1) Cooldown: si no hubo vigente, pero hay uno MUY reciente (race/spam), reusar el más reciente
+    // (Esto solo es un airbag extra)
+    if (!reused_invite) {
+      const { data: recent, error: recErr } = await supabaseAdmin
+        .from("tracker_invites")
+        .select("id, created_at, expires_at")
+        .eq("org_id", org_id)
+        .eq("email_norm", email)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!recErr && recent?.id) {
+        const age = msSince(recent.created_at);
+        if (age < COOLDOWN_MS) {
+          invite_id = String(recent.id);
+          reused_invite = true;
+        }
+      }
+    }
+
+    // 4) redirectTo correcto (TODO dentro de next)
     const redirectTo = buildRedirectTo({ org_id, invite_id, email });
 
-    // 5) Enviar magic link
+    // 5) Enviar magic link (reenvío real, sin crear filas de más)
     const { error: otpErr } = await supabaseAnon.auth.signInWithOtp({
       email,
       options: {
@@ -155,12 +215,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       ok: true,
+      mode,
       email,
       email_sent: true,
       org_id,
       invite_id,
+      reused_invite,
       redirect_to: redirectTo,
-      note: "Invite tracker: next incluye org_id+invite_id+invited_email, para llegar directo a /tracker-gps.",
+      note:
+        "Idempotente: si existe invite vigente para (org_id,email_norm) se reutiliza y se reenvía email.",
     });
   } catch (e: any) {
     console.error("invite-tracker error", e);

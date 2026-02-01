@@ -77,10 +77,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600">
-                  {" "}
-                  — {selected.email || "(sin email)"}
-                </span>
+                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -119,9 +116,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
                   }}
                 >
                   <div className="text-sm font-medium">{p.full_name}</div>
-                  <div className="text-xs text-gray-600">
-                    {p.email || "(sin email)"}
-                  </div>
+                  <div className="text-xs text-gray-600">{p.email || "(sin email)"}</div>
                 </button>
               ))
             )}
@@ -132,40 +127,12 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
   );
 }
 
-/**
- * Convierte el error del trigger/enforcement en un mensaje UX claro.
- */
-function humanizePlanLimitError(errMsg) {
-  const s = String(errMsg || "");
-
-  if (/plan limit reached/i.test(s)) {
-    const m = s.match(/plan limit reached:\s*([a-z0-9_-]+)\s*allows\s*(\d+)/i);
-    const plan = (m?.[1] || "starter").trim();
-    const limit = m?.[2] ? Number(m[2]) : null;
-    const planLabel = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "Starter";
-    if (Number.isFinite(limit)) {
-      return `Has alcanzado el límite de tu plan ${planLabel} (${limit} tracker vigente).`;
-    }
-    return `Has alcanzado el límite de trackers vigentes de tu plan (${planLabel}).`;
-  }
-
-  if (/P0001/.test(s) && /tracker/i.test(s) && /limit/i.test(s)) {
-    return "Has alcanzado el límite de trackers vigentes de tu plan.";
-  }
-
-  return "";
-}
-
 function planLabel(planCode) {
   const s = String(planCode || "").trim();
   if (!s) return "";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/**
- * Lee el usage desde Supabase RPC (sin Vercel serverless).
- * Retorna null si no hay orgId o si falla por permisos/red, etc.
- */
 async function fetchPlanUsage(orgId) {
   if (!orgId) return null;
 
@@ -173,11 +140,7 @@ async function fetchPlanUsage(orgId) {
     org_id: orgId,
   });
 
-  if (error) {
-    // No rompemos la pantalla si falla: el trigger DB sigue protegiendo igual
-    return null;
-  }
-
+  if (error) return null;
   if (data && typeof data === "object" && "over_limit" in data) return data;
   return null;
 }
@@ -198,10 +161,8 @@ export default function InvitarTracker() {
   const [success, setSuccess] = useState(null);
   const [inviteData, setInviteData] = useState(null);
 
-  // Plan usage
   const [planUsage, setPlanUsage] = useState(null);
 
-  // ✅ orgId SOLO desde currentOrg.id
   const orgId =
     currentOrg && isUuid(currentOrg.id) ? String(currentOrg.id).trim() : "";
 
@@ -241,12 +202,10 @@ export default function InvitarTracker() {
   }
 
   function getAuthHeadersOrThrow() {
-    // Este flujo ya usa /api/personal y /api/invite-tracker que requieren Bearer
     const token = getSupabaseAccessTokenFromLocalStorage();
-    if (!token)
-      throw new Error(
-        "No autenticado (sin access_token). Cierra sesión y vuelve a entrar."
-      );
+    if (!token) {
+      throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
+    }
     return { Authorization: `Bearer ${token}` };
   }
 
@@ -266,7 +225,6 @@ export default function InvitarTracker() {
       const url = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`;
       const res = await fetch(url, { headers: { ...getAuthHeadersOrThrow() } });
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok) throw new Error(data?.error || "No se pudo cargar el personal");
       setPersonalRaw(normalizeRows(data));
     } catch (e) {
@@ -304,64 +262,64 @@ export default function InvitarTracker() {
     else if (selectedPersonId) setEmail("");
   }, [selectedPersonId, selectedPerson]);
 
-  async function handleInvite(e) {
-    e.preventDefault();
+  const overLimit = planUsage?.over_limit === true;
+
+  async function sendInvite({ mode }) {
     setError(null);
     setSuccess(null);
     setInviteData(null);
 
-    if (!orgId) return setError("Organización no válida (currentOrg.id no es UUID).");
-    if (!selectedPersonId) return setError("Selecciona una persona.");
-    if (!email || !email.includes("@")) return setError("Email inválido.");
+    if (!orgId) throw new Error("Organización no válida (currentOrg.id no es UUID).");
+    if (!selectedPersonId) throw new Error("Selecciona una persona.");
+    if (!email || !email.includes("@")) throw new Error("Email inválido.");
 
+    const res = await fetch("/api/invite-tracker", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeadersOrThrow(),
+      },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        org_id: orgId,
+        person_id: selectedPersonId,
+        force_tracker_default: true,
+        mode, // "invite" | "resend"
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || "Error al enviar invitación");
+
+    return data;
+  }
+
+  async function handleInviteNew(e) {
+    e.preventDefault();
     try {
       setSending(true);
 
-      // ✅ Pre-check REAL (Supabase RPC)
+      // Solo bloqueamos "invitar nuevo" por plan.
       const usage = planUsage || (await fetchPlanUsage(orgId));
       if (usage?.over_limit === true) {
         const pLabel = planLabel(usage?.plan) || "Starter";
         const limit = usage?.tracker_limit_vigente;
         if (Number.isFinite(Number(limit))) {
-          setError(
+          throw new Error(
             `Has alcanzado el límite de tu plan ${pLabel} (${Number(limit)} tracker vigente).`
           );
-        } else {
-          setError(`Has alcanzado el límite de trackers vigentes de tu plan ${pLabel}.`);
         }
-        setPlanUsage(usage);
-        return;
+        throw new Error(`Has alcanzado el límite de trackers vigentes de tu plan ${pLabel}.`);
       }
 
-      const res = await fetch("/api/invite-tracker", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeadersOrThrow(),
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          org_id: orgId,
-          person_id: selectedPersonId,
-          force_tracker_default: true,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data?.error || "Error al invitar tracker";
-
-        // ✅ Airbag: si el trigger bloqueó, mostrar mensaje claro
-        const friendly = humanizePlanLimitError(msg);
-        if (friendly) throw new Error(friendly);
-
-        throw new Error(msg);
-      }
-
+      const data = await sendInvite({ mode: "invite" });
       setInviteData(data);
-      setSuccess("Email enviado ✅ Revisa bandeja de entrada / spam.");
+      setSuccess(
+        data?.reused_invite
+          ? "Invitación reenviada ✅ (reutilizando un link vigente). Revisa bandeja/spam."
+          : "Invitación enviada ✅ Revisa bandeja/spam."
+      );
 
-      // refresca usage después de invitar (si aplica)
       refreshPlanUsage();
     } catch (err) {
       setError(err.message || "Error inesperado");
@@ -370,11 +328,29 @@ export default function InvitarTracker() {
     }
   }
 
-  const overLimit = planUsage?.over_limit === true;
+  async function handleResend(e) {
+    e.preventDefault();
+    try {
+      setSending(true);
+
+      // ✅ Reenviar NO se bloquea por plan: NO agrega tracker, solo reenvía link.
+      const data = await sendInvite({ mode: "resend" });
+      setInviteData(data);
+      setSuccess(
+        data?.reused_invite
+          ? "Reenvío exitoso ✅ (link vigente). Revisa bandeja/spam."
+          : "Reenvío exitoso ✅ (nuevo link). Revisa bandeja/spam."
+      );
+    } catch (err) {
+      setError(err.message || "Error inesperado");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-6">Invitar Tracker</h1>
+      <h1 className="text-2xl font-semibold mb-6">Invitar / Reenviar Tracker</h1>
 
       {!orgId && (
         <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
@@ -386,30 +362,24 @@ export default function InvitarTracker() {
         </div>
       )}
 
-      {/* ✅ Banner de plan */}
       {planUsage && (
         <div
           className={`mb-4 p-3 rounded-lg border text-sm ${
-            overLimit
-              ? "border-amber-300 bg-amber-50 text-amber-900"
-              : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            overLimit ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"
           }`}
         >
-          <div className="font-medium">
-            Plan {planLabel(planUsage?.plan) || "—"}
-          </div>
+          <div className="font-medium">Plan {planLabel(planUsage?.plan) || "—"}</div>
           <div className="text-xs mt-1">
-            Trackers vigentes:{" "}
-            <b>{Number(planUsage?.trackers_vigentes_used ?? 0)}</b> /{" "}
+            Trackers vigentes: <b>{Number(planUsage?.trackers_vigentes_used ?? 0)}</b> /{" "}
             <b>{Number(planUsage?.tracker_limit_vigente ?? 0)}</b>
             {overLimit ? <span className="ml-2 font-medium">— Límite alcanzado</span> : null}
           </div>
-          {overLimit && (
+          {overLimit ? (
             <div className="text-xs mt-1">
-              Has alcanzado el límite de trackers vigentes de tu plan. Para agregar más,
-              necesitas actualizar el plan.
+              Puedes <b>reenviar</b> invitaciones (no agrega trackers), pero <b>no</b> invitar nuevos
+              trackers mientras estés en límite.
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -449,25 +419,29 @@ export default function InvitarTracker() {
           />
         </div>
 
-        <form onSubmit={handleInvite} className="mt-5">
-          {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
-          {success && <div className="text-green-700 text-sm mb-2">{success}</div>}
+        {error && <div className="text-red-600 text-sm mt-3">{error}</div>}
+        {success && <div className="text-green-700 text-sm mt-3">{success}</div>}
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
           <button
-            type="submit"
+            onClick={handleInviteNew}
             disabled={sending || !orgId || overLimit}
-            className="w-full mt-4 bg-emerald-600 text-white rounded-lg py-3 disabled:opacity-60"
+            className="w-full bg-emerald-600 text-white rounded-lg py-3 disabled:opacity-60"
             title={overLimit ? "Límite de plan alcanzado" : ""}
+            type="button"
           >
-            {sending ? "Enviando email..." : "Enviar invitación por email"}
+            {sending ? "Enviando..." : "Invitar NUEVO tracker"}
           </button>
 
-          {overLimit && (
-            <div className="mt-2 text-xs text-amber-800">
-              Has alcanzado el límite de tu plan. No puedes invitar más trackers vigentes.
-            </div>
-          )}
-        </form>
+          <button
+            onClick={handleResend}
+            disabled={sending || !orgId}
+            className="w-full bg-sky-600 text-white rounded-lg py-3 disabled:opacity-60"
+            type="button"
+          >
+            {sending ? "Enviando..." : "Reenviar invitación (mismo tracker)"}
+          </button>
+        </div>
 
         {!!inviteData?.email_sent && (
           <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
@@ -476,6 +450,11 @@ export default function InvitarTracker() {
               El tracker recibirá un link que lo lleva directo a <b>Tracker GPS</b>.
               <br />
               Si no lo ve, revisar <b>Spam</b>.
+              {inviteData?.reused_invite ? (
+                <div className="mt-1">
+                  <b>Nota:</b> Se reutilizó un invite vigente (no se creó una fila nueva).
+                </div>
+              ) : null}
             </div>
           </div>
         )}
