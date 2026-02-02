@@ -1,4 +1,11 @@
 // src/pages/TrackerDashboard.jsx
+// Dashboard de tracking en tiempo real
+//
+// - Obtiene la organización activa desde AuthContext (useAuth).
+// - Trackers: tabla personal (scoped por org_id)
+// - Geocercas: vista v_geocercas_tracker_ui (scoped por org_id)
+// - Posiciones: tabla tracker_positions (NO tiene org_id)
+//   => scoping universal por user_id (auth.users.id) de trackers pertenecientes a la org.
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
@@ -22,24 +29,35 @@ const TIME_WINDOWS = [
   { id: "24h", label: "24 horas", ms: 24 * 60 * 60 * 1000 },
 ];
 
-const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
+const TRACKER_COLORS = [
+  "#2563eb", // azul
+  "#16a34a", // verde
+  "#f97316", // naranja
+  "#dc2626", // rojo
+  "#7c3aed", // violeta
+  "#0d9488", // teal
+];
 
 function formatDateTime(dtString) {
   if (!dtString) return "-";
   try {
-    return new Date(dtString).toLocaleString();
+    const d = new Date(dtString);
+    return d.toLocaleString();
   } catch {
     return dtString;
   }
 }
+
 function formatTime(dtString) {
   if (!dtString) return "-";
   try {
-    return new Date(dtString).toLocaleTimeString();
+    const d = new Date(dtString);
+    return d.toLocaleTimeString();
   } catch {
     return dtString;
   }
 }
+
 function safeJson(input) {
   if (!input) return null;
   if (typeof input === "object") return input;
@@ -53,13 +71,17 @@ function safeJson(input) {
   return null;
 }
 
-// ✅ CLAVE: tracker_positions.user_id debe coincidir con personal.user_id (auth.users.id)
+// ✅ Resolver universal del auth uid del tracker
+// Regla: tracker_positions.user_id == auth.users.id
+// En tu app, personal.owner_id es ese auth uid.
+// Además, ya estás creando/sincronizando personal.user_id = owner_id (arreglo universal).
 function resolveTrackerAuthId(row) {
-  return row?.user_id ? String(row.user_id) : null;
+  return row?.user_id || row?.owner_id || null;
 }
 
 export default function TrackerDashboard() {
   const { currentOrg } = useAuth();
+
   const orgId =
     typeof currentOrg === "string"
       ? currentOrg
@@ -77,47 +99,51 @@ export default function TrackerDashboard() {
   const [trackers, setTrackers] = useState([]);
   const [geofences, setGeofences] = useState([]);
 
-  // ---------------- TRACKERS (personal) ----------------
+  // -----------------------------------------------------------------------
+  // FETCH HELPERS
+  // -----------------------------------------------------------------------
+
+  // 🔹 TRACKERS: tabla personal, filtrada por org_id
   const fetchTrackers = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
-    // ✅ NO .order("nombre") (te estaba dando 400)
+    setErrorMsg("");
+
+    // ✅ select("*") para no romper por columnas (universal)
     const { data, error } = await supabase
       .from("personal")
       .select("*")
-      .eq("org_id", currentOrgId);
+      .eq("org_id", currentOrgId)
+      .order("nombre", { ascending: true });
 
     if (error) {
-      console.error("[TrackerDashboard] error fetching trackers", error);
-      setErrorMsg("Error al cargar trackers (personal)");
+      console.error("[TrackerDashboard] error fetching trackers (personal)", error);
+      setErrorMsg("Error al cargar trackers (personal).");
       setTrackers([]);
       return;
     }
 
     const arr = Array.isArray(data) ? data : [];
 
-    // filtros en memoria
-    const activos = arr.filter((p) => {
-      const activo = (p?.activo_bool ?? true) === true;
-      const vigente = (p?.vigente ?? true) === true;
-      const notDeleted = (p?.is_deleted ?? false) === false;
-      const hasUserId = !!resolveTrackerAuthId(p);
-      return activo && vigente && notDeleted && hasUserId;
-    });
+    const activos =
+      arr.filter(
+        (p) =>
+          (p.activo_bool ?? true) === true &&
+          (p.vigente ?? true) === true &&
+          (p.is_deleted ?? false) === false
+      ) ?? [];
 
-    // orden en memoria (tolerante)
-    activos.sort((a, b) => {
-      const la = (a?.nombre || a?.email || a?.id || "").toString().toLowerCase();
-      const lb = (b?.nombre || b?.email || b?.id || "").toString().toLowerCase();
-      return la.localeCompare(lb);
-    });
+    // Solo trackers que tengan auth uid resoluble (user_id/owner_id)
+    const conUid = activos.filter((p) => !!resolveTrackerAuthId(p));
 
-    setTrackers(activos);
+    setTrackers(conUid);
   }, []);
 
-  // ---------------- GEOCERCAS ----------------
+  // 🔹 GEOCERCAS: vista v_geocercas_tracker_ui, filtrada por org_id
   const fetchGeofences = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
+
+    setErrorMsg("");
 
     const { data, error } = await supabase
       .from("v_geocercas_tracker_ui")
@@ -126,25 +152,33 @@ export default function TrackerDashboard() {
 
     if (error) {
       console.error("[TrackerDashboard] error fetching geocercas", error);
-      setErrorMsg("No se pudieron cargar geocercas.");
+      setErrorMsg("No se pudieron cargar las geocercas (v_geocercas_tracker_ui).");
       setGeofences([]);
       return;
     }
 
     const arr = Array.isArray(data) ? data : [];
+
     arr.sort((a, b) => {
-      const la = (a?.name || a?.nombre || a?.id || "").toString().toLowerCase();
-      const lb = (b?.name || b?.nombre || b?.id || "").toString().toLowerCase();
-      return la.localeCompare(lb);
+      const labelA = (a.name || a.nombre || a.id || "").toString().toLowerCase();
+      const labelB = (b.name || b.nombre || b.id || "").toString().toLowerCase();
+      return labelA.localeCompare(labelB);
     });
 
     setGeofences(arr);
   }, []);
 
-  // ---------------- POSICIONES ----------------
+  // 🔹 POSICIONES: tracker_positions (scoping universal por auth user_id de trackers de la org)
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
+
+      // ✅ CLAVE: si aún no hay trackers, NO consultar (evita vaciar y “quedarse en 0”)
+      if (!trackers || trackers.length === 0) {
+        console.warn("[TrackerDashboard] fetchPositions skipped: trackers not loaded yet");
+        return;
+      }
+
       const { showSpinner } = options;
 
       try {
@@ -152,22 +186,31 @@ export default function TrackerDashboard() {
         setErrorMsg("");
 
         const windowConfig =
-          TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+          TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1]; // 6h default
         const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
         const allowedTrackerIds = (trackers || [])
           .map(resolveTrackerAuthId)
-          .filter(Boolean);
+          .filter(Boolean)
+          .map((x) => String(x));
 
         if (allowedTrackerIds.length === 0) {
           setPositions([]);
           return;
         }
 
-        const targetIds =
-          selectedTrackerId !== "all"
-            ? [String(selectedTrackerId)]
-            : allowedTrackerIds;
+        // Si se seleccionó un tracker, validamos que sea de esta org
+        let targetIds = allowedTrackerIds;
+        if (selectedTrackerId !== "all") {
+          const wanted = String(selectedTrackerId);
+          if (!allowedTrackerIds.includes(wanted)) {
+            // Evita mostrar “nada” por selección inválida
+            setSelectedTrackerId("all");
+            targetIds = allowedTrackerIds;
+          } else {
+            targetIds = [wanted];
+          }
+        }
 
         const { data, error } = await supabase
           .from("tracker_positions")
@@ -178,8 +221,8 @@ export default function TrackerDashboard() {
           .limit(1000);
 
         if (error) {
-          console.error("[TrackerDashboard] error fetching positions", error);
-          setErrorMsg("Error al cargar posiciones");
+          console.error("[TrackerDashboard] error fetching positions (tracker_positions)", error);
+          setErrorMsg("Error al cargar posiciones.");
           return;
         }
 
@@ -200,57 +243,63 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [selectedTrackerId, timeWindowId, trackers]
+    [trackers, selectedTrackerId, timeWindowId]
   );
 
-  const fetchAllSummary = useCallback(
-    async (currentOrgId) => {
-      if (!currentOrgId) return;
-      setLoadingSummary(true);
+  // -----------------------------------------------------------------------
+  // EFECTOS
+  // -----------------------------------------------------------------------
+
+  // 1) cargar trackers + geocercas al cambiar org
+  useEffect(() => {
+    if (!orgId) return;
+    setLoadingSummary(true);
+    (async () => {
       try {
-        await Promise.all([fetchTrackers(currentOrgId), fetchGeofences(currentOrgId)]);
+        await Promise.all([fetchTrackers(orgId), fetchGeofences(orgId)]);
       } finally {
         setLoadingSummary(false);
       }
-    },
-    [fetchGeofences, fetchTrackers]
-  );
+    })();
+  }, [orgId, fetchTrackers, fetchGeofences]);
 
-  // ---------------- EFECTOS ----------------
-  useEffect(() => {
-    if (!orgId) return;
-    fetchAllSummary(orgId);
-  }, [orgId, fetchAllSummary]);
-
-  useEffect(() => {
-    if (!orgId) return;
-    if (!trackers || trackers.length === 0) {
-      setPositions([]);
-      return;
-    }
-    fetchPositions(orgId, { showSpinner: true });
-  }, [orgId, trackers, timeWindowId, selectedTrackerId, fetchPositions]);
-
+  // 2) cuando ya hay trackers -> cargar posiciones (y cuando cambian filtros/ventana)
   useEffect(() => {
     if (!orgId) return;
     if (!trackers || trackers.length === 0) return;
-    const id = setInterval(() => fetchPositions(orgId, { showSpinner: false }), 30_000);
+    fetchPositions(orgId, { showSpinner: true });
+  }, [orgId, trackers, timeWindowId, selectedTrackerId, fetchPositions]);
+
+  // 3) polling
+  useEffect(() => {
+    if (!orgId) return;
+    if (!trackers || trackers.length === 0) return;
+    const id = setInterval(() => {
+      fetchPositions(orgId, { showSpinner: false });
+    }, 30_000);
     return () => clearInterval(id);
   }, [orgId, trackers, fetchPositions]);
 
-  // ---------------- DERIVED ----------------
+  // -----------------------------------------------------------------------
+  // DERIVED DATA
+  // -----------------------------------------------------------------------
+
   const filteredPositions = useMemo(() => {
     let pts = positions ?? [];
+
+    // ✅ filtro universal por geocerca_id
     if (selectedGeofenceId !== "all") {
       pts = pts.filter((p) => String(p?.geocerca_id || "") === String(selectedGeofenceId));
     }
+
     return pts;
   }, [positions, selectedGeofenceId]);
 
   const pointsByTracker = useMemo(() => {
     const map = new Map();
     for (const p of filteredPositions) {
-      const key = p?.user_id || "desconocido";
+      if (!p) continue;
+      const key = p.user_id || "desconocido";
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(p);
     }
@@ -260,25 +309,31 @@ export default function TrackerDashboard() {
   const totalTrackers = trackers.length;
   const totalGeofences = geofences.length;
   const totalPoints = filteredPositions.length;
+
   const lastPoint = filteredPositions[0] ?? null;
+  const lastPointTime = lastPoint?.recorded_at ?? null;
 
   const mapCenter = useMemo(() => {
     if (lastPoint && typeof lastPoint.lat === "number" && typeof lastPoint.lng === "number") {
       return [lastPoint.lat, lastPoint.lng];
     }
-    return [-0.19, -78.48];
+    return [-0.19, -78.48]; // Quito
   }, [lastPoint]);
+
+  // -----------------------------------------------------------------------
+  // RENDER
+  // -----------------------------------------------------------------------
 
   if (!orgId) {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-semibold mb-4">Dashboard de Tracking</h1>
-        <p className="text-red-600">No se pudo resolver orgId.</p>
+        <p className="text-red-600">
+          Error de configuración: no se pudo resolver la organización activa (<code>orgId</code>).
+        </p>
       </div>
     );
   }
-
-  const allowedTrackerIdsDebug = (trackers || []).map(resolveTrackerAuthId).filter(Boolean);
 
   return (
     <div className="p-3 md:p-6 space-y-3 md:space-y-4">
@@ -288,14 +343,13 @@ export default function TrackerDashboard() {
             Dashboard de Tracking en tiempo real
           </h1>
           <p className="text-xs md:text-sm text-slate-500 leading-snug">
-            Los puntos se actualizan automáticamente.
+            Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador y los trackers.
           </p>
-
-          {/* ✅ DEBUG visible (temporal) */}
           <p className="text-[11px] text-slate-500">
-            Org: <span className="font-mono">{String(orgId)}</span> · Trackers con user_id:{" "}
-            <span className="font-mono">{allowedTrackerIdsDebug.length}</span> ·
-            Puntos recibidos: <span className="font-mono">{positions.length}</span>
+            Org activa: <span className="font-mono">{String(orgId)}</span>{" "}
+            <span className="ml-2">
+              Trackers con UID: <b>{totalTrackers}</b>
+            </span>
           </p>
         </div>
 
@@ -318,16 +372,17 @@ export default function TrackerDashboard() {
           <label className="text-xs md:text-sm flex items-center gap-2">
             <span className="font-medium">Tracker:</span>
             <select
-              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[150px]"
+              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[180px]"
               value={selectedTrackerId}
               onChange={(e) => setSelectedTrackerId(e.target.value)}
             >
               <option value="all">Todos los trackers</option>
               {trackers.map((t) => {
                 const tid = resolveTrackerAuthId(t);
+                const label = t.nombre || t.email || String(tid || t.id);
                 return (
-                  <option key={t.id} value={String(tid)}>
-                    {t.nombre || t.email || String(tid)}
+                  <option key={t.id} value={String(tid || "")}>
+                    {label}
                   </option>
                 );
               })}
@@ -337,7 +392,7 @@ export default function TrackerDashboard() {
           <label className="text-xs md:text-sm flex items-center gap-2">
             <span className="font-medium">Geocerca:</span>
             <select
-              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[150px]"
+              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[180px]"
               value={selectedGeofenceId}
               onChange={(e) => setSelectedGeofenceId(e.target.value)}
             >
@@ -352,9 +407,10 @@ export default function TrackerDashboard() {
 
           <button
             type="button"
-            onClick={() => fetchPositions(orgId)}
+            onClick={() => fetchPositions(orgId, { showSpinner: true })}
             className="col-span-2 md:col-span-1 border rounded px-3 py-2 md:py-1 text-xs md:text-sm bg-white hover:bg-slate-50"
-            disabled={loading}
+            disabled={loading || !trackers?.length}
+            title={!trackers?.length ? "Primero deben cargar los trackers" : ""}
           >
             {loading ? "Actualizando..." : "Actualizar ahora"}
           </button>
@@ -368,11 +424,12 @@ export default function TrackerDashboard() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-3 md:gap-4">
+        {/* MAPA */}
         <div className="rounded-lg border bg-white overflow-hidden">
           <div className="border-b px-2 py-2 md:px-3 md:py-2 flex items-center justify-between">
             <span className="text-xs md:text-sm font-medium">Mapa de posiciones</span>
             <span className="text-[11px] md:text-xs text-slate-500">
-              Puntos en ventana seleccionada: <span className="font-semibold">{totalPoints}</span>
+              Puntos en ventana: <span className="font-semibold">{totalPoints}</span>
             </span>
           </div>
 
@@ -383,16 +440,29 @@ export default function TrackerDashboard() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
+              {/* GEOCERCAS */}
               {geofences.map((g) => {
                 const label = g.name || g.nombre || g.id;
 
                 const lat =
-                  typeof g.lat === "number" ? g.lat : typeof g.center_lat === "number" ? g.center_lat : null;
+                  typeof g.lat === "number"
+                    ? g.lat
+                    : typeof g.center_lat === "number"
+                    ? g.center_lat
+                    : null;
                 const lng =
-                  typeof g.lng === "number" ? g.lng : typeof g.center_lng === "number" ? g.center_lng : null;
+                  typeof g.lng === "number"
+                    ? g.lng
+                    : typeof g.center_lng === "number"
+                    ? g.center_lng
+                    : null;
 
                 const radius =
-                  typeof g.radius_m === "number" ? g.radius_m : typeof g.radius === "number" ? g.radius : 0;
+                  typeof g.radius_m === "number"
+                    ? g.radius_m
+                    : typeof g.radius === "number"
+                    ? g.radius
+                    : 0;
 
                 const shapeRaw = g.geojson || g.geometry || g.geom || g.polygon || null;
                 const shape = safeJson(shapeRaw) || shapeRaw || null;
@@ -440,31 +510,50 @@ export default function TrackerDashboard() {
                 return layers;
               })}
 
+              {/* POSICIONES */}
               {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
                 if (!pts.length) return null;
                 const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
 
-                const latlngs = pts
+                // pts vienen en orden desc por created_at (latest primero)
+                const latest = pts[0];
+
+                // Para la polilínea queremos orden cronológico asc
+                const chron = [...pts].reverse();
+                const positionsLatLng = chron
                   .map((p) => (typeof p.lat === "number" && typeof p.lng === "number" ? [p.lat, p.lng] : null))
                   .filter(Boolean);
 
-                const latest = pts[0];
-
                 return (
                   <React.Fragment key={trackerId}>
-                    {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
-                    {latest && (
+                    {positionsLatLng.length > 1 && (
+                      <Polyline positions={positionsLatLng} pathOptions={{ color, weight: 3 }} />
+                    )}
+
+                    {latest && typeof latest.lat === "number" && typeof latest.lng === "number" && (
                       <CircleMarker
                         center={[latest.lat, latest.lng]}
-                        radius={6}
-                        pathOptions={{ color, fillColor: color, fillOpacity: 0.9 }}
+                        radius={7}
+                        pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
                       >
                         <Tooltip direction="top">
                           <div className="text-xs">
-                            <div><strong>Tracker:</strong> {trackerId}</div>
-                            <div><strong>Hora:</strong> {formatTime(latest.recorded_at)}</div>
-                            <div><strong>Lat:</strong> {Number(latest.lat).toFixed(6)}</div>
-                            <div><strong>Lng:</strong> {Number(latest.lng).toFixed(6)}</div>
+                            <div>
+                              <strong>Tracker UID:</strong> {trackerId}
+                            </div>
+                            <div>
+                              <strong>Hora:</strong> {formatTime(latest.recorded_at)}
+                            </div>
+                            <div>
+                              <strong>Lat:</strong> {latest.lat.toFixed(6)}
+                            </div>
+                            <div>
+                              <strong>Lng:</strong> {latest.lng.toFixed(6)}
+                            </div>
+                            <div>
+                              <strong>Geocerca:</strong>{" "}
+                              {latest.geocerca_id ? String(latest.geocerca_id) : "—"}
+                            </div>
                           </div>
                         </Tooltip>
                       </CircleMarker>
@@ -472,29 +561,80 @@ export default function TrackerDashboard() {
                   </React.Fragment>
                 );
               })}
+
+              {!totalPoints && (
+                <div className="leaflet-bottom leaflet-left mb-2 ml-2">
+                  <div className="bg-white/90 text-xs px-2 py-1 rounded shadow">
+                    {trackers?.length
+                      ? "No hay posiciones para los filtros/ventana actuales."
+                      : "Cargando trackers… (luego se mostrarán posiciones)."}
+                  </div>
+                </div>
+              )}
             </MapContainer>
           </div>
         </div>
 
+        {/* RESUMEN */}
         <div className="space-y-3 md:space-y-4">
           <div className="rounded-lg border bg-white px-4 py-3">
             <h2 className="text-base md:text-lg font-semibold mb-2 md:mb-3">Resumen</h2>
+
             <dl className="space-y-1 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">Geocercas activas:</dt><dd>{totalGeofences}</dd>
+                <dt className="font-medium">Geocercas activas:</dt>
+                <dd>{totalGeofences}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">Trackers (perfiles con user_id):</dt><dd>{totalTrackers}</dd>
+                <dt className="font-medium">Trackers (con UID):</dt>
+                <dd>{totalTrackers}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">Puntos en mapa (filtro actual):</dt><dd>{totalPoints}</dd>
+                <dt className="font-medium">Puntos en mapa (filtro actual):</dt>
+                <dd>{totalPoints}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="font-medium">Último punto registrado:</dt>
-                <dd>{lastPoint?.recorded_at ? formatDateTime(lastPoint.recorded_at) : "-"}</dd>
+                <dd>{lastPointTime ? formatDateTime(lastPointTime) : "-"}</dd>
               </div>
             </dl>
-            {loadingSummary && <p className="mt-2 md:mt-3 text-xs text-slate-500">Actualizando…</p>}
+
+            {loadingSummary && (
+              <p className="mt-2 md:mt-3 text-xs text-slate-500">Actualizando datos…</p>
+            )}
+          </div>
+
+          <div className="rounded-lg border bg-white px-4 py-3 text-sm">
+            <h3 className="font-semibold mb-2">Leyenda de trackers</h3>
+            {trackers.length === 0 ? (
+              <p className="text-slate-500 text-sm">No hay trackers con UID en esta organización.</p>
+            ) : (
+              <ul className="space-y-1">
+                {trackers.map((t, idx) => {
+                  const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
+                  const tid = resolveTrackerAuthId(t);
+                  const label = t.nombre || t.email || String(tid || t.id);
+                  return (
+                    <li key={t.id} className="flex items-center gap-2">
+                      <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                      <span>{label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-lg border bg-white px-4 py-3 text-xs text-slate-500 space-y-1">
+            <div>
+              <strong>Tip:</strong> Si el tracker está enviando pero aquí no aparecen puntos:
+            </div>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Revisa la ventana de tiempo (1h / 6h / 24h).</li>
+              <li>Prueba “Todos los trackers”.</li>
+              <li>Si filtraste por geocerca, prueba con “Todas las geocercas”.</li>
+              <li>Confirma que el tracker esté enviando con el mismo usuario (UID) que figura en Personal.</li>
+            </ul>
           </div>
         </div>
       </div>
