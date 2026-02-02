@@ -77,7 +77,10 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
+                <span className="text-gray-600">
+                  {" "}
+                  — {selected.email || "(sin email)"}
+                </span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -163,9 +166,7 @@ export default function InvitarTracker() {
 
   const [planUsage, setPlanUsage] = useState(null);
 
-  const orgId =
-    currentOrg && isUuid(currentOrg.id) ? String(currentOrg.id).trim() : "";
-
+  const orgId = currentOrg && isUuid(currentOrg.id) ? String(currentOrg.id).trim() : "";
   const orgName = currentOrg?.name || "";
 
   const personal = useMemo(() => {
@@ -195,7 +196,7 @@ export default function InvitarTracker() {
           p.full_name ||
           p.name ||
           "(Sin nombre)",
-        email: (p.email_norm ?? p.email ?? "").trim(),
+        email: String(p.email_norm ?? p.email ?? "").trim(),
         org_id: p.org_id ?? null,
       }))
       .filter((p) => p.id);
@@ -290,7 +291,6 @@ export default function InvitarTracker() {
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error || "Error al enviar invitación");
-
     return data;
   }
 
@@ -333,7 +333,7 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      // ✅ Reenviar NO se bloquea por plan: NO agrega tracker, solo reenvía link.
+      // ✅ Reenviar NO se bloquea por plan
       const data = await sendInvite({ mode: "resend" });
       setInviteData(data);
       setSuccess(
@@ -365,7 +365,9 @@ export default function InvitarTracker() {
       {planUsage && (
         <div
           className={`mb-4 p-3 rounded-lg border text-sm ${
-            overLimit ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            overLimit
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900"
           }`}
         >
           <div className="font-medium">Plan {planLabel(planUsage?.plan) || "—"}</div>

@@ -44,8 +44,8 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 }
 
 /**
- * Construye redirectTo CANÓNICO para AuthCallback (React).
- * Todo lo que TrackerGpsPage necesita debe ir dentro de "next".
+ * Redirect canónico para AuthCallback (React).
+ * Todo lo que TrackerGpsPage necesita va dentro de "next".
  */
 function buildRedirectTo(params: { org_id: string; invite_id: string; email: string }) {
   const { org_id, invite_id, email } = params;
@@ -70,6 +70,7 @@ type TrackerInviteRow = {
   id: string;
   created_at: string | null;
   expires_at: string | null;
+  is_active?: boolean | null;
 };
 
 function msSince(iso: string | null | undefined) {
@@ -77,6 +78,75 @@ function msSince(iso: string | null | undefined) {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
   return Date.now() - t;
+}
+
+async function getOrCreateActiveInvite(params: {
+  org_id: string;
+  email: string;
+  inviter_user_id: string;
+  expires_days?: number;
+  cooldown_ms?: number;
+}) {
+  const { org_id, email, inviter_user_id } = params;
+  const expiresDays = Number(params.expires_days ?? 7);
+  const cooldownMs = Number(params.cooldown_ms ?? 60_000);
+
+  // 1) buscar invite activo (garantizado único por índice parcial)
+  const { data: existing, error: exErr } = await supabaseAdmin
+    .from("tracker_invites")
+    .select("id, created_at, expires_at, is_active")
+    .eq("org_id", org_id)
+    .eq("email_norm", email)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<TrackerInviteRow>();
+
+  if (exErr) throw exErr;
+
+  if (existing?.id) {
+    return { invite_id: String(existing.id), reused_invite: true };
+  }
+
+  // 2) no hay activo → crear uno nuevo
+  const expiresAt = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: created, error: crErr } = await supabaseAdmin
+    .from("tracker_invites")
+    .insert({
+      org_id,
+      email_norm: email,
+      created_by_user_id: inviter_user_id,
+      expires_at: expiresAt,
+      // is_active lo setea el trigger
+    })
+    .select("id, created_at, expires_at, is_active")
+    .single<TrackerInviteRow>();
+
+  if (crErr || !created?.id) throw crErr || new Error("Failed to create invite");
+
+  let invite_id = String(created.id);
+  let reused_invite = false;
+
+  // 3) Airbag anti-race/spam: si por timing alguien creó uno “muy reciente”, reusamos el más reciente
+  const { data: recent, error: recErr } = await supabaseAdmin
+    .from("tracker_invites")
+    .select("id, created_at, expires_at, is_active")
+    .eq("org_id", org_id)
+    .eq("email_norm", email)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<TrackerInviteRow>();
+
+  if (!recErr && recent?.id) {
+    const age = msSince(recent.created_at);
+    if (age < cooldownMs) {
+      invite_id = String(recent.id);
+      reused_invite = true;
+    }
+  }
+
+  return { invite_id, reused_invite };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -92,8 +162,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: "Missing env SUPABASE_ANON_KEY" });
     }
 
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.replace("Bearer ", "").trim();
+    const authHeader = String(req.headers.authorization || "");
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     if (!token) return res.status(401).json({ error: "Missing Authorization header" });
 
     // 1) Validar sesión del invitador
@@ -107,10 +177,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = req.body || {};
     const email = normEmail(body.email);
     const org_id = String(body.org_id || "").trim();
-
-    // modo opcional (no obligatorio)
-    // "invite" o "resend" (para UX). La lógica es idéntica (idempotente).
-    const mode = String(body.mode || "invite").trim().toLowerCase();
+    const mode = String(body.mode || "invite").trim().toLowerCase(); // invite | resend (solo UX)
 
     if (!email || !email.includes("@")) return res.status(400).json({ error: "Invalid email" });
     if (!isUuid(org_id)) return res.status(400).json({ error: "Invalid org_id (must be UUID)" });
@@ -122,87 +189,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email,
         email_confirm: false,
       });
-      if (createErr) {
-        return res.status(400).json({ error: createErr.message || "Error creating user" });
-      }
+      if (createErr) return res.status(400).json({ error: createErr.message || "Error creating user" });
       trackerUserId = created?.user?.id || null;
     }
     if (!trackerUserId) trackerUserId = await findUserIdByEmail(email);
     if (!trackerUserId) return res.status(500).json({ error: "Could not resolve tracker user id" });
 
-    // 3) IDPOTENCIA: reusar invite vigente si existe
-    // Cooldown anti-spam: si hay uno creado hace < 60s, reusar también
-    const COOLDOWN_MS = 60_000;
-
-    const { data: existing, error: exErr } = await supabaseAdmin
-      .from("tracker_invites")
-      .select("id, created_at, expires_at")
-      .eq("org_id", org_id)
-      .eq("email_norm", email)
-      .gt("expires_at", new Date().toISOString())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (exErr) {
-      return res.status(500).json({ error: exErr.message || "Failed to query tracker invites" });
-    }
-
-    let invite_id: string;
-    let reused_invite = false;
-
-    if (existing?.id) {
-      // Si está vigente, lo reusamos (y evitamos spamear la tabla)
-      invite_id = String(existing.id);
-      reused_invite = true;
-
-      // Si está vigente pero fue creado hace muchísimo, igual lo reusamos (tu requerimiento).
-      // (Si alguna vez quieres que reenvío genere un nuevo invite, me lo dices y lo ajustamos).
-    } else {
-      // No hay vigente → crear uno nuevo
-      const { data: inv, error: invErr } = await supabaseAdmin
-        .from("tracker_invites")
-        .insert({
-          org_id,
-          email_norm: email,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .select("id")
-        .single();
-
-      if (invErr || !inv?.id) {
-        return res.status(500).json({ error: invErr?.message || "Failed to create tracker invite" });
-      }
-
-      invite_id = String(inv.id);
-      reused_invite = false;
-    }
-
-    // 3.1) Cooldown: si no hubo vigente, pero hay uno MUY reciente (race/spam), reusar el más reciente
-    // (Esto solo es un airbag extra)
-    if (!reused_invite) {
-      const { data: recent, error: recErr } = await supabaseAdmin
-        .from("tracker_invites")
-        .select("id, created_at, expires_at")
-        .eq("org_id", org_id)
-        .eq("email_norm", email)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!recErr && recent?.id) {
-        const age = msSince(recent.created_at);
-        if (age < COOLDOWN_MS) {
-          invite_id = String(recent.id);
-          reused_invite = true;
-        }
-      }
-    }
+    // 3) Idempotencia: reusar invite activo o crear nuevo
+    const { invite_id, reused_invite } = await getOrCreateActiveInvite({
+      org_id,
+      email,
+      inviter_user_id: inviter.id,
+      expires_days: 7,
+      cooldown_ms: 60_000,
+    });
 
     // 4) redirectTo correcto (TODO dentro de next)
     const redirectTo = buildRedirectTo({ org_id, invite_id, email });
 
-    // 5) Enviar magic link (reenvío real, sin crear filas de más)
+    // 5) Enviar magic link
     const { error: otpErr } = await supabaseAnon.auth.signInWithOtp({
       email,
       options: {
@@ -222,8 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       invite_id,
       reused_invite,
       redirect_to: redirectTo,
-      note:
-        "Idempotente: si existe invite vigente para (org_id,email_norm) se reutiliza y se reenvía email.",
+      note: "Idempotente: si existe invite activo para (org_id,email_norm) se reutiliza y se reenvía email.",
     });
   } catch (e: any) {
     console.error("invite-tracker error", e);
