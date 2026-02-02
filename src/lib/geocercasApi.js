@@ -1,9 +1,9 @@
 // src/lib/geocercasApi.js
 // ============================================================
-// CANONICAL client for /api/geocercas (TENANT-SAFE)
+// CANONICAL client for /api/geocercas (TENANT-SAFE) — Feb 2026
+// ✅ Endpoint legacy /api/geocercas, pero backend ya usa public.geofences
 // - Auth universal: Authorization Bearer desde localStorage (sb-*-auth-token)
-// - No depende de cookie tg_at (evita SameSite/domain issues)
-// - Permite scoping UI por orgId (si backend devuelve múltiples orgs)
+// - Scoping UI por orgId
 // ============================================================
 
 function pickErrorMessage(payload) {
@@ -14,9 +14,7 @@ function pickErrorMessage(payload) {
     payload.message ||
     payload.detail ||
     payload.hint ||
-    (Array.isArray(payload.errors)
-      ? payload.errors.map((e) => e.message || e).join(" | ")
-      : null) ||
+    (Array.isArray(payload.errors) ? payload.errors.map((e) => e.message || e).join(" | ") : null) ||
     null
   );
 }
@@ -43,9 +41,7 @@ function getSupabaseAccessTokenFromLocalStorage() {
 function getAuthHeadersOrThrow() {
   if (typeof window === "undefined") return {};
   const token = getSupabaseAccessTokenFromLocalStorage();
-  if (!token) {
-    throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
-  }
+  if (!token) throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
   return { Authorization: `Bearer ${token}` };
 }
 
@@ -57,7 +53,7 @@ async function requestJson(url, { method = "GET", body } = {}) {
 
   const res = await fetch(url, {
     method,
-    credentials: "include", // no estorba; pero ya no dependemos de cookies
+    credentials: "include",
     cache: "no-store",
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -78,7 +74,6 @@ async function requestJson(url, { method = "GET", body } = {}) {
       pickErrorMessage(payload) ||
       `HTTP ${res.status} ${res.statusText || ""}`.trim() ||
       "Request failed";
-
     const err = new Error(msg);
     err.status = res.status;
     err.payload = payload;
@@ -93,13 +88,13 @@ function normalizeRows(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.rows)) return data.rows;
   if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.result)) return data.result;
   return [];
 }
 
 /**
  * LIST (canonical)
- * Backend decide tenant + org(s).
- * Args opcionales solo para scoping UI.
+ * Backend decide tenant + org(s). Args opcionales solo para scoping UI.
  */
 export async function listGeocercas({ orgId } = {}) {
   const data = await requestJson("/api/geocercas", { method: "GET" });
@@ -109,87 +104,67 @@ export async function listGeocercas({ orgId } = {}) {
   return rows.filter((r) => String(r.org_id ?? "") === String(orgId));
 }
 
+/** Helper que tu Geocercas.jsx usa */
+export async function listGeocercasForOrg(orgId) {
+  return await listGeocercas({ orgId });
+}
+
 /**
- * GET ONE (compat con tu NuevaGeocerca.jsx)
+ * GET ONE
  */
 export async function getGeocerca({ id, orgId } = {}) {
   if (!id) throw new Error("getGeocerca requiere id");
-  const data = await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, {
-    method: "GET",
-  });
+  const data = await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, { method: "GET" });
 
-  // Si backend devuelve lista, filtramos por id
-  if (Array.isArray(data)) {
-    const row = data.find((x) => String(x?.id) === String(id)) || null;
-    return row;
-  }
-
+  // backend puede devolver row directo
   const row = data?.row || data?.data || data;
   if (!row) return null;
 
-  // scoping UI extra (no seguridad): evita mezclar org en UI
+  // scoping UI extra
   if (orgId && row?.org_id && String(row.org_id) !== String(orgId)) return null;
 
   return row;
 }
 
 /**
- * UPSERT (canonical)
- * Backend ignora org/tenant del cliente si valida por sesión.
+ * UPSERT
+ * body: { org_id, nombre, geojson/geometry, ... }
  */
 export async function upsertGeocerca(payload = {}) {
   const nombre = payload.nombre ?? payload.name ?? "";
-  if (!String(nombre).trim()) {
-    throw new Error("upsertGeocerca requiere nombre");
-  }
+  if (!String(nombre).trim()) throw new Error("upsertGeocerca requiere nombre");
 
-  const body = {
-    ...payload,
-    nombre: String(nombre).trim(),
-  };
-
-  const data = await requestJson("/api/geocercas", {
-    method: "POST",
-    body,
-  });
+  const body = { ...payload, nombre: String(nombre).trim() };
+  const data = await requestJson("/api/geocercas", { method: "POST", body });
 
   return data?.row || data?.data || data || { ok: true };
 }
 
 /**
- * DELETE (dual):
- * - Si mandas { id } → borra por id vía /api/geocercas?id=
- * - Si mandas { orgId, nombres_ci } → intenta RPC si existe endpoint /api/geocercas-bulk (si no, error claro)
- *
- * Nota: tu NuevaGeocerca.jsx llama deleteGeocerca({ orgId, nombres_ci })
- * pero tu api/geocercas.js hoy SOLO soporta delete por id.
- * Para no romper, devolvemos error explícito si no hay id.
+ * DELETE
+ * - deleteGeocerca(id) o deleteGeocerca({id})
+ * - bulk: deleteGeocerca({ orgId, nombres_ci })
  */
 export async function deleteGeocerca(arg = {}) {
-  // Caso 1: delete por id
+  // Caso 1: por id
   if (typeof arg === "string" || typeof arg === "number") {
     const id = String(arg);
     return await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
   const id = arg?.id ? String(arg.id) : "";
-  if (id) {
-    return await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-  }
+  if (id) return await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 
-  // Caso 2 (tu UI): delete por nombres_ci (requiere endpoint dedicado o RPC en /api/geocercas)
+  // Caso 2: bulk por nombres_ci (tu UI)
   const nombres_ci = Array.isArray(arg?.nombres_ci) ? arg.nombres_ci : [];
-  if (nombres_ci.length) {
-    throw new Error(
-      "deleteGeocerca({nombres_ci}) requiere endpoint bulk. Tu api/geocercas.js actualmente solo soporta DELETE por id."
-    );
+  const orgId = arg?.orgId || arg?.org_id || null;
+
+  if (orgId && nombres_ci.length) {
+    return await requestJson("/api/geocercas", {
+      method: "DELETE",
+      body: { orgId, nombres_ci },
+    });
   }
 
-  throw new Error("deleteGeocerca requiere id (o nombres_ci con endpoint bulk).");
+  throw new Error("deleteGeocerca requiere id (o { orgId, nombres_ci[] }).");
 }
-
-/**
- * Backward compatibility con tu import:
- * deleteGeocerca({ orgId, nombres_ci })
- * -> Lo de arriba ya lo cubre (con error explícito si falta endpoint bulk).
- */

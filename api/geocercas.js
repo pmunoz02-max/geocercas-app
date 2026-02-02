@@ -1,9 +1,13 @@
 // api/geocercas.js
 // ============================================================
-// TENANT-SAFE Geocercas API (CANONICAL)
-// - NO orgId / tenantId desde el cliente (DB resuelve contexto)
-// - Contexto resuelto vía bootstrap_session_context()
+// TENANT-SAFE Geocercas API (CANONICAL) — Feb 2026
+// ✅ MIGRADO A public.geofences (source of truth real)
+// - Endpoint se mantiene /api/geocercas por compatibilidad con frontend
+// - Mapeo:
+//    nombre  <-> geofences.name
+//    geojson <-> geofences.geojson || geofences.geometry
 // - Auth universal: Bearer token (preferido) o cookie tg_at (legacy)
+// - Contexto por sesión: bootstrap_session_context()
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
@@ -13,7 +17,6 @@ function send(res, status, payload) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("CDN-Cache-Control", "no-store");
   res.setHeader("Surrogate-Control", "no-store");
-  // Si antes dependías de Cookie, mantenemos Vary amplio:
   res.setHeader("Vary", "Cookie, Authorization");
   return res.status(status).json(payload);
 }
@@ -69,6 +72,27 @@ async function getContextOr401(req) {
   return { ok: true, supabase };
 }
 
+/**
+ * Convierte fila de geofences -> contrato legacy que usa el frontend:
+ * { id, org_id, nombre, geojson, geometry, created_at, ... }
+ */
+function mapGeofenceRowToLegacy(row) {
+  if (!row) return null;
+  const geo = row.geojson ?? row.geometry ?? null;
+  return {
+    ...row,
+    nombre: row.name ?? row.nombre ?? "",
+    geojson: geo,
+    geometry: geo,
+    name: row.name ?? null, // mantenemos también name por si alguna UI lo usa
+  };
+}
+
+function isMissingColumnError(err, colName) {
+  const msg = String(err?.message || "");
+  return msg.toLowerCase().includes(`column ${colName}`) && msg.toLowerCase().includes("does not exist");
+}
+
 export default async function handler(req, res) {
   try {
     const ctx = await getContextOr401(req);
@@ -77,70 +101,127 @@ export default async function handler(req, res) {
     const { supabase } = ctx;
 
     // -------------------------
-    // GET → list geocercas
+    // GET → list geofences (legacy "geocercas")
     // -------------------------
     if (req.method === "GET") {
-      // opcional: id para obtener una geocerca puntual
       const id = req.query?.id ? String(req.query.id) : "";
+
       if (id) {
-        const { data, error } = await supabase.rpc("geocercas_get", { p_id: id }).catch(() => ({
-          data: null,
-          error: null,
-        }));
-
-        // Si no tienes geocercas_get, caemos a list y filtramos (compat)
-        if (error) {
-          console.error("[api/geocercas][GET geocercas_get]", error);
-          return send(res, 500, { ok: false, error: error.message });
-        }
-        if (data) return send(res, 200, data);
+        const { data, error } = await supabase.from("geofences").select("*").eq("id", id).maybeSingle();
+        if (error) return send(res, 500, { ok: false, error: error.message });
+        return send(res, 200, mapGeofenceRowToLegacy(data));
       }
 
-      const { data, error } = await supabase.rpc("geocercas_list");
-      if (error) {
-        console.error("[api/geocercas][GET]", error);
-        return send(res, 500, { ok: false, error: error.message });
-      }
-      return send(res, 200, data || []);
+      const { data, error } = await supabase.from("geofences").select("*").order("created_at", { ascending: false });
+      if (error) return send(res, 500, { ok: false, error: error.message });
+
+      const rows = (data || []).map(mapGeofenceRowToLegacy);
+      return send(res, 200, rows);
     }
 
     // -------------------------
-    // POST → upsert geocerca
+    // POST → upsert geofence
     // -------------------------
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-      const { data, error } = await supabase.rpc("geocercas_upsert", {
-        p_id: body.id || null,
-        p_nombre: body.nombre || body.name || null,
-        p_geojson: body.geojson || body.geometry || body.geom || null,
-        p_visible: body.visible ?? true,
-        p_activa: body.activa ?? true,
-        p_color: body.color || null,
-      });
+      const id = body.id || null;
+      const org_id = body.org_id || body.orgId || null;
+      const name = String(body.nombre || body.name || "").trim();
 
-      if (error) {
-        console.error("[api/geocercas][POST]", error);
-        return send(res, 500, { ok: false, error: error.message });
+      if (!name) return send(res, 422, { ok: false, error: "nombre (o name) is required" });
+      if (!org_id) return send(res, 422, { ok: false, error: "org_id is required" });
+
+      // geo payload (FeatureCollection o lo que ya mandas)
+      const geo = body.geojson || body.geometry || body.geom || null;
+
+      // Intento 1: columna geojson
+      let upsertPayload = { id, org_id, name };
+      if (geo !== null) upsertPayload.geojson = geo;
+
+      let { data, error } = await supabase
+        .from("geofences")
+        .upsert(upsertPayload, { onConflict: "id" })
+        .select("*")
+        .maybeSingle();
+
+      // Fallback: si geofences no tiene geojson, probamos geometry
+      if (error && geo !== null && isMissingColumnError(error, "geofences.geojson")) {
+        upsertPayload = { id, org_id, name, geometry: geo };
+        const r2 = await supabase
+          .from("geofences")
+          .upsert(upsertPayload, { onConflict: "id" })
+          .select("*")
+          .maybeSingle();
+        data = r2.data;
+        error = r2.error;
       }
 
-      return send(res, 200, data);
+      if (error) return send(res, 500, { ok: false, error: error.message });
+
+      return send(res, 200, { ok: true, row: mapGeofenceRowToLegacy(data) });
     }
 
     // -------------------------
-    // DELETE → delete geocerca
+    // DELETE → delete geofence
+    // - por id (query ?id=)
+    // - bulk por { orgId, nombres_ci } (body)
     // -------------------------
     if (req.method === "DELETE") {
       const id = req.query?.id ? String(req.query.id) : "";
-      if (!id) return send(res, 422, { ok: false, error: "id is required" });
 
-      const { error } = await supabase.rpc("geocercas_delete", { p_id: id });
-      if (error) {
-        console.error("[api/geocercas][DELETE]", error);
-        return send(res, 500, { ok: false, error: error.message });
+      // Caso 1: por id
+      if (id) {
+        const { error } = await supabase.from("geofences").delete().eq("id", id);
+        if (error) return send(res, 500, { ok: false, error: error.message });
+        return send(res, 200, { ok: true });
       }
 
-      return send(res, 200, { ok: true });
+      // Caso 2: bulk (tu UI actual)
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+      const orgId = body.orgId || body.org_id || null;
+      const nombres_ci = Array.isArray(body.nombres_ci) ? body.nombres_ci : [];
+
+      if (!orgId || !nombres_ci.length) {
+        return send(res, 422, { ok: false, error: "id (query) OR { orgId, nombres_ci[] } is required" });
+      }
+
+      // Intento directo: borrar por org + name lower() IN (...)
+      // Nota: PostgREST no tiene lower() directo; hacemos dos estrategias:
+      //  A) si tu DB tiene columna nombre_ci o name_ci en geofences (si existiera) lo usamos
+      //  B) si no, hacemos fetch y borramos ids resultantes en server (RLS safe)
+
+      // Strategy A: probar columna name_ci
+      let delError = null;
+
+      // Probamos name_ci
+      {
+        const { data: hits, error: e1 } = await supabase
+          .from("geofences")
+          .select("id, org_id, name, name_ci, nombre_ci")
+          .eq("org_id", orgId);
+
+        if (e1) {
+          delError = e1;
+        } else {
+          const wanted = new Set(nombres_ci.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean));
+          const ids = (hits || [])
+            .filter((r) => {
+              const ci = String(r?.name_ci || r?.nombre_ci || r?.name || "").trim().toLowerCase();
+              return wanted.has(ci);
+            })
+            .map((r) => r.id)
+            .filter(Boolean);
+
+          if (!ids.length) return send(res, 200, { ok: true, deleted: 0 });
+
+          const { error: eDel } = await supabase.from("geofences").delete().in("id", ids);
+          if (eDel) return send(res, 500, { ok: false, error: eDel.message });
+          return send(res, 200, { ok: true, deleted: ids.length });
+        }
+      }
+
+      return send(res, 500, { ok: false, error: delError?.message || "bulk delete failed" });
     }
 
     res.setHeader("Allow", ["GET", "POST", "DELETE"]);

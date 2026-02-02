@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import GeoMap from "@/components/GeoMap";
 import OrgSelector from "@/components/OrgSelector";
-import { supabase } from "../supabaseClient.js";
+import { supabase } from "@/lib/supabaseClient";
 import { listGeocercasForOrg } from "@/lib/geocercasApi";
 
 export default function GeocercasPage() {
@@ -15,17 +15,13 @@ export default function GeocercasPage() {
 
   const canEdit = role === "owner" || role === "admin";
 
-  const orgId = useMemo(
-    () => currentOrg?.org_id ?? currentOrg?.id ?? null,
-    [currentOrg]
-  );
+  const orgId = useMemo(() => currentOrg?.org_id ?? currentOrg?.id ?? null, [currentOrg]);
 
   const [geocercas, setGeocercas] = useState([]);
   const [loadingGeocercas, setLoadingGeocercas] = useState(false);
 
   const [selectedGeocercaIdsUI, setSelectedGeocercaIdsUI] = useState([]);
-  const [selectedGeocercaIdsApplied, setSelectedGeocercaIdsApplied] =
-    useState([]);
+  const [selectedGeocercaIdsApplied, setSelectedGeocercaIdsApplied] = useState([]);
 
   const [newGeocercaName, setNewGeocercaName] = useState("");
 
@@ -38,23 +34,18 @@ export default function GeocercasPage() {
         return;
       }
 
-      // Reset inmediato al cambiar de org para evitar “mezclas visuales”
       setGeocercas([]);
       setSelectedGeocercaIdsUI([]);
       setSelectedGeocercaIdsApplied([]);
 
       try {
         setLoadingGeocercas(true);
-
-        // ✅ FIX: scoping por org activa
         const rows = await listGeocercasForOrg(orgId);
         setGeocercas(Array.isArray(rows) ? rows : []);
       } catch (err) {
         console.error("[GeocercasPage] load error:", err);
         alert(
-          t("geocercas.manage.loadError", {
-            defaultValue: "No se pudieron cargar las geocercas.",
-          })
+          t("geocercas.manage.loadError", { defaultValue: "No se pudieron cargar las geocercas." })
         );
       } finally {
         setLoadingGeocercas(false);
@@ -63,11 +54,6 @@ export default function GeocercasPage() {
 
     load();
   }, [orgId, t]);
-
-  const handleSelectChange = (e) => {
-    const options = Array.from(e.target.selectedOptions);
-    setSelectedGeocercaIdsUI(options.map((opt) => String(opt.value)));
-  };
 
   const handleMostrar = () => {
     setSelectedGeocercaIdsApplied(selectedGeocercaIdsUI.map(String));
@@ -95,36 +81,24 @@ export default function GeocercasPage() {
     if (!window.confirm(confirmText)) return;
 
     try {
-      // Precaución: borrado en cascada manual (pruebas)
+      // ⚠️ Nota: este borrado de org debe revisarse con tu esquema real.
+      // Lo dejo como estaba (pero ahora geocercas endpoint usa geofences).
       const geocercaIds = geocercas.map((g) => g.id).filter(Boolean);
 
       if (geocercaIds.length > 0) {
-        // Nota: si asignaciones tiene org_id, mejor filtrar por org_id también.
-        await supabase
-          .from("asignaciones")
-          .delete()
-          .in("geocerca_id", geocercaIds);
+        await supabase.from("asignaciones").delete().in("geocerca_id", geocercaIds);
       }
 
+      // si tienes tabla legacy geocercas, esto se puede mantener o eliminar luego
       await supabase.from("geocercas").delete().eq("org_id", orgId);
 
-      // OJO: verifica si tu tabla es public.organizations o app.organizations.
-      // Aquí mantengo el nombre que tenías. Si falla, te doy el ajuste.
       await supabase.from("organizations").delete().eq("id", orgId);
 
-      alert(
-        t("geocercas.manage.orgDeleted", {
-          defaultValue: "Organización eliminada.",
-        })
-      );
+      alert(t("geocercas.manage.orgDeleted", { defaultValue: "Organización eliminada." }));
       window.location.reload();
     } catch (err) {
       console.error("[GeocercasPage] delete org error:", err);
-      alert(
-        t("geocercas.manage.deleteOrgError", {
-          defaultValue: "Error eliminando organización.",
-        })
-      );
+      alert(t("geocercas.manage.deleteOrgError", { defaultValue: "Error eliminando organización." }));
     }
   };
 
@@ -133,39 +107,27 @@ export default function GeocercasPage() {
   if (!orgId) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
-        <h2 className="text-lg font-semibold">
-          {t("geocercas.manage.noOrgTitle", { defaultValue: "Geocercas" })}
-        </h2>
+        <h2 className="text-lg font-semibold">{t("geocercas.manage.noOrgTitle", { defaultValue: "Geocercas" })}</h2>
         <p className="text-sm">
-          {t("geocercas.manage.noOrgBody", {
-            defaultValue:
-              "Selecciona una organización para gestionar geocercas.",
-          })}
+          {t("geocercas.manage.noOrgBody", { defaultValue: "Selecciona una organización para gestionar geocercas." })}
         </p>
         <button
           onClick={() => navigate("/seleccionar-organizacion")}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-white"
         >
-          {t("geocercas.manage.selectOrgButton", {
-            defaultValue: "Seleccionar organización",
-          })}
+          {t("geocercas.manage.selectOrgButton", { defaultValue: "Seleccionar organización" })}
         </button>
       </div>
     );
   }
 
   const currentOrgName =
-    currentOrg?.name ||
-    currentOrg?.org_name ||
-    orgs?.find((o) => o.id === orgId)?.name ||
-    "Sin nombre";
+    currentOrg?.name || currentOrg?.org_name || orgs?.find((o) => o.id === orgId)?.name || "Sin nombre";
 
   const geocercasForMap =
     selectedGeocercaIdsApplied.length === 0
       ? geocercas
-      : geocercas.filter((g) =>
-          selectedGeocercaIdsApplied.includes(String(g.id))
-        );
+      : geocercas.filter((g) => selectedGeocercaIdsApplied.includes(String(g.id)));
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
@@ -183,36 +145,24 @@ export default function GeocercasPage() {
         <input
           type="text"
           className="flex-1 rounded-lg border px-3 py-2"
-          placeholder={t("geocercas.manage.newNameLabel", {
-            defaultValue: "Nombre de nueva geocerca",
-          })}
+          placeholder={t("geocercas.manage.newNameLabel", { defaultValue: "Nombre de nueva geocerca" })}
           value={newGeocercaName}
           onChange={(e) => setNewGeocercaName(e.target.value)}
         />
 
-        <button
-          onClick={handleMostrar}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-white"
-        >
+        <button onClick={handleMostrar} className="rounded-lg bg-blue-600 px-4 py-2 text-white">
           {t("geocercas.manage.showButton", { defaultValue: "Mostrar" })}
         </button>
 
         {canEdit && (
-          <button
-            onClick={handleEliminarOrg}
-            className="rounded-lg bg-red-600 px-4 py-2 text-white"
-          >
-            {t("geocercas.manage.deleteOrgButton", {
-              defaultValue: "Eliminar Org",
-            })}
+          <button onClick={handleEliminarOrg} className="rounded-lg bg-red-600 px-4 py-2 text-white">
+            {t("geocercas.manage.deleteOrgButton", { defaultValue: "Eliminar Org" })}
           </button>
         )}
       </div>
 
       {loadingGeocercas && (
-        <div className="text-sm text-slate-500">
-          {t("geocercas.manage.loading", { defaultValue: "Cargando..." })}
-        </div>
+        <div className="text-sm text-slate-500">{t("geocercas.manage.loading", { defaultValue: "Cargando..." })}</div>
       )}
 
       <GeoMap
@@ -230,3 +180,4 @@ export default function GeocercasPage() {
     </div>
   );
 }
+
