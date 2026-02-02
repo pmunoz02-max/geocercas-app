@@ -11,6 +11,11 @@
 // - Supabase/Postgres puede devolver latitude/longitude como string (numeric)
 // - Normalizamos a Number y validamos finitos para que Leaflet renderice.
 // - FitBounds automático cuando llegan puntos.
+//
+// MEJORA (Feb 2026):
+// - Tooltip muestra nombre de geocerca (id -> label) usando catálogo cargado.
+// - Filtro de geocerca usa el mismo catálogo.
+// - Alinea import de supabase a /lib/supabaseClient (stack actual).
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
@@ -25,7 +30,7 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const TIME_WINDOWS = [
@@ -35,14 +40,7 @@ const TIME_WINDOWS = [
   { id: "24h", label: "24 horas", ms: 24 * 60 * 60 * 1000 },
 ];
 
-const TRACKER_COLORS = [
-  "#2563eb", // azul
-  "#16a34a", // verde
-  "#f97316", // naranja
-  "#dc2626", // rojo
-  "#7c3aed", // violeta
-  "#0d9488", // teal
-];
+const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
 
 function formatDateTime(dtString) {
   if (!dtString) return "-";
@@ -77,7 +75,6 @@ function safeJson(input) {
   return null;
 }
 
-// Normaliza numeric/string -> number y valida
 function toNum(v) {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
@@ -85,14 +82,7 @@ function toNum(v) {
 }
 
 function isValidLatLng(lat, lng) {
-  return (
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    lat >= -90 &&
-    lat <= 90 &&
-    lng >= -180 &&
-    lng <= 180
-  );
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
 // ✅ Resolver universal del auth uid del tracker
@@ -100,7 +90,6 @@ function resolveTrackerAuthId(row) {
   return row?.user_id || row?.owner_id || null;
 }
 
-// Componente para hacer fitBounds cuando hay puntos válidos
 function FitToPoints({ points, enabled }) {
   const map = useMap();
 
@@ -119,7 +108,6 @@ function FitToPoints({ points, enabled }) {
 
     if (latLngs.length === 0) return;
 
-    // Si es 1 punto, solo pan + zoom razonable
     if (latLngs.length === 1) {
       map.setView(latLngs[0], Math.max(map.getZoom() || 12, 15), { animate: true });
       return;
@@ -135,9 +123,7 @@ export default function TrackerDashboard() {
   const { currentOrg } = useAuth();
 
   const orgId =
-    typeof currentOrg === "string"
-      ? currentOrg
-      : currentOrg?.id || currentOrg?.org_id || null;
+    typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
 
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -152,10 +138,8 @@ export default function TrackerDashboard() {
   const [geofences, setGeofences] = useState([]);
 
   // -----------------------------------------------------------------------
-  // FETCH HELPERS
+  // TRACKERS: tabla personal, filtrada por org_id
   // -----------------------------------------------------------------------
-
-  // 🔹 TRACKERS: tabla personal, filtrada por org_id
   const fetchTrackers = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
@@ -189,7 +173,9 @@ export default function TrackerDashboard() {
     setTrackers(conUid);
   }, []);
 
-  // 🔹 GEOCERCAS: vista v_geocercas_tracker_ui, filtrada por org_id
+  // -----------------------------------------------------------------------
+  // GEOCERCAS: vista v_geocercas_tracker_ui, filtrada por org_id
+  // -----------------------------------------------------------------------
   const fetchGeofences = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
@@ -210,15 +196,17 @@ export default function TrackerDashboard() {
     const arr = Array.isArray(data) ? data : [];
 
     arr.sort((a, b) => {
-      const labelA = (a.name || a.nombre || a.id || "").toString().toLowerCase();
-      const labelB = (b.name || b.nombre || b.id || "").toString().toLowerCase();
+      const labelA = (a.name || a.nombre || a.label || a.id || "").toString().toLowerCase();
+      const labelB = (b.name || b.nombre || b.label || b.id || "").toString().toLowerCase();
       return labelA.localeCompare(labelB);
     });
 
     setGeofences(arr);
   }, []);
 
-  // 🔹 POSICIONES: tracker_positions (scoping universal por auth user_id de trackers de la org)
+  // -----------------------------------------------------------------------
+  // POSICIONES: tracker_positions (scoping universal por auth user_id de trackers)
+  // -----------------------------------------------------------------------
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
@@ -234,8 +222,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(true);
         setErrorMsg("");
 
-        const windowConfig =
-          TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
         const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
         const allowedTrackerIds = (trackers || [])
@@ -290,7 +277,7 @@ export default function TrackerDashboard() {
               _valid: isValidLatLng(lat, lng),
             };
           })
-          .filter((p) => p._valid); // <- si prefieres ver inválidos, quita este filter
+          .filter((p) => p._valid);
 
         setPositions(normalized);
       } finally {
@@ -303,7 +290,6 @@ export default function TrackerDashboard() {
   // -----------------------------------------------------------------------
   // EFECTOS
   // -----------------------------------------------------------------------
-
   useEffect(() => {
     if (!orgId) return;
     setLoadingSummary(true);
@@ -332,16 +318,26 @@ export default function TrackerDashboard() {
   }, [orgId, trackers, fetchPositions]);
 
   // -----------------------------------------------------------------------
+  // MAPA geofenceId -> label (para tooltips y filtros)
+  // -----------------------------------------------------------------------
+  const geofenceLabelById = useMemo(() => {
+    const m = new Map();
+    (geofences || []).forEach((g) => {
+      const label = g?.name || g?.nombre || g?.label || g?.id || "";
+      if (g?.id) m.set(String(g.id), String(label));
+    });
+    return m;
+  }, [geofences]);
+
+  // -----------------------------------------------------------------------
   // DERIVED DATA
   // -----------------------------------------------------------------------
-
   const filteredPositions = useMemo(() => {
     let pts = positions ?? [];
-
     if (selectedGeofenceId !== "all") {
-      pts = pts.filter((p) => String(p?.geocerca_id || "") === String(selectedGeofenceId));
+      const wanted = String(selectedGeofenceId);
+      pts = pts.filter((p) => String(p?.geocerca_id || "") === wanted);
     }
-
     return pts;
   }, [positions, selectedGeofenceId]);
 
@@ -373,7 +369,6 @@ export default function TrackerDashboard() {
   // -----------------------------------------------------------------------
   // RENDER
   // -----------------------------------------------------------------------
-
   if (!orgId) {
     return (
       <div className="p-6">
@@ -449,7 +444,7 @@ export default function TrackerDashboard() {
               <option value="all">Todas las geocercas</option>
               {geofences.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.name || g.nombre || g.id}
+                  {g.name || g.nombre || g.label || g.id}
                 </option>
               ))}
             </select>
@@ -490,16 +485,14 @@ export default function TrackerDashboard() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
-              {/* Fit automático a puntos */}
               <FitToPoints points={filteredPositions} enabled={totalPoints > 0} />
 
               {/* GEOCERCAS */}
               {geofences.map((g) => {
-                const label = g.name || g.nombre || g.id;
+                const label = g.name || g.nombre || g.label || g.id;
 
                 const lat = toNum(g.lat ?? g.center_lat);
                 const lng = toNum(g.lng ?? g.center_lng);
-
                 const radius = toNum(g.radius_m ?? g.radius) ?? 0;
 
                 const shapeRaw = g.geojson || g.geometry || g.geom || g.polygon || null;
@@ -553,10 +546,7 @@ export default function TrackerDashboard() {
                 if (!pts.length) return null;
                 const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
 
-                // pts vienen en orden desc por created_at (latest primero)
                 const latest = pts[0];
-
-                // Para la polilínea queremos orden cronológico asc
                 const chron = [...pts].reverse();
                 const positionsLatLng = chron
                   .map((p) => {
@@ -568,6 +558,9 @@ export default function TrackerDashboard() {
 
                 const latestLat = toNum(latest?.lat);
                 const latestLng = toNum(latest?.lng);
+
+                const geofenceId = latest?.geocerca_id ? String(latest.geocerca_id) : "";
+                const geofenceLabel = geofenceId ? geofenceLabelById.get(geofenceId) : null;
 
                 return (
                   <React.Fragment key={trackerId}>
@@ -597,7 +590,7 @@ export default function TrackerDashboard() {
                             </div>
                             <div>
                               <strong>Geocerca:</strong>{" "}
-                              {latest.geocerca_id ? String(latest.geocerca_id) : "—"}
+                              {geofenceId ? (geofenceLabel ? `${geofenceLabel} (${geofenceId})` : geofenceId) : "—"}
                             </div>
                           </div>
                         </Tooltip>
@@ -644,9 +637,7 @@ export default function TrackerDashboard() {
               </div>
             </dl>
 
-            {loadingSummary && (
-              <p className="mt-2 md:mt-3 text-xs text-slate-500">Actualizando datos…</p>
-            )}
+            {loadingSummary && <p className="mt-2 md:mt-3 text-xs text-slate-500">Actualizando datos…</p>}
           </div>
 
           <div className="rounded-lg border bg-white px-4 py-3 text-sm">
