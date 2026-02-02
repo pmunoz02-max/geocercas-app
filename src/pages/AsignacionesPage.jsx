@@ -46,9 +46,11 @@ export default function AsignacionesPage() {
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
   const [startDate, setStartDate] = useState(toDateInput(new Date().toISOString()));
-  const [endDate, setEndDate] = useState(toDateInput(new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString()));
+  const [endDate, setEndDate] = useState(
+    toDateInput(new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString())
+  );
   const [active, setActive] = useState(true);
-  const [editingKey, setEditingKey] = useState(null); // usamos id de tracker_assignments
+  const [editingKey, setEditingKey] = useState(null); // id de tracker_assignments
 
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geofenceOptions, setGeofenceOptions] = useState([]);
@@ -99,7 +101,10 @@ export default function AsignacionesPage() {
           id: p.id,
           org_id: p.org_id,
           user_id: p.user_id || null,
-          label: `${(p.nombre || "").trim()} ${(p.apellido || "").trim()}`.trim() || p.email || p.id,
+          label:
+            `${(p.nombre || "").trim()} ${(p.apellido || "").trim()}`.trim() ||
+            p.email ||
+            p.id,
           email: p.email || "",
         }))
         // importante: para asignar tracker, necesitamos user_id
@@ -108,9 +113,10 @@ export default function AsignacionesPage() {
       setPersonalOptions(dedupeById(personal));
 
       // 2) Catálogo geofences (source of truth)
+      // ✅ FIX: NO pedir geofences.nombre (no existe). Solo name.
       const gRes = await supabase
         .from("geofences")
-        .select("id, org_id, name, nombre, created_at")
+        .select("id, org_id, name, created_at")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
 
@@ -119,7 +125,7 @@ export default function AsignacionesPage() {
       const geofences = (gRes.data || []).map((g) => ({
         id: g.id,
         org_id: g.org_id,
-        label: g.name || g.nombre || g.id,
+        label: g.name || g.id,
       }));
 
       setGeofenceOptions(dedupeById(geofences));
@@ -187,11 +193,9 @@ export default function AsignacionesPage() {
     const trackerUserId = p?.user_id || null;
     if (!trackerUserId) return setError("La persona seleccionada no tiene user_id (tracker_user_id).");
 
-    // end_date NOT NULL (y debe ser >= start_date)
     if (String(endDate) < String(startDate)) return setError("La fecha fin debe ser >= fecha inicio.");
 
     try {
-      // ✅ RPC idempotente (no inserts directos)
       const { data, error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
         p_org_id: orgId,
         p_tracker_user_id: trackerUserId,
@@ -207,10 +211,7 @@ export default function AsignacionesPage() {
       resetForm();
       await loadAll();
 
-      if (debugEnabled) {
-        // eslint-disable-next-line no-console
-        console.log("RPC result:", data);
-      }
+      if (debugEnabled) console.log("RPC result:", data);
     } catch (e2) {
       setError(e2?.message || String(e2));
     }
@@ -221,15 +222,10 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     try {
-      // Resolver personal (tracker_user_id) y geofence
-      const trackerUserId = row.tracker_user_id;
-      const geofenceId = row.geofence_id;
-
-      // Si activamos, dejamos vigencia tal cual; si desactivamos, marcamos inactive.
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
         p_org_id: orgId,
-        p_tracker_user_id: trackerUserId,
-        p_geofence_id: geofenceId,
+        p_tracker_user_id: row.tracker_user_id,
+        p_geofence_id: row.geofence_id,
         p_start_date: row.start_date,
         p_end_date: row.end_date,
         p_active: !row.active,
@@ -247,7 +243,6 @@ export default function AsignacionesPage() {
   function onEditRow(r) {
     setEditingKey(r.id);
 
-    // buscar personal.id por tracker_user_id
     const per = personalOptions.find((p) => p.user_id === r.tracker_user_id);
     setSelectedPersonalId(per?.id || "");
 
@@ -281,22 +276,15 @@ export default function AsignacionesPage() {
   return (
     <div className="w-full p-4">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold">
-          {t("asignaciones.title", { defaultValue: "Asignaciones" })}
-        </h1>
+        <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
         <p className="text-xs text-gray-500 mt-1">
-          Org actual:{" "}
-          <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
         </p>
       </div>
 
-      {error && (
-        <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-      )}
+      {error && <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       {successMessage && (
-        <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">
-          {successMessage}
-        </div>
+        <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">{successMessage}</div>
       )}
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
@@ -379,7 +367,7 @@ export default function AsignacionesPage() {
               autoComplete="off"
             />
             <p className="text-xs text-gray-500 mt-1">
-              end_date es NOT NULL en DB. Usa un fin futuro (ej. +365 días) si quieres “vigencia larga”.
+              end_date es NOT NULL en DB. Usa fin futuro (ej. +365 días) si quieres “vigencia larga”.
             </p>
           </div>
 
@@ -487,16 +475,10 @@ export default function AsignacionesPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2 flex gap-2">
-                      <button
-                        className="border rounded px-2 py-1 hover:bg-gray-50"
-                        onClick={() => onEditRow(r)}
-                      >
+                      <button className="border rounded px-2 py-1 hover:bg-gray-50" onClick={() => onEditRow(r)}>
                         Editar
                       </button>
-                      <button
-                        className="border rounded px-2 py-1 hover:bg-gray-50"
-                        onClick={() => handleToggleActive(r)}
-                      >
+                      <button className="border rounded px-2 py-1 hover:bg-gray-50" onClick={() => handleToggleActive(r)}>
                         {r.active ? "Pausar" : "Activar"}
                       </button>
                     </td>
