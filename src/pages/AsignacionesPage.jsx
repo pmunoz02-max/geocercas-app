@@ -1,10 +1,11 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2 (Feb 2026) — Tracker Assignments reales
+// Asignaciones v2.1 (Feb 2026) — Tracker Assignments reales
 // - Source of truth: public.tracker_assignments + public.geofences + public.personal
 // - personal: se selecciona persona (personal.id) pero se usa tracker_user_id (personal.user_id)
 // - RLS-safe: lecturas planas sin joins; enrichment en frontend
 // - CRUD via RPC: admin_upsert_tracker_assignment_v1 (idempotente)
-// - end_date NOT NULL (se usa rango por fechas)
+// - end_date NOT NULL (se usa rango por fechas en DB)
+// - UI: datetime-local (fecha+hora) y se convierte a date (YYYY-MM-DD) al guardar
 // - Debug opcional: /asignaciones?debug=1
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -23,12 +24,60 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-function toDateInput(value) {
+/**
+ * Para inputs:
+ * - date: "YYYY-MM-DD"
+ * - datetime-local: "YYYY-MM-DDTHH:mm"
+ */
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toDateOnly(value) {
   if (!value) return "";
   const s = String(value);
+  // "YYYY-MM-DDTHH:mm:ssZ" o "YYYY-MM-DDTHH:mm"
   if (s.includes("T")) return s.slice(0, 10);
-  if (s.includes(" ")) return s.split(" ")[0];
+  // "YYYY-MM-DD HH:mm:ss"
+  if (s.includes(" ")) return s.split(" ")[0].slice(0, 10);
+  // "YYYY-MM-DD"
   return s.slice(0, 10);
+}
+
+function toDateTimeLocalInput(value) {
+  if (!value) return "";
+  const s = String(value);
+
+  // Si ya viene en formato datetime
+  if (s.includes("T")) {
+    // "YYYY-MM-DDTHH:mm:ssZ" -> "YYYY-MM-DDTHH:mm"
+    return s.slice(0, 16);
+  }
+  if (s.includes(" ")) {
+    // "YYYY-MM-DD HH:mm:ss" -> "YYYY-MM-DDTHH:mm"
+    const [d, t] = s.split(" ");
+    return `${d.slice(0, 10)}T${t.slice(0, 5)}`;
+  }
+
+  // Si solo viene date: completar hora 08:00 (neutro) para UX
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T08:00`;
+
+  return "";
+}
+
+function nowDateTimeLocal() {
+  const d = new Date();
+  // datetime-local requiere local time, sin Z
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(
+    d.getMinutes()
+  )}`;
+}
+
+function plusDaysDateTimeLocal(days) {
+  const d = new Date(Date.now() + days * 24 * 3600 * 1000);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(
+    d.getMinutes()
+  )}`;
 }
 
 export default function AsignacionesPage() {
@@ -45,15 +94,25 @@ export default function AsignacionesPage() {
   // Form (selecciona personal.id pero guardamos tracker_user_id real)
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
-  const [startDate, setStartDate] = useState(toDateInput(new Date().toISOString()));
-  const [endDate, setEndDate] = useState(
-    toDateInput(new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString())
-  );
+
+  // UI fecha+hora (datetime-local) pero DB es date: convertimos en submit
+  const [startDateTime, setStartDateTime] = useState(nowDateTimeLocal());
+  const [endDateTime, setEndDateTime] = useState(plusDaysDateTimeLocal(365));
+
   const [active, setActive] = useState(true);
   const [editingKey, setEditingKey] = useState(null); // id de tracker_assignments
 
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geofenceOptions, setGeofenceOptions] = useState([]);
+
+  // Debug info
+  const [debugInfo, setDebugInfo] = useState({
+    personalCount: 0,
+    geofenceCount: 0,
+    assignmentCount: 0,
+    geofenceQueryTried: "",
+    geofenceError: null,
+  });
 
   const debugEnabled = useMemo(() => {
     try {
@@ -66,8 +125,8 @@ export default function AsignacionesPage() {
   function resetForm() {
     setSelectedPersonalId("");
     setSelectedGeofenceId("");
-    setStartDate(toDateInput(new Date().toISOString()));
-    setEndDate(toDateInput(new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString()));
+    setStartDateTime(nowDateTimeLocal());
+    setEndDateTime(plusDaysDateTimeLocal(365));
     setActive(true);
     setEditingKey(null);
   }
@@ -75,6 +134,7 @@ export default function AsignacionesPage() {
   async function loadAll() {
     setLoadingData(true);
     setError(null);
+    setSuccessMessage(null);
 
     if (!orgId) {
       setRows([]);
@@ -107,28 +167,53 @@ export default function AsignacionesPage() {
             p.id,
           email: p.email || "",
         }))
-        // importante: para asignar tracker, necesitamos user_id
+        // para asignar tracker, necesitamos user_id
         .filter((p) => !!p.user_id);
 
-      setPersonalOptions(dedupeById(personal));
+      const personalDedup = dedupeById(personal);
+      setPersonalOptions(personalDedup);
 
       // 2) Catálogo geofences (source of truth)
-      // ✅ FIX: NO pedir geofences.nombre (no existe). Solo name.
-      const gRes = await supabase
+      // En algunos despliegues antiguos, el campo de org puede llamarse organization_id.
+      // Intentamos org_id primero (correcto actual). Si falla por columna, intentamos organization_id.
+      let geofencesData = null;
+      let geofenceQueryTried = "org_id";
+      let geofenceError = null;
+
+      const gRes1 = await supabase
         .from("geofences")
         .select("id, org_id, name, created_at")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
 
-      if (gRes.error) throw gRes.error;
+      if (!gRes1.error) {
+        geofencesData = gRes1.data || [];
+      } else {
+        // fallback si la columna org_id no existe o si hay un esquema distinto
+        geofenceError = gRes1.error;
+        geofenceQueryTried = "organization_id (fallback)";
 
-      const geofences = (gRes.data || []).map((g) => ({
+        const gRes2 = await supabase
+          .from("geofences")
+          .select("id, organization_id, name, created_at")
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: false });
+
+        if (gRes2.error) {
+          // si también falla, lanzamos el error más reciente
+          throw gRes2.error;
+        }
+        geofencesData = gRes2.data || [];
+      }
+
+      const geofences = (geofencesData || []).map((g) => ({
         id: g.id,
-        org_id: g.org_id,
+        org_id: g.org_id || g.organization_id || null,
         label: g.name || g.id,
       }));
 
-      setGeofenceOptions(dedupeById(geofences));
+      const geofencesDedup = dedupeById(geofences);
+      setGeofenceOptions(geofencesDedup);
 
       // 3) Asignaciones planas (tracker_assignments)
       const taRes = await supabase
@@ -140,6 +225,16 @@ export default function AsignacionesPage() {
       if (taRes.error) throw taRes.error;
 
       setRows(taRes.data || []);
+
+      // Debug info
+      setDebugInfo({
+        personalCount: personalDedup.length,
+        geofenceCount: geofencesDedup.length,
+        assignmentCount: (taRes.data || []).length,
+        geofenceQueryTried,
+        geofenceError: geofenceError ? geofenceError.message : null,
+      });
+
       setLoadingData(false);
     } catch (e) {
       setLoadingData(false);
@@ -187,12 +282,16 @@ export default function AsignacionesPage() {
     if (!orgId) return setError("No hay organización activa.");
     if (!selectedPersonalId) return setError("Selecciona una persona.");
     if (!selectedGeofenceId) return setError("Selecciona una geocerca.");
-    if (!startDate || !endDate) return setError("Selecciona inicio y fin (fechas).");
+    if (!startDateTime || !endDateTime) return setError("Selecciona inicio y fin (fecha y hora).");
 
     const p = personalOptions.find((x) => x.id === selectedPersonalId);
     const trackerUserId = p?.user_id || null;
     if (!trackerUserId) return setError("La persona seleccionada no tiene user_id (tracker_user_id).");
 
+    const startDate = toDateOnly(startDateTime);
+    const endDate = toDateOnly(endDateTime);
+
+    if (!startDate || !endDate) return setError("No se pudo convertir fecha/hora a fecha válida.");
     if (String(endDate) < String(startDate)) return setError("La fecha fin debe ser >= fecha inicio.");
 
     try {
@@ -247,13 +346,17 @@ export default function AsignacionesPage() {
     setSelectedPersonalId(per?.id || "");
 
     setSelectedGeofenceId(r.geofence_id || "");
-    setStartDate(toDateInput(r.start_date));
-    setEndDate(toDateInput(r.end_date));
+    // DB guarda date; en UI lo mostramos con hora “08:00”
+    setStartDateTime(toDateTimeLocalInput(r.start_date));
+    setEndDateTime(toDateTimeLocalInput(r.end_date));
     setActive(!!r.active);
 
     setError(null);
     setSuccessMessage(null);
   }
+
+  const noGeofences = !loadingData && (geofenceOptions?.length || 0) === 0;
+  const noPersonal = !loadingData && (personalOptions?.length || 0) === 0;
 
   if (loading) {
     return (
@@ -266,9 +369,7 @@ export default function AsignacionesPage() {
   if (!isAuthenticated || !user) {
     return (
       <div className="p-4 max-w-3xl mx-auto">
-        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
-          Debes iniciar sesión.
-        </div>
+        <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">Debes iniciar sesión.</div>
       </div>
     );
   }
@@ -285,6 +386,27 @@ export default function AsignacionesPage() {
       {error && <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       {successMessage && (
         <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">{successMessage}</div>
+      )}
+
+      {(noGeofences || noPersonal) && (
+        <div className="mb-4 border rounded bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+          {noPersonal && (
+            <div className="mb-1">
+              No hay trackers disponibles para asignar (o RLS no permite ver <code>personal</code> con <code>user_id</code>).
+            </div>
+          )}
+          {noGeofences && (
+            <div>
+              No hay geocercas disponibles (o RLS no permite ver <code>geofences</code> en esta organización).
+              {debugEnabled && (
+                <div className="text-xs mt-2">
+                  Intento geofences por: <b>{debugInfo.geofenceQueryTried}</b>
+                  {debugInfo.geofenceError ? <span> — error previo: {debugInfo.geofenceError}</span> : null}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="mb-6 border rounded-lg bg-white shadow-sm p-4">
@@ -334,35 +456,44 @@ export default function AsignacionesPage() {
                 </option>
               ))}
             </select>
+
+            {geofenceOptions.length > 0 ? (
+              <p className="text-xs text-gray-500 mt-1">{geofenceOptions.length} geocerca(s) disponibles.</p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-1">
+                No hay geocercas cargadas (o RLS bloquea). Prueba <code>/asignaciones?debug=1</code>.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="start_date" className="mb-1 font-medium text-sm">
-              Inicio (fecha)
+            <label htmlFor="start_dt" className="mb-1 font-medium text-sm">
+              Inicio (fecha + hora)
             </label>
             <input
-              id="start_date"
-              name="start_date"
-              type="date"
+              id="start_dt"
+              name="start_dt"
+              type="datetime-local"
               className="border rounded px-3 py-2"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={startDateTime}
+              onChange={(e) => setStartDateTime(e.target.value)}
               required
               autoComplete="off"
             />
+            <p className="text-xs text-gray-500 mt-1">Se convertirá a fecha (YYYY-MM-DD) al guardar.</p>
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="end_date" className="mb-1 font-medium text-sm">
-              Fin (fecha)
+            <label htmlFor="end_dt" className="mb-1 font-medium text-sm">
+              Fin (fecha + hora)
             </label>
             <input
-              id="end_date"
-              name="end_date"
-              type="date"
+              id="end_dt"
+              name="end_dt"
+              type="datetime-local"
               className="border rounded px-3 py-2"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={endDateTime}
+              onChange={(e) => setEndDateTime(e.target.value)}
               required
               autoComplete="off"
             />
@@ -428,8 +559,24 @@ export default function AsignacionesPage() {
 
       {debugEnabled && (
         <div className="mb-4 border rounded bg-gray-50 p-3 text-xs overflow-auto">
-          <div className="font-semibold mb-2">DEBUG enriched[0]</div>
-          <pre className="whitespace-pre-wrap">{JSON.stringify(enriched?.[0] || null, null, 2)}</pre>
+          <div className="font-semibold mb-2">DEBUG</div>
+          <pre className="whitespace-pre-wrap">
+            {JSON.stringify(
+              {
+                orgId,
+                debugInfo,
+                selectedPersonalId,
+                selectedGeofenceId,
+                startDateTime,
+                endDateTime,
+                startDate: toDateOnly(startDateTime),
+                endDate: toDateOnly(endDateTime),
+                enrichedSample: enriched?.[0] || null,
+              },
+              null,
+              2
+            )}
+          </pre>
         </div>
       )}
 
@@ -478,7 +625,10 @@ export default function AsignacionesPage() {
                       <button className="border rounded px-2 py-1 hover:bg-gray-50" onClick={() => onEditRow(r)}>
                         Editar
                       </button>
-                      <button className="border rounded px-2 py-1 hover:bg-gray-50" onClick={() => handleToggleActive(r)}>
+                      <button
+                        className="border rounded px-2 py-1 hover:bg-gray-50"
+                        onClick={() => handleToggleActive(r)}
+                      >
                         {r.active ? "Pausar" : "Activar"}
                       </button>
                     </td>
