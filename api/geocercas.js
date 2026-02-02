@@ -1,9 +1,9 @@
 // api/geocercas.js
 // ============================================================
 // TENANT-SAFE Geocercas API (CANONICAL)
-// - NO orgId / tenantId desde el cliente
+// - NO orgId / tenantId desde el cliente (DB resuelve contexto)
 // - Contexto resuelto vía bootstrap_session_context()
-// - Todas las operaciones delegan a RPCs
+// - Auth universal: Bearer token (preferido) o cookie tg_at (legacy)
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
@@ -13,7 +13,8 @@ function send(res, status, payload) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("CDN-Cache-Control", "no-store");
   res.setHeader("Surrogate-Control", "no-store");
-  res.setHeader("Vary", "Cookie");
+  // Si antes dependías de Cookie, mantenemos Vary amplio:
+  res.setHeader("Vary", "Cookie, Authorization");
   return res.status(status).json(payload);
 }
 
@@ -28,6 +29,13 @@ function parseCookies(req) {
   return out;
 }
 
+function getBearerToken(req) {
+  const h = String(req.headers?.authorization || "").trim();
+  if (!h) return "";
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m ? String(m[1] || "").trim() : "";
+}
+
 function supabaseForToken(accessToken) {
   const url = process.env.SUPABASE_URL;
   const anon = process.env.SUPABASE_ANON_KEY;
@@ -40,14 +48,23 @@ function supabaseForToken(accessToken) {
 }
 
 async function getContextOr401(req) {
+  // Preferido: Authorization Bearer
+  const bearer = getBearerToken(req);
+  if (bearer) {
+    const supabase = supabaseForToken(bearer);
+    const { error } = await supabase.rpc("bootstrap_session_context");
+    if (error) return { ok: false, status: 401, error: error.message || "ctx error (bearer)" };
+    return { ok: true, supabase };
+  }
+
+  // Legacy: cookie tg_at
   const cookies = parseCookies(req);
-  const token = cookies.tg_at || null;
-  if (!token) return { ok: false, status: 401, error: "missing tg_at cookie" };
+  const token = cookies.tg_at || "";
+  if (!token) return { ok: false, status: 401, error: "missing auth (no Bearer, no tg_at cookie)" };
 
   const supabase = supabaseForToken(token);
-
   const { error } = await supabase.rpc("bootstrap_session_context");
-  if (error) return { ok: false, status: 401, error: error.message || "ctx error" };
+  if (error) return { ok: false, status: 401, error: error.message || "ctx error (cookie)" };
 
   return { ok: true, supabase };
 }
@@ -63,6 +80,22 @@ export default async function handler(req, res) {
     // GET → list geocercas
     // -------------------------
     if (req.method === "GET") {
+      // opcional: id para obtener una geocerca puntual
+      const id = req.query?.id ? String(req.query.id) : "";
+      if (id) {
+        const { data, error } = await supabase.rpc("geocercas_get", { p_id: id }).catch(() => ({
+          data: null,
+          error: null,
+        }));
+
+        // Si no tienes geocercas_get, caemos a list y filtramos (compat)
+        if (error) {
+          console.error("[api/geocercas][GET geocercas_get]", error);
+          return send(res, 500, { ok: false, error: error.message });
+        }
+        if (data) return send(res, 200, data);
+      }
+
       const { data, error } = await supabase.rpc("geocercas_list");
       if (error) {
         console.error("[api/geocercas][GET]", error);
@@ -98,7 +131,7 @@ export default async function handler(req, res) {
     // DELETE → delete geocerca
     // -------------------------
     if (req.method === "DELETE") {
-      const id = req.query.id;
+      const id = req.query?.id ? String(req.query.id) : "";
       if (!id) return send(res, 422, { ok: false, error: "id is required" });
 
       const { error } = await supabase.rpc("geocercas_delete", { p_id: id });
