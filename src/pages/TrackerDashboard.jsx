@@ -6,6 +6,11 @@
 // - Geocercas: vista v_geocercas_tracker_ui (scoped por org_id)
 // - Posiciones: tabla tracker_positions (NO tiene org_id)
 //   => scoping universal por user_id (auth.users.id) de trackers pertenecientes a la org.
+//
+// FIX UNIVERSAL (render):
+// - Supabase/Postgres puede devolver latitude/longitude como string (numeric)
+// - Normalizamos a Number y validamos finitos para que Leaflet renderice.
+// - FitBounds automático cuando llegan puntos.
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
@@ -16,6 +21,7 @@ import {
   Circle,
   Tooltip,
   GeoJSON,
+  useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -71,12 +77,58 @@ function safeJson(input) {
   return null;
 }
 
+// Normaliza numeric/string -> number y valida
+function toNum(v) {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isValidLatLng(lat, lng) {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
 // ✅ Resolver universal del auth uid del tracker
-// Regla: tracker_positions.user_id == auth.users.id
-// En tu app, personal.owner_id es ese auth uid.
-// Además, ya estás creando/sincronizando personal.user_id = owner_id (arreglo universal).
 function resolveTrackerAuthId(row) {
   return row?.user_id || row?.owner_id || null;
+}
+
+// Componente para hacer fitBounds cuando hay puntos válidos
+function FitToPoints({ points, enabled }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (!map) return;
+
+    const latLngs =
+      (points || [])
+        .map((p) => {
+          const lat = toNum(p?.lat);
+          const lng = toNum(p?.lng);
+          return isValidLatLng(lat, lng) ? [lat, lng] : null;
+        })
+        .filter(Boolean) ?? [];
+
+    if (latLngs.length === 0) return;
+
+    // Si es 1 punto, solo pan + zoom razonable
+    if (latLngs.length === 1) {
+      map.setView(latLngs[0], Math.max(map.getZoom() || 12, 15), { animate: true });
+      return;
+    }
+
+    map.fitBounds(latLngs, { padding: [24, 24] });
+  }, [map, points, enabled]);
+
+  return null;
 }
 
 export default function TrackerDashboard() {
@@ -109,7 +161,6 @@ export default function TrackerDashboard() {
 
     setErrorMsg("");
 
-    // ✅ select("*") para no romper por columnas (universal)
     const { data, error } = await supabase
       .from("personal")
       .select("*")
@@ -133,7 +184,6 @@ export default function TrackerDashboard() {
           (p.is_deleted ?? false) === false
       ) ?? [];
 
-    // Solo trackers que tengan auth uid resoluble (user_id/owner_id)
     const conUid = activos.filter((p) => !!resolveTrackerAuthId(p));
 
     setTrackers(conUid);
@@ -173,7 +223,6 @@ export default function TrackerDashboard() {
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
 
-      // ✅ CLAVE: si aún no hay trackers, NO consultar (evita vaciar y “quedarse en 0”)
       if (!trackers || trackers.length === 0) {
         console.warn("[TrackerDashboard] fetchPositions skipped: trackers not loaded yet");
         return;
@@ -186,7 +235,7 @@ export default function TrackerDashboard() {
         setErrorMsg("");
 
         const windowConfig =
-          TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1]; // 6h default
+          TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
         const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
         const allowedTrackerIds = (trackers || [])
@@ -199,12 +248,10 @@ export default function TrackerDashboard() {
           return;
         }
 
-        // Si se seleccionó un tracker, validamos que sea de esta org
         let targetIds = allowedTrackerIds;
         if (selectedTrackerId !== "all") {
           const wanted = String(selectedTrackerId);
           if (!allowedTrackerIds.includes(wanted)) {
-            // Evita mostrar “nada” por selección inválida
             setSelectedTrackerId("all");
             targetIds = allowedTrackerIds;
           } else {
@@ -226,17 +273,24 @@ export default function TrackerDashboard() {
           return;
         }
 
-        const normalized = (data ?? []).map((r) => ({
-          id: r.id,
-          user_id: r.user_id,
-          geocerca_id: r.geocerca_id,
-          lat: r.latitude,
-          lng: r.longitude,
-          accuracy: r.accuracy,
-          speed: r.speed,
-          recorded_at: r.created_at,
-          meta: null,
-        }));
+        const normalized = (data ?? [])
+          .map((r) => {
+            const lat = toNum(r.latitude);
+            const lng = toNum(r.longitude);
+            return {
+              id: r.id,
+              user_id: r.user_id,
+              geocerca_id: r.geocerca_id,
+              lat,
+              lng,
+              accuracy: r.accuracy,
+              speed: r.speed,
+              recorded_at: r.created_at,
+              meta: null,
+              _valid: isValidLatLng(lat, lng),
+            };
+          })
+          .filter((p) => p._valid); // <- si prefieres ver inválidos, quita este filter
 
         setPositions(normalized);
       } finally {
@@ -250,7 +304,6 @@ export default function TrackerDashboard() {
   // EFECTOS
   // -----------------------------------------------------------------------
 
-  // 1) cargar trackers + geocercas al cambiar org
   useEffect(() => {
     if (!orgId) return;
     setLoadingSummary(true);
@@ -263,14 +316,12 @@ export default function TrackerDashboard() {
     })();
   }, [orgId, fetchTrackers, fetchGeofences]);
 
-  // 2) cuando ya hay trackers -> cargar posiciones (y cuando cambian filtros/ventana)
   useEffect(() => {
     if (!orgId) return;
     if (!trackers || trackers.length === 0) return;
     fetchPositions(orgId, { showSpinner: true });
   }, [orgId, trackers, timeWindowId, selectedTrackerId, fetchPositions]);
 
-  // 3) polling
   useEffect(() => {
     if (!orgId) return;
     if (!trackers || trackers.length === 0) return;
@@ -287,7 +338,6 @@ export default function TrackerDashboard() {
   const filteredPositions = useMemo(() => {
     let pts = positions ?? [];
 
-    // ✅ filtro universal por geocerca_id
     if (selectedGeofenceId !== "all") {
       pts = pts.filter((p) => String(p?.geocerca_id || "") === String(selectedGeofenceId));
     }
@@ -314,9 +364,9 @@ export default function TrackerDashboard() {
   const lastPointTime = lastPoint?.recorded_at ?? null;
 
   const mapCenter = useMemo(() => {
-    if (lastPoint && typeof lastPoint.lat === "number" && typeof lastPoint.lng === "number") {
-      return [lastPoint.lat, lastPoint.lng];
-    }
+    const lat = toNum(lastPoint?.lat);
+    const lng = toNum(lastPoint?.lng);
+    if (isValidLatLng(lat, lng)) return [lat, lng];
     return [-0.19, -78.48]; // Quito
   }, [lastPoint]);
 
@@ -440,29 +490,17 @@ export default function TrackerDashboard() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
+              {/* Fit automático a puntos */}
+              <FitToPoints points={filteredPositions} enabled={totalPoints > 0} />
+
               {/* GEOCERCAS */}
               {geofences.map((g) => {
                 const label = g.name || g.nombre || g.id;
 
-                const lat =
-                  typeof g.lat === "number"
-                    ? g.lat
-                    : typeof g.center_lat === "number"
-                    ? g.center_lat
-                    : null;
-                const lng =
-                  typeof g.lng === "number"
-                    ? g.lng
-                    : typeof g.center_lng === "number"
-                    ? g.center_lng
-                    : null;
+                const lat = toNum(g.lat ?? g.center_lat);
+                const lng = toNum(g.lng ?? g.center_lng);
 
-                const radius =
-                  typeof g.radius_m === "number"
-                    ? g.radius_m
-                    : typeof g.radius === "number"
-                    ? g.radius
-                    : 0;
+                const radius = toNum(g.radius_m ?? g.radius) ?? 0;
 
                 const shapeRaw = g.geojson || g.geometry || g.geom || g.polygon || null;
                 const shape = safeJson(shapeRaw) || shapeRaw || null;
@@ -481,7 +519,7 @@ export default function TrackerDashboard() {
                   );
                 }
 
-                if (lat != null && lng != null) {
+                if (isValidLatLng(lat, lng)) {
                   if (radius) {
                     layers.push(
                       <Circle
@@ -521,8 +559,15 @@ export default function TrackerDashboard() {
                 // Para la polilínea queremos orden cronológico asc
                 const chron = [...pts].reverse();
                 const positionsLatLng = chron
-                  .map((p) => (typeof p.lat === "number" && typeof p.lng === "number" ? [p.lat, p.lng] : null))
+                  .map((p) => {
+                    const lat = toNum(p.lat);
+                    const lng = toNum(p.lng);
+                    return isValidLatLng(lat, lng) ? [lat, lng] : null;
+                  })
                   .filter(Boolean);
+
+                const latestLat = toNum(latest?.lat);
+                const latestLng = toNum(latest?.lng);
 
                 return (
                   <React.Fragment key={trackerId}>
@@ -530,9 +575,9 @@ export default function TrackerDashboard() {
                       <Polyline positions={positionsLatLng} pathOptions={{ color, weight: 3 }} />
                     )}
 
-                    {latest && typeof latest.lat === "number" && typeof latest.lng === "number" && (
+                    {isValidLatLng(latestLat, latestLng) && (
                       <CircleMarker
-                        center={[latest.lat, latest.lng]}
+                        center={[latestLat, latestLng]}
                         radius={7}
                         pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
                       >
@@ -545,10 +590,10 @@ export default function TrackerDashboard() {
                               <strong>Hora:</strong> {formatTime(latest.recorded_at)}
                             </div>
                             <div>
-                              <strong>Lat:</strong> {latest.lat.toFixed(6)}
+                              <strong>Lat:</strong> {latestLat.toFixed(6)}
                             </div>
                             <div>
-                              <strong>Lng:</strong> {latest.lng.toFixed(6)}
+                              <strong>Lng:</strong> {latestLng.toFixed(6)}
                             </div>
                             <div>
                               <strong>Geocerca:</strong>{" "}
