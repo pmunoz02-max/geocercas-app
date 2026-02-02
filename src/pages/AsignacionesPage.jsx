@@ -1,11 +1,8 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.1 (Feb 2026) — Tracker Assignments reales
-// - Source of truth: public.tracker_assignments + public.geofences + public.personal
-// - personal: se selecciona persona (personal.id) pero se usa tracker_user_id (personal.user_id)
-// - RLS-safe: lecturas planas sin joins; enrichment en frontend
-// - CRUD via RPC: admin_upsert_tracker_assignment_v1 (idempotente)
-// - end_date NOT NULL (se usa rango por fechas en DB)
-// - UI: datetime-local (fecha+hora) y se convierte a date (YYYY-MM-DD) al guardar
+// Asignaciones v2.3 (Feb 2026) — Fix: org mismatch guard + datetime-local interval
+// - UI usa datetime-local (fecha+hora) para inicio/fin, DB recibe date (YYYY-MM-DD)
+// - Geofences SIEMPRE filtradas por org_id = currentOrg.id (doble filtro)
+// - Debug visual: muestra current org id para detectar cruce de org entre pantallas
 // - Debug opcional: /asignaciones?debug=1
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -24,11 +21,6 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-/**
- * Para inputs:
- * - date: "YYYY-MM-DD"
- * - datetime-local: "YYYY-MM-DDTHH:mm"
- */
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -36,38 +28,25 @@ function pad2(n) {
 function toDateOnly(value) {
   if (!value) return "";
   const s = String(value);
-  // "YYYY-MM-DDTHH:mm:ssZ" o "YYYY-MM-DDTHH:mm"
   if (s.includes("T")) return s.slice(0, 10);
-  // "YYYY-MM-DD HH:mm:ss"
   if (s.includes(" ")) return s.split(" ")[0].slice(0, 10);
-  // "YYYY-MM-DD"
   return s.slice(0, 10);
 }
 
 function toDateTimeLocalInput(value) {
   if (!value) return "";
   const s = String(value);
-
-  // Si ya viene en formato datetime
-  if (s.includes("T")) {
-    // "YYYY-MM-DDTHH:mm:ssZ" -> "YYYY-MM-DDTHH:mm"
-    return s.slice(0, 16);
-  }
+  if (s.includes("T")) return s.slice(0, 16);
   if (s.includes(" ")) {
-    // "YYYY-MM-DD HH:mm:ss" -> "YYYY-MM-DDTHH:mm"
     const [d, t] = s.split(" ");
     return `${d.slice(0, 10)}T${t.slice(0, 5)}`;
   }
-
-  // Si solo viene date: completar hora 08:00 (neutro) para UX
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T08:00`;
-
   return "";
 }
 
 function nowDateTimeLocal() {
   const d = new Date();
-  // datetime-local requiere local time, sin Z
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(
     d.getMinutes()
   )}`;
@@ -78,6 +57,12 @@ function plusDaysDateTimeLocal(days) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(
     d.getMinutes()
   )}`;
+}
+
+function shortId(uuid) {
+  if (!uuid) return "";
+  const s = String(uuid);
+  return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
 }
 
 export default function AsignacionesPage() {
@@ -91,28 +76,16 @@ export default function AsignacionesPage() {
   const [successMessage, setSuccessMessage] = useState(null);
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
-  // Form (selecciona personal.id pero guardamos tracker_user_id real)
+  // Form
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
-
-  // UI fecha+hora (datetime-local) pero DB es date: convertimos en submit
   const [startDateTime, setStartDateTime] = useState(nowDateTimeLocal());
   const [endDateTime, setEndDateTime] = useState(plusDaysDateTimeLocal(365));
-
   const [active, setActive] = useState(true);
-  const [editingKey, setEditingKey] = useState(null); // id de tracker_assignments
+  const [editingKey, setEditingKey] = useState(null);
 
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geofenceOptions, setGeofenceOptions] = useState([]);
-
-  // Debug info
-  const [debugInfo, setDebugInfo] = useState({
-    personalCount: 0,
-    geofenceCount: 0,
-    assignmentCount: 0,
-    geofenceQueryTried: "",
-    geofenceError: null,
-  });
 
   const debugEnabled = useMemo(() => {
     try {
@@ -121,6 +94,14 @@ export default function AsignacionesPage() {
       return false;
     }
   }, []);
+
+  const [debugInfo, setDebugInfo] = useState({
+    personalCount: 0,
+    geofenceCount: 0,
+    assignmentCount: 0,
+    geofenceSelectError: null,
+    orgIdUsed: null,
+  });
 
   function resetForm() {
     setSelectedPersonalId("");
@@ -146,7 +127,7 @@ export default function AsignacionesPage() {
     }
 
     try {
-      // 1) Catálogo personal (incluye user_id real del tracker)
+      // 1) Personal
       const pRes = await supabase
         .from("personal")
         .select("id, org_id, nombre, apellido, email, user_id, is_deleted")
@@ -167,55 +148,41 @@ export default function AsignacionesPage() {
             p.id,
           email: p.email || "",
         }))
-        // para asignar tracker, necesitamos user_id
         .filter((p) => !!p.user_id);
 
       const personalDedup = dedupeById(personal);
       setPersonalOptions(personalDedup);
 
-      // 2) Catálogo geofences (source of truth)
-      // En algunos despliegues antiguos, el campo de org puede llamarse organization_id.
-      // Intentamos org_id primero (correcto actual). Si falla por columna, intentamos organization_id.
-      let geofencesData = null;
-      let geofenceQueryTried = "org_id";
-      let geofenceError = null;
+      // 2) Geofences (doble filtro: query + filtro frontend por seguridad)
+      let geofenceSelectError = null;
 
-      const gRes1 = await supabase
+      const gRes = await supabase
         .from("geofences")
         .select("id, org_id, name, created_at")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
 
-      if (!gRes1.error) {
-        geofencesData = gRes1.data || [];
-      } else {
-        // fallback si la columna org_id no existe o si hay un esquema distinto
-        geofenceError = gRes1.error;
-        geofenceQueryTried = "organization_id (fallback)";
-
-        const gRes2 = await supabase
-          .from("geofences")
-          .select("id, organization_id, name, created_at")
-          .eq("organization_id", orgId)
-          .order("created_at", { ascending: false });
-
-        if (gRes2.error) {
-          // si también falla, lanzamos el error más reciente
-          throw gRes2.error;
-        }
-        geofencesData = gRes2.data || [];
+      if (gRes.error) {
+        geofenceSelectError = gRes.error.message;
       }
 
-      const geofences = (geofencesData || []).map((g) => ({
+      const rawGeofences = (gRes.data || []).map((g) => ({
         id: g.id,
-        org_id: g.org_id || g.organization_id || null,
+        org_id: g.org_id,
         label: g.name || g.id,
       }));
 
+      // HARD GUARD: si por cualquier motivo vinieran mezcladas, se filtran aquí
+      const geofences = rawGeofences.filter((g) => g.org_id === orgId);
       const geofencesDedup = dedupeById(geofences);
       setGeofenceOptions(geofencesDedup);
 
-      // 3) Asignaciones planas (tracker_assignments)
+      // Si la geocerca seleccionada ya no pertenece al org actual, la limpiamos
+      if (selectedGeofenceId && !geofencesDedup.some((g) => g.id === selectedGeofenceId)) {
+        setSelectedGeofenceId("");
+      }
+
+      // 3) Assignments
       const taRes = await supabase
         .from("tracker_assignments")
         .select("id, org_id, tracker_user_id, geofence_id, start_date, end_date, active, created_at")
@@ -226,13 +193,12 @@ export default function AsignacionesPage() {
 
       setRows(taRes.data || []);
 
-      // Debug info
       setDebugInfo({
         personalCount: personalDedup.length,
         geofenceCount: geofencesDedup.length,
         assignmentCount: (taRes.data || []).length,
-        geofenceQueryTried,
-        geofenceError: geofenceError ? geofenceError.message : null,
+        geofenceSelectError,
+        orgIdUsed: orgId,
       });
 
       setLoadingData(false);
@@ -249,7 +215,6 @@ export default function AsignacionesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, isAuthenticated, user?.id, orgId]);
 
-  // Enrichment frontend
   const enriched = useMemo(() => {
     const geoMap = new Map((geofenceOptions || []).map((g) => [g.id, g]));
     const perByUser = new Map((personalOptions || []).map((p) => [p.user_id, p]));
@@ -346,7 +311,6 @@ export default function AsignacionesPage() {
     setSelectedPersonalId(per?.id || "");
 
     setSelectedGeofenceId(r.geofence_id || "");
-    // DB guarda date; en UI lo mostramos con hora “08:00”
     setStartDateTime(toDateTimeLocalInput(r.start_date));
     setEndDateTime(toDateTimeLocalInput(r.end_date));
     setActive(!!r.active);
@@ -356,7 +320,6 @@ export default function AsignacionesPage() {
   }
 
   const noGeofences = !loadingData && (geofenceOptions?.length || 0) === 0;
-  const noPersonal = !loadingData && (personalOptions?.length || 0) === 0;
 
   if (loading) {
     return (
@@ -379,7 +342,8 @@ export default function AsignacionesPage() {
       <div className="mb-4">
         <h1 className="text-2xl font-bold">{t("asignaciones.title", { defaultValue: "Asignaciones" })}</h1>
         <p className="text-xs text-gray-500 mt-1">
-          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+          Org actual: <span className="font-medium">{currentOrg?.name || "—"}</span>{" "}
+          <span className="text-gray-400">({currentOrg?.id || "—"})</span>
         </p>
       </div>
 
@@ -388,24 +352,14 @@ export default function AsignacionesPage() {
         <div className="mb-4 border rounded bg-green-50 px-3 py-2 text-sm text-green-700">{successMessage}</div>
       )}
 
-      {(noGeofences || noPersonal) && (
+      {noGeofences && (
         <div className="mb-4 border rounded bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
-          {noPersonal && (
-            <div className="mb-1">
-              No hay trackers disponibles para asignar (o RLS no permite ver <code>personal</code> con <code>user_id</code>).
+          No hay geocercas para esta org ({shortId(orgId)}). Si en “Geocerca” ves otras, estás en otra organización.
+          {debugEnabled && debugInfo.geofenceSelectError ? (
+            <div className="text-xs mt-2">
+              Error SELECT geofences: <b>{debugInfo.geofenceSelectError}</b>
             </div>
-          )}
-          {noGeofences && (
-            <div>
-              No hay geocercas disponibles (o RLS no permite ver <code>geofences</code> en esta organización).
-              {debugEnabled && (
-                <div className="text-xs mt-2">
-                  Intento geofences por: <b>{debugInfo.geofenceQueryTried}</b>
-                  {debugInfo.geofenceError ? <span> — error previo: {debugInfo.geofenceError}</span> : null}
-                </div>
-              )}
-            </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -452,18 +406,10 @@ export default function AsignacionesPage() {
               <option value="">Selecciona una geocerca</option>
               {geofenceOptions.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.label}
+                  {g.label} — ({shortId(g.org_id)})
                 </option>
               ))}
             </select>
-
-            {geofenceOptions.length > 0 ? (
-              <p className="text-xs text-gray-500 mt-1">{geofenceOptions.length} geocerca(s) disponibles.</p>
-            ) : (
-              <p className="text-xs text-gray-500 mt-1">
-                No hay geocercas cargadas (o RLS bloquea). Prueba <code>/asignaciones?debug=1</code>.
-              </p>
-            )}
           </div>
 
           <div className="flex flex-col">
@@ -480,7 +426,6 @@ export default function AsignacionesPage() {
               required
               autoComplete="off"
             />
-            <p className="text-xs text-gray-500 mt-1">Se convertirá a fecha (YYYY-MM-DD) al guardar.</p>
           </div>
 
           <div className="flex flex-col">
@@ -498,7 +443,7 @@ export default function AsignacionesPage() {
               autoComplete="off"
             />
             <p className="text-xs text-gray-500 mt-1">
-              end_date es NOT NULL en DB. Usa fin futuro (ej. +365 días) si quieres “vigencia larga”.
+              DB guarda solo fecha (YYYY-MM-DD). La hora es para UX; se recorta al guardar.
             </p>
           </div>
 
@@ -565,13 +510,7 @@ export default function AsignacionesPage() {
               {
                 orgId,
                 debugInfo,
-                selectedPersonalId,
-                selectedGeofenceId,
-                startDateTime,
-                endDateTime,
-                startDate: toDateOnly(startDateTime),
-                endDate: toDateOnly(endDateTime),
-                enrichedSample: enriched?.[0] || null,
+                geofenceOptionsSample: geofenceOptions?.[0] || null,
               },
               null,
               2
