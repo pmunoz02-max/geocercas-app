@@ -1,10 +1,10 @@
-G// src/components/geocercas/NuevaGeocerca.jsx
+// src/components/geocercas/NuevaGeocerca.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, FeatureGroup, Pane, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "leaflet/dist/leaflet.css";
-import { GeomanControls } from "react-leaflet-geoman-v2";
+import GeomanControls from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
 import { useAuth } from "../../context/AuthContext.jsx";
