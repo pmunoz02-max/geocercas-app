@@ -5,7 +5,7 @@
 // - Endpoint se mantiene /api/geocercas por compatibilidad
 // - Mapeo legacy:
 //    nombre  <-> geofences.name
-//    geojson <-> geofences.geojson || geofences.geometry
+//    geojson <-> geofences.geojson (puede ser Feature/FC/Geometry)
 // - Auth universal: Bearer token (preferido) o cookie tg_at (legacy)
 // - Contexto por sesión: bootstrap_session_context()
 // ============================================================
@@ -72,7 +72,7 @@ async function getContextOr401(req) {
 
 function mapGeofenceRowToLegacy(row) {
   if (!row) return null;
-  const geo = row.geojson ?? row.geometry ?? null;
+  const geo = row.geojson ?? row.polygon_geojson ?? null;
   return {
     ...row,
     nombre: row.name ?? "",
@@ -82,13 +82,39 @@ function mapGeofenceRowToLegacy(row) {
   };
 }
 
-function isMissingColumnError(err, colRef) {
-  const msg = String(err?.message || "").toLowerCase();
-  return msg.includes(`column ${String(colRef).toLowerCase()}`) && msg.includes("does not exist");
-}
-
 function normalizeCi(s) {
   return String(s || "").trim().toLowerCase();
+}
+
+function extractGeometryJson(geo) {
+  if (!geo) return null;
+
+  const t = String(geo?.type || "").toLowerCase();
+  if (t === "featurecollection") return geo?.features?.[0]?.geometry || null;
+  if (t === "feature") return geo?.geometry || null;
+  return geo; // geometry puro
+}
+
+function extractCircleProps(geo) {
+  // si viene como Feature Point con properties.radius_m
+  try {
+    const t = String(geo?.type || "").toLowerCase();
+    if (t !== "feature") return null;
+    const g = geo?.geometry;
+    if (!g || String(g.type || "").toLowerCase() !== "point") return null;
+
+    const radius = Number(geo?.properties?.radius_m || 0);
+    const coords = Array.isArray(g.coordinates) ? g.coordinates : null;
+    if (!coords || coords.length < 2) return null;
+
+    const lng = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radius) || radius <= 0) return null;
+
+    return { lat, lng, radius_m: Math.round(radius) };
+  } catch {
+    return null;
+  }
 }
 
 export default async function handler(req, res) {
@@ -130,27 +156,29 @@ export default async function handler(req, res) {
 
       const geo = body.geojson || body.geometry || body.geom || null;
 
-      // Intento 1: columna geojson
-      let payload = { id, org_id, name };
-      if (geo !== null) payload.geojson = geo;
+      const payload = { id, org_id, name, active: true };
 
-      let { data, error } = await supabase
+      if (geo !== null) {
+        payload.geojson = geo;
+
+        // ✅ Guardamos polygon_geojson limpio (geometry pura), así triggers/constraints no sufren
+        const gOnly = extractGeometryJson(geo);
+        if (gOnly) payload.polygon_geojson = gOnly;
+
+        // ✅ Si es círculo, opcionalmente llenamos lat/lng/radius_m (si tu UI manda Feature Point + radius_m)
+        const circle = extractCircleProps(geo);
+        if (circle) {
+          payload.lat = circle.lat;
+          payload.lng = circle.lng;
+          payload.radius_m = circle.radius_m;
+        }
+      }
+
+      const { data, error } = await supabase
         .from("geofences")
         .upsert(payload, { onConflict: "id" })
         .select("*")
         .maybeSingle();
-
-      // Fallback: si no existe geojson, probamos geometry
-      if (error && geo !== null && isMissingColumnError(error, "geofences.geojson")) {
-        payload = { id, org_id, name, geometry: geo };
-        const r2 = await supabase
-          .from("geofences")
-          .upsert(payload, { onConflict: "id" })
-          .select("*")
-          .maybeSingle();
-        data = r2.data;
-        error = r2.error;
-      }
 
       if (error) return send(res, 500, { ok: false, error: error.message });
       return send(res, 200, { ok: true, row: mapGeofenceRowToLegacy(data) });
@@ -158,20 +186,16 @@ export default async function handler(req, res) {
 
     // -------------------------
     // DELETE → delete geofence
-    // - por id (query ?id=)
-    // - bulk por { orgId, nombres_ci } (body)
     // -------------------------
     if (req.method === "DELETE") {
       const id = req.query?.id ? String(req.query.id) : "";
 
-      // Caso 1: delete por id
       if (id) {
         const { error } = await supabase.from("geofences").delete().eq("id", id);
         if (error) return send(res, 500, { ok: false, error: error.message });
         return send(res, 200, { ok: true });
       }
 
-      // Caso 2: bulk (tu UI)
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
       const orgId = body.orgId || body.org_id || null;
       const nombres_ci = Array.isArray(body.nombres_ci) ? body.nombres_ci : [];
@@ -180,8 +204,6 @@ export default async function handler(req, res) {
         return send(res, 422, { ok: false, error: "id (query) OR { orgId, nombres_ci[] } is required" });
       }
 
-      // ✅ FIX: no dependemos de name_ci/nombre_ci (no existen).
-      // Leemos ids por org, calculamos lower(name) y borramos por ids.
       const wanted = new Set(nombres_ci.map(normalizeCi).filter(Boolean));
 
       const { data: rows, error: listErr } = await supabase
