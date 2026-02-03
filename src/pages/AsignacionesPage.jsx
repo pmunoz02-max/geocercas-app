@@ -233,13 +233,16 @@ export default function AsignacionesPage() {
       setRows(normalized);
 
       if (debug) {
-        // eslint-disable-next-line no-console
-        console.log("DEBUG orgId:", orgId);
-        // eslint-disable-next-line no-console
-        console.log("DEBUG v_tracker_assignments_ui first row (raw):", (a || [])[0] || null);
-        // eslint-disable-next-line no-console
-        console.log("DEBUG v_tracker_assignments_ui first row (normalized):", normalized[0] || null);
-      }
+  console.log("DEBUG orgId:", orgId);
+  console.log("DEBUG v_tracker_assignments_ui first row (raw):", (a || [])[0] || null);
+  console.log("DEBUG v_tracker_assignments_ui first row (normalized):", normalized[0] || null);
+
+  // ✅ expone data real para copiar desde consola
+  window.__asig_raw = (a || [])[0] || null;
+  window.__asig_norm = normalized[0] || null;
+  window.__asig_rows = normalized || [];
+}
+
 
       setLoadingData(false);
     } catch (e) {
