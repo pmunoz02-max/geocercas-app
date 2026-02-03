@@ -17,6 +17,9 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 // ✅ Claim Invite (nuevo)
 import ClaimInvite from "./pages/ClaimInvite.jsx";
 
+// ✅ Privacy Policy (public)
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
+
 // Tracker GPS
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import TrackerAuthBridge from "./pages/TrackerAuthBridge.jsx";
@@ -83,6 +86,9 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+
+        {/* ✅ Privacy Policy (public, required by Google Play) */}
+        <Route path="/privacy" element={<PrivacyPolicy />} />
 
         {/* ✅ Claim invite (public, pero requiere que el usuario esté logueado para que RPC funcione) */}
         <Route path="/claim" element={<ClaimInvite />} />
