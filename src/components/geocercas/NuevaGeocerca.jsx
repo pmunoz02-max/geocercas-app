@@ -4,7 +4,9 @@ import { MapContainer, TileLayer, GeoJSON, FeatureGroup, Pane, useMapEvents } fr
 import L from "leaflet";
 
 import "leaflet/dist/leaflet.css";
-import GeomanControls from "react-leaflet-geoman-v2";
+
+// ✅ IMPORT CORRECTO (Vercel build fix):
+import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -227,25 +229,6 @@ function addTombstones(orgId, names) {
   if (!orgId) return;
   const set = readTombstones(orgId);
   for (const nm of names || []) set.add(normalizeNombreCi(nm));
-  try {
-    localStorage.setItem(tombstoneKey(orgId), JSON.stringify(Array.from(set)));
-  } catch {}
-}
-
-/** ✅ NUEVO: remover tombstones para que vuelva a aparecer en panel */
-function removeTombstones(orgId, names) {
-  if (typeof window === "undefined") return;
-  if (!orgId) return;
-  const set = readTombstones(orgId);
-  let changed = false;
-  for (const nm of names || []) {
-    const key = normalizeNombreCi(nm);
-    if (set.has(key)) {
-      set.delete(key);
-      changed = true;
-    }
-  }
-  if (!changed) return;
   try {
     localStorage.setItem(tombstoneKey(orgId), JSON.stringify(Array.from(set)));
   } catch {}
@@ -541,9 +524,12 @@ export default function NuevaGeocerca() {
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
   /**
-   * ✅ FIX UNIVERSAL:
-   * - Polygon/Rectangle: Feature Polygon
-   * - Circle: Feature Point + properties.radius_m
+   * ✅ Envío correcto al backend:
+   * - Polígonos: Feature Polygon
+   * - Círculo: Feature Point + properties.radius_m
+   *
+   * Nota: aquí enviamos **feature** (no FeatureCollection) para que tu función
+   * _geojson_extract_geometry funcione perfecto (Feature/FC/Geometry).
    */
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
@@ -605,9 +591,10 @@ export default function NuevaGeocerca() {
       return;
     }
 
+    // Vista siempre como FC (solo para render)
     const fc = { type: "FeatureCollection", features: [feature] };
 
-    // local snapshot (no molesta, pero NO manda el panel si la API responde ok)
+    // Local write (solo cache UI)
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(
@@ -619,14 +606,12 @@ export default function NuevaGeocerca() {
 
     try {
       await upsertGeocerca({
+        // 🔥 Importante: NO mandamos id (para evitar "id null")
         org_id: orgId,
         nombre: nm,
-        geojson: feature,
-        geometry: feature,
+        geojson: feature, // ✅ Feature (no FC)
+        geometry: feature, // compat
       });
-
-      // ✅ FIX: si estaba tombstoneado, lo “revivimos” (porque acabas de guardarlo)
-      removeTombstones(orgId, [nm]);
 
       setSelectedNames(() => new Set([nm]));
       setLastSelectedName(nm);
@@ -668,7 +653,9 @@ export default function NuevaGeocerca() {
       return;
     }
 
-    const confirmed = window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }));
+    const confirmed = window.confirm(
+      t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
+    );
     if (!confirmed) return;
 
     const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
@@ -745,14 +732,16 @@ export default function NuevaGeocerca() {
         return;
       }
 
-      setViewFeature(geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] });
-      setViewCentroid(centroidFeatureFromGeojson(geo));
+      const fc = geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
+
+      setViewFeature(fc);
+      setViewCentroid(centroidFeatureFromGeojson(fc));
       setViewId((x) => x + 1);
 
       if (mapRef.current) {
         try {
           mapRef.current.invalidateSize?.();
-          const bounds = L.geoJSON(geo).getBounds();
+          const bounds = L.geoJSON(fc).getBounds();
           if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
         } catch {}
       }
@@ -765,7 +754,8 @@ export default function NuevaGeocerca() {
 
   const pointStyle = useMemo(
     () => ({
-      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
+      pointToLayer: (_feature, latlng) =>
+        L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
     }),
     []
   );
@@ -871,7 +861,9 @@ export default function NuevaGeocerca() {
               className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
               type="button"
             >
-              {showLoading ? t("common.actions.loading", { defaultValue: "Cargando..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
+              {showLoading
+                ? t("common.actions.loading", { defaultValue: "Cargando..." })
+                : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
             <button
@@ -1016,9 +1008,12 @@ export default function NuevaGeocerca() {
             </h2>
 
             <p className="text-xs text-slate-400">
-              {t("geocercas.modalHintRule", { defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono" })}
+              {t("geocercas.modalHintRule", {
+                defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
+              })}
               <br />
-              {t("geocercas.modalInstruction", { defaultValue: "Formato:" })} <span className="font-mono text-[11px]">lat,lng</span>{" "}
+              {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
+              <span className="font-mono text-[11px]">lat,lng</span>{" "}
               {t("geocercas.modalOnePerLine", { defaultValue: "(uno por línea)" })}
             </p>
 
@@ -1039,7 +1034,11 @@ export default function NuevaGeocerca() {
                 {t("common.actions.cancel", { defaultValue: "Cancelar" })}
               </button>
 
-              <button onClick={handleDrawFromCoords} className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white" type="button">
+              <button
+                onClick={handleDrawFromCoords}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white"
+                type="button"
+              >
                 {t("geocercas.modalDraw", { defaultValue: "Dibujar" })}
               </button>
             </div>
