@@ -1,10 +1,9 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.8 FINAL (Feb 2026)
-// - Fuente canónica de lectura: public.v_tracker_assignments_ui (contrato estable DB->UI)
+// Asignaciones v2.9 FINAL (Feb 2026)
+// - Lectura canónica: v_tracker_assignments_ui (contrato estable DB->UI)
 // - Escritura: RPC admin_upsert_tracker_assignment_v1
-// - DatePicker con icono calendario (react-datepicker v8: showIcon + icon)
-// - UI usa fecha + hora | DB guarda solo DATE
-// - Filtro estricto por org_id (vía RLS + org_id en vista)
+// - DatePicker con icono calendario (react-datepicker v8)
+// - DEBUG universal activable con ?debug=1
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -55,17 +54,9 @@ function plusDays(days) {
 }
 
 /* ---------- Calendar icon (SVG) ---------- */
-
 function CalendarIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="text-gray-500"
-    >
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-gray-500">
       <path
         d="M7 3v2M17 3v2M4 9h16M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
         stroke="currentColor"
@@ -76,17 +67,25 @@ function CalendarIcon() {
   );
 }
 
-/* ================= COMPONENT ================= */
-
 export default function AsignacionesPage() {
   const { loading, isAuthenticated, user, currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
 
-  // Options para crear asignación (inputs)
+  // DEBUG universal: activar con ?debug=1
+  const debug = useMemo(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      return qs.get("debug") === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Selectores (crear asignación)
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geofenceOptions, setGeofenceOptions] = useState([]);
 
-  // Tabla desde vista canónica
+  // Tabla (desde vista canónica)
   const [rows, setRows] = useState([]);
 
   // Form
@@ -96,43 +95,35 @@ export default function AsignacionesPage() {
   const [endDt, setEndDt] = useState(plusDays(365));
   const [active, setActive] = useState(true);
 
-  // UI states
+  // UI
   const [estadoFilter, setEstadoFilter] = useState("todos");
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  /* ---------------- load ---------------- */
-
   async function loadAll() {
     if (!orgId) return;
-
     setLoadingData(true);
     setError(null);
 
     try {
-      // Personal (para selector)
+      // Personal para selector
       const { data: p, error: pErr } = await supabase
         .from("personal")
         .select("id, nombre, apellido, email, user_id, org_id, is_deleted")
         .eq("org_id", orgId);
-
       if (pErr) throw pErr;
 
-      const ppl =
-        (p || [])
-          .filter((x) => x.user_id && !x.is_deleted)
-          .map((x) => ({
-            id: x.id,
-            user_id: x.user_id,
-            label:
-              `${x.nombre || ""} ${x.apellido || ""}`.trim() ||
-              x.email ||
-              x.id,
-            email: x.email || "",
-          })) || [];
+      const ppl = (p || [])
+        .filter((x) => x.user_id && !x.is_deleted)
+        .map((x) => ({
+          id: x.id,
+          user_id: x.user_id,
+          label: `${x.nombre || ""} ${x.apellido || ""}`.trim() || x.email || x.id,
+          email: x.email || "",
+        }));
 
-      // Dedupe por id
+      // dedupe
       const seen = new Set();
       const deduped = [];
       for (const it of ppl) {
@@ -143,29 +134,32 @@ export default function AsignacionesPage() {
       }
       setPersonalOptions(deduped);
 
-      // Geofences (para selector)
+      // Geofences para selector
       const { data: g, error: gErr } = await supabase
         .from("geofences")
         .select("id, name, org_id")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
-
       if (gErr) throw gErr;
 
       setGeofenceOptions((g || []).map((x) => ({ id: x.id, label: x.name })));
 
-      // Vista canónica (para tabla)
+      // ✅ Tabla desde vista canónica
       const { data: a, error: aErr } = await supabase
         .from("v_tracker_assignments_ui")
-        .select(
-          "id, org_id, tracker_user_id, geofence_id, start_date, end_date, active, created_at, updated_at, geofence_name, tracker_email, tracker_name, tracker_label"
-        )
+        .select("id, org_id, tracker_user_id, geofence_id, start_date, end_date, active, created_at, geofence_name, tracker_email, tracker_label")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
-
       if (aErr) throw aErr;
 
       setRows(a || []);
+
+      // DEBUG: confirma en consola qué está llegando al frontend
+      if (debug && (a || []).length) {
+        // eslint-disable-next-line no-console
+        console.log("DEBUG v_tracker_assignments_ui first row:", a[0]);
+      }
+
       setLoadingData(false);
     } catch (e) {
       setError(e.message || String(e));
@@ -177,8 +171,6 @@ export default function AsignacionesPage() {
     if (!loading && isAuthenticated) loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, isAuthenticated, user?.id, orgId]);
-
-  /* ---------------- submit ---------------- */
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -204,7 +196,6 @@ export default function AsignacionesPage() {
         p_end_date: endDate,
         p_active: active,
       });
-
       if (rpcErr) throw rpcErr;
 
       setSuccess("Asignación guardada.");
@@ -218,8 +209,6 @@ export default function AsignacionesPage() {
     }
   }
 
-  /* ---------------- list filters ---------------- */
-
   const filteredRows = useMemo(() => {
     const base = rows || [];
     if (estadoFilter === "activa") return base.filter((r) => r?.active === true);
@@ -227,16 +216,9 @@ export default function AsignacionesPage() {
     return base;
   }, [rows, estadoFilter]);
 
-  /* ---------------- toggle active ---------------- */
-
   async function toggleActive(row) {
-    if (!row) return;
     setError(null);
     setSuccess(null);
-
-    if (!row.tracker_user_id || !row.geofence_id || !row.start_date || !row.end_date) {
-      return setError("Fila inválida (faltan ids/fechas).");
-    }
 
     try {
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
@@ -247,7 +229,6 @@ export default function AsignacionesPage() {
         p_end_date: String(row.end_date),
         p_active: !row.active,
       });
-
       if (rpcErr) throw rpcErr;
 
       setSuccess(!row.active ? "Asignación activada." : "Asignación inactivada.");
@@ -257,11 +238,7 @@ export default function AsignacionesPage() {
     }
   }
 
-  /* ================= RENDER ================= */
-
-  if (!isAuthenticated) {
-    return <div className="p-4">Debes iniciar sesión.</div>;
-  }
+  if (!isAuthenticated) return <div className="p-4">Debes iniciar sesión.</div>;
 
   return (
     <div className="p-4 w-full">
@@ -273,34 +250,18 @@ export default function AsignacionesPage() {
       {error && <div className="mb-3 bg-red-50 border px-3 py-2 text-red-700">{error}</div>}
       {success && <div className="mb-3 bg-green-50 border px-3 py-2 text-green-700">{success}</div>}
 
-      {/* ================= FORM ================= */}
-      <form
-        onSubmit={handleSubmit}
-        className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 border rounded"
-      >
-        <select
-          className="border rounded px-3 py-2"
-          value={selectedPersonalId}
-          onChange={(e) => setSelectedPersonalId(e.target.value)}
-        >
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 border rounded">
+        <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)}>
           <option value="">Selecciona tracker</option>
           {personalOptions.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
+            <option key={p.id} value={p.id}>{p.label}</option>
           ))}
         </select>
 
-        <select
-          className="border rounded px-3 py-2"
-          value={selectedGeofenceId}
-          onChange={(e) => setSelectedGeofenceId(e.target.value)}
-        >
+        <select className="border rounded px-3 py-2" value={selectedGeofenceId} onChange={(e) => setSelectedGeofenceId(e.target.value)}>
           <option value="">Selecciona geocerca</option>
           {geofenceOptions.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.label}
-            </option>
+            <option key={g.id} value={g.id}>{g.label}</option>
           ))}
         </select>
 
@@ -338,11 +299,7 @@ export default function AsignacionesPage() {
           />
         </div>
 
-        <select
-          className="border rounded px-3 py-2"
-          value={active ? "activa" : "inactiva"}
-          onChange={(e) => setActive(e.target.value === "activa")}
-        >
+        <select className="border rounded px-3 py-2" value={active ? "activa" : "inactiva"} onChange={(e) => setActive(e.target.value === "activa")}>
           <option value="activa">Activa</option>
           <option value="inactiva">Inactiva</option>
         </select>
@@ -350,18 +307,13 @@ export default function AsignacionesPage() {
         <button className="bg-blue-600 text-white rounded px-4 py-2">Guardar</button>
       </form>
 
-      {/* ================= LISTADO ================= */}
       <div className="mt-6 bg-white border rounded p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
           <h2 className="text-lg font-semibold">Asignaciones guardadas</h2>
 
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">Estado:</span>
-            <select
-              className="border rounded px-3 py-2"
-              value={estadoFilter}
-              onChange={(e) => setEstadoFilter(e.target.value)}
-            >
+            <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
               {ESTADOS.map((x) => (
                 <option key={x} value={x}>
                   {x === "todos" ? "Todos" : x === "activa" ? "Activas" : "Inactivas"}
@@ -369,12 +321,7 @@ export default function AsignacionesPage() {
               ))}
             </select>
 
-            <button
-              type="button"
-              className="border rounded px-3 py-2 hover:bg-gray-50"
-              onClick={loadAll}
-              title="Refrescar"
-            >
+            <button type="button" className="border rounded px-3 py-2 hover:bg-gray-50" onClick={loadAll}>
               Refrescar
             </button>
           </div>
@@ -399,45 +346,38 @@ export default function AsignacionesPage() {
               </thead>
               <tbody>
                 {filteredRows.map((r) => {
-                  const trackerText =
-                    r.tracker_label || r.tracker_email || shortId(r.tracker_user_id);
-
-                  const geofenceText =
-                    r.geofence_name || shortId(r.geofence_id);
+                  const trackerText = r.tracker_label || r.tracker_email || shortId(r.tracker_user_id);
+                  const geofenceText = r.geofence_name || shortId(r.geofence_id);
+                  const startText = formatDateDDMMYYYY(r.start_date);
+                  const endText = formatDateDDMMYYYY(r.end_date);
 
                   return (
                     <tr key={r.id} className="border-b last:border-b-0">
                       <td className="py-2 pr-3">
                         <div className="font-medium">{trackerText || "—"}</div>
-                        {r.tracker_email ? (
-                          <div className="text-xs text-gray-500">{r.tracker_email}</div>
-                        ) : null}
+                        {r.tracker_email ? <div className="text-xs text-gray-500">{r.tracker_email}</div> : null}
                       </td>
 
                       <td className="py-2 pr-3">{geofenceText || "—"}</td>
-                      <td className="py-2 pr-3">{formatDateDDMMYYYY(r.start_date)}</td>
-                      <td className="py-2 pr-3">{formatDateDDMMYYYY(r.end_date)}</td>
+                      <td className="py-2 pr-3">{startText || "—"}</td>
+                      <td className="py-2 pr-3">{endText || "—"}</td>
 
                       <td className="py-2 pr-3">
-                        <span
-                          className={
-                            r.active
-                              ? "inline-flex items-center px-2 py-1 rounded bg-green-50 text-green-700 border"
-                              : "inline-flex items-center px-2 py-1 rounded bg-gray-50 text-gray-700 border"
-                          }
-                        >
+                        <span className={r.active ? "inline-flex items-center px-2 py-1 rounded bg-green-50 text-green-700 border" : "inline-flex items-center px-2 py-1 rounded bg-gray-50 text-gray-700 border"}>
                           {r.active ? "Activa" : "Inactiva"}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3 text-right">
-                        <button
-                          type="button"
-                          className="border rounded px-3 py-1 hover:bg-gray-50"
-                          onClick={() => toggleActive(r)}
-                        >
+                        <button type="button" className="border rounded px-3 py-1 hover:bg-gray-50" onClick={() => toggleActive(r)}>
                           {r.active ? "Inactivar" : "Activar"}
                         </button>
+
+                        {debug ? (
+                          <div className="mt-1 text-[11px] text-gray-500">
+                            dbg: {String(r.geofence_name)} | {String(r.start_date)} | {String(r.end_date)}
+                          </div>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -448,6 +388,12 @@ export default function AsignacionesPage() {
             <div className="mt-2 text-xs text-gray-500">
               Mostrando {filteredRows.length} de {rows.length}.
             </div>
+
+            {debug ? (
+              <pre className="mt-3 text-xs bg-gray-50 border rounded p-2 overflow-auto">
+                {JSON.stringify(rows?.[0] || null, null, 2)}
+              </pre>
+            ) : null}
           </div>
         )}
       </div>
