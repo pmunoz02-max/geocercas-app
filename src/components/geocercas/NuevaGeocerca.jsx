@@ -1,4 +1,4 @@
-// src/components/geocercas/NuevaGeocerca.jsx
+G// src/components/geocercas/NuevaGeocerca.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, FeatureGroup, Pane, useMapEvents } from "react-leaflet";
 import L from "leaflet";
@@ -232,6 +232,25 @@ function addTombstones(orgId, names) {
   } catch {}
 }
 
+/** ✅ NUEVO: remover tombstones para que vuelva a aparecer en panel */
+function removeTombstones(orgId, names) {
+  if (typeof window === "undefined") return;
+  if (!orgId) return;
+  const set = readTombstones(orgId);
+  let changed = false;
+  for (const nm of names || []) {
+    const key = normalizeNombreCi(nm);
+    if (set.has(key)) {
+      set.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  try {
+    localStorage.setItem(tombstoneKey(orgId), JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 function purgeTombstonesFromList(items, orgId) {
   const tombs = readTombstones(orgId);
   return (items || []).filter((g) => !tombs.has(normalizeNombreCi(g?.nombre)));
@@ -359,10 +378,7 @@ function normalizeGeojson(geo) {
 
 function centroidFeatureFromGeojson(geo) {
   try {
-    const gj =
-      geo?.type === "FeatureCollection"
-        ? geo
-        : { type: "FeatureCollection", features: [geo] };
+    const gj = geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
     const bounds = L.geoJSON(gj).getBounds();
     if (!bounds?.isValid?.()) return null;
     const c = bounds.getCenter();
@@ -526,9 +542,8 @@ export default function NuevaGeocerca() {
 
   /**
    * ✅ FIX UNIVERSAL:
-   * - Si es Polygon/Rectangle: mandamos Feature Polygon
-   * - Si es Circle: mandamos Feature Point con properties.radius_m
-   *   y el backend lo convierte a MultiPolygon con ST_Buffer
+   * - Polygon/Rectangle: Feature Polygon
+   * - Circle: Feature Point + properties.radius_m
    */
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
@@ -547,8 +562,7 @@ export default function NuevaGeocerca() {
       feature = draftFeature;
     } else {
       const map = mapRef.current;
-      const layerToSave =
-        selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
+      const layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
       if (!layerToSave) {
         showErr(
@@ -559,7 +573,7 @@ export default function NuevaGeocerca() {
         return;
       }
 
-      // ✅ Circle → Feature Point + radius_m
+      // Circle → Feature Point + radius_m
       if (layerToSave instanceof L.Circle) {
         const center = layerToSave.getLatLng?.();
         const radiusM = Math.round(Number(layerToSave.getRadius?.() || 0));
@@ -573,7 +587,6 @@ export default function NuevaGeocerca() {
           geometry: { type: "Point", coordinates: [center.lng, center.lat] },
         };
       } else {
-        // Polygon/Rectangle/etc
         if (typeof layerToSave.toGeoJSON !== "function") {
           showErr(
             t("geocercas.errorNoShape", {
@@ -594,6 +607,7 @@ export default function NuevaGeocerca() {
 
     const fc = { type: "FeatureCollection", features: [feature] };
 
+    // local snapshot (no molesta, pero NO manda el panel si la API responde ok)
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(
@@ -610,6 +624,9 @@ export default function NuevaGeocerca() {
         geojson: feature,
         geometry: feature,
       });
+
+      // ✅ FIX: si estaba tombstoneado, lo “revivimos” (porque acabas de guardarlo)
+      removeTombstones(orgId, [nm]);
 
       setSelectedNames(() => new Set([nm]));
       setLastSelectedName(nm);
@@ -651,9 +668,7 @@ export default function NuevaGeocerca() {
       return;
     }
 
-    const confirmed = window.confirm(
-      t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
-    );
+    const confirmed = window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }));
     if (!confirmed) return;
 
     const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
@@ -856,9 +871,7 @@ export default function NuevaGeocerca() {
               className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
               type="button"
             >
-              {showLoading
-                ? t("common.actions.loading", { defaultValue: "Cargando..." })
-                : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
+              {showLoading ? t("common.actions.loading", { defaultValue: "Cargando..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
             <button
@@ -1005,8 +1018,7 @@ export default function NuevaGeocerca() {
             <p className="text-xs text-slate-400">
               {t("geocercas.modalHintRule", { defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono" })}
               <br />
-              {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
-              <span className="font-mono text-[11px]">lat,lng</span>{" "}
+              {t("geocercas.modalInstruction", { defaultValue: "Formato:" })} <span className="font-mono text-[11px]">lat,lng</span>{" "}
               {t("geocercas.modalOnePerLine", { defaultValue: "(uno por línea)" })}
             </p>
 
@@ -1027,11 +1039,7 @@ export default function NuevaGeocerca() {
                 {t("common.actions.cancel", { defaultValue: "Cancelar" })}
               </button>
 
-              <button
-                onClick={handleDrawFromCoords}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white"
-                type="button"
-              >
+              <button onClick={handleDrawFromCoords} className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white" type="button">
                 {t("geocercas.modalDraw", { defaultValue: "Dibujar" })}
               </button>
             </div>

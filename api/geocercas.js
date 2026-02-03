@@ -5,7 +5,7 @@
 // - Endpoint se mantiene /api/geocercas por compatibilidad
 // - Mapeo legacy:
 //    nombre  <-> geofences.name
-//    geojson <-> geofences.geojson (Feature/FC/Geometry aceptados)
+//    geojson <-> geofences.geojson || geofences.geometry
 // - Auth universal: Bearer token (preferido) o cookie tg_at (legacy)
 // - Contexto por sesión: bootstrap_session_context()
 // ============================================================
@@ -73,7 +73,7 @@ async function getContextOr401(req) {
 
 function mapGeofenceRowToLegacy(row) {
   if (!row) return null;
-  const geo = row.geojson ?? row.polygon_geojson ?? null;
+  const geo = row.geojson ?? row.geometry ?? null;
   return {
     ...row,
     nombre: row.name ?? "",
@@ -83,56 +83,18 @@ function mapGeofenceRowToLegacy(row) {
   };
 }
 
+function isMissingColumnError(err, colRef) {
+  const msg = String(err?.message || "").toLowerCase();
+  return msg.includes(`column ${String(colRef).toLowerCase()}`) && msg.includes("does not exist");
+}
+
 function normalizeCi(s) {
   return String(s || "").trim().toLowerCase();
 }
 
-/**
- * Extrae geometry pura desde:
- * - FeatureCollection -> features[0].geometry
- * - Feature          -> geometry
- * - Geometry         -> geo
- */
-function extractGeometryJson(geo) {
-  if (!geo) return null;
-  const t = String(geo?.type || "").toLowerCase();
-  if (t === "featurecollection") return geo?.features?.[0]?.geometry || null;
-  if (t === "feature") return geo?.geometry || null;
-  return geo;
-}
-
-/**
- * Si viene como Feature Point + properties.radius_m, lo tratamos como círculo.
- * (opcional)
- */
-function extractCircleProps(geo) {
-  try {
-    const t = String(geo?.type || "").toLowerCase();
-    if (t !== "feature") return null;
-    const g = geo?.geometry;
-    if (!g || String(g.type || "").toLowerCase() !== "point") return null;
-
-    const radius = Number(geo?.properties?.radius_m || 0);
-    const coords = Array.isArray(g.coordinates) ? g.coordinates : null;
-    if (!coords || coords.length < 2) return null;
-
-    const lng = Number(coords[0]);
-    const lat = Number(coords[1]);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radius) || radius <= 0) return null;
-
-    return { lat, lng, radius_m: Math.round(radius) };
-  } catch {
-    return null;
-  }
-}
-
-function safeUuid() {
-  // Node 18+ (Vercel) soporta randomUUID; fallback por si acaso
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `${Date.now()}-${Math.random()}`; // nunca debería usarse como uuid real
-  }
+function newUuid() {
+  // node 18+: crypto.randomUUID()
+  return crypto.randomUUID();
 }
 
 export default async function handler(req, res) {
@@ -156,7 +118,6 @@ export default async function handler(req, res) {
 
       const { data, error } = await supabase.from("geofences").select("*").order("created_at", { ascending: false });
       if (error) return send(res, 500, { ok: false, error: error.message });
-
       return send(res, 200, (data || []).map(mapGeofenceRowToLegacy));
     }
 
@@ -166,41 +127,59 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-      // ⚠️ FIX: NO mandamos id:null. Si no hay id, generamos uuid.
-      const rawId = body.id ?? null;
-      const id = rawId ? String(rawId) : safeUuid();
-
+      let id = body.id || null;
       const org_id = body.org_id || body.orgId || null;
       const name = String(body.nombre || body.name || "").trim();
+
       if (!name) return send(res, 422, { ok: false, error: "nombre (o name) is required" });
       if (!org_id) return send(res, 422, { ok: false, error: "org_id is required" });
 
       const geo = body.geojson || body.geometry || body.geom || null;
 
-      const payload = { id, org_id, name, active: true };
+      // ✅ FIX anti-duplicados:
+      // si no viene id, intentamos encontrar uno existente por (org_id + lower(name))
+      if (!id) {
+        const { data: existing, error: e0 } = await supabase
+          .from("geofences")
+          .select("id")
+          .eq("org_id", org_id)
+          .ilike("name", name) // ilike equivale a CI
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (geo !== null) {
-        // guardamos lo que llega (para UI legacy)
-        payload.geojson = geo;
-
-        // guardamos geometry pura para evitar líos aguas abajo
-        const gOnly = extractGeometryJson(geo);
-        if (gOnly) payload.polygon_geojson = gOnly;
-
-        // círculo opcional
-        const circle = extractCircleProps(geo);
-        if (circle) {
-          payload.lat = circle.lat;
-          payload.lng = circle.lng;
-          payload.radius_m = circle.radius_m;
+        if (e0) {
+          // no matamos el request por esto, solo logico: seguimos
+          console.warn("[api/geocercas] lookup existing failed", e0.message);
+        } else if (existing?.id) {
+          id = existing.id;
         }
       }
 
-      const { data, error } = await supabase
+      // ✅ FIX id NOT NULL: si aún no hay id, generamos uno
+      if (!id) id = newUuid();
+
+      // Intento 1: columna geojson
+      let payload = { id, org_id, name };
+      if (geo !== null) payload.geojson = geo;
+
+      let { data, error } = await supabase
         .from("geofences")
         .upsert(payload, { onConflict: "id" })
         .select("*")
         .maybeSingle();
+
+      // Fallback: si no existe geojson, probamos geometry
+      if (error && geo !== null && isMissingColumnError(error, "geofences.geojson")) {
+        payload = { id, org_id, name, geometry: geo };
+        const r2 = await supabase
+          .from("geofences")
+          .upsert(payload, { onConflict: "id" })
+          .select("*")
+          .maybeSingle();
+        data = r2.data;
+        error = r2.error;
+      }
 
       if (error) return send(res, 500, { ok: false, error: error.message });
       return send(res, 200, { ok: true, row: mapGeofenceRowToLegacy(data) });
@@ -208,6 +187,8 @@ export default async function handler(req, res) {
 
     // -------------------------
     // DELETE → delete geofence
+    // - por id (query ?id=)
+    // - bulk por { orgId, nombres_ci } (body)
     // -------------------------
     if (req.method === "DELETE") {
       const id = req.query?.id ? String(req.query.id) : "";
