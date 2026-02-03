@@ -1,13 +1,6 @@
 // src/components/geocercas/NuevaGeocerca.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  GeoJSON,
-  FeatureGroup,
-  Pane,
-  useMapEvents,
-} from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, FeatureGroup, Pane, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "leaflet/dist/leaflet.css";
@@ -17,12 +10,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
-import {
-  listGeocercas,
-  getGeocerca,
-  upsertGeocerca,
-  deleteGeocerca,
-} from "../../lib/geocercasApi.js";
+import { listGeocercas, getGeocerca, upsertGeocerca, deleteGeocerca } from "../../lib/geocercasApi.js";
 
 /**
  * DATASET opcional:
@@ -36,7 +24,7 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 /**
  * ✅ FIX UNIVERSAL:
  * Solo usar LocalStorage si la API falla (modo offline real).
- * Si la API responde OK, NO mezclamos local para evitar "revivir" geocercas borradas.
+ * Si la API responde OK, NO mezclamos local para evitar “revivir” borradas.
  */
 const USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS = true;
 
@@ -156,6 +144,10 @@ function filterSoftDeleted(items) {
   return (items || []).filter((g) => !isSoftDeletedName(g?.nombre || g?.name || ""));
 }
 
+/**
+ * LocalStorage TENANT-SAFE:
+ * geocerca_<orgId>_<nombre>
+ */
 function makeLocalKey(orgId, nombre) {
   const oid = String(orgId || "").trim();
   const nm = String(nombre || "").trim();
@@ -212,7 +204,7 @@ function deleteFromLocalStorageByNames(orgId, names) {
 }
 
 /**
- * ✅ Tombstone persistente para que NO reviva tras refresh aunque quede algo en local.
+ * ✅ Tombstones persistentes (por org) para evitar que reaparezca por local
  */
 function tombstoneKey(orgId) {
   return `geocerca_tombstones_${String(orgId || "").trim()}`;
@@ -240,30 +232,32 @@ function addTombstones(orgId, names) {
   } catch {}
 }
 
+function purgeTombstonesFromList(items, orgId) {
+  const tombs = readTombstones(orgId);
+  return (items || []).filter((g) => !tombs.has(normalizeNombreCi(g?.nombre)));
+}
+
 /* ----------------------------- Unified list ----------------------------- */
 async function listGeofencesUnified({ orgId }) {
-  const tombs = readTombstones(orgId);
-
   // 1) Intento API primero
   try {
     const apiItems = await listGeocercas({ orgId });
     const apiList = (apiItems || [])
       .map((r) => ({ id: r.id, nombre: r.nombre || r.name, source: "api" }))
-      .filter((g) => !!g.nombre)
-      .filter((g) => !tombs.has(normalizeNombreCi(g.nombre)));
+      .filter((g) => !!g.nombre);
+
+    const apiClean = mergeUniqueByNombre(filterSoftDeleted(purgeTombstonesFromList(apiList, orgId)));
 
     // ✅ FIX: si API OK, retornamos SOLO API (no mezclamos local)
-    if (USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS) {
-      return mergeUniqueByNombre(filterSoftDeleted(apiList));
-    }
+    if (USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS) return apiClean;
 
-    // Si en algún momento quieres mezclar siempre (no recomendado), cae abajo.
-    const local = readLocalGeocercas(orgId).filter((g) => !tombs.has(normalizeNombreCi(g.nombre)));
-    return mergeUniqueByNombre(filterSoftDeleted([...apiList, ...local]));
+    const local = readLocalGeocercas(orgId);
+    const merged = [...apiClean, ...local];
+    return mergeUniqueByNombre(filterSoftDeleted(purgeTombstonesFromList(merged, orgId)));
   } catch (e) {
     console.warn("[NuevaGeocerca] API listGeocercas falló, usando local", e);
-    const local = readLocalGeocercas(orgId).filter((g) => !tombs.has(normalizeNombreCi(g.nombre)));
-    return mergeUniqueByNombre(filterSoftDeleted(local));
+    const local = readLocalGeocercas(orgId);
+    return mergeUniqueByNombre(filterSoftDeleted(purgeTombstonesFromList(local, orgId)));
   }
 }
 
@@ -532,6 +526,10 @@ export default function NuevaGeocerca() {
     showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
+  /**
+   * ✅ FIX: Guardar manda FEATURE (no FeatureCollection) al backend
+   * para evitar "invalid GeoJson representation".
+   */
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
     if (!nm) {
@@ -543,10 +541,11 @@ export default function NuevaGeocerca() {
       return;
     }
 
-    // geojson
-    let geo = null;
+    // 1) Obtener un FEATURE (no FeatureCollection)
+    let feature = null;
+
     if (draftFeature) {
-      geo = { type: "FeatureCollection", features: [draftFeature] };
+      feature = draftFeature; // ya es Feature Polygon
     } else {
       const map = mapRef.current;
       const layerToSave =
@@ -560,15 +559,24 @@ export default function NuevaGeocerca() {
         );
         return;
       }
-      geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
+
+      const gj = layerToSave.toGeoJSON();
+      feature = gj?.type === "Feature" ? gj : { type: "Feature", properties: {}, geometry: gj };
     }
 
-    // Local: solo por resiliencia (pero NO se lista si API OK)
+    if (!feature?.geometry || !feature?.geometry?.type) {
+      showErr("GeoJSON inválido (sin geometry).");
+      return;
+    }
+
+    const fc = { type: "FeatureCollection", features: [feature] };
+
+    // Local resiliencia (pero NO se lista si API OK)
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(
           makeLocalKey(orgId, nm),
-          JSON.stringify({ nombre: nm, org_id: orgId, geojson: geo, updated_at: new Date().toISOString() })
+          JSON.stringify({ nombre: nm, org_id: orgId, geojson: fc, updated_at: new Date().toISOString() })
         );
       }
     } catch {}
@@ -577,21 +585,21 @@ export default function NuevaGeocerca() {
       await upsertGeocerca({
         org_id: orgId,
         nombre: nm,
-        geojson: geo,
-        geometry: geo,
+        geojson: feature,
+        geometry: feature,
       });
 
       setSelectedNames(() => new Set([nm]));
       setLastSelectedName(nm);
 
-      setViewFeature(geo);
-      setViewCentroid(centroidFeatureFromGeojson(geo));
+      setViewFeature(fc);
+      setViewCentroid(centroidFeatureFromGeojson(fc));
       setViewId((x) => x + 1);
 
       try {
         const map = mapRef.current;
         if (map) {
-          const bounds = L.geoJSON(geo).getBounds();
+          const bounds = L.geoJSON(fc).getBounds();
           if (bounds?.isValid?.()) map.fitBounds(bounds, { padding: [40, 40] });
         }
       } catch {}
@@ -604,6 +612,9 @@ export default function NuevaGeocerca() {
       showOk(t("geocercas.saved", { defaultValue: "Geocerca guardada." }));
     } catch (e) {
       showErr(t("geocercas.saveError", { defaultValue: "No se pudo guardar. Intenta nuevamente." }), e);
+      try {
+        await refreshGeofenceList();
+      } catch {}
     }
   }, [geofenceName, orgId, draftFeature, t, refreshGeofenceList, showErr, showOk, invalidateMapSize]);
 
@@ -654,8 +665,9 @@ export default function NuevaGeocerca() {
       );
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
-      // Refrescar para no quedar en estado incoherente
-      try { await refreshGeofenceList(); } catch {}
+      try {
+        await refreshGeofenceList();
+      } catch {}
     }
   }, [orgId, selectedNames, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
 
@@ -698,7 +710,7 @@ export default function NuevaGeocerca() {
         return;
       }
 
-      setViewFeature(geo);
+      setViewFeature(geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] });
       setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
 
@@ -718,8 +730,7 @@ export default function NuevaGeocerca() {
 
   const pointStyle = useMemo(
     () => ({
-      pointToLayer: (_feature, latlng) =>
-        L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
+      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
     }),
     []
   );
@@ -784,6 +795,7 @@ export default function NuevaGeocerca() {
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
+        {/* Panel */}
         <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[42svh] md:max-h-[32svh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">
             {t("geocercas.panelTitle", { defaultValue: "Geocercas" })}
@@ -858,11 +870,10 @@ export default function NuevaGeocerca() {
               {t("geocercas.loadingDataset", { defaultValue: "Cargando dataset..." })}
             </div>
           )}
-          {datasetError && (
-            <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>
-          )}
+          {datasetError && <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
+        {/* Map */}
         <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
           <MapContainer
             center={[-0.2, -78.5]}
@@ -884,12 +895,7 @@ export default function NuevaGeocerca() {
                 <GeoJSON
                   key={`draft-${draftId}`}
                   data={draftFeature}
-                  style={() => ({
-                    color: "#22c55e",
-                    weight: 3,
-                    fillColor: "#22c55e",
-                    fillOpacity: 0.35,
-                  })}
+                  style={() => ({ color: "#22c55e", weight: 3, fillColor: "#22c55e", fillOpacity: 0.35 })}
                 />
               )}
             </Pane>
@@ -900,20 +906,13 @@ export default function NuevaGeocerca() {
                   <GeoJSON
                     key={`view-${viewId}`}
                     data={viewFeature}
-                    style={() => ({
-                      color: "#38bdf8",
-                      weight: 3,
-                      fillColor: "#38bdf8",
-                      fillOpacity: 0.15,
-                    })}
+                    style={() => ({ color: "#38bdf8", weight: 3, fillColor: "#38bdf8", fillOpacity: 0.15 })}
                   />
                   {viewCentroid && (
                     <GeoJSON
                       key={`view-marker-${viewId}`}
                       data={viewCentroid}
-                      pointToLayer={(_f, latlng) =>
-                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
-                      }
+                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
                     />
                   )}
                 </>
@@ -978,6 +977,7 @@ export default function NuevaGeocerca() {
         </div>
       </div>
 
+      {/* Modal coordenadas */}
       {coordModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
@@ -986,9 +986,7 @@ export default function NuevaGeocerca() {
             </h2>
 
             <p className="text-xs text-slate-400">
-              {t("geocercas.modalHintRule", {
-                defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
-              })}
+              {t("geocercas.modalHintRule", { defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono" })}
               <br />
               {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
               <span className="font-mono text-[11px]">lat,lng</span>{" "}
