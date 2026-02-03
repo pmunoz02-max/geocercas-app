@@ -629,11 +629,18 @@ export default function NuevaGeocerca() {
     }
   }, [geofenceName, orgId, draftFeature, t, refreshGeofenceList, showErr, showOk, invalidateMapSize]);
 
-  const handleDeleteSelected = useCallback(async () => {
-    if (!orgId) {
-      showErr(t("geocercas.manage.noOrgTitle", { defaultValue: "Selecciona una organización primero." }));
-      return;
-    }
+  onst names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
+
+// NUEVO: buscar ids de esos nombres en tu lista actual
+const idsToDelete = (geofenceList || [])
+  .filter((g) => names.includes(String(g?.nombre || "").trim()))
+  .map((g) => g.id)
+  .filter(Boolean);
+
+if (!idsToDelete.length) {
+  showErr("No se encontraron IDs para eliminar. Refresca la lista e intenta otra vez.");
+  return;
+}
 
     if (!selectedNames || selectedNames.size === 0) {
       showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
