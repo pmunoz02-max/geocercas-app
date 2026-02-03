@@ -1,8 +1,9 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.11 FINAL (Feb 2026)
+// Asignaciones v2.12 FINAL (Feb 2026)
 // - Lectura canónica: v_tracker_assignments_ui
 // - Escritura: RPC admin_upsert_tracker_assignment_v1
-// - Debug: detecta filas con campos faltantes (para resolver "vacíos" definitivamente)
+// - Fix permanente: fuerza visibilidad (Geocerca/Inicio/Fin) ante CSS/herencia/ancho 0
+// - DEBUG: ?debug=1
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -97,7 +98,6 @@ export default function AsignacionesPage() {
         .from("personal")
         .select("id, nombre, apellido, email, user_id, org_id, is_deleted")
         .eq("org_id", orgId);
-
       if (pErr) throw pErr;
 
       const ppl = (p || [])
@@ -124,28 +124,22 @@ export default function AsignacionesPage() {
         .select("id, name, org_id, created_at")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
-
       if (gErr) throw gErr;
+
       setGeofenceOptions((g || []).map((x) => ({ id: x.id, label: x.name })));
 
-      // ✅ lectura canónica: vista
       const { data: a, error: aErr } = await supabase
         .from("v_tracker_assignments_ui")
         .select("*")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
-
       if (aErr) throw aErr;
 
       setRows(a || []);
 
       if (debug) {
-        window.__asig_rows = a || [];
-        window.__asig_raw0 = (a || [])[0] || null;
         // eslint-disable-next-line no-console
         console.log("DEBUG orgId:", orgId);
-        // eslint-disable-next-line no-console
-        console.log("DEBUG rows length:", (a || []).length);
         // eslint-disable-next-line no-console
         console.log("DEBUG first row:", (a || [])[0] || null);
       }
@@ -205,24 +199,11 @@ export default function AsignacionesPage() {
     return base;
   }, [rows, estadoFilter]);
 
-  // ✅ detector de “vacíos” (solo debug)
-  const missingReport = useMemo(() => {
-    if (!debug) return { missingCount: 0, badRows: [] };
-    const bad = (rows || []).map((r) => {
-      const miss = [];
-      if (!r?.geofence_name) miss.push("geofence_name");
-      if (!r?.tracker_label && !r?.tracker_email && !r?.tracker_name) miss.push("tracker_label/email/name");
-      if (!r?.start_date) miss.push("start_date");
-      if (!r?.end_date) miss.push("end_date");
-      return { id: r?.id, miss, row: r };
-    }).filter((x) => x.miss.length > 0);
-    return { missingCount: bad.length, badRows: bad.slice(0, 20) };
-  }, [debug, rows]);
-
   async function toggleActive(row) {
     setError(null);
     setSuccess(null);
 
+    // ✅ siempre YYYY-MM-DD (nunca "null")
     const startDate = toDateOnly(parseDateOnlyLoose(row?.start_date));
     const endDate = toDateOnly(parseDateOnlyLoose(row?.end_date));
     if (!startDate || !endDate) return setError("No puedo alternar: start/end inválidos.");
@@ -252,22 +233,9 @@ export default function AsignacionesPage() {
       {debug ? (
         <div className="mb-3 border rounded bg-yellow-50 px-3 py-2 text-xs text-yellow-900">
           <div className="font-semibold">DEBUG: src/pages/AsignacionesPage.jsx</div>
-          <div>Fuente: <span className="font-mono">v_tracker_assignments_ui</span></div>
-          <div>Rows: {rows?.length || 0} | Missing rows: {missingReport.missingCount}</div>
-          {missingReport.missingCount > 0 ? (
-            <div className="mt-2">
-              <div className="font-semibold">Problemas detectados (máx 20):</div>
-              <ul className="list-disc pl-5">
-                {missingReport.badRows.map((x) => (
-                  <li key={String(x.id)} className="font-mono">
-                    {shortId(x.id)} → {x.miss.join(", ")}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div className="mt-1">✅ No se detectan campos faltantes en las filas cargadas.</div>
-          )}
+          <div>
+            Fuente: <span className="font-mono">v_tracker_assignments_ui</span> | Rows: {rows?.length || 0}
+          </div>
         </div>
       ) : null}
 
@@ -362,7 +330,7 @@ export default function AsignacionesPage() {
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left border-b">
+                <tr className="text-left border-b bg-slate-900 text-white">
                   <th className="py-2 pr-3">Tracker</th>
                   <th className="py-2 pr-3">Geocerca</th>
                   <th className="py-2 pr-3">Inicio</th>
@@ -371,27 +339,55 @@ export default function AsignacionesPage() {
                   <th className="py-2 pr-3 text-right">Acción</th>
                 </tr>
               </thead>
+
               <tbody>
                 {filteredRows.map((r) => {
                   const trackerText = r.tracker_label || r.tracker_name || r.tracker_email || shortId(r.tracker_user_id);
-                  const geofenceText = r.geofence_name || shortId(r.geofence_id);
-                  const startText = formatDateDDMMYYYY(r.start_date);
-                  const endText = formatDateDDMMYYYY(r.end_date);
+                  const geofenceText = r.geofence_name || shortId(r.geofence_id) || "—";
+                  const startText = formatDateDDMMYYYY(r.start_date) || "—";
+                  const endText = formatDateDDMMYYYY(r.end_date) || "—";
 
                   return (
                     <tr key={r.id} className="border-b last:border-b-0">
                       <td className="py-2 pr-3">
-                        <div className="font-medium">{trackerText || "—"}</div>
+                        <div className="font-medium text-gray-900">{trackerText || "—"}</div>
                         {r.tracker_email ? <div className="text-xs text-gray-500">{r.tracker_email}</div> : null}
                       </td>
-                      <td className="py-2 pr-3">{geofenceText || "—"}</td>
-                      <td className="py-2 pr-3">{startText || "—"}</td>
-                      <td className="py-2 pr-3">{endText || "—"}</td>
+
+                      {/* ✅ FORZAR VISIBILIDAD */}
+                      <td className="py-2 pr-3">
+                        <span
+                          className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap"
+                          title={String(geofenceText)}
+                        >
+                          {geofenceText}
+                        </span>
+                      </td>
+
+                      <td className="py-2 pr-3">
+                        <span
+                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
+                          title={String(r.start_date)}
+                        >
+                          {startText}
+                        </span>
+                      </td>
+
+                      <td className="py-2 pr-3">
+                        <span
+                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
+                          title={String(r.end_date)}
+                        >
+                          {endText}
+                        </span>
+                      </td>
+
                       <td className="py-2 pr-3">
                         <span className={r.active ? "inline-flex items-center px-2 py-1 rounded bg-green-50 text-green-700 border" : "inline-flex items-center px-2 py-1 rounded bg-gray-50 text-gray-700 border"}>
                           {r.active ? "Activa" : "Inactiva"}
                         </span>
                       </td>
+
                       <td className="py-2 pr-3 text-right">
                         <button type="button" className="border rounded px-3 py-1 hover:bg-gray-50" onClick={() => toggleActive(r)}>
                           {r.active ? "Inactivar" : "Activar"}
