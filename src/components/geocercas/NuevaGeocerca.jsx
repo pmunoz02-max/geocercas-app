@@ -33,6 +33,13 @@ const DATA_SOURCE = null; // 'geojson' | 'csv' | null
 const GEOJSON_URL = "/data/mapa_corto_214.geojson";
 const CSV_URL = "/data/mapa_corto_214.csv";
 
+/**
+ * ✅ FIX UNIVERSAL:
+ * Solo usar LocalStorage si la API falla (modo offline real).
+ * Si la API responde OK, NO mezclamos local para evitar "revivir" geocercas borradas.
+ */
+const USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS = true;
+
 /* ----------------------------- UI helpers ----------------------------- */
 function Banner({ banner, onClose }) {
   if (!banner) return null;
@@ -149,10 +156,6 @@ function filterSoftDeleted(items) {
   return (items || []).filter((g) => !isSoftDeletedName(g?.nombre || g?.name || ""));
 }
 
-/**
- * LocalStorage TENANT-SAFE:
- * geocerca_<orgId>_<nombre>
- */
 function makeLocalKey(orgId, nombre) {
   const oid = String(orgId || "").trim();
   const nm = String(nombre || "").trim();
@@ -208,22 +211,60 @@ function deleteFromLocalStorageByNames(orgId, names) {
   return deleted;
 }
 
-async function listGeofencesUnified({ orgId }) {
-  const list = [];
-  if (orgId) {
-    try {
-      const apiItems = await listGeocercas({ orgId, onlyActive: false });
-      for (const r of filterSoftDeleted(apiItems)) {
-        list.push({ id: r.id, nombre: r.nombre || r.name, source: "api" });
-      }
-    } catch (e) {
-      // si API falla, solo cae a local (pero sin mezclar por org)
-      console.warn("[NuevaGeocerca] API listGeocercas falló, usando local", e);
-    }
-  }
+/**
+ * ✅ Tombstone persistente para que NO reviva tras refresh aunque quede algo en local.
+ */
+function tombstoneKey(orgId) {
+  return `geocerca_tombstones_${String(orgId || "").trim()}`;
+}
 
-  list.push(...filterSoftDeleted(readLocalGeocercas(orgId)));
-  return mergeUniqueByNombre(list);
+function readTombstones(orgId) {
+  if (typeof window === "undefined") return new Set();
+  if (!orgId) return new Set();
+  try {
+    const raw = localStorage.getItem(tombstoneKey(orgId));
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set((Array.isArray(arr) ? arr : []).map((x) => normalizeNombreCi(x)));
+  } catch {
+    return new Set();
+  }
+}
+
+function addTombstones(orgId, names) {
+  if (typeof window === "undefined") return;
+  if (!orgId) return;
+  const set = readTombstones(orgId);
+  for (const nm of names || []) set.add(normalizeNombreCi(nm));
+  try {
+    localStorage.setItem(tombstoneKey(orgId), JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+/* ----------------------------- Unified list ----------------------------- */
+async function listGeofencesUnified({ orgId }) {
+  const tombs = readTombstones(orgId);
+
+  // 1) Intento API primero
+  try {
+    const apiItems = await listGeocercas({ orgId });
+    const apiList = (apiItems || [])
+      .map((r) => ({ id: r.id, nombre: r.nombre || r.name, source: "api" }))
+      .filter((g) => !!g.nombre)
+      .filter((g) => !tombs.has(normalizeNombreCi(g.nombre)));
+
+    // ✅ FIX: si API OK, retornamos SOLO API (no mezclamos local)
+    if (USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS) {
+      return mergeUniqueByNombre(filterSoftDeleted(apiList));
+    }
+
+    // Si en algún momento quieres mezclar siempre (no recomendado), cae abajo.
+    const local = readLocalGeocercas(orgId).filter((g) => !tombs.has(normalizeNombreCi(g.nombre)));
+    return mergeUniqueByNombre(filterSoftDeleted([...apiList, ...local]));
+  } catch (e) {
+    console.warn("[NuevaGeocerca] API listGeocercas falló, usando local", e);
+    const local = readLocalGeocercas(orgId).filter((g) => !tombs.has(normalizeNombreCi(g.nombre)));
+    return mergeUniqueByNombre(filterSoftDeleted(local));
+  }
 }
 
 /* ----------------------------- Map cursor live ---------------------------- */
@@ -343,26 +384,9 @@ function centroidFeatureFromGeojson(geo) {
   }
 }
 
-/* -------------------------- Pin de recién guardadas -------------------------- */
-const PIN_TTL_MS = 25_000;
-const DELETE_TTL_MS = 30_000;
-
-function makePinKey(nombre) {
-  return normalizeNombreCi(nombre);
-}
-
-function isTombstoned(deletedRef, nombre) {
-  try {
-    const ci = makePinKey(nombre);
-    return !!deletedRef.current?.[ci];
-  } catch {
-    return false;
-  }
-}
-
 /* ================================ Component =============================== */
 export default function NuevaGeocerca() {
-  const { currentOrg } = useAuth();
+  const { currentOrg, user } = useAuth();
   const { t } = useTranslation();
 
   const orgId = currentOrg?.id || currentOrg?.org_id || null;
@@ -402,45 +426,6 @@ export default function NuevaGeocerca() {
 
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
-  const pinnedRef = useRef({}); // { [nombre_ci]: { nombre, ts } }
-  const deletedRef = useRef({}); // { [nombre_ci]: { ts } }
-
-  const pinGeofenceName = useCallback((nombre) => {
-    const ci = makePinKey(nombre);
-    if (!ci) return;
-    pinnedRef.current[ci] = { nombre: String(nombre || "").trim(), ts: Date.now() };
-  }, []);
-
-  const purgePins = useCallback(() => {
-    const now = Date.now();
-    const pins = pinnedRef.current || {};
-    for (const [ci, v] of Object.entries(pins)) {
-      const ts = Number(v?.ts);
-      if (!Number.isFinite(ts) || now - ts > PIN_TTL_MS) delete pins[ci];
-    }
-  }, []);
-
-  const markDeletedNames = useCallback((names) => {
-    try {
-      const now = Date.now();
-      const obj = deletedRef.current || {};
-      for (const nm of names || []) {
-        const ci = makePinKey(nm);
-        if (!ci) continue;
-        obj[ci] = { ts: now };
-      }
-      deletedRef.current = obj;
-    } catch {}
-  }, []);
-
-  const purgeDeleted = useCallback(() => {
-    const now = Date.now();
-    const tombs = deletedRef.current || {};
-    for (const [ci, v] of Object.entries(tombs)) {
-      const ts = Number(v?.ts);
-      if (!Number.isFinite(ts) || now - ts > DELETE_TTL_MS) delete tombs[ci];
-    }
-  }, []);
 
   const clearCanvas = useCallback(() => {
     try {
@@ -470,64 +455,13 @@ export default function NuevaGeocerca() {
 
   const refreshGeofenceList = useCallback(async () => {
     try {
-      purgePins();
-      purgeDeleted();
-
-      const mergedRaw = await listGeofencesUnified({ orgId });
-      let merged = mergeUniqueByNombre(filterSoftDeleted(mergedRaw));
-
-      // evita reaparición de tombstones
-      merged = (merged || []).filter((g) => !isTombstoned(deletedRef, g?.nombre));
-
-      setGeofenceList((prev) => {
-        const prevList = prev || [];
-        let out = merged.length ? merged : prevList;
-
-        // mantener pineadas
-        const pins = pinnedRef.current || {};
-        const outNames = new Set((out || []).map((g) => String(g?.nombre || "").trim()));
-        for (const v of Object.values(pins)) {
-          const nm = String(v?.nombre || "").trim();
-          if (!nm) continue;
-          if (!outNames.has(nm)) {
-            const fromPrev = prevList.find((g) => String(g?.nombre || "").trim() === nm);
-            out = mergeUniqueByNombre([
-              fromPrev || { id: `pin-${makePinKey(nm)}`, nombre: nm, source: "local" },
-              ...(out || []),
-            ]);
-          }
-        }
-        return out;
-      });
-
-      // despinear si backend confirma
-      try {
-        const pins = pinnedRef.current || {};
-        const mergedNamesCi = new Set((merged || []).map((g) => makePinKey(g?.nombre)));
-        for (const ci of Object.keys(pins)) {
-          if (mergedNamesCi.has(ci)) delete pins[ci];
-        }
-      } catch {}
+      const merged = await listGeofencesUnified({ orgId });
+      setGeofenceList(mergeUniqueByNombre(filterSoftDeleted(merged)));
     } catch (e) {
       console.error("[NuevaGeocerca] refreshGeofenceList error", e);
-      // fallback: local, scoped por org
-      setGeofenceList((prev) => {
-        const fallback = mergeUniqueByNombre(filterSoftDeleted(readLocalGeocercas(orgId)));
-        return fallback.length ? fallback : prev;
-      });
+      setGeofenceList([]);
     }
-  }, [orgId, purgePins, purgeDeleted]);
-
-  const scheduleRefreshAfterSave = useCallback(() => {
-    const waits = [400, 1200, 2500, 5000];
-    for (const ms of waits) {
-      setTimeout(() => {
-        try {
-          refreshGeofenceList();
-        } catch {}
-      }, ms);
-    }
-  }, [refreshGeofenceList]);
+  }, [orgId]);
 
   useEffect(() => {
     refreshGeofenceList();
@@ -629,7 +563,7 @@ export default function NuevaGeocerca() {
       geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
     }
 
-    // local (scoped por org)
+    // Local: solo por resiliencia (pero NO se lista si API OK)
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(
@@ -639,33 +573,14 @@ export default function NuevaGeocerca() {
       }
     } catch {}
 
-    // optimistic
-    setGeofenceList((prev) =>
-      mergeUniqueByNombre([{ id: `optim-${Date.now()}`, nombre: nm, source: "local" }, ...(prev || [])])
-    );
-
-    pinGeofenceName(nm);
-
-    const nombre_ci = normalizeNombreCi(nm);
-
-    let upsertOk = false;
     try {
       await upsertGeocerca({
         org_id: orgId,
         nombre: nm,
-        nombre_ci,
         geojson: geo,
         geometry: geo,
       });
-      upsertOk = true;
-    } catch (e) {
-      console.warn("[NuevaGeocerca] upsert falló (posible 401 previo), mantengo local y reintento refresh", e);
-      scheduleRefreshAfterSave();
-      // No mostramos error falso: por ahora queda guardado local y se sincroniza cuando la API quede OK
-      return;
-    }
 
-    if (upsertOk) {
       setSelectedNames(() => new Set([nm]));
       setLastSelectedName(nm);
 
@@ -684,23 +599,13 @@ export default function NuevaGeocerca() {
       invalidateMapSize();
       setGeofenceName("");
       setDraftFeature(null);
-    }
 
-    try {
       await refreshGeofenceList();
-      scheduleRefreshAfterSave();
-    } catch {}
-  }, [
-    geofenceName,
-    orgId,
-    draftFeature,
-    t,
-    refreshGeofenceList,
-    showErr,
-    pinGeofenceName,
-    invalidateMapSize,
-    scheduleRefreshAfterSave,
-  ]);
+      showOk(t("geocercas.saved", { defaultValue: "Geocerca guardada." }));
+    } catch (e) {
+      showErr(t("geocercas.saveError", { defaultValue: "No se pudo guardar. Intenta nuevamente." }), e);
+    }
+  }, [geofenceName, orgId, draftFeature, t, refreshGeofenceList, showErr, showOk, invalidateMapSize]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!orgId) {
@@ -720,24 +625,24 @@ export default function NuevaGeocerca() {
 
     const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
 
+    // Optimistic UI
     setGeofenceList((prev) => (prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim())));
-    markDeletedNames(names);
-
     setSelectedNames(() => new Set());
     setLastSelectedName(null);
     setViewFeature(null);
     setViewCentroid(null);
 
-    try {
-      deleteFromLocalStorageByNames(orgId, names);
+    // ✅ Tombstones persistentes para evitar “revivir”
+    addTombstones(orgId, names);
+    deleteFromLocalStorageByNames(orgId, names);
 
+    try {
       await deleteGeocerca({
         orgId,
         nombres_ci: names.map(normalizeNombreCi),
       });
 
       await refreshGeofenceList();
-      scheduleRefreshAfterSave();
       clearCanvas();
       setDraftFeature(null);
 
@@ -749,8 +654,10 @@ export default function NuevaGeocerca() {
       );
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
+      // Refrescar para no quedar en estado incoherente
+      try { await refreshGeofenceList(); } catch {}
     }
-  }, [orgId, selectedNames, refreshGeofenceList, clearCanvas, t, showErr, showOk, markDeletedNames, scheduleRefreshAfterSave]);
+  }, [orgId, selectedNames, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
@@ -826,11 +733,12 @@ export default function NuevaGeocerca() {
     }
   }, [draftFeature]);
 
+  if (!user) return null;
+
   return (
     <div className="flex flex-col gap-2 sm:gap-3 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
       <Banner banner={banner} onClose={() => setBanner(null)} />
 
-      {/* Debug visible (orgId real) */}
       <div className="text-[11px] text-slate-300">
         OrgId actual: <span className="font-mono text-slate-100">{orgId || "null"}</span>
       </div>
@@ -876,7 +784,6 @@ export default function NuevaGeocerca() {
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
-        {/* Panel */}
         <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[42svh] md:max-h-[32svh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">
             {t("geocercas.panelTitle", { defaultValue: "Geocercas" })}
@@ -891,24 +798,24 @@ export default function NuevaGeocerca() {
 
             {filterSoftDeleted(geofenceList).map((g) => (
               <label
-  key={`${g.source}-${g.id || ""}-${g.nombre}`}
-  className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
->
-  <input
-    type="checkbox"
-    checked={selectedNames.has(g.nombre)}
-    onChange={() => {
-      setSelectedNames((prev) => {
-        const next = new Set(prev);
-        if (next.has(g.nombre)) next.delete(g.nombre);
-        else next.add(g.nombre);
-        return next;
-      });
-      setLastSelectedName(g.nombre);
-    }}
-  />
-  <span className="text-[11px] md:text-xs text-slate-100">{g.nombre}</span>
-</label>
+                key={`${g.source}-${g.id || ""}-${g.nombre}`}
+                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedNames.has(g.nombre)}
+                  onChange={() => {
+                    setSelectedNames((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(g.nombre)) next.delete(g.nombre);
+                      else next.add(g.nombre);
+                      return next;
+                    });
+                    setLastSelectedName(g.nombre);
+                  }}
+                />
+                <span className="text-[11px] md:text-xs text-slate-100">{g.nombre}</span>
+              </label>
             ))}
           </div>
 
@@ -956,7 +863,6 @@ export default function NuevaGeocerca() {
           )}
         </div>
 
-        {/* Map */}
         <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
           <MapContainer
             center={[-0.2, -78.5]}
@@ -1053,7 +959,6 @@ export default function NuevaGeocerca() {
             </FeatureGroup>
           </MapContainer>
 
-          {/* Lat/Lng (desktop) + draft info */}
           <div className="hidden md:block absolute right-3 top-3 z-[9999] space-y-2">
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
               {cursorLatLng ? (
@@ -1073,7 +978,6 @@ export default function NuevaGeocerca() {
         </div>
       </div>
 
-      {/* Modal coordenadas */}
       {coordModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
