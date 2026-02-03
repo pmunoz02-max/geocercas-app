@@ -1,11 +1,12 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.5 FINAL (Feb 2026)
+// Asignaciones v2.6 FINAL (Feb 2026)
 // - DatePicker con icono calendario (react-datepicker v8: showIcon + icon)
 // - UI usa fecha + hora | DB guarda solo DATE
 // - Filtro estricto por org_id
 // - Compatible con admin_upsert_tracker_assignment_v1
+// - Lista de asignaciones guardadas + filtros + activar/inactivar
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
@@ -14,6 +15,8 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
 /* ---------------- helpers ---------------- */
+
+const ESTADOS = ["todos", "activa", "inactiva"];
 
 function dedupeById(arr) {
   const m = new Map();
@@ -33,6 +36,22 @@ function shortId(uuid) {
 function toDateOnly(d) {
   if (!(d instanceof Date) || isNaN(d)) return "";
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function parseDateOnlyLoose(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v) ? null : v;
+  const s = String(v);
+  // DB: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T08:00:00`);
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function formatDateDDMMYYYY(v) {
+  const d = parseDateOnlyLoose(v);
+  if (!d) return "";
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
 function nowDate() {
@@ -83,9 +102,29 @@ export default function AsignacionesPage() {
   const [endDt, setEndDt] = useState(plusDays(365));
   const [active, setActive] = useState(true);
 
+  const [estadoFilter, setEstadoFilter] = useState("todos");
+
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  /* ---------------- lookups ---------------- */
+
+  const personalByUserId = useMemo(() => {
+    const m = new Map();
+    for (const p of personalOptions) {
+      if (p?.user_id) m.set(p.user_id, p);
+    }
+    return m;
+  }, [personalOptions]);
+
+  const geofenceById = useMemo(() => {
+    const m = new Map();
+    for (const g of geofenceOptions) {
+      if (g?.id) m.set(g.id, g);
+    }
+    return m;
+  }, [geofenceOptions]);
 
   /* ---------------- load ---------------- */
 
@@ -195,6 +234,50 @@ export default function AsignacionesPage() {
     }
   }
 
+  /* ---------------- list filters ---------------- */
+
+  const filteredRows = useMemo(() => {
+    const base = rows || [];
+    if (estadoFilter === "activa") return base.filter((r) => r?.active === true);
+    if (estadoFilter === "inactiva") return base.filter((r) => r?.active === false);
+    return base;
+  }, [rows, estadoFilter]);
+
+  /* ---------------- toggle active ---------------- */
+
+  async function toggleActive(row) {
+    if (!row) return;
+    setError(null);
+    setSuccess(null);
+
+    const trackerUserId = row.tracker_user_id || row.user_id || row.tracker_id;
+    const geofenceId = row.geofence_id;
+    const startDate = row.start_date || row.start || row.startDate;
+    const endDate = row.end_date || row.end || row.endDate;
+
+    if (!trackerUserId || !geofenceId) {
+      return setError("Fila inválida (faltan tracker_user_id o geofence_id).");
+    }
+
+    try {
+      const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
+        p_org_id: orgId,
+        p_tracker_user_id: trackerUserId,
+        p_geofence_id: geofenceId,
+        p_start_date: String(startDate || ""),
+        p_end_date: String(endDate || ""),
+        p_active: !row.active,
+      });
+
+      if (rpcErr) throw rpcErr;
+
+      setSuccess(!row.active ? "Asignación activada." : "Asignación inactivada.");
+      await loadAll();
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+  }
+
   /* ================= RENDER ================= */
 
   if (!isAuthenticated) {
@@ -209,16 +292,13 @@ export default function AsignacionesPage() {
       </p>
 
       {error && (
-        <div className="mb-3 bg-red-50 border px-3 py-2 text-red-700">
-          {error}
-        </div>
+        <div className="mb-3 bg-red-50 border px-3 py-2 text-red-700">{error}</div>
       )}
       {success && (
-        <div className="mb-3 bg-green-50 border px-3 py-2 text-green-700">
-          {success}
-        </div>
+        <div className="mb-3 bg-green-50 border px-3 py-2 text-green-700">{success}</div>
       )}
 
+      {/* ================= FORM ================= */}
       <form
         onSubmit={handleSubmit}
         className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 border rounded"
@@ -292,10 +372,113 @@ export default function AsignacionesPage() {
           <option value="inactiva">Inactiva</option>
         </select>
 
-        <button className="bg-blue-600 text-white rounded px-4 py-2">
-          Guardar
-        </button>
+        <button className="bg-blue-600 text-white rounded px-4 py-2">Guardar</button>
       </form>
+
+      {/* ================= LISTADO ================= */}
+      <div className="mt-6 bg-white border rounded p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+          <h2 className="text-lg font-semibold">Asignaciones guardadas</h2>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Estado:</span>
+            <select
+              className="border rounded px-3 py-2"
+              value={estadoFilter}
+              onChange={(e) => setEstadoFilter(e.target.value)}
+            >
+              {ESTADOS.map((x) => (
+                <option key={x} value={x}>
+                  {x === "todos" ? "Todos" : x === "activa" ? "Activas" : "Inactivas"}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              className="border rounded px-3 py-2 hover:bg-gray-50"
+              onClick={loadAll}
+              title="Refrescar"
+            >
+              Refrescar
+            </button>
+          </div>
+        </div>
+
+        {loadingData ? (
+          <div className="text-sm text-gray-600">Cargando…</div>
+        ) : filteredRows.length === 0 ? (
+          <div className="text-sm text-gray-600">No hay asignaciones para mostrar.</div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b">
+                  <th className="py-2 pr-3">Tracker</th>
+                  <th className="py-2 pr-3">Geocerca</th>
+                  <th className="py-2 pr-3">Inicio</th>
+                  <th className="py-2 pr-3">Fin</th>
+                  <th className="py-2 pr-3">Estado</th>
+                  <th className="py-2 pr-3 text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((r) => {
+                  const trackerUserId = r.tracker_user_id || r.user_id || r.tracker_id;
+                  const p = trackerUserId ? personalByUserId.get(trackerUserId) : null;
+                  const g = r.geofence_id ? geofenceById.get(r.geofence_id) : null;
+
+                  return (
+                    <tr key={r.id} className="border-b last:border-b-0">
+                      <td className="py-2 pr-3">
+                        <div className="font-medium">
+                          {p?.label || (trackerUserId ? shortId(trackerUserId) : "—")}
+                        </div>
+                        {p?.email ? (
+                          <div className="text-xs text-gray-500">{p.email}</div>
+                        ) : null}
+                      </td>
+
+                      <td className="py-2 pr-3">
+                        {g?.label || (r.geofence_id ? shortId(r.geofence_id) : "—")}
+                      </td>
+
+                      <td className="py-2 pr-3">{formatDateDDMMYYYY(r.start_date)}</td>
+                      <td className="py-2 pr-3">{formatDateDDMMYYYY(r.end_date)}</td>
+
+                      <td className="py-2 pr-3">
+                        <span
+                          className={
+                            r.active
+                              ? "inline-flex items-center px-2 py-1 rounded bg-green-50 text-green-700 border"
+                              : "inline-flex items-center px-2 py-1 rounded bg-gray-50 text-gray-700 border"
+                          }
+                        >
+                          {r.active ? "Activa" : "Inactiva"}
+                        </span>
+                      </td>
+
+                      <td className="py-2 pr-3 text-right">
+                        <button
+                          type="button"
+                          className="border rounded px-3 py-1 hover:bg-gray-50"
+                          onClick={() => toggleActive(r)}
+                        >
+                          {r.active ? "Inactivar" : "Activar"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div className="mt-2 text-xs text-gray-500">
+              Mostrando {filteredRows.length} de {rows.length}.
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
