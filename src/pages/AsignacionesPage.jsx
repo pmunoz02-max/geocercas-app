@@ -1,13 +1,12 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.6 FINAL (Feb 2026)
+// Asignaciones v2.8 FINAL (Feb 2026)
+// - Fuente canónica de lectura: public.v_tracker_assignments_ui (contrato estable DB->UI)
+// - Escritura: RPC admin_upsert_tracker_assignment_v1
 // - DatePicker con icono calendario (react-datepicker v8: showIcon + icon)
 // - UI usa fecha + hora | DB guarda solo DATE
-// - Filtro estricto por org_id
-// - Compatible con admin_upsert_tracker_assignment_v1
-// - Lista de asignaciones guardadas + filtros + activar/inactivar
+// - Filtro estricto por org_id (vía RLS + org_id en vista)
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
 
@@ -17,12 +16,6 @@ import "react-datepicker/dist/react-datepicker.css";
 /* ---------------- helpers ---------------- */
 
 const ESTADOS = ["todos", "activa", "inactiva"];
-
-function dedupeById(arr) {
-  const m = new Map();
-  (arr || []).forEach((x) => x?.id && !m.has(x.id) && m.set(x.id, x));
-  return Array.from(m.values());
-}
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -42,9 +35,8 @@ function parseDateOnlyLoose(v) {
   if (!v) return null;
   if (v instanceof Date) return isNaN(v) ? null : v;
   const s = String(v);
-  // DB: YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T08:00:00`);
-  const d = new Date(s);
+  const d = new Date(s.includes(" ") ? s.replace(" ", "T") : s);
   return isNaN(d) ? null : d;
 }
 
@@ -87,44 +79,28 @@ function CalendarIcon() {
 /* ================= COMPONENT ================= */
 
 export default function AsignacionesPage() {
-  const { t } = useTranslation();
   const { loading, isAuthenticated, user, currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
 
-  const [rows, setRows] = useState([]);
+  // Options para crear asignación (inputs)
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geofenceOptions, setGeofenceOptions] = useState([]);
 
+  // Tabla desde vista canónica
+  const [rows, setRows] = useState([]);
+
+  // Form
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
-
   const [startDt, setStartDt] = useState(nowDate());
   const [endDt, setEndDt] = useState(plusDays(365));
   const [active, setActive] = useState(true);
 
+  // UI states
   const [estadoFilter, setEstadoFilter] = useState("todos");
-
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-
-  /* ---------------- lookups ---------------- */
-
-  const personalByUserId = useMemo(() => {
-    const m = new Map();
-    for (const p of personalOptions) {
-      if (p?.user_id) m.set(p.user_id, p);
-    }
-    return m;
-  }, [personalOptions]);
-
-  const geofenceById = useMemo(() => {
-    const m = new Map();
-    for (const g of geofenceOptions) {
-      if (g?.id) m.set(g.id, g);
-    }
-    return m;
-  }, [geofenceOptions]);
 
   /* ---------------- load ---------------- */
 
@@ -135,31 +111,39 @@ export default function AsignacionesPage() {
     setError(null);
 
     try {
-      // Personal
+      // Personal (para selector)
       const { data: p, error: pErr } = await supabase
         .from("personal")
-        .select("id, nombre, apellido, email, user_id, org_id")
+        .select("id, nombre, apellido, email, user_id, org_id, is_deleted")
         .eq("org_id", orgId);
 
       if (pErr) throw pErr;
 
-      setPersonalOptions(
-        dedupeById(
-          (p || [])
-            .filter((x) => x.user_id)
-            .map((x) => ({
-              id: x.id,
-              user_id: x.user_id,
-              label:
-                `${x.nombre || ""} ${x.apellido || ""}`.trim() ||
-                x.email ||
-                x.id,
-              email: x.email || "",
-            }))
-        )
-      );
+      const ppl =
+        (p || [])
+          .filter((x) => x.user_id && !x.is_deleted)
+          .map((x) => ({
+            id: x.id,
+            user_id: x.user_id,
+            label:
+              `${x.nombre || ""} ${x.apellido || ""}`.trim() ||
+              x.email ||
+              x.id,
+            email: x.email || "",
+          })) || [];
 
-      // Geofences
+      // Dedupe por id
+      const seen = new Set();
+      const deduped = [];
+      for (const it of ppl) {
+        if (!seen.has(it.id)) {
+          seen.add(it.id);
+          deduped.push(it);
+        }
+      }
+      setPersonalOptions(deduped);
+
+      // Geofences (para selector)
       const { data: g, error: gErr } = await supabase
         .from("geofences")
         .select("id, name, org_id")
@@ -168,14 +152,14 @@ export default function AsignacionesPage() {
 
       if (gErr) throw gErr;
 
-      setGeofenceOptions(
-        dedupeById((g || []).map((x) => ({ id: x.id, label: x.name, org_id: x.org_id })))
-      );
+      setGeofenceOptions((g || []).map((x) => ({ id: x.id, label: x.name })));
 
-      // Assignments
+      // Vista canónica (para tabla)
       const { data: a, error: aErr } = await supabase
-        .from("tracker_assignments")
-        .select("*")
+        .from("v_tracker_assignments_ui")
+        .select(
+          "id, org_id, tracker_user_id, geofence_id, start_date, end_date, active, created_at, updated_at, geofence_name, tracker_email, tracker_name, tracker_label"
+        )
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
 
@@ -250,22 +234,17 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccess(null);
 
-    const trackerUserId = row.tracker_user_id || row.user_id || row.tracker_id;
-    const geofenceId = row.geofence_id;
-    const startDate = row.start_date || row.start || row.startDate;
-    const endDate = row.end_date || row.end || row.endDate;
-
-    if (!trackerUserId || !geofenceId) {
-      return setError("Fila inválida (faltan tracker_user_id o geofence_id).");
+    if (!row.tracker_user_id || !row.geofence_id || !row.start_date || !row.end_date) {
+      return setError("Fila inválida (faltan ids/fechas).");
     }
 
     try {
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
         p_org_id: orgId,
-        p_tracker_user_id: trackerUserId,
-        p_geofence_id: geofenceId,
-        p_start_date: String(startDate || ""),
-        p_end_date: String(endDate || ""),
+        p_tracker_user_id: row.tracker_user_id,
+        p_geofence_id: row.geofence_id,
+        p_start_date: String(row.start_date),
+        p_end_date: String(row.end_date),
         p_active: !row.active,
       });
 
@@ -291,12 +270,8 @@ export default function AsignacionesPage() {
         Org actual: {currentOrg?.name} ({shortId(orgId)})
       </p>
 
-      {error && (
-        <div className="mb-3 bg-red-50 border px-3 py-2 text-red-700">{error}</div>
-      )}
-      {success && (
-        <div className="mb-3 bg-green-50 border px-3 py-2 text-green-700">{success}</div>
-      )}
+      {error && <div className="mb-3 bg-red-50 border px-3 py-2 text-red-700">{error}</div>}
+      {success && <div className="mb-3 bg-green-50 border px-3 py-2 text-green-700">{success}</div>}
 
       {/* ================= FORM ================= */}
       <form
@@ -424,25 +399,22 @@ export default function AsignacionesPage() {
               </thead>
               <tbody>
                 {filteredRows.map((r) => {
-                  const trackerUserId = r.tracker_user_id || r.user_id || r.tracker_id;
-                  const p = trackerUserId ? personalByUserId.get(trackerUserId) : null;
-                  const g = r.geofence_id ? geofenceById.get(r.geofence_id) : null;
+                  const trackerText =
+                    r.tracker_label || r.tracker_email || shortId(r.tracker_user_id);
+
+                  const geofenceText =
+                    r.geofence_name || shortId(r.geofence_id);
 
                   return (
                     <tr key={r.id} className="border-b last:border-b-0">
                       <td className="py-2 pr-3">
-                        <div className="font-medium">
-                          {p?.label || (trackerUserId ? shortId(trackerUserId) : "—")}
-                        </div>
-                        {p?.email ? (
-                          <div className="text-xs text-gray-500">{p.email}</div>
+                        <div className="font-medium">{trackerText || "—"}</div>
+                        {r.tracker_email ? (
+                          <div className="text-xs text-gray-500">{r.tracker_email}</div>
                         ) : null}
                       </td>
 
-                      <td className="py-2 pr-3">
-                        {g?.label || (r.geofence_id ? shortId(r.geofence_id) : "—")}
-                      </td>
-
+                      <td className="py-2 pr-3">{geofenceText || "—"}</td>
                       <td className="py-2 pr-3">{formatDateDDMMYYYY(r.start_date)}</td>
                       <td className="py-2 pr-3">{formatDateDDMMYYYY(r.end_date)}</td>
 
