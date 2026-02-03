@@ -5,12 +5,13 @@
 // - Endpoint se mantiene /api/geocercas por compatibilidad
 // - Mapeo legacy:
 //    nombre  <-> geofences.name
-//    geojson <-> geofences.geojson (puede ser Feature/FC/Geometry)
+//    geojson <-> geofences.geojson (Feature/FC/Geometry aceptados)
 // - Auth universal: Bearer token (preferido) o cookie tg_at (legacy)
 // - Contexto por sesión: bootstrap_session_context()
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 function send(res, status, payload) {
   res.setHeader("Content-Type", "application/json");
@@ -86,17 +87,25 @@ function normalizeCi(s) {
   return String(s || "").trim().toLowerCase();
 }
 
+/**
+ * Extrae geometry pura desde:
+ * - FeatureCollection -> features[0].geometry
+ * - Feature          -> geometry
+ * - Geometry         -> geo
+ */
 function extractGeometryJson(geo) {
   if (!geo) return null;
-
   const t = String(geo?.type || "").toLowerCase();
   if (t === "featurecollection") return geo?.features?.[0]?.geometry || null;
   if (t === "feature") return geo?.geometry || null;
-  return geo; // geometry puro
+  return geo;
 }
 
+/**
+ * Si viene como Feature Point + properties.radius_m, lo tratamos como círculo.
+ * (opcional)
+ */
 function extractCircleProps(geo) {
-  // si viene como Feature Point con properties.radius_m
   try {
     const t = String(geo?.type || "").toLowerCase();
     if (t !== "feature") return null;
@@ -114,6 +123,15 @@ function extractCircleProps(geo) {
     return { lat, lng, radius_m: Math.round(radius) };
   } catch {
     return null;
+  }
+}
+
+function safeUuid() {
+  // Node 18+ (Vercel) soporta randomUUID; fallback por si acaso
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random()}`; // nunca debería usarse como uuid real
   }
 }
 
@@ -148,7 +166,10 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-      const id = body.id || null;
+      // ⚠️ FIX: NO mandamos id:null. Si no hay id, generamos uuid.
+      const rawId = body.id ?? null;
+      const id = rawId ? String(rawId) : safeUuid();
+
       const org_id = body.org_id || body.orgId || null;
       const name = String(body.nombre || body.name || "").trim();
       if (!name) return send(res, 422, { ok: false, error: "nombre (o name) is required" });
@@ -159,13 +180,14 @@ export default async function handler(req, res) {
       const payload = { id, org_id, name, active: true };
 
       if (geo !== null) {
+        // guardamos lo que llega (para UI legacy)
         payload.geojson = geo;
 
-        // ✅ Guardamos polygon_geojson limpio (geometry pura), así triggers/constraints no sufren
+        // guardamos geometry pura para evitar líos aguas abajo
         const gOnly = extractGeometryJson(geo);
         if (gOnly) payload.polygon_geojson = gOnly;
 
-        // ✅ Si es círculo, opcionalmente llenamos lat/lng/radius_m (si tu UI manda Feature Point + radius_m)
+        // círculo opcional
         const circle = extractCircleProps(geo);
         if (circle) {
           payload.lat = circle.lat;
