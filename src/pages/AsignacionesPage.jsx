@@ -1,7 +1,8 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.3 (Feb 2026) — Fix: org mismatch guard + datetime-local interval
-// - UI usa datetime-local (fecha+hora) para inicio/fin, DB recibe date (YYYY-MM-DD)
-// - Geofences SIEMPRE filtradas por org_id = currentOrg.id (doble filtro)
+// Asignaciones v2.4 (Feb 2026) — Fix: calendar icon datepicker (react-datepicker)
+// - UI usa DatePicker (calendario + hora) con icono
+// - DB recibe date (YYYY-MM-DD)
+// - Geofences filtradas por org_id = currentOrg.id (doble filtro)
 // - Debug visual: muestra current org id para detectar cruce de org entre pantallas
 // - Debug opcional: /asignaciones?debug=1
 
@@ -9,6 +10,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
+
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const ESTADOS = ["todos", "activa", "inactiva"];
 
@@ -25,44 +29,94 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
-function toDateOnly(value) {
-  if (!value) return "";
-  const s = String(value);
-  if (s.includes("T")) return s.slice(0, 10);
-  if (s.includes(" ")) return s.split(" ")[0].slice(0, 10);
-  return s.slice(0, 10);
-}
-
-function toDateTimeLocalInput(value) {
-  if (!value) return "";
-  const s = String(value);
-  if (s.includes("T")) return s.slice(0, 16);
-  if (s.includes(" ")) {
-    const [d, t] = s.split(" ");
-    return `${d.slice(0, 10)}T${t.slice(0, 5)}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T08:00`;
-  return "";
-}
-
-function nowDateTimeLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(
-    d.getMinutes()
-  )}`;
-}
-
-function plusDaysDateTimeLocal(days) {
-  const d = new Date(Date.now() + days * 24 * 3600 * 1000);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(
-    d.getMinutes()
-  )}`;
-}
-
 function shortId(uuid) {
   if (!uuid) return "";
   const s = String(uuid);
   return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
+}
+
+// ---- Date helpers ----
+// DB needs YYYY-MM-DD (date only)
+function toDateOnlyFromDate(d) {
+  if (!d || !(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${y}-${m}-${day}`;
+}
+
+// backend returns "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm:ss" or "YYYY-MM-DD HH:mm:ss"
+function parseDateLoose(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+
+  // If already Date
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  // "YYYY-MM-DD"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    // default time 08:00 local (solo UX)
+    return new Date(`${s}T08:00:00`);
+  }
+
+  // "YYYY-MM-DDTHH:mm..."
+  if (s.includes("T")) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // "YYYY-MM-DD HH:mm:ss"
+  if (s.includes(" ")) {
+    const [dPart, tPart] = s.split(" ");
+    const iso = `${dPart}T${(tPart || "08:00").slice(0, 5)}:00`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // fallback
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function nowDate() {
+  return new Date();
+}
+
+function plusDays(days) {
+  return new Date(Date.now() + days * 24 * 3600 * 1000);
+}
+
+// ---- UI: input with icon (calendar) ----
+function CalendarInput({ value, onClick, placeholder }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full border rounded px-3 py-2 flex items-center justify-between gap-3 hover:bg-gray-50"
+    >
+      <span className={value ? "text-gray-900" : "text-gray-400"}>
+        {value || placeholder || ""}
+      </span>
+
+      {/* simple inline SVG calendar icon */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        className="shrink-0 text-gray-500"
+      >
+        <path
+          d="M7 3v2M17 3v2M4 9h16M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    </button>
+  );
 }
 
 export default function AsignacionesPage() {
@@ -79,8 +133,11 @@ export default function AsignacionesPage() {
   // Form
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
-  const [startDateTime, setStartDateTime] = useState(nowDateTimeLocal());
-  const [endDateTime, setEndDateTime] = useState(plusDaysDateTimeLocal(365));
+
+  // ✅ Date objects for DatePicker
+  const [startDt, setStartDt] = useState(nowDate());
+  const [endDt, setEndDt] = useState(plusDays(365));
+
   const [active, setActive] = useState(true);
   const [editingKey, setEditingKey] = useState(null);
 
@@ -106,8 +163,8 @@ export default function AsignacionesPage() {
   function resetForm() {
     setSelectedPersonalId("");
     setSelectedGeofenceId("");
-    setStartDateTime(nowDateTimeLocal());
-    setEndDateTime(plusDaysDateTimeLocal(365));
+    setStartDt(nowDate());
+    setEndDt(plusDays(365));
     setActive(true);
     setEditingKey(null);
   }
@@ -153,7 +210,7 @@ export default function AsignacionesPage() {
       const personalDedup = dedupeById(personal);
       setPersonalOptions(personalDedup);
 
-      // 2) Geofences (doble filtro: query + filtro frontend por seguridad)
+      // 2) Geofences (doble filtro)
       let geofenceSelectError = null;
 
       const gRes = await supabase
@@ -172,12 +229,10 @@ export default function AsignacionesPage() {
         label: g.name || g.id,
       }));
 
-      // HARD GUARD: si por cualquier motivo vinieran mezcladas, se filtran aquí
       const geofences = rawGeofences.filter((g) => g.org_id === orgId);
       const geofencesDedup = dedupeById(geofences);
       setGeofenceOptions(geofencesDedup);
 
-      // Si la geocerca seleccionada ya no pertenece al org actual, la limpiamos
       if (selectedGeofenceId && !geofencesDedup.some((g) => g.id === selectedGeofenceId)) {
         setSelectedGeofenceId("");
       }
@@ -247,14 +302,14 @@ export default function AsignacionesPage() {
     if (!orgId) return setError("No hay organización activa.");
     if (!selectedPersonalId) return setError("Selecciona una persona.");
     if (!selectedGeofenceId) return setError("Selecciona una geocerca.");
-    if (!startDateTime || !endDateTime) return setError("Selecciona inicio y fin (fecha y hora).");
+    if (!startDt || !endDt) return setError("Selecciona inicio y fin (fecha y hora).");
 
     const p = personalOptions.find((x) => x.id === selectedPersonalId);
     const trackerUserId = p?.user_id || null;
     if (!trackerUserId) return setError("La persona seleccionada no tiene user_id (tracker_user_id).");
 
-    const startDate = toDateOnly(startDateTime);
-    const endDate = toDateOnly(endDateTime);
+    const startDate = toDateOnlyFromDate(startDt);
+    const endDate = toDateOnlyFromDate(endDt);
 
     if (!startDate || !endDate) return setError("No se pudo convertir fecha/hora a fecha válida.");
     if (String(endDate) < String(startDate)) return setError("La fecha fin debe ser >= fecha inicio.");
@@ -311,8 +366,11 @@ export default function AsignacionesPage() {
     setSelectedPersonalId(per?.id || "");
 
     setSelectedGeofenceId(r.geofence_id || "");
-    setStartDateTime(toDateTimeLocalInput(r.start_date));
-    setEndDateTime(toDateTimeLocalInput(r.end_date));
+
+    // DB guarda date, pero a UX le damos hora por defecto
+    setStartDt(parseDateLoose(r.start_date) || nowDate());
+    setEndDt(parseDateLoose(r.end_date) || plusDays(365));
+
     setActive(!!r.active);
 
     setError(null);
@@ -412,35 +470,41 @@ export default function AsignacionesPage() {
             </select>
           </div>
 
+          {/* ✅ Calendar icon DatePicker */}
           <div className="flex flex-col">
-            <label htmlFor="start_dt" className="mb-1 font-medium text-sm">
-              Inicio (fecha + hora)
-            </label>
-            <input
-              id="start_dt"
-              name="start_dt"
-              type="datetime-local"
-              className="border rounded px-3 py-2"
-              value={startDateTime}
-              onChange={(e) => setStartDateTime(e.target.value)}
-              required
-              autoComplete="off"
+            <label className="mb-1 font-medium text-sm">Inicio (fecha + hora)</label>
+            <DatePicker
+              selected={startDt}
+              onChange={(d) => setStartDt(d || null)}
+              showTimeSelect
+              timeIntervals={15}
+              timeCaption="Hora"
+              dateFormat="dd/MM/yyyy HH:mm"
+              customInput={
+                <CalendarInput
+                  placeholder="Selecciona inicio"
+                  value={startDt ? startDt.toLocaleString() : ""}
+                />
+              }
             />
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor="end_dt" className="mb-1 font-medium text-sm">
-              Fin (fecha + hora)
-            </label>
-            <input
-              id="end_dt"
-              name="end_dt"
-              type="datetime-local"
-              className="border rounded px-3 py-2"
-              value={endDateTime}
-              onChange={(e) => setEndDateTime(e.target.value)}
-              required
-              autoComplete="off"
+            <label className="mb-1 font-medium text-sm">Fin (fecha + hora)</label>
+            <DatePicker
+              selected={endDt}
+              onChange={(d) => setEndDt(d || null)}
+              showTimeSelect
+              timeIntervals={15}
+              timeCaption="Hora"
+              dateFormat="dd/MM/yyyy HH:mm"
+              minDate={startDt || undefined}
+              customInput={
+                <CalendarInput
+                  placeholder="Selecciona fin"
+                  value={endDt ? endDt.toLocaleString() : ""}
+                />
+              }
             />
             <p className="text-xs text-gray-500 mt-1">
               DB guarda solo fecha (YYYY-MM-DD). La hora es para UX; se recorta al guardar.
