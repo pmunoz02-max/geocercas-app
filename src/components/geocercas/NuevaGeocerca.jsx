@@ -445,51 +445,38 @@ export default function NuevaGeocerca() {
   }, []);
 
   const refreshGeofenceList = useCallback(async () => {
-    try {
-      const merged = await listGeofencesUnified({ orgId });
-      setGeofenceList(mergeUniqueByNombre(filterSoftDeleted(merged)));
-    } catch (e) {
-      console.error("[NuevaGeocerca] refreshGeofenceList error", e);
-      setGeofenceList([]);
+  try {
+    // 1) pide al API
+    const rows = await listGeocercas({ orgId });
+
+    // 2) normaliza campos y filtra vacíos
+    const normalized = (rows || [])
+      .map((r) => {
+        const nombre = String(r?.nombre ?? r?.name ?? "").trim();
+        return {
+          id: r?.id,
+          nombre,
+          org_id: r?.org_id ?? r?.orgId ?? null,
+          source: "api",
+        };
+      })
+      .filter((g) => !!g.nombre);
+
+    // 3) unique por nombre (sin botar nada por errores)
+    const seen = new Set();
+    const unique = [];
+    for (const g of normalized) {
+      if (seen.has(g.nombre)) continue;
+      seen.add(g.nombre);
+      unique.push(g);
     }
-  }, [orgId]);
 
-  useEffect(() => {
-    refreshGeofenceList();
-  }, [refreshGeofenceList]);
-
-  useEffect(() => {
-    invalidateMapSize();
-  }, [geofenceList.length, invalidateMapSize]);
-
-  useEffect(() => {
-    let mounted = true;
-    if (!DATA_SOURCE) {
-      setLoadingDataset(false);
-      setDataset(null);
-      setDatasetError(null);
-      return;
-    }
-    (async () => {
-      try {
-        setLoadingDataset(true);
-        const data = await loadShortMap({ source: DATA_SOURCE });
-        if (!mounted) return;
-        setDataset(data);
-        setDatasetError(null);
-      } catch (e) {
-        if (!mounted) return;
-        setDataset(null);
-        setDatasetError(e?.message || String(e));
-      } finally {
-        if (!mounted) return;
-        setLoadingDataset(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    setGeofenceList(unique);
+  } catch (e) {
+    console.error("[NuevaGeocerca] refreshGeofenceList error", e);
+    setGeofenceList([]);
+  }
+}, [orgId]);
 
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
