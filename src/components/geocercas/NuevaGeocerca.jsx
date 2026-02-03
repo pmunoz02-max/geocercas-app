@@ -4,8 +4,6 @@ import { MapContainer, TileLayer, GeoJSON, FeatureGroup, Pane, useMapEvents } fr
 import L from "leaflet";
 
 import "leaflet/dist/leaflet.css";
-
-// ✅ IMPORT CORRECTO (Vercel build fix):
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
@@ -180,63 +178,14 @@ function mergeUniqueByNombre(items) {
   const seen = new Set();
   const unique = [];
   for (const g of items || []) {
-    const nm = String(g?.nombre ?? g?.name ?? "").trim();  // ✅ FIX
+    const nm = String(g?.nombre || "").trim();
     if (!nm) continue;
     if (seen.has(nm)) continue;
     seen.add(nm);
-    unique.push({ ...g, nombre: nm }); // ✅ normaliza a "nombre"
+    unique.push({ ...g, nombre: nm });
   }
   unique.sort((a, b) => a.nombre.localeCompare(b.nombre));
   return unique;
-}
-
-function deleteFromLocalStorageByNames(orgId, names) {
-  if (typeof window === "undefined") return 0;
-  if (!orgId) return 0;
-
-  let deleted = 0;
-  for (const nm of names) {
-    const key = makeLocalKey(orgId, nm);
-    if (localStorage.getItem(key) !== null) {
-      localStorage.removeItem(key);
-      deleted += 1;
-    }
-  }
-  return deleted;
-}
-
-/**
- * ✅ Tombstones persistentes (por org) para evitar que reaparezca por local
- */
-function tombstoneKey(orgId) {
-  return `geocerca_tombstones_${String(orgId || "").trim()}`;
-}
-
-function readTombstones(orgId) {
-  if (typeof window === "undefined") return new Set();
-  if (!orgId) return new Set();
-  try {
-    const raw = localStorage.getItem(tombstoneKey(orgId));
-    const arr = raw ? JSON.parse(raw) : [];
-    return new Set((Array.isArray(arr) ? arr : []).map((x) => normalizeNombreCi(x)));
-  } catch {
-    return new Set();
-  }
-}
-
-function addTombstones(orgId, names) {
-  if (typeof window === "undefined") return;
-  if (!orgId) return;
-  const set = readTombstones(orgId);
-  for (const nm of names || []) set.add(normalizeNombreCi(nm));
-  try {
-    localStorage.setItem(tombstoneKey(orgId), JSON.stringify(Array.from(set)));
-  } catch {}
-}
-
-function purgeTombstonesFromList(items, orgId) {
-  const tombs = readTombstones(orgId);
-  return (items || []).filter((g) => !tombs.has(normalizeNombreCi(g?.nombre)));
 }
 
 /* ----------------------------- Unified list ----------------------------- */
@@ -247,17 +196,17 @@ async function listGeofencesUnified({ orgId }) {
       .map((r) => ({ id: r.id, nombre: r.nombre || r.name, source: "api" }))
       .filter((g) => !!g.nombre);
 
-    const apiClean = mergeUniqueByNombre(filterSoftDeleted(purgeTombstonesFromList(apiList, orgId)));
+    const apiClean = mergeUniqueByNombre(filterSoftDeleted(apiList));
 
     if (USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS) return apiClean;
 
     const local = readLocalGeocercas(orgId);
     const merged = [...apiClean, ...local];
-    return mergeUniqueByNombre(filterSoftDeleted(purgeTombstonesFromList(merged, orgId)));
+    return mergeUniqueByNombre(filterSoftDeleted(merged));
   } catch (e) {
     console.warn("[NuevaGeocerca] API listGeocercas falló, usando local", e);
     const local = readLocalGeocercas(orgId);
-    return mergeUniqueByNombre(filterSoftDeleted(purgeTombstonesFromList(local, orgId)));
+    return mergeUniqueByNombre(filterSoftDeleted(local));
   }
 }
 
@@ -445,38 +394,51 @@ export default function NuevaGeocerca() {
   }, []);
 
   const refreshGeofenceList = useCallback(async () => {
-  try {
-    // 1) pide al API
-    const rows = await listGeocercas({ orgId });
-
-    // 2) normaliza campos y filtra vacíos
-    const normalized = (rows || [])
-      .map((r) => {
-        const nombre = String(r?.nombre ?? r?.name ?? "").trim();
-        return {
-          id: r?.id,
-          nombre,
-          org_id: r?.org_id ?? r?.orgId ?? null,
-          source: "api",
-        };
-      })
-      .filter((g) => !!g.nombre);
-
-    // 3) unique por nombre (sin botar nada por errores)
-    const seen = new Set();
-    const unique = [];
-    for (const g of normalized) {
-      if (seen.has(g.nombre)) continue;
-      seen.add(g.nombre);
-      unique.push(g);
+    try {
+      const merged = await listGeofencesUnified({ orgId });
+      setGeofenceList(mergeUniqueByNombre(filterSoftDeleted(merged)));
+    } catch (e) {
+      console.error("[NuevaGeocerca] refreshGeofenceList error", e);
+      setGeofenceList([]);
     }
+  }, [orgId]);
 
-    setGeofenceList(unique);
-  } catch (e) {
-    console.error("[NuevaGeocerca] refreshGeofenceList error", e);
-    setGeofenceList([]);
-  }
-}, [orgId]);
+  useEffect(() => {
+    refreshGeofenceList();
+  }, [refreshGeofenceList]);
+
+  useEffect(() => {
+    invalidateMapSize();
+  }, [geofenceList.length, invalidateMapSize]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!DATA_SOURCE) {
+      setLoadingDataset(false);
+      setDataset(null);
+      setDatasetError(null);
+      return;
+    }
+    (async () => {
+      try {
+        setLoadingDataset(true);
+        const data = await loadShortMap({ source: DATA_SOURCE });
+        if (!mounted) return;
+        setDataset(data);
+        setDatasetError(null);
+      } catch (e) {
+        if (!mounted) return;
+        setDataset(null);
+        setDatasetError(e?.message || String(e));
+      } finally {
+        if (!mounted) return;
+        setLoadingDataset(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
@@ -511,12 +473,10 @@ export default function NuevaGeocerca() {
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
   /**
-   * ✅ Envío correcto al backend:
-   * - Polígonos: Feature Polygon
-   * - Círculo: Feature Point + properties.radius_m
-   *
-   * Nota: aquí enviamos **feature** (no FeatureCollection) para que tu función
-   * _geojson_extract_geometry funcione perfecto (Feature/FC/Geometry).
+   * ✅ FIX UNIVERSAL:
+   * - Si es Polygon/Rectangle: mandamos Feature Polygon
+   * - Si es Circle: mandamos Feature Point con properties.radius_m
+   *   y el backend lo convierte a MultiPolygon con ST_Buffer
    */
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
@@ -546,7 +506,7 @@ export default function NuevaGeocerca() {
         return;
       }
 
-      // Circle → Feature Point + radius_m
+      // ✅ Circle → Feature Point + radius_m
       if (layerToSave instanceof L.Circle) {
         const center = layerToSave.getLatLng?.();
         const radiusM = Math.round(Number(layerToSave.getRadius?.() || 0));
@@ -578,10 +538,9 @@ export default function NuevaGeocerca() {
       return;
     }
 
-    // Vista siempre como FC (solo para render)
     const fc = { type: "FeatureCollection", features: [feature] };
 
-    // Local write (solo cache UI)
+    // Cache local (solo como respaldo)
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(
@@ -593,11 +552,10 @@ export default function NuevaGeocerca() {
 
     try {
       await upsertGeocerca({
-        // 🔥 Importante: NO mandamos id (para evitar "id null")
         org_id: orgId,
         nombre: nm,
-        geojson: feature, // ✅ Feature (no FC)
-        geometry: feature, // compat
+        geojson: feature,
+        geometry: feature,
       });
 
       setSelectedNames(() => new Set([nm]));
@@ -629,18 +587,12 @@ export default function NuevaGeocerca() {
     }
   }, [geofenceName, orgId, draftFeature, t, refreshGeofenceList, showErr, showOk, invalidateMapSize]);
 
-  onst names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
-
-// NUEVO: buscar ids de esos nombres en tu lista actual
-const idsToDelete = (geofenceList || [])
-  .filter((g) => names.includes(String(g?.nombre || "").trim()))
-  .map((g) => g.id)
-  .filter(Boolean);
-
-if (!idsToDelete.length) {
-  showErr("No se encontraron IDs para eliminar. Refresca la lista e intenta otra vez.");
-  return;
-}
+  // ✅ DELETE POR ID (para que no “reaparezca”)
+  const handleDeleteSelected = useCallback(async () => {
+    if (!orgId) {
+      showErr(t("geocercas.manage.noOrgTitle", { defaultValue: "Selecciona una organización primero." }));
+      return;
+    }
 
     if (!selectedNames || selectedNames.size === 0) {
       showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
@@ -654,20 +606,28 @@ if (!idsToDelete.length) {
 
     const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
 
+    // IDs reales según lista actual
+    const idsToDelete = (geofenceList || [])
+      .filter((g) => names.includes(String(g?.nombre || "").trim()))
+      .map((g) => g.id)
+      .filter(Boolean);
+
+    if (!idsToDelete.length) {
+      showErr("No se encontraron IDs para eliminar. Refresca la lista e intenta otra vez.");
+      return;
+    }
+
+    // Optimistic UI
     setGeofenceList((prev) => (prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim())));
     setSelectedNames(() => new Set());
     setLastSelectedName(null);
     setViewFeature(null);
     setViewCentroid(null);
 
-    addTombstones(orgId, names);
-    deleteFromLocalStorageByNames(orgId, names);
-
     try {
-      await deleteGeocerca({
-        orgId,
-        nombres_ci: names.map(normalizeNombreCi),
-      });
+      for (const id of idsToDelete) {
+        await deleteGeocerca(id); // DELETE /api/geocercas?id=...
+      }
 
       await refreshGeofenceList();
       clearCanvas();
@@ -675,8 +635,8 @@ if (!idsToDelete.length) {
 
       showOk(
         t("geocercas.deletedCount", {
-          count: names.length,
-          defaultValue: `Eliminadas: ${names.length}`,
+          count: idsToDelete.length,
+          defaultValue: `Eliminadas: ${idsToDelete.length}`,
         })
       );
     } catch (e) {
@@ -685,7 +645,7 @@ if (!idsToDelete.length) {
         await refreshGeofenceList();
       } catch {}
     }
-  }, [orgId, selectedNames, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
+  }, [orgId, selectedNames, geofenceList, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
@@ -726,16 +686,14 @@ if (!idsToDelete.length) {
         return;
       }
 
-      const fc = geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
-
-      setViewFeature(fc);
-      setViewCentroid(centroidFeatureFromGeojson(fc));
+      setViewFeature(geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] });
+      setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
 
       if (mapRef.current) {
         try {
           mapRef.current.invalidateSize?.();
-          const bounds = L.geoJSON(fc).getBounds();
+          const bounds = L.geoJSON(geo).getBounds();
           if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
         } catch {}
       }
