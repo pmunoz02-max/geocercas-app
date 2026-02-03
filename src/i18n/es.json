@@ -896,6 +896,38 @@
       "subtitle": "Contáctanos para soporte técnico, dudas de facturación o capacitación.",
       "emailLabel": "Correo de soporte",
       "notConfigured": "El contacto de soporte aún no está configurado."
+    },
+    "changelog": {
+      "title": "Novedades / Changelog",
+      "subtitle": "Historial de cambios, mejoras y correcciones.",
+      "badges": {
+        "feature": "Función",
+        "fix": "Corrección",
+        "improvement": "Mejora"
+      },
+      "items": [
+        {
+          "version": "v1.0.0",
+          "date": "2026-02-03",
+          "changes": [
+            {
+              "type": "feature",
+              "title": "Centro de ayuda",
+              "details": [
+                "Guía rápida, FAQ, soporte y changelog disponibles."
+              ]
+            },
+            {
+              "type": "improvement",
+              "title": "Privacidad y cumplimiento",
+              "details": [
+                "Página pública de Política de Privacidad.",
+                "Correo de soporte configurable por variables de entorno."
+              ]
+            }
+          ]
+        }
+      ]
     }
   },
   "resetPassword": {

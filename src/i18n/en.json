@@ -936,6 +936,38 @@
       "subtitle": "Contact us for technical support, billing questions, or onboarding.",
       "emailLabel": "Support email",
       "notConfigured": "Support contact is not configured yet."
+    },
+    "changelog": {
+      "title": "Updates / Changelog",
+      "subtitle": "Change history, improvements, and fixes.",
+      "badges": {
+        "feature": "Feature",
+        "fix": "Fix",
+        "improvement": "Improvement"
+      },
+      "items": [
+        {
+          "version": "v1.0.0",
+          "date": "2026-02-03",
+          "changes": [
+            {
+              "type": "feature",
+              "title": "Help center",
+              "details": [
+                "Quick guide, FAQ, support, and changelog available."
+              ]
+            },
+            {
+              "type": "improvement",
+              "title": "Privacy & compliance",
+              "details": [
+                "Public Privacy Policy page.",
+                "Support email configurable via environment variables."
+              ]
+            }
+          ]
+        }
+      ]
     }
   },
   "resetPassword": {

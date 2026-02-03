@@ -858,6 +858,38 @@
       "subtitle": "Contactez-nous pour le support technique, la facturation ou l’onboarding.",
       "emailLabel": "E-mail de support",
       "notConfigured": "Le contact support n’est pas encore configuré."
+    },
+    "changelog": {
+      "title": "Nouveautés / Changelog",
+      "subtitle": "Historique des changements, améliorations et corrections.",
+      "badges": {
+        "feature": "Fonctionnalité",
+        "fix": "Correction",
+        "improvement": "Amélioration"
+      },
+      "items": [
+        {
+          "version": "v1.0.0",
+          "date": "2026-02-03",
+          "changes": [
+            {
+              "type": "feature",
+              "title": "Centre d’aide",
+              "details": [
+                "Guide rapide, FAQ, support et changelog disponibles."
+              ]
+            },
+            {
+              "type": "improvement",
+              "title": "Confidentialité & conformité",
+              "details": [
+                "Page publique de Politique de confidentialité.",
+                "E-mail de support configurable via variables d’environnement."
+              ]
+            }
+          ]
+        }
+      ]
     }
   },
   "resetPassword": {
