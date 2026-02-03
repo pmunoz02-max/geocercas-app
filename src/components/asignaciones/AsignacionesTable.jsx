@@ -1,9 +1,11 @@
 // src/components/asignaciones/AsignacionesTable.jsx
-// v5 — Enero 2026
-// Objetivo: NUNCA columnas “vacías invisibles” por CSS.
-// - Fuerza color/visibilidad en celdas.
-// - Incluye celda de prueba "TEXTO_FORZADO_OK" (rojo/amarillo) en Geocerca si no hay valor.
-// - Fallbacks a IDs cortos y “—”.
+// v6 — Feb 2026 (UNIVERSAL + PERMANENTE)
+// Objetivo: soporte canónico (v_tracker_assignments_ui) + legacy sin romper.
+// - Geocerca: usa geofence_name o fallback a IDs
+// - Fechas: usa start_date/end_date o variantes legacy
+// - Estado: usa active boolean si existe (CANÓNICO), si no usa strings legacy
+// - Anti-CSS invisible: fuerza estilos
+// - Celda de prueba: TEXTO_FORZADO_OK si Geocerca viene vacío (para diagnosticar rutas/componentes)
 
 import React, { useMemo } from "react";
 
@@ -20,11 +22,28 @@ function shortId(id) {
   return s.length > 10 ? `${s.slice(0, 8)}…` : s;
 }
 
+function formatDateOnly(value) {
+  // Para DATE (YYYY-MM-DD) o ISO, devuelve DD/MM/YYYY
+  const s = safe(value);
+  if (!s) return "";
+  try {
+    // Si viene YYYY-MM-DD, agrego hora para evitar timezone raro
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T08:00:00`) : new Date(s);
+    if (Number.isNaN(d.getTime())) return s;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = d.getFullYear();
+    return `${dd}/${mm}/${yy}`;
+  } catch {
+    return s;
+  }
+}
+
 function formatDateTime(value) {
   const s = safe(value);
   if (!s) return "";
   try {
-    const d = new Date(s);
+    const d = new Date(s.includes(" ") ? s.replace(" ", "T") : s);
     if (Number.isNaN(d.getTime())) return s;
     return d.toLocaleString(undefined, {
       year: "numeric",
@@ -44,6 +63,19 @@ function cell(v) {
 }
 
 function personaInfo(row) {
+  // CANÓNICO (vista)
+  const trackerLabel = safe(row?.tracker_label);
+  const trackerEmail = safe(row?.tracker_email);
+  const trackerUserId = safe(row?.tracker_user_id);
+
+  if (trackerLabel || trackerEmail) {
+    return {
+      nombre: trackerLabel || trackerEmail || (trackerUserId ? shortId(trackerUserId) : DASH),
+      email: trackerEmail || "",
+    };
+  }
+
+  // LEGACY
   const p = row?.personal || row?.persona || null;
   const nombre =
     safe(p?.nombre) ||
@@ -61,16 +93,21 @@ function personaInfo(row) {
 }
 
 function geocercaText(row) {
+  // CANÓNICO
+  const nombreCanon = safe(row?.geofence_name);
+  if (nombreCanon) return nombreCanon;
+
+  // LEGACY
   const nombre =
     safe(row?.geocerca?.nombre) ||
     safe(row?.geocerca_nombre) ||
     safe(row?.geofence?.nombre) ||
-    safe(row?.geofence_name) ||
     "";
   const id =
     safe(row?.geocerca_id) ||
     safe(row?.geofence_id) ||
     safe(row?.geocercaId) ||
+    safe(row?.geofenceId) ||
     "";
   return nombre || (id ? shortId(id) : "");
 }
@@ -86,11 +123,17 @@ function actividadText(row) {
     safe(row?.activity_id) ||
     safe(row?.actividad_id) ||
     safe(row?.activityId) ||
+    safe(row?.actividadId) ||
     "";
   return nombre || (id ? shortId(id) : "");
 }
 
 function freqMin(row) {
+  // CANÓNICO en tracker_assignments: frequency_minutes
+  const fm = row?.frequency_minutes;
+  if (fm != null && Number.isFinite(Number(fm)) && Number(fm) > 0) return String(Number(fm));
+
+  // LEGACY
   const sec =
     row?.frecuencia_envio_sec ??
     row?.freq_sec ??
@@ -109,9 +152,19 @@ function freqMin(row) {
   return "";
 }
 
-function StatusPill({ status }) {
-  const s = safe(status).toLowerCase();
-  const isActive = s === "activa" || s === "active" || s === "on";
+function isActiveRow(row) {
+  // CANÓNICO: active boolean
+  if (typeof row?.active === "boolean") return row.active;
+
+  // Legacy: strings
+  const s = safe(row?.status || row?.estado).toLowerCase();
+  if (s === "activa" || s === "active" || s === "on" || s === "true" || s === "1") return true;
+  if (s === "inactiva" || s === "inactive" || s === "off" || s === "false" || s === "0") return false;
+
+  return false;
+}
+
+function StatusPill({ active }) {
   return (
     <span
       style={{
@@ -121,13 +174,13 @@ function StatusPill({ status }) {
         borderRadius: "999px",
         fontSize: "12px",
         fontWeight: 700,
-        background: isActive ? "#dcfce7" : "#f3f4f6",
-        color: isActive ? "#166534" : "#111827",
+        background: active ? "#dcfce7" : "#f3f4f6",
+        color: active ? "#166534" : "#111827",
         opacity: 1,
         visibility: "visible",
       }}
     >
-      {isActive ? "Activa" : "Inactiva"}
+      {active ? "Activa" : "Inactiva"}
     </span>
   );
 }
@@ -159,7 +212,7 @@ export default function AsignacionesTable({
           style={{ ...tdForce }}
         >
           <h3 className="font-semibold" style={{ ...tdForce }}>
-            Listado de asignaciones (v5)
+            Listado de asignaciones (v6 CANÓNICO)
           </h3>
           <span className="text-xs text-gray-500" style={{ ...tdForce }}>
             rows: {rows.length}
@@ -210,59 +263,58 @@ export default function AsignacionesTable({
                 <th className="px-4 py-3 font-semibold" style={{ ...tdForce }}>
                   Estado
                 </th>
-                <th
-                  className="px-4 py-3 font-semibold text-right"
-                  style={{ ...tdForce }}
-                >
+                <th className="px-4 py-3 font-semibold text-right" style={{ ...tdForce }}>
                   Acciones
                 </th>
               </tr>
             </thead>
 
-            <tbody
-              className="divide-y"
-              style={{ color: "#111827", opacity: 1, visibility: "visible" }}
-            >
+            <tbody className="divide-y" style={{ color: "#111827", opacity: 1, visibility: "visible" }}>
               {rows.map((row) => {
                 const { nombre, email } = personaInfo(row);
 
                 const geo = geocercaText(row);
                 const act = actividadText(row);
 
+                // CANÓNICO: start_date/end_date (DATE)
+                // LEGACY: start_time/end_time/etc
                 const inicioRaw =
+                  row?.start_date ||
                   row?.start_time ||
                   row?.inicio ||
                   row?.start ||
-                  row?.start_date ||
                   row?.fecha_inicio ||
                   "";
+
                 const finRaw =
+                  row?.end_date ||
                   row?.end_time ||
                   row?.fin ||
                   row?.end ||
-                  row?.end_date ||
                   row?.fecha_fin ||
                   "";
 
-                const inicio = inicioRaw ? formatDateTime(inicioRaw) : "";
-                const fin = finRaw ? formatDateTime(finRaw) : "";
+                const inicio =
+                  /^\d{4}-\d{2}-\d{2}$/.test(safe(inicioRaw))
+                    ? formatDateOnly(inicioRaw)
+                    : (inicioRaw ? formatDateTime(inicioRaw) : "");
+
+                const fin =
+                  /^\d{4}-\d{2}-\d{2}$/.test(safe(finRaw))
+                    ? formatDateOnly(finRaw)
+                    : (finRaw ? formatDateTime(finRaw) : "");
 
                 const freq = freqMin(row);
-                const status = row?.status || row?.estado || "inactiva";
+                const active = isActiveRow(row);
 
                 const key =
                   row?.id ||
-                  `${row?.personal_id || "p"}-${row?.geocerca_id || "g"}-${
-                    row?.activity_id || "a"
-                  }`;
+                  `${safe(row?.tracker_user_id || row?.personal_id || "p")}-${safe(row?.geofence_id || row?.geocerca_id || "g")}`;
 
                 return (
                   <tr key={key}>
                     <td className="px-4 py-3" style={{ ...tdForce }}>
-                      <div
-                        className="font-semibold text-gray-900"
-                        style={{ ...tdForce }}
-                      >
+                      <div className="font-semibold text-gray-900" style={{ ...tdForce }}>
                         {cell(nombre)}
                       </div>
                       {email ? (
@@ -279,11 +331,7 @@ export default function AsignacionesTable({
                         ...tdForce,
                         ...(geo
                           ? {}
-                          : {
-                              color: "#ff0000",
-                              fontWeight: "bold",
-                              background: "#ffff00",
-                            }),
+                          : { color: "#ff0000", fontWeight: "bold", background: "#ffff00" }),
                       }}
                     >
                       {geo ? geo : "TEXTO_FORZADO_OK"}
@@ -306,7 +354,7 @@ export default function AsignacionesTable({
                     </td>
 
                     <td className="px-4 py-3" style={{ ...tdForce }}>
-                      <StatusPill status={status} />
+                      <StatusPill active={active} />
                     </td>
 
                     <td className="px-4 py-3" style={{ ...tdForce }}>
