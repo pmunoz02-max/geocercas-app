@@ -180,11 +180,11 @@ function mergeUniqueByNombre(items) {
   const seen = new Set();
   const unique = [];
   for (const g of items || []) {
-    const nm = String(g?.nombre || "").trim();
+    const nm = String(g?.nombre ?? g?.name ?? "").trim();  // ✅ FIX
     if (!nm) continue;
     if (seen.has(nm)) continue;
     seen.add(nm);
-    unique.push({ ...g, nombre: nm });
+    unique.push({ ...g, nombre: nm }); // ✅ normaliza a "nombre"
   }
   unique.sort((a, b) => a.nombre.localeCompare(b.nombre));
   return unique;
