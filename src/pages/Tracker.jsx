@@ -22,7 +22,7 @@ export default function Tracker() {
     typeof navigator !== "undefined" ? navigator.onLine : true
   );
 
-  // Intervalo efectivo (universal): viene del backend/assignments
+  // Intervalo efectivo (universal): viene del backend/assignments (vista canónica)
   const [intervalSec, setIntervalSec] = useState(MIN_INTERVAL_SEC);
 
   const [statusMessage, setStatusMessage] = useState("Preparando tracker...");
@@ -43,10 +43,6 @@ export default function Tracker() {
   const lastFlushTsRef = useRef(0);
 
   const canOperate = useMemo(() => {
-    // Solo operamos si:
-    // - usuario existe
-    // - guard fue evaluado
-    // - guard ok
     return Boolean(user?.id) && guard.checked && guard.ok;
   }, [user?.id, guard.checked, guard.ok]);
 
@@ -129,7 +125,6 @@ export default function Tracker() {
         return { ok: false, reason: "rpc_error" };
       }
 
-      // data es array (por returns table)
       const row = Array.isArray(data) ? data[0] : data;
 
       const next = {
@@ -143,13 +138,11 @@ export default function Tracker() {
 
       setGuard(next);
 
-      // Si no es tracker => logout forzado (universal)
       if (!next.ok && next.reason === "role_not_tracker") {
         await signOutHard(humanGuardReason(next.reason));
         return { ok: false, reason: next.reason };
       }
 
-      // Mensaje de estado si está bloqueado
       if (!next.ok) {
         setStatusMessage(`${humanGuardReason(next.reason)} (${reason})`);
       }
@@ -164,22 +157,22 @@ export default function Tracker() {
   }
 
   // ==============================
-  // Intervalo universal (desde tracker_assignments)
+  // Intervalo universal (DESDE VISTA CANÓNICA)
   // - Máximo: el mínimo de frequency_minutes activos
-  // - Mínimo: 5 min
+  // - Mínimo: 5 min (MIN_INTERVAL_SEC)
   // ==============================
   async function loadIntervalFromAssignments() {
     try {
       if (!user?.id) return MIN_INTERVAL_SEC;
 
       const { data, error } = await supabase
-        .from("tracker_assignments")
+        .from("v_tracker_assignments_ui")
         .select("frequency_minutes, active")
         .eq("tracker_user_id", user.id)
         .eq("active", true);
 
       if (error) {
-        console.error("Error leyendo tracker_assignments:", error);
+        console.error("Error leyendo v_tracker_assignments_ui:", error);
         return MIN_INTERVAL_SEC;
       }
 
@@ -227,7 +220,6 @@ export default function Tracker() {
   // ==============================
   async function flushQueue(reason = "auto") {
     try {
-      // 1) Si no hay red, no intentamos
       if (!isOnline) {
         const stats = await updateQueueInfo();
         setStatusMessage(
@@ -236,26 +228,22 @@ export default function Tracker() {
         return;
       }
 
-      // 2) Validar guard antes de enviar (universal)
       if (!canOperate) {
         setStatusMessage(`${humanGuardReason(guard.reason)} (${reason})`);
         return;
       }
 
-      // 3) No “flushear” demasiado rápido
       setStatusMessage(`Enviando cola (${reason})...`);
 
       await flushQueueCore(async (item) => {
         const res = await sendPositionEdge(item);
 
-        // Si backend responde min_interval_ms, lo respetamos (universal)
         if (res?.min_interval_ms) {
           const sec = Math.max(MIN_INTERVAL_SEC, Math.ceil(res.min_interval_ms / 1000));
           setIntervalSec(sec);
         }
 
         if (!res?.ok) {
-          // Diagnóstico: si backend dice no assignments/role, refrescamos guard
           if (res?.reason === "no_assignments" || res?.reason === "role_not_tracker") {
             await refreshGuard("send_position");
           }
@@ -287,7 +275,6 @@ export default function Tracker() {
     try {
       const id = navigator.geolocation.watchPosition(
         async (pos) => {
-          // No encolar si no podemos operar (ahorra batería y evita ruido)
           if (!canOperate) return;
 
           const payload = {
@@ -301,9 +288,7 @@ export default function Tracker() {
           const stats = await updateQueueInfo();
 
           setStatusMessage(
-            `Posición encolada (${stats?.pending ?? 0}): ${payload.lat.toFixed(
-              6
-            )}, ${payload.lng.toFixed(6)}`
+            `Posición encolada (${stats?.pending ?? 0}): ${payload.lat.toFixed(6)}, ${payload.lng.toFixed(6)}`
           );
         },
         (err) => {
@@ -338,8 +323,6 @@ export default function Tracker() {
   // ==============================
   // Efectos
   // ==============================
-
-  // 1) Al entrar/cambiar usuario: evaluar guard + intervalo universal
   useEffect(() => {
     let cancelled = false;
 
@@ -361,11 +344,9 @@ export default function Tracker() {
         return;
       }
 
-      // Guard primero (fuente de verdad)
       const g = await refreshGuard("boot");
       if (cancelled) return;
 
-      // Intervalo desde assignments (si no hay, queda en MIN)
       const sec = await loadIntervalFromAssignments();
       if (cancelled) return;
 
@@ -388,7 +369,6 @@ export default function Tracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // 2) Refresco periódico del guard (por si cambian assignments/roles)
   useEffect(() => {
     if (!user?.id) return;
 
@@ -400,7 +380,6 @@ export default function Tracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // 3) Activar tracking automático cuando está listo y autorizado
   useEffect(() => {
     if (!isReady) return;
 
@@ -414,7 +393,6 @@ export default function Tracker() {
     setIsTracking(guard.ok);
   }, [isReady, user?.id, guard.checked, guard.ok]);
 
-  // 4) Cuando tracking está activo: GPS + timer de flush
   useEffect(() => {
     if (!isTracking) {
       stopWatch();
@@ -437,7 +415,6 @@ export default function Tracker() {
       }
     }, ms / 2);
 
-    // Primer intento suave al arrancar
     flushQueue("start");
 
     return () => {
@@ -450,7 +427,6 @@ export default function Tracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTracking, intervalSec, canOperate]);
 
-  // 5) Eventos online/offline
   useEffect(() => {
     function handleOnline() {
       setIsOnline(true);
@@ -477,13 +453,9 @@ export default function Tracker() {
   // Render
   // ==============================
   const onlineLabel = isOnline ? "Online" : "Offline";
-  const onlineBadgeClass = isOnline
-    ? "bg-green-100 text-green-800"
-    : "bg-red-100 text-red-800";
+  const onlineBadgeClass = isOnline ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800";
 
-  const guardBadgeClass = guard.ok
-    ? "bg-green-100 text-green-800"
-    : "bg-yellow-100 text-yellow-800";
+  const guardBadgeClass = guard.ok ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800";
 
   return (
     <div className="max-w-xl mx-auto p-4">
@@ -497,15 +469,11 @@ export default function Tracker() {
 
       <div className="border rounded-lg p-4 bg-white shadow-sm">
         <div className="flex justify-between items-center mb-3 gap-2">
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${onlineBadgeClass}`}
-          >
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${onlineBadgeClass}`}>
             {onlineLabel}
           </span>
 
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${guardBadgeClass}`}
-          >
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${guardBadgeClass}`}>
             {guard.ok ? "Autorizado" : "Bloqueado"}
           </span>
 
@@ -527,14 +495,13 @@ export default function Tracker() {
 
           {queueInfo.lastSentAt && (
             <p>
-              <strong>Último envío:</strong>{" "}
-              {new Date(queueInfo.lastSentAt).toLocaleString()}
+              <strong>Último envío:</strong> {new Date(queueInfo.lastSentAt).toLocaleString()}
             </p>
           )}
 
           <p className="mt-2">
-            Tracker DB-driven: el backend decide si puedes enviar (roles + assignments).
-            Este dispositivo fuerza cuentas <strong>tracker</strong> y bloquea owner/admin.
+            Tracker DB-driven: el backend decide si puedes enviar (roles + assignments). Este dispositivo fuerza cuentas{" "}
+            <strong>tracker</strong> y bloquea owner/admin.
           </p>
         </div>
       </div>
