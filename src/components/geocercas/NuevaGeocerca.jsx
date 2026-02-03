@@ -239,7 +239,6 @@ function purgeTombstonesFromList(items, orgId) {
 
 /* ----------------------------- Unified list ----------------------------- */
 async function listGeofencesUnified({ orgId }) {
-  // 1) Intento API primero
   try {
     const apiItems = await listGeocercas({ orgId });
     const apiList = (apiItems || [])
@@ -248,7 +247,6 @@ async function listGeofencesUnified({ orgId }) {
 
     const apiClean = mergeUniqueByNombre(filterSoftDeleted(purgeTombstonesFromList(apiList, orgId)));
 
-    // ✅ FIX: si API OK, retornamos SOLO API (no mezclamos local)
     if (USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS) return apiClean;
 
     const local = readLocalGeocercas(orgId);
@@ -527,8 +525,10 @@ export default function NuevaGeocerca() {
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
   /**
-   * ✅ FIX: Guardar manda FEATURE (no FeatureCollection) al backend
-   * para evitar "invalid GeoJson representation".
+   * ✅ FIX UNIVERSAL:
+   * - Si es Polygon/Rectangle: mandamos Feature Polygon
+   * - Si es Circle: mandamos Feature Point con properties.radius_m
+   *   y el backend lo convierte a MultiPolygon con ST_Buffer
    */
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
@@ -541,17 +541,16 @@ export default function NuevaGeocerca() {
       return;
     }
 
-    // 1) Obtener un FEATURE (no FeatureCollection)
     let feature = null;
 
     if (draftFeature) {
-      feature = draftFeature; // ya es Feature Polygon
+      feature = draftFeature;
     } else {
       const map = mapRef.current;
       const layerToSave =
         selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
-      if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
+      if (!layerToSave) {
         showErr(
           t("geocercas.errorNoShape", {
             defaultValue: "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
@@ -560,8 +559,32 @@ export default function NuevaGeocerca() {
         return;
       }
 
-      const gj = layerToSave.toGeoJSON();
-      feature = gj?.type === "Feature" ? gj : { type: "Feature", properties: {}, geometry: gj };
+      // ✅ Circle → Feature Point + radius_m
+      if (layerToSave instanceof L.Circle) {
+        const center = layerToSave.getLatLng?.();
+        const radiusM = Math.round(Number(layerToSave.getRadius?.() || 0));
+        if (!center || !radiusM || radiusM <= 0) {
+          showErr("Círculo inválido (sin centro o radio).");
+          return;
+        }
+        feature = {
+          type: "Feature",
+          properties: { radius_m: radiusM, shape: "circle" },
+          geometry: { type: "Point", coordinates: [center.lng, center.lat] },
+        };
+      } else {
+        // Polygon/Rectangle/etc
+        if (typeof layerToSave.toGeoJSON !== "function") {
+          showErr(
+            t("geocercas.errorNoShape", {
+              defaultValue: "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
+            })
+          );
+          return;
+        }
+        const gj = layerToSave.toGeoJSON();
+        feature = gj?.type === "Feature" ? gj : { type: "Feature", properties: {}, geometry: gj };
+      }
     }
 
     if (!feature?.geometry || !feature?.geometry?.type) {
@@ -571,7 +594,6 @@ export default function NuevaGeocerca() {
 
     const fc = { type: "FeatureCollection", features: [feature] };
 
-    // Local resiliencia (pero NO se lista si API OK)
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(
@@ -636,14 +658,12 @@ export default function NuevaGeocerca() {
 
     const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
 
-    // Optimistic UI
     setGeofenceList((prev) => (prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim())));
     setSelectedNames(() => new Set());
     setLastSelectedName(null);
     setViewFeature(null);
     setViewCentroid(null);
 
-    // ✅ Tombstones persistentes para evitar “revivir”
     addTombstones(orgId, names);
     deleteFromLocalStorageByNames(orgId, names);
 
@@ -795,7 +815,6 @@ export default function NuevaGeocerca() {
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
-        {/* Panel */}
         <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[42svh] md:max-h-[32svh] lg:max-h-none">
           <h2 className="text-sm font-semibold text-slate-100 mb-2">
             {t("geocercas.panelTitle", { defaultValue: "Geocercas" })}
@@ -873,7 +892,6 @@ export default function NuevaGeocerca() {
           {datasetError && <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
-        {/* Map */}
         <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
           <MapContainer
             center={[-0.2, -78.5]}
@@ -977,7 +995,6 @@ export default function NuevaGeocerca() {
         </div>
       </div>
 
-      {/* Modal coordenadas */}
       {coordModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
