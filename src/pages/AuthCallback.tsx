@@ -59,11 +59,9 @@ function hasInviteTokensInHash(): boolean {
 function extractInvitedEmailFromNext(next: string): string {
   try {
     if (!next) return "";
-    // next puede ser "/tracker-gps?tg_flow=tracker&invited_email=a@b.com"
     const u = new URL(next, window.location.origin);
     return (u.searchParams.get("invited_email") || "").trim();
   } catch {
-    // si next no es URL parseable, intentamos manual
     const idx = next.indexOf("invited_email=");
     if (idx === -1) return "";
     const chunk = next.slice(idx + "invited_email=".length);
@@ -92,7 +90,6 @@ export default function AuthCallback() {
   const [err, setErr] = useState<string | null>(null);
   const [sessionExists, setSessionExists] = useState(false);
   const [sbKeys, setSbKeys] = useState<string[]>([]);
-  const [orgId, setOrgId] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -124,7 +121,6 @@ export default function AuthCallback() {
         const isTrackerFlow = String(tg_flow).toLowerCase() === "tracker";
         const forceSwap = force === "1" || isTrackerFlow;
 
-        // invited_email: puede venir directo o dentro de next
         const invited_email =
           (parsed.params.get("invited_email") || "").trim() ||
           extractInvitedEmailFromNext(next);
@@ -148,14 +144,12 @@ export default function AuthCallback() {
           setStep("force_swap:signOut+clearStorage");
           try {
             await supabase.auth.signOut();
-          } catch {
-            // ignore
-          }
+          } catch {}
           clearSbTokensBestEffort();
           await sleep(200);
         }
 
-        // ✅ 1) Consumir sesión desde URL (invite links suelen venir con tokens en hash)
+        // ✅ 1) Consumir sesión desde URL
         setStep("getSessionFromUrl...");
         try {
           await supabase.auth.getSessionFromUrl({ storeSession: true });
@@ -221,36 +215,21 @@ export default function AuthCallback() {
           return;
         }
 
-        // ✅ 5) Contexto org (si falla => tracker)
-        setStep("rpc_get_my_context (optional)");
-        try {
-          const { data: ctx, error: ctxErr } = await supabase.rpc("get_my_context");
-          if (ctxErr) {
-            setStep("get_my_context_failed_continue_tracker");
-            navigate(buildTrackerUrl(invited_email), { replace: true });
-            return;
-          }
-
-          const oid = ctx?.org_id ? String(ctx.org_id) : null;
-          setOrgId(oid);
-
-          if (oid) {
-            try {
-              localStorage.setItem(LAST_ORG_KEY, oid);
-            } catch {}
-            setStep("redirect_inicio");
-            navigate(`/inicio`, { replace: true });
-            return;
-          }
-
-          setStep("no_org_assume_tracker");
-          navigate(buildTrackerUrl(invited_email), { replace: true });
-          return;
-        } catch {
-          setStep("rpc_exception_continue_tracker");
+        // ✅ 5) Sin next: decide destino sin llamar RPC (AuthProvider es la única fuente de verdad)
+        if (isTrackerFlow) {
+          setStep("redirect_tracker_flow");
           navigate(buildTrackerUrl(invited_email), { replace: true });
           return;
         }
+
+        // Si hay un org recordado, entramos a inicio (AuthProvider fijará contexto)
+        let lastOrg: string | null = null;
+        try {
+          lastOrg = localStorage.getItem(LAST_ORG_KEY);
+        } catch {}
+
+        setStep(lastOrg ? "redirect_inicio_with_lastOrg_present" : "redirect_inicio");
+        navigate(`/inicio`, { replace: true });
       } catch (e: any) {
         setErr(e?.message || "auth_callback_exception");
         setStep("exception");
@@ -280,9 +259,6 @@ export default function AuthCallback() {
         </div>
         <div>
           <b>sbKeys:</b> {sbKeys.length ? sbKeys.join(", ") : "[]"}
-        </div>
-        <div>
-          <b>orgId:</b> {orgId || "—"}
         </div>
         {err && (
           <div style={{ color: "#b00020", marginTop: 8 }}>

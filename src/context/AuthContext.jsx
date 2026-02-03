@@ -27,34 +27,69 @@ export function AuthProvider({ children }) {
 
   const mountedRef = useRef(true);
 
+  // -----------------------------
+  // Single-flight + cache (universal)
+  // -----------------------------
+  const ctxInFlightRef = useRef(null);
+  const ctxLastRef = useRef({ userId: null, at: 0, data: null });
+
+  const rootInFlightRef = useRef(null);
+  const rootLastRef = useRef({ userId: null, at: 0, ok: false });
+
+  // TTLs (balance: evita doble-hit pero permite refresh natural)
+  const CTX_TTL_MS = 10_000;
+  const ROOT_TTL_MS = 60_000;
+
   // --------------------------------------------------
-  // ROOT OWNER CHECK (independiente de org)
+  // ROOT OWNER CHECK (independiente de org) — single-flight + cache
   // --------------------------------------------------
-  const fetchIsAppRoot = async (u) => {
+  const fetchIsAppRoot = async (u, { force = false } = {}) => {
     const uid = u?.id;
     if (!uid || !mountedRef.current) {
       setIsAppRoot(false);
       return false;
     }
 
-    try {
-      const { data } = await withTimeout(
-        supabase
-          .from("app_root_owners")
-          .select("user_id, active")
-          .eq("user_id", uid)
-          .maybeSingle(),
-        6000,
-        "root_check_timeout"
-      );
+    const now = Date.now();
+    const last = rootLastRef.current;
 
-      const ok = !!(data && data.user_id && data.active === true);
-      if (mountedRef.current) setIsAppRoot(ok);
-      return ok;
-    } catch {
-      if (mountedRef.current) setIsAppRoot(false);
-      return false;
+    if (!force && last.userId === uid && now - last.at < ROOT_TTL_MS) {
+      if (mountedRef.current) setIsAppRoot(!!last.ok);
+      return !!last.ok;
     }
+
+    if (!force && rootInFlightRef.current) {
+      return rootInFlightRef.current;
+    }
+
+    const p = (async () => {
+      try {
+        const { data } = await withTimeout(
+          supabase
+            .from("app_root_owners")
+            .select("user_id, active")
+            .eq("user_id", uid)
+            .maybeSingle(),
+          6000,
+          "root_check_timeout"
+        );
+
+        const ok = !!(data && data.user_id && data.active === true);
+        rootLastRef.current = { userId: uid, at: Date.now(), ok };
+
+        if (mountedRef.current) setIsAppRoot(ok);
+        return ok;
+      } catch {
+        rootLastRef.current = { userId: uid, at: Date.now(), ok: false };
+        if (mountedRef.current) setIsAppRoot(false);
+        return false;
+      } finally {
+        rootInFlightRef.current = null;
+      }
+    })();
+
+    rootInFlightRef.current = p;
+    return p;
   };
 
   // --------------------------------------------------
@@ -75,37 +110,67 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const fetchContext = async () => {
-    if (!mountedRef.current) return;
+  const fetchContext = async ({ force = false } = {}) => {
+    if (!mountedRef.current) return null;
 
     const { data: sessData } = await supabase.auth.getSession();
-    if (!sessData?.session) {
+    const sess = sessData?.session || null;
+
+    if (!sess?.user?.id) {
+      ctxLastRef.current = { userId: null, at: Date.now(), data: null };
       applyCtx(null);
-      return;
+      return null;
+    }
+
+    const uid = sess.user.id;
+    const now = Date.now();
+    const last = ctxLastRef.current;
+
+    if (!force && last.userId === uid && now - last.at < CTX_TTL_MS && last.data) {
+      applyCtx(last.data);
+      return last.data;
+    }
+
+    if (!force && ctxInFlightRef.current) {
+      return ctxInFlightRef.current;
     }
 
     setContextLoading(true);
-    try {
-      const { data, error } = await withTimeout(
-        supabase.rpc("get_my_context"),
-        8000,
-        "rpc_timeout_get_my_context"
-      );
 
-      if (!mountedRef.current) return;
+    const p = (async () => {
+      try {
+        const { data, error } = await withTimeout(
+          supabase.rpc("get_my_context"),
+          8000,
+          "rpc_timeout_get_my_context"
+        );
 
-      if (error) {
-        applyCtx({ ok: false, error: error.message || "rpc_error" });
-        return;
+        if (!mountedRef.current) return null;
+
+        if (error) {
+          const bad = { ok: false, error: error.message || "rpc_error" };
+          ctxLastRef.current = { userId: uid, at: Date.now(), data: bad };
+          applyCtx(bad);
+          return bad;
+        }
+
+        ctxLastRef.current = { userId: uid, at: Date.now(), data };
+        applyCtx(data);
+        return data;
+      } catch (e) {
+        if (!mountedRef.current) return null;
+        const bad = { ok: false, error: e?.message || "rpc_exception" };
+        ctxLastRef.current = { userId: uid, at: Date.now(), data: bad };
+        applyCtx(bad);
+        return bad;
+      } finally {
+        if (mountedRef.current) setContextLoading(false);
+        ctxInFlightRef.current = null;
       }
+    })();
 
-      applyCtx(data);
-    } catch (e) {
-      if (!mountedRef.current) return;
-      applyCtx({ ok: false, error: e?.message || "rpc_exception" });
-    } finally {
-      if (mountedRef.current) setContextLoading(false);
-    }
+    ctxInFlightRef.current = p;
+    return p;
   };
 
   // --------------------------------------------------
@@ -115,12 +180,10 @@ export function AuthProvider({ children }) {
     if (!orgId) return { ok: false, error: "org_required" };
 
     const { data, error } = await supabase.rpc("set_current_org", { p_org: orgId });
-    if (error) {
-      return { ok: false, error: error.message };
-    }
+    if (error) return { ok: false, error: error.message };
 
-    // volver a pedir contexto (fuente de verdad)
-    await fetchContext();
+    // refrescar contexto (fuente de verdad)
+    await fetchContext({ force: true });
     return data;
   };
 
@@ -133,11 +196,7 @@ export function AuthProvider({ children }) {
     const boot = async () => {
       setLoading(true);
       try {
-        const { data } = await withTimeout(
-          supabase.auth.getSession(),
-          6000,
-          "getSession_timeout"
-        );
+        const { data } = await withTimeout(supabase.auth.getSession(), 6000, "getSession_timeout");
 
         if (!mountedRef.current) return;
 
@@ -146,6 +205,7 @@ export function AuthProvider({ children }) {
         setUser(sess?.user ?? null);
 
         if (sess?.user) {
+          // ✅ paralelo, pero single-flight evita doble
           fetchIsAppRoot(sess.user);
           fetchContext();
         } else {
@@ -165,15 +225,18 @@ export function AuthProvider({ children }) {
 
     boot();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mountedRef.current) return;
+
+      // ✅ Clave: evita el "doble-hit" inicial
+      if (event === "INITIAL_SESSION") return;
 
       setSession(newSession);
       setUser(newSession?.user ?? null);
 
       if (newSession?.user) {
-        fetchIsAppRoot(newSession.user);
-        fetchContext();
+        fetchIsAppRoot(newSession.user, { force: true });
+        fetchContext({ force: true });
       } else {
         setIsAppRoot(false);
         applyCtx(null);
@@ -200,8 +263,8 @@ export function AuthProvider({ children }) {
       role,
       currentRole: role,
       isAppRoot,
-      refreshContext: fetchContext,
-      switchOrg, // ✅ ÚNICA forma de cambiar org
+      refreshContext: (opts) => fetchContext(opts),
+      switchOrg,
       signOut: async () => {
         await supabase.auth.signOut();
         setSession(null);
@@ -210,6 +273,11 @@ export function AuthProvider({ children }) {
         setCurrentOrg(null);
         setRole(null);
         setIsAppRoot(false);
+        // limpia cache local
+        ctxInFlightRef.current = null;
+        rootInFlightRef.current = null;
+        ctxLastRef.current = { userId: null, at: Date.now(), data: null };
+        rootLastRef.current = { userId: null, at: Date.now(), ok: false };
       },
       isAuthenticated: !!session,
     }),
