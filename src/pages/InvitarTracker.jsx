@@ -8,6 +8,16 @@ function isUuid(v) {
   );
 }
 
+function resolveOrgId(currentOrg) {
+  const raw =
+    typeof currentOrg === "string"
+      ? currentOrg
+      : currentOrg?.id || currentOrg?.org_id || currentOrg?.orgId || null;
+
+  const s = String(raw || "").trim();
+  return isUuid(s) ? s : "";
+}
+
 function getSupabaseAccessTokenFromLocalStorage() {
   try {
     const keys = Object.keys(window.localStorage || {});
@@ -77,10 +87,7 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600">
-                  {" "}
-                  — {selected.email || "(sin email)"}
-                </span>
+                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -138,11 +145,9 @@ function planLabel(planCode) {
 
 async function fetchPlanUsage(orgId) {
   if (!orgId) return null;
-
   const { data, error } = await supabase.rpc("rpc_plan_tracker_vigente_usage", {
     org_id: orgId,
   });
-
   if (error) return null;
   if (data && typeof data === "object" && "over_limit" in data) return data;
   return null;
@@ -150,6 +155,9 @@ async function fetchPlanUsage(orgId) {
 
 export default function InvitarTracker() {
   const { currentOrg } = useAuth();
+
+  const orgId = resolveOrgId(currentOrg);
+  const orgName = currentOrg?.name || currentOrg?.nombre || "";
 
   const [personalRaw, setPersonalRaw] = useState([]);
   const [loadingPersonal, setLoadingPersonal] = useState(false);
@@ -166,8 +174,9 @@ export default function InvitarTracker() {
 
   const [planUsage, setPlanUsage] = useState(null);
 
-  const orgId = currentOrg && isUuid(currentOrg.id) ? String(currentOrg.id).trim() : "";
-  const orgName = currentOrg?.name || "";
+  // NUEVO: flags de flujo (Nota Técnica)
+  const [forceSwap, setForceSwap] = useState(true); // evita que admin consuma invite por accidente
+  const [sendToTrackerGps, setSendToTrackerGps] = useState(true); // destino final: tracker-gps
 
   const personal = useMemo(() => {
     if (!orgId) return [];
@@ -218,7 +227,7 @@ export default function InvitarTracker() {
       if (!orgId) {
         setPersonalRaw([]);
         setPersonalError(
-          "Org actual no válida (currentOrg.id no es UUID). Refresca contexto o vuelve a iniciar sesión."
+          "Org actual no válida (no se pudo resolver UUID desde currentOrg). Refresca contexto o vuelve a iniciar sesión."
         );
         return;
       }
@@ -265,14 +274,22 @@ export default function InvitarTracker() {
 
   const overLimit = planUsage?.over_limit === true;
 
+  function buildRedirectPath() {
+    // Nota Técnica: destino final /tracker-gps?tg_flow=tracker o /tracker
+    return sendToTrackerGps ? "/tracker-gps?tg_flow=tracker" : "/tracker?tg_flow=tracker";
+  }
+
   async function sendInvite({ mode }) {
     setError(null);
     setSuccess(null);
     setInviteData(null);
 
-    if (!orgId) throw new Error("Organización no válida (currentOrg.id no es UUID).");
+    if (!orgId) throw new Error("Organización no válida (orgId no es UUID).");
     if (!selectedPersonId) throw new Error("Selecciona una persona.");
     if (!email || !email.includes("@")) throw new Error("Email inválido.");
+
+    const emailNorm = email.trim().toLowerCase();
+    const redirect_to = buildRedirectPath();
 
     const res = await fetch("/api/invite-tracker", {
       method: "POST",
@@ -281,10 +298,22 @@ export default function InvitarTracker() {
         ...getAuthHeadersOrThrow(),
       },
       body: JSON.stringify({
-        email: email.trim().toLowerCase(),
+        email: emailNorm,
         org_id: orgId,
         person_id: selectedPersonId,
+
+        // Reglas definitivas
+        role: "tracker",
+        tg_flow: "tracker",
+        redirect_to, // backend debe construir link con este destino final
+        invited_email: emailNorm, // opcional, útil para recover/debug
+
+        // Force swap (evitar que admin consuma por accidente)
+        force_swap: !!forceSwap,
+
+        // compat legacy (si tu edge lo usa)
         force_tracker_default: true,
+
         mode, // "invite" | "resend"
       }),
     });
@@ -348,16 +377,32 @@ export default function InvitarTracker() {
     }
   }
 
+  async function copy(text) {
+    try {
+      await navigator.clipboard.writeText(String(text || ""));
+    } catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = String(text || "");
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  }
+
+  const inviteLink =
+    inviteData?.invite_link || inviteData?.link || inviteData?.url || inviteData?.magic_link || "";
+
   return (
     <div className="max-w-3xl mx-auto p-6">
       <h1 className="text-2xl font-semibold mb-6">Invitar / Reenviar Tracker</h1>
 
       {!orgId && (
         <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
-          ⚠️ La organización actual no tiene un <b>UUID válido</b> en <code>currentOrg.id</code>.
+          ⚠️ No se pudo resolver la organización activa como UUID.
           <div className="mt-1 text-xs">
-            Org actual (currentOrg.id):{" "}
-            <span className="font-mono">{String(currentOrg?.id || "(vacío)")}</span>
+            currentOrg: <span className="font-mono">{JSON.stringify(currentOrg || {})}</span>
           </div>
         </div>
       )}
@@ -421,6 +466,31 @@ export default function InvitarTracker() {
           />
         </div>
 
+        {/* Flags Nota Técnica */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={forceSwap}
+              onChange={(e) => setForceSwap(e.target.checked)}
+            />
+            <span>
+              <b>Force swap</b> (evita que un admin consuma el invite)
+            </span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={sendToTrackerGps}
+              onChange={(e) => setSendToTrackerGps(e.target.checked)}
+            />
+            <span>
+              Redirigir a <b>Tracker GPS</b> (tg_flow=tracker)
+            </span>
+          </label>
+        </div>
+
         {error && <div className="text-red-600 text-sm mt-3">{error}</div>}
         {success && <div className="text-green-700 text-sm mt-3">{success}</div>}
 
@@ -449,7 +519,8 @@ export default function InvitarTracker() {
           <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
             <div className="text-sm font-medium text-emerald-800 mb-1">Email enviado ✅</div>
             <div className="text-xs text-emerald-900">
-              El tracker recibirá un link que lo lleva directo a <b>Tracker GPS</b>.
+              El tracker recibirá un link que lo lleva directo a{" "}
+              <b>{sendToTrackerGps ? "Tracker GPS" : "Tracker Dashboard"}</b>.
               <br />
               Si no lo ve, revisar <b>Spam</b>.
               {inviteData?.reused_invite ? (
@@ -458,6 +529,28 @@ export default function InvitarTracker() {
                 </div>
               ) : null}
             </div>
+
+            {!!inviteLink && (
+              <div className="mt-3">
+                <div className="text-xs font-medium text-emerald-900 mb-1">
+                  Link (debug/soporte):
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={inviteLink}
+                    className="w-full border rounded-lg px-3 py-2 bg-white text-xs font-mono"
+                  />
+                  <button
+                    type="button"
+                    className="px-3 py-2 border rounded-lg text-xs bg-white"
+                    onClick={() => copy(inviteLink)}
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
