@@ -15,13 +15,14 @@ function LangButton({ lng, current, onClick }) {
       type="button"
       onClick={() => onClick(lng)}
       className={cx(
-        "px-3 py-1.5 rounded-full text-xs font-bold transition",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/70",
+        "px-3 py-1.5 rounded-full text-xs font-bold tracking-wide transition",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60",
         active
-          ? "bg-emerald-500 text-slate-950"
-          : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10"
+          ? "bg-emerald-600 text-white shadow-sm"
+          : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
       )}
       aria-pressed={active}
+      aria-label={`Language ${lng}`}
     >
       {lng.toUpperCase()}
     </button>
@@ -35,11 +36,11 @@ function InlineLanguageSwitcher() {
   const setLang = (lng) => {
     const code = String(lng || "es").toLowerCase().slice(0, 2);
     if (!["es", "en", "fr"].includes(code)) return;
-    i18n.changeLanguage(code); // persistencia la hace src/i18n/index.js
+    i18n.changeLanguage(code); // persistencia la maneja src/i18n/index.js
   };
 
   return (
-    <div className="flex items-center gap-1 p-1 rounded-full bg-white/5 border border-white/10">
+    <div className="flex items-center gap-1 p-1 rounded-full bg-white border border-slate-200 shadow-sm">
       <LangButton lng="es" current={current} onClick={setLang} />
       <LangButton lng="en" current={current} onClick={setLang} />
       <LangButton lng="fr" current={current} onClick={setLang} />
@@ -54,24 +55,22 @@ function HelpCard({ badge, title, description, cta, to }) {
     <button
       type="button"
       onClick={() => navigate(to)}
-      className="
-        text-left w-full
-        rounded-3xl border border-white/10 bg-white/5
-        p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]
-        hover:bg-white/10 transition
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/70
-      "
+      className={cx(
+        "text-left w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition",
+        "hover:shadow-md hover:border-slate-300",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+      )}
     >
       {badge ? (
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs text-white/70">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-600">
           {badge}
         </div>
       ) : null}
 
-      <h3 className="mt-4 text-lg font-extrabold text-white">{title}</h3>
-      <p className="mt-2 text-sm text-white/70 leading-relaxed">{description}</p>
+      <h3 className="mt-4 text-lg font-extrabold text-slate-900">{title}</h3>
+      <p className="mt-2 text-sm text-slate-600 leading-relaxed">{description}</p>
 
-      <div className="mt-4 text-sm font-bold text-emerald-300">{cta}</div>
+      <div className="mt-4 text-sm font-bold text-emerald-700">{cta}</div>
     </button>
   );
 }
@@ -83,82 +82,87 @@ export default function Inicio() {
 
   const roleLower = useMemo(() => String(role || "").toLowerCase(), [role]);
 
+  // 1) Esperar SOLO el boot auth
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-white/70">
-        {t("inicio.loadingPermissions", { defaultValue: "Resolving permissions…" })}
+      <div className="min-h-[60vh] flex items-center justify-center text-slate-600">
+        {t("inicio.loadingPermissions", { defaultValue: "Resolviendo permisos…" })}
       </div>
     );
   }
 
+  // 2) No autenticado
   if (!isAuthenticated || !user) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center gap-3 text-white/70">
-        {t("inicio.loginToContinue", { defaultValue: "Please login to continue." })}
+      <div className="min-h-[60vh] flex items-center justify-center gap-3 text-slate-700">
+        {t("inicio.loginToContinue", { defaultValue: "Inicia sesión para continuar." })}
         <button
-          className="px-4 py-2 rounded-2xl font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
+          className="px-4 py-2 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition"
           onClick={() => navigate("/login")}
         >
-          {t("inicio.goToLogin", { defaultValue: "Go to Login" })}
+          {t("inicio.goToLogin", { defaultValue: "Ir a Login" })}
         </button>
       </div>
     );
   }
 
+  // 3) Contexto incompleto
   if (!roleLower || !currentOrg?.id) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-10">
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-xl font-extrabold text-white">
-              {t("inicio.missingContextTitle", { defaultValue: "Logged in, but context is missing" })}
+            <h1 className="text-xl font-extrabold text-slate-900">
+              {t("inicio.missingContextTitle", { defaultValue: "Sesión iniciada, pero falta contexto" })}
             </h1>
             <InlineLanguageSwitcher />
           </div>
 
-          <div className="mt-4 text-sm text-white/70 space-y-1">
+          <div className="mt-4 text-sm text-slate-700 space-y-1">
             <div>
-              {t("inicio.userInfo.userLabel", { defaultValue: "User:" })}{" "}
-              <b className="text-white">{user.email}</b>
+              {t("inicio.userInfo.userLabel", { defaultValue: "Usuario:" })}{" "}
+              <b className="text-slate-900">{user.email}</b>
             </div>
             <div>
-              {t("inicio.userInfo.withRole", { defaultValue: "Role:" })}{" "}
-              <b className="text-white">{roleLower || t("inicio.roleEmpty", { defaultValue: "(empty)" })}</b>
+              {t("inicio.userInfo.withRole", { defaultValue: "Rol:" })}{" "}
+              <b className="text-slate-900">{roleLower || t("inicio.roleEmpty", { defaultValue: "(vacío)" })}</b>
             </div>
             <div>
-              {t("inicio.userInfo.inOrg", { defaultValue: "Organization:" })}{" "}
-              <b className="text-white">
-                {currentOrg?.name || t("inicio.orgNotResolved", { defaultValue: "(not resolved)" })}
+              {t("inicio.userInfo.inOrg", { defaultValue: "Organización:" })}{" "}
+              <b className="text-slate-900">
+                {currentOrg?.name || t("inicio.orgNotResolved", { defaultValue: "(no resuelta)" })}
               </b>
             </div>
           </div>
 
           <button
-            className="mt-6 px-4 py-2 rounded-2xl font-bold bg-white text-slate-950 hover:bg-white/90 transition"
+            className="mt-6 px-4 py-2 rounded-xl font-bold bg-slate-900 text-white hover:bg-slate-800 transition"
             onClick={() => window.location.reload()}
           >
-            {t("inicio.retry", { defaultValue: "Retry" })}
+            {t("inicio.retry", { defaultValue: "Reintentar" })}
           </button>
         </div>
       </div>
     );
   }
 
+  // 4) HOME OK (Centro de ayuda)
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
-      <div className="flex items-start justify-between gap-4">
+    <div className="max-w-6xl mx-auto px-2 sm:px-0 py-6 space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-white/70">
-            {t("inicio.header.badge", { defaultValue: "Help Center & Resources" })}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-slate-200 text-xs text-slate-600 shadow-sm">
+            {t("inicio.header.badge", { defaultValue: "Centro de ayuda y recursos" })}
           </div>
 
-          <h1 className="mt-4 text-3xl sm:text-4xl font-extrabold text-white">
-            {t("inicio.header.title", { defaultValue: "Welcome to your dashboard" })}
+          <h1 className="mt-4 text-3xl sm:text-4xl font-extrabold text-slate-900">
+            {t("inicio.header.title", { defaultValue: "Bienvenido a tu panel" })}
           </h1>
 
-          <p className="mt-2 text-white/70">
+          <p className="mt-2 text-slate-600 max-w-3xl">
             {t("inicio.header.subtitle", {
-              defaultValue: "From here you can access instructions, FAQ, support and updates for App Geocercas.",
+              defaultValue:
+                "Desde aquí puedes acceder a instrucciones, FAQ, soporte y novedades de App Geocercas.",
             })}
           </p>
         </div>
@@ -168,71 +172,103 @@ export default function Inicio() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-        <div className="text-sm text-white/70 space-y-1">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-sm text-slate-700 space-y-1">
           <div>
-            {t("inicio.userInfo.connectedAs", { defaultValue: "Connected as" })}:{" "}
-            <b className="text-white">{user.email}</b>
+            {t("inicio.userInfo.connectedAs", { defaultValue: "Sesión como" })}:{" "}
+            <b className="text-slate-900">{roleLower}</b>
           </div>
           <div>
-            {t("inicio.userInfo.withRole", { defaultValue: "with role" })}:{" "}
-            <b className="text-white">{roleLower}</b>
+            {t("inicio.userInfo.userLabel", { defaultValue: "Email:" })}{" "}
+            <b className="text-slate-900">{user.email}</b>
           </div>
           <div>
-            {t("inicio.userInfo.inOrg", { defaultValue: "in organization" })}:{" "}
-            <b className="text-white">{currentOrg?.name}</b>
+            {t("inicio.userInfo.inOrg", { defaultValue: "Org:" })}{" "}
+            <b className="text-slate-900">{currentOrg?.name}</b>
           </div>
         </div>
       </div>
 
       <div>
-        <h2 className="text-xl font-extrabold text-white mb-4">
-          {t("inicio.cardsTitle", { defaultValue: "Quick links" })}
+        <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 mb-4">
+          {t("inicio.cardsTitle", { defaultValue: "Accesos rápidos" })}
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <HelpCard
-            badge={t("inicio.cards.instrucciones.badge", { defaultValue: "Quick Guide" })}
-            title={t("inicio.cards.instrucciones.title", { defaultValue: "Instructions" })}
-            description={t("inicio.cards.instrucciones.body", { defaultValue: "Step-by-step setup." })}
-            cta={t("inicio.cards.instrucciones.cta", { defaultValue: "View instructions →" })}
+            badge={t("inicio.cards.instrucciones.badge", { defaultValue: "Guía rápida" })}
+            title={t("inicio.cards.instrucciones.title", { defaultValue: "Instrucciones" })}
+            description={t("inicio.cards.instrucciones.body", {
+              defaultValue: "Configura organizaciones, geocercas, personal, actividades y trackers.",
+            })}
+            cta={t("inicio.cards.instrucciones.cta", { defaultValue: "Ver instrucciones →" })}
             to="/help/instructions"
           />
+
           <HelpCard
-            badge={t("inicio.cards.faq.badge", { defaultValue: "Help" })}
-            title={t("inicio.cards.faq.title", { defaultValue: "FAQ" })}
-            description={t("inicio.cards.faq.body", { defaultValue: "Quick answers." })}
-            cta={t("inicio.cards.faq.cta", { defaultValue: "View FAQ →" })}
+            badge={t("inicio.cards.faq.badge", { defaultValue: "Ayuda" })}
+            title={t("inicio.cards.faq.title", { defaultValue: "Preguntas frecuentes" })}
+            description={t("inicio.cards.faq.body", {
+              defaultValue: "Respuestas rápidas sobre roles, invitaciones y uso del tracker.",
+            })}
+            cta={t("inicio.cards.faq.cta", { defaultValue: "Ver FAQ →" })}
             to="/help/faq"
           />
+
           <HelpCard
-            badge={t("inicio.cards.soporte.badge", { defaultValue: "Support" })}
-            title={t("inicio.cards.soporte.title", { defaultValue: "Support" })}
-            description={t("inicio.cards.soporte.body", { defaultValue: "Contact support." })}
-            cta={t("inicio.cards.soporte.cta", { defaultValue: "Open support →" })}
+            badge={t("inicio.cards.soporte.badge", { defaultValue: "Soporte" })}
+            title={t("inicio.cards.soporte.title", { defaultValue: "Contacto / Soporte" })}
+            description={t("inicio.cards.soporte.body", {
+              defaultValue: "¿Necesitas ayuda? Escríbenos para soporte técnico o dudas de tu cuenta.",
+            })}
+            cta={t("inicio.cards.soporte.cta", { defaultValue: "Abrir soporte →" })}
             to="/help/support"
           />
+
           <HelpCard
-            badge={t("inicio.cards.novedades.badge", { defaultValue: "Updates" })}
-            title={t("inicio.cards.novedades.title", { defaultValue: "Changelog" })}
-            description={t("inicio.cards.novedades.body", { defaultValue: "What’s new." })}
-            cta={t("inicio.cards.novedades.cta", { defaultValue: "View changelog →" })}
+            badge={t("inicio.cards.novedades.badge", { defaultValue: "Novedades" })}
+            title={t("inicio.cards.novedades.title", { defaultValue: "Novedades / Changelog" })}
+            description={t("inicio.cards.novedades.body", {
+              defaultValue: "Mejoras, correcciones y nuevas funcionalidades.",
+            })}
+            cta={t("inicio.cards.novedades.cta", { defaultValue: "Ver changelog →" })}
             to="/help/changelog"
+          />
+
+          {/* Opcionales si existen en JSON */}
+          <HelpCard
+            badge={t("inicio.cards.videoDemo.badge", { defaultValue: "Video" })}
+            title={t("inicio.cards.videoDemo.title", { defaultValue: "Video demo" })}
+            description={t("inicio.cards.videoDemo.body", {
+              defaultValue: "Mira una demostración breve en uso real.",
+            })}
+            cta={t("inicio.cards.videoDemo.cta", { defaultValue: "Ver video →" })}
+            to="/help/changelog"
+          />
+
+          <HelpCard
+            badge={t("inicio.cards.queEs.badge", { defaultValue: "Info" })}
+            title={t("inicio.cards.queEs.title", { defaultValue: "¿Qué es App Geocercas?" })}
+            description={t("inicio.cards.queEs.body", {
+              defaultValue: "Visión, casos de uso y beneficios para tu organización.",
+            })}
+            cta={t("inicio.cards.queEs.cta", { defaultValue: "Saber más →" })}
+            to="/help/faq"
           />
         </div>
 
-        <div className="mt-8 flex items-center gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <button
-            className="px-4 py-2 rounded-2xl font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition"
+            className="px-4 py-2 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition"
             onClick={() => navigate("/geocerca")}
           >
-            {t("app.tabs.geocercas", { defaultValue: "Geofences" })}
+            {t("app.tabs.geocercas", { defaultValue: "Geocercas" })}
           </button>
           <button
-            className="px-4 py-2 rounded-2xl font-bold bg-white/5 text-white border border-white/10 hover:bg-white/10 transition"
+            className="px-4 py-2 rounded-xl font-bold bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 transition"
             onClick={() => navigate("/personal")}
           >
-            {t("app.tabs.personal", { defaultValue: "Staff" })}
+            {t("app.tabs.personal", { defaultValue: "Personal" })}
           </button>
         </div>
       </div>
