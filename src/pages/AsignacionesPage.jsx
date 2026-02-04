@@ -1,5 +1,5 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.12 FINAL (Feb 2026)
+// Asignaciones v2.12 FINAL (Feb 2026) + i18n (ES/EN/FR)
 // - Lectura canónica: v_tracker_assignments_ui
 // - Escritura: RPC admin_upsert_tracker_assignment_v1
 // - Fix permanente: fuerza visibilidad (Geocerca/Inicio/Fin) ante CSS/herencia/ancho 0
@@ -11,6 +11,8 @@ import { supabase } from "../lib/supabaseClient";
 
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+
+import { useTranslation } from "react-i18next";
 
 const ESTADOS = ["todos", "activa", "inactiva"];
 
@@ -61,6 +63,7 @@ function CalendarIcon() {
 }
 
 export default function AsignacionesPage() {
+  const { t } = useTranslation();
   const { loading, isAuthenticated, user, currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
 
@@ -161,14 +164,14 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccess(null);
 
-    if (!selectedPersonalId || !selectedGeofenceId) return setError("Selecciona tracker y geocerca.");
+    if (!selectedPersonalId || !selectedGeofenceId) return setError(t("asignaciones.messages.selectTrackerAndGeofence"));
 
     const p = personalOptions.find((x) => x.id === selectedPersonalId);
-    if (!p?.user_id) return setError("Tracker sin user_id.");
+    if (!p?.user_id) return setError(t("asignaciones.messages.trackerMissingUserId"));
 
     const startDate = toDateOnly(startDt);
     const endDate = toDateOnly(endDt);
-    if (!startDate || !endDate) return setError("Fechas inválidas.");
+    if (!startDate || !endDate) return setError(t("asignaciones.messages.invalidDates"));
 
     try {
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
@@ -181,7 +184,7 @@ export default function AsignacionesPage() {
       });
       if (rpcErr) throw rpcErr;
 
-      setSuccess("Asignación guardada.");
+      setSuccess(t("asignaciones.banner.saved"));
       setSelectedPersonalId("");
       setSelectedGeofenceId("");
       setStartDt(nowDate());
@@ -203,10 +206,9 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccess(null);
 
-    // ✅ siempre YYYY-MM-DD (nunca "null")
     const startDate = toDateOnly(parseDateOnlyLoose(row?.start_date));
     const endDate = toDateOnly(parseDateOnlyLoose(row?.end_date));
-    if (!startDate || !endDate) return setError("No puedo alternar: start/end inválidos.");
+    if (!startDate || !endDate) return setError(t("asignaciones.messages.toggleInvalidDates"));
 
     try {
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
@@ -219,14 +221,14 @@ export default function AsignacionesPage() {
       });
       if (rpcErr) throw rpcErr;
 
-      setSuccess(!row.active ? "Asignación activada." : "Asignación inactivada.");
+      setSuccess(!row.active ? t("asignaciones.banner.activated") : t("asignaciones.banner.deactivated"));
       await loadAll();
     } catch (e) {
       setError(e?.message || String(e));
     }
   }
 
-  if (!isAuthenticated) return <div className="p-4">Debes iniciar sesión.</div>;
+  if (!isAuthenticated) return <div className="p-4">{t("auth.loginRequired")}</div>;
 
   return (
     <div className="p-4 w-full">
@@ -234,14 +236,14 @@ export default function AsignacionesPage() {
         <div className="mb-3 border rounded bg-yellow-50 px-3 py-2 text-xs text-yellow-900">
           <div className="font-semibold">DEBUG: src/pages/AsignacionesPage.jsx</div>
           <div>
-            Fuente: <span className="font-mono">v_tracker_assignments_ui</span> | Rows: {rows?.length || 0}
+            {t("asignaciones.debug.source")} <span className="font-mono">v_tracker_assignments_ui</span> | {t("asignaciones.debug.rows")}: {rows?.length || 0}
           </div>
         </div>
       ) : null}
 
-      <h1 className="text-2xl font-bold mb-2">Asignaciones</h1>
+      <h1 className="text-2xl font-bold mb-2">{t("asignaciones.title")}</h1>
       <p className="text-xs text-gray-500 mb-4">
-        Org actual: {currentOrg?.name} ({shortId(orgId)})
+        {t("asignaciones.orgCurrent")}: {currentOrg?.name} ({shortId(orgId)})
       </p>
 
       {error && <div className="mb-3 bg-red-50 border px-3 py-2 text-red-700">{error}</div>}
@@ -249,14 +251,14 @@ export default function AsignacionesPage() {
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 border rounded">
         <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)}>
-          <option value="">Selecciona tracker</option>
+          <option value="">{t("asignaciones.form.selectTracker")}</option>
           {personalOptions.map((p) => (
             <option key={p.id} value={p.id}>{p.label}</option>
           ))}
         </select>
 
         <select className="border rounded px-3 py-2" value={selectedGeofenceId} onChange={(e) => setSelectedGeofenceId(e.target.value)}>
-          <option value="">Selecciona geocerca</option>
+          <option value="">{t("asignaciones.form.selectGeofence")}</option>
           {geofenceOptions.map((g) => (
             <option key={g.id} value={g.id}>{g.label}</option>
           ))}
@@ -268,14 +270,14 @@ export default function AsignacionesPage() {
             onChange={(d) => d && setStartDt(d)}
             showTimeSelect
             dateFormat="dd/MM/yyyy HH:mm"
-            placeholderText="Inicio"
+            placeholderText={t("asignaciones.form.start")}
             showIcon
             icon={<CalendarIcon />}
             toggleCalendarOnIconClick
             wrapperClassName="w-full"
             className="w-full border rounded px-3 py-2"
           />
-          <div className="text-xs text-gray-500 mt-1">DB guarda solo fecha (YYYY-MM-DD). La hora es UX; se recorta al guardar.</div>
+          <div className="text-xs text-gray-500 mt-1">{t("asignaciones.form.dateHint")}</div>
         </div>
 
         <div className="w-full">
@@ -285,7 +287,7 @@ export default function AsignacionesPage() {
             showTimeSelect
             minDate={startDt}
             dateFormat="dd/MM/yyyy HH:mm"
-            placeholderText="Fin"
+            placeholderText={t("asignaciones.form.end")}
             showIcon
             icon={<CalendarIcon />}
             toggleCalendarOnIconClick
@@ -295,48 +297,52 @@ export default function AsignacionesPage() {
         </div>
 
         <select className="border rounded px-3 py-2" value={active ? "activa" : "inactiva"} onChange={(e) => setActive(e.target.value === "activa")}>
-          <option value="activa">Activa</option>
-          <option value="inactiva">Inactiva</option>
+          <option value="activa">{t("asignaciones.status.active")}</option>
+          <option value="inactiva">{t("asignaciones.status.inactive")}</option>
         </select>
 
-        <button className="bg-blue-600 text-white rounded px-4 py-2">Guardar</button>
+        <button className="bg-blue-600 text-white rounded px-4 py-2">{t("common.actions.save")}</button>
       </form>
 
       <div className="mt-6 bg-white border rounded p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-          <h2 className="text-lg font-semibold">Asignaciones guardadas</h2>
+          <h2 className="text-lg font-semibold">{t("asignaciones.table.title")}</h2>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Estado:</span>
+            <span className="text-sm text-gray-600">{t("asignaciones.filters.statusLabel")}</span>
             <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
               {ESTADOS.map((x) => (
                 <option key={x} value={x}>
-                  {x === "todos" ? "Todos" : x === "activa" ? "Activas" : "Inactivas"}
+                  {x === "todos"
+                    ? t("asignaciones.filters.status.todos")
+                    : x === "activa"
+                    ? t("asignaciones.filters.status.activa")
+                    : t("asignaciones.filters.status.inactiva")}
                 </option>
               ))}
             </select>
 
             <button type="button" className="border rounded px-3 py-2 hover:bg-gray-50" onClick={loadAll}>
-              Refrescar
+              {t("common.actions.refresh")}
             </button>
           </div>
         </div>
 
         {loadingData ? (
-          <div className="text-sm text-gray-600">Cargando…</div>
+          <div className="text-sm text-gray-600">{t("common.actions.loading")}</div>
         ) : filteredRows.length === 0 ? (
-          <div className="text-sm text-gray-600">No hay asignaciones para mostrar.</div>
+          <div className="text-sm text-gray-600">{t("asignaciones.table.empty")}</div>
         ) : (
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left border-b bg-slate-900 text-white">
-                  <th className="py-2 pr-3">Tracker</th>
-                  <th className="py-2 pr-3">Geocerca</th>
-                  <th className="py-2 pr-3">Inicio</th>
-                  <th className="py-2 pr-3">Fin</th>
-                  <th className="py-2 pr-3">Estado</th>
-                  <th className="py-2 pr-3 text-right">Acción</th>
+                  <th className="py-2 pr-3">{t("asignaciones.table.tracker")}</th>
+                  <th className="py-2 pr-3">{t("asignaciones.table.geofence")}</th>
+                  <th className="py-2 pr-3">{t("asignaciones.table.start")}</th>
+                  <th className="py-2 pr-3">{t("asignaciones.table.end")}</th>
+                  <th className="py-2 pr-3">{t("asignaciones.table.status")}</th>
+                  <th className="py-2 pr-3 text-right">{t("asignaciones.table.action")}</th>
                 </tr>
               </thead>
 
@@ -354,43 +360,39 @@ export default function AsignacionesPage() {
                         {r.tracker_email ? <div className="text-xs text-gray-500">{r.tracker_email}</div> : null}
                       </td>
 
-                      {/* ✅ FORZAR VISIBILIDAD */}
                       <td className="py-2 pr-3">
-                        <span
-                          className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap"
-                          title={String(geofenceText)}
-                        >
+                        <span className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap" title={String(geofenceText)}>
                           {geofenceText}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span
-                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
-                          title={String(r.start_date)}
-                        >
+                        <span className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap" title={String(r.start_date)}>
                           {startText}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span
-                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
-                          title={String(r.end_date)}
-                        >
+                        <span className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap" title={String(r.end_date)}>
                           {endText}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span className={r.active ? "inline-flex items-center px-2 py-1 rounded bg-green-50 text-green-700 border" : "inline-flex items-center px-2 py-1 rounded bg-gray-50 text-gray-700 border"}>
-                          {r.active ? "Activa" : "Inactiva"}
+                        <span
+                          className={
+                            r.active
+                              ? "inline-flex items-center px-2 py-1 rounded bg-green-50 text-green-700 border"
+                              : "inline-flex items-center px-2 py-1 rounded bg-gray-50 text-gray-700 border"
+                          }
+                        >
+                          {r.active ? t("asignaciones.status.active") : t("asignaciones.status.inactive")}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3 text-right">
                         <button type="button" className="border rounded px-3 py-1 hover:bg-gray-50" onClick={() => toggleActive(r)}>
-                          {r.active ? "Inactivar" : "Activar"}
+                          {r.active ? t("asignaciones.actions.deactivate") : t("asignaciones.actions.activate")}
                         </button>
                       </td>
                     </tr>
@@ -400,7 +402,7 @@ export default function AsignacionesPage() {
             </table>
 
             <div className="mt-2 text-xs text-gray-500">
-              Mostrando {filteredRows.length} de {rows.length}.
+              {t("asignaciones.table.showing", { shown: filteredRows.length, total: rows.length })}
             </div>
 
             {debug ? (

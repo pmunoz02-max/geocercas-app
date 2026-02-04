@@ -338,17 +338,26 @@
   },
   "asignaciones": {
     "title": "Asignaciones",
+    "orgCurrent": "Organización actual",
+    "debug": { "source": "Fuente:", "rows": "Filas" },
     "filters": {
       "statusLabel": "Estado",
       "status": {
         "todos": "Todos",
         "activo": "Activos",
-        "inactivo": "Inactivos"
+        "inactivo": "Inactivos",
+        "activa": "Activos",
+        "inactiva": "Inactivos"
       },
       "refresh": "Refrescar",
       "refreshLoading": "Actualizando…"
     },
     "form": {
+      "selectTracker": "Selecciona tracker",
+      "selectGeofence": "Selecciona geocerca",
+      "start": "Inicio",
+      "end": "Fin",
+      "dateHint": "La BD almacena solo fecha (YYYY-MM-DD). La hora es UX; se recorta al guardar.",
       "newTitle": "Nueva asignación",
       "editTitle": "Editar asignación",
       "personLabel": "Persona",
@@ -378,30 +387,26 @@
         "saving": "Guardando…"
       }
     },
-    "table": {
-      "title": "Listado de asignaciones",
-      "person": "Persona",
-      "activity": "Actividad",
-      "geofence": "Geocerca",
-      "start": "Inicio",
-      "end": "Fin",
-      "status": "Estado",
-      "actions": "Acciones",
-      "noResults": "No hay asignaciones registradas.",
-      "frequency": "Freq (min)"
-    },
+    "status": { "active": "Activa", "inactive": "Inactiva" },
     "actions": {
-      "edit": "Editar",
-      "delete": "Eliminar",
       "activate": "Activar",
-      "deactivate": "Desactivar"
+      "deactivate": "Desactivar",
+      "edit": "Editar",
+      "delete": "Eliminar"
     },
     "banner": {
+      "saved": "Asignación guardada.",
+      "activated": "Asignación activada.",
+      "deactivated": "Asignación desactivada.",
       "created": "Asignación creada correctamente.",
       "updated": "Asignación actualizada.",
       "deleted": "Asignación eliminada."
     },
     "messages": {
+      "selectTrackerAndGeofence": "Debes seleccionar un tracker y una geocerca.",
+      "trackerMissingUserId": "El tracker no tiene user_id.",
+      "invalidDates": "Fechas inválidas.",
+      "toggleInvalidDates": "No se puede cambiar el estado: inicio/fin inválidos.",
       "loadError": "Error al cargar las asignaciones.",
       "catalogError": "Error al cargar catálogos (personal, geocercas, actividades).",
       "loadingData": "Cargando datos de asignaciones…",
@@ -421,15 +426,21 @@
       "noPersonal": "No hay personal vigente en esta organización. Reactiva o crea al menos una persona.",
       "noActivities": "No hay actividades creadas. Crea al menos una Actividad para poder asignar."
     },
-    "error": {
-      "load": "Error al cargar las asignaciones.",
-      "save": "No se pudo guardar la asignación.",
-      "delete": "No se pudo eliminar la asignación.",
-      "missingPerson": "Debe seleccionar una persona.",
-      "missingGeofence": "Debe seleccionar una geocerca.",
-      "missingActivity": "Debe seleccionar una actividad.",
-      "missingStart": "Debe ingresar fecha/hora de inicio.",
-      "missingEnd": "Debe ingresar fecha/hora de fin."
+    "table": {
+      "title": "Asignaciones guardadas",
+      "empty": "No hay asignaciones para mostrar.",
+      "tracker": "Tracker",
+      "geofence": "Geocerca",
+      "start": "Inicio",
+      "end": "Fin",
+      "status": "Estado",
+      "action": "Acción",
+      "actions": "Acciones",
+      "person": "Persona",
+      "activity": "Actividad",
+      "noResults": "No hay asignaciones registradas.",
+      "frequency": "Freq (min)",
+      "showing": "Mostrando {{shown}} de {{total}}."
     }
   },
   "reportes": {

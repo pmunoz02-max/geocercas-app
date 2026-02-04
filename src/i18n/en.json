@@ -14,13 +14,23 @@
       "back": "Back",
       "yes": "Yes",
       "no": "No",
-      "loading": "Loading..."
+      "refresh": "Refresh",
+      "clear": "Clear",
+      "loading": "Loading…",
+      "saving": "Saving…"
     },
-    "edit": "Edit",
-    "yes": "Yes",
-    "no": "No",
-    "loading": "Loading..."
+    "refreshContext": "Retry context"
   },
+
+  "auth": {
+    "loginRequired": "You must log in.",
+    "processing": "Authenticating…",
+    "timeout": "Authentication took too long. Please try again.",
+    "invalidOrExpiredLink": "The link is invalid, expired, or already used.",
+    "errorTitle": "Authentication failed",
+    "backToLogin": "Back to login"
+  },
+
   "app": {
     "title": "App Geocercas",
     "header": {
@@ -38,6 +48,8 @@
     },
     "tabs": {
       "inicio": "Home",
+      "home": "Home",
+      "geocercas": "Geofences",
       "geocerca": "Geofence",
       "nuevaGeocerca": "Geofence",
       "personal": "Personnel",
@@ -48,11 +60,11 @@
       "dashboardCostos": "Costs Dashboard",
       "tracker": "Tracker",
       "invitarTracker": "Invite tracker",
-      "admins": "Admin",
-      "home": "Home",
-      "invitar_tracker": "Invite tracker"
+      "invitar_tracker": "Invite tracker",
+      "admins": "Admins"
     }
   },
+
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Personnel control by geofences",
@@ -97,7 +109,7 @@
     "quickAccessTitle": "Quick access",
     "quickAccessDesc": "If you prefer, you can sign in using a Magic Link (no password).",
     "email": "Email",
-    "sending": "Sending...",
+    "sending": "Sending…",
     "sendMagic": "Send magic link",
     "magicNote": "Important: access works only with the real Magic Link.",
     "support": "Support",
@@ -105,6 +117,7 @@
     "magicLinkSent": "We sent you an access link. Check your email.",
     "magicLinkError": "Could not send the link. Please try again."
   },
+
   "login": {
     "title": "Log in",
     "subtitle": "Access your App Geocercas account",
@@ -133,7 +146,7 @@
     "forgotPassword": "Forgot your password?",
     "forgotPasswordAlt": "Prefer to reset your password? (send email)",
     "loadingSession": "Loading your session…",
-    "errorMissingCredentials": "Missing user or password.",
+    "errorMissingCredentials": "Email and password required.",
     "errorMissingEmail": "You must enter an email.",
     "errorInvalidCredentials": "Invalid credentials.",
     "errorUnexpected": "Unexpected error while logging in.",
@@ -146,12 +159,11 @@
     "errorResetPasswordUnexpected": "Unexpected error while sending the recovery email.",
     "badge": "(LOGIN-V31 NO-JS)",
     "info": "Stable WebView/TWA login: native submit (no JS events), anti rate-limit by design.",
-    "email": "Email",
-    "password": "Password",
     "modeTitle": "Mode: NO-JS (native form submit)",
     "modeDesc": "If login is correct, the server redirects to /auth/callback with tokens.",
     "back": "Back"
   },
+
   "inicio": {
     "header": {
       "badge": "Help center & resources",
@@ -207,6 +219,7 @@
       "orgIdLabel": "Organization ID:"
     }
   },
+
   "geocercas": {
     "titleNew": "New geofence",
     "subtitleNew": "Draw a geofence on the map and assign it to your personnel or activities.",
@@ -230,7 +243,7 @@
     "cardListTitle": "Geofence list",
     "cardListBody": "Soon you will be able to see the list of existing geofences and their details here. For now, use New geofence to create and edit.",
     "buttonShowOnMap": "Show on map",
-    "loadingDataset": "Loading dataset...",
+    "loadingDataset": "Loading dataset…",
     "cursorHint": "Move the mouse over the map",
     "lat": "Lat",
     "lng": "Lng",
@@ -250,6 +263,7 @@
     "deletedCount": "Deleted: {{count}}",
     "savedOk": "Geofence saved successfully."
   },
+
   "personal": {
     "title": "Personnel",
     "orgInfoLabel": "Organization:",
@@ -307,22 +321,40 @@
     "no": "No",
     "processing": "Processing…",
     "errorDeleteNoRows": "Could not delete: record does not exist or was already deleted.",
+    "roleNone": "no role",
+    "orgLabel": "Org",
+    "errorMissingOrg": "No active organization.",
+    "toggleVigente": "Active / Inactive",
+    "newButton": "+ New",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "deleted": "Deleted"
+    },
     "table": {
-      "loading": "Loading…",
-      "noActive": "No active personnel.",
-      "columns": {
-        "firstName": "First name",
-        "lastName": "Last name",
-        "email": "Email",
-        "phone": "Phone",
-        "active": "Active",
-        "start": "Start",
-        "end": "End"
-      }
+      "name": "Name",
+      "phone": "Phone",
+      "email": "Email",
+      "status": "Status",
+      "actions": "Actions",
+      "empty": "No records in this organization."
+    },
+    "modal": {
+      "newTitle": "New personnel",
+      "editTitle": "Edit personnel"
+    },
+    "form": {
+      "firstName": "First name",
+      "lastName": "Last name",
+      "phone": "Phone",
+      "email": "Email",
+      "vigente": "Active"
     }
   },
+
   "actividades": {
     "title": "Activities",
+    "includeInactive": "Include inactive",
     "formTitleNew": "New activity",
     "formTitleEdit": "Edit activity",
     "fieldName": "Activity name",
@@ -346,8 +378,8 @@
       "LOCAL": "Local currency"
     },
     "buttonCreate": "Create activity",
-    "buttonSave": "Save changes",
-    "buttonUpdate": "Update activity",
+    "buttonSave": "Save",
+    "buttonUpdate": "Update",
     "buttonCancel": "Cancel",
     "tableTitle": "Activities list",
     "thName": "Activity",
@@ -380,19 +412,31 @@
     "errorToggle": "Could not change activity status.",
     "confirmDelete": "Are you sure you want to delete the activity \"{{name}}\"?"
   },
+
   "asignaciones": {
     "title": "Assignments",
+    "orgCurrent": "Current org",
+    "debug": { "source": "Source:", "rows": "Rows" },
+
     "filters": {
       "statusLabel": "Status",
       "status": {
         "todos": "All",
         "activo": "Active",
-        "inactivo": "Inactive"
+        "inactivo": "Inactive",
+        "activa": "Active",
+        "inactiva": "Inactive"
       },
       "refresh": "Refresh",
       "refreshLoading": "Refreshing…"
     },
+
     "form": {
+      "selectTracker": "Select tracker",
+      "selectGeofence": "Select geofence",
+      "start": "Start",
+      "end": "End",
+      "dateHint": "DB stores date only (YYYY-MM-DD). Time is UX; it is trimmed on save.",
       "newTitle": "New assignment",
       "editTitle": "Edit assignment",
       "personLabel": "Person",
@@ -422,30 +466,30 @@
         "saving": "Saving…"
       }
     },
-    "table": {
-      "title": "Assignments list",
-      "person": "Person",
-      "activity": "Activity",
-      "geofence": "Geofence",
-      "start": "Start",
-      "end": "End",
-      "status": "Status",
-      "actions": "Actions",
-      "noResults": "No assignments registered.",
-      "frequency": "Freq (min)"
-    },
+
+    "status": { "active": "Active", "inactive": "Inactive" },
+
     "actions": {
-      "edit": "Edit",
-      "delete": "Delete",
       "activate": "Activate",
-      "deactivate": "Deactivate"
+      "deactivate": "Deactivate",
+      "edit": "Edit",
+      "delete": "Delete"
     },
+
     "banner": {
+      "saved": "Assignment saved.",
+      "activated": "Assignment activated.",
+      "deactivated": "Assignment deactivated.",
       "created": "Assignment created successfully.",
       "updated": "Assignment updated.",
       "deleted": "Assignment deleted."
     },
+
     "messages": {
+      "selectTrackerAndGeofence": "Select tracker and geofence.",
+      "trackerMissingUserId": "Tracker has no user_id.",
+      "invalidDates": "Invalid dates.",
+      "toggleInvalidDates": "Cannot toggle: invalid start/end.",
       "loadError": "Error loading assignments.",
       "catalogError": "Error loading catalogs (personnel, geofences, activities).",
       "loadingData": "Loading assignment data…",
@@ -465,17 +509,25 @@
       "noPersonal": "There is no active personnel in this organization. Create or reactivate at least one person.",
       "noActivities": "There are no activities created. Create at least one activity to assign."
     },
-    "error": {
-      "load": "Error loading assignments.",
-      "save": "Could not save the assignment.",
-      "delete": "Could not delete the assignment.",
-      "missingPerson": "You must select a person.",
-      "missingGeofence": "You must select a geofence.",
-      "missingActivity": "You must select an activity.",
-      "missingStart": "You must enter a start date/time.",
-      "missingEnd": "You must enter an end date/time."
+
+    "table": {
+      "title": "Saved assignments",
+      "empty": "There are no assignments to show.",
+      "tracker": "Tracker",
+      "geofence": "Geofence",
+      "start": "Start",
+      "end": "End",
+      "status": "Status",
+      "action": "Action",
+      "actions": "Actions",
+      "person": "Person",
+      "activity": "Activity",
+      "noResults": "No assignments registered.",
+      "frequency": "Freq (min)",
+      "showing": "Showing {{shown}} of {{total}}."
     }
   },
+
   "reportes": {
     "title": "Cost reports",
     "headerSubtitle": "View and export costs by person, activity, and geofence.",
@@ -530,30 +582,9 @@
     "tableEmpty": "No records for the selected filters.",
     "personNoName": "Person without name",
     "geofenceNoName": "Geofence without name",
-    "activityNoName": "Activity without name",
-    "filters": {
-      "dateFromLabel": "From",
-      "dateToLabel": "To",
-      "personLabel": "Person",
-      "activityLabel": "Activity",
-      "geofenceLabel": "Geofence",
-      "apply": "Apply filters",
-      "clear": "Clear filters"
-    },
-    "table": {
-      "title": "Cost details",
-      "person": "Person",
-      "activity": "Activity",
-      "geofence": "Geofence",
-      "start": "Start",
-      "end": "End",
-      "hours": "Hours",
-      "rate": "Rate/hour",
-      "total": "Total cost",
-      "currency": "Currency",
-      "noResults": "No records found for the selected filters."
-    }
+    "activityNoName": "Activity without name"
   },
+
   "dashboard": {
     "title": "Costs dashboard",
     "subtitle": "View aggregated costs by person, activity, and geofence.",
@@ -577,6 +608,7 @@
     },
     "errorLoad": "Error loading the costs dashboard."
   },
+
   "dashboardCostos": {
     "title": "Costs dashboard",
     "subtitle": "View KPIs and cost charts by person, activity, and geofence.",
@@ -626,6 +658,7 @@
     "colRegistros": "Records",
     "tableEmpty": "No data to display"
   },
+
   "tracker": {
     "title": "GPS Tracker",
     "subtitle": "View in real time the location of trackers inside your geofences.",
@@ -655,6 +688,7 @@
     },
     "errorLoad": "Error loading tracker positions."
   },
+
   "trackerDashboard": {
     "title": "Real-time Tracking Dashboard",
     "subtitle": "Points update automatically. The send frequency is defined by the administrator.",
@@ -698,6 +732,7 @@
       "checkConsole": "Check the console if it persists."
     }
   },
+
   "inviteTracker": {
     "orgFallback": "your organization",
     "title": "Invite tracker",
@@ -728,6 +763,7 @@
       "unexpectedError": "Unexpected error processing the invitation."
     }
   },
+
   "admins": {
     "title": "Admins",
     "subtitle": "Manage admins of your organization and their roles.",
@@ -762,6 +798,7 @@
       "remove": "Could not remove the admin."
     }
   },
+
   "help": {
     "common": {
       "breadcrumb": "Help Center",
@@ -782,200 +819,56 @@
       "tocTips": "Best practices",
       "tocResult": "Expected result",
       "recommendationTitle": "Recommendation",
-      "recommendationBody": "Start with 1 geofence and 1 tracker. Once the flow works, scale to more zones and people.",
-      "stepsTitle": "Step-by-step",
-      "stepsSubtitle": "A practical sequence that works for most organizations.",
-      "steps": [
-        {
-          "title": "Select your organization",
-          "bullets": [
-            "Use the organization selector to choose where you will work.",
-            "If you are Owner, you can create/manage multiple organizations."
-          ]
-        },
-        {
-          "title": "Create your first geofence",
-          "bullets": [
-            "Go to Geofence and draw the area on the map.",
-            "Give it a clear name (Farm A, Field 3, Plant 1, etc.).",
-            "Save and verify it appears in Geofences list."
-          ]
-        },
-        {
-          "title": "Register your personnel",
-          "bullets": [
-            "Go to Personnel and create the people that will work in the field.",
-            "Use a valid email if you plan to invite them as trackers."
-          ]
-        },
-        {
-          "title": "Create activities and hourly rates",
-          "bullets": [
-            "Go to Activities and define tasks (Harvest, Irrigation, Maintenance…).",
-            "Set currency and hourly rate to calculate costs and reports."
-          ]
-        },
-        {
-          "title": "Create assignments",
-          "bullets": [
-            "Go to Assignments and link: Person + Activity + Geofence.",
-            "Set start/end and status Active.",
-            "Define frequency (minimum 5 minutes)."
-          ]
-        },
-        {
-          "title": "Invite trackers (field phones)",
-          "bullets": [
-            "Go to Invite tracker and send an invite by email.",
-            "The invited user can log in with Magic Link on mobile.",
-            "Once logged in, the tracker will send GPS points based on the assignment."
-          ]
-        },
-        {
-          "title": "Review reports and dashboard",
-          "bullets": [
-            "Open Reports to filter by geofence/person/activity and export CSV.",
-            "Open Costs Dashboard for charts and KPIs."
-          ]
-        }
-      ],
-      "tipsTitle": "Best practices",
-      "bestPractice1Title": "Use clear names",
-      "bestPractice1Body": "Name geofences and activities in a way that your team understands instantly (Farm, Field, Block, Task).",
-      "bestPractice2Title": "Start small, then scale",
-      "bestPractice2Body": "Validate the full flow with one person and one geofence before creating dozens of records.",
-      "bestPractice3Title": "Keep assignments updated",
-      "bestPractice3Body": "Close or deactivate old assignments so the tracker follows only the current work plan.",
-      "bestPractice4Title": "Mind battery and accuracy",
-      "bestPractice4Body": "Use a reasonable send frequency. Higher frequency uses more battery and mobile data.",
-      "resultTitle": "What you should see",
-      "resultIntro": "After completing the steps, your organization should have the following:",
-      "resultBullets": [
-        "At least 1 geofence saved and visible on the map",
-        "Personnel registered and ready for assignments",
-        "Activities with currency and hourly rate configured",
-        "Active assignments linking person + activity + geofence",
-        "GPS points appearing in Tracker / Tracking dashboard",
-        "Cost reports and dashboard ready to export and analyze"
-      ]
+      "recommendationBody": "Start with 1 geofence and 1 tracker. Once the flow works, scale to more zones and people."
     },
     "faq": {
       "title": "Frequently asked questions",
-      "subtitle": "Quick answers about invitations, roles, tracking, reports, and data privacy.",
-      "seeQuickGuide": "See quick guide",
-      "backToPanel": "Go to dashboard",
-      "sections": [
-        {
-          "title": "Access & roles",
-          "items": [
-            {
-              "q": "How do I get access to the app?",
-              "a": "You need to be invited by an Owner/Admin of an organization. If you don’t have access, request an invitation."
-            },
-            {
-              "q": "What is the difference between Owner, Admin and Tracker?",
-              "a": "Owner manages the organization and admins. Admin manages operational data (geofences, personnel, activities, assignments). Tracker is a field user who sends GPS points."
-            },
-            {
-              "q": "Can I manage more than one organization?",
-              "a": "Yes. Owners can work with multiple organizations and switch using the organization selector."
-            }
-          ]
-        },
-        {
-          "title": "Tracking",
-          "items": [
-            {
-              "q": "Why do I see “No recent data” in Tracker?",
-              "a": "The tracker may be offline, location permissions may be disabled, or there is no active assignment for that person. Verify permissions and assignments."
-            },
-            {
-              "q": "How often does the tracker send location?",
-              "a": "The send frequency is defined in the assignment. The minimum allowed is 5 minutes to protect battery and data usage."
-            },
-            {
-              "q": "Does the app work with weak signal?",
-              "a": "Yes. The tracker can store points and sync when connectivity returns (depending on your build and permissions)."
-            }
-          ]
-        },
-        {
-          "title": "Costs & reports",
-          "items": [
-            {
-              "q": "How are costs calculated?",
-              "a": "Costs are calculated from assignments (hours) and the hourly rate configured for each activity."
-            },
-            {
-              "q": "Can I export reports to Excel?",
-              "a": "Yes. Reports can be exported as CSV, which you can open in Excel or Google Sheets."
-            },
-            {
-              "q": "Can I filter by geofence, person, activity and date range?",
-              "a": "Yes. Use the filters in Reports and Costs Dashboard to focus on specific geofences, people, activities, and dates."
-            }
-          ]
-        },
-        {
-          "title": "Data & privacy",
-          "items": [
-            {
-              "q": "What location data is stored?",
-              "a": "Only location points needed for tracking and geofence validation. Access is controlled by roles and organization permissions."
-            },
-            {
-              "q": "Can trackers see other organizations’ data?",
-              "a": "No. Data is isolated by organization (multi-tenant) and protected by database security rules."
-            }
-          ]
-        }
-      ]
+      "subtitle": "Quick answers about invitations, roles, tracking, reports, and data privacy."
     },
     "support": {
       "title": "Support",
       "subtitle": "Contact us for technical support, billing questions, or onboarding.",
       "emailLabel": "Support email",
       "notConfigured": "Support contact is not configured yet."
-    },
-    "changelog": {
-      "title": "Updates / Changelog",
-      "subtitle": "Change history, improvements, and fixes.",
-      "badges": {
-        "feature": "Feature",
-        "fix": "Fix",
-        "improvement": "Improvement"
-      },
-      "items": [
-        {
-          "version": "v1.0.0",
-          "date": "2026-02-03",
-          "changes": [
-            {
-              "type": "feature",
-              "title": "Help center",
-              "details": [
-                "Quick guide, FAQ, support, and changelog available."
-              ]
-            },
-            {
-              "type": "improvement",
-              "title": "Privacy & compliance",
-              "details": [
-                "Public Privacy Policy page.",
-                "Support email configurable via environment variables."
-              ]
-            }
-          ]
-        }
-      ]
     }
   },
+
+  "home": {
+    "open": "Open →",
+    "loadingPermissions": "Resolving permissions…",
+    "loginToContinue": "Sign in to continue.",
+    "goToLogin": "Go to Login",
+    "welcome": "Welcome to App Geocercas",
+    "sessionAs": "Logged in as",
+    "labels": {
+      "email": "Email:",
+      "organization": "Organization:",
+      "role": "Role:"
+    },
+    "help": {
+      "title": "Help center",
+      "quick": "Quick guide",
+      "quickDesc": "Learn how to use the app step by step.",
+      "faq": "FAQ",
+      "faqDesc": "Answers to the most common questions.",
+      "support": "Support",
+      "supportDesc": "Do you have a problem or question? Contact us.",
+      "news": "What’s new",
+      "newsDesc": "Recent changes, improvements, and updates."
+    },
+    "missingContextTitle": "Signed in, but missing context",
+    "missingContextBody": "The session exists ({{email}}), but your role or active organization could not be determined yet.",
+    "orgNotResolved": "(not resolved)",
+    "roleEmpty": "(empty)",
+    "retry": "Retry"
+  },
+
   "resetPassword": {
     "title": "Reset password",
     "subtitle": "Create a new password for your account.",
     "loading": "Preparing recovery link…",
     "invalidOrExpired": "The recovery link is invalid or expired. Request a new one.",
-    "noSession": "There is no valid session to reset the password. Request the link again.",
+    "noSession": "There is no valid session to reset your password. Request the link again.",
     "noticeType": "Session detected. If this link was not for recovery, log in normally again.",
     "unexpected": "An error occurred while preparing the password reset.",
     "newPassword": "New password",
@@ -993,6 +886,7 @@
     "backHome": "Go to landing",
     "tip": "Tip: go back to /login, enter your email and use “Forgot your password?” to generate a new link."
   },
+
   "authInvite": {
     "title": "You’ve been invited",
     "processing": "Validating invitation…",
@@ -1001,54 +895,5 @@
     "continue": "Continue",
     "goToLogin": "Go to login",
     "timeout": "Invitation validation took too long. Please try again."
-  },
-  "auth": {
-    "processing": "Authenticating…",
-    "timeout": "Authentication took too long. Please try again.",
-    "invalidOrExpiredLink": "The link is invalid, expired, or already used.",
-    "errorTitle": "Authentication failed",
-    "backToLogin": "Back to login"
-  },
-  "home": {
-    "home": {
-  "open": "Open →",
-  "sessionAs": "Logged in as",
-  "labels": {
-    "email": "Email:",
-    "organization": "Organization:",
-    "role": "Role:"
-  },
-  "help": {
-    "title": "Help center",
-    "quick": "Quick guide",
-    "quickDesc": "Learn how to use the app step by step.",
-    "faq": "FAQ",
-    "faqDesc": "Answers to the most common questions.",
-    "support": "Support",
-    "supportDesc": "Do you have a problem or question? Contact us.",
-    "news": "What’s new",
-    "newsDesc": "Recent changes, improvements, and updates."
-  }
-},
-    "help": {
-      "title": "Help center",
-      "quick": "Quick guide",
-      "quickDesc": "Learn how to use the app step by step.",
-      "faq": "Frequently asked questions",
-      "faqDesc": "Answers to the most common questions.",
-      "support": "Support",
-      "supportDesc": "Do you have a problem or question? Contact us.",
-      "news": "What’s new",
-      "newsDesc": "Recent changes, improvements, and updates."
-    },
-    "open": "Open →",
-    "loadingPermissions": "Resolving permissions…",
-    "loginToContinue": "Sign in to continue.",
-    "goToLogin": "Go to Login",
-    "missingContextTitle": "Signed in, but missing context",
-    "missingContextBody": "The session exists ({{email}}), but your role or active organization could not be determined yet.",
-    "orgNotResolved": "(not resolved)",
-    "roleEmpty": "(empty)",
-    "retry": "Retry"
   }
 }

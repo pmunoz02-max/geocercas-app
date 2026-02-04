@@ -11,8 +11,23 @@
       "save": "Enregistrer",
       "delete": "Supprimer",
       "edit": "Modifier",
-      "back": "Retour"
-    }
+      "back": "Retour",
+      "yes": "Oui",
+      "no": "Non",
+      "refresh": "Actualiser",
+      "clear": "Effacer",
+      "loading": "Chargement…",
+      "saving": "Enregistrement…"
+    },
+    "refreshContext": "Réessayer le contexte"
+  },
+  "auth": {
+    "loginRequired": "Vous devez vous connecter.",
+    "processing": "Authentification…",
+    "timeout": "L’authentification a pris trop de temps. Veuillez réessayer.",
+    "invalidOrExpiredLink": "Le lien est invalide, expiré ou déjà utilisé.",
+    "errorTitle": "Échec de l’authentification",
+    "backToLogin": "Retour à la connexion"
   },
   "app": {
     "title": "App Geocercas",
@@ -31,7 +46,9 @@
     },
     "tabs": {
       "inicio": "Accueil",
+      "home": "Accueil",
       "geocercas": "Géofences",
+      "geocerca": "Géofence",
       "nuevaGeocerca": "Géofence",
       "personal": "Personnel",
       "actividades": "Activités",
@@ -41,6 +58,7 @@
       "dashboardCostos": "Tableau des coûts",
       "tracker": "Tracker",
       "invitarTracker": "Inviter un tracker",
+      "invitar_tracker": "Inviter un tracker",
       "admins": "Administrateurs"
     }
   },
@@ -253,10 +271,40 @@
     "tableNoResults": "Aucun résultat trouvé.",
     "yes": "Oui",
     "no": "Non",
-    "processing": "Traitement…"
+    "processing": "Traitement…",
+    "roleNone": "sans rôle",
+    "orgLabel": "Org",
+    "errorMissingOrg": "Aucune organisation active.",
+    "toggleVigente": "Actif / Inactif",
+    "newButton": "+ Nouveau",
+    "status": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "deleted": "Supprimé"
+    },
+    "table": {
+      "name": "Nom",
+      "phone": "Téléphone",
+      "email": "E-mail",
+      "status": "Statut",
+      "actions": "Actions",
+      "empty": "Aucun enregistrement dans cette organisation."
+    },
+    "modal": {
+      "newTitle": "Nouveau personnel",
+      "editTitle": "Modifier le personnel"
+    },
+    "form": {
+      "firstName": "Prénom",
+      "lastName": "Nom",
+      "phone": "Téléphone",
+      "email": "E-mail",
+      "vigente": "Actif"
+    }
   },
   "actividades": {
     "title": "Activités",
+    "includeInactive": "Inclure inactives",
     "formTitleNew": "Nouvelle activité",
     "formTitleEdit": "Modifier l'activité",
     "fieldName": "Nom de l'activité",
@@ -280,8 +328,8 @@
       "LOCAL": "Devise locale"
     },
     "buttonCreate": "Créer l'activité",
-    "buttonSave": "Enregistrer les modifications",
-    "buttonUpdate": "Mettre à jour l'activité",
+    "buttonSave": "Enregistrer",
+    "buttonUpdate": "Mettre à jour",
     "buttonCancel": "Annuler",
     "tableTitle": "Liste des activités",
     "thName": "Activité",
@@ -316,17 +364,26 @@
   },
   "asignaciones": {
     "title": "Affectations",
+    "orgCurrent": "Organisation actuelle",
+    "debug": { "source": "Source :", "rows": "Lignes" },
     "filters": {
       "statusLabel": "Statut",
       "status": {
         "todos": "Tous",
         "activo": "Actifs",
-        "inactivo": "Inactifs"
+        "inactivo": "Inactifs",
+        "activa": "Actifs",
+        "inactiva": "Inactifs"
       },
       "refresh": "Actualiser",
       "refreshLoading": "Actualisation…"
     },
     "form": {
+      "selectTracker": "Sélectionner un tracker",
+      "selectGeofence": "Sélectionner une géofence",
+      "start": "Début",
+      "end": "Fin",
+      "dateHint": "La BD stocke uniquement la date (YYYY-MM-DD). L’heure est UX ; elle est tronquée à l’enregistrement.",
       "newTitle": "Nouvelle affectation",
       "editTitle": "Modifier l'affectation",
       "personLabel": "Personne",
@@ -346,35 +403,40 @@
       "cancelEditButton": "Annuler la modification",
       "buttonCreate": "Créer l'affectation",
       "buttonUpdate": "Mettre à jour l'affectation",
-      "buttonCancel": "Annuler"
+      "buttonCancel": "Annuler",
+      "endOptionalHint": "Optionnel",
+      "quickActivity": {
+        "noActivitiesHint": "Aucune activité (créez-en une dans le module Activités ou ici en bas).",
+        "newButton": "Nouvelle activité",
+        "newNamePlaceholder": "Nom de la nouvelle activité",
+        "saveButton": "Enregistrer l'activité",
+        "saving": "Enregistrement…"
+      }
     },
-    "table": {
-      "title": "Liste des affectations",
-      "person": "Personne",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "start": "Début",
-      "end": "Fin",
-      "status": "Statut",
-      "actions": "Actions",
-      "noResults": "Aucune affectation enregistrée."
-    },
+    "status": { "active": "Active", "inactive": "Inactive" },
     "actions": {
-      "edit": "Modifier",
-      "delete": "Supprimer",
       "activate": "Activer",
-      "deactivate": "Désactiver"
+      "deactivate": "Désactiver",
+      "edit": "Modifier",
+      "delete": "Supprimer"
     },
     "banner": {
+      "saved": "Affectation enregistrée.",
+      "activated": "Affectation activée.",
+      "deactivated": "Affectation désactivée.",
       "created": "Affectation créée correctement.",
       "updated": "Affectation mise à jour.",
       "deleted": "Affectation supprimée."
     },
     "messages": {
+      "selectTrackerAndGeofence": "Sélectionnez un tracker et une géofence.",
+      "trackerMissingUserId": "Tracker sans user_id.",
+      "invalidDates": "Dates invalides.",
+      "toggleInvalidDates": "Impossible d’alterner : début/fin invalides.",
       "loadError": "Erreur lors du chargement des affectations.",
       "catalogError": "Erreur lors du chargement des catalogues (personnel, géofences, activités).",
       "loadingData": "Chargement des données d'affectations…",
-      "overlapError": "Cette personne a déjà une affectation qui se chevauche sur cette plage de dates.",
+      "overlapError": "Cette personne a déjà une affectation active qui se chevauche sur cette plage de dates.",
       "selectPersonAndFence": "Vous devez sélectionner une personne et une géofence.",
       "selectDates": "Vous devez saisir la date/heure de début et de fin.",
       "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
@@ -386,17 +448,25 @@
       "updateSuccess": "Affectation mise à jour correctement.",
       "deleteError": "Impossible de supprimer l'affectation.",
       "deleteSuccess": "Affectation supprimée correctement.",
-      "confirmDelete": "Voulez-vous vraiment supprimer cette affectation ?"
+      "confirmDelete": "Voulez-vous vraiment supprimer cette affectation ?",
+      "noPersonal": "Aucun personnel actif dans cette organisation. Créez ou réactivez au moins une personne.",
+      "noActivities": "Aucune activité créée. Créez au moins une activité pour pouvoir affecter."
     },
-    "error": {
-      "load": "Erreur lors du chargement des affectations.",
-      "save": "Impossible d'enregistrer l'affectation.",
-      "delete": "Impossible de supprimer l'affectation.",
-      "missingPerson": "Vous devez sélectionner une personne.",
-      "missingGeofence": "Vous devez sélectionner une géofence.",
-      "missingActivity": "Vous devez sélectionner une activité.",
-      "missingStart": "Vous devez saisir la date/heure de début.",
-      "missingEnd": "Vous devez saisir la date/heure de fin."
+    "table": {
+      "title": "Affectations enregistrées",
+      "empty": "Aucune affectation à afficher.",
+      "tracker": "Tracker",
+      "geofence": "Géofence",
+      "start": "Début",
+      "end": "Fin",
+      "status": "Statut",
+      "action": "Action",
+      "actions": "Actions",
+      "person": "Personne",
+      "activity": "Activité",
+      "noResults": "Aucune affectation enregistrée.",
+      "frequency": "Fréq (min)",
+      "showing": "Affichage de {{shown}} sur {{total}}."
     }
   },
   "reportes": {
@@ -435,7 +505,7 @@
     "csvHeaderFin": "Fin",
     "csvHeaderPersona": "Personne",
     "csvHeaderActividad": "Activité",
-    "csvHeaderGeocerca": "Géocerca",
+    "csvHeaderGeocerca": "Géofence",
     "csvHeaderHoras": "Heures",
     "csvHeaderTarifa": "Tarif_heure",
     "csvHeaderTotal": "Coût_total",
@@ -453,29 +523,7 @@
     "tableEmpty": "Aucun enregistrement pour les filtres sélectionnés.",
     "personNoName": "Personne sans nom",
     "geofenceNoName": "Géofence sans nom",
-    "activityNoName": "Activité sans nom",
-    "filters": {
-      "dateFromLabel": "Du",
-      "dateToLabel": "Au",
-      "personLabel": "Personne",
-      "activityLabel": "Activité",
-      "geofenceLabel": "Géofence",
-      "apply": "Appliquer les filtres",
-      "clear": "Effacer les filtres"
-    },
-    "table": {
-      "title": "Détail des coûts",
-      "person": "Personne",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "start": "Début",
-      "end": "Fin",
-      "hours": "Heures",
-      "rate": "Tarif/heure",
-      "total": "Coût total",
-      "currency": "Devise",
-      "noResults": "Aucun enregistrement trouvé pour les filtres sélectionnés."
-    }
+    "activityNoName": "Activité sans nom"
   },
   "dashboard": {
     "title": "Tableau des coûts",
@@ -591,7 +639,7 @@
     },
     "summary": {
       "title": "Résumé",
-      "geofencesActive": "Géofences actives",
+      "geocercasActive": "Géofences actives",
       "trackersProfiles": "Trackers (profils)",
       "pointsInMap": "Points sur la carte (filtre actuel)",
       "lastPoint": "Dernier point enregistré",
@@ -685,30 +733,6 @@
       "remove": "Impossible de retirer l'administrateur."
     }
   },
-  "home": {
-    "open": "Ouvrir →",
-    "loadingPermissions": "Résolution des permissions…",
-    "loginToContinue": "Connectez-vous pour continuer.",
-    "goToLogin": "Aller à Login",
-    "welcome": "Bienvenue sur App Geocercas",
-    "sessionAs": "Connecté en tant que",
-    "labels": {
-      "email": "E-mail :",
-      "organization": "Organisation :",
-      "role": "Rôle :"
-    },
-    "help": {
-      "title": "Centre d’aide",
-      "quick": "Guide rapide",
-      "quickDesc": "Apprenez à utiliser l’application pas à pas.",
-      "faq": "FAQ",
-      "faqDesc": "Réponses aux questions les plus fréquentes.",
-      "support": "Support",
-      "supportDesc": "Un problème ou une question ? Contactez-nous.",
-      "news": "Nouveautés",
-      "newsDesc": "Changements, améliorations et mises à jour récentes."
-    }
-  },
   "help": {
     "common": {
       "breadcrumb": "Centre d'aide",
@@ -731,191 +755,47 @@
       "recommendationTitle": "Recommandation",
       "recommendationBody": "Commencez avec 1 géofence et 1 tracker. Une fois le flux validé, passez à plus de zones et de personnes.",
       "stepsTitle": "Étape par étape",
-      "stepsSubtitle": "Une séquence pratique qui convient à la plupart des organisations.",
-      "steps": [
-        {
-          "title": "Sélectionnez votre organisation",
-          "bullets": [
-            "Utilisez le sélecteur d'organisation pour choisir où travailler.",
-            "Si vous êtes Propriétaire, vous pouvez gérer plusieurs organisations."
-          ]
-        },
-        {
-          "title": "Créez votre première géofence",
-          "bullets": [
-            "Allez à Géofence et dessinez la zone sur la carte.",
-            "Donnez un nom clair (Ferme A, Parcelle 3, Usine 1, etc.).",
-            "Enregistrez et vérifiez qu’elle apparaît dans la liste."
-          ]
-        },
-        {
-          "title": "Enregistrez votre personnel",
-          "bullets": [
-            "Allez à Personnel et créez les personnes qui travailleront sur le terrain.",
-            "Utilisez un e-mail valide si vous comptez les inviter comme trackers."
-          ]
-        },
-        {
-          "title": "Créez des activités et des tarifs",
-          "bullets": [
-            "Allez à Activités et définissez les tâches (Récolte, Irrigation, Maintenance…).",
-            "Définissez la devise et le tarif horaire pour calculer les coûts et rapports."
-          ]
-        },
-        {
-          "title": "Créez des affectations",
-          "bullets": [
-            "Allez à Affectations et liez : Personne + Activité + Géofence.",
-            "Définissez début/fin et statut Active.",
-            "Choisissez une fréquence (minimum 5 minutes)."
-          ]
-        },
-        {
-          "title": "Invitez des trackers (téléphones terrain)",
-          "bullets": [
-            "Allez à Inviter un tracker et envoyez une invitation par e-mail.",
-            "L’invité peut se connecter avec un Lien magique sur mobile.",
-            "Une fois connecté, le tracker enverra des points GPS selon l’affectation."
-          ]
-        },
-        {
-          "title": "Consultez rapports et tableau des coûts",
-          "bullets": [
-            "Ouvrez Rapports pour filtrer par géofence/personne/activité et exporter en CSV.",
-            "Ouvrez Tableau des coûts pour les KPI et graphiques."
-          ]
-        }
-      ],
-      "tipsTitle": "Bonnes pratiques",
-      "bestPractice1Title": "Noms explicites",
-      "bestPractice1Body": "Nommez géofences et activités de façon évidente pour l’équipe (Ferme, Parcelle, Bloc, Tâche).",
-      "bestPractice2Title": "Commencer petit, puis étendre",
-      "bestPractice2Body": "Validez le flux complet avec une personne et une géofence avant de créer beaucoup d’enregistrements.",
-      "bestPractice3Title": "Affectations à jour",
-      "bestPractice3Body": "Clôturez ou désactivez les anciennes affectations pour que le tracker suive uniquement le plan actuel.",
-      "bestPractice4Title": "Batterie et précision",
-      "bestPractice4Body": "Choisissez une fréquence raisonnable. Une fréquence élevée consomme plus de batterie et de données.",
-      "resultTitle": "Ce que vous devriez voir",
-      "resultIntro": "Après ces étapes, votre organisation devrait avoir :",
-      "resultBullets": [
-        "Au moins 1 géofence enregistrée et visible sur la carte",
-        "Personnel enregistré et prêt pour les affectations",
-        "Activités avec devise et tarif horaire configurés",
-        "Affectations actives (personne + activité + géofence)",
-        "Points GPS visibles dans Tracker / tableau de suivi",
-        "Rapports et tableau des coûts prêts à exporter et analyser"
-      ]
+      "stepsSubtitle": "Une séquence pratique qui convient à la plupart des organisations."
     },
     "faq": {
       "title": "Questions fréquentes",
-      "subtitle": "Réponses rapides sur invitations, rôles, suivi, rapports et confidentialité.",
-      "seeQuickGuide": "Voir le guide rapide",
-      "backToPanel": "Aller au tableau de bord",
-      "sections": [
-        {
-          "title": "Accès et rôles",
-          "items": [
-            {
-              "q": "Comment obtenir l’accès à l’application ?",
-              "a": "Vous devez être invité par un Propriétaire/Admin d’une organisation. Sinon, demandez une invitation."
-            },
-            {
-              "q": "Différence entre Propriétaire, Administrateur et Tracker ?",
-              "a": "Le Propriétaire gère l’organisation et les admins. L’Administrateur gère les données opérationnelles. Le Tracker est un utilisateur terrain qui envoie des points GPS."
-            },
-            {
-              "q": "Puis-je gérer plusieurs organisations ?",
-              "a": "Oui. Les Propriétaires peuvent basculer entre organisations via le sélecteur d’organisation."
-            }
-          ]
-        },
-        {
-          "title": "Suivi (tracking)",
-          "items": [
-            {
-              "q": "Pourquoi « Sans données récentes » dans Tracker ?",
-              "a": "Le tracker peut être hors ligne, sans autorisation de localisation, ou sans affectation active. Vérifiez permissions et affectations."
-            },
-            {
-              "q": "À quelle fréquence la position est-elle envoyée ?",
-              "a": "La fréquence est définie dans l’affectation. Le minimum est 5 minutes pour préserver batterie et données."
-            },
-            {
-              "q": "Fonctionne-t-il avec un signal faible ?",
-              "a": "Oui. Le tracker peut stocker les points et synchroniser lorsque la connexion revient (selon votre build et permissions)."
-            }
-          ]
-        },
-        {
-          "title": "Coûts et rapports",
-          "items": [
-            {
-              "q": "Comment les coûts sont-ils calculés ?",
-              "a": "Les coûts sont calculés à partir des affectations (heures) et du tarif horaire configuré pour chaque activité."
-            },
-            {
-              "q": "Puis-je exporter vers Excel ?",
-              "a": "Oui. Les rapports s’exportent en CSV, ouvrable dans Excel ou Google Sheets."
-            },
-            {
-              "q": "Puis-je filtrer par géofence, personne, activité et dates ?",
-              "a": "Oui. Utilisez les filtres dans Rapports et Tableau des coûts (géofence(s), personne(s), activité(s), période)."
-            }
-          ]
-        },
-        {
-          "title": "Données et confidentialité",
-          "items": [
-            {
-              "q": "Quelles données de localisation sont stockées ?",
-              "a": "Uniquement les points nécessaires au suivi et à la validation des géofences. L’accès est contrôlé par rôles et organisation."
-            },
-            {
-              "q": "Un tracker peut-il voir les données d’autres organisations ?",
-              "a": "Non. Les données sont isolées par organisation (multi-tenant) et protégées par des règles de sécurité."
-            }
-          ]
-        }
-      ]
+      "subtitle": "Réponses rapides sur invitations, rôles, suivi, rapports et confidentialité."
     },
     "support": {
       "title": "Support",
       "subtitle": "Contactez-nous pour le support technique, la facturation ou l’onboarding.",
       "emailLabel": "E-mail de support",
       "notConfigured": "Le contact support n’est pas encore configuré."
-    },
-    "changelog": {
-      "title": "Nouveautés / Changelog",
-      "subtitle": "Historique des changements, améliorations et corrections.",
-      "badges": {
-        "feature": "Fonctionnalité",
-        "fix": "Correction",
-        "improvement": "Amélioration"
-      },
-      "items": [
-        {
-          "version": "v1.0.0",
-          "date": "2026-02-03",
-          "changes": [
-            {
-              "type": "feature",
-              "title": "Centre d’aide",
-              "details": [
-                "Guide rapide, FAQ, support et changelog disponibles."
-              ]
-            },
-            {
-              "type": "improvement",
-              "title": "Confidentialité & conformité",
-              "details": [
-                "Page publique de Politique de confidentialité.",
-                "E-mail de support configurable via variables d’environnement."
-              ]
-            }
-          ]
-        }
-      ]
     }
+  },
+  "home": {
+    "open": "Ouvrir →",
+    "loadingPermissions": "Résolution des permissions…",
+    "loginToContinue": "Connectez-vous pour continuer.",
+    "goToLogin": "Aller à Login",
+    "welcome": "Bienvenue sur App Geocercas",
+    "sessionAs": "Connecté en tant que",
+    "labels": {
+      "email": "E-mail :",
+      "organization": "Organisation :",
+      "role": "Rôle :"
+    },
+    "help": {
+      "title": "Centre d’aide",
+      "quick": "Guide rapide",
+      "quickDesc": "Apprenez à utiliser l’application pas à pas.",
+      "faq": "FAQ",
+      "faqDesc": "Réponses aux questions les plus fréquentes.",
+      "support": "Support",
+      "supportDesc": "Un problème ou une question ? Contactez-nous.",
+      "news": "Nouveautés",
+      "newsDesc": "Changements, améliorations et mises à jour récentes."
+    },
+    "missingContextTitle": "Connecté, mais contexte manquant",
+    "missingContextBody": "La session existe ({{email}}), mais votre rôle ou organisation active n’a pas pu être déterminé.",
+    "orgNotResolved": "(non résolu)",
+    "roleEmpty": "(vide)",
+    "retry": "Réessayer"
   },
   "resetPassword": {
     "title": "Réinitialiser le mot de passe",
@@ -939,5 +819,14 @@
     "backToLogin": "Retour à la connexion",
     "backHome": "Aller à la landing",
     "tip": "Astuce : retournez à /login, saisissez votre e-mail et utilisez « Mot de passe oublié ? » pour générer un nouveau lien."
+  },
+  "authInvite": {
+    "title": "Vous avez été invité",
+    "processing": "Validation de l’invitation…",
+    "notInviteLink": "Ce lien n’est pas une invitation valide. Utilisez le lien reçu par e-mail.",
+    "expiredOrUsed": "L’invitation est invalide, expirée ou déjà utilisée.",
+    "continue": "Continuer",
+    "goToLogin": "Aller à la connexion",
+    "timeout": "La validation de l’invitation a pris trop de temps. Veuillez réessayer."
   }
 }
