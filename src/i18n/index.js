@@ -6,47 +6,26 @@ import es from "./es.json";
 import en from "./en.json";
 import fr from "./fr.json";
 
-/**
- * i18n BLINDADO – ÚNICA fuente de verdad
- *
- * Lee (en orden):
- * 1) ?lang=es|en|fr
- * 2) localStorage.i18nextLng
- * 3) localStorage.app_lang (legacy / compat)
- * 4) navigator.language
- * 5) fallback: es
- *
- * Guarda SIEMPRE:
- * - localStorage.i18nextLng
- * - localStorage.app_lang  (compat)
- * - document.documentElement.lang
- */
-
 export const SUPPORTED = ["es", "en", "fr"];
-const KEY_MAIN = "i18nextLng";
-const KEY_COMPAT = "app_lang";
+const STORAGE_KEY = "i18nextLng";
 
-function norm2(v) {
-  return String(v || "").toLowerCase().slice(0, 2);
-}
-
-function ensureSupported(code) {
-  const c = norm2(code);
-  return SUPPORTED.includes(c) ? c : null;
-}
+const norm2 = (v) => String(v || "").toLowerCase().slice(0, 2);
+const isOk = (v) => SUPPORTED.includes(norm2(v));
 
 function readUrlLang() {
   try {
     const url = new URL(window.location.href);
-    return ensureSupported(url.searchParams.get("lang"));
+    const v = url.searchParams.get("lang");
+    return isOk(v) ? norm2(v) : null;
   } catch {
     return null;
   }
 }
 
-function readLocal(key) {
+function readStoredLang() {
   try {
-    return ensureSupported(localStorage.getItem(key));
+    const v = localStorage.getItem(STORAGE_KEY);
+    return isOk(v) ? norm2(v) : null;
   } catch {
     return null;
   }
@@ -54,17 +33,17 @@ function readLocal(key) {
 
 function readNavigatorLang() {
   try {
-    return ensureSupported(navigator.language);
+    const v = navigator.language;
+    return isOk(v) ? norm2(v) : null;
   } catch {
     return null;
   }
 }
 
 function persistLang(code) {
-  const c = ensureSupported(code) || "es";
+  const c = isOk(code) ? norm2(code) : "es";
   try {
-    localStorage.setItem(KEY_MAIN, c);
-    localStorage.setItem(KEY_COMPAT, c);
+    localStorage.setItem(STORAGE_KEY, c);
   } catch {}
   try {
     document.documentElement.lang = c;
@@ -72,13 +51,7 @@ function persistLang(code) {
   return c;
 }
 
-const initial = persistLang(
-  readUrlLang() ||
-    readLocal(KEY_MAIN) ||
-    readLocal(KEY_COMPAT) ||
-    readNavigatorLang() ||
-    "es"
-);
+const initial = persistLang(readUrlLang() || readStoredLang() || readNavigatorLang() || "es");
 
 i18n.use(initReactI18next).init({
   resources: {
@@ -87,7 +60,7 @@ i18n.use(initReactI18next).init({
     fr: { translation: fr },
   },
 
-  // 🔒 Acepta fr-FR / en-US / es-EC y normaliza
+  // 🔒 clave para fr-FR / en-US
   supportedLngs: SUPPORTED,
   nonExplicitSupportedLngs: true,
   load: "languageOnly",
@@ -97,17 +70,15 @@ i18n.use(initReactI18next).init({
 
   interpolation: { escapeValue: false },
   react: { useSuspense: false },
-
   returnEmptyString: false,
   returnNull: false,
 });
 
-// Persistencia garantizada
 i18n.on("languageChanged", (lng) => {
   persistLang(lng);
 });
 
-// (Opcional) expone para debug. Puedes borrarlo luego.
+// Debug (temporal)
 if (typeof window !== "undefined") {
   window.__i18n = i18n;
 }
