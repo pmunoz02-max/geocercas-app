@@ -970,14 +970,26 @@
     "backToLogin": "Volver al login"
   },
   "home": {
-    "welcome": "Bienvenido a App Geocercas",
-    "sessionAs": "Sesión iniciada como",
-    "labels": {
-      "email": "Email:",
-      "orgId": "Organización ID:",
-      "organization": "Organización:",
-      "role": "Rol:"
-    },
+    "home": {
+  "open": "Abrir →",
+  "sessionAs": "Sesión iniciada como",
+  "labels": {
+    "email": "Email:",
+    "organization": "Organización:",
+    "role": "Rol:"
+  },
+  "help": {
+    "title": "Centro de ayuda",
+    "quick": "Guía rápida",
+    "quickDesc": "Aprende cómo usar la app paso a paso.",
+    "faq": "Preguntas frecuentes",
+    "faqDesc": "Respuestas a las dudas más comunes.",
+    "support": "Soporte",
+    "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
+    "news": "Novedades",
+    "newsDesc": "Cambios, mejoras y actualizaciones recientes."
+  }
+}
     "help": {
       "title": "Centro de ayuda",
       "quick": "Guía rápida",

@@ -10,18 +10,18 @@ function HelpCard({ title, description, to }) {
 
   return (
     <div
-      onClick={() => navigate(to)}
-      className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
       role="button"
       tabIndex={0}
+      onClick={() => navigate(to)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") navigate(to);
       }}
+      className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
     >
       <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       <div className="mt-4 text-sm font-medium text-blue-600">
-        {t("home.open", { defaultValue: "Abrir →" })}
+        {t("home.open", { defaultValue: "Open →" })}
       </div>
     </div>
   );
@@ -104,7 +104,7 @@ export default function Inicio() {
           {t("home.sessionAs", { defaultValue: "Sesión iniciada como" })} <b>{roleLower}</b>
         </p>
 
-        <div className="mt-4 text-sm text-slate-700 space-y-1">
+        <div className="mt-4 text-sm text-slate-700">
           <div>
             {t("home.labels.email", { defaultValue: "Email:" })} {user.email}
           </div>
@@ -137,7 +137,7 @@ export default function Inicio() {
           />
           <HelpCard
             title={t("home.help.news", { defaultValue: "Novedades" })}
-            description={t("home.help.newsDesc", { defaultValue: "Cambios recientes, mejoras y actualizaciones." })}
+            description={t("home.help.newsDesc", { defaultValue: "Cambios, mejoras y actualizaciones recientes." })}
             to="/help/changelog"
           />
         </div>

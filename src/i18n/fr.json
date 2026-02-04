@@ -684,6 +684,26 @@
       "remove": "Impossible de retirer l'administrateur."
     }
   },
+  "home": {
+  "open": "Ouvrir →",
+  "sessionAs": "Connecté en tant que",
+  "labels": {
+    "email": "E-mail :",
+    "organization": "Organisation :",
+    "role": "Rôle :"
+  },
+  "help": {
+    "title": "Centre d’aide",
+    "quick": "Guide rapide",
+    "quickDesc": "Apprenez à utiliser l’application pas à pas.",
+    "faq": "FAQ",
+    "faqDesc": "Réponses aux questions les plus fréquentes.",
+    "support": "Support",
+    "supportDesc": "Un problème ou une question ? Contactez-nous.",
+    "news": "Nouveautés",
+    "newsDesc": "Changements, améliorations et mises à jour récentes."
+  }
+
   "help": {
     "common": {
       "breadcrumb": "Centre d'aide",
