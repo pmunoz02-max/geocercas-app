@@ -982,14 +982,12 @@
     "title": "Centro de ayuda",
     "quick": "Guía rápida",
     "quickDesc": "Aprende cómo usar la app paso a paso.",
-    "faq": "Preguntas frecuentes",
+       "faq": "Preguntas frecuentes",
     "faqDesc": "Respuestas a las dudas más comunes.",
     "support": "Soporte",
     "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
     "news": "Novedades",
-    "newsDesc": "Cambios, mejoras y actualizaciones recientes."
-  }
-}
+    "newsDesc": "Cambios, mejoras y actualizaciones recientes.",
     "help": {
       "title": "Centro de ayuda",
       "quick": "Guía rápida",
@@ -1002,7 +1000,8 @@
       "newsDesc": "Cambios, mejoras y actualizaciones recientes."
     },
     "open": "Abrir →",
-    "loadingPermissions": "Resolviendo permisos…",
+    "loadingPermissions": "Resolviendo permisos…"
+
     "loginToContinue": "Inicia sesión para continuar.",
     "goToLogin": "Ir a Login",
     "missingContextTitle": "Sesión iniciada, pero falta contexto",

@@ -3,7 +3,7 @@
     "language": {
       "es": "Espagnol",
       "en": "Anglais",
-      "fr": "FranÃ§ais"
+      "fr": "Français"
     },
     "actions": {
       "close": "Fermer",
@@ -17,28 +17,28 @@
   "app": {
     "title": "App Geocercas",
     "header": {
-      "loggedAs": "ConnectÃ© en tant que",
-      "logout": "Se dÃ©connecter",
+      "loggedAs": "Connecté en tant que",
+      "logout": "Se déconnecter",
       "login": "Se connecter",
       "goToPanel": "Aller au tableau de bord",
-      "roleOwner": "PropriÃ©taire",
+      "roleOwner": "Propriétaire",
       "roleAdmin": "Administrateur",
       "roleTracker": "Tracker",
       "organizationLabel": "Organisation",
-      "organizationAriaLabel": "SÃ©lectionner une organisation",
+      "organizationAriaLabel": "Sélectionner une organisation",
       "organizationNone": "Aucune organisation",
       "loginMagic": "Lien magique"
     },
     "tabs": {
       "inicio": "Accueil",
-      "geocercas": "GÃ©ofences",
-      "nuevaGeocerca": "GÃ©ofence",
+      "geocercas": "Géofences",
+      "nuevaGeocerca": "Géofence",
       "personal": "Personnel",
-      "actividades": "ActivitÃ©s",
+      "actividades": "Activités",
       "asignaciones": "Affectations",
       "reportes": "Rapports",
-      "dashboard": "Tableau des coÃ»ts",
-      "dashboardCostos": "Tableau des coÃ»ts",
+      "dashboard": "Tableau des coûts",
+      "dashboardCostos": "Tableau des coûts",
       "tracker": "Tracker",
       "invitarTracker": "Inviter un tracker",
       "admins": "Administrateurs"
@@ -46,53 +46,53 @@
   },
   "landing": {
     "brandName": "App Geocercas",
-    "brandTagline": "ContrÃ´le du personnel par gÃ©ofences",
-    "heroBadge": "ContrÃ´le intelligent du terrain",
-    "heroTitlePrefix": "ContrÃ´lez votre personnel",
-    "heroTitleHighlight": "avec des gÃ©ofences intelligentes",
+    "brandTagline": "Contrôle du personnel par géofences",
+    "heroBadge": "Contrôle intelligent du terrain",
+    "heroTitlePrefix": "Contrôlez votre personnel",
+    "heroTitleHighlight": "avec des géofences intelligentes",
     "heroTitleSuffix": "partout dans le monde",
     "heroSubtitle": "App Geocercas vous permet d'affecter des personnes à des zones, d'enregistrer des activités et de calculer les coûts en temps réel.",
     "ctaLogin": "Aller au tableau de bord",
     "ctaMagic": "Entrer avec un lien magique",
-    "bulletGeocercasTitle": "GÃ©ofences",
-    "bulletGeocercasBody": "CrÃ©ez et gÃ©rez des gÃ©ofences pour vos champs, exploitations, usines ou points de service.",
+    "bulletGeocercasTitle": "Géofences",
+    "bulletGeocercasBody": "Créez et gérez des géofences pour vos champs, exploitations, usines ou points de service.",
     "bulletPersonalTitle": "Personnel",
-    "bulletPersonalBody": "Enregistrez votre personnel et affectez-le Ã  des activitÃ©s et zones spÃ©cifiques.",
-    "bulletCostsTitle": "CoÃ»ts",
-    "bulletCostsBody": "Consultez des tableaux de bord de type BI avec les coÃ»ts par personne, activitÃ© et gÃ©ofence.",
+    "bulletPersonalBody": "Enregistrez votre personnel et affectez-le à des activités et zones spécifiques.",
+    "bulletCostsTitle": "Coûts",
+    "bulletCostsBody": "Consultez des tableaux de bord de type BI avec les coûts par personne, activité et géofence.",
     "livePanelLabel": "Panneau en direct",
-    "livePanelTitle": "OpÃ©rations en temps rÃ©el",
+    "livePanelTitle": "Opérations en temps réel",
     "zonesActive": "Zones actives",
-    "statusOnline": "SystÃ¨me en ligne",
-    "assistanceControlTitle": "ContrÃ´le de prÃ©sence",
-    "assistanceControlBody": "VÃ©rifiez qui Ã©tait dans chaque gÃ©ofence, Ã  quelle heure et dans quelle activitÃ©.",
+    "statusOnline": "Système en ligne",
+    "assistanceControlTitle": "Contrôle de présence",
+    "assistanceControlBody": "Vérifiez qui était dans chaque géofence, à quelle heure et dans quelle activité.",
     "multiOrgTitle": "Multi-organisation",
-    "multiOrgBody": "GÃ©rez plusieurs entreprises ou projets depuis un seul compte, avec des rÃ´les et des permissions distincts.",
+    "multiOrgBody": "Gérez plusieurs entreprises ou projets depuis un seul compte, avec des rôles et des permissions distincts.",
     "goToDashboard": "Aller au tableau de bord",
-    "logout": "Se dÃ©connecter",
-    "footerFaq": "Questions frÃ©quentes",
+    "logout": "Se déconnecter",
+    "footerFaq": "Questions fréquentes",
     "footerSupport": "Support",
     "footerTerms": "Conditions",
-    "footerPrivacy": "ConfidentialitÃ©",
-    "rightsReserved": "Tous droits rÃ©servÃ©s",
+    "footerPrivacy": "Confidentialité",
+    "rightsReserved": "Tous droits réservés",
     "loginButton": "Se connecter",
-    "accessTitle": "Compte autorisÃ© requis",
-    "accessBody": "Cette application nÃ©cessite un compte invitÃ© par un administrateur. Si vous n'avez pas accÃ¨s, demandez une invitation Ã  votre organisation.",
-    "accessHint": "Astuce : utilisez Â« Lien magique Â» si votre admin vous a invitÃ© par e-mail.",
-    "reviewNote": "Note : Si vous Ã©valuez l'app (Google Play), utilisez les identifiants fournis dans Play Console (App access).",
-    "privacyMiniNote": "ConfidentialitÃ© : la localisation est utilisÃ©e uniquement pour les fonctions de gÃ©ofence/suivi selon les autorisations accordÃ©es."
+    "accessTitle": "Compte autorisé requis",
+    "accessBody": "Cette application nécessite un compte invité par un administrateur. Si vous n'avez pas accès, demandez une invitation à votre organisation.",
+    "accessHint": "Astuce : utilisez « Lien magique » si votre admin vous a invité par e-mail.",
+    "reviewNote": "Note : Si vous évaluez l'app (Google Play), utilisez les identifiants fournis dans Play Console (App access).",
+    "privacyMiniNote": "Confidentialité : la localisation est utilisée uniquement pour les fonctions de géofence/suivi selon les autorisations accordées."
   },
   "login": {
     "title": "Se connecter",
-    "subtitle": "AccÃ©dez Ã  votre compte App Geocercas",
+    "subtitle": "Accédez à votre compte App Geocercas",
     "emailLabel": "E-mail",
     "passwordLabel": "Mot de passe",
     "passwordLoginButton": "Entrer avec mot de passe",
     "magicLinkTitle": "Entrer avec lien magique",
-    "magicLinkDescription": "Nous vous enverrons un lien sÃ©curisÃ© Ã  votre e-mail pour entrer sans mot de passe.",
+    "magicLinkDescription": "Nous vous enverrons un lien sécurisé à votre e-mail pour entrer sans mot de passe.",
     "magicLinkButton": "Envoyer le lien magique",
-    "magicLinkSent": "Nous avons envoyÃ© un lien magique Ã  votre e-mail.",
-    "sessionActive": "Vous avez dÃ©jÃ  une session active.",
+    "magicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
+    "sessionActive": "Vous avez déjà une session active.",
     "goToDashboard": "Aller au tableau de bord",
     "errors": {
       "invalidEmail": "Saisissez une adresse e-mail valide.",
@@ -101,138 +101,138 @@
     "modePassword": "Mot de passe",
     "modeMagic": "Lien magique",
     "submit": "Se connecter",
-    "submitting": "Connexionâ€¦",
+    "submitting": "Connexion…",
     "magicButton": "Envoyer le lien magique",
-    "magicSubmitting": "Envoi du lienâ€¦",
-    "magicDescription": "Nous vous enverrons un lien sÃ©curisÃ© par e-mail pour vous connecter sans mot de passe.",
+    "magicSubmitting": "Envoi du lien…",
+    "magicDescription": "Nous vous enverrons un lien sécurisé par e-mail pour vous connecter sans mot de passe.",
     "emailPlaceholder": "vous@exemple.com",
     "passwordPlaceholder": "Saisissez votre mot de passe",
-    "forgotPassword": "Mot de passe oubliÃ© ?",
-    "forgotPasswordAlt": "PrÃ©fÃ©rez rÃ©initialiser votre mot de passe ? (envoyer e-mail)",
-    "loadingSession": "Chargement de votre sessionâ€¦",
+    "forgotPassword": "Mot de passe oublié ?",
+    "forgotPasswordAlt": "Préférez réinitialiser votre mot de passe ? (envoyer e-mail)",
+    "loadingSession": "Chargement de votre session…",
     "errorMissingCredentials": "E-mail et mot de passe requis.",
     "errorMissingEmail": "Veuillez saisir un e-mail.",
     "errorInvalidCredentials": "Identifiants invalides.",
     "errorUnexpected": "Erreur inattendue lors de la connexion.",
-    "userNotAuthorized": "Cet e-mail n'est pas autorisÃ©. Demandez une invitation Ã  un admin.",
+    "userNotAuthorized": "Cet e-mail n'est pas autorisé. Demandez une invitation à un admin.",
     "errorMagicLink": "Impossible d'envoyer le lien magique.",
-    "infoMagicLinkSent": "Nous avons envoyÃ© un lien magique Ã  votre e-mail.",
+    "infoMagicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
     "errorMagicLinkUnexpected": "Erreur inattendue lors de l'envoi du lien magique.",
-    "errorResetPassword": "Impossible d'envoyer l'e-mail de rÃ©cupÃ©ration.",
-    "infoResetPasswordSent": "Nous vous avons envoyÃ© un e-mail pour rÃ©initialiser votre mot de passe. VÃ©rifiez votre boÃ®te de rÃ©ception.",
-    "errorResetPasswordUnexpected": "Erreur inattendue lors de l'envoi de l'e-mail de rÃ©cupÃ©ration."
+    "errorResetPassword": "Impossible d'envoyer l'e-mail de récupération.",
+    "infoResetPasswordSent": "Nous vous avons envoyé un e-mail pour réinitialiser votre mot de passe. Vérifiez votre boîte de réception.",
+    "errorResetPasswordUnexpected": "Erreur inattendue lors de l'envoi de l'e-mail de récupération."
   },
   "inicio": {
     "header": {
       "badge": "Centre d'aide et de ressources",
       "title": "Bienvenue sur votre tableau de bord",
-      "subtitle": "Depuis ici, vous pouvez accÃ©der aux instructions, FAQ, support et nouveautÃ©s d'App Geocercas."
+      "subtitle": "Depuis ici, vous pouvez accéder aux instructions, FAQ, support et nouveautés d'App Geocercas."
     },
     "cards": {
       "instrucciones": {
         "badge": "Guide rapide",
         "title": "Instructions",
-        "body": "Suivez pas Ã  pas la configuration des organisations, gÃ©ofences, personnel, activitÃ©s et trackers.",
+        "body": "Suivez pas à pas la configuration des organisations, géofences, personnel, activités et trackers.",
         "cta": "Voir instructions"
       },
       "faq": {
         "badge": "Aide",
-        "title": "Questions frÃ©quentes",
-        "body": "Trouvez des rÃ©ponses aux questions les plus courantes sur les invitations, rÃ´les, coÃ»ts et usage du tracker.",
+        "title": "Questions fréquentes",
+        "body": "Trouvez des réponses aux questions les plus courantes sur les invitations, rôles, coûts et usage du tracker.",
         "cta": "Voir FAQ"
       },
       "videoDemo": {
-        "badge": "VidÃ©o",
-        "title": "VidÃ©o dÃ©mo",
-        "body": "Regardez une courte dÃ©monstration d'App Geocercas en situation rÃ©elle.",
-        "cta": "Voir la vidÃ©o"
+        "badge": "Vidéo",
+        "title": "Vidéo démo",
+        "body": "Regardez une courte démonstration d'App Geocercas en situation réelle.",
+        "cta": "Voir la vidéo"
       },
       "soporte": {
         "badge": "Support",
         "title": "Contact / Support",
         "body": "Besoin d'aide ? Contactez-nous pour du support technique, facturation ou questions sur votre compte.",
-        "cta": "AccÃ©der au support"
+        "cta": "Accéder au support"
       },
       "queEs": {
         "badge": "Info",
         "title": "Qu'est-ce qu'App Geocercas ?",
-        "body": "DÃ©couvrez la vision, les cas d'usage et les bÃ©nÃ©fices d'App Geocercas pour votre organisation.",
+        "body": "Découvrez la vision, les cas d'usage et les bénéfices d'App Geocercas pour votre organisation.",
         "cta": "En savoir plus"
       },
       "novedades": {
-        "badge": "NouveautÃ©s",
-        "title": "NouveautÃ©s / Changelog",
-        "body": "Consultez l'historique des changements, nouvelles fonctionnalitÃ©s, amÃ©liorations et corrections.",
+        "badge": "Nouveautés",
+        "title": "Nouveautés / Changelog",
+        "body": "Consultez l'historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
         "cta": "Voir changelog"
       },
       "common": {
-        "soon": "BientÃ´t disponible"
+        "soon": "Bientôt disponible"
       }
     },
     "userInfo": {
-      "connectedAs": "ConnectÃ© en tant que",
-      "withRole": "avec le rÃ´le",
+      "connectedAs": "Connecté en tant que",
+      "withRole": "avec le rôle",
       "inOrg": "dans l'organisation",
       "userLabel": "Utilisateur :",
       "orgIdLabel": "ID d'organisation :"
     }
   },
   "geocercas": {
-    "titleNew": "Nouvelle gÃ©ofence",
-    "subtitleNew": "Dessinez une gÃ©ofence sur la carte et affectez-la Ã  votre personnel ou vos activitÃ©s.",
-    "panelTitle": "GÃ©ofences",
-    "noGeofences": "Vous n'avez pas encore crÃ©Ã© de gÃ©ofences.",
-    "placeholderName": "Nom de la gÃ©ofence",
-    "buttonDrawByCoords": "Dessiner par coordonnÃ©es",
-    "buttonSave": "Enregistrer la gÃ©ofence",
-    "buttonShowSelected": "Afficher sÃ©lectionnÃ©es",
+    "titleNew": "Nouvelle géofence",
+    "subtitleNew": "Dessinez une géofence sur la carte et affectez-la à votre personnel ou vos activités.",
+    "panelTitle": "Géofences",
+    "noGeofences": "Vous n'avez pas encore créé de géofences.",
+    "placeholderName": "Nom de la géofence",
+    "buttonDrawByCoords": "Dessiner par coordonnées",
+    "buttonSave": "Enregistrer la géofence",
+    "buttonShowSelected": "Afficher sélectionnées",
     "buttonShowAll": "Afficher toutes",
-    "buttonDeleteSelected": "Supprimer sÃ©lectionnÃ©es",
+    "buttonDeleteSelected": "Supprimer sélectionnées",
     "buttonClearCanvas": "Nettoyer la carte",
-    "pageTitle": "GÃ©ofences",
-    "pageSubtitle": "GÃ©rez les gÃ©ofences de votre organisation. Dâ€™ici, vous pouvez en crÃ©er de nouvelles et consulter celles existantes.",
+    "pageTitle": "Géofences",
+    "pageSubtitle": "Gérez les géofences de votre organisation. D’ici, vous pouvez en créer de nouvelles et consulter celles existantes.",
     "currentOrgLabel": "Organisation actuelle :",
     "currentUserLabel": "Utilisateur :",
-    "cardNewTitle": "Nouvelle gÃ©ofence",
-    "cardNewBody": "CrÃ©ez une nouvelle gÃ©ofence sur la carte et assignez-la Ã  votre personnel ou Ã  vos activitÃ©s.",
-    "cardNewCta": "Aller Ã  Nouvelle gÃ©ofence â†’",
-    "cardListTitle": "Liste des gÃ©ofences",
-    "cardListBody": "BientÃ´t, vous verrez ici la liste des gÃ©ofences existantes et leurs dÃ©tails. Pour lâ€™instant, utilisez lâ€™option Nouvelle gÃ©ofence pour crÃ©er et modifier."
+    "cardNewTitle": "Nouvelle géofence",
+    "cardNewBody": "Créez une nouvelle géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
+    "cardNewCta": "Aller à Nouvelle géofence →",
+    "cardListTitle": "Liste des géofences",
+    "cardListBody": "Bientôt, vous verrez ici la liste des géofences existantes et leurs détails. Pour l’instant, utilisez l’option Nouvelle géofence pour créer et modifier."
   },
   "personal": {
     "title": "Personnel",
     "orgInfoLabel": "Organisation :",
     "orgFallback": "Sans organisation",
-    "roleLabel": "RÃ´le :",
+    "roleLabel": "Rôle :",
     "pillCanEdit": "Modifiable",
     "pillReadOnly": "Lecture seule",
-    "bannerLoadingSession": "Chargement de la sessionâ€¦",
-    "bannerLoginRequired": "Vous devez vous connecter pour accÃ©der Ã  cette section.",
-    "bannerRefreshedOk": "DonnÃ©es mises Ã  jour avec succÃ¨s.",
-    "bannerSelected": "Enregistrement sÃ©lectionnÃ©.",
-    "bannerNewMode": "Mode crÃ©ation de personnel.",
-    "bannerEditMode": "Mode Ã©dition.",
-    "bannerCreated": "Personnel crÃ©Ã© avec succÃ¨s.",
-    "bannerUpdated": "Personnel mis Ã  jour correctement.",
-    "bannerDeletedOk": "Enregistrement supprimÃ© correctement.",
-    "errorMissingUser": "Impossible d'obtenir l'utilisateur authentifiÃ©.",
-    "errorNoAuthUser": "Aucun utilisateur authentifiÃ©.",
+    "bannerLoadingSession": "Chargement de la session…",
+    "bannerLoginRequired": "Vous devez vous connecter pour accéder à cette section.",
+    "bannerRefreshedOk": "Données mises à jour avec succès.",
+    "bannerSelected": "Enregistrement sélectionné.",
+    "bannerNewMode": "Mode création de personnel.",
+    "bannerEditMode": "Mode édition.",
+    "bannerCreated": "Personnel créé avec succès.",
+    "bannerUpdated": "Personnel mis à jour correctement.",
+    "bannerDeletedOk": "Enregistrement supprimé correctement.",
+    "errorMissingUser": "Impossible d'obtenir l'utilisateur authentifié.",
+    "errorNoAuthUser": "Aucun utilisateur authentifié.",
     "errorLoad": "Erreur lors du chargement du personnel.",
-    "errorNoPermissionCreate": "Vous n'avez pas les permissions pour crÃ©er du personnel.",
+    "errorNoPermissionCreate": "Vous n'avez pas les permissions pour créer du personnel.",
     "errorNoPermissionEdit": "Vous n'avez pas les permissions pour modifier du personnel.",
-    "errorMustSelectForEdit": "Vous devez sÃ©lectionner un enregistrement Ã  modifier.",
+    "errorMustSelectForEdit": "Vous devez sélectionner un enregistrement à modifier.",
     "errorNoPermissionSave": "Vous n'avez pas les permissions pour enregistrer les modifications.",
     "errorMissingName": "Le nom est requis.",
     "errorMissingEmail": "L'e-mail est requis.",
-    "errorPhonePolicy": "Le tÃ©lÃ©phone doit commencer par + (format international E.164).",
-    "errorSaveNoRecord": "Aucun enregistrement mis Ã  jour reÃ§u.",
+    "errorPhonePolicy": "Le téléphone doit commencer par + (format international E.164).",
+    "errorSaveNoRecord": "Aucun enregistrement mis à jour reçu.",
     "errorSave": "Impossible d'enregistrer le personnel.",
     "errorNoPermissionDelete": "Vous n'avez pas les permissions pour supprimer du personnel.",
-    "errorMustSelectForDelete": "Vous devez sÃ©lectionner un enregistrement Ã  supprimer.",
+    "errorMustSelectForDelete": "Vous devez sélectionner un enregistrement à supprimer.",
     "errorDelete": "Impossible de supprimer l'enregistrement.",
-    "confirmDelete": "ÃŠtes-vous sÃ»r de vouloir supprimer cet enregistrement ? (soft delete)",
-    "searchPlaceholder": "Rechercher par nom, prÃ©nom, e-mail ou tÃ©lÃ©phoneâ€¦",
-    "onlyActive": "Unicamente actifs",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (soft delete)",
+    "searchPlaceholder": "Rechercher par nom, prénom, e-mail ou téléphone…",
+    "onlyActive": "Uniquement actifs",
     "buttonRefresh": "Actualiser",
     "buttonFullList": "Tout voir",
     "buttonNew": "Nouveau",
@@ -240,78 +240,78 @@
     "buttonSave": "Enregistrer",
     "buttonDelete": "Supprimer",
     "fieldName": "Nom",
-    "fieldLastName": "PrÃ©nom",
+    "fieldLastName": "Prénom",
     "fieldEmail": "E-mail",
-    "fieldPhonePlaceholder": "TÃ©lÃ©phone (+33â€¦)",
+    "fieldPhonePlaceholder": "Téléphone (+33…)",
     "fieldActive": "Actif",
     "tableName": "Nom",
-    "tableLastName": "PrÃ©nom",
+    "tableLastName": "Prénom",
     "tableEmail": "E-mail",
-    "tablePhone": "TÃ©lÃ©phone",
+    "tablePhone": "Téléphone",
     "tableActive": "Actif",
-    "tableNoResults": "Aucun rÃ©sultat trouvÃ©.",
+    "tableNoResults": "Aucun résultat trouvé.",
     "yes": "Oui",
     "no": "Non",
-    "processing": "Traitementâ€¦"
+    "processing": "Traitement…"
   },
   "actividades": {
-    "title": "ActivitÃ©s",
-    "formTitleNew": "Nouvelle activitÃ©",
-    "formTitleEdit": "Modifier l'activitÃ©",
-    "fieldName": "Nom de l'activitÃ©",
-    "fieldNamePlaceholder": "Ex. Plantation, Irrigation, RÃ©colte",
+    "title": "Activités",
+    "formTitleNew": "Nouvelle activité",
+    "formTitleEdit": "Modifier l'activité",
+    "fieldName": "Nom de l'activité",
+    "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
     "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "BrÃ¨ve description de l'activitÃ©â€¦",
+    "fieldDescriptionPlaceholder": "Brève description de l'activité…",
     "fieldCurrency": "Devise",
     "fieldHourlyRate": "Tarif horaire",
     "fieldHourlyRatePlaceholder": "Ex. 3.50",
     "currencies": {
-      "USD": "Dollar amÃ©ricain",
+      "USD": "Dollar américain",
       "EUR": "Euro",
       "MXN": "Peso mexicain",
       "COP": "Peso colombien",
-      "PEN": "Sol pÃ©ruvien",
+      "PEN": "Sol péruvien",
       "CLP": "Peso chilien",
       "ARS": "Peso argentin",
-      "BRL": "RÃ©al brÃ©silien",
+      "BRL": "Réal brésilien",
       "CAD": "Dollar canadien",
       "GBP": "Livre sterling",
       "LOCAL": "Devise locale"
     },
-    "buttonCreate": "CrÃ©er l'activitÃ©",
+    "buttonCreate": "Créer l'activité",
     "buttonSave": "Enregistrer les modifications",
-    "buttonUpdate": "Mettre Ã  jour l'activitÃ©",
+    "buttonUpdate": "Mettre à jour l'activité",
     "buttonCancel": "Annuler",
-    "tableTitle": "Liste des activitÃ©s",
-    "thName": "ActivitÃ©",
+    "tableTitle": "Liste des activités",
+    "thName": "Activité",
     "thDescription": "Description",
-    "thCost": "CoÃ»t",
+    "thCost": "Coût",
     "thStatus": "Statut",
     "thActions": "Actions",
     "statusActive": "Active",
     "statusInactive": "Inactive",
     "actionEdit": "Modifier",
-    "actionDeactivate": "DÃ©sactiver",
+    "actionDeactivate": "Désactiver",
     "actionActivate": "Activer",
     "actionDelete": "Supprimer",
-    "tableNoResults": "Aucune activitÃ© enregistrÃ©e.",
-    "loading": "Chargement des activitÃ©sâ€¦",
-    "empty": "Aucune activitÃ© enregistrÃ©e.",
-    "readOnlyNote": "Seuls le propriÃ©taire et les administrateurs peuvent crÃ©er ou modifier des activitÃ©s.",
-    "bannerCreated": "ActivitÃ© crÃ©Ã©e avec succÃ¨s.",
-    "bannerUpdated": "ActivitÃ© mise Ã  jour avec succÃ¨s.",
-    "bannerDeleted": "ActivitÃ© supprimÃ©e.",
-    "errorLoad": "Erreur lors du chargement des activitÃ©s.",
-    "errorSave": "Impossible d'enregistrer l'activitÃ©.",
-    "errorDelete": "Impossible de supprimer l'activitÃ©.",
-    "errorMissingName": "Le nom de l'activitÃ© est obligatoire.",
+    "tableNoResults": "Aucune activité enregistrée.",
+    "loading": "Chargement des activités…",
+    "empty": "Aucune activité enregistrée.",
+    "readOnlyNote": "Seuls le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
+    "bannerCreated": "Activité créée avec succès.",
+    "bannerUpdated": "Activité mise à jour avec succès.",
+    "bannerDeleted": "Activité supprimée.",
+    "errorLoad": "Erreur lors du chargement des activités.",
+    "errorSave": "Impossible d'enregistrer l'activité.",
+    "errorDelete": "Impossible de supprimer l'activité.",
+    "errorMissingName": "Le nom de l'activité est obligatoire.",
     "errorMissingCurrency": "La devise est obligatoire.",
     "errorMissingRate": "Le tarif horaire est obligatoire.",
-    "errorNameRequired": "Le nom de l'activitÃ© est obligatoire.",
-    "errorRatePositive": "Le tarif horaire doit Ãªtre supÃ©rieur Ã  0.",
+    "errorNameRequired": "Le nom de l'activité est obligatoire.",
+    "errorRatePositive": "Le tarif horaire doit être supérieur à 0.",
     "errorMissingTenant": "Impossible de trouver l'organisation de l'utilisateur (tenant_id/org_id).",
-    "errorToggle": "Impossible de modifier le statut de l'activitÃ©.",
-    "confirmDelete": "Voulez-vous vraiment supprimer l'activitÃ© Â« {{name}} Â» ?"
+    "errorToggle": "Impossible de modifier le statut de l'activité.",
+    "confirmDelete": "Voulez-vous vraiment supprimer l'activité « {{name}} » ?"
   },
   "asignaciones": {
     "title": "Affectations",
@@ -323,167 +323,167 @@
         "inactivo": "Inactifs"
       },
       "refresh": "Actualiser",
-      "refreshLoading": "Actualisationâ€¦"
+      "refreshLoading": "Actualisation…"
     },
     "form": {
       "newTitle": "Nouvelle affectation",
       "editTitle": "Modifier l'affectation",
       "personLabel": "Personne",
-      "personPlaceholder": "SÃ©lectionnez une personne",
-      "activityLabel": "ActivitÃ©",
-      "activityPlaceholder": "SÃ©lectionnez une activitÃ©",
-      "geofenceLabel": "GÃ©ofence",
-      "geofencePlaceholder": "SÃ©lectionnez une gÃ©ofence",
-      "startLabel": "Date/heure de dÃ©but",
+      "personPlaceholder": "Sélectionnez une personne",
+      "activityLabel": "Activité",
+      "activityPlaceholder": "Sélectionnez une activité",
+      "geofenceLabel": "Géofence",
+      "geofencePlaceholder": "Sélectionnez une géofence",
+      "startLabel": "Date/heure de début",
       "endLabel": "Date/heure de fin",
       "statusLabel": "Statut",
       "statusActive": "Active",
       "statusInactive": "Inactive",
-      "frequencyLabel": "FrÃ©quence (min)",
+      "frequencyLabel": "Fréquence (min)",
       "saveButton": "Enregistrer l'affectation",
-      "updateButton": "Mettre Ã  jour l'affectation",
+      "updateButton": "Mettre à jour l'affectation",
       "cancelEditButton": "Annuler la modification",
-      "buttonCreate": "CrÃ©er l'affectation",
-      "buttonUpdate": "Mettre Ã  jour l'affectation",
+      "buttonCreate": "Créer l'affectation",
+      "buttonUpdate": "Mettre à jour l'affectation",
       "buttonCancel": "Annuler"
     },
     "table": {
       "title": "Liste des affectations",
       "person": "Personne",
-      "activity": "ActivitÃ©",
-      "geofence": "GÃ©ofence",
-      "start": "DÃ©but",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "start": "Début",
       "end": "Fin",
       "status": "Statut",
       "actions": "Actions",
-      "noResults": "Aucune affectation enregistrÃ©e."
+      "noResults": "Aucune affectation enregistrée."
     },
     "actions": {
       "edit": "Modifier",
       "delete": "Supprimer",
       "activate": "Activer",
-      "deactivate": "DÃ©sactiver"
+      "deactivate": "Désactiver"
     },
     "banner": {
-      "created": "Affectation crÃ©Ã©e correctement.",
-      "updated": "Affectation mise Ã  jour.",
-      "deleted": "Affectation supprimÃ©e."
+      "created": "Affectation créée correctement.",
+      "updated": "Affectation mise à jour.",
+      "deleted": "Affectation supprimée."
     },
     "messages": {
       "loadError": "Erreur lors du chargement des affectations.",
-      "catalogError": "Erreur lors du chargement des catalogues (personnel, gÃ©ofences, activitÃ©s).",
-      "loadingData": "Chargement des donnÃ©es d'affectationsâ€¦",
-      "overlapError": "Cette personne a dÃ©jÃ  une affectation qui se chevauche sur cette plage de dates.",
-      "selectPersonAndFence": "Vous devez sÃ©lectionner une personne et une gÃ©ofence.",
-      "selectDates": "Vous devez saisir la date/heure de dÃ©but et de fin.",
-      "frequencyTooLow": "La frÃ©quence minimale autorisÃ©e est de 5 minutes.",
-      "frequencyInvalidRange": "La frÃ©quence doit Ãªtre comprise entre 5 minutes et 12 heures.",
+      "catalogError": "Erreur lors du chargement des catalogues (personnel, géofences, activités).",
+      "loadingData": "Chargement des données d'affectations…",
+      "overlapError": "Cette personne a déjà une affectation qui se chevauche sur cette plage de dates.",
+      "selectPersonAndFence": "Vous devez sélectionner une personne et une géofence.",
+      "selectDates": "Vous devez saisir la date/heure de début et de fin.",
+      "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
+      "frequencyInvalidRange": "La fréquence doit être comprise entre 5 minutes et 12 heures.",
       "saveGenericError": "Une erreur s'est produite lors de l'enregistrement de l'affectation.",
-      "createGenericError": "Impossible de crÃ©er l'affectation.",
-      "createSuccess": "Affectation crÃ©Ã©e correctement.",
-      "updateGenericError": "Impossible de mettre Ã  jour l'affectation.",
-      "updateSuccess": "Affectation mise Ã  jour correctement.",
+      "createGenericError": "Impossible de créer l'affectation.",
+      "createSuccess": "Affectation créée correctement.",
+      "updateGenericError": "Impossible de mettre à jour l'affectation.",
+      "updateSuccess": "Affectation mise à jour correctement.",
       "deleteError": "Impossible de supprimer l'affectation.",
-      "deleteSuccess": "Affectation supprimÃ©e correctement.",
+      "deleteSuccess": "Affectation supprimée correctement.",
       "confirmDelete": "Voulez-vous vraiment supprimer cette affectation ?"
     },
     "error": {
       "load": "Erreur lors du chargement des affectations.",
       "save": "Impossible d'enregistrer l'affectation.",
       "delete": "Impossible de supprimer l'affectation.",
-      "missingPerson": "Vous devez sÃ©lectionner une personne.",
-      "missingGeofence": "Vous devez sÃ©lectionner une gÃ©ofence.",
-      "missingActivity": "Vous devez sÃ©lectionner une activitÃ©.",
-      "missingStart": "Vous devez saisir la date/heure de dÃ©but.",
+      "missingPerson": "Vous devez sélectionner une personne.",
+      "missingGeofence": "Vous devez sélectionner une géofence.",
+      "missingActivity": "Vous devez sélectionner une activité.",
+      "missingStart": "Vous devez saisir la date/heure de début.",
       "missingEnd": "Vous devez saisir la date/heure de fin."
     }
   },
   "reportes": {
-    "title": "Rapports de coÃ»ts",
-    "headerSubtitle": "Consultez et exportez les coÃ»ts par personne, activitÃ© et gÃ©ofence.",
-    "noAccessBody": "Vous n'avez pas l'autorisation d'accÃ©der aux rapports de coÃ»ts. Ce module est rÃ©servÃ© aux propriÃ©taires et administrateurs.",
-    "loadingReport": "Chargement du rapportâ€¦",
+    "title": "Rapports de coûts",
+    "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
+    "noAccessBody": "Vous n'avez pas l'autorisation d'accéder aux rapports de coûts. Ce module est réservé aux propriétaires et administrateurs.",
+    "loadingReport": "Chargement du rapport…",
     "filtersTitle": "Filtres",
     "filtersFrom": "Du",
     "filtersTo": "Au",
     "filtersPerson": "Personne",
-    "filtersActivity": "ActivitÃ©",
-    "filtersGeofence": "GÃ©ofence",
+    "filtersActivity": "Activité",
+    "filtersGeofence": "Géofence",
     "filtersAll": "Tous",
     "filtersClear": "Effacer les filtres",
     "filtersApply": "Appliquer les filtres",
     "summaryTotalHoursLabel": "Heures totales",
-    "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans la pÃ©riode sÃ©lectionnÃ©e.",
-    "summaryTotalCostLabel": "CoÃ»t total",
-    "summaryTotalCostHelp": "Somme des coÃ»ts calculÃ©s par personne, activitÃ© et gÃ©ofence.",
+    "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans la période sélectionnée.",
+    "summaryTotalCostLabel": "Coût total",
+    "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
     "summaryRecordsLabel": "Enregistrements",
     "summaryRecordsHelp": "Nombre de lignes correspondant aux filtres actuels.",
-    "tableTitle": "DÃ©tail des coÃ»ts",
-    "tableExportHelp": "Exportez le dÃ©tail actuel au format CSV.",
+    "tableTitle": "Détail des coûts",
+    "tableExportHelp": "Exportez le détail actuel au format CSV.",
     "tableExportButton": "Exporter CSV",
     "colPersona": "Personne",
-    "colGeocerca": "GÃ©ofence",
-    "colActividad": "ActivitÃ©",
-    "colInicio": "DÃ©but",
+    "colGeocerca": "Géofence",
+    "colActividad": "Activité",
+    "colInicio": "Début",
     "colFin": "Fin",
     "colHoras": "Heures",
     "colTarifa": "Tarif/heure",
-    "colCosto": "CoÃ»t",
+    "colCosto": "Coût",
     "colMoneda": "Devise",
-    "csvHeaderInicio": "DÃ©but",
+    "csvHeaderInicio": "Début",
     "csvHeaderFin": "Fin",
     "csvHeaderPersona": "Personne",
-    "csvHeaderActividad": "ActivitÃ©",
-    "csvHeaderGeocerca": "GÃ©ofence",
+    "csvHeaderActividad": "Activité",
+    "csvHeaderGeocerca": "Géofence",
     "csvHeaderHoras": "Heures",
     "csvHeaderTarifa": "Tarif_heure",
-    "csvHeaderTotal": "CoÃ»t_total",
-    "csvHeaderCosto": "CoÃ»t_total",
+    "csvHeaderTotal": "Coût_total",
+    "csvHeaderCosto": "Coût_total",
     "csvHeaderMoneda": "Devise",
-    "buttonDownloadCsv": "TÃ©lÃ©charger CSV",
+    "buttonDownloadCsv": "Télécharger CSV",
     "errorLoad": "Erreur lors du chargement des rapports.",
-    "errorCsv": "Impossible de gÃ©nÃ©rer le fichier CSV.",
-    "errorLoadFilters": "Erreur lors du chargement des filtres (personnes, activitÃ©s, gÃ©ofences).",
-    "errorRangeInvalid": "La date Â« Du Â» ne peut pas Ãªtre postÃ©rieure Ã  la date Â« Au Â».",
-    "errorViewMissing": "La vue v_costos_detalle n'est pas encore crÃ©Ã©e dans Supabase.",
-    "errorLoadReport": "Erreur lors du chargement du rapport de coÃ»ts.",
+    "errorCsv": "Impossible de générer le fichier CSV.",
+    "errorLoadFilters": "Erreur lors du chargement des filtres (personnes, activités, géofences).",
+    "errorRangeInvalid": "La date « Du » ne peut pas être postérieure à la date « Au ».",
+    "errorViewMissing": "La vue v_costos_detalle n'est pas encore créée dans Supabase.",
+    "errorLoadReport": "Erreur lors du chargement du rapport de coûts.",
     "errorLabel": "Erreur :",
-    "exportNoData": "Aucune donnÃ©e Ã  exporter.",
-    "tableEmpty": "Aucun enregistrement pour les filtres sÃ©lectionnÃ©s.",
+    "exportNoData": "Aucune donnée à exporter.",
+    "tableEmpty": "Aucun enregistrement pour les filtres sélectionnés.",
     "personNoName": "Personne sans nom",
-    "geofenceNoName": "GÃ©ofence sans nom",
-    "activityNoName": "ActivitÃ© sans nom",
+    "geofenceNoName": "Géofence sans nom",
+    "activityNoName": "Activité sans nom",
     "filters": {
       "dateFromLabel": "Du",
       "dateToLabel": "Au",
       "personLabel": "Personne",
-      "activityLabel": "ActivitÃ©",
-      "geofenceLabel": "GÃ©ofence",
+      "activityLabel": "Activité",
+      "geofenceLabel": "Géofence",
       "apply": "Appliquer les filtres",
       "clear": "Effacer les filtres"
     },
     "table": {
-      "title": "DÃ©tail des coÃ»ts",
+      "title": "Détail des coûts",
       "person": "Personne",
-      "activity": "ActivitÃ©",
-      "geofence": "GÃ©ofence",
-      "start": "DÃ©but",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "start": "Début",
       "end": "Fin",
       "hours": "Heures",
       "rate": "Tarif/heure",
-      "total": "CoÃ»t total",
+      "total": "Coût total",
       "currency": "Devise",
-      "noResults": "Aucun enregistrement trouvÃ© pour les filtres sÃ©lectionnÃ©s."
+      "noResults": "Aucun enregistrement trouvé pour les filtres sélectionnés."
     }
   },
   "dashboard": {
-    "title": "Tableau des coÃ»ts",
-    "subtitle": "Visualisez les coÃ»ts agrÃ©gÃ©s par personne, activitÃ© et gÃ©ofence.",
+    "title": "Tableau des coûts",
+    "subtitle": "Visualisez les coûts agrégés par personne, activité et géofence.",
     "cards": {
-      "totalCost": "CoÃ»t total",
+      "totalCost": "Coût total",
       "totalHours": "Heures totales",
       "totalPersons": "Personnes",
-      "totalGeofences": "GÃ©ofences"
+      "totalGeofences": "Géofences"
     },
     "filters": {
       "dateFromLabel": "Du",
@@ -492,146 +492,146 @@
       "clear": "Effacer"
     },
     "charts": {
-      "costByActivity": "CoÃ»t par activitÃ©",
-      "costByPerson": "CoÃ»t par personne",
-      "costByGeofence": "CoÃ»t par gÃ©ofence",
+      "costByActivity": "Coût par activité",
+      "costByPerson": "Coût par personne",
+      "costByGeofence": "Coût par géofence",
       "hoursByDay": "Heures par jour"
     },
-    "errorLoad": "Erreur lors du chargement du tableau des coÃ»ts."
+    "errorLoad": "Erreur lors du chargement du tableau des coûts."
   },
   "dashboardCostos": {
-    "title": "Tableau des coÃ»ts",
-    "subtitle": "Visualisez des KPI et graphiques de coÃ»ts par personne, activitÃ© et gÃ©ofence.",
-    "refreshButton": "RafraÃ®chir les donnÃ©es",
+    "title": "Tableau des coûts",
+    "subtitle": "Visualisez des KPI et graphiques de coûts par personne, activité et géofence.",
+    "refreshButton": "Rafraîchir les données",
     "filtersTitle": "Filtres",
     "filtersFrom": "Du",
     "filtersTo": "Au",
     "filtersPerson": "Personne",
-    "filtersActivity": "ActivitÃ©",
-    "filtersGeofence": "GÃ©ofence",
+    "filtersActivity": "Activité",
+    "filtersGeofence": "Géofence",
     "filtersAll": "Tous",
     "filtersClear": "Effacer les filtres",
     "filtersApply": "Appliquer les filtres",
     "kpiTotalHours": "Heures totales",
-    "kpiTotalCost": "CoÃ»t total",
+    "kpiTotalCost": "Coût total",
     "kpiRecords": "Enregistrements",
     "kpiCurrencies": "Devises",
-    "chartTitle": "Graphique des coÃ»ts",
+    "chartTitle": "Graphique des coûts",
     "chartDimension": "Dimension",
-    "chartMetric": "MÃ©trique",
+    "chartMetric": "Métrique",
     "dimensionPersona": "Personne",
-    "dimensionActividad": "ActivitÃ©",
-    "dimensionGeocerca": "GÃ©ofence",
+    "dimensionActividad": "Activité",
+    "dimensionGeocerca": "Géofence",
     "dimensionFecha": "Date",
-    "metricCost": "CoÃ»t",
+    "metricCost": "Coût",
     "metricHours": "Heures",
     "metricRecords": "Enregistrements",
-    "tableTitle": "DÃ©tail pour la dimension sÃ©lectionnÃ©e",
+    "tableTitle": "Détail pour la dimension sélectionnée",
     "colPersona": "Personne",
-    "colActividad": "ActivitÃ©",
-    "colGeocerca": "GÃ©ofence",
+    "colActividad": "Activité",
+    "colGeocerca": "Géofence",
     "colFecha": "Date",
     "colHoras": "Heures",
-    "colCosto": "CoÃ»t",
+    "colCosto": "Coût",
     "colMoneda": "Devise",
-    "tableNoResults": "Aucune donnÃ©e pour les filtres actuels.",
-    "errorLoad": "Erreur lors du chargement du tableau des coÃ»ts.",
-    "exportDataButton": "Exporter les donnÃ©es",
+    "tableNoResults": "Aucune donnée pour les filtres actuels.",
+    "errorLoad": "Erreur lors du chargement du tableau des coûts.",
+    "exportDataButton": "Exporter les données",
     "exportChartButton": "Exporter le graphique",
     "chartType": "Type de graphique",
     "chartTypeBar": "Barres",
     "chartTypeLine": "Lignes",
     "chartTypeArea": "Aires",
     "chartTypePie": "Camembert",
-    "colCategoria": "CatÃ©gorie",
+    "colCategoria": "Catégorie",
     "colTarifaPromedio": "Tarif moyen",
     "colRegistros": "Enregistrements",
-    "tableEmpty": "Aucune donnÃ©e Ã  afficher"
+    "tableEmpty": "Aucune donnée à afficher"
   },
   "tracker": {
     "title": "Tracker GPS",
-    "subtitle": "Visualisez en temps rÃ©el la position des trackers Ã  l'intÃ©rieur de vos gÃ©ofences.",
+    "subtitle": "Visualisez en temps réel la position des trackers à l'intérieur de vos géofences.",
     "status": {
       "online": "Tracker en ligne",
-      "offline": "Sans donnÃ©es rÃ©centes"
+      "offline": "Sans données récentes"
     },
     "controls": {
       "centerOnUser": "Centrer sur ma position",
-      "refresh": "RafraÃ®chir les positions",
+      "refresh": "Rafraîchir les positions",
       "showAll": "Afficher tous",
-      "showInside": "Uniquement Ã  l'intÃ©rieur des gÃ©ofences"
+      "showInside": "Uniquement à l'intérieur des géofences"
     },
     "legend": {
-      "insideFence": "Ã€ l'intÃ©rieur de la gÃ©ofence",
-      "outsideFence": "Hors gÃ©ofence",
-      "geofence": "GÃ©ofence"
+      "insideFence": "À l'intérieur de la géofence",
+      "outsideFence": "Hors géofence",
+      "geofence": "Géofence"
     },
     "table": {
-      "title": "DerniÃ¨res positions",
+      "title": "Dernières positions",
       "person": "Personne",
-      "activity": "ActivitÃ©",
-      "geofence": "GÃ©ofence",
+      "activity": "Activité",
+      "geofence": "Géofence",
       "timestamp": "Date/heure",
       "status": "Statut",
-      "noResults": "Aucune position enregistrÃ©e."
+      "noResults": "Aucune position enregistrée."
     },
     "errorLoad": "Erreur lors du chargement des positions du tracker."
   },
   "trackerDashboard": {
-    "title": "Tableau de tracking en temps rÃ©el",
-    "subtitle": "Les points se mettent Ã  jour automatiquement. La frÃ©quence d'envoi est dÃ©finie par l'administrateur.",
+    "title": "Tableau de tracking en temps réel",
+    "subtitle": "Les points se mettent à jour automatiquement. La fréquence d'envoi est définie par l'administrateur.",
     "filters": {
       "trackerLabel": "Tracker",
-      "timeWindowLabel": "FenÃªtre",
+      "timeWindowLabel": "Fenêtre",
       "timeWindowSuffix": "heures",
-      "geofenceLabel": "GÃ©ofence",
+      "geofenceLabel": "Géofence",
       "allTrackers": "Tous les trackers",
-      "allGeofences": "Toutes les gÃ©ofences"
+      "allGeofences": "Toutes les géofences"
     },
     "summary": {
-      "title": "RÃ©sumÃ©",
-      "geofencesActive": "GÃ©ofences actives",
+      "title": "Résumé",
+      "geofencesActive": "Géofences actives",
       "trackersProfiles": "Trackers (profils)",
       "pointsInMap": "Points sur la carte (filtre actuel)",
-      "lastPoint": "Dernier point enregistrÃ©",
+      "lastPoint": "Dernier point enregistré",
       "noPoints": "Aucun point pour le filtre actuel."
     },
     "legend": {
-      "title": "LÃ©gende des trackers",
+      "title": "Légende des trackers",
       "points": "pts"
     },
     "popup": {
       "tracker": "Tracker",
       "time": "Heure",
-      "accuracy": "PrÃ©cision",
-      "countHere": "Enregistrements Ã  cette position",
-      "activity": "ActivitÃ©",
-      "geofence": "GÃ©ofence",
-      "inside": "Ã€ l'intÃ©rieur de la gÃ©ofence",
+      "accuracy": "Précision",
+      "countHere": "Enregistrements à cette position",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "inside": "À l'intérieur de la géofence",
       "yes": "Oui",
       "no": "Non"
     },
     "messages": {
-      "noOrg": "Vous devez sÃ©lectionner une organisation.",
-      "autoRefresh": "Les points se mettent Ã  jour automatiquement. Vous n'avez pas besoin de recharger la page.",
-      "loading": "Chargement des donnÃ©es de trackingâ€¦",
-      "noData": "Aucune position trouvÃ©e pour les filtres sÃ©lectionnÃ©s.",
-      "error": "Erreur lors du chargement des donnÃ©es de tracking.",
-      "checkConsole": "VÃ©rifiez la console si le problÃ¨me persiste."
+      "noOrg": "Vous devez sélectionner une organisation.",
+      "autoRefresh": "Les points se mettent à jour automatiquement. Vous n'avez pas besoin de recharger la page.",
+      "loading": "Chargement des données de tracking…",
+      "noData": "Aucune position trouvée pour les filtres sélectionnés.",
+      "error": "Erreur lors du chargement des données de tracking.",
+      "checkConsole": "Vérifiez la console si le problème persiste."
     }
   },
   "inviteTracker": {
     "orgFallback": "votre organisation",
     "title": "Inviter un tracker",
-    "subtitle": "SÃ©lectionnez un membre de votre personnel ou saisissez un e-mail pour l'inviter comme tracker dans {{orgName}}.",
+    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un e-mail pour l'inviter comme tracker dans {{orgName}}.",
     "form": {
-      "selectLabel": "SÃ©lectionner un personnel actif (optionnel)",
-      "selectPlaceholder": "-- SÃ©lectionner du personnel --",
-      "selectHelp": "Si vous sÃ©lectionnez un personnel, son e-mail sera rempli automatiquement.",
+      "selectLabel": "Sélectionner un personnel actif (optionnel)",
+      "selectPlaceholder": "-- Sélectionner du personnel --",
+      "selectHelp": "Si vous sélectionnez un personnel, son e-mail sera rempli automatiquement.",
       "emailLabel": "E-mail du tracker",
       "emailPlaceholder": "tracker@exemple.com",
-      "emailHelp": "Une invitation sera envoyÃ©e Ã  cet e-mail.",
-      "buttonSending": "Envoi de l'invitationâ€¦",
+      "emailHelp": "Une invitation sera envoyée à cet e-mail.",
+      "buttonSending": "Envoi de l'invitation…",
       "buttonSend": "Envoyer l'invitation"
     },
     "errors": {
@@ -639,188 +639,192 @@
       "emailInvalid": "Saisissez une adresse e-mail valide."
     },
     "messages": {
-      "serverProblem": "Un problÃ¨me est survenu lors du contact avec le serveur d'invitations.",
-      "notOk": "L'invitation n'a pas pu Ãªtre complÃ©tÃ©e. VÃ©rifiez l'e-mail et rÃ©essayez.",
-      "invited": "Une invitation a Ã©tÃ© envoyÃ©e Ã  {{email}} pour rejoindre en tant que tracker dans {{orgName}}.",
-      "magiclinkSent": "Un lien magique d'accÃ¨s a Ã©tÃ© envoyÃ© Ã  {{email}}.",
-      "linkOnlyWithLink": "L'invitation a Ã©tÃ© crÃ©Ã©e. Utilisez ce lien pour partager l'accÃ¨s : {{link}}.",
-      "linkOnlyNoLink": "L'invitation a Ã©tÃ© crÃ©Ã©e, mais aucun lien public n'a Ã©tÃ© renvoyÃ©.",
-      "createdWithoutEmail": "L'accÃ¨s du tracker a Ã©tÃ© crÃ©Ã© sans envoi d'e-mail.",
-      "genericProcessed": "L'invitation pour {{email}} a Ã©tÃ© traitÃ©e avec succÃ¨s.",
+      "serverProblem": "Un problème est survenu lors du contact avec le serveur d'invitations.",
+      "notOk": "L'invitation n'a pas pu être complétée. Vérifiez l'e-mail et réessayez.",
+      "invited": "Une invitation a été envoyée à {{email}} pour rejoindre en tant que tracker dans {{orgName}}.",
+      "magiclinkSent": "Un lien magique d'accès a été envoyé à {{email}}.",
+      "linkOnlyWithLink": "L'invitation a été créée. Utilisez ce lien pour partager l'accès : {{link}}.",
+      "linkOnlyNoLink": "L'invitation a été créée, mais aucun lien public n'a été renvoyé.",
+      "createdWithoutEmail": "L'accès du tracker a été créé sans envoi d'e-mail.",
+      "genericProcessed": "L'invitation pour {{email}} a été traitée avec succès.",
       "unexpectedError": "Erreur inattendue lors du traitement de l'invitation."
     }
   },
   "admins": {
     "title": "Administrateurs",
-    "subtitle": "GÃ©rez les administrateurs de votre organisation et leurs rÃ´les.",
+    "subtitle": "Gérez les administrateurs de votre organisation et leurs rôles.",
     "table": {
       "name": "Nom",
       "email": "E-mail",
-      "role": "RÃ´le",
+      "role": "Rôle",
       "status": "Statut",
       "actions": "Actions",
-      "noResults": "Aucun administrateur enregistrÃ©."
+      "noResults": "Aucun administrateur enregistré."
     },
     "form": {
       "inviteTitle": "Inviter un nouvel administrateur",
       "emailLabel": "E-mail",
-      "roleLabel": "RÃ´le",
+      "roleLabel": "Rôle",
       "buttonInvite": "Envoyer l'invitation"
     },
     "actions": {
-      "makeOwner": "DÃ©finir comme propriÃ©taire",
-      "makeAdmin": "DÃ©finir comme admin",
-      "remove": "Retirer l'accÃ¨s"
+      "makeOwner": "Définir comme propriétaire",
+      "makeAdmin": "Définir comme admin",
+      "remove": "Retirer l'accès"
     },
     "banner": {
-      "invitationSent": "Invitation envoyÃ©e avec succÃ¨s.",
-      "roleUpdated": "RÃ´le mis Ã  jour.",
-      "removed": "Administrateur retirÃ© de l'organisation."
+      "invitationSent": "Invitation envoyée avec succès.",
+      "roleUpdated": "Rôle mis à jour.",
+      "removed": "Administrateur retiré de l'organisation."
     },
     "error": {
       "load": "Erreur lors du chargement de la liste des administrateurs.",
       "invite": "Impossible d'envoyer l'invitation.",
-      "updateRole": "Impossible de mettre Ã  jour le rÃ´le.",
+      "updateRole": "Impossible de mettre à jour le rôle.",
       "remove": "Impossible de retirer l'administrateur."
     }
   },
   "home": {
-  "open": "Ouvrir →",
-  "sessionAs": "Connecté en tant que",
-  "labels": {
-    "email": "E-mail :",
-    "organization": "Organisation :",
-    "role": "Rôle :"
+    "open": "Ouvrir →",
+    "loadingPermissions": "Résolution des permissions…",
+    "loginToContinue": "Connectez-vous pour continuer.",
+    "goToLogin": "Aller à Login",
+    "welcome": "Bienvenue sur App Geocercas",
+    "sessionAs": "Connecté en tant que",
+    "labels": {
+      "email": "E-mail :",
+      "organization": "Organisation :",
+      "role": "Rôle :"
+    },
+    "help": {
+      "title": "Centre d’aide",
+      "quick": "Guide rapide",
+      "quickDesc": "Apprenez à utiliser l’application pas à pas.",
+      "faq": "FAQ",
+      "faqDesc": "Réponses aux questions les plus fréquentes.",
+      "support": "Support",
+      "supportDesc": "Un problème ou une question ? Contactez-nous.",
+      "news": "Nouveautés",
+      "newsDesc": "Changements, améliorations et mises à jour récentes."
+    }
   },
-  "help": {
-    "title": "Centre d’aide",
-    "quick": "Guide rapide",
-    "quickDesc": "Apprenez à utiliser l’application pas à pas.",
-    "faq": "FAQ",
-    "faqDesc": "Réponses aux questions les plus fréquentes.",
-    "support": "Support",
-    "supportDesc": "Un problème ou une question ? Contactez-nous.",
-    "news": "Nouveautés",
-    "newsDesc": "Changements, améliorations et mises à jour récentes."
-  }
-
   "help": {
     "common": {
       "breadcrumb": "Centre d'aide",
       "back": "Retour",
-      "goHome": "Aller Ã  l'accueil",
+      "goHome": "Aller à l'accueil",
       "viewFaq": "Voir la FAQ",
       "badge": "Centre d'aide",
       "quickGuideBadge": "Guide rapide"
     },
     "instructions": {
       "title": "Guide rapide de configuration",
-      "subtitle": "Suivez ces Ã©tapes pour configurer votre organisation, crÃ©er des gÃ©ofences, affecter le personnel et dÃ©marrer le suivi.",
-      "jumpToSteps": "Aller aux Ã©tapes",
-      "viewResult": "Voir le rÃ©sultat",
+      "subtitle": "Suivez ces étapes pour configurer votre organisation, créer des géofences, affecter le personnel et démarrer le suivi.",
+      "jumpToSteps": "Aller aux étapes",
+      "viewResult": "Voir le résultat",
       "tocTitle": "Sommaire",
       "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
-      "tocSteps": "Ã‰tapes",
+      "tocSteps": "Étapes",
       "tocTips": "Bonnes pratiques",
-      "tocResult": "RÃ©sultat attendu",
+      "tocResult": "Résultat attendu",
       "recommendationTitle": "Recommandation",
-      "recommendationBody": "Commencez avec 1 gÃ©ofence et 1 tracker. Une fois le flux validÃ©, passez Ã  plus de zones et de personnes.",
-      "stepsTitle": "Ã‰tape par Ã©tape",
-      "stepsSubtitle": "Une sÃ©quence pratique qui convient Ã  la plupart des organisations.",
+      "recommendationBody": "Commencez avec 1 géofence et 1 tracker. Une fois le flux validé, passez à plus de zones et de personnes.",
+      "stepsTitle": "Étape par étape",
+      "stepsSubtitle": "Une séquence pratique qui convient à la plupart des organisations.",
       "steps": [
         {
-          "title": "SÃ©lectionnez votre organisation",
+          "title": "Sélectionnez votre organisation",
           "bullets": [
-            "Utilisez le sÃ©lecteur d'organisation pour choisir oÃ¹ travailler.",
-            "Si vous Ãªtes PropriÃ©taire, vous pouvez gÃ©rer plusieurs organisations."
+            "Utilisez le sélecteur d'organisation pour choisir où travailler.",
+            "Si vous êtes Propriétaire, vous pouvez gérer plusieurs organisations."
           ]
         },
         {
-          "title": "CrÃ©ez votre premiÃ¨re gÃ©ofence",
+          "title": "Créez votre première géofence",
           "bullets": [
-            "Allez Ã  GÃ©ofence et dessinez la zone sur la carte.",
+            "Allez à Géofence et dessinez la zone sur la carte.",
             "Donnez un nom clair (Ferme A, Parcelle 3, Usine 1, etc.).",
-            "Enregistrez et vÃ©rifiez quâ€™elle apparaÃ®t dans la liste."
+            "Enregistrez et vérifiez qu’elle apparaît dans la liste."
           ]
         },
         {
           "title": "Enregistrez votre personnel",
           "bullets": [
-            "Allez Ã  Personnel et crÃ©ez les personnes qui travailleront sur le terrain.",
+            "Allez à Personnel et créez les personnes qui travailleront sur le terrain.",
             "Utilisez un e-mail valide si vous comptez les inviter comme trackers."
           ]
         },
         {
-          "title": "CrÃ©ez des activitÃ©s et des tarifs",
+          "title": "Créez des activités et des tarifs",
           "bullets": [
-            "Allez Ã  ActivitÃ©s et dÃ©finissez les tÃ¢ches (RÃ©colte, Irrigation, Maintenanceâ€¦).",
-            "DÃ©finissez la devise et le tarif horaire pour calculer les coÃ»ts et rapports."
+            "Allez à Activités et définissez les tâches (Récolte, Irrigation, Maintenance…).",
+            "Définissez la devise et le tarif horaire pour calculer les coûts et rapports."
           ]
         },
         {
-          "title": "CrÃ©ez des affectations",
+          "title": "Créez des affectations",
           "bullets": [
-            "Allez Ã  Affectations et liez : Personne + ActivitÃ© + GÃ©ofence.",
-            "DÃ©finissez dÃ©but/fin et statut Active.",
-            "Choisissez une frÃ©quence (minimum 5 minutes)."
+            "Allez à Affectations et liez : Personne + Activité + Géofence.",
+            "Définissez début/fin et statut Active.",
+            "Choisissez une fréquence (minimum 5 minutes)."
           ]
         },
         {
-          "title": "Invitez des trackers (tÃ©lÃ©phones terrain)",
+          "title": "Invitez des trackers (téléphones terrain)",
           "bullets": [
-            "Allez Ã  Inviter un tracker et envoyez une invitation par e-mail.",
-            "Lâ€™invitÃ© peut se connecter avec un Lien magique sur mobile.",
-            "Une fois connectÃ©, le tracker enverra des points GPS selon lâ€™affectation."
+            "Allez à Inviter un tracker et envoyez une invitation par e-mail.",
+            "L’invité peut se connecter avec un Lien magique sur mobile.",
+            "Une fois connecté, le tracker enverra des points GPS selon l’affectation."
           ]
         },
         {
-          "title": "Consultez rapports et tableau des coÃ»ts",
+          "title": "Consultez rapports et tableau des coûts",
           "bullets": [
-            "Ouvrez Rapports pour filtrer par gÃ©ofence/personne/activitÃ© et exporter en CSV.",
-            "Ouvrez Tableau des coÃ»ts pour les KPI et graphiques."
+            "Ouvrez Rapports pour filtrer par géofence/personne/activité et exporter en CSV.",
+            "Ouvrez Tableau des coûts pour les KPI et graphiques."
           ]
         }
       ],
       "tipsTitle": "Bonnes pratiques",
       "bestPractice1Title": "Noms explicites",
-      "bestPractice1Body": "Nommez gÃ©ofences et activitÃ©s de faÃ§on Ã©vidente pour lâ€™Ã©quipe (Ferme, Parcelle, Bloc, TÃ¢che).",
-      "bestPractice2Title": "Commencer petit, puis Ã©tendre",
-      "bestPractice2Body": "Validez le flux complet avec une personne et une gÃ©ofence avant de crÃ©er beaucoup dâ€™enregistrements.",
-      "bestPractice3Title": "Affectations Ã  jour",
-      "bestPractice3Body": "ClÃ´turez ou dÃ©sactivez les anciennes affectations pour que le tracker suive uniquement le plan actuel.",
-      "bestPractice4Title": "Batterie et prÃ©cision",
-      "bestPractice4Body": "Choisissez une frÃ©quence raisonnable. Une frÃ©quence Ã©levÃ©e consomme plus de batterie et de donnÃ©es.",
+      "bestPractice1Body": "Nommez géofences et activités de façon évidente pour l’équipe (Ferme, Parcelle, Bloc, Tâche).",
+      "bestPractice2Title": "Commencer petit, puis étendre",
+      "bestPractice2Body": "Validez le flux complet avec une personne et une géofence avant de créer beaucoup d’enregistrements.",
+      "bestPractice3Title": "Affectations à jour",
+      "bestPractice3Body": "Clôturez ou désactivez les anciennes affectations pour que le tracker suive uniquement le plan actuel.",
+      "bestPractice4Title": "Batterie et précision",
+      "bestPractice4Body": "Choisissez une fréquence raisonnable. Une fréquence élevée consomme plus de batterie et de données.",
       "resultTitle": "Ce que vous devriez voir",
-      "resultIntro": "AprÃ¨s ces Ã©tapes, votre organisation devrait avoir :",
+      "resultIntro": "Après ces étapes, votre organisation devrait avoir :",
       "resultBullets": [
-        "Au moins 1 gÃ©ofence enregistrÃ©e et visible sur la carte",
-        "Personnel enregistrÃ© et prÃªt pour les affectations",
-        "ActivitÃ©s avec devise et tarif horaire configurÃ©s",
-        "Affectations actives (personne + activitÃ© + gÃ©ofence)",
+        "Au moins 1 géofence enregistrée et visible sur la carte",
+        "Personnel enregistré et prêt pour les affectations",
+        "Activités avec devise et tarif horaire configurés",
+        "Affectations actives (personne + activité + géofence)",
         "Points GPS visibles dans Tracker / tableau de suivi",
-        "Rapports et tableau des coÃ»ts prÃªts Ã  exporter et analyser"
+        "Rapports et tableau des coûts prêts à exporter et analyser"
       ]
     },
     "faq": {
-      "title": "Questions frÃ©quentes",
-      "subtitle": "RÃ©ponses rapides sur invitations, rÃ´les, suivi, rapports et confidentialitÃ©.",
+      "title": "Questions fréquentes",
+      "subtitle": "Réponses rapides sur invitations, rôles, suivi, rapports et confidentialité.",
       "seeQuickGuide": "Voir le guide rapide",
       "backToPanel": "Aller au tableau de bord",
       "sections": [
         {
-          "title": "AccÃ¨s et rÃ´les",
+          "title": "Accès et rôles",
           "items": [
             {
-              "q": "Comment obtenir lâ€™accÃ¨s Ã  lâ€™application ?",
-              "a": "Vous devez Ãªtre invitÃ© par un PropriÃ©taire/Admin dâ€™une organisation. Sinon, demandez une invitation."
+              "q": "Comment obtenir l’accès à l’application ?",
+              "a": "Vous devez être invité par un Propriétaire/Admin d’une organisation. Sinon, demandez une invitation."
             },
             {
-              "q": "DiffÃ©rence entre PropriÃ©taire, Administrateur et Tracker ?",
-              "a": "Le PropriÃ©taire gÃ¨re lâ€™organisation et les admins. Lâ€™Administrateur gÃ¨re les donnÃ©es opÃ©rationnelles. Le Tracker est un utilisateur terrain qui envoie des points GPS."
+              "q": "Différence entre Propriétaire, Administrateur et Tracker ?",
+              "a": "Le Propriétaire gère l’organisation et les admins. L’Administrateur gère les données opérationnelles. Le Tracker est un utilisateur terrain qui envoie des points GPS."
             },
             {
-              "q": "Puis-je gÃ©rer plusieurs organisations ?",
-              "a": "Oui. Les PropriÃ©taires peuvent basculer entre organisations via le sÃ©lecteur dâ€™organisation."
+              "q": "Puis-je gérer plusieurs organisations ?",
+              "a": "Oui. Les Propriétaires peuvent basculer entre organisations via le sélecteur d’organisation."
             }
           ]
         },
@@ -828,12 +832,12 @@
           "title": "Suivi (tracking)",
           "items": [
             {
-              "q": "Pourquoi â€œSans donnÃ©es rÃ©centesâ€ dans Tracker ?",
-              "a": "Le tracker peut Ãªtre hors ligne, sans autorisation de localisation, ou sans affectation active. VÃ©rifiez permissions et affectations."
+              "q": "Pourquoi « Sans données récentes » dans Tracker ?",
+              "a": "Le tracker peut être hors ligne, sans autorisation de localisation, ou sans affectation active. Vérifiez permissions et affectations."
             },
             {
-              "q": "Ã€ quelle frÃ©quence la position est-elle envoyÃ©e ?",
-              "a": "La frÃ©quence est dÃ©finie dans lâ€™affectation. Le minimum est 5 minutes pour prÃ©server batterie et donnÃ©es."
+              "q": "À quelle fréquence la position est-elle envoyée ?",
+              "a": "La fréquence est définie dans l’affectation. Le minimum est 5 minutes pour préserver batterie et données."
             },
             {
               "q": "Fonctionne-t-il avec un signal faible ?",
@@ -842,32 +846,32 @@
           ]
         },
         {
-          "title": "CoÃ»ts et rapports",
+          "title": "Coûts et rapports",
           "items": [
             {
-              "q": "Comment les coÃ»ts sont-ils calculÃ©s ?",
-              "a": "Les coÃ»ts sont calculÃ©s Ã  partir des affectations (heures) et du tarif horaire configurÃ© pour chaque activitÃ©."
+              "q": "Comment les coûts sont-ils calculés ?",
+              "a": "Les coûts sont calculés à partir des affectations (heures) et du tarif horaire configuré pour chaque activité."
             },
             {
               "q": "Puis-je exporter vers Excel ?",
-              "a": "Oui. Les rapports sâ€™exportent en CSV, ouvrable dans Excel ou Google Sheets."
+              "a": "Oui. Les rapports s’exportent en CSV, ouvrable dans Excel ou Google Sheets."
             },
             {
-              "q": "Puis-je filtrer par gÃ©ofence, personne, activitÃ© et dates ?",
-              "a": "Oui. Utilisez les filtres dans Rapports et Tableau des coÃ»ts (gÃ©ofence(s), personne(s), activitÃ©(s), pÃ©riode)."
+              "q": "Puis-je filtrer par géofence, personne, activité et dates ?",
+              "a": "Oui. Utilisez les filtres dans Rapports et Tableau des coûts (géofence(s), personne(s), activité(s), période)."
             }
           ]
         },
         {
-          "title": "DonnÃ©es et confidentialitÃ©",
+          "title": "Données et confidentialité",
           "items": [
             {
-              "q": "Quelles donnÃ©es de localisation sont stockÃ©es ?",
-              "a": "Uniquement les points nÃ©cessaires au suivi et Ã  la validation des gÃ©ofences. Lâ€™accÃ¨s est contrÃ´lÃ© par rÃ´les et organisation."
+              "q": "Quelles données de localisation sont stockées ?",
+              "a": "Uniquement les points nécessaires au suivi et à la validation des géofences. L’accès est contrôlé par rôles et organisation."
             },
             {
-              "q": "Un tracker peut-il voir les donnÃ©es dâ€™autres organisations ?",
-              "a": "Non. Les donnÃ©es sont isolÃ©es par organisation (multi-tenant) et protÃ©gÃ©es par des rÃ¨gles de sÃ©curitÃ©."
+              "q": "Un tracker peut-il voir les données d’autres organisations ?",
+              "a": "Non. Les données sont isolées par organisation (multi-tenant) et protégées par des règles de sécurité."
             }
           ]
         }
@@ -875,17 +879,17 @@
     },
     "support": {
       "title": "Support",
-      "subtitle": "Contactez-nous pour le support technique, la facturation ou lâ€™onboarding.",
+      "subtitle": "Contactez-nous pour le support technique, la facturation ou l’onboarding.",
       "emailLabel": "E-mail de support",
-      "notConfigured": "Le contact support nâ€™est pas encore configurÃ©."
+      "notConfigured": "Le contact support n’est pas encore configuré."
     },
     "changelog": {
-      "title": "NouveautÃ©s / Changelog",
-      "subtitle": "Historique des changements, amÃ©liorations et corrections.",
+      "title": "Nouveautés / Changelog",
+      "subtitle": "Historique des changements, améliorations et corrections.",
       "badges": {
-        "feature": "FonctionnalitÃ©",
+        "feature": "Fonctionnalité",
         "fix": "Correction",
-        "improvement": "AmÃ©lioration"
+        "improvement": "Amélioration"
       },
       "items": [
         {
@@ -894,17 +898,17 @@
           "changes": [
             {
               "type": "feature",
-              "title": "Centre dâ€™aide",
+              "title": "Centre d’aide",
               "details": [
                 "Guide rapide, FAQ, support et changelog disponibles."
               ]
             },
             {
               "type": "improvement",
-              "title": "ConfidentialitÃ© & conformitÃ©",
+              "title": "Confidentialité & conformité",
               "details": [
-                "Page publique de Politique de confidentialitÃ©.",
-                "E-mail de support configurable via variables dâ€™environnement."
+                "Page publique de Politique de confidentialité.",
+                "E-mail de support configurable via variables d’environnement."
               ]
             }
           ]
@@ -913,26 +917,26 @@
     }
   },
   "resetPassword": {
-    "title": "RÃ©initialiser le mot de passe",
-    "subtitle": "CrÃ©ez un nouveau mot de passe pour votre compte.",
-    "loading": "PrÃ©paration du lien de rÃ©cupÃ©rationâ€¦",
-    "invalidOrExpired": "Le lien de rÃ©cupÃ©ration est invalide ou expirÃ©. Veuillez en demander un nouveau.",
-    "noSession": "Aucune session valide pour rÃ©initialiser le mot de passe. Veuillez redemander le lien.",
-    "noticeType": "Session dÃ©tectÃ©e. Si ce lien n'Ã©tait pas pour une rÃ©cupÃ©ration, connectez-vous normalement.",
-    "unexpected": "Une erreur s'est produite lors de la prÃ©paration de la rÃ©initialisation.",
+    "title": "Réinitialiser le mot de passe",
+    "subtitle": "Créez un nouveau mot de passe pour votre compte.",
+    "loading": "Préparation du lien de récupération…",
+    "invalidOrExpired": "Le lien de récupération est invalide ou expiré. Veuillez en demander un nouveau.",
+    "noSession": "Aucune session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
+    "noticeType": "Session détectée. Si ce lien n'était pas pour une récupération, connectez-vous normalement.",
+    "unexpected": "Une erreur s'est produite lors de la préparation de la réinitialisation.",
     "newPassword": "Nouveau mot de passe",
-    "newPasswordPlaceholder": "Au moins 8 caractÃ¨res",
+    "newPasswordPlaceholder": "Au moins 8 caractères",
     "confirmPassword": "Confirmer le mot de passe",
-    "confirmPlaceholder": "RÃ©pÃ©tez",
-    "passwordMin": "Le mot de passe doit contenir au moins 8 caractÃ¨res.",
+    "confirmPlaceholder": "Répétez",
+    "passwordMin": "Le mot de passe doit contenir au moins 8 caractères.",
     "passwordMismatch": "Les mots de passe ne correspondent pas.",
     "saveButton": "Enregistrer le nouveau mot de passe",
-    "saving": "Enregistrementâ€¦",
-    "updateFailed": "Impossible de mettre Ã  jour le mot de passe. RÃ©essayez.",
-    "updateUnexpected": "Erreur inattendue lors de la mise Ã  jour du mot de passe.",
-    "success": "Mot de passe mis Ã  jour avec succÃ¨s. Vous pouvez vous connecter maintenant.",
-    "backToLogin": "Retour Ã  la connexion",
-    "backHome": "Aller Ã  la landing",
-    "tip": "Astuce : retournez Ã  /login, saisissez votre e-mail et utilisez Â« Mot de passe oubliÃ© ? Â» pour gÃ©nÃ©rer un nouveau lien."
+    "saving": "Enregistrement…",
+    "updateFailed": "Impossible de mettre à jour le mot de passe. Réessayez.",
+    "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
+    "success": "Mot de passe mis à jour avec succès. Vous pouvez vous connecter maintenant.",
+    "backToLogin": "Retour à la connexion",
+    "backHome": "Aller à la landing",
+    "tip": "Astuce : retournez à /login, saisissez votre e-mail et utilisez « Mot de passe oublié ? » pour générer un nouveau lien."
   }
 }
