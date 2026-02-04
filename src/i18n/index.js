@@ -7,42 +7,46 @@ import en from "./en.json";
 import fr from "./fr.json";
 
 /**
- * i18n UNIFICADO – App Geocercas
+ * i18n BLINDADO – ÚNICA fuente de verdad
  *
- * Prioridad:
+ * Lee (en orden):
  * 1) ?lang=es|en|fr
- * 2) localStorage.app_lang
- * 3) navigator.language
- * 4) fallback: es
+ * 2) localStorage.i18nextLng
+ * 3) localStorage.app_lang (legacy / compat)
+ * 4) navigator.language
+ * 5) fallback: es
  *
- * Objetivos:
- * - Un solo init (evitar i18n duplicado)
- * - Persistencia real
- * - Funciona Web/PWA/TWA
+ * Guarda SIEMPRE:
+ * - localStorage.i18nextLng
+ * - localStorage.app_lang  (compat)
+ * - document.documentElement.lang
  */
 
-const SUPPORTED = ["es", "en", "fr"];
-const STORAGE_KEY = "app_lang";
+export const SUPPORTED = ["es", "en", "fr"];
+const KEY_MAIN = "i18nextLng";
+const KEY_COMPAT = "app_lang";
 
-function normalize2(v) {
+function norm2(v) {
   return String(v || "").toLowerCase().slice(0, 2);
+}
+
+function ensureSupported(code) {
+  const c = norm2(code);
+  return SUPPORTED.includes(c) ? c : null;
 }
 
 function readUrlLang() {
   try {
-    if (typeof window === "undefined") return null;
     const url = new URL(window.location.href);
-    const v = normalize2(url.searchParams.get("lang"));
-    return SUPPORTED.includes(v) ? v : null;
+    return ensureSupported(url.searchParams.get("lang"));
   } catch {
     return null;
   }
 }
 
-function readStoredLang() {
+function readLocal(key) {
   try {
-    const v = normalize2(localStorage.getItem(STORAGE_KEY));
-    return SUPPORTED.includes(v) ? v : null;
+    return ensureSupported(localStorage.getItem(key));
   } catch {
     return null;
   }
@@ -50,30 +54,31 @@ function readStoredLang() {
 
 function readNavigatorLang() {
   try {
-    const v = normalize2(navigator.language);
-    return SUPPORTED.includes(v) ? v : null;
+    return ensureSupported(navigator.language);
   } catch {
     return null;
   }
 }
 
-function setHtmlLang(code) {
-  try {
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = code;
-    }
-  } catch {}
-}
-
 function persistLang(code) {
+  const c = ensureSupported(code) || "es";
   try {
-    localStorage.setItem(STORAGE_KEY, code);
+    localStorage.setItem(KEY_MAIN, c);
+    localStorage.setItem(KEY_COMPAT, c);
   } catch {}
+  try {
+    document.documentElement.lang = c;
+  } catch {}
+  return c;
 }
 
-const initialLang = readUrlLang() || readStoredLang() || readNavigatorLang() || "es";
-persistLang(initialLang);
-setHtmlLang(initialLang);
+const initial = persistLang(
+  readUrlLang() ||
+    readLocal(KEY_MAIN) ||
+    readLocal(KEY_COMPAT) ||
+    readNavigatorLang() ||
+    "es"
+);
 
 i18n.use(initReactI18next).init({
   resources: {
@@ -81,22 +86,30 @@ i18n.use(initReactI18next).init({
     en: { translation: en },
     fr: { translation: fr },
   },
-  lng: initialLang,
+
+  // 🔒 Acepta fr-FR / en-US / es-EC y normaliza
+  supportedLngs: SUPPORTED,
+  nonExplicitSupportedLngs: true,
+  load: "languageOnly",
+
+  lng: initial,
   fallbackLng: "es",
+
   interpolation: { escapeValue: false },
   react: { useSuspense: false },
 
-  // Evita mostrar null o strings vacíos
   returnEmptyString: false,
   returnNull: false,
 });
 
+// Persistencia garantizada
 i18n.on("languageChanged", (lng) => {
-  const code = normalize2(lng) || "es";
-  if (!SUPPORTED.includes(code)) return;
-  persistLang(code);
-  setHtmlLang(code);
+  persistLang(lng);
 });
 
+// (Opcional) expone para debug. Puedes borrarlo luego.
+if (typeof window !== "undefined") {
+  window.__i18n = i18n;
+}
+
 export default i18n;
-export { SUPPORTED, STORAGE_KEY };
