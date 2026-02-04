@@ -18,11 +18,7 @@
     },
     "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
     "createOrganization": "Crear organización",
-    "refreshContext": "Refrescar contexto",
-    "edit": "Editar",
-    "yes": "Sí",
-    "no": "No",
-    "loading": "Cargando…"
+    "refreshContext": "Refrescar contexto"
   },
   "app": {
     "title": "App Geocercas",
@@ -51,7 +47,7 @@
       "dashboardCostos": "Dashboard Costos",
       "tracker": "Tracker",
       "invitarTracker": "Invitar tracker",
-      "admins": "Administrador"
+      "admins": "Administradores"
     }
   },
   "landing": {
@@ -970,24 +966,17 @@
     "backToLogin": "Volver al login"
   },
   "home": {
-    "home": {
-  "open": "Abrir →",
-  "sessionAs": "Sesión iniciada como",
-  "labels": {
-    "email": "Email:",
-    "organization": "Organización:",
-    "role": "Rol:"
-  },
-  "help": {
-    "title": "Centro de ayuda",
-    "quick": "Guía rápida",
-    "quickDesc": "Aprende cómo usar la app paso a paso.",
-       "faq": "Preguntas frecuentes",
-    "faqDesc": "Respuestas a las dudas más comunes.",
-    "support": "Soporte",
-    "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
-    "news": "Novedades",
-    "newsDesc": "Cambios, mejoras y actualizaciones recientes.",
+    "open": "Abrir →",
+    "loadingPermissions": "Resolviendo permisos…",
+    "loginToContinue": "Inicia sesión para continuar.",
+    "goToLogin": "Ir a Login",
+    "welcome": "Bienvenido a App Geocercas",
+    "sessionAs": "Sesión como",
+    "labels": {
+      "email": "Email:",
+      "organization": "Org:",
+      "role": "Rol:"
+    },
     "help": {
       "title": "Centro de ayuda",
       "quick": "Guía rápida",
@@ -999,11 +988,6 @@
       "news": "Novedades",
       "newsDesc": "Cambios, mejoras y actualizaciones recientes."
     },
-    "open": "Abrir →",
-    "loadingPermissions": "Resolviendo permisos…"
-
-    "loginToContinue": "Inicia sesión para continuar.",
-    "goToLogin": "Ir a Login",
     "missingContextTitle": "Sesión iniciada, pero falta contexto",
     "missingContextBody": "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
     "orgNotResolved": "(no resuelta)",
