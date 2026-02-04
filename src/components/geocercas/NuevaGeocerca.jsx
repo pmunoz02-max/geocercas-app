@@ -32,7 +32,7 @@ const USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS = true;
    ✅ Geoman i18n bridge (UNIVERSAL)
    - Geoman NO usa i18next
    - Hay builds que usan L.PM (global) y otros map.pm
-   - Además, la toolbar NO siempre refresca strings ya montados:
+   - La toolbar NO siempre refresca strings ya montados:
      => forzamos REMOUNT con key (pmUiKey)
 =========================== */
 function normalizeLang(code) {
@@ -57,12 +57,6 @@ const PM_LANG = {
       snapping: "Snapping",
       pinning: "Pinning",
       actions: "Actions",
-    },
-    layers: {
-      geofences: "Geofences",
-      showOnMap: "Show on map",
-      deleteSelected: "Delete selected",
-      clearMap: "Clear map",
     },
     tooltips: {
       placeMarker: "Click to place marker",
@@ -114,12 +108,6 @@ const PM_LANG = {
       pinning: "Fijar",
       actions: "Acciones",
     },
-    layers: {
-      geofences: "Geocercas",
-      showOnMap: "Mostrar en mapa",
-      deleteSelected: "Eliminar seleccionadas",
-      clearMap: "Limpiar mapa",
-    },
     tooltips: {
       placeMarker: "Haz clic para colocar un marcador",
       firstVertex: "Haz clic para colocar el primer vértice",
@@ -170,12 +158,6 @@ const PM_LANG = {
       pinning: "Épingler",
       actions: "Actions",
     },
-    layers: {
-      geofences: "Géofences",
-      showOnMap: "Afficher sur la carte", // ✅ FIX: antes estaba "Mostrar en mapa"
-      deleteSelected: "Supprimer sélectionnées",
-      clearMap: "Nettoyer la carte",
-    },
     tooltips: {
       placeMarker: "Cliquez pour placer un marqueur",
       firstVertex: "Cliquez pour placer le premier sommet",
@@ -218,29 +200,21 @@ function applyGeomanLang(map, lang) {
   const code = normalizeLang(lang);
   const dict = PM_LANG[code] || PM_LANG.en;
 
+  // 1) GLOBAL (muchas builds usan esto)
   try {
-    // 1) GLOBAL (muchas builds usan esto)
     if (L?.PM) {
-      if (typeof L.PM.addLang === "function") {
-        L.PM.addLang(code, dict, "en");
-      }
-      if (typeof L.PM.setLang === "function") {
-        L.PM.setLang(code);
-      }
+      if (typeof L.PM.addLang === "function") L.PM.addLang(code, dict, "en");
+      if (typeof L.PM.setLang === "function") L.PM.setLang(code);
     }
   } catch (e) {
     console.warn("[NuevaGeocerca] L.PM setLang failed:", e);
   }
 
+  // 2) MAP (otras builds usan map.pm)
   try {
-    // 2) MAP (otras builds usan map.pm)
     if (map?.pm) {
-      if (typeof map.pm.addLang === "function") {
-        map.pm.addLang(code, dict, "en");
-      }
-      if (typeof map.pm.setLang === "function") {
-        map.pm.setLang(code);
-      }
+      if (typeof map.pm.addLang === "function") map.pm.addLang(code, dict, "en");
+      if (typeof map.pm.setLang === "function") map.pm.setLang(code);
     }
   } catch (e) {
     console.warn("[NuevaGeocerca] map.pm setLang failed:", e);
@@ -281,12 +255,10 @@ function getGeomanLayers(map) {
     return [];
   }
 }
-
 function getLastGeomanLayer(map) {
   const layers = getGeomanLayers(map);
   return layers.length ? layers[layers.length - 1] : null;
 }
-
 function removeAllGeomanLayers(map) {
   const layers = getGeomanLayers(map);
   for (const lyr of layers) {
@@ -354,7 +326,6 @@ function isSoftDeletedName(nombre) {
   const nm = String(nombre || "").trim().toLowerCase();
   return nm.startsWith("deleted_") || nm.startsWith("deleted-") || nm === "deleted";
 }
-
 function filterSoftDeleted(items) {
   return (items || []).filter((g) => !isSoftDeletedName(g?.nombre || g?.name || ""));
 }
@@ -561,7 +532,6 @@ export default function NuevaGeocerca() {
 
   const [geofenceList, setGeofenceList] = useState([]);
   const [selectedNames, setSelectedNames] = useState(() => new Set());
-  const_bt; // (no)
   const [lastSelectedName, setLastSelectedName] = useState(null);
 
   const [cursorLatLng, setCursorLatLng] = useState(null);
@@ -929,8 +899,7 @@ export default function NuevaGeocerca() {
 
   const pointStyle = useMemo(
     () => ({
-      pointToLayer: (_feature, latlng) =>
-        L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
+      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
     }),
     []
   );
@@ -1081,10 +1050,8 @@ export default function NuevaGeocerca() {
             whenCreated={(map) => {
               mapRef.current = map;
 
-              // ✅ aplica lang Geoman al crear mapa
+              // ✅ aplica lang Geoman al crear mapa + reintentos por init tardío
               applyGeomanLang(map, i18n.language);
-
-              // ✅ reintentos por init tardío
               setTimeout(() => applyGeomanLang(map, i18n.language), 0);
               setTimeout(() => applyGeomanLang(map, i18n.language), 200);
             }}
