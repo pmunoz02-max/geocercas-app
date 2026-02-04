@@ -3,7 +3,49 @@ import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import LanguageSwitcher from "../components/LanguageSwitcher.jsx";
+
+function cx(...arr) {
+  return arr.filter(Boolean).join(" ");
+}
+
+function LangButton({ lng, current, onClick }) {
+  const active = current === lng;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(lng)}
+      className={cx(
+        "px-3 py-1.5 rounded-full text-xs font-bold transition",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/70",
+        active
+          ? "bg-emerald-500 text-slate-950"
+          : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10"
+      )}
+      aria-pressed={active}
+    >
+      {lng.toUpperCase()}
+    </button>
+  );
+}
+
+function InlineLanguageSwitcher() {
+  const { i18n } = useTranslation();
+  const current = String(i18n.language || "es").slice(0, 2);
+
+  const setLang = (lng) => {
+    const code = String(lng || "es").toLowerCase().slice(0, 2);
+    if (!["es", "en", "fr"].includes(code)) return;
+    i18n.changeLanguage(code); // persistencia la hace src/i18n/index.js
+  };
+
+  return (
+    <div className="flex items-center gap-1 p-1 rounded-full bg-white/5 border border-white/10">
+      <LangButton lng="es" current={current} onClick={setLang} />
+      <LangButton lng="en" current={current} onClick={setLang} />
+      <LangButton lng="fr" current={current} onClick={setLang} />
+    </div>
+  );
+}
 
 function HelpCard({ badge, title, description, cta, to }) {
   const navigate = useNavigate();
@@ -41,7 +83,6 @@ export default function Inicio() {
 
   const roleLower = useMemo(() => String(role || "").toLowerCase(), [role]);
 
-  // 1) Esperar SOLO el boot auth
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-white/70">
@@ -50,7 +91,6 @@ export default function Inicio() {
     );
   }
 
-  // 2) No autenticado
   if (!isAuthenticated || !user) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center gap-3 text-white/70">
@@ -65,7 +105,6 @@ export default function Inicio() {
     );
   }
 
-  // 3) Contexto incompleto (pero NO spinner infinito)
   if (!roleLower || !currentOrg?.id) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-10">
@@ -74,9 +113,7 @@ export default function Inicio() {
             <h1 className="text-xl font-extrabold text-white">
               {t("inicio.missingContextTitle", { defaultValue: "Logged in, but context is missing" })}
             </h1>
-
-            {/* ✅ Selector visible aunque el header falle */}
-            <LanguageSwitcher />
+            <InlineLanguageSwitcher />
           </div>
 
           <div className="mt-4 text-sm text-white/70 space-y-1">
@@ -107,7 +144,6 @@ export default function Inicio() {
     );
   }
 
-  // 4) HOME OK (Centro de ayuda)
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
       <div className="flex items-start justify-between gap-4">
@@ -122,15 +158,13 @@ export default function Inicio() {
 
           <p className="mt-2 text-white/70">
             {t("inicio.header.subtitle", {
-              defaultValue:
-                "From here you can access instructions, FAQ, support and updates for App Geocercas.",
+              defaultValue: "From here you can access instructions, FAQ, support and updates for App Geocercas.",
             })}
           </p>
         </div>
 
-        {/* ✅ Selector visible siempre */}
         <div className="shrink-0">
-          <LanguageSwitcher />
+          <InlineLanguageSwitcher />
         </div>
       </div>
 
@@ -160,62 +194,30 @@ export default function Inicio() {
           <HelpCard
             badge={t("inicio.cards.instrucciones.badge", { defaultValue: "Quick Guide" })}
             title={t("inicio.cards.instrucciones.title", { defaultValue: "Instructions" })}
-            description={t("inicio.cards.instrucciones.body", {
-              defaultValue: "Step-by-step to set up orgs, geofences, staff, activities and trackers.",
-            })}
+            description={t("inicio.cards.instrucciones.body", { defaultValue: "Step-by-step setup." })}
             cta={t("inicio.cards.instrucciones.cta", { defaultValue: "View instructions →" })}
             to="/help/instructions"
           />
-
           <HelpCard
             badge={t("inicio.cards.faq.badge", { defaultValue: "Help" })}
             title={t("inicio.cards.faq.title", { defaultValue: "FAQ" })}
-            description={t("inicio.cards.faq.body", {
-              defaultValue: "Answers to the most common questions about roles, invitations and tracking.",
-            })}
+            description={t("inicio.cards.faq.body", { defaultValue: "Quick answers." })}
             cta={t("inicio.cards.faq.cta", { defaultValue: "View FAQ →" })}
             to="/help/faq"
           />
-
           <HelpCard
             badge={t("inicio.cards.soporte.badge", { defaultValue: "Support" })}
-            title={t("inicio.cards.soporte.title", { defaultValue: "Contact / Support" })}
-            description={t("inicio.cards.soporte.body", {
-              defaultValue: "Need help? Contact us for technical support or account questions.",
-            })}
+            title={t("inicio.cards.soporte.title", { defaultValue: "Support" })}
+            description={t("inicio.cards.soporte.body", { defaultValue: "Contact support." })}
             cta={t("inicio.cards.soporte.cta", { defaultValue: "Open support →" })}
             to="/help/support"
           />
-
           <HelpCard
             badge={t("inicio.cards.novedades.badge", { defaultValue: "Updates" })}
             title={t("inicio.cards.novedades.title", { defaultValue: "Changelog" })}
-            description={t("inicio.cards.novedades.body", {
-              defaultValue: "See new features, improvements and fixes.",
-            })}
+            description={t("inicio.cards.novedades.body", { defaultValue: "What’s new." })}
             cta={t("inicio.cards.novedades.cta", { defaultValue: "View changelog →" })}
             to="/help/changelog"
-          />
-
-          {/* Opcionales si existen en JSON */}
-          <HelpCard
-            badge={t("inicio.cards.videoDemo.badge", { defaultValue: "Video" })}
-            title={t("inicio.cards.videoDemo.title", { defaultValue: "Demo video" })}
-            description={t("inicio.cards.videoDemo.body", {
-              defaultValue: "Watch a short demo of App Geocercas in real usage.",
-            })}
-            cta={t("inicio.cards.videoDemo.cta", { defaultValue: "Watch →" })}
-            to="/help/changelog"
-          />
-
-          <HelpCard
-            badge={t("inicio.cards.queEs.badge", { defaultValue: "Info" })}
-            title={t("inicio.cards.queEs.title", { defaultValue: "What is App Geocercas?" })}
-            description={t("inicio.cards.queEs.body", {
-              defaultValue: "Learn the vision, use cases and benefits for your organization.",
-            })}
-            cta={t("inicio.cards.queEs.cta", { defaultValue: "Learn more →" })}
-            to="/help/faq"
           />
         </div>
 
