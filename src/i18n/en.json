@@ -19,9 +19,10 @@
       "loading": "Loading…",
       "saving": "Saving…"
     },
+    "orgNamePlaceholder": "Organization name (e.g., Farm A)",
+    "createOrganization": "Create organization",
     "refreshContext": "Retry context"
   },
-
   "auth": {
     "loginRequired": "You must log in.",
     "processing": "Authenticating…",
@@ -30,7 +31,6 @@
     "errorTitle": "Authentication failed",
     "backToLogin": "Back to login"
   },
-
   "app": {
     "title": "App Geocercas",
     "header": {
@@ -64,7 +64,6 @@
       "admins": "Admins"
     }
   },
-
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Personnel control by geofences",
@@ -117,7 +116,6 @@
     "magicLinkSent": "We sent you an access link. Check your email.",
     "magicLinkError": "Could not send the link. Please try again."
   },
-
   "login": {
     "title": "Log in",
     "subtitle": "Access your App Geocercas account",
@@ -163,7 +161,6 @@
     "modeDesc": "If login is correct, the server redirects to /auth/callback with tokens.",
     "back": "Back"
   },
-
   "inicio": {
     "header": {
       "badge": "Help center & resources",
@@ -219,7 +216,6 @@
       "orgIdLabel": "Organization ID:"
     }
   },
-
   "geocercas": {
     "titleNew": "New geofence",
     "subtitleNew": "Draw a geofence on the map and assign it to your personnel or activities.",
@@ -263,7 +259,6 @@
     "deletedCount": "Deleted: {{count}}",
     "savedOk": "Geofence saved successfully."
   },
-
   "personal": {
     "title": "Personnel",
     "orgInfoLabel": "Organization:",
@@ -351,7 +346,6 @@
       "vigente": "Active"
     }
   },
-
   "actividades": {
     "title": "Activities",
     "includeInactive": "Include inactive",
@@ -412,12 +406,13 @@
     "errorToggle": "Could not change activity status.",
     "confirmDelete": "Are you sure you want to delete the activity \"{{name}}\"?"
   },
-
   "asignaciones": {
     "title": "Assignments",
     "orgCurrent": "Current org",
-    "debug": { "source": "Source:", "rows": "Rows" },
-
+    "debug": {
+      "source": "Source:",
+      "rows": "Rows"
+    },
     "filters": {
       "statusLabel": "Status",
       "status": {
@@ -430,7 +425,6 @@
       "refresh": "Refresh",
       "refreshLoading": "Refreshing…"
     },
-
     "form": {
       "selectTracker": "Select tracker",
       "selectGeofence": "Select geofence",
@@ -466,16 +460,16 @@
         "saving": "Saving…"
       }
     },
-
-    "status": { "active": "Active", "inactive": "Inactive" },
-
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
     "actions": {
       "activate": "Activate",
       "deactivate": "Deactivate",
       "edit": "Edit",
       "delete": "Delete"
     },
-
     "banner": {
       "saved": "Assignment saved.",
       "activated": "Assignment activated.",
@@ -484,7 +478,6 @@
       "updated": "Assignment updated.",
       "deleted": "Assignment deleted."
     },
-
     "messages": {
       "selectTrackerAndGeofence": "Select tracker and geofence.",
       "trackerMissingUserId": "Tracker has no user_id.",
@@ -509,7 +502,6 @@
       "noPersonal": "There is no active personnel in this organization. Create or reactivate at least one person.",
       "noActivities": "There are no activities created. Create at least one activity to assign."
     },
-
     "table": {
       "title": "Saved assignments",
       "empty": "There are no assignments to show.",
@@ -527,21 +519,24 @@
       "showing": "Showing {{shown}} of {{total}}."
     }
   },
-
   "reportes": {
     "title": "Cost reports",
     "headerSubtitle": "View and export costs by person, activity, and geofence.",
+    "currentOrg": "Current organization:",
     "noAccessBody": "You don’t have permission to view cost reports. This module is available only for owners and admins.",
     "loadingReport": "Loading report…",
+    "loadingFilters": "Loading…",
     "filtersTitle": "Filters",
     "filtersFrom": "From",
     "filtersTo": "To",
     "filtersPerson": "Person",
     "filtersActivity": "Activity",
     "filtersGeofence": "Geofence",
+    "filtersAsignacion": "Assignments",
     "filtersAll": "All",
     "filtersClear": "Clear filters",
     "filtersApply": "Apply filters",
+    "multiTip": "Tip: Ctrl/Command to select multiple.",
     "summaryTotalHoursLabel": "Total hours",
     "summaryTotalHoursHelp": "Sum of hours of all assignments in the selected range.",
     "summaryTotalCostLabel": "Total cost",
@@ -551,12 +546,20 @@
     "tableTitle": "Cost details",
     "tableExportHelp": "Export the current details as a CSV file.",
     "tableExportButton": "Export CSV",
+    "colDia": "Day",
     "colPersona": "Person",
+    "colEmail": "Email",
     "colGeocerca": "Geofence",
     "colActividad": "Activity",
+    "colAsignacion": "Assignment",
     "colInicio": "Start",
     "colFin": "End",
+    "colEntrada": "Check-in",
+    "colSalida": "Check-out",
     "colHoras": "Hours",
+    "colMarcajes": "Checkpoints",
+    "colDentro": "Inside",
+    "colDist": "Dist (m)",
     "colTarifa": "Rate/hour",
     "colCosto": "Cost",
     "colMoneda": "Currency",
@@ -578,13 +581,14 @@
     "errorViewMissing": "View v_costos_detalle has not been created in Supabase yet.",
     "errorLoadReport": "Error loading the cost report.",
     "errorLabel": "Error:",
+    "errorMissingAuth": "Missing authentication.",
+    "errorMissingOrg": "Could not determine the current organization.",
     "exportNoData": "No data to export.",
     "tableEmpty": "No records for the selected filters.",
     "personNoName": "Person without name",
     "geofenceNoName": "Geofence without name",
     "activityNoName": "Activity without name"
   },
-
   "dashboard": {
     "title": "Costs dashboard",
     "subtitle": "View aggregated costs by person, activity, and geofence.",
@@ -608,7 +612,6 @@
     },
     "errorLoad": "Error loading the costs dashboard."
   },
-
   "dashboardCostos": {
     "title": "Costs dashboard",
     "subtitle": "View KPIs and cost charts by person, activity, and geofence.",
@@ -658,7 +661,6 @@
     "colRegistros": "Records",
     "tableEmpty": "No data to display"
   },
-
   "tracker": {
     "title": "GPS Tracker",
     "subtitle": "View in real time the location of trackers inside your geofences.",
@@ -688,7 +690,6 @@
     },
     "errorLoad": "Error loading tracker positions."
   },
-
   "trackerDashboard": {
     "title": "Real-time Tracking Dashboard",
     "subtitle": "Points update automatically. The send frequency is defined by the administrator.",
@@ -732,7 +733,6 @@
       "checkConsole": "Check the console if it persists."
     }
   },
-
   "inviteTracker": {
     "orgFallback": "your organization",
     "title": "Invite tracker",
@@ -763,7 +763,6 @@
       "unexpectedError": "Unexpected error processing the invitation."
     }
   },
-
   "admins": {
     "title": "Admins",
     "subtitle": "Manage admins of your organization and their roles.",
@@ -798,7 +797,6 @@
       "remove": "Could not remove the admin."
     }
   },
-
   "help": {
     "common": {
       "breadcrumb": "Help Center",
@@ -832,7 +830,6 @@
       "notConfigured": "Support contact is not configured yet."
     }
   },
-
   "home": {
     "open": "Open →",
     "loadingPermissions": "Resolving permissions…",
@@ -862,7 +859,6 @@
     "roleEmpty": "(empty)",
     "retry": "Retry"
   },
-
   "resetPassword": {
     "title": "Reset password",
     "subtitle": "Create a new password for your account.",
@@ -886,7 +882,6 @@
     "backHome": "Go to landing",
     "tip": "Tip: go back to /login, enter your email and use “Forgot your password?” to generate a new link."
   },
-
   "authInvite": {
     "title": "You’ve been invited",
     "processing": "Validating invitation…",

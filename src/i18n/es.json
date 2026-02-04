@@ -14,7 +14,10 @@
       "back": "Volver",
       "yes": "Sí",
       "no": "No",
-      "loading": "Cargando…"
+      "loading": "Cargando…",
+      "saving": "Guardando…",
+      "refresh": "Recargar",
+      "clear": "Limpiar"
     },
     "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
     "createOrganization": "Crear organización",
@@ -339,7 +342,10 @@
   "asignaciones": {
     "title": "Asignaciones",
     "orgCurrent": "Organización actual",
-    "debug": { "source": "Fuente:", "rows": "Filas" },
+    "debug": {
+      "source": "Fuente:",
+      "rows": "Filas"
+    },
     "filters": {
       "statusLabel": "Estado",
       "status": {
@@ -387,7 +393,10 @@
         "saving": "Guardando…"
       }
     },
-    "status": { "active": "Activa", "inactive": "Inactiva" },
+    "status": {
+      "active": "Activa",
+      "inactive": "Inactiva"
+    },
     "actions": {
       "activate": "Activar",
       "deactivate": "Desactivar",
@@ -446,17 +455,21 @@
   "reportes": {
     "title": "Reportes de costos",
     "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
+    "currentOrg": "Organización actual:",
     "noAccessBody": "No tienes permisos para visualizar los reportes de costos. Este módulo está disponible solo para propietarios y administradores.",
     "loadingReport": "Cargando reporte…",
+    "loadingFilters": "Cargando…",
     "filtersTitle": "Filtros",
     "filtersFrom": "Desde",
     "filtersTo": "Hasta",
     "filtersPerson": "Persona",
     "filtersActivity": "Actividad",
     "filtersGeofence": "Geocerca",
+    "filtersAsignacion": "Asignaciones",
     "filtersAll": "Todos",
     "filtersClear": "Limpiar filtros",
     "filtersApply": "Aplicar filtros",
+    "multiTip": "Tip: Ctrl/Command para seleccionar múltiples.",
     "summaryTotalHoursLabel": "Horas totales",
     "summaryTotalHoursHelp": "Suma de las horas de todas las asignaciones en el rango seleccionado.",
     "summaryTotalCostLabel": "Costo total",
@@ -466,12 +479,20 @@
     "tableTitle": "Detalle de costos",
     "tableExportHelp": "Exporta el detalle actual como archivo CSV.",
     "tableExportButton": "Exportar CSV",
+    "colDia": "Día",
     "colPersona": "Persona",
+    "colEmail": "Email",
     "colGeocerca": "Geocerca",
     "colActividad": "Actividad",
+    "colAsignacion": "Asignación",
     "colInicio": "Inicio",
     "colFin": "Fin",
+    "colEntrada": "Entrada",
+    "colSalida": "Salida",
     "colHoras": "Horas",
+    "colMarcajes": "Marcajes",
+    "colDentro": "Dentro",
+    "colDist": "Dist (m)",
     "colTarifa": "Tarifa/hora",
     "colCosto": "Costo",
     "colMoneda": "Moneda",
@@ -493,8 +514,11 @@
     "errorViewMissing": "La vista v_costos_detalle aún no está creada en Supabase.",
     "errorLoadReport": "Error al cargar el reporte de costos.",
     "errorLabel": "Error:",
+    "errorMissingAuth": "Falta autenticación.",
+    "errorMissingOrg": "No se pudo determinar la organización actual.",
     "exportNoData": "No hay datos para exportar.",
     "tableEmpty": "No hay registros para los filtros seleccionados.",
+    "asignacion": "asignación",
     "personNoName": "Persona sin nombre",
     "geofenceNoName": "Geocerca sin nombre",
     "activityNoName": "Actividad sin nombre",
