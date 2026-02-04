@@ -1,78 +1,15 @@
 // src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
-
-// ✅ i18n local (universal, sin hooks externos)
-import es from "../i18n/es.json";
-import en from "../i18n/en.json";
-import fr from "../i18n/fr.json";
-
-function deepGet(obj, path) {
-  if (!obj || !path) return undefined;
-  return path.split(".").reduce((acc, k) => (acc && acc[k] !== undefined ? acc[k] : undefined), obj);
-}
-
-function formatTemplate(str, vars) {
-  if (!str || typeof str !== "string") return str;
-  return str.replace(/\{\{(\w+)\}\}/g, (_, k) => (vars && vars[k] !== undefined ? String(vars[k]) : ""));
-}
-
-function getLang() {
-  const candidates = [
-    localStorage.getItem("lang"),
-    localStorage.getItem("language"),
-    localStorage.getItem("i18n_lang"),
-    document.documentElement.getAttribute("lang"),
-  ].filter(Boolean);
-
-  const v = String(candidates[0] || "es").toLowerCase().slice(0, 2);
-  return v === "en" || v === "fr" ? v : "es";
-}
-
-function useLocalI18n() {
-  const [lang, setLang] = useState(getLang());
-
-  useEffect(() => {
-    const onStorage = (e) => {
-      if (["lang", "language", "i18n_lang"].includes(e.key)) setLang(getLang());
-    };
-    window.addEventListener("storage", onStorage);
-
-    // fallback: si el switch de idioma no dispara storage, refrescamos al enfocar
-    const onFocus = () => setLang(getLang());
-    window.addEventListener("focus", onFocus);
-
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
-
-  const dict = useMemo(() => {
-    if (lang === "en") return en;
-    if (lang === "fr") return fr;
-    return es;
-  }, [lang]);
-
-  const t = (key, vars) => {
-    const value = deepGet(dict, key);
-    if (value === undefined) return key; // fallback visible
-    return formatTemplate(value, vars);
-  };
-
-  return { lang, t };
-}
 
 function toCsvValue(v) {
   const s = v === null || v === undefined ? "" : String(v);
   return `"${s.replaceAll('"', '""')}"`;
 }
 
-function exportRowsToCSV(rows, filenameBase = "reportes", t) {
-  if (!rows?.length) {
-    alert(t ? t("reportes.exportNoData") : "No hay datos para exportar.");
-    return;
-  }
+function exportRowsToCSV(rows, filenameBase = "reporte") {
+  if (!rows?.length) return;
   const columns = Object.keys(rows[0]);
   const header = columns.map(toCsvValue).join(",");
   const lines = rows.map((r) => columns.map((k) => toCsvValue(r[k])).join(","));
@@ -106,6 +43,7 @@ function normalizeGeocercas(arr) {
       .filter((g) => g?.id)
   );
 }
+
 function normalizePersonas(arr) {
   return dedupeById(
     (Array.isArray(arr) ? arr : [])
@@ -113,6 +51,7 @@ function normalizePersonas(arr) {
       .filter((p) => p?.id)
   );
 }
+
 function normalizeActivities(arr) {
   return dedupeById(
     (Array.isArray(arr) ? arr : [])
@@ -120,13 +59,14 @@ function normalizeActivities(arr) {
       .filter((a) => a?.id)
   );
 }
+
 function normalizeAsignaciones(arr) {
   return dedupeById((Array.isArray(arr) ? arr : []).filter((a) => a?.id));
 }
 
 export default function Reports() {
+  const { t } = useTranslation();
   const { loading, isAuthenticated, currentOrg, contextLoading, session } = useAuth();
-  const { t } = useLocalI18n();
 
   const orgId = currentOrg?.id || null;
   const token = session?.access_token || null;
@@ -153,8 +93,8 @@ export default function Reports() {
   );
 
   async function apiGet(url) {
-    if (!token) throw new Error("Missing authentication");
-    if (!orgId) throw new Error("Cannot resolve current organization");
+    if (!token) throw new Error(t("reportes.errorMissingAuth", { defaultValue: "Missing authentication" }));
+    if (!orgId) throw new Error(t("reportes.errorMissingOrg", { defaultValue: "Cannot resolve current organization" }));
 
     const resp = await fetch(url, {
       method: "GET",
@@ -183,6 +123,7 @@ export default function Reports() {
     try {
       const json = await apiGet("/api/reportes?action=filters");
       const data = json?.data || {};
+
       const geocercas = normalizeGeocercas(data.geocercas);
       const personas = normalizePersonas(data.personas);
       const activities = normalizeActivities(data.activities);
@@ -202,7 +143,7 @@ export default function Reports() {
       setSelectedAsignacionIds((prev) => prev.filter((id) => asSet.has(String(id))));
     } catch (e) {
       console.error("[Reports] loadFilters:", e);
-      setErrorMsg(e?.message || t("reportes.errorLoadFilters"));
+      setErrorMsg(e?.message || t("reportes.errorLoadFilters", { defaultValue: "Error cargando filtros." }));
       setFilters({ geocercas: [], personas: [], activities: [], asignaciones: [] });
     } finally {
       setLoadingFilters(false);
@@ -215,8 +156,14 @@ export default function Reports() {
     setLoadingReport(true);
 
     try {
-      if (!canRun) throw new Error(!token ? "Missing authentication" : "Cannot resolve current organization");
-      if (start && end && start > end) throw new Error(t("reportes.errorRangeInvalid"));
+      if (!canRun) throw new Error(!token ? t("reportes.errorMissingAuth") : t("reportes.errorMissingOrg"));
+      if (start && end && start > end) {
+        throw new Error(
+          t("reportes.errorRangeInvalid", {
+            defaultValue: 'La fecha "Desde" no puede ser mayor que la fecha "Hasta".'
+          })
+        );
+      }
 
       const params = new URLSearchParams();
       params.set("action", "report");
@@ -233,7 +180,7 @@ export default function Reports() {
       setRows(Array.isArray(json?.data) ? json.data : []);
     } catch (e) {
       console.error("[Reports] loadReport:", e);
-      setErrorMsg(e?.message || t("reportes.errorLoadReport"));
+      setErrorMsg(e?.message || t("reportes.errorLoadReport", { defaultValue: "Error generando reporte." }));
     } finally {
       setLoadingReport(false);
     }
@@ -250,7 +197,7 @@ export default function Reports() {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
-          {t("personal.bannerLoadingSession")}
+          {t("common.actions.loading", { defaultValue: "Cargando…" })}
         </div>
       </div>
     );
@@ -260,7 +207,7 @@ export default function Reports() {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {t("personal.bannerLoginRequired")}
+          {t("auth.loginRequired", { defaultValue: "No hay sesión activa. Inicia sesión nuevamente." })}
         </div>
       </div>
     );
@@ -270,7 +217,7 @@ export default function Reports() {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
-          {t("home.loadingPermissions")}
+          {t("home.missingContextBody", { defaultValue: "Cargando organización…" })}
         </div>
       </div>
     );
@@ -279,40 +226,30 @@ export default function Reports() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">{t("reportes.title")}</h1>
-        <p className="text-xs text-gray-500">{t("reportes.headerSubtitle")}</p>
+        <h1 className="text-2xl font-bold">{t("reportes.title", { defaultValue: "Reportes de costos" })}</h1>
+        <p className="text-sm text-slate-600">
+          {t("reportes.headerSubtitle", { defaultValue: "Consulta y exporta los costos por persona, actividad y geocerca." })}
+        </p>
         <p className="text-xs text-gray-500">
-          {t("geocercas.currentOrgLabel")}{" "}
-          <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+          {t("reportes.currentOrg", { defaultValue: "Organización actual:" })}{" "}
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
         </p>
       </div>
 
       {errorMsg && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span className="font-semibold">{t("reportes.errorLabel")}</span> {errorMsg}
-        </div>
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMsg}</div>
       )}
 
       <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersFrom")}</label>
-            <input
-              type="date"
-              value={start}
-              onChange={(e) => setStart(e.target.value)}
-              className="block border rounded-lg px-2 py-1 mt-1"
-            />
+            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersFrom", { defaultValue: "Desde" })}</label>
+            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="block border rounded-lg px-2 py-1 mt-1" />
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersTo")}</label>
-            <input
-              type="date"
-              value={end}
-              onChange={(e) => setEnd(e.target.value)}
-              className="block border rounded-lg px-2 py-1 mt-1"
-            />
+            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersTo", { defaultValue: "Hasta" })}</label>
+            <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="block border rounded-lg px-2 py-1 mt-1" />
           </div>
 
           <button
@@ -320,15 +257,17 @@ export default function Reports() {
             disabled={loadingReport}
             className="px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-60"
           >
-            {loadingReport ? t("reportes.loadingReport") : t("reportes.filtersApply")}
+            {loadingReport
+              ? t("reportes.generating", { defaultValue: "Generando…" })
+              : t("reportes.filtersApply", { defaultValue: "Aplicar filtros" })}
           </button>
 
           <button
-            onClick={() => exportRowsToCSV(rows, "reportes", t)}
+            onClick={() => exportRowsToCSV(rows, "reportes")}
             disabled={!rows.length}
             className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
           >
-            {t("reportes.tableExportButton")}
+            {t("reportes.tableExportButton", { defaultValue: "Exportar CSV" })}
           </button>
 
           <button
@@ -336,13 +275,15 @@ export default function Reports() {
             disabled={loadingFilters}
             className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
           >
-            {loadingFilters ? t("geocercas.loadingDataset") : t("common.actions.refresh")}
+            {loadingFilters
+              ? t("common.actions.loading", { defaultValue: "Cargando…" })
+              : t("reportes.refreshFilters", { defaultValue: "Recargar filtros" })}
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersGeofence")} (multi)</label>
+            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersGeofence", { defaultValue: "Geocerca (multi)" })}</label>
             <select
               multiple
               value={selectedGeocercaIds}
@@ -351,16 +292,14 @@ export default function Reports() {
               disabled={loadingFilters}
             >
               {filters.geocercas.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nombre}
-                </option>
+                <option key={g.id} value={g.id}>{g.nombre}</option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">Tip: Ctrl/Command para seleccionar múltiples.</p>
+            <p className="text-[11px] text-gray-400 mt-1">{t("reportes.multiTip", { defaultValue: "Tip: Ctrl/Command para seleccionar múltiples." })}</p>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersPerson")} (multi)</label>
+            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersPerson", { defaultValue: "Persona (multi)" })}</label>
             <select
               multiple
               value={selectedPersonalIds}
@@ -369,19 +308,14 @@ export default function Reports() {
               disabled={loadingFilters}
             >
               {filters.personas.map((p) => {
-                const label =
-                  `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id || t("reportes.personNoName");
-                return (
-                  <option key={p.id} value={p.id}>
-                    {label}
-                  </option>
-                );
+                const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
+                return <option key={p.id} value={p.id}>{label}</option>;
               })}
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersActivity")} (multi)</label>
+            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersActivity", { defaultValue: "Actividad (multi)" })}</label>
             <select
               multiple
               value={selectedActivityIds}
@@ -391,15 +325,14 @@ export default function Reports() {
             >
               {filters.activities.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
-                  {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
+                  {a.name}{a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("asignaciones.title")} (multi)</label>
+            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersAsignacion", { defaultValue: "Asignaciones (multi)" })}</label>
             <select
               multiple
               value={selectedAsignacionIds}
@@ -409,7 +342,7 @@ export default function Reports() {
             >
               {filters.asignaciones.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {(a.status || a.estado || "asignación").toString()} — {String(a.id).slice(0, 8)}
+                  {(a.status || a.estado || t("reportes.asignacion", { defaultValue: "asignación" }))} — {String(a.id).slice(0, 8)}
                 </option>
               ))}
             </select>
@@ -419,25 +352,25 @@ export default function Reports() {
 
       <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         {loadingReport ? (
-          <p className="p-4 text-sm text-slate-500">{t("reportes.loadingReport")}</p>
+          <p className="p-4 text-sm text-slate-500">{t("common.actions.loading", { defaultValue: "Cargando…" })}</p>
         ) : rows.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">{t("reportes.tableEmpty")}</p>
+          <p className="p-4 text-sm text-slate-500">{t("reportes.tableEmpty", { defaultValue: "No hay datos con los filtros seleccionados." })}</p>
         ) : (
           <table className="min-w-full text-sm">
             <thead className="bg-slate-100 text-slate-700">
               <tr>
-                <th className="p-2 text-left">{t("dashboardCostos.dimensionFecha")}</th>
-                <th className="p-2 text-left">{t("reportes.colPersona")}</th>
-                <th className="p-2 text-left">Email</th>
-                <th className="p-2 text-left">{t("reportes.colGeocerca")}</th>
-                <th className="p-2 text-left">{t("reportes.colActividad")}</th>
-                <th className="p-2 text-left">Asignación</th>
-                <th className="p-2 text-left">{t("reportes.colInicio")}</th>
-                <th className="p-2 text-left">{t("reportes.colFin")}</th>
-                <th className="p-2 text-center">Marcajes</th>
-                <th className="p-2 text-center">Dentro</th>
-                <th className="p-2 text-center">Dist (m)</th>
-                <th className="p-2 text-left">{t("reportes.colTarifa")}</th>
+                <th className="p-2 text-left">{t("reportes.colDia", { defaultValue: "Día" })}</th>
+                <th className="p-2 text-left">{t("reportes.colPersona", { defaultValue: "Persona" })}</th>
+                <th className="p-2 text-left">{t("reportes.colEmail", { defaultValue: "Email" })}</th>
+                <th className="p-2 text-left">{t("reportes.colGeocerca", { defaultValue: "Geocerca" })}</th>
+                <th className="p-2 text-left">{t("reportes.colActividad", { defaultValue: "Actividad" })}</th>
+                <th className="p-2 text-left">{t("reportes.colAsignacion", { defaultValue: "Asignación" })}</th>
+                <th className="p-2 text-left">{t("reportes.colEntrada", { defaultValue: "Entrada" })}</th>
+                <th className="p-2 text-left">{t("reportes.colSalida", { defaultValue: "Salida" })}</th>
+                <th className="p-2 text-center">{t("reportes.colMarcajes", { defaultValue: "Marcajes" })}</th>
+                <th className="p-2 text-center">{t("reportes.colDentro", { defaultValue: "Dentro" })}</th>
+                <th className="p-2 text-center">{t("reportes.colDist", { defaultValue: "Dist (m)" })}</th>
+                <th className="p-2 text-left">{t("reportes.colTarifa", { defaultValue: "Tarifa" })}</th>
               </tr>
             </thead>
             <tbody>
@@ -447,10 +380,10 @@ export default function Reports() {
                   className={`border-t hover:bg-slate-50 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
                 >
                   <td className="p-2">{r.work_day || "—"}</td>
-                  <td className="p-2">{r.personal_nombre || t("reportes.personNoName")}</td>
+                  <td className="p-2">{r.personal_nombre || "—"}</td>
                   <td className="p-2">{r.email || "—"}</td>
-                  <td className="p-2">{r.geofence_name || t("reportes.geofenceNoName")}</td>
-                  <td className="p-2">{r.activity_name || t("reportes.activityNoName")}</td>
+                  <td className="p-2">{r.geofence_name || "—"}</td>
+                  <td className="p-2">{r.activity_name || "—"}</td>
                   <td className="p-2">
                     {r.asignacion_id ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})` : "—"}
                   </td>
@@ -459,9 +392,7 @@ export default function Reports() {
                   <td className="p-2 text-center">{r.total_marks ?? "—"}</td>
                   <td className="p-2 text-center">{r.inside_count ?? "—"}</td>
                   <td className="p-2 text-center">{r.avg_distance_m ?? "—"}</td>
-                  <td className="p-2">
-                    {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
-                  </td>
+                  <td className="p-2">{r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}</td>
                 </tr>
               ))}
             </tbody>
