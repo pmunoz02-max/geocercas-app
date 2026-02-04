@@ -172,7 +172,7 @@ const PM_LANG = {
     },
     layers: {
       geofences: "Géofences",
-      showOnMap: "Mostrar en mapa", // (si quieres 100% FR: "Afficher sur la carte")
+      showOnMap: "Afficher sur la carte", // ✅ FIX: antes estaba "Mostrar en mapa"
       deleteSelected: "Supprimer sélectionnées",
       clearMap: "Nettoyer la carte",
     },
@@ -216,7 +216,6 @@ const PM_LANG = {
 
 function applyGeomanLang(map, lang) {
   const code = normalizeLang(lang);
-
   const dict = PM_LANG[code] || PM_LANG.en;
 
   try {
@@ -413,7 +412,6 @@ async function listGeofencesUnified({ orgId }) {
       .filter((g) => !!g.nombre);
 
     const apiClean = mergeUniqueByNombre(filterSoftDeleted(apiList));
-
     if (USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS) return apiClean;
 
     const local = readLocalGeocercas(orgId);
@@ -563,6 +561,7 @@ export default function NuevaGeocerca() {
 
   const [geofenceList, setGeofenceList] = useState([]);
   const [selectedNames, setSelectedNames] = useState(() => new Set());
+  const_bt; // (no)
   const [lastSelectedName, setLastSelectedName] = useState(null);
 
   const [cursorLatLng, setCursorLatLng] = useState(null);

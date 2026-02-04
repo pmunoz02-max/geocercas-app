@@ -197,7 +197,8 @@
     "cardNewBody": "Créez une nouvelle géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
     "cardNewCta": "Aller à Nouvelle géofence →",
     "cardListTitle": "Liste des géofences",
-    "cardListBody": "Bientôt, vous verrez ici la liste des géofences existantes et leurs détails. Pour l’instant, utilisez l’option Nouvelle géofence pour créer et modifier."
+    "cardListBody": "Bientôt, vous verrez ici la liste des géofences existantes et leurs détails. Pour l’instant, utilisez l’option Nouvelle géofence pour créer et modifier.",
+    "buttonShowOnMap": "Afficher sur la carte"
   },
   "personal": {
     "title": "Personnel",
@@ -434,7 +435,7 @@
     "csvHeaderFin": "Fin",
     "csvHeaderPersona": "Personne",
     "csvHeaderActividad": "Activité",
-    "csvHeaderGeocerca": "Géofence",
+    "csvHeaderGeocerca": "Géocerca",
     "csvHeaderHoras": "Heures",
     "csvHeaderTarifa": "Tarif_heure",
     "csvHeaderTotal": "Coût_total",
