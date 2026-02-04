@@ -29,9 +29,11 @@ const CSV_URL = "/data/mapa_corto_214.csv";
 const USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS = true;
 
 /* ===========================
-   ✅ Geoman i18n bridge
+   ✅ Geoman i18n bridge (UNIVERSAL)
    - Geoman NO usa i18next
-   - Hay que setLang() + addLang()
+   - Hay builds que usan L.PM (global) y otros map.pm
+   - Además, la toolbar NO siempre refresca strings ya montados:
+     => forzamos REMOUNT con key (pmUiKey)
 =========================== */
 function normalizeLang(code) {
   const v = String(code || "").toLowerCase().slice(0, 2);
@@ -39,11 +41,29 @@ function normalizeLang(code) {
 }
 
 /**
- * Diccionarios mínimos (puedes ampliar si aparecen textos nuevos)
- * Geoman usa un "lang" interno con frases UI.
+ * Diccionarios más completos.
+ * Nota: Geoman varía keys entre versiones; incluir más keys NO rompe.
  */
 const PM_LANG = {
   en: {
+    name: "English",
+    geoman: {
+      draw: "Draw",
+      edit: "Edit",
+      drag: "Drag",
+      cut: "Cut",
+      removal: "Remove",
+      rotate: "Rotate",
+      snapping: "Snapping",
+      pinning: "Pinning",
+      actions: "Actions",
+    },
+    layers: {
+      geofences: "Geofences",
+      showOnMap: "Show on map",
+      deleteSelected: "Delete selected",
+      clearMap: "Clear map",
+    },
     tooltips: {
       placeMarker: "Click to place marker",
       firstVertex: "Click to place first vertex",
@@ -67,13 +87,39 @@ const PM_LANG = {
       drawPolygonButton: "Draw polygon",
       drawRectangleButton: "Draw rectangle",
       drawCircleButton: "Draw circle",
+      drawMarkerButton: "Draw marker",
+      drawCircleMarkerButton: "Draw circle marker",
+      drawPolylineButton: "Draw polyline",
+      drawTextButton: "Draw text",
       editButton: "Edit layers",
       dragButton: "Drag layers",
+      cutButton: "Cut layers",
       deleteButton: "Delete layers",
+      rotateButton: "Rotate layers",
+      snappingButton: "Snapping",
+      pinningButton: "Pinning",
     },
   },
 
   es: {
+    name: "Español",
+    geoman: {
+      draw: "Dibujar",
+      edit: "Editar",
+      drag: "Mover",
+      cut: "Cortar",
+      removal: "Eliminar",
+      rotate: "Rotar",
+      snapping: "Ajuste",
+      pinning: "Fijar",
+      actions: "Acciones",
+    },
+    layers: {
+      geofences: "Geocercas",
+      showOnMap: "Mostrar en mapa",
+      deleteSelected: "Eliminar seleccionadas",
+      clearMap: "Limpiar mapa",
+    },
     tooltips: {
       placeMarker: "Haz clic para colocar un marcador",
       firstVertex: "Haz clic para colocar el primer vértice",
@@ -97,13 +143,39 @@ const PM_LANG = {
       drawPolygonButton: "Dibujar polígono",
       drawRectangleButton: "Dibujar rectángulo",
       drawCircleButton: "Dibujar círculo",
-      editButton: "Editar capas",
-      dragButton: "Mover capas",
-      deleteButton: "Eliminar capas",
+      drawMarkerButton: "Poner marcador",
+      drawCircleMarkerButton: "Marcador circular",
+      drawPolylineButton: "Dibujar línea",
+      drawTextButton: "Texto",
+      editButton: "Editar",
+      dragButton: "Mover",
+      cutButton: "Cortar",
+      deleteButton: "Eliminar",
+      rotateButton: "Rotar",
+      snappingButton: "Ajuste",
+      pinningButton: "Fijar",
     },
   },
 
   fr: {
+    name: "Français",
+    geoman: {
+      draw: "Dessiner",
+      edit: "Modifier",
+      drag: "Déplacer",
+      cut: "Découper",
+      removal: "Supprimer",
+      rotate: "Rotation",
+      snapping: "Accrochage",
+      pinning: "Épingler",
+      actions: "Actions",
+    },
+    layers: {
+      geofences: "Géofences",
+      showOnMap: "Mostrar en mapa", // (si quieres 100% FR: "Afficher sur la carte")
+      deleteSelected: "Supprimer sélectionnées",
+      clearMap: "Nettoyer la carte",
+    },
     tooltips: {
       placeMarker: "Cliquez pour placer un marqueur",
       firstVertex: "Cliquez pour placer le premier sommet",
@@ -127,29 +199,52 @@ const PM_LANG = {
       drawPolygonButton: "Dessiner un polygone",
       drawRectangleButton: "Dessiner un rectangle",
       drawCircleButton: "Dessiner un cercle",
+      drawMarkerButton: "Placer un marqueur",
+      drawCircleMarkerButton: "Marqueur circulaire",
+      drawPolylineButton: "Dessiner une ligne",
+      drawTextButton: "Texte",
       editButton: "Modifier",
       dragButton: "Déplacer",
+      cutButton: "Découper",
       deleteButton: "Supprimer",
+      rotateButton: "Rotation",
+      snappingButton: "Accrochage",
+      pinningButton: "Épingler",
     },
   },
 };
 
 function applyGeomanLang(map, lang) {
+  const code = normalizeLang(lang);
+
+  const dict = PM_LANG[code] || PM_LANG.en;
+
   try {
-    if (!map?.pm) return;
-    const code = normalizeLang(lang);
-
-    // registra diccionario si falta
-    if (typeof map.pm.addLang === "function") {
-      map.pm.addLang(code, PM_LANG[code] || PM_LANG.en, "en");
-    }
-
-    // aplica idioma
-    if (typeof map.pm.setLang === "function") {
-      map.pm.setLang(code);
+    // 1) GLOBAL (muchas builds usan esto)
+    if (L?.PM) {
+      if (typeof L.PM.addLang === "function") {
+        L.PM.addLang(code, dict, "en");
+      }
+      if (typeof L.PM.setLang === "function") {
+        L.PM.setLang(code);
+      }
     }
   } catch (e) {
-    console.warn("[NuevaGeocerca] pm.setLang failed:", e);
+    console.warn("[NuevaGeocerca] L.PM setLang failed:", e);
+  }
+
+  try {
+    // 2) MAP (otras builds usan map.pm)
+    if (map?.pm) {
+      if (typeof map.pm.addLang === "function") {
+        map.pm.addLang(code, dict, "en");
+      }
+      if (typeof map.pm.setLang === "function") {
+        map.pm.setLang(code);
+      }
+    }
+  } catch (e) {
+    console.warn("[NuevaGeocerca] map.pm setLang failed:", e);
   }
 }
 
@@ -488,6 +583,9 @@ export default function NuevaGeocerca() {
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
 
+  // ✅ REMOUNT KEY para la UI de Geoman
+  const pmUiKey = useMemo(() => `pm-${normalizeLang(i18n.language)}`, [i18n.language]);
+
   const clearCanvas = useCallback(() => {
     try {
       featureGroupRef.current?.clearLayers?.();
@@ -562,10 +660,19 @@ export default function NuevaGeocerca() {
   }, []);
 
   // ✅ APLICA idioma Geoman cada vez que cambias idioma
+  // + re-aplica con timeouts por inicialización tardía en algunos builds
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
     applyGeomanLang(map, i18n.language);
+    const t1 = setTimeout(() => applyGeomanLang(map, i18n.language), 0);
+    const t2 = setTimeout(() => applyGeomanLang(map, i18n.language), 200);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [i18n.language]);
 
   const handleDrawFromCoords = useCallback(() => {
@@ -974,8 +1081,13 @@ export default function NuevaGeocerca() {
             style={{ height: "100%", width: "100%" }}
             whenCreated={(map) => {
               mapRef.current = map;
+
               // ✅ aplica lang Geoman al crear mapa
               applyGeomanLang(map, i18n.language);
+
+              // ✅ reintentos por init tardío
+              setTimeout(() => applyGeomanLang(map, i18n.language), 0);
+              setTimeout(() => applyGeomanLang(map, i18n.language), 200);
             }}
           >
             <TileLayer
@@ -1016,7 +1128,9 @@ export default function NuevaGeocerca() {
             </Pane>
 
             <FeatureGroup ref={featureGroupRef}>
+              {/* ✅ KEY = REMOUNT cuando cambia idioma */}
               <GeomanControls
+                key={pmUiKey}
                 options={{
                   position: "topleft",
                   drawMarker: false,
