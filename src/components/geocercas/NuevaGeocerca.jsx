@@ -28,6 +28,131 @@ const CSV_URL = "/data/mapa_corto_214.csv";
  */
 const USE_LOCAL_FALLBACK_ONLY_WHEN_API_FAILS = true;
 
+/* ===========================
+   ✅ Geoman i18n bridge
+   - Geoman NO usa i18next
+   - Hay que setLang() + addLang()
+=========================== */
+function normalizeLang(code) {
+  const v = String(code || "").toLowerCase().slice(0, 2);
+  return ["es", "en", "fr"].includes(v) ? v : "en";
+}
+
+/**
+ * Diccionarios mínimos (puedes ampliar si aparecen textos nuevos)
+ * Geoman usa un "lang" interno con frases UI.
+ */
+const PM_LANG = {
+  en: {
+    tooltips: {
+      placeMarker: "Click to place marker",
+      firstVertex: "Click to place first vertex",
+      continueLine: "Click to continue drawing",
+      finishLine: "Click any existing marker to finish",
+      finishPoly: "Click first marker to finish",
+      finishRect: "Release to finish",
+      startCircle: "Click and drag to draw circle",
+      finishCircle: "Release to finish circle",
+      edit: "Drag handles to edit",
+      drag: "Drag layer to move",
+      cut: "Drag to cut",
+      remove: "Click to remove",
+    },
+    actions: {
+      finish: "Finish",
+      cancel: "Cancel",
+      removeLastVertex: "Remove last vertex",
+    },
+    buttonTitles: {
+      drawPolygonButton: "Draw polygon",
+      drawRectangleButton: "Draw rectangle",
+      drawCircleButton: "Draw circle",
+      editButton: "Edit layers",
+      dragButton: "Drag layers",
+      deleteButton: "Delete layers",
+    },
+  },
+
+  es: {
+    tooltips: {
+      placeMarker: "Haz clic para colocar un marcador",
+      firstVertex: "Haz clic para colocar el primer vértice",
+      continueLine: "Haz clic para seguir dibujando",
+      finishLine: "Haz clic en un marcador para terminar",
+      finishPoly: "Haz clic en el primer punto para cerrar",
+      finishRect: "Suelta para terminar",
+      startCircle: "Haz clic y arrastra para dibujar un círculo",
+      finishCircle: "Suelta para terminar el círculo",
+      edit: "Arrastra los puntos para editar",
+      drag: "Arrastra la figura para mover",
+      cut: "Arrastra para cortar",
+      remove: "Haz clic para eliminar",
+    },
+    actions: {
+      finish: "Finalizar",
+      cancel: "Cancelar",
+      removeLastVertex: "Eliminar último punto",
+    },
+    buttonTitles: {
+      drawPolygonButton: "Dibujar polígono",
+      drawRectangleButton: "Dibujar rectángulo",
+      drawCircleButton: "Dibujar círculo",
+      editButton: "Editar capas",
+      dragButton: "Mover capas",
+      deleteButton: "Eliminar capas",
+    },
+  },
+
+  fr: {
+    tooltips: {
+      placeMarker: "Cliquez pour placer un marqueur",
+      firstVertex: "Cliquez pour placer le premier sommet",
+      continueLine: "Cliquez pour continuer le dessin",
+      finishLine: "Cliquez sur un marqueur existant pour terminer",
+      finishPoly: "Cliquez sur le premier point pour fermer",
+      finishRect: "Relâchez pour terminer",
+      startCircle: "Cliquez et glissez pour dessiner un cercle",
+      finishCircle: "Relâchez pour terminer le cercle",
+      edit: "Faites glisser les poignées pour modifier",
+      drag: "Faites glisser la forme pour déplacer",
+      cut: "Glissez pour découper",
+      remove: "Cliquez pour supprimer",
+    },
+    actions: {
+      finish: "Terminer",
+      cancel: "Annuler",
+      removeLastVertex: "Supprimer le dernier point",
+    },
+    buttonTitles: {
+      drawPolygonButton: "Dessiner un polygone",
+      drawRectangleButton: "Dessiner un rectangle",
+      drawCircleButton: "Dessiner un cercle",
+      editButton: "Modifier",
+      dragButton: "Déplacer",
+      deleteButton: "Supprimer",
+    },
+  },
+};
+
+function applyGeomanLang(map, lang) {
+  try {
+    if (!map?.pm) return;
+    const code = normalizeLang(lang);
+
+    // registra diccionario si falta
+    if (typeof map.pm.addLang === "function") {
+      map.pm.addLang(code, PM_LANG[code] || PM_LANG.en, "en");
+    }
+
+    // aplica idioma
+    if (typeof map.pm.setLang === "function") {
+      map.pm.setLang(code);
+    }
+  } catch (e) {
+    console.warn("[NuevaGeocerca] pm.setLang failed:", e);
+  }
+}
+
 /* ----------------------------- UI helpers ----------------------------- */
 function Banner({ banner, onClose }) {
   if (!banner) return null;
@@ -131,10 +256,6 @@ async function loadShortMap({ source = DATA_SOURCE } = {}) {
 }
 
 /* ----------------------------- Local fallback ----------------------------- */
-function normalizeNombreCi(nombre) {
-  return String(nombre || "").trim().toLowerCase();
-}
-
 function isSoftDeletedName(nombre) {
   const nm = String(nombre || "").trim().toLowerCase();
   return nm.startsWith("deleted_") || nm.startsWith("deleted-") || nm === "deleted";
@@ -327,7 +448,7 @@ function centroidFeatureFromGeojson(geo) {
 /* ================================ Component =============================== */
 export default function NuevaGeocerca() {
   const { currentOrg, user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const orgId = currentOrg?.id || currentOrg?.org_id || null;
 
@@ -440,6 +561,13 @@ export default function NuevaGeocerca() {
     };
   }, []);
 
+  // ✅ APLICA idioma Geoman cada vez que cambias idioma
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    applyGeomanLang(map, i18n.language);
+  }, [i18n.language]);
+
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
     if (!pairs.length) {
@@ -472,12 +600,6 @@ export default function NuevaGeocerca() {
     showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
   }, [coordText, clearCanvas, t, showErr, showOk]);
 
-  /**
-   * ✅ FIX UNIVERSAL:
-   * - Si es Polygon/Rectangle: mandamos Feature Polygon
-   * - Si es Circle: mandamos Feature Point con properties.radius_m
-   *   y el backend lo convierte a MultiPolygon con ST_Buffer
-   */
   const handleSave = useCallback(async () => {
     const nm = String(geofenceName || "").trim();
     if (!nm) {
@@ -506,12 +628,11 @@ export default function NuevaGeocerca() {
         return;
       }
 
-      // ✅ Circle → Feature Point + radius_m
       if (layerToSave instanceof L.Circle) {
         const center = layerToSave.getLatLng?.();
         const radiusM = Math.round(Number(layerToSave.getRadius?.() || 0));
         if (!center || !radiusM || radiusM <= 0) {
-          showErr("Círculo inválido (sin centro o radio).");
+          showErr(t("geocercas.errorInvalidCircle", { defaultValue: "Círculo inválido (sin centro o radio)." }));
           return;
         }
         feature = {
@@ -534,13 +655,12 @@ export default function NuevaGeocerca() {
     }
 
     if (!feature?.geometry || !feature?.geometry?.type) {
-      showErr("GeoJSON inválido (sin geometry).");
+      showErr(t("geocercas.errorInvalidGeojson", { defaultValue: "GeoJSON inválido (sin geometry)." }));
       return;
     }
 
     const fc = { type: "FeatureCollection", features: [feature] };
 
-    // Cache local (solo como respaldo)
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(
@@ -587,7 +707,6 @@ export default function NuevaGeocerca() {
     }
   }, [geofenceName, orgId, draftFeature, t, refreshGeofenceList, showErr, showOk, invalidateMapSize]);
 
-  // ✅ DELETE POR ID (para que no “reaparezca”)
   const handleDeleteSelected = useCallback(async () => {
     if (!orgId) {
       showErr(t("geocercas.manage.noOrgTitle", { defaultValue: "Selecciona una organización primero." }));
@@ -606,18 +725,16 @@ export default function NuevaGeocerca() {
 
     const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
 
-    // IDs reales según lista actual
     const idsToDelete = (geofenceList || [])
       .filter((g) => names.includes(String(g?.nombre || "").trim()))
       .map((g) => g.id)
       .filter(Boolean);
 
     if (!idsToDelete.length) {
-      showErr("No se encontraron IDs para eliminar. Refresca la lista e intenta otra vez.");
+      showErr(t("geocercas.errorNoIds", { defaultValue: "No se encontraron IDs para eliminar. Refresca e intenta." }));
       return;
     }
 
-    // Optimistic UI
     setGeofenceList((prev) => (prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim())));
     setSelectedNames(() => new Set());
     setLastSelectedName(null);
@@ -626,7 +743,7 @@ export default function NuevaGeocerca() {
 
     try {
       for (const id of idsToDelete) {
-        await deleteGeocerca(id); // DELETE /api/geocercas?id=...
+        await deleteGeocerca(id);
       }
 
       await refreshGeofenceList();
@@ -855,7 +972,11 @@ export default function NuevaGeocerca() {
             zoom={8}
             scrollWheelZoom={true}
             style={{ height: "100%", width: "100%" }}
-            whenCreated={(map) => (mapRef.current = map)}
+            whenCreated={(map) => {
+              mapRef.current = map;
+              // ✅ aplica lang Geoman al crear mapa
+              applyGeomanLang(map, i18n.language);
+            }}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
