@@ -56,13 +56,18 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const lang = String(i18n.language || "es").slice(0, 2);
+  // ✅ resolvedLanguage es más estable que language (en-US -> en)
+  const lang = String(i18n.resolvedLanguage || i18n.language || "es").slice(0, 2);
 
-  const setLang = (lng) => {
+  const setLang = async (lng) => {
     const code = String(lng || "es").toLowerCase().slice(0, 2);
     if (!SUPPORTED.includes(code)) return;
-    i18n.changeLanguage(code);
-    // persistencia la hace i18n/index.js con app_lang
+    try {
+      await i18n.changeLanguage(code);
+      // persistencia la hace src/i18n/index.js (listener languageChanged)
+    } catch (e) {
+      console.error("[Header] changeLanguage failed:", e);
+    }
   };
 
   const handleLogout = async () => {
@@ -70,7 +75,6 @@ export default function Header() {
     if (location.pathname !== "/login") navigate("/login", { replace: true });
   };
 
-  // Rol a mostrar (robusto)
   let displayRole = t("common.actions.loading", { defaultValue: "Cargando…" });
   if (!loading) {
     if (!currentOrg) {
@@ -119,7 +123,6 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Idiomas */}
           <div className="flex items-center gap-1 p-1 rounded-full bg-white/5 border border-white/10">
             <LangPill lng="es" current={lang} onClick={setLang} />
             <LangPill lng="en" current={lang} onClick={setLang} />
@@ -165,7 +168,6 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Tabs en móvil/tablet */}
       {isAuthenticated && (
         <div className="lg:hidden border-t border-white/10">
           <div className="max-w-7xl mx-auto px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide">

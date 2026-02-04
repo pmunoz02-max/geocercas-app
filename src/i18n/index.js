@@ -51,32 +51,52 @@ function persistLang(code) {
   return c;
 }
 
-const initial = persistLang(readUrlLang() || readStoredLang() || readNavigatorLang() || "es");
+function computeInitial() {
+  return persistLang(readUrlLang() || readStoredLang() || readNavigatorLang() || "es");
+}
 
-i18n.use(initReactI18next).init({
-  resources: {
-    es: { translation: es },
-    en: { translation: en },
-    fr: { translation: fr },
-  },
+// ✅ Evita doble init (si existe src/i18n/i18n.js u otro init)
+function ensureInit() {
+  // si ya está inicializado, solo asegura recursos + listeners
+  if (i18n.isInitialized) return;
 
-  // 🔒 clave para fr-FR / en-US
-  supportedLngs: SUPPORTED,
-  nonExplicitSupportedLngs: true,
-  load: "languageOnly",
+  const initial = computeInitial();
 
-  lng: initial,
-  fallbackLng: "es",
+  i18n.use(initReactI18next).init({
+    resources: {
+      es: { translation: es },
+      en: { translation: en },
+      fr: { translation: fr },
+    },
 
-  interpolation: { escapeValue: false },
-  react: { useSuspense: false },
-  returnEmptyString: false,
-  returnNull: false,
-});
+    supportedLngs: SUPPORTED,
+    nonExplicitSupportedLngs: true,
+    load: "languageOnly",
 
-i18n.on("languageChanged", (lng) => {
+    lng: initial,
+    fallbackLng: "es",
+
+    interpolation: { escapeValue: false },
+    react: { useSuspense: false },
+    returnEmptyString: false,
+    returnNull: false,
+  });
+}
+
+// ✅ Listener único (sin duplicar)
+function ensureListeners() {
+  try {
+    i18n.off("languageChanged", onLanguageChanged);
+  } catch {}
+  i18n.on("languageChanged", onLanguageChanged);
+}
+
+function onLanguageChanged(lng) {
   persistLang(lng);
-});
+}
+
+ensureInit();
+ensureListeners();
 
 // Debug (temporal)
 if (typeof window !== "undefined") {

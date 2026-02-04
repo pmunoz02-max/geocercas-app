@@ -23,10 +23,7 @@ function LangBtn({ code, current, onClick }: LangBtnProps) {
       className={cx(
         "px-3 py-1.5 rounded-full text-xs font-extrabold tracking-wide transition",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60",
-        // ✅ BLINDAJE: fuerza colores aunque haya CSS global
-        active
-          ? "!bg-emerald-600 !text-white shadow-sm"
-          : "!bg-transparent !text-slate-900 hover:!bg-slate-100"
+        active ? "!bg-emerald-600 !text-white shadow-sm" : "!bg-transparent !text-slate-900 hover:!bg-slate-100"
       )}
     >
       {code.toUpperCase()}
@@ -34,19 +31,18 @@ function LangBtn({ code, current, onClick }: LangBtnProps) {
   );
 }
 
-/**
- * LanguageSwitcher (LIGHT + blindado)
- * - Texto ES/EN/FR siempre visible
- * - Persistencia la maneja i18n (languageChanged)
- */
 export default function LanguageSwitcher() {
   const { i18n } = useTranslation();
-  const current = String(i18n.language || "es").slice(0, 2);
+  const current = String(i18n.resolvedLanguage || i18n.language || "es").slice(0, 2) as "es" | "en" | "fr";
 
-  const setLang = (lng: "es" | "en" | "fr") => {
+  const setLang = async (lng: "es" | "en" | "fr") => {
     const code = String(lng || "es").toLowerCase().slice(0, 2) as "es" | "en" | "fr";
     if (!["es", "en", "fr"].includes(code)) return;
-    i18n.changeLanguage(code);
+    try {
+      await i18n.changeLanguage(code);
+    } catch (e) {
+      console.error("[LanguageSwitcher] changeLanguage failed:", e);
+    }
   };
 
   return (
