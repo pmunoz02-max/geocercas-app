@@ -99,30 +99,30 @@ export default function TopTabs({ tabs = [] }) {
   const roleRaw = effectiveRole.toLowerCase();
   const roleLabel = isAppRoot ? "ROOT" : roleRaw ? roleRaw.toUpperCase() : "…";
 
-  // usamos el isActive de NavLink + startsWith para rutas hijas
   const isOnPath = (to) => {
     const p = safeText(to).trim();
     if (!p) return false;
     return location.pathname === p || location.pathname.startsWith(p + "/");
   };
 
-  const baseTab =
+  const tabBase =
     "no-underline inline-flex items-center justify-center select-none " +
     "px-5 py-2.5 rounded-full text-sm font-extrabold whitespace-nowrap " +
     "transition-all duration-150 " +
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
 
-  const inactiveTab =
-    "bg-white text-slate-800 border border-slate-200 " +
-    "hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm";
+  // ✅ IMPORTANT: forzamos color con !
+  const tabInactive =
+    "bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm " +
+    "!text-slate-900";
 
-  const activeTab =
-    "text-white border border-emerald-600 shadow-md " +
-    "bg-gradient-to-r from-emerald-600 via-emerald-500 to-cyan-600";
+  const tabActive =
+    "border border-emerald-600 shadow-md bg-gradient-to-r from-emerald-600 via-emerald-500 to-cyan-600 " +
+    "!text-white";
 
   return (
-    <div className="w-full" data-top-tabs="v13">
-      <div className="bg-white/90 backdrop-blur border border-slate-200 rounded-2xl px-3 py-2 shadow-sm">
+    <div className="w-full" data-top-tabs="v14">
+      <div className="bg-white border border-slate-200 rounded-2xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
             <div className="shrink-0">
@@ -145,10 +145,11 @@ export default function TopTabs({ tabs = [] }) {
                     to={to}
                     title={label}
                     className={({ isActive }) =>
-                      cx(baseTab, (on || isActive) ? activeTab : inactiveTab)
+                      cx(tabBase, (on || isActive) ? tabActive : tabInactive)
                     }
                   >
-                    {label}
+                    {/* ✅ doble-blindaje: el span también fuerza color */}
+                    <span className={(on ? "!text-white" : "!text-slate-900")}>{label}</span>
                   </NavLink>
                 );
               })}

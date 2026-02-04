@@ -4,9 +4,6 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
 
-/** =========================
- * Helpers (a prueba de i18n)
- * ========================= */
 function safeText(v) {
   if (v == null) return "";
   if (typeof v === "string") return v;
@@ -16,6 +13,10 @@ function safeText(v) {
   } catch {
     return String(v);
   }
+}
+
+function cx(...arr) {
+  return arr.filter(Boolean).join(" ");
 }
 
 export default function AppHeader() {
@@ -37,63 +38,70 @@ export default function AppHeader() {
     }
   };
 
-  // Traducción básica de roles (fallback al valor original si no matchea)
   let roleLabel = rawRole;
   if (rawRole === "owner") roleLabel = t("app.header.roleOwner", { defaultValue: "Propietario" });
   if (rawRole === "admin") roleLabel = t("app.header.roleAdmin", { defaultValue: "Administrador" });
   if (rawRole === "tracker") roleLabel = t("app.header.roleTracker", { defaultValue: "Tracker" });
-  if (rawRole === "root" || rawRole === "root_owner") roleLabel = t("app.header.roleRoot", { defaultValue: "Root" });
+  if (rawRole === "root" || rawRole === "root_owner")
+    roleLabel = t("app.header.roleRoot", { defaultValue: "Root" });
+
+  const btnBase =
+    "px-4 py-2 rounded-full text-xs font-extrabold transition " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
 
   return (
-    <header className="w-full border-b border-slate-200 bg-white">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* Branding */}
-        <Link to={isLogged ? "/inicio" : "/"} className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold">
+    <header className="w-full border-b border-slate-200 bg-white sticky top-0 z-40">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <Link to={isLogged ? "/inicio" : "/"} className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-600 flex items-center justify-center text-white font-extrabold shadow-sm">
             AG
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-slate-900">
+          <div className="min-w-0 leading-tight">
+            <div className="text-sm font-extrabold text-slate-900 truncate">
               {safeText(t("landing.brandName", { defaultValue: "App Geocercas" }))}
-            </span>
-            <span className="text-[11px] text-slate-500">
+            </div>
+            <div className="text-[11px] text-slate-500 truncate">
               {safeText(t("landing.brandTagline", { defaultValue: "Control de personal por geocercas" }))}
-            </span>
+            </div>
           </div>
         </Link>
 
-        {/* Zona derecha: idioma + info de usuario + acciones */}
-        <div className="flex items-center gap-3 text-xs">
-          {/* Selector de idioma SIEMPRE visible */}
-          <LanguageSwitcher />
+        <div className="flex items-center gap-3">
+          {/* ✅ pill contenedor para switch */}
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 shadow-sm">
+            <LanguageSwitcher />
+          </div>
 
           {isLogged ? (
             <>
-              {/* Email + rol */}
-              <div className="hidden sm:flex flex-col items-end">
-                {email && <span className="font-medium text-slate-700">{email}</span>}
+              <div className="hidden md:flex flex-col items-end text-xs">
+                {email && <div className="font-semibold text-slate-800">{email}</div>}
                 {rawRole && (
-                  <span className="uppercase tracking-wide text-[10px] text-slate-400">
+                  <div className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">
                     {safeText(roleLabel)}
-                  </span>
+                  </div>
                 )}
               </div>
 
-              {/* Botón Administrador solo para owner/root */}
               {(rawRole === "owner" || rawRole === "root" || rawRole === "root_owner") && (
                 <Link
                   to="/admins"
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold bg-amber-500 text-white hover:bg-amber-400"
+                  className={cx(
+                    btnBase,
+                    "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md hover:brightness-105"
+                  )}
                 >
-                  {safeText(t("app.tabs.admins", { defaultValue: "Administrador" }))}
+                  {safeText(t("app.tabs.admins", { defaultValue: "Administradores" }))}
                 </Link>
               )}
 
-              {/* Botón Salir */}
               <button
                 type="button"
                 onClick={handleLogout}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
+                className={cx(
+                  btnBase,
+                  "bg-emerald-600 text-white shadow-md hover:bg-emerald-500"
+                )}
               >
                 {safeText(t("app.header.logout", { defaultValue: "Salir" }))}
               </button>
@@ -101,7 +109,7 @@ export default function AppHeader() {
           ) : (
             <Link
               to="/login"
-              className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
+              className={cx(btnBase, "bg-emerald-600 text-white shadow-md hover:bg-emerald-500")}
             >
               {safeText(t("app.header.login", { defaultValue: "Entrar" }))}
             </Link>
