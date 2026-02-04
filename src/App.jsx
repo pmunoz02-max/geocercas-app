@@ -1,6 +1,6 @@
 // src/App.jsx
 import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
@@ -78,7 +78,7 @@ function AdminRoute({ children }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <>
       <CallbackCatcher />
 
       <Routes>
@@ -90,7 +90,7 @@ export default function App() {
         {/* ✅ Privacy Policy (public, required by Google Play) */}
         <Route path="/privacy" element={<PrivacyPolicy />} />
 
-        {/* ✅ Claim invite (public, pero requiere que el usuario esté logueado para que RPC funcione) */}
+        {/* ✅ Claim invite (public) */}
         <Route path="/claim" element={<ClaimInvite />} />
 
         {/* ✅ TRACKER GPS */}
@@ -149,6 +149,6 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </>
   );
 }
