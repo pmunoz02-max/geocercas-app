@@ -1,27 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
 
 /**
- * src/pages/Personal.jsx — v22
- *
- * FIXES:
- * - ❌ No inserta/actualiza columna "activo" (GENERATED)
- * - Usa "vigente" como estado editable
- * - Mantiene filtro org_id
- * - ✅ Fallback de rol: si AuthContext no entrega role, lo lee de app_user_roles / memberships
- * - ✅ ORDEN ESTABLE al cargar y al presionar ACTUALIZAR:
- *   1) Vigentes + activos (vigente=true AND activo_bool=true AND NOT deleted)
- *   2) No vigentes (pero no eliminados)
- *   3) Eliminados al final (is_deleted=true OR deleted_at not null)
- *   Dentro de cada grupo: apellido, nombre, email
+ * src/pages/Personal.jsx — i18n edition
+ * - Mantiene tu lógica Supabase/RLS/orden universal
+ * - Cambia TODOS los textos a t(...)
  */
 
 function cls(...a) {
   return a.filter(Boolean).join(" ");
 }
 
-function Modal({ open, title, children, onClose }) {
+function Modal({ open, title, children, onClose, t }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
@@ -32,8 +24,8 @@ function Modal({ open, title, children, onClose }) {
             type="button"
             onClick={onClose}
             className="text-slate-600 hover:text-slate-900 px-2"
-            aria-label="Cerrar"
-            title="Cerrar"
+            aria-label={t("common.actions.close", { defaultValue: "Cerrar" })}
+            title={t("common.actions.close", { defaultValue: "Cerrar" })}
           >
             ✕
           </button>
@@ -75,16 +67,12 @@ function isVigenteActivaRow(r) {
   if (isDeletedRow(r)) return false;
 
   const vigente = r?.vigente !== false;
-  // activo_bool existe en tu dataset; por si viene "activo" también lo aceptamos
   const activo = r?.activo_bool === true || r?.activo === true;
 
   return vigente && activo;
 }
 
 function rankRow(r) {
-  // 0: vigentes+activos
-  // 1: no vigentes (no eliminados)
-  // 2: eliminados
   if (isDeletedRow(r)) return 2;
   if (isVigenteActivaRow(r)) return 0;
   return 1;
@@ -112,8 +100,8 @@ function sortPersonal(rows) {
 }
 
 export default function Personal() {
-  const { loading, isAuthenticated, user, currentOrg, role, refreshContext } =
-    useAuth();
+  const { t } = useTranslation();
+  const { loading, isAuthenticated, user, currentOrg, role, refreshContext } = useAuth();
 
   // ✅ Rol efectivo (si AuthContext falla, lo resolvemos acá)
   const [effectiveRole, setEffectiveRole] = useState(role ?? null);
@@ -125,12 +113,11 @@ export default function Personal() {
 
   async function resolveRoleFallback() {
     if (!isAuthenticated || !user?.id || !currentOrg?.id) return;
-    if (role) return; // ya hay rol en contexto
+    if (role) return;
     if (roleBusy) return;
 
     setRoleBusy(true);
     try {
-      // 1) Intentar desde app_user_roles
       const { data: aur, error: aurErr } = await supabase
         .from("app_user_roles")
         .select("role")
@@ -147,7 +134,6 @@ export default function Personal() {
         return;
       }
 
-      // 2) Fallback a memberships
       const { data: mem, error: memErr } = await supabase
         .from("memberships")
         .select("role")
@@ -180,10 +166,7 @@ export default function Personal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, isAuthenticated, user?.id, currentOrg?.id, role]);
 
-  const roleLower = useMemo(
-    () => String(effectiveRole || "").toLowerCase(),
-    [effectiveRole]
-  );
+  const roleLower = useMemo(() => String(effectiveRole || "").toLowerCase(), [effectiveRole]);
   const canEdit = roleLower === "owner" || roleLower === "admin";
 
   const [rows, setRows] = useState([]);
@@ -233,8 +216,8 @@ export default function Personal() {
   function validate() {
     const nombre = (form.nombre || "").trim();
     const email = (form.email || "").trim();
-    if (!nombre) return "Nombre es obligatorio.";
-    if (!email) return "Email es obligatorio.";
+    if (!nombre) return t("personal.errorMissingName", { defaultValue: "El nombre es obligatorio." });
+    if (!email) return t("personal.errorMissingEmail", { defaultValue: "El email es obligatorio." });
     return null;
   }
 
@@ -244,11 +227,7 @@ export default function Personal() {
 
     setBusy(true);
     try {
-      let qy = supabase
-        .from("personal")
-        .select("*")
-        .eq("org_id", currentOrg.id)
-        .limit(500);
+      let qy = supabase.from("personal").select("*").eq("org_id", currentOrg.id).limit(500);
 
       const or = buildOrFilter(q);
       if (or) qy = qy.or(or);
@@ -259,7 +238,7 @@ export default function Personal() {
       setRows(sortPersonal(Array.isArray(data) ? data : []));
     } catch (e) {
       console.error("[Personal] load error", e);
-      setMsg(e?.message || "No se pudo cargar el listado.");
+      setMsg(e?.message || t("personal.errorLoad", { defaultValue: "No se pudo cargar el listado." }));
     } finally {
       setBusy(false);
     }
@@ -267,9 +246,7 @@ export default function Personal() {
 
   useEffect(() => {
     const run = async () => {
-      if (!loading && isAuthenticated && currentOrg?.id) {
-        await load();
-      }
+      if (!loading && isAuthenticated && currentOrg?.id) await load();
     };
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -294,7 +271,6 @@ export default function Personal() {
         telefono: form.telefono?.trim() || null,
         email: form.email.trim(),
         vigente: !!form.vigente,
-        // ✅ NO enviar "activo" (GENERATED)
       };
 
       if (editing?.id) {
@@ -313,7 +289,7 @@ export default function Personal() {
       await load();
     } catch (e) {
       console.error("[Personal] save error", e);
-      setMsg(e?.message || "No se pudo guardar.");
+      setMsg(e?.message || t("personal.errorSave", { defaultValue: "No se pudo guardar." }));
     } finally {
       setBusy(false);
     }
@@ -335,7 +311,7 @@ export default function Personal() {
       await load();
     } catch (e) {
       console.error("[Personal] toggle vigente error", e);
-      setMsg(e?.message || "No se pudo cambiar el estado.");
+      setMsg(e?.message || t("personal.errorToggle", { defaultValue: "No se pudo cambiar el estado." }));
     } finally {
       setBusy(false);
     }
@@ -343,7 +319,10 @@ export default function Personal() {
 
   async function onDelete(row) {
     if (!canEdit) return;
-    const ok = window.confirm("¿Eliminar este registro?");
+
+    const ok = window.confirm(
+      t("personal.confirmDelete", { defaultValue: "¿Eliminar este registro?" })
+    );
     if (!ok) return;
 
     setMsg("");
@@ -368,18 +347,18 @@ export default function Personal() {
       await load();
     } catch (e) {
       console.error("[Personal] delete error", e);
-      setMsg(e?.message || "No se pudo eliminar.");
+      setMsg(e?.message || t("personal.errorDelete", { defaultValue: "No se pudo eliminar." }));
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <div className="p-6 text-slate-600">Cargando sesión…</div>;
+  if (loading) return <div className="p-6 text-slate-600">{t("common.actions.loading", { defaultValue: "Cargando…" })}</div>;
 
   if (!isAuthenticated || !user) {
     return (
       <div className="p-6 text-red-700 bg-red-50 border border-red-200 rounded-xl">
-        Debes iniciar sesión.
+        {t("auth.loginRequired", { defaultValue: "Debes iniciar sesión." })}
       </div>
     );
   }
@@ -387,14 +366,14 @@ export default function Personal() {
   if (!currentOrg?.id) {
     return (
       <div className="p-6 text-red-700 bg-red-50 border border-red-200 rounded-xl">
-        No hay organización activa.
+        {t("personal.errorMissingOrg", { defaultValue: "No hay organización activa." })}
         <div className="mt-3">
           <button
             type="button"
             onClick={() => refreshContext?.()}
             className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition"
           >
-            Reintentar contexto
+            {t("common.refreshContext", { defaultValue: "Reintentar contexto" })}
           </button>
         </div>
       </div>
@@ -403,18 +382,20 @@ export default function Personal() {
 
   const roleLabelUi =
     roleBusy && !effectiveRole
-      ? "CARGANDO…"
-      : (roleLower || "sin rol").toUpperCase();
+      ? t("common.actions.loading", { defaultValue: "Cargando…" }).toUpperCase()
+      : (roleLower || t("personal.roleNone", { defaultValue: "sin rol" })).toUpperCase();
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold mb-1 text-slate-900">Personal</h1>
+          <h1 className="text-2xl font-semibold mb-1 text-slate-900">
+            {t("personal.title", { defaultValue: "Personal" })}
+          </h1>
           <div className="text-sm text-slate-700">
-            Rol:{" "}
-            <span className="font-semibold text-slate-900">{roleLabelUi}</span>{" "}
-            · Org:{" "}
+            {t("personal.roleLabel", { defaultValue: "Rol" })}:{" "}
+            <span className="font-semibold text-slate-900">{roleLabelUi}</span> ·{" "}
+            {t("personal.orgLabel", { defaultValue: "Org" })}:{" "}
             <span className="font-mono text-slate-700">{currentOrg.id}</span>
           </div>
         </div>
@@ -425,7 +406,7 @@ export default function Personal() {
             onClick={() => setOpenNew(true)}
             type="button"
           >
-            + Nuevo
+            {t("personal.newButton", { defaultValue: "+ Nuevo" })}
           </button>
         )}
       </div>
@@ -433,7 +414,9 @@ export default function Personal() {
       <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
         <input
           className="w-full md:w-[520px] rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
-          placeholder="Buscar por nombre, apellido, email o teléfono…"
+          placeholder={t("personal.searchPlaceholder", {
+            defaultValue: "Buscar por nombre, apellido, email o teléfono…",
+          })}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -445,7 +428,9 @@ export default function Personal() {
             onClick={() => load()}
             disabled={busy}
           >
-            {busy ? "Cargando…" : "Actualizar"}
+            {busy
+              ? t("common.actions.loading", { defaultValue: "Cargando…" })
+              : t("common.actions.refresh", { defaultValue: "Actualizar" })}
           </button>
 
           <button
@@ -457,7 +442,7 @@ export default function Personal() {
             }}
             disabled={busy}
           >
-            Limpiar
+            {t("common.actions.clear", { defaultValue: "Limpiar" })}
           </button>
         </div>
       </div>
@@ -473,19 +458,19 @@ export default function Personal() {
           <thead className="bg-slate-50">
             <tr>
               <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                Nombre
+                {t("personal.table.name", { defaultValue: "Nombre" })}
               </th>
               <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                Teléfono
+                {t("personal.table.phone", { defaultValue: "Teléfono" })}
               </th>
               <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                Email
+                {t("personal.table.email", { defaultValue: "Email" })}
               </th>
               <th className="text-left px-4 py-3 font-semibold text-slate-700">
-                Estado
+                {t("personal.table.status", { defaultValue: "Estado" })}
               </th>
               <th className="text-right px-4 py-3 font-semibold text-slate-700">
-                Acciones
+                {t("personal.table.actions", { defaultValue: "Acciones" })}
               </th>
             </tr>
           </thead>
@@ -494,18 +479,18 @@ export default function Personal() {
             {rows.map((r) => {
               const deleted = isDeletedRow(r);
               const vigente = r.vigente !== false && !deleted;
+
               return (
-                <tr
-                  key={r.id}
-                  className="border-t border-slate-200 hover:bg-slate-50 transition"
-                >
+                <tr key={r.id} className="border-t border-slate-200 hover:bg-slate-50 transition">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900">
                       {r.nombre || ""} {r.apellido || ""}
                     </div>
                   </td>
+
                   <td className="px-4 py-3">{r.telefono || ""}</td>
                   <td className="px-4 py-3">{r.email || ""}</td>
+
                   <td className="px-4 py-3">
                     <span
                       className={cls(
@@ -515,9 +500,14 @@ export default function Personal() {
                           : "bg-slate-100 border-slate-200 text-slate-700"
                       )}
                     >
-                      {vigente ? "Vigente" : deleted ? "Eliminado" : "No vigente"}
+                      {vigente
+                        ? t("personal.status.active", { defaultValue: "Vigente" })
+                        : deleted
+                        ? t("personal.status.deleted", { defaultValue: "Eliminado" })
+                        : t("personal.status.inactive", { defaultValue: "No vigente" })}
                     </span>
                   </td>
+
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex gap-2">
                       <button
@@ -525,25 +515,27 @@ export default function Personal() {
                         className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
                         onClick={() => openEdit(r)}
                         disabled={!canEdit || busy}
-                        title="Editar"
+                        title={t("common.actions.edit", { defaultValue: "Editar" })}
                       >
                         ✎
                       </button>
+
                       <button
                         type="button"
                         className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
                         onClick={() => onToggleVigente(r)}
                         disabled={!canEdit || busy || deleted}
-                        title="Vigente / No vigente"
+                        title={t("personal.toggleVigente", { defaultValue: "Vigente / No vigente" })}
                       >
                         ⏻
                       </button>
+
                       <button
                         type="button"
                         className="px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-60"
                         onClick={() => onDelete(r)}
                         disabled={!canEdit || busy}
-                        title="Eliminar"
+                        title={t("common.actions.delete", { defaultValue: "Eliminar" })}
                       >
                         🗑
                       </button>
@@ -555,11 +547,8 @@ export default function Personal() {
 
             {!busy && rows.length === 0 && (
               <tr className="border-t border-slate-200">
-                <td
-                  colSpan={5}
-                  className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50"
-                >
-                  No hay registros en esta organización.
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-600 font-medium bg-slate-50">
+                  {t("personal.table.empty", { defaultValue: "No hay registros en esta organización." })}
                 </td>
               </tr>
             )}
@@ -569,12 +558,19 @@ export default function Personal() {
 
       <Modal
         open={openNew || !!editing}
-        title={editing ? "Editar personal" : "Nuevo personal"}
+        title={
+          editing
+            ? t("personal.modal.editTitle", { defaultValue: "Editar personal" })
+            : t("personal.modal.newTitle", { defaultValue: "Nuevo personal" })
+        }
         onClose={closeModal}
+        t={t}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-700">Nombre *</label>
+            <label className="text-xs text-slate-700">
+              {t("personal.form.firstName", { defaultValue: "Nombre" })} *
+            </label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.nombre}
@@ -583,29 +579,31 @@ export default function Personal() {
           </div>
 
           <div>
-            <label className="text-xs text-slate-700">Apellido</label>
+            <label className="text-xs text-slate-700">
+              {t("personal.form.lastName", { defaultValue: "Apellido" })}
+            </label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.apellido}
-              onChange={(e) =>
-                setForm((s) => ({ ...s, apellido: e.target.value }))
-              }
+              onChange={(e) => setForm((s) => ({ ...s, apellido: e.target.value }))}
             />
           </div>
 
           <div>
-            <label className="text-xs text-slate-700">Teléfono</label>
+            <label className="text-xs text-slate-700">
+              {t("personal.form.phone", { defaultValue: "Teléfono" })}
+            </label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.telefono}
-              onChange={(e) =>
-                setForm((s) => ({ ...s, telefono: e.target.value }))
-              }
+              onChange={(e) => setForm((s) => ({ ...s, telefono: e.target.value }))}
             />
           </div>
 
           <div>
-            <label className="text-xs text-slate-700">Email *</label>
+            <label className="text-xs text-slate-700">
+              {t("personal.form.email", { defaultValue: "Email" })} *
+            </label>
             <input
               className="mt-1 w-full rounded-xl bg-white border border-slate-300 px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
               value={form.email}
@@ -617,11 +615,11 @@ export default function Personal() {
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) =>
-                setForm((s) => ({ ...s, vigente: e.target.checked }))
-              }
+              onChange={(e) => setForm((s) => ({ ...s, vigente: e.target.checked }))}
             />
-            <span className="text-slate-800">Vigente</span>
+            <span className="text-slate-800">
+              {t("personal.form.vigente", { defaultValue: "Vigente" })}
+            </span>
           </div>
         </div>
 
@@ -632,15 +630,18 @@ export default function Personal() {
             onClick={closeModal}
             disabled={busy}
           >
-            Cancelar
+            {t("common.actions.cancel", { defaultValue: "Cancelar" })}
           </button>
+
           <button
             type="button"
             className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition disabled:opacity-60"
             onClick={onSave}
             disabled={busy || !canEdit}
           >
-            {busy ? "Guardando…" : "Guardar"}
+            {busy
+              ? t("common.actions.saving", { defaultValue: "Guardando…" })
+              : t("common.actions.save", { defaultValue: "Guardar" })}
           </button>
         </div>
       </Modal>

@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 
 const TABLE = "activities";
 
+// Si quieres "LOCAL" también, agrégalo aquí.
 const CURRENCIES = ["USD", "EUR", "MXN", "COP", "PEN", "CLP", "ARS", "BRL", "CAD", "GBP"];
 
 function toNumber(v) {
@@ -67,7 +68,9 @@ export default function ActividadesPage() {
 
       let q = supabase
         .from(TABLE)
-        .select("id, tenant_id, org_id, name, description, active, hourly_rate, currency_code, created_at, created_by")
+        .select(
+          "id, tenant_id, org_id, name, description, active, hourly_rate, currency_code, created_at, created_by"
+        )
         .or(`tenant_id.eq.${orgId},org_id.eq.${orgId}`)
         .order("created_at", { ascending: false });
 
@@ -80,7 +83,10 @@ export default function ActividadesPage() {
     } catch (e) {
       console.error("[ActividadesPage] load error", e);
       setRows([]);
-      setErrorMsg(e?.message || "No se pudo cargar actividades.");
+      setErrorMsg(
+        e?.message ||
+          t("actividades.errorLoad", { defaultValue: "No se pudo cargar actividades." })
+      );
     } finally {
       setLoadingList(false);
     }
@@ -96,18 +102,27 @@ export default function ActividadesPage() {
     setErrorMsg("");
 
     if (!canEdit) {
-      setErrorMsg("No tienes permisos para editar actividades.");
+      setErrorMsg(
+        t("actividades.readOnlyNote", {
+          defaultValue: "No tienes permisos para editar actividades.",
+        })
+      );
       return;
     }
+
     if (!name.trim()) {
-      setErrorMsg(t("actividades.errorNameRequired", { defaultValue: "Nombre es obligatorio." }));
+      setErrorMsg(
+        t("actividades.errorNameRequired", { defaultValue: "El nombre es obligatorio." })
+      );
       return;
     }
 
     const rate = toNumber(hourlyRate);
     if (!Number.isFinite(rate) || rate <= 0) {
       setErrorMsg(
-        t("actividades.errorRatePositive", { defaultValue: "Tarifa/hora debe ser un número > 0." })
+        t("actividades.errorRatePositive", {
+          defaultValue: "La tarifa por hora debe ser un número mayor a 0.",
+        })
       );
       return;
     }
@@ -119,7 +134,7 @@ export default function ActividadesPage() {
       if (mode === "create") {
         const payload = {
           tenant_id: orgId, // ✅ NOT NULL
-          org_id: orgId,    // ✅ tu RLS suele mirar org_id
+          org_id: orgId, // ✅ tu RLS suele mirar org_id
           name: name.trim(),
           description: description.trim() || null,
           active: true,
@@ -151,7 +166,9 @@ export default function ActividadesPage() {
       await load();
     } catch (e) {
       console.error("[ActividadesPage] save error", e);
-      setErrorMsg(e?.message || "No se pudo guardar.");
+      setErrorMsg(
+        e?.message || t("actividades.errorSave", { defaultValue: "No se pudo guardar." })
+      );
     } finally {
       setBusy(false);
     }
@@ -171,13 +188,18 @@ export default function ActividadesPage() {
       await load();
     } catch (e) {
       console.error("[ActividadesPage] toggle error", e);
-      setErrorMsg(e?.message || "No se pudo actualizar.");
+      setErrorMsg(
+        e?.message || t("actividades.errorToggle", { defaultValue: "No se pudo actualizar." })
+      );
     }
   }
 
   async function deleteOne(id) {
     if (!canEdit) return;
-    const ok = window.confirm("¿Eliminar esta actividad?");
+
+    const ok = window.confirm(
+      t("actividades.confirmDeleteGeneric", { defaultValue: "¿Eliminar esta actividad?" })
+    );
     if (!ok) return;
 
     setErrorMsg("");
@@ -192,7 +214,9 @@ export default function ActividadesPage() {
       await load();
     } catch (e) {
       console.error("[ActividadesPage] delete error", e);
-      setErrorMsg(e?.message || "No se pudo eliminar.");
+      setErrorMsg(
+        e?.message || t("actividades.errorDelete", { defaultValue: "No se pudo eliminar." })
+      );
     }
   }
 
@@ -211,7 +235,7 @@ export default function ActividadesPage() {
     return (
       <div className="p-4 max-w-3xl mx-auto">
         <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
-          Debes iniciar sesión.
+          {t("auth.loginRequired", { defaultValue: "Debes iniciar sesión." })}
         </div>
       </div>
     );
@@ -236,9 +260,18 @@ export default function ActividadesPage() {
 
         <div className="text-xs text-gray-600 text-right">
           <div className="font-mono">{currentOrg.id}</div>
-          <div>{(effectiveRole || "cargando").toUpperCase()}</div>
+          <div>{(effectiveRole || t("common.loading", { defaultValue: "cargando" })).toUpperCase()}</div>
         </div>
       </div>
+
+      {!canEdit && (
+        <div className="mb-4 border rounded bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+          {t("actividades.readOnlyNote", {
+            defaultValue:
+              "Solo el propietario y los administradores pueden crear o modificar actividades.",
+          })}
+        </div>
+      )}
 
       {errorMsg && (
         <div className="mb-4 border rounded bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -263,14 +296,18 @@ export default function ActividadesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               className="border rounded px-3 py-2"
-              placeholder={t("actividades.fieldNamePlaceholder", { defaultValue: "Nombre" })}
+              placeholder={t("actividades.fieldNamePlaceholder", {
+                defaultValue: "Nombre de la actividad",
+              })}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
 
             <input
               className="border rounded px-3 py-2"
-              placeholder={t("actividades.fieldHourlyRatePlaceholder", { defaultValue: "Tarifa por hora" })}
+              placeholder={t("actividades.fieldHourlyRatePlaceholder", {
+                defaultValue: "Tarifa por hora (ej. 3.50)",
+              })}
               type="number"
               step="0.01"
               value={hourlyRate}
@@ -281,15 +318,20 @@ export default function ActividadesPage() {
               className="border rounded px-3 py-2"
               value={currencyCode}
               onChange={(e) => setCurrencyCode(e.target.value)}
+              aria-label={t("actividades.fieldCurrency", { defaultValue: "Moneda" })}
             >
               {CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>
+                  {t(`actividades.currencies.${c}`, { defaultValue: c })}
+                </option>
               ))}
             </select>
 
             <input
               className="border rounded px-3 py-2"
-              placeholder={t("actividades.fieldDescriptionPlaceholder", { defaultValue: "Descripción (opcional)" })}
+              placeholder={t("actividades.fieldDescriptionPlaceholder", {
+                defaultValue: "Descripción (opcional)",
+              })}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -321,13 +363,13 @@ export default function ActividadesPage() {
 
       {loadingList ? (
         <div className="border rounded px-4 py-3 text-sm text-gray-600">
-          {t("actividades.loading", { defaultValue: "Cargando…" })}
+          {t("actividades.loading", { defaultValue: "Cargando actividades…" })}
         </div>
       ) : (
         <div className="space-y-2">
           {rows.length === 0 && (
             <div className="text-sm text-gray-500">
-              {t("actividades.empty", { defaultValue: "No hay actividades." })}
+              {t("actividades.empty", { defaultValue: "No hay actividades registradas." })}
             </div>
           )}
 
@@ -335,21 +377,24 @@ export default function ActividadesPage() {
             <div key={a.id} className="border rounded p-3 flex items-center justify-between">
               <div>
                 <div className="font-medium text-gray-900">{a.name}</div>
+
                 <div className="mt-0.5 flex flex-wrap items-center gap-2 text-sm">
                   <span className="text-gray-800 font-medium">
                     {(a.currency_code || "USD")} · {a.hourly_rate ?? ""}
                   </span>
+
                   <span
                     className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                       a.active ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-700"
                     }`}
                   >
-                    {a.active ? "Activa" : "Inactiva"}
+                    {a.active
+                      ? t("actividades.statusActive", { defaultValue: "Activa" })
+                      : t("actividades.statusInactive", { defaultValue: "Inactiva" })}
                   </span>
                 </div>
-                {a.description && (
-                  <div className="mt-1 text-sm text-gray-700">{a.description}</div>
-                )}
+
+                {a.description && <div className="mt-1 text-sm text-gray-700">{a.description}</div>}
               </div>
 
               {canEdit && (
@@ -359,7 +404,7 @@ export default function ActividadesPage() {
                     onClick={() => startEdit(a)}
                     className="text-xs px-2 py-1 rounded bg-yellow-500 text-white"
                   >
-                    Editar
+                    {t("common.actions.edit", { defaultValue: "Editar" })}
                   </button>
 
                   <button
@@ -367,7 +412,9 @@ export default function ActividadesPage() {
                     onClick={() => toggleActive(a.id, !a.active)}
                     className="text-xs px-2 py-1 rounded bg-blue-500 text-white"
                   >
-                    {a.active ? "Desactivar" : "Activar"}
+                    {a.active
+                      ? t("actividades.actionDeactivate", { defaultValue: "Desactivar" })
+                      : t("actividades.actionActivate", { defaultValue: "Activar" })}
                   </button>
 
                   <button
@@ -375,7 +422,7 @@ export default function ActividadesPage() {
                     onClick={() => deleteOne(a.id)}
                     className="text-xs px-2 py-1 rounded bg-red-600 text-white"
                   >
-                    Eliminar
+                    {t("common.actions.delete", { defaultValue: "Eliminar" })}
                   </button>
                 </div>
               )}
