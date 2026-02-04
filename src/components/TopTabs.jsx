@@ -65,8 +65,6 @@ function uniqByPath(tabs) {
 export default function TopTabs({ tabs = [] }) {
   const { t } = useTranslation();
   const location = useLocation();
-
-  // role/isAppRoot vienen del AuthContext
   const { user, currentRole, role, isAppRoot } = useAuth();
 
   const flags = useMemo(() => {
@@ -85,10 +83,9 @@ export default function TopTabs({ tabs = [] }) {
 
   const baseItems = Array.isArray(tabs) ? tabs : [];
 
-  // ✅ Inyecta el tab /admins cuando isAppRoot=true (no depende de ProtectedShell)
+  // ✅ Inyecta /admins cuando isAppRoot=true
   const items = useMemo(() => {
     const injected = [...baseItems];
-
     if (isAppRoot) {
       injected.push({
         path: "/admins",
@@ -96,30 +93,22 @@ export default function TopTabs({ tabs = [] }) {
         label: "Administrador",
       });
     }
-
     return uniqByPath(injected);
   }, [baseItems, isAppRoot]);
 
   const effectiveRole = safeText(currentRole || role).trim();
   const roleRaw = effectiveRole.toLowerCase();
-  const roleLabel = isAppRoot ? "ROOT" : roleRaw ? roleRaw.toUpperCase() : "CARGANDO ROL…";
+  const roleLabel = isAppRoot ? "ROOT" : roleRaw ? roleRaw.toUpperCase() : "…";
 
-  const isActive = (path) => {
+  const isActivePath = (path) => {
     const p = safeText(path).trim();
     if (!p) return false;
     return location.pathname === p || location.pathname.startsWith(p + "/");
   };
 
-  const baseCls =
-    "no-underline inline-flex items-center justify-center px-4 py-2 rounded-md text-sm " +
-    "font-semibold border transition-colors whitespace-nowrap min-w-[92px]";
-
-  const activeCls = "shadow-sm border-slate-900";
-  const inactiveCls = "border-slate-300 hover:bg-slate-50 hover:border-slate-400";
-
   return (
-    <div className="w-full" data-top-tabs="v11">
-      <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+    <div className="w-full" data-top-tabs="v12">
+      <div className="bg-white/80 backdrop-blur border border-slate-200 rounded-2xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
             <div className="shrink-0">
@@ -127,27 +116,33 @@ export default function TopTabs({ tabs = [] }) {
             </div>
           ) : null}
 
-          <nav className="flex-1 overflow-x-auto">
-            <div className="flex gap-2 min-w-max">
+          <nav className="flex-1 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-2 min-w-max py-1">
               {items.map((tab, idx) => {
                 const path = safeText(tab?.path).trim();
                 if (!path) return null;
 
-                const on = isActive(path);
-                const label =
-                  safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
-
-                const style = on
-                  ? { background: "#0f172a", color: "#ffffff" }
-                  : { background: "#ffffff", color: "#0f172a" };
+                const on = isActivePath(path);
+                const label = safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
 
                 return (
                   <NavLink
                     key={path || `tab-${idx}`}
                     to={path}
-                    className={`${baseCls} ${on ? activeCls : inactiveCls}`}
-                    style={style}
                     title={label}
+                    className={({ isActive }) => {
+                      const active = on || isActive;
+                      return cx(
+                        "no-underline inline-flex items-center justify-center",
+                        "px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap",
+                        "transition-all duration-150",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60",
+                        active
+                          ? "text-white shadow-md border border-emerald-600"
+                          : "text-slate-800 border border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                      );
+                    }}
+                    style={on ? activePillStyle : undefined}
                   >
                     {label}
                   </NavLink>
@@ -156,16 +151,31 @@ export default function TopTabs({ tabs = [] }) {
             </div>
           </nav>
 
-          {user && (
-            <div className="hidden md:flex flex-col text-right text-xs px-2 py-1 rounded bg-slate-100">
-              <span className="font-medium text-slate-800">
-                {user.email ?? "Sin email"}
-              </span>
-              <span className="text-slate-600">{roleLabel}</span>
+          {user ? (
+            <div className="hidden md:flex items-center gap-2 text-xs px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="min-w-0">
+                <div className="font-semibold text-slate-800 truncate max-w-[220px]">
+                  {user.email ?? "Sin email"}
+                </div>
+                <div className="text-[10px] font-bold tracking-wider text-slate-500">
+                  {roleLabel}
+                </div>
+              </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+/* ====== estilos activos (sin tailwind hardcode para gradiente) ====== */
+const activePillStyle = {
+  background:
+    "linear-gradient(135deg, rgba(16,185,129,1) 0%, rgba(5,150,105,1) 50%, rgba(2,132,199,1) 100%)",
+};
+
+/* helper local */
+function cx(...arr) {
+  return arr.filter(Boolean).join(" ");
 }
