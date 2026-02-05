@@ -55,12 +55,33 @@ function computeInitial() {
   return persistLang(readUrlLang() || readStoredLang() || readNavigatorLang() || "es");
 }
 
-// ✅ Evita doble init (si existe src/i18n/i18n.js u otro init)
-function ensureInit() {
-  // si ya está inicializado, solo asegura recursos + listeners
-  if (i18n.isInitialized) return;
+// ✅ SIEMPRE asegura bundles (aunque i18n ya esté inicializado por otro lado)
+function ensureBundles() {
+  // deep=true, overwrite=true para “forzar” que queden iguales a tus JSON
+  i18n.addResourceBundle("es", "translation", es, true, true);
+  i18n.addResourceBundle("en", "translation", en, true, true);
+  i18n.addResourceBundle("fr", "translation", fr, true, true);
+}
 
+function ensureInit() {
   const initial = computeInitial();
+
+  // Si ya existe init previo, NO re-init: solo asegura bundles + opciones clave
+  if (i18n.isInitialized) {
+    ensureBundles();
+
+    // refuerza settings importantes por si el init previo era distinto
+    i18n.options.supportedLngs = SUPPORTED;
+    i18n.options.nonExplicitSupportedLngs = true;
+    i18n.options.load = "languageOnly";
+    i18n.options.fallbackLng = "es";
+
+    // asegura que el idioma actual sea válido
+    const lng = isOk(i18n.language) ? norm2(i18n.language) : initial;
+    if (norm2(i18n.language) !== lng) i18n.changeLanguage(lng);
+
+    return;
+  }
 
   i18n.use(initReactI18next).init({
     resources: {
@@ -68,14 +89,11 @@ function ensureInit() {
       en: { translation: en },
       fr: { translation: fr },
     },
-
     supportedLngs: SUPPORTED,
     nonExplicitSupportedLngs: true,
     load: "languageOnly",
-
     lng: initial,
     fallbackLng: "es",
-
     interpolation: { escapeValue: false },
     react: { useSuspense: false },
     returnEmptyString: false,
@@ -84,6 +102,10 @@ function ensureInit() {
 }
 
 // ✅ Listener único (sin duplicar)
+function onLanguageChanged(lng) {
+  persistLang(lng);
+}
+
 function ensureListeners() {
   try {
     i18n.off("languageChanged", onLanguageChanged);
@@ -91,14 +113,11 @@ function ensureListeners() {
   i18n.on("languageChanged", onLanguageChanged);
 }
 
-function onLanguageChanged(lng) {
-  persistLang(lng);
-}
-
 ensureInit();
+ensureBundles();
 ensureListeners();
 
-// Debug (temporal)
+// Debug
 if (typeof window !== "undefined") {
   window.__i18n = i18n;
 }
