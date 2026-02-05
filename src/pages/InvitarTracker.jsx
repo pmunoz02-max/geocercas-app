@@ -13,11 +13,14 @@ const I18N = {
     emailPlaceholder: "name@email.com",
     emailHint: "Se enviará una invitación a este correo.",
     send: "Enviar invitación",
+    resend: "Reenviar a tracker registrado",
     sending: "Enviando…",
+    resending: "Reenviando…",
     selectPerson: "Debes seleccionar un miembro de Personal.",
     missingOrg: "No se encontró org_id activo. Refresca o vuelve a iniciar sesión.",
     emailRequired: "Debes ingresar un correo.",
     success: (email) => `Se envió un link mágico a ${email}.`,
+    resentOk: (email) => `Se reenviaron credenciales a ${email}.`,
     genericError: "No se pudo enviar la invitación.",
   },
   en: {
@@ -30,11 +33,14 @@ const I18N = {
     emailPlaceholder: "name@email.com",
     emailHint: "An invitation will be sent to this email.",
     send: "Send invitation",
+    resend: "Resend to registered tracker",
     sending: "Sending…",
+    resending: "Resending…",
     selectPerson: "You must select a staff member.",
     missingOrg: "No active org_id found. Refresh or sign in again.",
     emailRequired: "You must enter an email.",
     success: (email) => `A magic link was sent to ${email}.`,
+    resentOk: (email) => `Credentials were resent to ${email}.`,
     genericError: "Could not send invitation.",
   },
   fr: {
@@ -47,11 +53,14 @@ const I18N = {
     emailPlaceholder: "name@email.com",
     emailHint: "Une invitation sera envoyée à cet e-mail.",
     send: "Envoyer l’invitation",
+    resend: "Renvoyer au tracker enregistré",
     sending: "Envoi…",
+    resending: "Renvoi…",
     selectPerson: "Vous devez sélectionner un membre du personnel.",
     missingOrg: "Aucun org_id actif. Rafraîchissez ou reconnectez-vous.",
     emailRequired: "Vous devez saisir un e-mail.",
     success: (email) => `Un lien magique a été envoyé à ${email}.`,
+    resentOk: (email) => `Les accès ont été renvoyés à ${email}.`,
     genericError: "Impossible d’envoyer l’invitation.",
   },
 };
@@ -91,6 +100,7 @@ export default function InvitarTracker() {
 
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const [okMsg, setOkMsg] = useState("");
   const [errMsg, setErrMsg] = useState("");
@@ -114,7 +124,6 @@ export default function InvitarTracker() {
     setPeopleLoading(true);
     setErrMsg("");
     try {
-      // ✅ IMPORTANTE: en supabase-js v2, eq() va DESPUÉS de select()
       const tries = [
         async () => {
           const q = supabase
@@ -187,13 +196,9 @@ export default function InvitarTracker() {
           used = r.usedSelect;
           break;
         }
-        if (!r.missingCol) {
-          // error real (RLS, permisos, etc.)
-          throw r.error;
-        }
+        if (!r.missingCol) throw r.error;
       }
 
-      // filtra vigente si existe
       final = final.filter((p) => (typeof p?.vigente === "boolean" ? p.vigente === true : true));
 
       setPeople(final);
@@ -216,7 +221,7 @@ export default function InvitarTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org_id]);
 
-  async function sendInvite() {
+  async function callInvite({ resend }) {
     setOkMsg("");
     setErrMsg("");
 
@@ -226,22 +231,40 @@ export default function InvitarTracker() {
     const safeEmail = normEmail(email);
     if (!safeEmail) return setErrMsg(t.emailRequired);
 
-    const payload = { email: safeEmail, org_id, person_id: selectedPersonId, resend: false };
+    const payload = { email: safeEmail, org_id, person_id: selectedPersonId, resend: Boolean(resend) };
     console.log("[InvitarTracker] payload", payload);
 
-    setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("invite-tracker", { body: payload });
       if (error) throw new Error(error.message || t.genericError);
       if (!data?.ok) throw new Error(data?.message || t.genericError);
 
-      setOkMsg(t.success(safeEmail));
+      setOkMsg(resend ? t.resentOk(safeEmail) : t.success(safeEmail));
     } catch (e) {
       setErrMsg(String(e?.message || e || t.genericError));
+    }
+  }
+
+  async function sendInvite() {
+    setSending(true);
+    try {
+      await callInvite({ resend: false });
     } finally {
       setSending(false);
     }
   }
+
+  async function resendInvite() {
+    setResending(true);
+    try {
+      await callInvite({ resend: true });
+    } finally {
+      setResending(false);
+    }
+  }
+
+  const canSend = Boolean(org_id && selectedPersonId);
+  const canResend = Boolean(org_id && selectedPersonId && normEmail(email));
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -288,10 +311,20 @@ export default function InvitarTracker() {
         <button
           type="button"
           onClick={sendInvite}
-          disabled={sending || !org_id || !selectedPersonId}
+          disabled={sending || !canSend}
           className="w-full mt-4 py-4 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 disabled:opacity-60"
         >
           {sending ? t.sending : t.send}
+        </button>
+
+        {/* ✅ Botón Reenviar */}
+        <button
+          type="button"
+          onClick={resendInvite}
+          disabled={resending || !canResend}
+          className="w-full mt-3 py-4 rounded-xl font-bold border border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-60"
+        >
+          {resending ? t.resending : t.resend}
         </button>
 
         {okMsg ? (
