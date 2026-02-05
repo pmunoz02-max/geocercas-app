@@ -2,6 +2,7 @@
 // Dashboard de Costos — Versión PRO (roles centralizados + más métricas + export)
 // ✅ Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id
 // ✅ FIX: activities por org_id (fallback legacy tenant_id)
+// ✅ i18n: 100% dashboardCostos.* (sin strings hardcodeados)
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
@@ -341,35 +342,22 @@ const CostosDashboardPage = () => {
   const [selectedMetric, setSelectedMetric] = useState("cost");
 
   // ✅ Loading correcto del contexto (antes de decidir nada)
- if (authLoading) {
-  return (
-    <div className="p-4 text-sm text-gray-600">
-      Cargando tu sesión…
-    </div>
-  );
-}
+  if (authLoading) {
+    return <div className="p-4 text-sm text-gray-600">{t("dashboardCostos.sessionLoading")}</div>;
+  }
 
-if (!isAuthenticated) {
-  return (
-    <div className="p-4 text-sm text-red-600">
-      No hay sesión activa.
-    </div>
-  );
-}
+  if (!isAuthenticated) {
+    return <div className="p-4 text-sm text-red-600">{t("dashboardCostos.noActiveSession")}</div>;
+  }
 
-if (contextLoading && !currentOrg?.id) {
-  return (
-    <div className="p-4 text-sm text-gray-600">
-      Cargando organización actual…
-    </div>
-  );
-}
-
+  if (contextLoading && !currentOrg?.id) {
+    return <div className="p-4 text-sm text-gray-600">{t("dashboardCostos.loadingCurrentOrg")}</div>;
+  }
 
   if (!currentOrg?.id) {
     return (
       <div className="p-4 text-sm text-red-600">
-        {t("dashboardCostos.noOrgAssigned", "No hay organización activa para este usuario.")}
+        {t("dashboardCostos.noOrgAssigned")}
       </div>
     );
   }
@@ -377,7 +365,7 @@ if (contextLoading && !currentOrg?.id) {
   if (loadingAccess) {
     return (
       <div className="p-4 text-sm text-gray-600">
-        {t("dashboardCostos.loadingPermissions") || "Cargando permisos…"}
+        {t("dashboardCostos.loadingPermissions")}
       </div>
     );
   }
@@ -386,7 +374,9 @@ if (contextLoading && !currentOrg?.id) {
     return (
       <div className="p-4 text-red-600">
         {t("dashboardCostos.noAccess")}
-        <p className="mt-2 text-xs text-gray-400">(Rol actual: {role || "sin rol"})</p>
+        <p className="mt-2 text-xs text-gray-400">
+          ({t("dashboardCostos.currentRoleLabel")}: {role || t("dashboardCostos.roleNone")})
+        </p>
       </div>
     );
   }
@@ -484,11 +474,16 @@ if (contextLoading && !currentOrg?.id) {
 
   const aggregatedData = useMemo(() => {
     const dim = DIMENSIONS[selectedDimension];
-    return aggregateBy(rows, {
-      groupKey: dim.groupKey,
-      labelField: dim.labelField,
+    const raw = aggregateBy(rows, { groupKey: dim.groupKey, labelField: dim.labelField });
+
+    return raw.map((item) => {
+      const isUnknown = item.key === "SIN_DATO" || item.label === "SIN_DATO" || item.label == null;
+      return {
+        ...item,
+        label: isUnknown ? t("dashboardCostos.unknownCategory") : item.label,
+      };
     });
-  }, [rows, selectedDimension]);
+  }, [rows, selectedDimension, t]);
 
   const metricConfig = METRICS[selectedMetric];
 
@@ -497,11 +492,17 @@ if (contextLoading && !currentOrg?.id) {
   // ------------------------------
   const handleExportDataCSV = () => {
     if (!aggregatedData.length) {
-      alert(t("dashboardCostos.exportNoData") || "Sin datos que exportar.");
+      alert(t("dashboardCostos.exportNoData"));
       return;
     }
 
-    const header = ["categoria", "total_horas", "total_costo", "tarifa_promedio", "registros"];
+    const header = [
+      t("dashboardCostos.csvHeaderCategoria"),
+      t("dashboardCostos.csvHeaderTotalHoras"),
+      t("dashboardCostos.csvHeaderTotalCosto"),
+      t("dashboardCostos.csvHeaderTarifaPromedio"),
+      t("dashboardCostos.csvHeaderRegistros"),
+    ];
 
     const lines = aggregatedData.map((row) =>
       [
@@ -519,7 +520,7 @@ if (contextLoading && !currentOrg?.id) {
     const a = document.createElement("a");
     const today = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `dashboard_costos_${today}.csv`;
+    a.download = `${t("dashboardCostos.exportFilePrefix")}_${today}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -528,9 +529,7 @@ if (contextLoading && !currentOrg?.id) {
 
   const handleExportChartPNG = async () => {
     if (!chartRef.current) {
-      alert(
-        t("dashboardCostos.exportChartError") || "No se encontró el contenedor de la gráfica."
-      );
+      alert(t("dashboardCostos.exportChartContainerNotFound"));
       return;
     }
 
@@ -544,13 +543,13 @@ if (contextLoading && !currentOrg?.id) {
       const link = document.createElement("a");
       const today = new Date().toISOString().slice(0, 10);
       link.href = dataUrl;
-      link.download = `dashboard_costos_${today}.png`;
+      link.download = `${t("dashboardCostos.exportFilePrefix")}_${today}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (e) {
       console.error("[CostosDashboard] exportChart error:", e);
-      alert(t("dashboardCostos.exportChartError") || "No se pudo exportar la gráfica.");
+      alert(t("dashboardCostos.exportChartError"));
     }
   };
 
@@ -565,7 +564,7 @@ if (contextLoading && !currentOrg?.id) {
           <h1 className="text-2xl font-bold">{t("dashboardCostos.title")}</h1>
           <p className="text-sm text-gray-600">{t("dashboardCostos.subtitle")}</p>
           <p className="text-xs text-gray-500 mt-1">
-            {t("dashboardCostos.currentOrgLabel", "Organización actual")}:{" "}
+            {t("dashboardCostos.currentOrgLabel")}:{" "}
             <span className="font-medium">{currentOrg?.name || "—"}</span>
           </p>
         </div>
@@ -576,21 +575,21 @@ if (contextLoading && !currentOrg?.id) {
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700"
             disabled={loading}
           >
-            {loading ? t("dashboardCostos.refreshing") || "Actualizando…" : t("dashboardCostos.refreshButton")}
+            {loading ? t("dashboardCostos.refreshing") : t("dashboardCostos.refreshButton")}
           </button>
 
           <button
             onClick={handleExportDataCSV}
             className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
           >
-            {t("dashboardCostos.exportDataButton") || "Exportar datos (CSV)"}
+            {t("dashboardCostos.exportDataButton")}
           </button>
 
           <button
             onClick={handleExportChartPNG}
             className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
           >
-            {t("dashboardCostos.exportChartButton") || "Exportar gráfica (PNG)"}
+            {t("dashboardCostos.exportChartButton")}
           </button>
         </div>
       </div>
@@ -613,9 +612,7 @@ if (contextLoading && !currentOrg?.id) {
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-pink-500">
-          <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiAvgRate") || "Tarifa promedio"}
-          </p>
+          <p className="text-xs text-gray-500 uppercase">{t("dashboardCostos.kpiAvgRate")}</p>
           <p className="text-xl font-bold">{formatNumber(globalAvgRate)}</p>
         </div>
       </div>
@@ -624,7 +621,7 @@ if (contextLoading && !currentOrg?.id) {
       {resumenMoneda.length > 0 && (
         <div className="bg-white rounded-xl p-3 shadow">
           <h2 className="text-xs font-semibold text-gray-700 mb-2">
-            {t("dashboardCostos.currenciesSummaryTitle") || "Resumen por moneda"}
+            {t("dashboardCostos.currenciesSummaryTitle")}
           </h2>
           <div className="flex flex-wrap gap-2 text-xs">
             {resumenMoneda.map((m, idx) => (
@@ -636,10 +633,11 @@ if (contextLoading && !currentOrg?.id) {
                   className="inline-block h-2 w-2 rounded-full"
                   style={{ backgroundColor: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}
                 />
-                <span className="font-semibold">{m.currency || "N/A"}</span>
+                <span className="font-semibold">
+                  {m.currency === "N/A" ? t("dashboardCostos.na") : (m.currency || t("dashboardCostos.na"))}
+                </span>
                 <span className="text-gray-500">
-                  {formatNumber(m.totalCost)} / {formatNumber(m.totalHours)}{" "}
-                  {t("dashboardCostos.labelHours") || "horas"}
+                  {formatNumber(m.totalCost)} / {formatNumber(m.totalHours)} {t("dashboardCostos.labelHours")}
                 </span>
               </div>
             ))}
@@ -818,9 +816,7 @@ if (contextLoading && !currentOrg?.id) {
                 <th className="px-2 py-1 text-left">{t("dashboardCostos.colCategoria")}</th>
                 <th className="px-2 py-1 text-right">{t("dashboardCostos.colHoras")}</th>
                 <th className="px-2 py-1 text-right">{t("dashboardCostos.colCosto")}</th>
-                <th className="px-2 py-1 text-right">
-                  {t("dashboardCostos.colTarifaPromedio") || "Tarifa prom."}
-                </th>
+                <th className="px-2 py-1 text-right">{t("dashboardCostos.colTarifaPromedio")}</th>
                 <th className="px-2 py-1 text-right">{t("dashboardCostos.colRegistros")}</th>
               </tr>
             </thead>
