@@ -1,894 +1,723 @@
-{
-  "common": {
-    "language": {
-      "es": "Espagnol",
-      "en": "Anglais",
-      "fr": "Français"
-    },
-    "actions": {
-      "close": "Fermer",
-      "cancel": "Annuler",
-      "save": "Enregistrer",
-      "delete": "Supprimer",
-      "edit": "Modifier",
-      "back": "Retour",
-      "yes": "Oui",
-      "no": "Non",
-      "refresh": "Actualiser",
-      "clear": "Effacer",
-      "loading": "Chargement…",
-      "saving": "Enregistrement…"
-    },
-    "orgNamePlaceholder": "Nom de l’organisation (ex. Ferme A)",
-    "createOrganization": "Créer une organisation",
-    "refreshContext": "Réessayer le contexte"
-  },
-  "auth": {
-    "loginRequired": "Vous devez vous connecter.",
-    "processing": "Authentification…",
-    "timeout": "L’authentification a pris trop de temps. Veuillez réessayer.",
-    "invalidOrExpiredLink": "Le lien est invalide, expiré ou déjà utilisé.",
-    "errorTitle": "Échec de l’authentification",
-    "backToLogin": "Retour à la connexion"
-  },
-  "app": {
-    "title": "App Geocercas",
-    "header": {
-      "loggedAs": "Connecté en tant que",
-      "logout": "Se déconnecter",
-      "login": "Se connecter",
-      "goToPanel": "Aller au tableau de bord",
-      "roleOwner": "Propriétaire",
-      "roleAdmin": "Administrateur",
-      "roleTracker": "Tracker",
-      "organizationLabel": "Organisation",
-      "organizationAriaLabel": "Sélectionner une organisation",
-      "organizationNone": "Aucune organisation",
-      "loginMagic": "Lien magique"
-    },
-    "tabs": {
-      "inicio": "Accueil",
-      "home": "Accueil",
-      "geocercas": "Géofences",
-      "geocerca": "Géofence",
-      "nuevaGeocerca": "Géofence",
-      "personal": "Personnel",
-      "actividades": "Activités",
-      "asignaciones": "Affectations",
-      "reportes": "Rapports",
-      "dashboard": "Tableau des coûts",
-      "dashboardCostos": "Tableau des coûts",
-      "tracker": "Tracker",
-      "invitarTracker": "Inviter un tracker",
-      "invitar_tracker": "Inviter un tracker",
-      "admins": "Administrateurs"
-    }
-  },
-  "landing": {
-    "brandName": "App Geocercas",
-    "brandTagline": "Contrôle du personnel par géofences",
-    "heroBadge": "Contrôle intelligent du terrain",
-    "heroTitlePrefix": "Contrôlez votre personnel",
-    "heroTitleHighlight": "avec des géofences intelligentes",
-    "heroTitleSuffix": "partout dans le monde",
-    "heroSubtitle": "App Geocercas vous permet d'affecter des personnes à des zones, d'enregistrer des activités et de calculer les coûts en temps réel.",
-    "ctaLogin": "Aller au tableau de bord",
-    "ctaMagic": "Entrer avec un lien magique",
-    "bulletGeocercasTitle": "Géofences",
-    "bulletGeocercasBody": "Créez et gérez des géofences pour vos champs, exploitations, usines ou points de service.",
-    "bulletPersonalTitle": "Personnel",
-    "bulletPersonalBody": "Enregistrez votre personnel et affectez-le à des activités et zones spécifiques.",
-    "bulletCostsTitle": "Coûts",
-    "bulletCostsBody": "Consultez des tableaux de bord de type BI avec les coûts par personne, activité et géofence.",
-    "livePanelLabel": "Panneau en direct",
-    "livePanelTitle": "Opérations en temps réel",
-    "zonesActive": "Zones actives",
-    "statusOnline": "Système en ligne",
-    "assistanceControlTitle": "Contrôle de présence",
-    "assistanceControlBody": "Vérifiez qui était dans chaque géofence, à quelle heure et dans quelle activité.",
-    "multiOrgTitle": "Multi-organisation",
-    "multiOrgBody": "Gérez plusieurs entreprises ou projets depuis un seul compte, avec des rôles et des permissions distincts.",
-    "goToDashboard": "Aller au tableau de bord",
-    "logout": "Se déconnecter",
-    "footerFaq": "Questions fréquentes",
-    "footerSupport": "Support",
-    "footerTerms": "Conditions",
-    "footerPrivacy": "Confidentialité",
-    "rightsReserved": "Tous droits réservés",
-    "loginButton": "Se connecter",
-    "accessTitle": "Compte autorisé requis",
-    "accessBody": "Cette application nécessite un compte invité par un administrateur. Si vous n'avez pas accès, demandez une invitation à votre organisation.",
-    "accessHint": "Astuce : utilisez « Lien magique » si votre admin vous a invité par e-mail.",
-    "reviewNote": "Note : Si vous évaluez l'app (Google Play), utilisez les identifiants fournis dans Play Console (App access).",
-    "privacyMiniNote": "Confidentialité : la localisation est utilisée uniquement pour les fonctions de géofence/suivi selon les autorisations accordées."
-  },
-  "login": {
-    "title": "Se connecter",
-    "subtitle": "Accédez à votre compte App Geocercas",
-    "emailLabel": "E-mail",
-    "passwordLabel": "Mot de passe",
-    "passwordLoginButton": "Entrer avec mot de passe",
-    "magicLinkTitle": "Entrer avec lien magique",
-    "magicLinkDescription": "Nous vous enverrons un lien sécurisé à votre e-mail pour entrer sans mot de passe.",
-    "magicLinkButton": "Envoyer le lien magique",
-    "magicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
-    "sessionActive": "Vous avez déjà une session active.",
-    "goToDashboard": "Aller au tableau de bord",
-    "errors": {
-      "invalidEmail": "Saisissez une adresse e-mail valide.",
-      "unknown": "Une erreur s'est produite lors de la connexion."
-    },
-    "modePassword": "Mot de passe",
-    "modeMagic": "Lien magique",
-    "submit": "Se connecter",
-    "submitting": "Connexion…",
-    "magicButton": "Envoyer le lien magique",
-    "magicSubmitting": "Envoi du lien…",
-    "magicDescription": "Nous vous enverrons un lien sécurisé par e-mail pour vous connecter sans mot de passe.",
-    "emailPlaceholder": "vous@exemple.com",
-    "passwordPlaceholder": "Saisissez votre mot de passe",
-    "forgotPassword": "Mot de passe oublié ?",
-    "forgotPasswordAlt": "Préférez réinitialiser votre mot de passe ? (envoyer e-mail)",
-    "loadingSession": "Chargement de votre session…",
-    "errorMissingCredentials": "E-mail et mot de passe requis.",
-    "errorMissingEmail": "Veuillez saisir un e-mail.",
-    "errorInvalidCredentials": "Identifiants invalides.",
-    "errorUnexpected": "Erreur inattendue lors de la connexion.",
-    "userNotAuthorized": "Cet e-mail n'est pas autorisé. Demandez une invitation à un admin.",
-    "errorMagicLink": "Impossible d'envoyer le lien magique.",
-    "infoMagicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
-    "errorMagicLinkUnexpected": "Erreur inattendue lors de l'envoi du lien magique.",
-    "errorResetPassword": "Impossible d'envoyer l'e-mail de récupération.",
-    "infoResetPasswordSent": "Nous vous avons envoyé un e-mail pour réinitialiser votre mot de passe. Vérifiez votre boîte de réception.",
-    "errorResetPasswordUnexpected": "Erreur inattendue lors de l'envoi de l'e-mail de récupération."
-  },
-  "inicio": {
-    "header": {
-      "badge": "Centre d'aide et de ressources",
-      "title": "Bienvenue sur votre tableau de bord",
-      "subtitle": "Depuis ici, vous pouvez accéder aux instructions, FAQ, support et nouveautés d'App Geocercas."
-    },
-    "cards": {
-      "instrucciones": {
-        "badge": "Guide rapide",
-        "title": "Instructions",
-        "body": "Suivez pas à pas la configuration des organisations, géofences, personnel, activités et trackers.",
-        "cta": "Voir instructions"
-      },
-      "faq": {
-        "badge": "Aide",
-        "title": "Questions fréquentes",
-        "body": "Trouvez des réponses aux questions les plus courantes sur les invitations, rôles, coûts et usage du tracker.",
-        "cta": "Voir FAQ"
-      },
-      "videoDemo": {
-        "badge": "Vidéo",
-        "title": "Vidéo démo",
-        "body": "Regardez une courte démonstration d'App Geocercas en situation réelle.",
-        "cta": "Voir la vidéo"
-      },
-      "soporte": {
-        "badge": "Support",
-        "title": "Contact / Support",
-        "body": "Besoin d'aide ? Contactez-nous pour du support technique, facturation ou questions sur votre compte.",
-        "cta": "Accéder au support"
-      },
-      "queEs": {
-        "badge": "Info",
-        "title": "Qu'est-ce qu'App Geocercas ?",
-        "body": "Découvrez la vision, les cas d'usage et les bénéfices d'App Geocercas pour votre organisation.",
-        "cta": "En savoir plus"
-      },
-      "novedades": {
-        "badge": "Nouveautés",
-        "title": "Nouveautés / Changelog",
-        "body": "Consultez l'historique des changements, nouvelles fonctionnalités, améliorations et corrections.",
-        "cta": "Voir changelog"
-      },
-      "common": {
-        "soon": "Bientôt disponible"
-      }
-    },
-    "userInfo": {
-      "connectedAs": "Connecté en tant que",
-      "withRole": "avec le rôle",
-      "inOrg": "dans l'organisation",
-      "userLabel": "Utilisateur :",
-      "orgIdLabel": "ID d'organisation :"
-    }
-  },
-  "geocercas": {
-    "titleNew": "Nouvelle géofence",
-    "subtitleNew": "Dessinez une géofence sur la carte et affectez-la à votre personnel ou vos activités.",
-    "panelTitle": "Géofences",
-    "noGeofences": "Vous n'avez pas encore créé de géofences.",
-    "placeholderName": "Nom de la géofence",
-    "buttonDrawByCoords": "Dessiner par coordonnées",
-    "buttonSave": "Enregistrer la géofence",
-    "buttonShowSelected": "Afficher sélectionnées",
-    "buttonShowAll": "Afficher toutes",
-    "buttonDeleteSelected": "Supprimer sélectionnées",
-    "buttonClearCanvas": "Nettoyer la carte",
-    "pageTitle": "Géofences",
-    "pageSubtitle": "Gérez les géofences de votre organisation. D’ici, vous pouvez en créer de nouvelles et consulter celles existantes.",
-    "currentOrgLabel": "Organisation actuelle :",
-    "currentUserLabel": "Utilisateur :",
-    "noOrgFallback": "— (aucune organisation sélectionnée)",
-    "cardNewTitle": "Nouvelle géofence",
-    "cardNewBody": "Créez une nouvelle géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
-    "cardNewCta": "Aller à Nouvelle géofence →",
-    "cardListTitle": "Liste des géofences",
-    "cardListBody": "Bientôt, vous verrez ici la liste des géofences existantes et leurs détails. Pour l’instant, utilisez l’option Nouvelle géofence pour créer et modifier.",
-    "buttonShowOnMap": "Afficher sur la carte",
-    "loadingDataset": "Chargement du dataset…",
-    "cursorHint": "Déplacez la souris sur la carte",
-    "lat": "Lat",
-    "lng": "Lng",
-    "draftLabel": "Brouillon",
-    "pointsLabel": "Pts",
-    "modalTitle": "Dessiner par coordonnées",
-    "modalHintRule": "1 point = petit carré | 2 points = rectangle | 3+ = polygone",
-    "modalInstruction": "Format :",
-    "modalOnePerLine": "(une par ligne)",
-    "modalDraw": "Dessiner",
-    "errorNameRequired": "Veuillez saisir un nom pour la géofence.",
-    "errorCoordsInvalid": "Coordonnées invalides. Utilisez le format : lat,lng (une par ligne).",
-    "errorNoShape": "Dessinez une géofence sur la carte ou créez-en une par coordonnées avant d’enregistrer.",
-    "errorSelectAtLeastOne": "Sélectionnez au moins une géofence.",
-    "errorNoGeojson": "Impossible de charger le GeoJSON de la géofence.",
-    "deleteConfirm": "Supprimer les géofences sélectionnées ?",
-    "deletedCount": "Supprimées : {{count}}",
-    "savedOk": "Géofence enregistrée avec succès."
+"inviteTrackerV2": {
+  "title": "Inviter / Renvoyer un tracker",
+  "plan": {
+    "label": "Forfait",
+    "activeTrackers": "Trackers actifs :",
+    "limitReachedBadge": "Limite atteinte",
+    "overLimitHint": "Vous pouvez renvoyer des invitations (cela n’ajoute pas de trackers), mais vous ne pouvez pas inviter de nouveaux trackers tant que la limite est atteinte.",
+    "limitReached": "Vous avez atteint la limite de votre forfait ({{plan}}).",
+    "limitReachedWithNumber": "Vous avez atteint la limite de votre forfait ({{plan}} : {{limit}} tracker actif)."
   },
   "personal": {
-    "title": "Personnel",
-    "orgInfoLabel": "Organisation :",
-    "orgFallback": "Sans organisation",
-    "roleLabel": "Rôle :",
-    "pillCanEdit": "Modifiable",
-    "pillReadOnly": "Lecture seule",
-    "bannerLoadingSession": "Chargement de la session…",
-    "bannerLoginRequired": "Vous devez vous connecter pour accéder à cette section.",
-    "bannerRefreshedOk": "Données mises à jour avec succès.",
-    "bannerSelected": "Enregistrement sélectionné.",
-    "bannerNewMode": "Mode création de personnel.",
-    "bannerEditMode": "Mode édition.",
-    "bannerCreated": "Personnel créé avec succès.",
-    "bannerUpdated": "Personnel mis à jour correctement.",
-    "bannerDeletedOk": "Enregistrement supprimé correctement.",
-    "errorMissingUser": "Impossible d'obtenir l'utilisateur authentifié.",
-    "errorNoAuthUser": "Aucun utilisateur authentifié.",
-    "errorLoad": "Erreur lors du chargement du personnel.",
-    "formTitleNew": "Nouveau personnel",
-    "formTitleEdit": "Modifier le personnel",
-    "errorNoPermissionCreate": "Vous n'avez pas les permissions pour créer du personnel.",
-    "errorNoPermissionEdit": "Vous n'avez pas les permissions pour modifier du personnel.",
-    "errorMustSelectForEdit": "Vous devez sélectionner un enregistrement à modifier.",
-    "errorNoPermissionSave": "Vous n'avez pas les permissions pour enregistrer les modifications.",
-    "errorMissingName": "Le prénom est requis.",
-    "errorMissingEmail": "L'e-mail est requis.",
-    "errorPhonePolicy": "Le téléphone doit commencer par + (format international E.164).",
-    "errorSaveNoRecord": "Aucun enregistrement mis à jour reçu.",
-    "errorSave": "Impossible d'enregistrer le personnel.",
-    "errorNoPermissionDelete": "Vous n'avez pas les permissions pour supprimer du personnel.",
-    "errorMustSelectForDelete": "Vous devez sélectionner un enregistrement à supprimer.",
-    "errorDelete": "Impossible de supprimer l'enregistrement.",
-    "errorDeleteNoRows": "Impossible de supprimer : l’enregistrement n’existe pas ou a déjà été supprimé.",
-    "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (soft delete)",
-    "searchPlaceholder": "Rechercher par prénom, nom, e-mail ou téléphone…",
-    "onlyActive": "Uniquement actifs",
-    "buttonRefresh": "Actualiser",
-    "buttonFullList": "Tout voir",
-    "buttonNew": "Nouveau",
-    "buttonEdit": "Modifier",
-    "buttonSave": "Enregistrer",
-    "buttonDelete": "Supprimer",
-    "fieldName": "Prénom",
-    "fieldLastName": "Nom",
-    "fieldEmail": "E-mail",
-    "fieldPhonePlaceholder": "Téléphone (+33…)",
-    "fieldActive": "Actif",
-    "tableName": "Prénom",
-    "tableLastName": "Nom",
-    "tableEmail": "E-mail",
-    "tablePhone": "Téléphone",
-    "tableActive": "Actif",
-    "tableNoResults": "Aucun résultat trouvé.",
-    "yes": "Oui",
-    "no": "Non",
-    "processing": "Traitement…",
-    "roleNone": "sans rôle",
-    "orgLabel": "Org",
-    "errorMissingOrg": "Aucune organisation active.",
-    "toggleVigente": "Actif / Inactif",
-    "newButton": "+ Nouveau",
-    "status": {
-      "active": "Actif",
-      "inactive": "Inactif",
-      "deleted": "Supprimé"
-    },
-    "table": {
-      "name": "Nom",
-      "phone": "Téléphone",
-      "email": "E-mail",
-      "status": "Statut",
-      "actions": "Actions",
-      "empty": "Aucun enregistrement dans cette organisation."
-    },
-    "modal": {
-      "newTitle": "Nouveau personnel",
-      "editTitle": "Modifier le personnel"
-    },
-    "form": {
-      "firstName": "Prénom",
-      "lastName": "Nom",
-      "phone": "Téléphone",
-      "email": "E-mail",
-      "vigente": "Actif"
-    }
+    "title": "Personnel actif"
   },
-  "actividades": {
-    "title": "Activités",
-    "includeInactive": "Inclure inactives",
-    "formTitleNew": "Nouvelle activité",
-    "formTitleEdit": "Modifier l'activité",
-    "fieldName": "Nom de l'activité",
-    "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
-    "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "Brève description de l'activité…",
-    "fieldCurrency": "Devise",
-    "fieldHourlyRate": "Tarif horaire",
-    "fieldHourlyRatePlaceholder": "Ex. 3.50",
-    "currencies": {
-      "USD": "Dollar américain",
-      "EUR": "Euro",
-      "MXN": "Peso mexicain",
-      "COP": "Peso colombien",
-      "PEN": "Sol péruvien",
-      "CLP": "Peso chilien",
-      "ARS": "Peso argentin",
-      "BRL": "Réal brésilien",
-      "CAD": "Dollar canadien",
-      "GBP": "Livre sterling",
-      "LOCAL": "Devise locale"
-    },
-    "buttonCreate": "Créer l'activité",
-    "buttonSave": "Enregistrer",
-    "buttonUpdate": "Mettre à jour",
-    "buttonCancel": "Annuler",
-    "tableTitle": "Liste des activités",
-    "thName": "Activité",
-    "thDescription": "Description",
-    "thCost": "Coût",
-    "thStatus": "Statut",
-    "thActions": "Actions",
-    "statusActive": "Active",
-    "statusInactive": "Inactive",
-    "actionEdit": "Modifier",
-    "actionDeactivate": "Désactiver",
-    "actionActivate": "Activer",
-    "actionDelete": "Supprimer",
-    "tableNoResults": "Aucune activité enregistrée.",
-    "loading": "Chargement des activités…",
-    "empty": "Aucune activité enregistrée.",
-    "readOnlyNote": "Seuls le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
-    "bannerCreated": "Activité créée avec succès.",
-    "bannerUpdated": "Activité mise à jour avec succès.",
-    "bannerDeleted": "Activité supprimée.",
-    "errorLoad": "Erreur lors du chargement des activités.",
-    "errorSave": "Impossible d'enregistrer l'activité.",
-    "errorDelete": "Impossible de supprimer l'activité.",
-    "errorMissingName": "Le nom de l'activité est obligatoire.",
-    "errorMissingCurrency": "La devise est obligatoire.",
-    "errorMissingRate": "Le tarif horaire est obligatoire.",
-    "errorNameRequired": "Le nom de l'activité est obligatoire.",
-    "errorRatePositive": "Le tarif horaire doit être supérieur à 0.",
-    "errorMissingTenant": "Impossible de trouver l'organisation de l'utilisateur (tenant_id/org_id).",
-    "errorToggle": "Impossible de modifier le statut de l'activité.",
-    "confirmDelete": "Voulez-vous vraiment supprimer l'activité « {{name}} » ?"
+  "dropdown": {
+    "selectPlaceholder": "— Sélectionner une personne —",
+    "searchPlaceholder": "Rechercher…",
+    "noResults": "Aucun résultat",
+    "noEmail": "(sans e-mail)",
+    "unnamed": "(Sans nom)"
   },
-  "asignaciones": {
-    "title": "Affectations",
-    "orgCurrent": "Organisation actuelle",
-    "debug": {
-      "source": "Source :",
-      "rows": "Lignes"
-    },
-    "filters": {
-      "statusLabel": "Statut",
-      "status": {
-        "todos": "Tous",
-        "activo": "Actifs",
-        "inactivo": "Inactifs",
-        "activa": "Actifs",
-        "inactiva": "Inactifs"
-      },
-      "refresh": "Actualiser",
-      "refreshLoading": "Actualisation…"
-    },
-    "form": {
-      "selectTracker": "Sélectionner un tracker",
-      "selectGeofence": "Sélectionner une géofence",
-      "start": "Début",
-      "end": "Fin",
-      "dateHint": "La BD stocke uniquement la date (YYYY-MM-DD). L’heure est UX ; elle est tronquée à l’enregistrement.",
-      "newTitle": "Nouvelle affectation",
-      "editTitle": "Modifier l'affectation",
-      "personLabel": "Personne",
-      "personPlaceholder": "Sélectionnez une personne",
-      "activityLabel": "Activité",
-      "activityPlaceholder": "Sélectionnez une activité",
-      "geofenceLabel": "Géofence",
-      "geofencePlaceholder": "Sélectionnez une géofence",
-      "startLabel": "Date/heure de début",
-      "endLabel": "Date/heure de fin",
-      "statusLabel": "Statut",
-      "statusActive": "Active",
-      "statusInactive": "Inactive",
-      "frequencyLabel": "Fréquence (min)",
-      "saveButton": "Enregistrer l'affectation",
-      "updateButton": "Mettre à jour l'affectation",
-      "cancelEditButton": "Annuler la modification",
-      "buttonCreate": "Créer l'affectation",
-      "buttonUpdate": "Mettre à jour l'affectation",
-      "buttonCancel": "Annuler",
-      "endOptionalHint": "Optionnel",
-      "quickActivity": {
-        "noActivitiesHint": "Aucune activité (créez-en une dans le module Activités ou ici en bas).",
-        "newButton": "Nouvelle activité",
-        "newNamePlaceholder": "Nom de la nouvelle activité",
-        "saveButton": "Enregistrer l'activité",
-        "saving": "Enregistrement…"
-      }
-    },
-    "status": {
-      "active": "Active",
-      "inactive": "Inactive"
-    },
-    "actions": {
-      "activate": "Activer",
-      "deactivate": "Désactiver",
-      "edit": "Modifier",
-      "delete": "Supprimer"
-    },
-    "banner": {
-      "saved": "Affectation enregistrée.",
-      "activated": "Affectation activée.",
-      "deactivated": "Affectation désactivée.",
-      "created": "Affectation créée correctement.",
-      "updated": "Affectation mise à jour.",
-      "deleted": "Affectation supprimée."
-    },
-    "messages": {
-      "selectTrackerAndGeofence": "Sélectionnez un tracker et une géofence.",
-      "trackerMissingUserId": "Tracker sans user_id.",
-      "invalidDates": "Dates invalides.",
-      "toggleInvalidDates": "Impossible d’alterner : début/fin invalides.",
-      "loadError": "Erreur lors du chargement des affectations.",
-      "catalogError": "Erreur lors du chargement des catalogues (personnel, géofences, activités).",
-      "loadingData": "Chargement des données d'affectations…",
-      "overlapError": "Cette personne a déjà une affectation active qui se chevauche sur cette plage de dates.",
-      "selectPersonAndFence": "Vous devez sélectionner une personne et une géofence.",
-      "selectDates": "Vous devez saisir la date/heure de début et de fin.",
-      "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
-      "frequencyInvalidRange": "La fréquence doit être comprise entre 5 minutes et 12 heures.",
-      "saveGenericError": "Une erreur s'est produite lors de l'enregistrement de l'affectation.",
-      "createGenericError": "Impossible de créer l'affectation.",
-      "createSuccess": "Affectation créée correctement.",
-      "updateGenericError": "Impossible de mettre à jour l'affectation.",
-      "updateSuccess": "Affectation mise à jour correctement.",
-      "deleteError": "Impossible de supprimer l'affectation.",
-      "deleteSuccess": "Affectation supprimée.",
-      "confirmDelete": "Voulez-vous vraiment supprimer cette affectation ?",
-      "noPersonal": "Aucun personnel actif dans cette organisation. Créez ou réactivez au moins une personne.",
-      "noActivities": "Aucune activité créée. Créez au moins une activité pour pouvoir affecter."
-    },
-    "table": {
-      "title": "Affectations enregistrées",
-      "empty": "Aucune affectation à afficher.",
-      "tracker": "Tracker",
-      "geofence": "Géofence",
-      "start": "Début",
-      "end": "Fin",
-      "status": "Statut",
-      "action": "Action",
-      "actions": "Actions",
-      "person": "Personne",
-      "activity": "Activité",
-      "noResults": "Aucune affectation enregistrée.",
-      "frequency": "Fréq (min)",
-      "showing": "Affichage de {{shown}} sur {{total}}."
-    }
+  "form": {
+    "emailLabel": "E-mail du tracker",
+    "emailPlaceholder": "tracker@exemple.com"
   },
-  "reportes": {
-    "title": "Rapports de coûts",
-    "headerSubtitle": "Consultez et exportez les coûts par personne, activité et géofence.",
-    "currentOrg": "Organisation actuelle :",
-    "noAccessBody": "Vous n'avez pas l'autorisation d'accéder aux rapports de coûts. Ce module est réservé aux propriétaires et administrateurs.",
-    "loadingReport": "Chargement du rapport…",
-    "loadingFilters": "Chargement…",
-    "filtersTitle": "Filtres",
-    "filtersFrom": "Du",
-    "filtersTo": "Au",
-    "filtersPerson": "Personne",
-    "filtersActivity": "Activité",
-    "filtersGeofence": "Géofence",
-    "filtersAsignacion": "Affectations",
-    "filtersAll": "Tous",
-    "filtersClear": "Effacer les filtres",
-    "filtersApply": "Appliquer les filtres",
-    "multiTip": "Astuce : Ctrl/Commande pour sélectionner plusieurs.",
-    "summaryTotalHoursLabel": "Heures totales",
-    "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans la période sélectionnée.",
-    "summaryTotalCostLabel": "Coût total",
-    "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
-    "summaryRecordsLabel": "Enregistrements",
-    "summaryRecordsHelp": "Nombre de lignes correspondant aux filtres actuels.",
-    "tableTitle": "Détail des coûts",
-    "tableExportHelp": "Exportez le détail actuel au format CSV.",
-    "tableExportButton": "Exporter CSV",
-    "colDia": "Jour",
-    "colPersona": "Personne",
-    "colEmail": "E-mail",
-    "colGeocerca": "Géofence",
-    "colActividad": "Activité",
-    "colAsignacion": "Affectation",
-    "colInicio": "Début",
-    "colFin": "Fin",
-    "colEntrada": "Entrée",
-    "colSalida": "Sortie",
-    "colHoras": "Heures",
-    "colMarcajes": "Pointages",
-    "colDentro": "Dans",
-    "colDist": "Dist (m)",
-    "colTarifa": "Tarif/heure",
-    "colCosto": "Coût",
-    "colMoneda": "Devise",
-    "csvHeaderInicio": "Début",
-    "csvHeaderFin": "Fin",
-    "csvHeaderPersona": "Personne",
-    "csvHeaderActividad": "Activité",
-    "csvHeaderGeocerca": "Géofence",
-    "csvHeaderHoras": "Heures",
-    "csvHeaderTarifa": "Tarif_heure",
-    "csvHeaderTotal": "Coût_total",
-    "csvHeaderCosto": "Coût_total",
-    "csvHeaderMoneda": "Devise",
-    "buttonDownloadCsv": "Télécharger CSV",
-    "errorLoad": "Erreur lors du chargement des rapports.",
-    "errorCsv": "Impossible de générer le fichier CSV.",
-    "errorLoadFilters": "Erreur lors du chargement des filtres (personnes, activités, géofences).",
-    "errorRangeInvalid": "La date « Du » ne peut pas être postérieure à la date « Au ». ",
-    "errorViewMissing": "La vue v_costos_detalle n'est pas encore créée dans Supabase.",
-    "errorLoadReport": "Erreur lors du chargement du rapport de coûts.",
-    "errorLabel": "Erreur :",
-    "errorMissingAuth": "Authentification manquante.",
-    "errorMissingOrg": "Impossible de déterminer l’organisation actuelle.",
-    "exportNoData": "Aucune donnée à exporter.",
-    "tableEmpty": "Aucun enregistrement pour les filtres sélectionnés.",
-    "personNoName": "Personne sans nom",
-    "geofenceNoName": "Géofence sans nom",
-    "activityNoName": "Activité sans nom"
+  "flags": {
+    "forceSwap": "Force swap (évite qu’un admin consomme l’invitation)",
+    "sendToTrackerGps": "Rediriger vers Tracker GPS (tg_flow=tracker)"
   },
-  "dashboard": {
-    "title": "Tableau des coûts",
-    "subtitle": "Visualisez les coûts agrégés par personne, activité et géofence.",
-    "cards": {
-      "totalCost": "Coût total",
-      "totalHours": "Heures totales",
-      "totalPersons": "Personnes",
-      "totalGeofences": "Géofences"
-    },
-    "filters": {
-      "dateFromLabel": "Du",
-      "dateToLabel": "Au",
-      "apply": "Appliquer",
-      "clear": "Effacer"
-    },
-    "charts": {
-      "costByActivity": "Coût par activité",
-      "costByPerson": "Coût par personne",
-      "costByGeofence": "Coût par géofence",
-      "hoursByDay": "Heures par jour"
-    },
-    "errorLoad": "Erreur lors du chargement du tableau des coûts."
+  "buttons": {
+    "sending": "Envoi…",
+    "inviteNew": "Inviter un NOUVEAU tracker",
+    "resend": "Renvoyer l’invitation (même tracker)"
   },
-  "dashboardCostos": {
-    "title": "Tableau des coûts",
-    "subtitle": "Visualisez des KPI et graphiques de coûts par personne, activité, géofence et devise.",
-    "sessionLoading": "Chargement de votre session…",
-    "noActiveSession": "Aucune session active.",
-    "loadingCurrentOrg": "Chargement de l’organisation actuelle…",
-    "noOrgAssigned": "Aucune organisation active pour cet utilisateur.",
-    "currentOrgLabel": "Organisation actuelle",
-    "loadingPermissions": "Chargement des permissions…",
-    "noAccess": "Vous n’avez pas accès à ce module.",
-    "currentRoleLabel": "Rôle actuel",
-    "roleNone": "sans rôle",
-    "refreshButton": "Rafraîchir les données",
-    "refreshing": "Actualisation…",
-    "filtersTitle": "Filtres",
-    "filtersFrom": "Du",
-    "filtersTo": "Au",
-    "filtersPerson": "Personne",
-    "filtersActivity": "Activité",
-    "filtersGeofence": "Géofence",
-    "filtersAll": "Tous",
-    "filtersClear": "Effacer les filtres",
-    "filtersApply": "Appliquer les filtres",
-    "kpiTotalHours": "Heures totales",
-    "kpiTotalCost": "Coût total",
-    "kpiRecords": "Enregistrements",
-    "kpiAvgRate": "Tarif moyen",
-    "currenciesSummaryTitle": "Résumé par devise",
-    "labelHours": "heures",
-    "na": "N/A",
-    "chartTitle": "Graphique des coûts",
-    "chartDimension": "Dimension",
-    "chartMetric": "Métrique",
-    "chartType": "Type de graphique",
-    "chartTypeBar": "Barres",
-    "chartTypeLine": "Lignes",
-    "chartTypePie": "Camembert",
-    "dimensionPersona": "Personne",
-    "dimensionActividad": "Activité",
-    "dimensionGeocerca": "Géofence",
-    "dimensionMoneda": "Devise",
-    "metricCost": "Coût",
-    "metricHours": "Heures",
-    "metricAvgRate": "Tarif moyen",
-    "metricRecords": "Enregistrements",
-    "chartNoData": "Aucune donnée à afficher.",
-    "unknownCategory": "Inconnu",
-    "tableTitle": "Détail pour la dimension sélectionnée",
-    "colCategoria": "Catégorie",
-    "colHoras": "Heures",
-    "colCosto": "Coût",
-    "colTarifaPromedio": "Tarif moyen",
-    "colRegistros": "Enregistrements",
-    "tableEmpty": "Aucune donnée à afficher",
-    "exportDataButton": "Exporter les données (CSV)",
-    "exportChartButton": "Exporter le graphique (PNG)",
-    "exportNoData": "Aucune donnée à exporter.",
-    "exportChartError": "Impossible d’exporter le graphique.",
-    "exportChartContainerNotFound": "Conteneur du graphique introuvable.",
-    "exportFilePrefix": "dashboard_couts",
-    "csvHeaderCategoria": "categorie",
-    "csvHeaderTotalHoras": "total_heures",
-    "csvHeaderTotalCosto": "total_cout",
-    "csvHeaderTarifaPromedio": "tarif_moyen",
-    "csvHeaderRegistros": "enregistrements"
+  "messages": {
+    "sentNew": "Invitation envoyée ✅ Vérifiez boîte/spam.",
+    "sentReused": "Invitation renvoyée ✅ (lien valide réutilisé). Vérifiez boîte/spam.",
+    "resendOkNew": "Renvoi OK ✅ (nouveau lien). Vérifiez boîte/spam.",
+    "resendOkReused": "Renvoi OK ✅ (lien valide). Vérifiez boîte/spam."
   },
-  "tracker": {
-    "title": "Tracker GPS",
-    "subtitle": "Visualisez en temps réel la position des trackers à l'intérieur de vos géofences.",
-    "status": {
-      "online": "Tracker en ligne",
-      "offline": "Sans données récentes"
-    },
-    "controls": {
-      "centerOnUser": "Centrer sur ma position",
-      "refresh": "Rafraîchir les positions",
-      "showAll": "Afficher tous",
-      "showInside": "Uniquement à l'intérieur des géofences"
-    },
-    "legend": {
-      "insideFence": "À l'intérieur de la géofence",
-      "outsideFence": "Hors géofence",
-      "geofence": "Géofence"
-    },
-    "table": {
-      "title": "Dernières positions",
-      "person": "Personne",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "timestamp": "Date/heure",
-      "status": "Statut",
-      "noResults": "Aucune position enregistrée."
-    },
-    "errorLoad": "Erreur lors du chargement des positions du tracker."
+  "result": {
+    "emailSent": "E-mail envoyé ✅",
+    "willGoTo": "Le tracker recevra un lien qui l’emmène directement vers",
+    "destTrackerGps": "Tracker GPS",
+    "destTrackerDashboard": "Tableau tracker",
+    "checkSpam": "S’il ne le voit pas, vérifier Spam.",
+    "noteLabel": "Note :",
+    "reusedNote": "Une invitation valide a été réutilisée (aucune nouvelle ligne créée).",
+    "linkDebug": "Lien (debug/support) :",
+    "copy": "Copier"
   },
-  "trackerDashboard": {
-    "title": "Tableau de tracking en temps réel",
-    "subtitle": "Les points se mettent à jour automatiquement. La fréquence d'envoi est définie par l'administrateur.",
-    "filters": {
-      "trackerLabel": "Tracker",
-      "timeWindowLabel": "Fenêtre",
-      "timeWindowSuffix": "heures",
-      "geofenceLabel": "Géofence",
-      "allTrackers": "Tous les trackers",
-      "allGeofences": "Toutes les géofences"
-    },
-    "summary": {
-      "title": "Résumé",
-      "geofencesActive": "Géofences actives",
-      "trackersProfiles": "Trackers (profils)",
-      "pointsInMap": "Points sur la carte (filtre actuel)",
-      "lastPoint": "Dernier point enregistré",
-      "noPoints": "Aucun point pour le filtre actuel."
-    },
-    "legend": {
-      "title": "Légende des trackers",
-      "points": "pts"
-    },
-    "popup": {
-      "tracker": "Tracker",
-      "time": "Heure",
-      "accuracy": "Précision",
-      "countHere": "Enregistrements à cette position",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "inside": "À l'intérieur de la géofence",
-      "yes": "Oui",
-      "no": "Non"
-    },
-    "messages": {
-      "noOrg": "Vous devez sélectionner une organisation.",
-      "autoRefresh": "Les points se mettent à jour automatiquement. Vous n'avez pas besoin de recharger la page.",
-      "loading": "Chargement des données de tracking…",
-      "noData": "Aucune position trouvée pour les filtres sélectionnés.",
-      "error": "Erreur lors du chargement des données de tracking.",
-      "checkConsole": "Vérifiez la console si le problème persiste."
-    }
+  "errors": {
+    "noAuth": "Non authentifié (access_token manquant). Déconnectez-vous puis reconnectez-vous.",
+    "invalidOrg": "Impossible de résoudre l’organisation active en UUID.",
+    "invalidOrgShort": "Organisation invalide.",
+    "loadPersonal": "Impossible de charger le personnel",
+    "selectPerson": "Sélectionnez une personne.",
+    "invalidEmail": "E-mail invalide.",
+    "sendInvite": "Erreur lors de l’envoi de l’invitation",
+    "unexpected": "Erreur inattendue"
   },
-  "inviteTracker": {
-    "orgFallback": "votre organisation",
-    "title": "Inviter un tracker",
-    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un e-mail pour l'inviter comme tracker dans {{orgName}}.",
-    "form": {
-      "selectLabel": "Sélectionner un personnel actif (optionnel)",
-      "selectPlaceholder": "-- Sélectionner du personnel --",
-      "selectHelp": "Si vous sélectionnez un personnel, son e-mail sera rempli automatiquement.",
-      "emailLabel": "E-mail du tracker",
-      "emailPlaceholder": "tracker@exemple.com",
-      "emailHelp": "Une invitation sera envoyée à cet e-mail.",
-      "buttonSending": "Envoi de l'invitation…",
-      "buttonSend": "Envoyer l'invitation"
-    },
-    "errors": {
-      "emailRequired": "Vous devez saisir une adresse e-mail.",
-      "emailInvalid": "Saisissez une adresse e-mail valide."
-    },
-    "messages": {
-      "serverProblem": "Un problème est survenu lors du contact avec le serveur d'invitations.",
-      "notOk": "L'invitation n'a pas pu être complétée. Vérifiez l'e-mail et réessayez.",
-      "invited": "Une invitation a été envoyée à {{email}} pour rejoindre en tant que tracker dans {{orgName}}.",
-      "magiclinkSent": "Un lien magique d'accès a été envoyé à {{email}}.",
-      "linkOnlyWithLink": "L'invitation a été créée. Utilisez ce lien pour partager l'accès : {{link}}.",
-      "linkOnlyNoLink": "L'invitation a été créée, mais aucun lien public n'a été renvoyé.",
-      "createdWithoutEmail": "L'accès du tracker a été créé sans envoi d'e-mail.",
-      "genericProcessed": "L'invitation pour {{email}} a été traitée avec succès.",
-      "unexpectedError": "Erreur inattendue lors du traitement de l'invitation."
-    }
-  },
-  "admins": {
-    "title": "Administrateurs",
-    "subtitle": "Gérez les administrateurs de votre organisation et leurs rôles.",
-    "table": {
-      "name": "Nom",
-      "email": "E-mail",
-      "role": "Rôle",
-      "status": "Statut",
-      "actions": "Actions",
-      "noResults": "Aucun administrateur enregistré."
-    },
-    "form": {
-      "inviteTitle": "Inviter un nouvel administrateur",
-      "emailLabel": "E-mail",
-      "roleLabel": "Rôle",
-      "buttonInvite": "Envoyer l'invitation"
-    },
-    "actions": {
-      "makeOwner": "Définir comme propriétaire",
-      "makeAdmin": "Définir comme admin",
-      "remove": "Retirer l'accès"
-    },
-    "banner": {
-      "invitationSent": "Invitation envoyée avec succès.",
-      "roleUpdated": "Rôle mis à jour.",
-      "removed": "Administrateur retiré de l'organisation."
-    },
-    "error": {
-      "load": "Erreur lors du chargement de la liste des administrateurs.",
-      "invite": "Impossible d'envoyer l'invitation.",
-      "updateRole": "Impossible de mettre à jour le rôle.",
-      "remove": "Impossible de retirer l'administrateur."
-    }
-  },
-  "help": {
-    "common": {
-      "breadcrumb": "Centre d'aide",
-      "back": "Retour",
-      "goHome": "Aller à l'accueil",
-      "viewFaq": "Voir la FAQ",
-      "badge": "Centre d'aide",
-      "quickGuideBadge": "Guide rapide"
-    },
-    "instructions": {
-      "title": "Guide rapide de configuration",
-      "subtitle": "Suivez ces étapes pour configurer votre organisation, créer des géofences, affecter le personnel et démarrer le suivi.",
-      "jumpToSteps": "Aller aux étapes",
-      "viewResult": "Voir le résultat",
-      "tocTitle": "Sommaire",
-      "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
-      "tocSteps": "Étapes",
-      "tocTips": "Bonnes pratiques",
-      "tocResult": "Résultat attendu",
-      "recommendationTitle": "Recommandation",
-      "recommendationBody": "Commencez avec 1 géofence et 1 tracker. Une fois le flux validé, passez à plus de zones et de personnes.",
-      "stepsTitle": "Étape par étape",
-      "stepsSubtitle": "Une séquence pratique qui convient à la plupart des organisations."
-    },
-    "faq": {
-      "title": "Questions fréquentes",
-      "subtitle": "Réponses rapides sur invitations, rôles, suivi, rapports et confidentialité."
-    },
-    "support": {
-      "title": "Support",
-      "subtitle": "Contactez-nous pour le support technique, la facturation ou l’onboarding.",
-      "emailLabel": "E-mail de support",
-      "notConfigured": "Le contact support n’est pas encore configuré."
-    }
-  },
-  "home": {
-    "open": "Ouvrir →",
-    "loadingPermissions": "Résolution des permissions…",
-    "loginToContinue": "Connectez-vous pour continuer.",
-    "goToLogin": "Aller à Login",
-    "welcome": "Bienvenue sur App Geocercas",
-    "sessionAs": "Connecté en tant que",
-    "labels": {
-      "email": "E-mail :",
-      "organization": "Organisation :",
-      "role": "Rôle :"
-    },
-    "help": {
-      "title": "Centre d’aide",
-      "quick": "Guide rapide",
-      "quickDesc": "Apprenez à utiliser l’application pas à pas.",
-      "faq": "FAQ",
-      "faqDesc": "Réponses aux questions les plus fréquentes.",
-      "support": "Support",
-      "supportDesc": "Un problème ou une question ? Contactez-nous.",
-      "news": "Nouveautés",
-      "newsDesc": "Changements, améliorations et mises à jour récentes."
-    },
-    "missingContextTitle": "Connecté, mais contexte manquant",
-    "missingContextBody": "La session existe ({{email}}), mais votre rôle ou organisation active n’a pas pu être déterminé.",
-    "orgNotResolved": "(non résolu)",
-    "roleEmpty": "(vide)",
-    "retry": "Réessayer"
-  },
-  "resetPassword": {
-    "title": "Réinitialiser le mot de passe",
-    "subtitle": "Créez un nouveau mot de passe pour votre compte.",
-    "loading": "Préparation du lien de récupération…",
-    "invalidOrExpired": "Le lien de récupération est invalide ou expiré. Veuillez en demander un nouveau.",
-    "noSession": "Aucune session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
-    "noticeType": "Session détectée. Si ce lien n'était pas pour une récupération, connectez-vous normalement.",
-    "unexpected": "Une erreur s'est produite lors de la préparation de la réinitialisation.",
-    "newPassword": "Nouveau mot de passe",
-    "newPasswordPlaceholder": "Au moins 8 caractères",
-    "confirmPassword": "Confirmer le mot de passe",
-    "confirmPlaceholder": "Répétez",
-    "passwordMin": "Le mot de passe doit contenir au moins 8 caractères.",
-    "passwordMismatch": "Les mots de passe ne correspondent pas.",
-    "saveButton": "Enregistrer le nouveau mot de passe",
-    "saving": "Enregistrement…",
-    "updateFailed": "Impossible de mettre à jour le mot de passe. Réessayez.",
-    "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
-    "success": "Mot de passe mis à jour avec succès. Vous pouvez vous connecter maintenant.",
-    "backToLogin": "Retour à la connexion",
-    "backHome": "Aller à la landing",
-    "tip": "Astuce : retournez à /login, saisissez votre e-mail et utilisez « Mot de passe oublié ? » pour générer un nouveau lien."
-  },
-  "authInvite": {
-    "title": "Vous avez été invité",
-    "processing": "Validation de l’invitation…",
-    "notInviteLink": "Ce lien n’est pas une invitation valide. Utilisez le lien reçu par e-mail.",
-    "expiredOrUsed": "L’invitation est invalide, expirée ou déjà utilisée.",
-    "continue": "Continuer",
-    "goToLogin": "Aller à la connexion",
-    "timeout": "La validation de l’invitation a pris trop de temps. Veuillez réessayer."
+  "footer": {
+    "orgCurrent": "Organisation actuelle :",
+    "emptyOrg": "(vide / invalide)"
   }
+}
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
+
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(v || "").trim()
+  );
+}
+
+function resolveOrgId(currentOrg) {
+  const raw =
+    typeof currentOrg === "string"
+      ? currentOrg
+      : currentOrg?.id || currentOrg?.org_id || currentOrg?.orgId || null;
+
+  const s = String(raw || "").trim();
+  return isUuid(s) ? s : "";
+}
+
+function getSupabaseAccessTokenFromLocalStorage() {
+  try {
+    const keys = Object.keys(window.localStorage || {});
+    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
+    if (!k) return "";
+    const raw = window.localStorage.getItem(k);
+    if (!raw) return "";
+    const j = JSON.parse(raw);
+    const token =
+      j?.access_token ||
+      j?.currentSession?.access_token ||
+      j?.data?.session?.access_token ||
+      "";
+    return String(token || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function useClickOutside(ref, onOutside) {
+  useEffect(() => {
+    function onDown(e) {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target)) onOutside?.();
+    }
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("touchstart", onDown, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("touchstart", onDown, true);
+    };
+  }, [ref, onOutside]);
+}
+
+function Dropdown({
+  items,
+  value,
+  onChange,
+  placeholder,
+  searchPlaceholder,
+  noResultsText,
+  noEmailText,
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const boxRef = useRef(null);
+
+  useClickOutside(boxRef, () => setOpen(false));
+
+  const selected = useMemo(
+    () => items.find((x) => String(x.id) === String(value)) || null,
+    [items, value]
+  );
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return items;
+    return items.filter((x) =>
+      `${x.full_name || ""} ${x.email || ""}`.toLowerCase().includes(s)
+    );
+  }, [items, q]);
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        className="w-full border rounded-lg px-3 py-2 bg-white text-left"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="truncate">
+            {selected ? (
+              <>
+                <span className="font-medium">{selected.full_name}</span>
+                <span className="text-gray-600">
+                  {" "}
+                  — {selected.email || noEmailText}
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-500">{placeholder}</span>
+            )}
+          </div>
+          <div className="text-gray-500">{open ? "▴" : "▾"}</div>
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-2 w-full bg-white border rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full border rounded-lg px-3 py-2 bg-white"
+              autoFocus
+            />
+          </div>
+
+          <div className="max-h-72 overflow-auto">
+            {filtered.length === 0 ? (
+              <div className="p-3 text-sm text-gray-500">{noResultsText}</div>
+            ) : (
+              filtered.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(String(p.id));
+                    setOpen(false);
+                    setQ("");
+                  }}
+                >
+                  <div className="text-sm font-medium">{p.full_name}</div>
+                  <div className="text-xs text-gray-600">
+                    {p.email || noEmailText}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function planLabel(planCode) {
+  const s = String(planCode || "").trim();
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+async function fetchPlanUsage(orgId) {
+  if (!orgId) return null;
+  const { data, error } = await supabase.rpc("rpc_plan_tracker_vigente_usage", {
+    org_id: orgId,
+  });
+  if (error) return null;
+  if (data && typeof data === "object" && "over_limit" in data) return data;
+  return null;
+}
+
+export default function InvitarTracker() {
+  const { t } = useTranslation();
+  const { currentOrg } = useAuth();
+
+  const orgId = resolveOrgId(currentOrg);
+  const orgName = currentOrg?.name || currentOrg?.nombre || "";
+
+  const [personalRaw, setPersonalRaw] = useState([]);
+  const [loadingPersonal, setLoadingPersonal] = useState(false);
+  const [personalError, setPersonalError] = useState(null);
+
+  const [selectedPersonId, setSelectedPersonId] = useState("");
+  const [email, setEmail] = useState("");
+
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [success, setSuccess] = useState(null);
+  const [inviteData, setInviteData] = useState(null);
+
+  const [planUsage, setPlanUsage] = useState(null);
+
+  // flags
+  const [forceSwap, setForceSwap] = useState(true);
+  const [sendToTrackerGps, setSendToTrackerGps] = useState(true);
+
+  const personal = useMemo(() => {
+    if (!orgId) return [];
+    return personalRaw.filter((p) => String(p.org_id || "") === orgId);
+  }, [personalRaw, orgId]);
+
+  const selectedPerson = useMemo(() => {
+    if (!selectedPersonId) return null;
+    return personalRaw.find((p) => String(p.id) === String(selectedPersonId)) || null;
+  }, [personalRaw, selectedPersonId]);
+
+  function normalizeRows(data) {
+    const rows = Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data)
+      ? data
+      : [];
+
+    return rows
+      .map((p) => ({
+        id: p.id,
+        full_name:
+          `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim() ||
+          p.full_name ||
+          p.name ||
+          t("inviteTrackerV2.dropdown.unnamed", { defaultValue: "(No name)" }),
+        email: String(p.email_norm ?? p.email ?? "").trim(),
+        org_id: p.org_id ?? null,
+      }))
+      .filter((p) => p.id);
+  }
+
+  function getAuthHeadersOrThrow() {
+    const token = getSupabaseAccessTokenFromLocalStorage();
+    if (!token) {
+      throw new Error(
+        t("inviteTrackerV2.errors.noAuth", {
+          defaultValue: "Not authenticated. Log out and log in again.",
+        })
+      );
+    }
+    return { Authorization: `Bearer ${token}` };
+  }
+
+  async function loadPersonal() {
+    setLoadingPersonal(true);
+    setPersonalError(null);
+
+    try {
+      if (!orgId) {
+        setPersonalRaw([]);
+        setPersonalError(
+          t("inviteTrackerV2.errors.invalidOrg", {
+            defaultValue:
+              "Invalid active org (cannot resolve UUID). Refresh context or log in again.",
+          })
+        );
+        return;
+      }
+
+      const url = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`;
+      const res = await fetch(url, { headers: { ...getAuthHeadersOrThrow() } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(
+          data?.error ||
+            t("inviteTrackerV2.errors.loadPersonal", {
+              defaultValue: "Could not load personnel.",
+            })
+        );
+      setPersonalRaw(normalizeRows(data));
+    } catch (e) {
+      setPersonalError(e.message || t("inviteTrackerV2.errors.loadPersonal", { defaultValue: "Could not load personnel." }));
+      setPersonalRaw([]);
+    } finally {
+      setLoadingPersonal(false);
+    }
+  }
+
+  async function refreshPlanUsage() {
+    setPlanUsage(null);
+    if (!orgId) return;
+
+    try {
+      const usage = await fetchPlanUsage(orgId);
+      if (usage) setPlanUsage(usage);
+    } catch {
+      setPlanUsage(null);
+    }
+  }
+
+  useEffect(() => {
+    loadPersonal();
+    refreshPlanUsage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId]);
+
+  useEffect(() => {
+    setError(null);
+    setSuccess(null);
+    setInviteData(null);
+
+    if (selectedPerson?.email) setEmail(selectedPerson.email);
+    else if (selectedPersonId) setEmail("");
+  }, [selectedPersonId, selectedPerson]);
+
+  const overLimit = planUsage?.over_limit === true;
+
+  function buildRedirectPath() {
+    return sendToTrackerGps
+      ? "/tracker-gps?tg_flow=tracker"
+      : "/tracker?tg_flow=tracker";
+  }
+
+  async function sendInvite({ mode }) {
+    setError(null);
+    setSuccess(null);
+    setInviteData(null);
+
+    if (!orgId)
+      throw new Error(
+        t("inviteTrackerV2.errors.invalidOrgShort", {
+          defaultValue: "Invalid organization.",
+        })
+      );
+    if (!selectedPersonId)
+      throw new Error(
+        t("inviteTrackerV2.errors.selectPerson", {
+          defaultValue: "Select a person.",
+        })
+      );
+    if (!email || !email.includes("@"))
+      throw new Error(
+        t("inviteTrackerV2.errors.invalidEmail", {
+          defaultValue: "Invalid email.",
+        })
+      );
+
+    const emailNorm = email.trim().toLowerCase();
+    const redirect_to = buildRedirectPath();
+
+    const res = await fetch("/api/invite-tracker", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeadersOrThrow(),
+      },
+      body: JSON.stringify({
+        email: emailNorm,
+        org_id: orgId,
+        person_id: selectedPersonId,
+
+        role: "tracker",
+        tg_flow: "tracker",
+        redirect_to,
+        invited_email: emailNorm,
+
+        force_swap: !!forceSwap,
+        force_tracker_default: true,
+
+        mode,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok)
+      throw new Error(
+        data?.error ||
+          t("inviteTrackerV2.errors.sendInvite", {
+            defaultValue: "Error sending invitation.",
+          })
+      );
+    return data;
+  }
+
+  async function handleInviteNew(e) {
+    e.preventDefault();
+    try {
+      setSending(true);
+
+      const usage = planUsage || (await fetchPlanUsage(orgId));
+      if (usage?.over_limit === true) {
+        const pLabel = planLabel(usage?.plan) || "Starter";
+        const limit = usage?.tracker_limit_vigente;
+        if (Number.isFinite(Number(limit))) {
+          throw new Error(
+            t("inviteTrackerV2.plan.limitReachedWithNumber", {
+              defaultValue: "Plan limit reached ({{plan}}: {{limit}} active tracker).",
+              plan: pLabel,
+              limit: Number(limit),
+            })
+          );
+        }
+        throw new Error(
+          t("inviteTrackerV2.plan.limitReached", {
+            defaultValue: "Plan limit reached ({{plan}}).",
+            plan: pLabel,
+          })
+        );
+      }
+
+      const data = await sendInvite({ mode: "invite" });
+      setInviteData(data);
+
+      setSuccess(
+        data?.reused_invite
+          ? t("inviteTrackerV2.messages.sentReused", {
+              defaultValue:
+                "Invitation resent ✅ (reusing a valid link). Check inbox/spam.",
+            })
+          : t("inviteTrackerV2.messages.sentNew", {
+              defaultValue: "Invitation sent ✅ Check inbox/spam.",
+            })
+      );
+
+      refreshPlanUsage();
+    } catch (err) {
+      setError(err.message || t("inviteTrackerV2.errors.unexpected", { defaultValue: "Unexpected error." }));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleResend(e) {
+    e.preventDefault();
+    try {
+      setSending(true);
+
+      const data = await sendInvite({ mode: "resend" });
+      setInviteData(data);
+
+      setSuccess(
+        data?.reused_invite
+          ? t("inviteTrackerV2.messages.resendOkReused", {
+              defaultValue:
+                "Resend OK ✅ (valid link). Check inbox/spam.",
+            })
+          : t("inviteTrackerV2.messages.resendOkNew", {
+              defaultValue:
+                "Resend OK ✅ (new link). Check inbox/spam.",
+            })
+      );
+    } catch (err) {
+      setError(err.message || t("inviteTrackerV2.errors.unexpected", { defaultValue: "Unexpected error." }));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function copy(text) {
+    try {
+      await navigator.clipboard.writeText(String(text || ""));
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = String(text || "");
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+  }
+
+  const inviteLink =
+    inviteData?.invite_link || inviteData?.link || inviteData?.url || inviteData?.magic_link || "";
+
+  return (
+    <div className="max-w-3xl mx-auto p-6">
+      <h1 className="text-2xl font-semibold mb-6">
+        {t("inviteTrackerV2.title")}
+      </h1>
+
+      {!orgId && (
+        <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
+          ⚠️ {t("inviteTrackerV2.errors.invalidOrg")}
+          <div className="mt-1 text-xs">
+            currentOrg:{" "}
+            <span className="font-mono">{JSON.stringify(currentOrg || {})}</span>
+          </div>
+        </div>
+      )}
+
+      {planUsage && (
+        <div
+          className={`mb-4 p-3 rounded-lg border text-sm ${
+            overLimit
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900"
+          }`}
+        >
+          <div className="font-medium">
+            {t("inviteTrackerV2.plan.label")} {planLabel(planUsage?.plan) || "—"}
+          </div>
+
+          <div className="text-xs mt-1">
+            {t("inviteTrackerV2.plan.activeTrackers")}{" "}
+            <b>{Number(planUsage?.trackers_vigentes_used ?? 0)}</b> /{" "}
+            <b>{Number(planUsage?.tracker_limit_vigente ?? 0)}</b>
+            {overLimit ? (
+              <span className="ml-2 font-medium">
+                — {t("inviteTrackerV2.plan.limitReachedBadge")}
+              </span>
+            ) : null}
+          </div>
+
+          {overLimit ? (
+            <div className="text-xs mt-1">
+              {t("inviteTrackerV2.plan.overLimitHint")}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <div className="text-sm font-medium">
+            {t("inviteTrackerV2.personal.title")} ({personal.length})
+          </div>
+
+          <button
+            onClick={async () => {
+              await loadPersonal();
+              await refreshPlanUsage();
+            }}
+            disabled={loadingPersonal}
+            className="px-3 py-2 border rounded-lg text-sm"
+            type="button"
+          >
+            {loadingPersonal
+              ? t("common.actions.loading")
+              : t("common.actions.refresh")}
+          </button>
+        </div>
+
+        {personalError && <div className="text-red-600 text-sm">{personalError}</div>}
+
+        <div className="mt-2">
+          <Dropdown
+            items={personal}
+            value={selectedPersonId}
+            onChange={setSelectedPersonId}
+            placeholder={t("inviteTrackerV2.dropdown.selectPlaceholder")}
+            searchPlaceholder={t("inviteTrackerV2.dropdown.searchPlaceholder")}
+            noResultsText={t("inviteTrackerV2.dropdown.noResults")}
+            noEmailText={t("inviteTrackerV2.dropdown.noEmail")}
+          />
+        </div>
+
+        <div className="mt-4">
+          <label className="text-sm font-medium">
+            {t("inviteTrackerV2.form.emailLabel")}
+          </label>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 mt-1 bg-white"
+            placeholder={t("inviteTrackerV2.form.emailPlaceholder")}
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={forceSwap}
+              onChange={(e) => setForceSwap(e.target.checked)}
+            />
+            <span>{t("inviteTrackerV2.flags.forceSwap")}</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={sendToTrackerGps}
+              onChange={(e) => setSendToTrackerGps(e.target.checked)}
+            />
+            <span>{t("inviteTrackerV2.flags.sendToTrackerGps")}</span>
+          </label>
+        </div>
+
+        {error && <div className="text-red-600 text-sm mt-3">{error}</div>}
+        {success && <div className="text-green-700 text-sm mt-3">{success}</div>}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
+          <button
+            onClick={handleInviteNew}
+            disabled={sending || !orgId || overLimit}
+            className="w-full bg-emerald-600 text-white rounded-lg py-3 disabled:opacity-60"
+            title={overLimit ? t("inviteTrackerV2.plan.limitReachedBadge") : ""}
+            type="button"
+          >
+            {sending ? t("inviteTrackerV2.buttons.sending") : t("inviteTrackerV2.buttons.inviteNew")}
+          </button>
+
+          <button
+            onClick={handleResend}
+            disabled={sending || !orgId}
+            className="w-full bg-sky-600 text-white rounded-lg py-3 disabled:opacity-60"
+            type="button"
+          >
+            {sending ? t("inviteTrackerV2.buttons.sending") : t("inviteTrackerV2.buttons.resend")}
+          </button>
+        </div>
+
+        {!!inviteData?.email_sent && (
+          <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
+            <div className="text-sm font-medium text-emerald-800 mb-1">
+              {t("inviteTrackerV2.result.emailSent")}
+            </div>
+
+            <div className="text-xs text-emerald-900">
+              {t("inviteTrackerV2.result.willGoTo")}{" "}
+              <b>
+                {sendToTrackerGps
+                  ? t("inviteTrackerV2.result.destTrackerGps")
+                  : t("inviteTrackerV2.result.destTrackerDashboard")}
+              </b>
+              .
+              <br />
+              {t("inviteTrackerV2.result.checkSpam")}
+              {inviteData?.reused_invite ? (
+                <div className="mt-1">
+                  <b>{t("inviteTrackerV2.result.noteLabel")}</b>{" "}
+                  {t("inviteTrackerV2.result.reusedNote")}
+                </div>
+              ) : null}
+            </div>
+
+            {!!inviteLink && (
+              <div className="mt-3">
+                <div className="text-xs font-medium text-emerald-900 mb-1">
+                  {t("inviteTrackerV2.result.linkDebug")}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={inviteLink}
+                    className="w-full border rounded-lg px-3 py-2 bg-white text-xs font-mono"
+                  />
+                  <button
+                    type="button"
+                    className="px-3 py-2 border rounded-lg text-xs bg-white"
+                    onClick={() => copy(inviteLink)}
+                  >
+                    {t("inviteTrackerV2.result.copy")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="text-xs text-gray-500">
+        {t("inviteTrackerV2.footer.orgCurrent")}{" "}
+        <span className="font-mono">
+          {orgName ? `${orgName} — ` : ""}
+          {orgId || t("inviteTrackerV2.footer.emptyOrg")}
+        </span>
+      </div>
+    </div>
+  );
 }

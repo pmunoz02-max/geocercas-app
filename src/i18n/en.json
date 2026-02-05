@@ -1,3 +1,69 @@
+"inviteTrackerV2": {
+  "title": "Invite / Resend Tracker",
+  "plan": {
+    "label": "Plan",
+    "activeTrackers": "Active trackers:",
+    "limitReachedBadge": "Limit reached",
+    "overLimitHint": "You can resend invitations (it won’t add trackers), but you cannot invite new trackers while you are over the limit.",
+    "limitReached": "You have reached your plan limit ({{plan}}).",
+    "limitReachedWithNumber": "You have reached your plan limit ({{plan}}: {{limit}} active tracker)."
+  },
+  "personal": {
+    "title": "Active personnel"
+  },
+  "dropdown": {
+    "selectPlaceholder": "— Select a person —",
+    "searchPlaceholder": "Search…",
+    "noResults": "No results",
+    "noEmail": "(no email)",
+    "unnamed": "(No name)"
+  },
+  "form": {
+    "emailLabel": "Tracker email",
+    "emailPlaceholder": "tracker@example.com"
+  },
+  "flags": {
+    "forceSwap": "Force swap (prevents an admin from consuming the invite)",
+    "sendToTrackerGps": "Redirect to GPS Tracker (tg_flow=tracker)"
+  },
+  "buttons": {
+    "sending": "Sending…",
+    "inviteNew": "Invite NEW tracker",
+    "resend": "Resend invitation (same tracker)"
+  },
+  "messages": {
+    "sentNew": "Invitation sent ✅ Check inbox/spam.",
+    "sentReused": "Invitation resent ✅ (reusing a valid link). Check inbox/spam.",
+    "resendOkNew": "Resend OK ✅ (new link). Check inbox/spam.",
+    "resendOkReused": "Resend OK ✅ (valid link). Check inbox/spam."
+  },
+  "result": {
+    "emailSent": "Email sent ✅",
+    "willGoTo": "The tracker will receive a link that goes directly to",
+    "destTrackerGps": "GPS Tracker",
+    "destTrackerDashboard": "Tracker Dashboard",
+    "checkSpam": "If they don’t see it, check Spam.",
+    "noteLabel": "Note:",
+    "reusedNote": "A valid invite was reused (no new row created).",
+    "linkDebug": "Link (debug/support):",
+    "copy": "Copy"
+  },
+  "errors": {
+    "noAuth": "Not authenticated (missing access_token). Log out and log in again.",
+    "invalidOrg": "Could not resolve the active organization as UUID.",
+    "invalidOrgShort": "Invalid organization.",
+    "loadPersonal": "Could not load personnel",
+    "selectPerson": "Select a person.",
+    "invalidEmail": "Invalid email.",
+    "sendInvite": "Error sending invitation",
+    "unexpected": "Unexpected error"
+  },
+  "footer": {
+    "orgCurrent": "Current org:",
+    "emptyOrg": "(empty / invalid)"
+  }
+}
+
 {
   "common": {
     "language": {
