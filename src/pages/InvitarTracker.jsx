@@ -69,8 +69,8 @@ const I18N = {
 const normEmail = (v) => String(v || "").trim().toLowerCase();
 
 function buildLabel(p) {
-  const a = String(p?.apellidos || p?.apellido || "").trim();
-  const n = String(p?.nombres || p?.nombre || "").trim();
+  const a = String(p?.apellido || "").trim();
+  const n = String(p?.nombre || "").trim();
   const email = String(p?.email || "").trim();
 
   const base = (a || n) ? `${a} ${n}`.trim() : "";
@@ -146,16 +146,19 @@ export default function InvitarTracker() {
     try {
       const { data, error } = await supabase
         .from("personal")
-        .select("id,email,nombre,apellido,is_deleted,vigente")
+        .select("id,email,nombre,apellido,is_deleted,vigente,activo")
         .eq("org_id", org_id)
         .neq("is_deleted", true)
-        .order("email", { ascending: true });
+        .order("apellido", { ascending: true })
+        .order("nombre", { ascending: true });
 
       if (error) throw error;
 
-      const list = (Array.isArray(data) ? data : []).filter((p) =>
-        typeof p?.vigente === "boolean" ? p.vigente === true : true
-      );
+      const list = (Array.isArray(data) ? data : []).filter((p) => {
+        const vigenteOk = typeof p?.vigente === "boolean" ? p.vigente === true : true;
+        const activoOk = typeof p?.activo === "boolean" ? p.activo === true : true;
+        return vigenteOk && activoOk;
+      });
 
       setPeople(list);
 
@@ -188,11 +191,19 @@ export default function InvitarTracker() {
     const safeEmail = normEmail(email);
     if (!safeEmail) return setErrMsg(t.emailRequired);
 
-    const payload = { email: safeEmail, org_id, person_id: selectedPersonId, resend: Boolean(resend) };
+    const payload = {
+      email: safeEmail,
+      org_id,
+      person_id: selectedPersonId,
+      resend: Boolean(resend),
+    };
+
     console.log("[InvitarTracker] payload", payload);
 
     try {
-      const { data, error } = await supabase.functions.invoke("invite-tracker", { body: payload });
+      const { data, error } = await supabase.functions.invoke("invite-tracker", {
+        body: payload,
+      });
 
       if (error) {
         const details = await extractFunctionError(error);
