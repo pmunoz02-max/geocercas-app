@@ -164,8 +164,6 @@ export default function InvitarTracker() {
       if (selectedPersonId && !list.some((p) => p.id === selectedPersonId)) {
         setSelectedPersonId("");
       }
-
-      console.log("[InvitarTracker] personal loaded count:", list.length);
     } catch (e) {
       setPeople([]);
       setSelectedPersonId("");
@@ -197,16 +195,14 @@ export default function InvitarTracker() {
       resend: Boolean(resend),
     };
 
-    console.log("[InvitarTracker] payload", payload);
-
     try {
-      const { data, error } = await supabase.functions.invoke("invite-tracker", {
+      console.log("[InvitarTracker] BUILD_MARKER 564ed23 calling invite_tracker");
+      const { data, error } = await supabase.functions.invoke("invite_tracker", {
         body: payload,
       });
 
       if (error) {
         const details = await extractFunctionError(error);
-        console.error("[InvitarTracker] function error", error, details);
         const backendMsg = details?.message || details?.error || details?.raw || null;
         throw new Error(backendMsg || error.message || t.genericError);
       }
