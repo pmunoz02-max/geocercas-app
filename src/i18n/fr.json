@@ -1,723 +1,911 @@
-"inviteTrackerV2": {
-  "title": "Inviter / Renvoyer un tracker",
-  "plan": {
-    "label": "Forfait",
-    "activeTrackers": "Trackers actifs :",
-    "limitReachedBadge": "Limite atteinte",
-    "overLimitHint": "Vous pouvez renvoyer des invitations (cela n’ajoute pas de trackers), mais vous ne pouvez pas inviter de nouveaux trackers tant que la limite est atteinte.",
-    "limitReached": "Vous avez atteint la limite de votre forfait ({{plan}}).",
-    "limitReachedWithNumber": "Vous avez atteint la limite de votre forfait ({{plan}} : {{limit}} tracker actif)."
+{
+  "common": {
+    "language": {
+      "es": "Español",
+      "en": "Inglés",
+      "fr": "Francés"
+    },
+    "actions": {
+      "close": "Cerrar",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "delete": "Eliminar",
+      "edit": "Editar",
+      "back": "Volver",
+      "yes": "Sí",
+      "no": "No",
+      "refresh": "Refrescar",
+      "clear": "Limpiar",
+      "loading": "Cargando…",
+      "saving": "Guardando…"
+    },
+    "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
+    "createOrganization": "Crear organización",
+    "refreshContext": "Reintentar contexto"
+  },
+  "auth": {
+    "loginRequired": "Debes iniciar sesión.",
+    "processing": "Autenticando…",
+    "timeout": "La autenticación tardó demasiado. Inténtalo de nuevo.",
+    "invalidOrExpiredLink": "El enlace es inválido, expiró o ya fue usado.",
+    "errorTitle": "Falló la autenticación",
+    "backToLogin": "Volver al login"
+  },
+  "app": {
+    "title": "App Geocercas",
+    "header": {
+      "loggedAs": "Sesión iniciada como",
+      "logout": "Salir",
+      "login": "Iniciar sesión",
+      "goToPanel": "Ir al panel",
+      "roleOwner": "Propietario",
+      "roleAdmin": "Administrador",
+      "roleTracker": "Tracker",
+      "organizationLabel": "Organización",
+      "organizationAriaLabel": "Seleccionar organización",
+      "organizationNone": "Sin organización",
+      "loginMagic": "Link mágico"
+    },
+    "tabs": {
+      "inicio": "Inicio",
+      "home": "Inicio",
+      "geocercas": "Geocercas",
+      "geocerca": "Geocerca",
+      "nuevaGeocerca": "Geocerca",
+      "personal": "Personal",
+      "actividades": "Actividades",
+      "asignaciones": "Asignaciones",
+      "reportes": "Reportes",
+      "dashboard": "Dashboard Costos",
+      "dashboardCostos": "Dashboard Costos",
+      "tracker": "Tracker",
+      "invitarTracker": "Invitar tracker",
+      "invitar_tracker": "Invitar tracker",
+      "admins": "Administradores"
+    }
+  },
+  "landing": {
+    "brandName": "App Geocercas",
+    "brandTagline": "Control de personal por geocercas",
+    "heroBadge": "Control inteligente de campo",
+    "heroTitlePrefix": "Controla a tu personal",
+    "heroTitleHighlight": "con geocercas inteligentes",
+    "heroTitleSuffix": "en cualquier parte del mundo",
+    "heroSubtitle": "App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real.",
+    "ctaLogin": "Ir al panel",
+    "ctaMagic": "Entrar con link mágico",
+    "bulletGeocercasTitle": "Geocercas",
+    "bulletGeocercasBody": "Crea y administra geocercas para tus campos, fincas, plantas o puntos de servicio.",
+    "bulletPersonalTitle": "Personal",
+    "bulletPersonalBody": "Registra a tu personal y asígnalo a actividades y zonas específicas.",
+    "bulletCostsTitle": "Costos",
+    "bulletCostsBody": "Consulta paneles tipo Power BI con los costos por persona, actividad y geocerca.",
+    "livePanelLabel": "Panel en vivo",
+    "livePanelTitle": "Operaciones en tiempo real",
+    "zonesActive": "Zonas activas",
+    "statusOnline": "Sistema en línea",
+    "assistanceControlTitle": "Control de asistencia",
+    "assistanceControlBody": "Verifica quién estuvo dentro de cada geocerca, en qué horario y en qué actividad.",
+    "multiOrgTitle": "Multi organización",
+    "multiOrgBody": "Administra varias empresas o proyectos desde una sola cuenta, con roles y permisos separados.",
+    "goToDashboard": "Ir al panel",
+    "logout": "Salir",
+    "footerFaq": "Preguntas frecuentes",
+    "footerSupport": "Soporte",
+    "footerTerms": "Términos",
+    "footerPrivacy": "Privacidad",
+    "rightsReserved": "Todos los derechos reservados",
+    "loginButton": "Entrar",
+    "accessTitle": "Acceso con cuenta autorizada",
+    "accessBody": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
+    "accessHint": "Consejo: usa “Link mágico” si tu administrador te invitó con correo.",
+    "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
+    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
+    "login": "Iniciar sesión",
+    "heroTitle": "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo",
+    "goPanel": "Ir al panel",
+    "magicEnter": "Entrar con link mágico",
+    "quickAccessTitle": "Acceso rápido",
+    "quickAccessDesc": "Si prefieres, puedes ingresar usando un Link mágico (sin contraseña).",
+    "email": "Correo",
+    "sending": "Enviando…",
+    "sendMagic": "Enviar link mágico",
+    "magicNote": "Importante: el acceso funciona solo con el Link mágico real.",
+    "support": "Soporte",
+    "invalidEmail": "Correo inválido.",
+    "magicLinkSent": "Te enviamos un enlace de acceso. Revisa tu correo.",
+    "magicLinkError": "No se pudo enviar el enlace. Intenta de nuevo."
+  },
+  "login": {
+    "title": "Iniciar sesión",
+    "subtitle": "Accede a tu cuenta de App Geocercas",
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña",
+    "passwordLoginButton": "Entrar con contraseña",
+    "magicLinkTitle": "Entrar con link mágico",
+    "magicLinkDescription": "Te enviaremos un enlace seguro a tu correo para entrar sin contraseña.",
+    "magicLinkButton": "Enviar link mágico",
+    "magicLinkSent": "Hemos enviado un link mágico a tu correo.",
+    "sessionActive": "Ya tienes una sesión activa.",
+    "goToDashboard": "Ir al panel",
+    "errors": {
+      "invalidEmail": "Ingresa un correo electrónico válido.",
+      "unknown": "Ocurrió un error al iniciar sesión."
+    },
+    "modePassword": "Contraseña",
+    "modeMagic": "Link mágico",
+    "submit": "Entrar",
+    "submitting": "Ingresando…",
+    "magicButton": "Enviar link mágico",
+    "magicSubmitting": "Enviando enlace…",
+    "magicDescription": "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña.",
+    "emailPlaceholder": "tucorreo@ejemplo.com",
+    "passwordPlaceholder": "Ingresa tu contraseña",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgotPasswordAlt": "¿Prefieres restablecer tu contraseña? (enviar correo)",
+    "loadingSession": "Cargando tu sesión…",
+    "errorMissingCredentials": "Faltan correo o contraseña.",
+    "errorMissingEmail": "Debes ingresar un correo.",
+    "errorInvalidCredentials": "Credenciales inválidas.",
+    "errorUnexpected": "Error inesperado al iniciar sesión.",
+    "userNotAuthorized": "Este correo no está autorizado. Solicita una invitación al administrador.",
+    "errorMagicLink": "No se pudo enviar el link mágico.",
+    "infoMagicLinkSent": "Hemos enviado un link mágico a tu correo.",
+    "errorMagicLinkUnexpected": "Error inesperado al enviar el link mágico.",
+    "errorResetPassword": "No se pudo enviar el correo de recuperación.",
+    "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.",
+    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación.",
+    "badge": "(LOGIN-V31 NO-JS)",
+    "info": "Login estable WebView/TWA: submit nativo (sin eventos JS), anti rate-limit por diseño.",
+    "modeTitle": "Modo: NO-JS (submit nativo del formulario)",
+    "modeDesc": "Si el login es correcto, el servidor redirige a /auth/callback con tokens.",
+    "back": "Volver"
+  },
+  "inicio": {
+    "header": {
+      "badge": "Centro de ayuda y recursos",
+      "title": "Bienvenido a tu panel",
+      "subtitle": "Desde aquí puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de App Geocercas."
+    },
+    "cards": {
+      "instrucciones": {
+        "badge": "Guía rápida",
+        "title": "Instrucciones",
+        "body": "Sigue paso a paso cómo configurar organizaciones, geocercas, personal, actividades y trackers.",
+        "cta": "Ver instrucciones"
+      },
+      "faq": {
+        "badge": "Ayuda",
+        "title": "Preguntas frecuentes",
+        "body": "Encuentra respuestas a las dudas más comunes sobre invitaciones, roles, costos y uso del tracker.",
+        "cta": "Ver preguntas frecuentes"
+      },
+      "videoDemo": {
+        "badge": "Video",
+        "title": "Video demo",
+        "body": "Mira una demostración corta de cómo funciona App Geocercas en la vida real.",
+        "cta": "Ver video demo"
+      },
+      "soporte": {
+        "badge": "Soporte",
+        "title": "Contacto / Soporte",
+        "body": "¿Necesitas ayuda? Contáctanos para soporte técnico, facturación o dudas sobre tu cuenta.",
+        "cta": "Ir a soporte"
+      },
+      "queEs": {
+        "badge": "Información",
+        "title": "¿Qué es App Geocercas?",
+        "body": "Conoce la visión, los casos de uso y los beneficios de App Geocercas para tu organización.",
+        "cta": "Leer más"
+      },
+      "novedades": {
+        "badge": "Novedades",
+        "title": "Novedades / Changelog",
+        "body": "Revisa el historial de cambios, nuevas funciones, mejoras y correcciones de la plataforma.",
+        "cta": "Ver changelog"
+      },
+      "common": {
+        "soon": "Próximamente"
+      }
+    },
+    "userInfo": {
+      "connectedAs": "Conectado como",
+      "withRole": "con el rol",
+      "inOrg": "en la organización",
+      "userLabel": "Usuario:",
+      "orgIdLabel": "ID de organización:"
+    }
+  },
+  "geocercas": {
+    "titleNew": "Nueva geocerca",
+    "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
+    "panelTitle": "Geocercas",
+    "noGeofences": "Aún no tienes geocercas creadas.",
+    "placeholderName": "Nombre de la geocerca",
+    "buttonDrawByCoords": "Dibujar por coordenadas",
+    "buttonSave": "Guardar geocerca",
+    "buttonShowSelected": "Mostrar seleccionadas",
+    "buttonShowAll": "Mostrar todas",
+    "buttonDeleteSelected": "Eliminar seleccionadas",
+    "buttonClearCanvas": "Limpiar mapa",
+    "pageTitle": "Geocercas",
+    "pageSubtitle": "Administra las geocercas de tu organización. Desde aquí puedes crear nuevas geocercas y revisar las existentes.",
+    "currentOrgLabel": "Organización actual:",
+    "currentUserLabel": "Usuario:",
+    "noOrgFallback": "— (sin organización seleccionada)",
+    "cardNewTitle": "Nueva geocerca",
+    "cardNewBody": "Crea una nueva geocerca en el mapa y asígnala a tu personal o actividades.",
+    "cardNewCta": "Ir a Nueva geocerca →",
+    "cardListTitle": "Listado de geocercas",
+    "cardListBody": "Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar.",
+    "buttonShowOnMap": "Mostrar en mapa",
+    "loadingDataset": "Cargando dataset…",
+    "cursorHint": "Mueve el mouse sobre el mapa",
+    "lat": "Lat",
+    "lng": "Lng",
+    "draftLabel": "Borrador",
+    "pointsLabel": "Pts",
+    "modalTitle": "Dibujar por coordenadas",
+    "modalHintRule": "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
+    "modalInstruction": "Formato:",
+    "modalOnePerLine": "(uno por línea)",
+    "modalDraw": "Dibujar",
+    "errorNameRequired": "Por favor ingresa un nombre para la geocerca.",
+    "errorCoordsInvalid": "Coordenadas inválidas. Usa el formato: lat,lng (uno por línea).",
+    "errorNoShape": "Dibuja una geocerca en el mapa o créala por coordenadas antes de guardar.",
+    "errorSelectAtLeastOne": "Selecciona al menos una geocerca.",
+    "errorNoGeojson": "No se pudo cargar el GeoJSON de la geocerca.",
+    "deleteConfirm": "¿Eliminar las geocercas seleccionadas?",
+    "deletedCount": "Eliminadas: {{count}}",
+    "savedOk": "Geocerca guardada correctamente."
   },
   "personal": {
-    "title": "Personnel actif"
-  },
-  "dropdown": {
-    "selectPlaceholder": "— Sélectionner une personne —",
-    "searchPlaceholder": "Rechercher…",
-    "noResults": "Aucun résultat",
-    "noEmail": "(sans e-mail)",
-    "unnamed": "(Sans nom)"
-  },
-  "form": {
-    "emailLabel": "E-mail du tracker",
-    "emailPlaceholder": "tracker@exemple.com"
-  },
-  "flags": {
-    "forceSwap": "Force swap (évite qu’un admin consomme l’invitation)",
-    "sendToTrackerGps": "Rediriger vers Tracker GPS (tg_flow=tracker)"
-  },
-  "buttons": {
-    "sending": "Envoi…",
-    "inviteNew": "Inviter un NOUVEAU tracker",
-    "resend": "Renvoyer l’invitation (même tracker)"
-  },
-  "messages": {
-    "sentNew": "Invitation envoyée ✅ Vérifiez boîte/spam.",
-    "sentReused": "Invitation renvoyée ✅ (lien valide réutilisé). Vérifiez boîte/spam.",
-    "resendOkNew": "Renvoi OK ✅ (nouveau lien). Vérifiez boîte/spam.",
-    "resendOkReused": "Renvoi OK ✅ (lien valide). Vérifiez boîte/spam."
-  },
-  "result": {
-    "emailSent": "E-mail envoyé ✅",
-    "willGoTo": "Le tracker recevra un lien qui l’emmène directement vers",
-    "destTrackerGps": "Tracker GPS",
-    "destTrackerDashboard": "Tableau tracker",
-    "checkSpam": "S’il ne le voit pas, vérifier Spam.",
-    "noteLabel": "Note :",
-    "reusedNote": "Une invitation valide a été réutilisée (aucune nouvelle ligne créée).",
-    "linkDebug": "Lien (debug/support) :",
-    "copy": "Copier"
-  },
-  "errors": {
-    "noAuth": "Non authentifié (access_token manquant). Déconnectez-vous puis reconnectez-vous.",
-    "invalidOrg": "Impossible de résoudre l’organisation active en UUID.",
-    "invalidOrgShort": "Organisation invalide.",
-    "loadPersonal": "Impossible de charger le personnel",
-    "selectPerson": "Sélectionnez une personne.",
-    "invalidEmail": "E-mail invalide.",
-    "sendInvite": "Erreur lors de l’envoi de l’invitation",
-    "unexpected": "Erreur inattendue"
-  },
-  "footer": {
-    "orgCurrent": "Organisation actuelle :",
-    "emptyOrg": "(vide / invalide)"
-  }
-}
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useAuth } from "../context/AuthContext";
-import { supabase } from "../lib/supabaseClient";
-
-function isUuid(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    String(v || "").trim()
-  );
-}
-
-function resolveOrgId(currentOrg) {
-  const raw =
-    typeof currentOrg === "string"
-      ? currentOrg
-      : currentOrg?.id || currentOrg?.org_id || currentOrg?.orgId || null;
-
-  const s = String(raw || "").trim();
-  return isUuid(s) ? s : "";
-}
-
-function getSupabaseAccessTokenFromLocalStorage() {
-  try {
-    const keys = Object.keys(window.localStorage || {});
-    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
-    if (!k) return "";
-    const raw = window.localStorage.getItem(k);
-    if (!raw) return "";
-    const j = JSON.parse(raw);
-    const token =
-      j?.access_token ||
-      j?.currentSession?.access_token ||
-      j?.data?.session?.access_token ||
-      "";
-    return String(token || "").trim();
-  } catch {
-    return "";
-  }
-}
-
-function useClickOutside(ref, onOutside) {
-  useEffect(() => {
-    function onDown(e) {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target)) onOutside?.();
+    "title": "Personal",
+    "orgInfoLabel": "Organización:",
+    "orgFallback": "Sin organización",
+    "roleLabel": "Rol:",
+    "pillCanEdit": "Editable",
+    "pillReadOnly": "Solo lectura",
+    "bannerLoadingSession": "Cargando sesión…",
+    "bannerLoginRequired": "Debes iniciar sesión para acceder a esta sección.",
+    "bannerRefreshedOk": "Datos actualizados correctamente.",
+    "bannerSelected": "Registro seleccionado.",
+    "bannerNewMode": "Modo creación de personal.",
+    "bannerEditMode": "Modo edición.",
+    "bannerCreated": "Personal creado exitosamente.",
+    "bannerUpdated": "Personal actualizado correctamente.",
+    "bannerDeletedOk": "Registro eliminado correctamente.",
+    "errorMissingUser": "No se pudo obtener el usuario autenticado.",
+    "errorNoAuthUser": "No existe un usuario autenticado.",
+    "errorLoad": "Error al cargar el personal.",
+    "formTitleNew": "Nuevo personal",
+    "formTitleEdit": "Editar personal",
+    "errorNoPermissionCreate": "No tienes permisos para crear personal.",
+    "errorNoPermissionEdit": "No tienes permisos para editar personal.",
+    "errorMustSelectForEdit": "Debes seleccionar un registro para editarlo.",
+    "errorNoPermissionSave": "No tienes permisos para guardar cambios.",
+    "errorMissingName": "El nombre es requerido.",
+    "errorMissingEmail": "El email es requerido.",
+    "errorPhonePolicy": "El teléfono debe comenzar con + (formato internacional E.164).",
+    "errorSaveNoRecord": "No se recibió registro actualizado.",
+    "errorSave": "No se pudo guardar el personal.",
+    "errorNoPermissionDelete": "No tienes permisos para eliminar personal.",
+    "errorMustSelectForDelete": "Debes seleccionar un registro para eliminarlo.",
+    "errorDelete": "No se pudo eliminar el registro.",
+    "confirmDelete": "¿Está seguro que desea eliminar este registro? (soft delete)",
+    "searchPlaceholder": "Buscar por nombre, apellido, email o teléfono…",
+    "onlyActive": "Solo activos",
+    "buttonRefresh": "Actualizar",
+    "buttonFullList": "Ver todo",
+    "buttonNew": "Nuevo",
+    "buttonEdit": "Editar",
+    "buttonSave": "Guardar",
+    "buttonDelete": "Eliminar",
+    "fieldName": "Nombre",
+    "fieldLastName": "Apellido",
+    "fieldEmail": "Correo",
+    "fieldPhonePlaceholder": "Teléfono (+593…)",
+    "fieldActive": "Activo",
+    "tableName": "Nombre",
+    "tableLastName": "Apellido",
+    "tableEmail": "Correo",
+    "tablePhone": "Teléfono",
+    "tableActive": "Activo",
+    "tableNoResults": "No se encontraron resultados.",
+    "yes": "Sí",
+    "no": "No",
+    "processing": "Procesando…",
+    "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
+    "roleNone": "sin rol",
+    "orgLabel": "Org",
+    "errorMissingOrg": "No hay organización activa.",
+    "toggleVigente": "Activo / Inactivo",
+    "newButton": "+ Nuevo",
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "deleted": "Eliminado"
+    },
+    "table": {
+      "name": "Nombre",
+      "phone": "Teléfono",
+      "email": "Correo",
+      "status": "Estado",
+      "actions": "Acciones",
+      "empty": "No hay registros en esta organización."
+    },
+    "modal": {
+      "newTitle": "Nuevo personal",
+      "editTitle": "Editar personal"
+    },
+    "form": {
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "phone": "Teléfono",
+      "email": "Correo",
+      "vigente": "Activo"
     }
-    document.addEventListener("mousedown", onDown, true);
-    document.addEventListener("touchstart", onDown, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown, true);
-      document.removeEventListener("touchstart", onDown, true);
-    };
-  }, [ref, onOutside]);
-}
-
-function Dropdown({
-  items,
-  value,
-  onChange,
-  placeholder,
-  searchPlaceholder,
-  noResultsText,
-  noEmailText,
-}) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const boxRef = useRef(null);
-
-  useClickOutside(boxRef, () => setOpen(false));
-
-  const selected = useMemo(
-    () => items.find((x) => String(x.id) === String(value)) || null,
-    [items, value]
-  );
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter((x) =>
-      `${x.full_name || ""} ${x.email || ""}`.toLowerCase().includes(s)
-    );
-  }, [items, q]);
-
-  return (
-    <div ref={boxRef} className="relative">
-      <button
-        type="button"
-        className="w-full border rounded-lg px-3 py-2 bg-white text-left"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="truncate">
-            {selected ? (
-              <>
-                <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600">
-                  {" "}
-                  — {selected.email || noEmailText}
-                </span>
-              </>
-            ) : (
-              <span className="text-gray-500">{placeholder}</span>
-            )}
-          </div>
-          <div className="text-gray-500">{open ? "▴" : "▾"}</div>
-        </div>
-      </button>
-
-      {open && (
-        <div className="absolute z-50 mt-2 w-full bg-white border rounded-xl shadow-lg overflow-hidden">
-          <div className="p-2 border-b">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="w-full border rounded-lg px-3 py-2 bg-white"
-              autoFocus
-            />
-          </div>
-
-          <div className="max-h-72 overflow-auto">
-            {filtered.length === 0 ? (
-              <div className="p-3 text-sm text-gray-500">{noResultsText}</div>
-            ) : (
-              filtered.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange(String(p.id));
-                    setOpen(false);
-                    setQ("");
-                  }}
-                >
-                  <div className="text-sm font-medium">{p.full_name}</div>
-                  <div className="text-xs text-gray-600">
-                    {p.email || noEmailText}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function planLabel(planCode) {
-  const s = String(planCode || "").trim();
-  if (!s) return "";
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-async function fetchPlanUsage(orgId) {
-  if (!orgId) return null;
-  const { data, error } = await supabase.rpc("rpc_plan_tracker_vigente_usage", {
-    org_id: orgId,
-  });
-  if (error) return null;
-  if (data && typeof data === "object" && "over_limit" in data) return data;
-  return null;
-}
-
-export default function InvitarTracker() {
-  const { t } = useTranslation();
-  const { currentOrg } = useAuth();
-
-  const orgId = resolveOrgId(currentOrg);
-  const orgName = currentOrg?.name || currentOrg?.nombre || "";
-
-  const [personalRaw, setPersonalRaw] = useState([]);
-  const [loadingPersonal, setLoadingPersonal] = useState(false);
-  const [personalError, setPersonalError] = useState(null);
-
-  const [selectedPersonId, setSelectedPersonId] = useState("");
-  const [email, setEmail] = useState("");
-
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState(null);
-
-  const [success, setSuccess] = useState(null);
-  const [inviteData, setInviteData] = useState(null);
-
-  const [planUsage, setPlanUsage] = useState(null);
-
-  // flags
-  const [forceSwap, setForceSwap] = useState(true);
-  const [sendToTrackerGps, setSendToTrackerGps] = useState(true);
-
-  const personal = useMemo(() => {
-    if (!orgId) return [];
-    return personalRaw.filter((p) => String(p.org_id || "") === orgId);
-  }, [personalRaw, orgId]);
-
-  const selectedPerson = useMemo(() => {
-    if (!selectedPersonId) return null;
-    return personalRaw.find((p) => String(p.id) === String(selectedPersonId)) || null;
-  }, [personalRaw, selectedPersonId]);
-
-  function normalizeRows(data) {
-    const rows = Array.isArray(data?.items)
-      ? data.items
-      : Array.isArray(data?.data)
-      ? data.data
-      : Array.isArray(data)
-      ? data
-      : [];
-
-    return rows
-      .map((p) => ({
-        id: p.id,
-        full_name:
-          `${p.nombre ?? ""} ${p.apellido ?? ""}`.trim() ||
-          p.full_name ||
-          p.name ||
-          t("inviteTrackerV2.dropdown.unnamed", { defaultValue: "(No name)" }),
-        email: String(p.email_norm ?? p.email ?? "").trim(),
-        org_id: p.org_id ?? null,
-      }))
-      .filter((p) => p.id);
-  }
-
-  function getAuthHeadersOrThrow() {
-    const token = getSupabaseAccessTokenFromLocalStorage();
-    if (!token) {
-      throw new Error(
-        t("inviteTrackerV2.errors.noAuth", {
-          defaultValue: "Not authenticated. Log out and log in again.",
-        })
-      );
-    }
-    return { Authorization: `Bearer ${token}` };
-  }
-
-  async function loadPersonal() {
-    setLoadingPersonal(true);
-    setPersonalError(null);
-
-    try {
-      if (!orgId) {
-        setPersonalRaw([]);
-        setPersonalError(
-          t("inviteTrackerV2.errors.invalidOrg", {
-            defaultValue:
-              "Invalid active org (cannot resolve UUID). Refresh context or log in again.",
-          })
-        );
-        return;
-      }
-
-      const url = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`;
-      const res = await fetch(url, { headers: { ...getAuthHeadersOrThrow() } });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok)
-        throw new Error(
-          data?.error ||
-            t("inviteTrackerV2.errors.loadPersonal", {
-              defaultValue: "Could not load personnel.",
-            })
-        );
-      setPersonalRaw(normalizeRows(data));
-    } catch (e) {
-      setPersonalError(e.message || t("inviteTrackerV2.errors.loadPersonal", { defaultValue: "Could not load personnel." }));
-      setPersonalRaw([]);
-    } finally {
-      setLoadingPersonal(false);
-    }
-  }
-
-  async function refreshPlanUsage() {
-    setPlanUsage(null);
-    if (!orgId) return;
-
-    try {
-      const usage = await fetchPlanUsage(orgId);
-      if (usage) setPlanUsage(usage);
-    } catch {
-      setPlanUsage(null);
-    }
-  }
-
-  useEffect(() => {
-    loadPersonal();
-    refreshPlanUsage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId]);
-
-  useEffect(() => {
-    setError(null);
-    setSuccess(null);
-    setInviteData(null);
-
-    if (selectedPerson?.email) setEmail(selectedPerson.email);
-    else if (selectedPersonId) setEmail("");
-  }, [selectedPersonId, selectedPerson]);
-
-  const overLimit = planUsage?.over_limit === true;
-
-  function buildRedirectPath() {
-    return sendToTrackerGps
-      ? "/tracker-gps?tg_flow=tracker"
-      : "/tracker?tg_flow=tracker";
-  }
-
-  async function sendInvite({ mode }) {
-    setError(null);
-    setSuccess(null);
-    setInviteData(null);
-
-    if (!orgId)
-      throw new Error(
-        t("inviteTrackerV2.errors.invalidOrgShort", {
-          defaultValue: "Invalid organization.",
-        })
-      );
-    if (!selectedPersonId)
-      throw new Error(
-        t("inviteTrackerV2.errors.selectPerson", {
-          defaultValue: "Select a person.",
-        })
-      );
-    if (!email || !email.includes("@"))
-      throw new Error(
-        t("inviteTrackerV2.errors.invalidEmail", {
-          defaultValue: "Invalid email.",
-        })
-      );
-
-    const emailNorm = email.trim().toLowerCase();
-    const redirect_to = buildRedirectPath();
-
-    const res = await fetch("/api/invite-tracker", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeadersOrThrow(),
+  },
+  "actividades": {
+    "title": "Actividades",
+    "includeInactive": "Incluir inactivas",
+    "formTitleNew": "Nueva actividad",
+    "formTitleEdit": "Editar actividad",
+    "fieldName": "Nombre de la actividad",
+    "fieldNamePlaceholder": "Ej. Siembra, Riego, Cosecha",
+    "fieldDescription": "Descripción",
+    "fieldDescriptionPlaceholder": "Descripción breve de la actividad…",
+    "fieldCurrency": "Moneda",
+    "fieldHourlyRate": "Tarifa por hora",
+    "fieldHourlyRatePlaceholder": "Ej. 3.50",
+    "currencies": {
+      "USD": "Dólar estadounidense",
+      "EUR": "Euro",
+      "MXN": "Peso mexicano",
+      "COP": "Peso colombiano",
+      "PEN": "Sol peruano",
+      "CLP": "Peso chileno",
+      "ARS": "Peso argentino",
+      "BRL": "Real brasileño",
+      "CAD": "Dólar canadiense",
+      "GBP": "Libra esterlina",
+      "LOCAL": "Moneda local"
+    },
+    "buttonCreate": "Crear actividad",
+    "buttonSave": "Guardar",
+    "buttonUpdate": "Actualizar",
+    "buttonCancel": "Cancelar",
+    "tableTitle": "Listado de actividades",
+    "thName": "Actividad",
+    "thDescription": "Descripción",
+    "thCost": "Costo",
+    "thStatus": "Estado",
+    "thActions": "Acciones",
+    "statusActive": "Activa",
+    "statusInactive": "Inactiva",
+    "actionEdit": "Editar",
+    "actionDeactivate": "Desactivar",
+    "actionActivate": "Activar",
+    "actionDelete": "Eliminar",
+    "tableNoResults": "No hay actividades registradas.",
+    "loading": "Cargando actividades…",
+    "empty": "No hay actividades registradas.",
+    "readOnlyNote": "Solo el propietario y los administradores pueden crear o editar actividades.",
+    "bannerCreated": "Actividad creada correctamente.",
+    "bannerUpdated": "Actividad actualizada correctamente.",
+    "bannerDeleted": "Actividad eliminada.",
+    "errorLoad": "Error al cargar las actividades.",
+    "errorSave": "No se pudo guardar la actividad.",
+    "errorDelete": "No se pudo eliminar la actividad.",
+    "errorMissingName": "El nombre de la actividad es obligatorio.",
+    "errorMissingCurrency": "La moneda es obligatoria.",
+    "errorMissingRate": "La tarifa por hora es obligatoria.",
+    "errorNameRequired": "El nombre de la actividad es obligatorio.",
+    "errorRatePositive": "La tarifa por hora debe ser mayor que 0.",
+    "errorMissingTenant": "No se encontró la organización del usuario (tenant_id/org_id).",
+    "errorToggle": "No se pudo cambiar el estado de la actividad.",
+    "confirmDelete": "¿Seguro que deseas eliminar la actividad \"{{name}}\"?"
+  },
+  "asignaciones": {
+    "title": "Asignaciones",
+    "orgCurrent": "Organización actual",
+    "debug": {
+      "source": "Fuente:",
+      "rows": "Filas"
+    },
+    "filters": {
+      "statusLabel": "Estado",
+      "status": {
+        "todos": "Todos",
+        "activo": "Activos",
+        "inactivo": "Inactivos",
+        "activa": "Activos",
+        "inactiva": "Inactivos"
       },
-      body: JSON.stringify({
-        email: emailNorm,
-        org_id: orgId,
-        person_id: selectedPersonId,
-
-        role: "tracker",
-        tg_flow: "tracker",
-        redirect_to,
-        invited_email: emailNorm,
-
-        force_swap: !!forceSwap,
-        force_tracker_default: true,
-
-        mode,
-      }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok)
-      throw new Error(
-        data?.error ||
-          t("inviteTrackerV2.errors.sendInvite", {
-            defaultValue: "Error sending invitation.",
-          })
-      );
-    return data;
-  }
-
-  async function handleInviteNew(e) {
-    e.preventDefault();
-    try {
-      setSending(true);
-
-      const usage = planUsage || (await fetchPlanUsage(orgId));
-      if (usage?.over_limit === true) {
-        const pLabel = planLabel(usage?.plan) || "Starter";
-        const limit = usage?.tracker_limit_vigente;
-        if (Number.isFinite(Number(limit))) {
-          throw new Error(
-            t("inviteTrackerV2.plan.limitReachedWithNumber", {
-              defaultValue: "Plan limit reached ({{plan}}: {{limit}} active tracker).",
-              plan: pLabel,
-              limit: Number(limit),
-            })
-          );
-        }
-        throw new Error(
-          t("inviteTrackerV2.plan.limitReached", {
-            defaultValue: "Plan limit reached ({{plan}}).",
-            plan: pLabel,
-          })
-        );
+      "refresh": "Refrescar",
+      "refreshLoading": "Actualizando…"
+    },
+    "form": {
+      "selectTracker": "Selecciona tracker",
+      "selectGeofence": "Selecciona geocerca",
+      "start": "Inicio",
+      "end": "Fin",
+      "dateHint": "La BD almacena solo fecha (YYYY-MM-DD). La hora es UX; se recorta al guardar.",
+      "newTitle": "Nueva asignación",
+      "editTitle": "Editar asignación",
+      "personLabel": "Persona",
+      "personPlaceholder": "Selecciona una persona",
+      "activityLabel": "Actividad",
+      "activityPlaceholder": "Selecciona una actividad",
+      "geofenceLabel": "Geocerca",
+      "geofencePlaceholder": "Selecciona una geocerca",
+      "startLabel": "Fecha/hora inicio",
+      "endLabel": "Fecha/hora fin",
+      "statusLabel": "Estado",
+      "statusActive": "Activa",
+      "statusInactive": "Inactiva",
+      "frequencyLabel": "Frecuencia (min)",
+      "saveButton": "Guardar asignación",
+      "updateButton": "Actualizar asignación",
+      "cancelEditButton": "Cancelar edición",
+      "buttonCreate": "Crear asignación",
+      "buttonUpdate": "Actualizar asignación",
+      "buttonCancel": "Cancelar",
+      "endOptionalHint": "Opcional",
+      "quickActivity": {
+        "noActivitiesHint": "No hay actividades aún (cree una en el módulo Actividades o aquí abajo).",
+        "newButton": "Nueva actividad",
+        "newNamePlaceholder": "Nombre de la nueva actividad",
+        "saveButton": "Guardar actividad",
+        "saving": "Guardando…"
       }
-
-      const data = await sendInvite({ mode: "invite" });
-      setInviteData(data);
-
-      setSuccess(
-        data?.reused_invite
-          ? t("inviteTrackerV2.messages.sentReused", {
-              defaultValue:
-                "Invitation resent ✅ (reusing a valid link). Check inbox/spam.",
-            })
-          : t("inviteTrackerV2.messages.sentNew", {
-              defaultValue: "Invitation sent ✅ Check inbox/spam.",
-            })
-      );
-
-      refreshPlanUsage();
-    } catch (err) {
-      setError(err.message || t("inviteTrackerV2.errors.unexpected", { defaultValue: "Unexpected error." }));
-    } finally {
-      setSending(false);
+    },
+    "status": {
+      "active": "Activa",
+      "inactive": "Inactiva"
+    },
+    "actions": {
+      "activate": "Activar",
+      "deactivate": "Desactivar",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    },
+    "banner": {
+      "saved": "Asignación guardada.",
+      "activated": "Asignación activada.",
+      "deactivated": "Asignación desactivada.",
+      "created": "Asignación creada correctamente.",
+      "updated": "Asignación actualizada.",
+      "deleted": "Asignación eliminada."
+    },
+    "messages": {
+      "selectTrackerAndGeofence": "Debes seleccionar un tracker y una geocerca.",
+      "trackerMissingUserId": "El tracker no tiene user_id.",
+      "invalidDates": "Fechas inválidas.",
+      "toggleInvalidDates": "No se puede cambiar el estado: inicio/fin inválidos.",
+      "loadError": "Error al cargar las asignaciones.",
+      "catalogError": "Error al cargar catálogos (personal, geocercas, actividades).",
+      "loadingData": "Cargando datos de asignaciones…",
+      "overlapError": "La persona ya tiene una asignación activa que se solapa en ese rango de fechas.",
+      "selectPersonAndFence": "Debes seleccionar una persona y una geocerca.",
+      "selectDates": "Debes ingresar fecha y hora de inicio y de fin.",
+      "frequencyTooLow": "La frecuencia mínima permitida es de 5 minutos.",
+      "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
+      "saveGenericError": "Ocurrió un error al guardar la asignación.",
+      "createGenericError": "No se pudo crear la asignación.",
+      "createSuccess": "Asignación creada correctamente.",
+      "updateGenericError": "No se pudo actualizar la asignación.",
+      "updateSuccess": "Asignación actualizada correctamente.",
+      "deleteError": "No se pudo eliminar la asignación.",
+      "deleteSuccess": "Asignación eliminada.",
+      "confirmDelete": "¿Seguro que deseas eliminar esta asignación?",
+      "noPersonal": "No hay personal activo en esta organización. Crea o reactiva al menos una persona.",
+      "noActivities": "No hay actividades creadas. Crea al menos una actividad para poder asignar."
+    },
+    "table": {
+      "title": "Asignaciones guardadas",
+      "empty": "No hay asignaciones para mostrar.",
+      "tracker": "Tracker",
+      "geofence": "Geocerca",
+      "start": "Inicio",
+      "end": "Fin",
+      "status": "Estado",
+      "action": "Acción",
+      "actions": "Acciones",
+      "person": "Persona",
+      "activity": "Actividad",
+      "noResults": "No hay asignaciones registradas.",
+      "frequency": "Freq (min)",
+      "showing": "Mostrando {{shown}} de {{total}}."
     }
-  }
-
-  async function handleResend(e) {
-    e.preventDefault();
-    try {
-      setSending(true);
-
-      const data = await sendInvite({ mode: "resend" });
-      setInviteData(data);
-
-      setSuccess(
-        data?.reused_invite
-          ? t("inviteTrackerV2.messages.resendOkReused", {
-              defaultValue:
-                "Resend OK ✅ (valid link). Check inbox/spam.",
-            })
-          : t("inviteTrackerV2.messages.resendOkNew", {
-              defaultValue:
-                "Resend OK ✅ (new link). Check inbox/spam.",
-            })
-      );
-    } catch (err) {
-      setError(err.message || t("inviteTrackerV2.errors.unexpected", { defaultValue: "Unexpected error." }));
-    } finally {
-      setSending(false);
+  },
+  "reportes": {
+    "title": "Reportes de costos",
+    "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
+    "currentOrg": "Organización actual:",
+    "noAccessBody": "No tienes permisos para visualizar los reportes de costos. Este módulo está disponible solo para propietarios y administradores.",
+    "loadingReport": "Cargando reporte…",
+    "loadingFilters": "Cargando…",
+    "filtersTitle": "Filtros",
+    "filtersFrom": "Desde",
+    "filtersTo": "Hasta",
+    "filtersPerson": "Persona",
+    "filtersActivity": "Actividad",
+    "filtersGeofence": "Geocerca",
+    "filtersAsignacion": "Asignaciones",
+    "filtersAll": "Todos",
+    "filtersClear": "Limpiar filtros",
+    "filtersApply": "Aplicar filtros",
+    "multiTip": "Tip: Ctrl/Command para seleccionar múltiples.",
+    "summaryTotalHoursLabel": "Horas totales",
+    "summaryTotalHoursHelp": "Suma de las horas de todas las asignaciones en el rango seleccionado.",
+    "summaryTotalCostLabel": "Costo total",
+    "summaryTotalCostHelp": "Suma de los costos calculados por persona, actividad y geocerca.",
+    "summaryRecordsLabel": "Registros",
+    "summaryRecordsHelp": "Cantidad de filas que cumplen con los filtros actuales.",
+    "tableTitle": "Detalle de costos",
+    "tableExportHelp": "Exporta el detalle actual como archivo CSV.",
+    "tableExportButton": "Exportar CSV",
+    "colDia": "Día",
+    "colPersona": "Persona",
+    "colEmail": "Correo",
+    "colGeocerca": "Geocerca",
+    "colActividad": "Actividad",
+    "colAsignacion": "Asignación",
+    "colInicio": "Inicio",
+    "colFin": "Fin",
+    "colEntrada": "Entrada",
+    "colSalida": "Salida",
+    "colHoras": "Horas",
+    "colMarcajes": "Marcajes",
+    "colDentro": "Dentro",
+    "colDist": "Dist (m)",
+    "colTarifa": "Tarifa/hora",
+    "colCosto": "Costo",
+    "colMoneda": "Moneda",
+    "csvHeaderInicio": "Inicio",
+    "csvHeaderFin": "Fin",
+    "csvHeaderPersona": "Persona",
+    "csvHeaderActividad": "Actividad",
+    "csvHeaderGeocerca": "Geocerca",
+    "csvHeaderHoras": "Horas",
+    "csvHeaderTarifa": "Tarifa_hora",
+    "csvHeaderTotal": "Costo_total",
+    "csvHeaderCosto": "Costo_total",
+    "csvHeaderMoneda": "Moneda",
+    "buttonDownloadCsv": "Descargar CSV",
+    "errorLoad": "Error al cargar los reportes.",
+    "errorCsv": "No se pudo generar el archivo CSV.",
+    "errorLoadFilters": "Error al cargar filtros (personas, actividades, geocercas).",
+    "errorRangeInvalid": "La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
+    "errorViewMissing": "La vista v_costos_detalle aún no está creada en Supabase.",
+    "errorLoadReport": "Error al cargar el reporte de costos.",
+    "errorLabel": "Error:",
+    "errorMissingAuth": "Falta autenticación.",
+    "errorMissingOrg": "No se pudo determinar la organización actual.",
+    "exportNoData": "No hay datos para exportar.",
+    "tableEmpty": "No hay registros para los filtros seleccionados.",
+    "personNoName": "Persona sin nombre",
+    "geofenceNoName": "Geocerca sin nombre",
+    "activityNoName": "Actividad sin nombre"
+  },
+  "dashboard": {
+    "title": "Dashboard de costos",
+    "subtitle": "Visualiza los costos agregados por persona, actividad y geocerca.",
+    "cards": {
+      "totalCost": "Costo total",
+      "totalHours": "Horas totales",
+      "totalPersons": "Personas",
+      "totalGeofences": "Geocercas"
+    },
+    "filters": {
+      "dateFromLabel": "Desde",
+      "dateToLabel": "Hasta",
+      "apply": "Aplicar",
+      "clear": "Limpiar"
+    },
+    "charts": {
+      "costByActivity": "Costo por actividad",
+      "costByPerson": "Costo por persona",
+      "costByGeofence": "Costo por geocerca",
+      "hoursByDay": "Horas por día"
+    },
+    "errorLoad": "Error al cargar el dashboard de costos."
+  },
+  "dashboardCostos": {
+    "title": "Dashboard de costos",
+    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad, geocerca y moneda.",
+    "sessionLoading": "Cargando tu sesión…",
+    "noActiveSession": "No hay sesión activa.",
+    "loadingCurrentOrg": "Cargando organización actual…",
+    "noOrgAssigned": "No hay organización activa para este usuario.",
+    "currentOrgLabel": "Organización actual",
+    "loadingPermissions": "Cargando permisos…",
+    "noAccess": "No tienes acceso a este módulo.",
+    "currentRoleLabel": "Rol actual",
+    "roleNone": "sin rol",
+    "refreshButton": "Refrescar datos",
+    "refreshing": "Actualizando…",
+    "filtersTitle": "Filtros",
+    "filtersFrom": "Desde",
+    "filtersTo": "Hasta",
+    "filtersPerson": "Persona",
+    "filtersActivity": "Actividad",
+    "filtersGeofence": "Geocerca",
+    "filtersAll": "Todos",
+    "filtersClear": "Limpiar filtros",
+    "filtersApply": "Aplicar filtros",
+    "kpiTotalHours": "Horas totales",
+    "kpiTotalCost": "Costo total",
+    "kpiRecords": "Registros",
+    "kpiAvgRate": "Tarifa promedio",
+    "currenciesSummaryTitle": "Resumen por moneda",
+    "labelHours": "horas",
+    "na": "N/A",
+    "chartTitle": "Gráfico de costos",
+    "chartDimension": "Dimensión",
+    "chartMetric": "Métrica",
+    "chartType": "Tipo de gráfico",
+    "chartTypeBar": "Barras",
+    "chartTypeLine": "Líneas",
+    "chartTypePie": "Pastel",
+    "dimensionPersona": "Persona",
+    "dimensionActividad": "Actividad",
+    "dimensionGeocerca": "Geocerca",
+    "dimensionMoneda": "Moneda",
+    "metricCost": "Costo",
+    "metricHours": "Horas",
+    "metricAvgRate": "Tarifa promedio",
+    "metricRecords": "Registros",
+    "chartNoData": "No hay datos para mostrar.",
+    "unknownCategory": "Sin dato",
+    "tableTitle": "Detalle para la dimensión seleccionada",
+    "colCategoria": "Categoría",
+    "colHoras": "Horas",
+    "colCosto": "Costo",
+    "colTarifaPromedio": "Tarifa promedio",
+    "colRegistros": "Registros",
+    "tableEmpty": "No hay datos para mostrar",
+    "exportDataButton": "Exportar datos (CSV)",
+    "exportChartButton": "Exportar gráfico (PNG)",
+    "exportNoData": "No hay datos para exportar.",
+    "exportChartError": "No se pudo exportar la gráfica.",
+    "exportChartContainerNotFound": "No se encontró el contenedor de la gráfica.",
+    "exportFilePrefix": "dashboard_costos",
+    "csvHeaderCategoria": "categoria",
+    "csvHeaderTotalHoras": "total_horas",
+    "csvHeaderTotalCosto": "total_costo",
+    "csvHeaderTarifaPromedio": "tarifa_promedio",
+    "csvHeaderRegistros": "registros"
+  },
+  "tracker": {
+    "title": "Tracker GPS",
+    "subtitle": "Visualiza en tiempo real la ubicación de los trackers dentro de tus geocercas.",
+    "status": {
+      "online": "Tracker en línea",
+      "offline": "Sin datos recientes"
+    },
+    "controls": {
+      "centerOnUser": "Centrar en mi ubicación",
+      "refresh": "Refrescar posiciones",
+      "showAll": "Mostrar todo",
+      "showInside": "Solo dentro de geocercas"
+    },
+    "legend": {
+      "insideFence": "Dentro de la geocerca",
+      "outsideFence": "Fuera de la geocerca",
+      "geofence": "Geocerca"
+    },
+    "table": {
+      "title": "Últimas posiciones",
+      "person": "Persona",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "timestamp": "Fecha/hora",
+      "status": "Estado",
+      "noResults": "No hay posiciones registradas."
+    },
+    "errorLoad": "Error al cargar posiciones del tracker."
+  },
+  "trackerDashboard": {
+    "title": "Dashboard de Tracking en tiempo real",
+    "subtitle": "Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador.",
+    "filters": {
+      "trackerLabel": "Tracker",
+      "timeWindowLabel": "Ventana",
+      "timeWindowSuffix": "horas",
+      "geofenceLabel": "Geocerca",
+      "allTrackers": "Todos los trackers",
+      "allGeofences": "Todas las geocercas"
+    },
+    "summary": {
+      "title": "Resumen",
+      "geofencesActive": "Geocercas activas",
+      "trackersProfiles": "Trackers (perfiles)",
+      "pointsInMap": "Puntos en mapa (filtro actual)",
+      "lastPoint": "Último punto registrado",
+      "noPoints": "No hay puntos para el filtro actual."
+    },
+    "legend": {
+      "title": "Leyenda de trackers",
+      "points": "pts"
+    },
+    "popup": {
+      "tracker": "Tracker",
+      "time": "Hora",
+      "accuracy": "Precisión",
+      "countHere": "Registros en esta posición",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "inside": "Dentro de la geocerca",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "messages": {
+      "noOrg": "Debes seleccionar una organización.",
+      "autoRefresh": "Los puntos se actualizan automáticamente. No necesitas refrescar la página.",
+      "loading": "Cargando datos de tracking…",
+      "noData": "No se encontraron posiciones para los filtros seleccionados.",
+      "error": "Error al cargar datos de tracking.",
+      "checkConsole": "Revisa la consola si persiste."
     }
-  }
-
-  async function copy(text) {
-    try {
-      await navigator.clipboard.writeText(String(text || ""));
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = String(text || "");
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
+  },
+  "inviteTracker": {
+    "orgFallback": "tu organización",
+    "title": "Invitar tracker",
+    "subtitle": "Selecciona un miembro de personal activo o ingresa un correo manualmente para invitarlo como tracker en {{orgName}}.",
+    "form": {
+      "selectLabel": "Selecciona personal activo (opcional)",
+      "selectPlaceholder": "-- Selecciona personal --",
+      "selectHelp": "Si seleccionas personal, su correo se llenará automáticamente.",
+      "emailLabel": "Correo del tracker",
+      "emailPlaceholder": "tracker@ejemplo.com",
+      "emailHelp": "Se enviará una invitación a este correo.",
+      "buttonSending": "Enviando invitación…",
+      "buttonSend": "Enviar invitación"
+    },
+    "errors": {
+      "emailRequired": "Debes ingresar un correo.",
+      "emailInvalid": "Ingresa un correo válido."
+    },
+    "messages": {
+      "serverProblem": "Hubo un problema al contactar el servidor de invitaciones.",
+      "notOk": "No se pudo completar la invitación. Revisa el correo e intenta de nuevo.",
+      "invited": "Se envió una invitación a {{email}} para unirse como tracker en {{orgName}}.",
+      "magiclinkSent": "Se envió un link mágico a {{email}}.",
+      "linkOnlyWithLink": "La invitación fue creada. Usa este link para compartir acceso: {{link}}.",
+      "linkOnlyNoLink": "La invitación fue creada, pero no se recibió un link público.",
+      "createdWithoutEmail": "El acceso del tracker fue creado sin enviar correo.",
+      "genericProcessed": "La invitación para {{email}} fue procesada correctamente.",
+      "unexpectedError": "Error inesperado al procesar la invitación."
     }
+  },
+  "admins": {
+    "title": "Administradores",
+    "subtitle": "Administra los administradores de tu organización y sus roles.",
+    "table": {
+      "name": "Nombre",
+      "email": "Correo",
+      "role": "Rol",
+      "status": "Estado",
+      "actions": "Acciones",
+      "noResults": "No hay administradores registrados."
+    },
+    "form": {
+      "inviteTitle": "Invitar a un nuevo administrador",
+      "emailLabel": "Correo",
+      "roleLabel": "Rol",
+      "buttonInvite": "Enviar invitación"
+    },
+    "actions": {
+      "makeOwner": "Hacer propietario",
+      "makeAdmin": "Hacer admin",
+      "remove": "Quitar acceso"
+    },
+    "banner": {
+      "invitationSent": "Invitación enviada correctamente.",
+      "roleUpdated": "Rol actualizado.",
+      "removed": "Administrador removido de la organización."
+    },
+    "error": {
+      "load": "Error al cargar la lista de administradores.",
+      "invite": "No se pudo enviar la invitación.",
+      "updateRole": "No se pudo actualizar el rol.",
+      "remove": "No se pudo quitar el administrador."
+    }
+  },
+  "help": {
+    "common": {
+      "breadcrumb": "Centro de ayuda",
+      "back": "Volver",
+      "goHome": "Ir a Inicio",
+      "viewFaq": "Ver FAQ",
+      "badge": "Centro de ayuda",
+      "quickGuideBadge": "Guía rápida"
+    },
+    "instructions": {
+      "title": "Guía rápida de configuración",
+      "subtitle": "Sigue estos pasos para configurar tu organización, crear geocercas, asignar personal y empezar el tracking.",
+      "jumpToSteps": "Ir a pasos",
+      "viewResult": "Ver resultado",
+      "tocTitle": "Tabla de contenidos",
+      "tocSubtitle": "Usa estos atajos para navegar la guía.",
+      "tocSteps": "Pasos",
+      "tocTips": "Buenas prácticas",
+      "tocResult": "Resultado esperado",
+      "recommendationTitle": "Recomendación",
+      "recommendationBody": "Empieza con 1 geocerca y 1 tracker. Cuando el flujo funcione, escala a más zonas y personas."
+    },
+    "faq": {
+      "title": "Preguntas frecuentes",
+      "subtitle": "Respuestas rápidas sobre invitaciones, roles, tracking, reportes y privacidad."
+    },
+    "support": {
+      "title": "Soporte",
+      "subtitle": "Contáctanos para soporte técnico, facturación u onboarding.",
+      "emailLabel": "Correo de soporte",
+      "notConfigured": "El contacto de soporte aún no está configurado."
+    }
+  },
+  "home": {
+    "open": "Abrir →",
+    "loadingPermissions": "Resolviendo permisos…",
+    "loginToContinue": "Inicia sesión para continuar.",
+    "goToLogin": "Ir a Login",
+    "welcome": "Bienvenido a App Geocercas",
+    "sessionAs": "Sesión iniciada como",
+    "labels": {
+      "email": "Correo:",
+      "organization": "Organización:",
+      "role": "Rol:"
+    },
+    "help": {
+      "title": "Centro de ayuda",
+      "quick": "Guía rápida",
+      "quickDesc": "Aprende a usar la app paso a paso.",
+      "faq": "FAQ",
+      "faqDesc": "Respuestas a las preguntas más comunes.",
+      "support": "Soporte",
+      "supportDesc": "¿Tienes un problema o una pregunta? Contáctanos.",
+      "news": "Novedades",
+      "newsDesc": "Cambios recientes, mejoras y actualizaciones."
+    },
+    "missingContextTitle": "Sesión iniciada, pero falta contexto",
+    "missingContextBody": "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
+    "orgNotResolved": "(no resuelto)",
+    "roleEmpty": "(vacío)",
+    "retry": "Reintentar"
+  },
+  "resetPassword": {
+    "title": "Restablecer contraseña",
+    "subtitle": "Crea una nueva contraseña para tu cuenta.",
+    "loading": "Preparando link de recuperación…",
+    "invalidOrExpired": "El link de recuperación es inválido o expiró. Solicita uno nuevo.",
+    "noSession": "No hay una sesión válida para restablecer tu contraseña. Solicita el link de nuevo.",
+    "noticeType": "Sesión detectada. Si este link no era para recuperación, inicia sesión normalmente otra vez.",
+    "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
+    "newPassword": "Nueva contraseña",
+    "newPasswordPlaceholder": "Mínimo 8 caracteres",
+    "confirmPassword": "Confirmar contraseña",
+    "confirmPlaceholder": "Repite",
+    "passwordMin": "La contraseña debe tener al menos 8 caracteres.",
+    "passwordMismatch": "Las contraseñas no coinciden.",
+    "saveButton": "Guardar nueva contraseña",
+    "saving": "Guardando…",
+    "updateFailed": "No se pudo actualizar la contraseña. Inténtalo de nuevo.",
+    "updateUnexpected": "Error inesperado al actualizar la contraseña.",
+    "success": "Contraseña actualizada correctamente. Ya puedes iniciar sesión.",
+    "backToLogin": "Volver al login",
+    "backHome": "Ir al landing",
+    "tip": "Tip: vuelve a /login, ingresa tu correo y usa “¿Olvidaste tu contraseña?” para generar un nuevo link."
+  },
+  "authInvite": {
+    "title": "Has sido invitado",
+    "processing": "Validando invitación…",
+    "notInviteLink": "Este enlace no es una invitación válida. Usa el enlace de invitación que recibiste por correo.",
+    "expiredOrUsed": "La invitación es inválida, expiró o ya fue usada.",
+    "continue": "Continuar",
+    "goToLogin": "Ir a login",
+    "timeout": "La validación de la invitación tardó demasiado. Inténtalo de nuevo."
   }
-
-  const inviteLink =
-    inviteData?.invite_link || inviteData?.link || inviteData?.url || inviteData?.magic_link || "";
-
-  return (
-    <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-6">
-        {t("inviteTrackerV2.title")}
-      </h1>
-
-      {!orgId && (
-        <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
-          ⚠️ {t("inviteTrackerV2.errors.invalidOrg")}
-          <div className="mt-1 text-xs">
-            currentOrg:{" "}
-            <span className="font-mono">{JSON.stringify(currentOrg || {})}</span>
-          </div>
-        </div>
-      )}
-
-      {planUsage && (
-        <div
-          className={`mb-4 p-3 rounded-lg border text-sm ${
-            overLimit
-              ? "border-amber-300 bg-amber-50 text-amber-900"
-              : "border-emerald-200 bg-emerald-50 text-emerald-900"
-          }`}
-        >
-          <div className="font-medium">
-            {t("inviteTrackerV2.plan.label")} {planLabel(planUsage?.plan) || "—"}
-          </div>
-
-          <div className="text-xs mt-1">
-            {t("inviteTrackerV2.plan.activeTrackers")}{" "}
-            <b>{Number(planUsage?.trackers_vigentes_used ?? 0)}</b> /{" "}
-            <b>{Number(planUsage?.tracker_limit_vigente ?? 0)}</b>
-            {overLimit ? (
-              <span className="ml-2 font-medium">
-                — {t("inviteTrackerV2.plan.limitReachedBadge")}
-              </span>
-            ) : null}
-          </div>
-
-          {overLimit ? (
-            <div className="text-xs mt-1">
-              {t("inviteTrackerV2.plan.overLimitHint")}
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
-        <div className="flex justify-between items-center mb-3">
-          <div className="text-sm font-medium">
-            {t("inviteTrackerV2.personal.title")} ({personal.length})
-          </div>
-
-          <button
-            onClick={async () => {
-              await loadPersonal();
-              await refreshPlanUsage();
-            }}
-            disabled={loadingPersonal}
-            className="px-3 py-2 border rounded-lg text-sm"
-            type="button"
-          >
-            {loadingPersonal
-              ? t("common.actions.loading")
-              : t("common.actions.refresh")}
-          </button>
-        </div>
-
-        {personalError && <div className="text-red-600 text-sm">{personalError}</div>}
-
-        <div className="mt-2">
-          <Dropdown
-            items={personal}
-            value={selectedPersonId}
-            onChange={setSelectedPersonId}
-            placeholder={t("inviteTrackerV2.dropdown.selectPlaceholder")}
-            searchPlaceholder={t("inviteTrackerV2.dropdown.searchPlaceholder")}
-            noResultsText={t("inviteTrackerV2.dropdown.noResults")}
-            noEmailText={t("inviteTrackerV2.dropdown.noEmail")}
-          />
-        </div>
-
-        <div className="mt-4">
-          <label className="text-sm font-medium">
-            {t("inviteTrackerV2.form.emailLabel")}
-          </label>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 mt-1 bg-white"
-            placeholder={t("inviteTrackerV2.form.emailPlaceholder")}
-          />
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={forceSwap}
-              onChange={(e) => setForceSwap(e.target.checked)}
-            />
-            <span>{t("inviteTrackerV2.flags.forceSwap")}</span>
-          </label>
-
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={sendToTrackerGps}
-              onChange={(e) => setSendToTrackerGps(e.target.checked)}
-            />
-            <span>{t("inviteTrackerV2.flags.sendToTrackerGps")}</span>
-          </label>
-        </div>
-
-        {error && <div className="text-red-600 text-sm mt-3">{error}</div>}
-        {success && <div className="text-green-700 text-sm mt-3">{success}</div>}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-          <button
-            onClick={handleInviteNew}
-            disabled={sending || !orgId || overLimit}
-            className="w-full bg-emerald-600 text-white rounded-lg py-3 disabled:opacity-60"
-            title={overLimit ? t("inviteTrackerV2.plan.limitReachedBadge") : ""}
-            type="button"
-          >
-            {sending ? t("inviteTrackerV2.buttons.sending") : t("inviteTrackerV2.buttons.inviteNew")}
-          </button>
-
-          <button
-            onClick={handleResend}
-            disabled={sending || !orgId}
-            className="w-full bg-sky-600 text-white rounded-lg py-3 disabled:opacity-60"
-            type="button"
-          >
-            {sending ? t("inviteTrackerV2.buttons.sending") : t("inviteTrackerV2.buttons.resend")}
-          </button>
-        </div>
-
-        {!!inviteData?.email_sent && (
-          <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
-            <div className="text-sm font-medium text-emerald-800 mb-1">
-              {t("inviteTrackerV2.result.emailSent")}
-            </div>
-
-            <div className="text-xs text-emerald-900">
-              {t("inviteTrackerV2.result.willGoTo")}{" "}
-              <b>
-                {sendToTrackerGps
-                  ? t("inviteTrackerV2.result.destTrackerGps")
-                  : t("inviteTrackerV2.result.destTrackerDashboard")}
-              </b>
-              .
-              <br />
-              {t("inviteTrackerV2.result.checkSpam")}
-              {inviteData?.reused_invite ? (
-                <div className="mt-1">
-                  <b>{t("inviteTrackerV2.result.noteLabel")}</b>{" "}
-                  {t("inviteTrackerV2.result.reusedNote")}
-                </div>
-              ) : null}
-            </div>
-
-            {!!inviteLink && (
-              <div className="mt-3">
-                <div className="text-xs font-medium text-emerald-900 mb-1">
-                  {t("inviteTrackerV2.result.linkDebug")}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={inviteLink}
-                    className="w-full border rounded-lg px-3 py-2 bg-white text-xs font-mono"
-                  />
-                  <button
-                    type="button"
-                    className="px-3 py-2 border rounded-lg text-xs bg-white"
-                    onClick={() => copy(inviteLink)}
-                  >
-                    {t("inviteTrackerV2.result.copy")}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="text-xs text-gray-500">
-        {t("inviteTrackerV2.footer.orgCurrent")}{" "}
-        <span className="font-mono">
-          {orgName ? `${orgName} — ` : ""}
-          {orgId || t("inviteTrackerV2.footer.emptyOrg")}
-        </span>
-      </div>
-    </div>
-  );
 }
