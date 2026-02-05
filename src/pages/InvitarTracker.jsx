@@ -10,21 +10,17 @@ const I18N = {
     loaded: "Cargados",
     refresh: "Refrescar",
     personPlaceholder: "Selecciona Personal…",
-    emailPlaceholder: "name@email.com",
     emailHint:
-      "Si el correo no llega, te mostraremos un link para copiar y enviar manualmente.",
+      "El acceso se enviará directamente por correo. Al abrir el link, el tracker ingresará automáticamente a Tracker GPS.",
     send: "Enviar invitación",
-    resend: "Reenviar acceso (magic link)",
+    resend: "Reenviar acceso (email)",
     sending: "Enviando…",
     resending: "Reenviando…",
     selectPerson: "Debes seleccionar un miembro de Personal.",
     missingOrg: "No se encontró org_id activo. Refresca o vuelve a iniciar sesión.",
-    emailRequired: "Debes ingresar un correo.",
-    success: (email) => `Se generó una invitación para ${email}.`,
-    resentOk: (email) => `Se generó un acceso para ${email}.`,
-    copy: "Copiar link",
-    copied: "Copiado ✔",
-    linkTitle: "Link de acceso (manual):",
+    emailRequired: "El registro de Personal seleccionado no tiene email.",
+    success: (email) => `Se envió una invitación a ${email}.`,
+    resentOk: (email) => `Se reenviaron credenciales a ${email}.`,
     genericError: "No se pudo completar la operación.",
   },
   en: {
@@ -33,21 +29,17 @@ const I18N = {
     loaded: "Loaded",
     refresh: "Refresh",
     personPlaceholder: "Select Staff…",
-    emailPlaceholder: "name@email.com",
     emailHint:
-      "If the email doesn't arrive, we'll show a link you can copy and send manually.",
+      "Access will be emailed directly. When the tracker opens the link, they will be redirected to Tracker GPS automatically.",
     send: "Send invitation",
-    resend: "Resend access (magic link)",
+    resend: "Resend access (email)",
     sending: "Sending…",
     resending: "Resending…",
     selectPerson: "You must select a staff member.",
     missingOrg: "No active org_id found. Refresh or sign in again.",
-    emailRequired: "You must enter an email.",
-    success: (email) => `Invitation generated for ${email}.`,
-    resentOk: (email) => `Access link generated for ${email}.`,
-    copy: "Copy link",
-    copied: "Copied ✔",
-    linkTitle: "Access link (manual):",
+    emailRequired: "Selected staff record has no email.",
+    success: (email) => `Invitation was sent to ${email}.`,
+    resentOk: (email) => `Credentials were resent to ${email}.`,
     genericError: "Could not complete the operation.",
   },
   fr: {
@@ -56,21 +48,17 @@ const I18N = {
     loaded: "Chargés",
     refresh: "Rafraîchir",
     personPlaceholder: "Sélectionnez Personnel…",
-    emailPlaceholder: "name@email.com",
     emailHint:
-      "Si l’e-mail n’arrive pas, nous afficherons un lien à copier et envoyer manuellement.",
+      "L’accès sera envoyé directement par e-mail. En ouvrant le lien, le tracker sera redirigé automatiquement vers Tracker GPS.",
     send: "Envoyer l’invitation",
-    resend: "Renvoyer l’accès (lien magique)",
+    resend: "Renvoyer l’accès (email)",
     sending: "Envoi…",
     resending: "Renvoi…",
     selectPerson: "Vous devez sélectionner un membre du personnel.",
     missingOrg: "Aucun org_id actif. Rafraîchissez ou reconnectez-vous.",
-    emailRequired: "Vous devez saisir un e-mail.",
-    success: (email) => `Invitation générée pour ${email}.`,
-    resentOk: (email) => `Lien d’accès généré pour ${email}.`,
-    copy: "Copier le lien",
-    copied: "Copié ✔",
-    linkTitle: "Lien d’accès (manuel) :",
+    emailRequired: "Le membre sélectionné n’a pas d’e-mail.",
+    success: (email) => `Invitation envoyée à ${email}.`,
+    resentOk: (email) => `Accès renvoyé à ${email}.`,
     genericError: "Impossible de terminer l’opération.",
   },
 };
@@ -81,6 +69,7 @@ function buildLabel(p) {
   const a = String(p?.apellido || "").trim();
   const n = String(p?.nombre || "").trim();
   const email = String(p?.email || "").trim();
+
   const base = (a || n) ? `${a} ${n}`.trim() : "";
   if (base && email) return `${base} — ${email}`;
   if (base) return base;
@@ -130,8 +119,6 @@ export default function InvitarTracker() {
 
   const [okMsg, setOkMsg] = useState("");
   const [errMsg, setErrMsg] = useState("");
-  const [actionLink, setActionLink] = useState("");
-  const [copied, setCopied] = useState(false);
 
   const selectedPerson = useMemo(
     () => people.find((p) => p.id === selectedPersonId) || null,
@@ -139,7 +126,8 @@ export default function InvitarTracker() {
   );
 
   useEffect(() => {
-    if (selectedPerson?.email) setEmail(normEmail(selectedPerson.email));
+    // El email queda siempre alineado a Personal (sin modo manual)
+    setEmail(selectedPerson?.email ? normEmail(selectedPerson.email) : "");
   }, [selectedPerson]);
 
   async function loadPeople() {
@@ -190,8 +178,6 @@ export default function InvitarTracker() {
   async function callInvite({ resend }) {
     setOkMsg("");
     setErrMsg("");
-    setActionLink("");
-    setCopied(false);
 
     if (!org_id) return setErrMsg(t.missingOrg);
     if (!selectedPersonId) return setErrMsg(t.selectPerson);
@@ -204,6 +190,8 @@ export default function InvitarTracker() {
       org_id,
       person_id: selectedPersonId,
       resend: Boolean(resend),
+      // redirectTo se controla por env en la Edge Function (INVITE_REDIRECT_TO),
+      // para garantizar entrada automática a Tracker GPS.
     };
 
     try {
@@ -220,10 +208,6 @@ export default function InvitarTracker() {
       if (!data?.ok) throw new Error(data?.message || t.genericError);
 
       setOkMsg(resend ? t.resentOk(safeEmail) : t.success(safeEmail));
-
-      if (data?.action_link) {
-        setActionLink(String(data.action_link));
-      }
     } catch (e) {
       setErrMsg(String(e?.message || e || t.genericError));
     }
@@ -247,17 +231,7 @@ export default function InvitarTracker() {
     }
   }
 
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(actionLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // fallback: do nothing
-    }
-  }
-
-  const canSend = Boolean(org_id && selectedPersonId);
+  const canSend = Boolean(org_id && selectedPersonId && normEmail(email));
   const canResend = Boolean(org_id && selectedPersonId && normEmail(email));
 
   return (
@@ -295,9 +269,8 @@ export default function InvitarTracker() {
 
         <input
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={t.emailPlaceholder}
-          className="w-full mt-3 p-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+          readOnly
+          className="w-full mt-3 p-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-700"
         />
 
         <div className="text-xs text-gray-500 mt-1">{t.emailHint}</div>
@@ -319,20 +292,6 @@ export default function InvitarTracker() {
         >
           {resending ? t.resending : t.resend}
         </button>
-
-        {actionLink ? (
-          <div className="mt-4 p-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 break-words">
-            <div className="font-semibold mb-2">{t.linkTitle}</div>
-            <div className="text-sm select-all">{actionLink}</div>
-            <button
-              type="button"
-              onClick={copyLink}
-              className="mt-3 px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700"
-            >
-              {copied ? t.copied : t.copy}
-            </button>
-          </div>
-        ) : null}
 
         {okMsg ? (
           <div className="mt-4 p-3 rounded-xl border border-green-200 bg-green-50 text-green-800">
