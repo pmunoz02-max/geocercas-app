@@ -122,7 +122,15 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
 ========================= */
 export default function InvitarTracker() {
   const { t } = useTranslation();
-  const { user, currentOrg } = useAuth();
+
+  // ✅ Alineado al patrón nuevo (si tu AuthContext expone estos flags)
+  const {
+    user,
+    currentOrg,
+    loading: authLoading,
+    isAuthenticated,
+    contextLoading,
+  } = useAuth();
 
   const orgId = resolveOrgId(currentOrg);
   const orgName =
@@ -138,21 +146,36 @@ export default function InvitarTracker() {
      Load personnel
   ========================= */
   const loadPersonnel = useCallback(async () => {
+    // ✅ evita ejecutar query antes de tener orgId
     if (!orgId) return;
+
     setLoading(true);
     setMessage("");
+
     try {
+      // ✅ Usa columnas reales (coherente con el resto de tu app)
       const { data, error } = await supabase
         .from("personal")
-        .select("id, full_name, email")
+        .select("id, nombre, apellido, email, is_deleted")
         .eq("org_id", orgId)
-        .eq("active", true)
-        .order("full_name");
+        .eq("is_deleted", false)
+        .order("nombre", { ascending: true });
 
       if (error) throw error;
-      setPeople(data || []);
+
+      const mapped =
+        (data || []).map((p) => {
+          const full = `${p.nombre || ""} ${p.apellido || ""}`.trim();
+          return {
+            id: p.id,
+            full_name: full || p.email || String(p.id),
+            email: p.email || "",
+          };
+        }) || [];
+
+      setPeople(mapped);
     } catch (e) {
-      console.error(e);
+      console.error("[InvitarTracker] loadPersonnel error:", e);
       setMessage(t("invite.loadPersonalError"));
     } finally {
       setLoading(false);
@@ -160,8 +183,13 @@ export default function InvitarTracker() {
   }, [orgId, t]);
 
   useEffect(() => {
+    // ✅ Espera a que AuthContext tenga org listo si expone flags
+    if (authLoading) return;
+    if (isAuthenticated === false) return;
+    if (contextLoading && !orgId) return;
+
     loadPersonnel();
-  }, [loadPersonnel]);
+  }, [authLoading, isAuthenticated, contextLoading, orgId, loadPersonnel]);
 
   useEffect(() => {
     const p = people.find((x) => String(x.id) === String(selectedPersonId));
@@ -176,21 +204,18 @@ export default function InvitarTracker() {
       setMessage(t("inviteTracker.errors.emailRequired"));
       return;
     }
+    if (!orgId) {
+      setMessage(t("inviteTracker.errors.orgRequired") || t("inviteTracker.orgFallback"));
+      return;
+    }
 
     setLoading(true);
     setMessage("");
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "invite-tracker",
-        {
-          body: {
-            email,
-            org_id: orgId,
-            resend,
-          },
-        }
-      );
+      const { data, error } = await supabase.functions.invoke("invite-tracker", {
+        body: { email, org_id: orgId, resend },
+      });
 
       if (error) throw error;
 
@@ -201,7 +226,7 @@ export default function InvitarTracker() {
         })
       );
     } catch (e) {
-      console.error(e);
+      console.error("[InvitarTracker] sendInvite error:", e);
       setMessage(t("invite.sendFail"));
     } finally {
       setLoading(false);
@@ -213,9 +238,7 @@ export default function InvitarTracker() {
   ========================= */
   return (
     <div className="max-w-xl mx-auto mt-10">
-      <h1 className="text-xl font-semibold mb-1">
-        {t("inviteTracker.title")}
-      </h1>
+      <h1 className="text-xl font-semibold mb-1">{t("inviteTracker.title")}</h1>
       <p className="text-gray-600 mb-6">
         {t("inviteTracker.subtitle", { orgName })}
       </p>
@@ -225,13 +248,24 @@ export default function InvitarTracker() {
           <label className="block text-sm font-medium mb-1">
             {t("inviteTracker.form.selectLabel")}
           </label>
+
           <Dropdown
             items={people}
             value={selectedPersonId}
             onChange={setSelectedPersonId}
-            placeholder={t("inviteTracker.form.selectPlaceholder")}
+            placeholder={
+              loading
+                ? t("common.actions.loading")
+                : t("inviteTracker.form.selectPlaceholder")
+            }
             t={t}
           />
+
+          {loading && (
+            <div className="mt-2 text-xs text-gray-500">
+              {t("common.actions.loading")}
+            </div>
+          )}
         </div>
 
         <div>
