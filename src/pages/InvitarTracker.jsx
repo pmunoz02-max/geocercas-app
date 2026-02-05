@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+// src/pages/InvitarTracker.jsx
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
@@ -18,25 +20,6 @@ function resolveOrgId(currentOrg) {
   return isUuid(s) ? s : "";
 }
 
-function getSupabaseAccessTokenFromLocalStorage() {
-  try {
-    const keys = Object.keys(window.localStorage || {});
-    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
-    if (!k) return "";
-    const raw = window.localStorage.getItem(k);
-    if (!raw) return "";
-    const j = JSON.parse(raw);
-    const token =
-      j?.access_token ||
-      j?.currentSession?.access_token ||
-      j?.data?.session?.access_token ||
-      "";
-    return String(token || "").trim();
-  } catch {
-    return "";
-  }
-}
-
 function useClickOutside(ref, onOutside) {
   useEffect(() => {
     function onDown(e) {
@@ -52,7 +35,7 @@ function useClickOutside(ref, onOutside) {
   }, [ref, onOutside]);
 }
 
-function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }) {
+function Dropdown({ items, value, onChange, placeholder = "—" }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const boxRef = useRef(null);
@@ -87,7 +70,10 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
             {selected ? (
               <>
                 <span className="font-medium">{selected.full_name}</span>
-                <span className="text-gray-600"> — {selected.email || "(sin email)"}</span>
+                <span className="text-gray-600">
+                  {" "}
+                  — {selected.email || "(sin email)"}
+                </span>
               </>
             ) : (
               <span className="text-gray-500">{placeholder}</span>
@@ -126,7 +112,9 @@ function Dropdown({ items, value, onChange, placeholder = "— Selecciona —" }
                   }}
                 >
                   <div className="text-sm font-medium">{p.full_name}</div>
-                  <div className="text-xs text-gray-600">{p.email || "(sin email)"}</div>
+                  <div className="text-xs text-gray-600">
+                    {p.email || "(sin email)"}
+                  </div>
                 </button>
               ))
             )}
@@ -154,6 +142,7 @@ async function fetchPlanUsage(orgId) {
 }
 
 export default function InvitarTracker() {
+  const { t } = useTranslation();
   const { currentOrg } = useAuth();
 
   const orgId = resolveOrgId(currentOrg);
@@ -174,9 +163,9 @@ export default function InvitarTracker() {
 
   const [planUsage, setPlanUsage] = useState(null);
 
-  // NUEVO: flags de flujo (Nota Técnica)
-  const [forceSwap, setForceSwap] = useState(true); // evita que admin consuma invite por accidente
-  const [sendToTrackerGps, setSendToTrackerGps] = useState(true); // destino final: tracker-gps
+  // Flags de flujo
+  const [forceSwap, setForceSwap] = useState(true);
+  const [sendToTrackerGps, setSendToTrackerGps] = useState(true);
 
   const personal = useMemo(() => {
     if (!orgId) return [];
@@ -211,15 +200,22 @@ export default function InvitarTracker() {
       .filter((p) => p.id);
   }
 
-  function getAuthHeadersOrThrow() {
-    const token = getSupabaseAccessTokenFromLocalStorage();
+  // ✅ UNIVERSAL: token desde Supabase (no localStorage)
+  const getAuthHeadersOrThrow = useCallback(async () => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw new Error(error.message || "No se pudo obtener sesión.");
+    const token = data?.session?.access_token;
     if (!token) {
-      throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
+      throw new Error(
+        t("auth.notAuthenticated", {
+          defaultValue: "No autenticado. Cierra sesión y vuelve a entrar.",
+        })
+      );
     }
     return { Authorization: `Bearer ${token}` };
-  }
+  }, [t]);
 
-  async function loadPersonal() {
+  const loadPersonal = useCallback(async () => {
     setLoadingPersonal(true);
     setPersonalError(null);
 
@@ -227,25 +223,31 @@ export default function InvitarTracker() {
       if (!orgId) {
         setPersonalRaw([]);
         setPersonalError(
-          "Org actual no válida (no se pudo resolver UUID desde currentOrg). Refresca contexto o vuelve a iniciar sesión."
+          t("org.invalid", {
+            defaultValue:
+              "Org actual no válida (no se pudo resolver UUID desde currentOrg). Refresca contexto o vuelve a iniciar sesión.",
+          })
         );
         return;
       }
 
       const url = `/api/personal?onlyActive=1&limit=500&org_id=${encodeURIComponent(orgId)}`;
-      const res = await fetch(url, { headers: { ...getAuthHeadersOrThrow() } });
+      const headers = await getAuthHeadersOrThrow();
+      const res = await fetch(url, { headers });
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "No se pudo cargar el personal");
+
       setPersonalRaw(normalizeRows(data));
     } catch (e) {
-      setPersonalError(e.message || "Error cargando personal");
+      setPersonalError(e?.message || "Error cargando personal");
       setPersonalRaw([]);
     } finally {
       setLoadingPersonal(false);
     }
-  }
+  }, [orgId, getAuthHeadersOrThrow, t]);
 
-  async function refreshPlanUsage() {
+  const refreshPlanUsage = useCallback(async () => {
     setPlanUsage(null);
     if (!orgId) return;
 
@@ -255,13 +257,12 @@ export default function InvitarTracker() {
     } catch {
       setPlanUsage(null);
     }
-  }
+  }, [orgId]);
 
   useEffect(() => {
     loadPersonal();
     refreshPlanUsage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId]);
+  }, [orgId, loadPersonal, refreshPlanUsage]);
 
   useEffect(() => {
     setError(null);
@@ -275,7 +276,7 @@ export default function InvitarTracker() {
   const overLimit = planUsage?.over_limit === true;
 
   function buildRedirectPath() {
-    // Nota Técnica: destino final /tracker-gps?tg_flow=tracker o /tracker
+    // Destino final
     return sendToTrackerGps ? "/tracker-gps?tg_flow=tracker" : "/tracker?tg_flow=tracker";
   }
 
@@ -284,34 +285,36 @@ export default function InvitarTracker() {
     setSuccess(null);
     setInviteData(null);
 
-    if (!orgId) throw new Error("Organización no válida (orgId no es UUID).");
-    if (!selectedPersonId) throw new Error("Selecciona una persona.");
-    if (!email || !email.includes("@")) throw new Error("Email inválido.");
+    if (!orgId) throw new Error(t("org.invalidShort", { defaultValue: "Organización no válida." }));
+    if (!selectedPersonId)
+      throw new Error(t("invite.selectPerson", { defaultValue: "Selecciona una persona." }));
+    if (!email || !email.includes("@"))
+      throw new Error(t("invite.invalidEmail", { defaultValue: "Email inválido." }));
 
     const emailNorm = email.trim().toLowerCase();
     const redirect_to = buildRedirectPath();
+
+    const headers = await getAuthHeadersOrThrow();
 
     const res = await fetch("/api/invite-tracker", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...getAuthHeadersOrThrow(),
+        ...headers,
       },
       body: JSON.stringify({
         email: emailNorm,
         org_id: orgId,
         person_id: selectedPersonId,
 
-        // Reglas definitivas
         role: "tracker",
         tg_flow: "tracker",
-        redirect_to, // backend debe construir link con este destino final
-        invited_email: emailNorm, // opcional, útil para recover/debug
+        redirect_to,
+        invited_email: emailNorm,
 
-        // Force swap (evitar que admin consuma por accidente)
         force_swap: !!forceSwap,
 
-        // compat legacy (si tu edge lo usa)
+        // compat legacy
         force_tracker_default: true,
 
         mode, // "invite" | "resend"
@@ -328,30 +331,40 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      // Solo bloqueamos "invitar nuevo" por plan.
       const usage = planUsage || (await fetchPlanUsage(orgId));
       if (usage?.over_limit === true) {
         const pLabel = planLabel(usage?.plan) || "Starter";
         const limit = usage?.tracker_limit_vigente;
         if (Number.isFinite(Number(limit))) {
           throw new Error(
-            `Has alcanzado el límite de tu plan ${pLabel} (${Number(limit)} tracker vigente).`
+            t("invite.planLimitReached", {
+              defaultValue: `Has alcanzado el límite de tu plan ${pLabel} (${Number(
+                limit
+              )} tracker vigente).`,
+            })
           );
         }
-        throw new Error(`Has alcanzado el límite de trackers vigentes de tu plan ${pLabel}.`);
+        throw new Error(
+          t("invite.planLimitReached2", {
+            defaultValue: `Has alcanzado el límite de trackers vigentes de tu plan ${pLabel}.`,
+          })
+        );
       }
 
       const data = await sendInvite({ mode: "invite" });
       setInviteData(data);
       setSuccess(
         data?.reused_invite
-          ? "Invitación reenviada ✅ (reutilizando un link vigente). Revisa bandeja/spam."
-          : "Invitación enviada ✅ Revisa bandeja/spam."
+          ? t("invite.resentReused", {
+              defaultValue:
+                "Invitación reenviada ✅ (reutilizando un link vigente). Revisa bandeja/spam.",
+            })
+          : t("invite.sent", { defaultValue: "Invitación enviada ✅ Revisa bandeja/spam." })
       );
 
       refreshPlanUsage();
     } catch (err) {
-      setError(err.message || "Error inesperado");
+      setError(err?.message || "Error inesperado");
     } finally {
       setSending(false);
     }
@@ -362,16 +375,19 @@ export default function InvitarTracker() {
     try {
       setSending(true);
 
-      // ✅ Reenviar NO se bloquea por plan
       const data = await sendInvite({ mode: "resend" });
       setInviteData(data);
       setSuccess(
         data?.reused_invite
-          ? "Reenvío exitoso ✅ (link vigente). Revisa bandeja/spam."
-          : "Reenvío exitoso ✅ (nuevo link). Revisa bandeja/spam."
+          ? t("invite.resendOkReused", {
+              defaultValue: "Reenvío exitoso ✅ (link vigente). Revisa bandeja/spam.",
+            })
+          : t("invite.resendOkNew", {
+              defaultValue: "Reenvío exitoso ✅ (nuevo link). Revisa bandeja/spam.",
+            })
       );
     } catch (err) {
-      setError(err.message || "Error inesperado");
+      setError(err?.message || "Error inesperado");
     } finally {
       setSending(false);
     }
@@ -381,7 +397,6 @@ export default function InvitarTracker() {
     try {
       await navigator.clipboard.writeText(String(text || ""));
     } catch {
-      // fallback
       const ta = document.createElement("textarea");
       ta.value = String(text || "");
       document.body.appendChild(ta);
@@ -396,13 +411,19 @@ export default function InvitarTracker() {
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-6">Invitar / Reenviar Tracker</h1>
+      <h1 className="text-2xl font-semibold mb-6">
+        {t("invite.title", { defaultValue: "Invitar / Reenviar Tracker" })}
+      </h1>
 
       {!orgId && (
         <div className="mb-4 p-3 rounded-lg border border-red-300 bg-red-50 text-red-800 text-sm">
-          ⚠️ No se pudo resolver la organización activa como UUID.
+          ⚠️{" "}
+          {t("org.invalidUuid", {
+            defaultValue: "No se pudo resolver la organización activa como UUID.",
+          })}
           <div className="mt-1 text-xs">
-            currentOrg: <span className="font-mono">{JSON.stringify(currentOrg || {})}</span>
+            currentOrg:{" "}
+            <span className="font-mono">{JSON.stringify(currentOrg || {})}</span>
           </div>
         </div>
       )}
@@ -410,21 +431,31 @@ export default function InvitarTracker() {
       {planUsage && (
         <div
           className={`mb-4 p-3 rounded-lg border text-sm ${
-            overLimit
+            planUsage?.over_limit
               ? "border-amber-300 bg-amber-50 text-amber-900"
               : "border-emerald-200 bg-emerald-50 text-emerald-900"
           }`}
         >
-          <div className="font-medium">Plan {planLabel(planUsage?.plan) || "—"}</div>
-          <div className="text-xs mt-1">
-            Trackers vigentes: <b>{Number(planUsage?.trackers_vigentes_used ?? 0)}</b> /{" "}
-            <b>{Number(planUsage?.tracker_limit_vigente ?? 0)}</b>
-            {overLimit ? <span className="ml-2 font-medium">— Límite alcanzado</span> : null}
+          <div className="font-medium">
+            {t("plan.label", { defaultValue: "Plan" })} {planLabel(planUsage?.plan) || "—"}
           </div>
+          <div className="text-xs mt-1">
+            {t("plan.trackersVigentes", { defaultValue: "Trackers vigentes" })}:{" "}
+            <b>{Number(planUsage?.trackers_vigentes_used ?? 0)}</b> /{" "}
+            <b>{Number(planUsage?.tracker_limit_vigente ?? 0)}</b>
+            {overLimit ? (
+              <span className="ml-2 font-medium">
+                — {t("plan.limitReached", { defaultValue: "Límite alcanzado" })}
+              </span>
+            ) : null}
+          </div>
+
           {overLimit ? (
             <div className="text-xs mt-1">
-              Puedes <b>reenviar</b> invitaciones (no agrega trackers), pero <b>no</b> invitar nuevos
-              trackers mientras estés en límite.
+              {t("plan.limitHint", {
+                defaultValue:
+                  "Puedes reenviar invitaciones (no agrega trackers), pero no invitar nuevos trackers mientras estés en límite.",
+              })}
             </div>
           ) : null}
         </div>
@@ -432,7 +463,9 @@ export default function InvitarTracker() {
 
       <div className="bg-white rounded-xl shadow-sm border p-5 mb-6">
         <div className="flex justify-between items-center mb-3">
-          <div className="text-sm font-medium">Personal activo ({personal.length})</div>
+          <div className="text-sm font-medium">
+            {t("invite.personalActive", { defaultValue: "Personal activo" })} ({personal.length})
+          </div>
           <button
             onClick={async () => {
               await loadPersonal();
@@ -442,7 +475,9 @@ export default function InvitarTracker() {
             className="px-3 py-2 border rounded-lg text-sm"
             type="button"
           >
-            {loadingPersonal ? "Cargando..." : "Refrescar"}
+            {loadingPersonal
+              ? t("common.loading", { defaultValue: "Cargando..." })
+              : t("common.refresh", { defaultValue: "Refrescar" })}
           </button>
         </div>
 
@@ -453,12 +488,16 @@ export default function InvitarTracker() {
             items={personal}
             value={selectedPersonId}
             onChange={setSelectedPersonId}
-            placeholder="— Selecciona una persona —"
+            placeholder={t("invite.selectPersonPlaceholder", {
+              defaultValue: "— Selecciona una persona —",
+            })}
           />
         </div>
 
         <div className="mt-4">
-          <label className="text-sm font-medium">Email del tracker</label>
+          <label className="text-sm font-medium">
+            {t("invite.emailLabel", { defaultValue: "Email del tracker" })}
+          </label>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -466,7 +505,6 @@ export default function InvitarTracker() {
           />
         </div>
 
-        {/* Flags Nota Técnica */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <label className="flex items-center gap-2">
             <input
@@ -475,7 +513,10 @@ export default function InvitarTracker() {
               onChange={(e) => setForceSwap(e.target.checked)}
             />
             <span>
-              <b>Force swap</b> (evita que un admin consuma el invite)
+              <b>{t("invite.forceSwap", { defaultValue: "Force swap" })}</b>{" "}
+              {t("invite.forceSwapHelp", {
+                defaultValue: "(evita que un admin consuma el invite)",
+              })}
             </span>
           </label>
 
@@ -486,7 +527,8 @@ export default function InvitarTracker() {
               onChange={(e) => setSendToTrackerGps(e.target.checked)}
             />
             <span>
-              Redirigir a <b>Tracker GPS</b> (tg_flow=tracker)
+              {t("invite.redirectTo", { defaultValue: "Redirigir a" })}{" "}
+              <b>{t("invite.trackerGps", { defaultValue: "Tracker GPS" })}</b> (tg_flow=tracker)
             </span>
           </label>
         </div>
@@ -502,7 +544,9 @@ export default function InvitarTracker() {
             title={overLimit ? "Límite de plan alcanzado" : ""}
             type="button"
           >
-            {sending ? "Enviando..." : "Invitar NUEVO tracker"}
+            {sending
+              ? t("common.sending", { defaultValue: "Enviando..." })
+              : t("invite.inviteNew", { defaultValue: "Invitar NUEVO tracker" })}
           </button>
 
           <button
@@ -511,21 +555,34 @@ export default function InvitarTracker() {
             className="w-full bg-sky-600 text-white rounded-lg py-3 disabled:opacity-60"
             type="button"
           >
-            {sending ? "Enviando..." : "Reenviar invitación (mismo tracker)"}
+            {sending
+              ? t("common.sending", { defaultValue: "Enviando..." })
+              : t("invite.resend", { defaultValue: "Reenviar invitación (mismo tracker)" })}
           </button>
         </div>
 
         {!!inviteData?.email_sent && (
           <div className="mt-6 border rounded-xl p-4 bg-emerald-50 border-emerald-200">
-            <div className="text-sm font-medium text-emerald-800 mb-1">Email enviado ✅</div>
+            <div className="text-sm font-medium text-emerald-800 mb-1">
+              {t("invite.emailSent", { defaultValue: "Email enviado ✅" })}
+            </div>
+
             <div className="text-xs text-emerald-900">
-              El tracker recibirá un link que lo lleva directo a{" "}
+              {t("invite.emailHint1", {
+                defaultValue: "El tracker recibirá un link que lo lleva directo a",
+              })}{" "}
               <b>{sendToTrackerGps ? "Tracker GPS" : "Tracker Dashboard"}</b>.
               <br />
-              Si no lo ve, revisar <b>Spam</b>.
+              {t("invite.emailHint2", {
+                defaultValue: "Si no lo ve, revisar Spam.",
+              })}
               {inviteData?.reused_invite ? (
                 <div className="mt-1">
-                  <b>Nota:</b> Se reutilizó un invite vigente (no se creó una fila nueva).
+                  <b>{t("common.note", { defaultValue: "Nota" })}:</b>{" "}
+                  {t("invite.reusedInviteNote", {
+                    defaultValue:
+                      "Se reutilizó un invite vigente (no se creó una fila nueva).",
+                  })}
                 </div>
               ) : null}
             </div>
@@ -533,7 +590,7 @@ export default function InvitarTracker() {
             {!!inviteLink && (
               <div className="mt-3">
                 <div className="text-xs font-medium text-emerald-900 mb-1">
-                  Link (debug/soporte):
+                  {t("invite.linkDebug", { defaultValue: "Link (debug/soporte):" })}
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -546,7 +603,7 @@ export default function InvitarTracker() {
                     className="px-3 py-2 border rounded-lg text-xs bg-white"
                     onClick={() => copy(inviteLink)}
                   >
-                    Copiar
+                    {t("common.copy", { defaultValue: "Copiar" })}
                   </button>
                 </div>
               </div>
