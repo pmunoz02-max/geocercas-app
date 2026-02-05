@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient"; // ajusta si tu path es distinto
-import { useAuth } from "../context/AuthProvider"; // ajusta si tu hook se llama distinto
+import { supabase } from "../lib/supabaseClient"; // ajusta si tu path difiere
+import { useAuth } from "../context/AuthProvider"; // ajusta si tu hook difiere
 
+// i18n simple (no rompe lógica)
 const I18N = {
   es: {
     title: "Invitar tracker",
@@ -9,31 +10,33 @@ const I18N = {
       "Selecciona un miembro de personal activo o ingresa un correo manualmente para invitarlo como tracker en tu organización.",
     loaded: "Cargados",
     refresh: "Refrescar",
-    emailLabel: "Correo",
+    personPlaceholder: "Selecciona Personal…",
+    emailPlaceholder: "name@email.com",
     emailHint: "Se enviará una invitación a este correo.",
     send: "Enviar invitación",
+    sending: "Enviando…",
     selectPerson: "Debes seleccionar un miembro de Personal.",
     missingOrg: "No se encontró org_id activo. Refresca o vuelve a iniciar sesión.",
-    sending: "Enviando…",
+    emailRequired: "Debes ingresar un correo.",
     success: (email) => `Se envió un link mágico a ${email}.`,
-    errorGeneric: "No se pudo enviar la invitación.",
-    personPlaceholder: "Selecciona Personal…",
+    genericError: "No se pudo enviar la invitación.",
   },
   en: {
     title: "Invite tracker",
     subtitle:
-      "Select an active staff member or type an email to invite them as a tracker in your organization.",
+      "Select an active staff member or enter an email to invite them as a tracker in your organization.",
     loaded: "Loaded",
     refresh: "Refresh",
-    emailLabel: "Email",
+    personPlaceholder: "Select Staff…",
+    emailPlaceholder: "name@email.com",
     emailHint: "An invitation will be sent to this email.",
     send: "Send invitation",
+    sending: "Sending…",
     selectPerson: "You must select a staff member.",
     missingOrg: "No active org_id found. Refresh or sign in again.",
-    sending: "Sending…",
+    emailRequired: "You must enter an email.",
     success: (email) => `A magic link was sent to ${email}.`,
-    errorGeneric: "Could not send invitation.",
-    personPlaceholder: "Select Staff…",
+    genericError: "Could not send invitation.",
   },
   fr: {
     title: "Inviter un tracker",
@@ -41,64 +44,164 @@ const I18N = {
       "Sélectionnez un membre du personnel actif ou saisissez un e-mail pour l’inviter comme tracker dans votre organisation.",
     loaded: "Chargés",
     refresh: "Rafraîchir",
-    emailLabel: "E-mail",
+    personPlaceholder: "Sélectionnez Personnel…",
+    emailPlaceholder: "name@email.com",
     emailHint: "Une invitation sera envoyée à cet e-mail.",
     send: "Envoyer l’invitation",
+    sending: "Envoi…",
     selectPerson: "Vous devez sélectionner un membre du personnel.",
     missingOrg: "Aucun org_id actif. Rafraîchissez ou reconnectez-vous.",
-    sending: "Envoi…",
+    emailRequired: "Vous devez saisir un e-mail.",
     success: (email) => `Un lien magique a été envoyé à ${email}.`,
-    errorGeneric: "Impossible d’envoyer l’invitation.",
-    personPlaceholder: "Sélectionnez Personnel…",
+    genericError: "Impossible d’envoyer l’invitation.",
   },
 };
 
+function normEmail(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
+function buildLabel(p) {
+  // Intentos comunes de nombres (sin romper si no existen)
+  const a = String(p?.apellidos || p?.apellido || p?.last_name || p?.lastname || "").trim();
+  const n = String(p?.nombres || p?.nombre || p?.first_name || p?.firstname || "").trim();
+  const full = String(p?.full_name || p?.fullname || p?.display_name || p?.name || "").trim();
+
+  const base = (a || n) ? `${a} ${n}`.trim() : (full || "");
+  const email = String(p?.email || "").trim();
+
+  if (base && email) return `${base} — ${email}`;
+  if (base) return base;
+  if (email) return email;
+  return String(p?.id || "Personal");
+}
+
+async function selectWithFallback(tableQueryBuilders) {
+  // tableQueryBuilders: array de funciones que retornan { data, error }
+  for (const fn of tableQueryBuilders) {
+    const { data, error, usedSelect } = await fn();
+    if (!error) return { data, usedSelect };
+    // Si el error es "column ... does not exist", probamos el siguiente select
+    const msg = String(error?.message || "");
+    const missingCol = msg.toLowerCase().includes("does not exist") && msg.toLowerCase().includes("column");
+    if (!missingCol) {
+      // error distinto: paramos y devolvemos
+      throw error;
+    }
+  }
+  // si todo falla, devolvemos lista vacía
+  return { data: [], usedSelect: "none" };
+}
+
 export default function InvitarTracker() {
-  const { currentOrg, lang } = useAuth(); // si tu AuthProvider usa otros nombres, luego lo ajusto
+  const { currentOrg, lang } = useAuth();
   const t = I18N[lang || "es"] || I18N.es;
 
   const org_id = currentOrg?.id || currentOrg?.org_id || null;
 
-  const [loading, setLoading] = useState(false);
-  const [peopleLoading, setPeopleLoading] = useState(false);
   const [people, setPeople] = useState([]);
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [email, setEmail] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
+
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const [okMsg, setOkMsg] = useState("");
+  const [errMsg, setErrMsg] = useState("");
 
   const selectedPerson = useMemo(
     () => people.find((p) => p.id === selectedPersonId) || null,
     [people, selectedPersonId]
   );
 
+  useEffect(() => {
+    if (selectedPerson?.email) setEmail(normEmail(selectedPerson.email));
+  }, [selectedPerson]);
+
   async function loadPeople() {
-    if (!org_id) return;
+    if (!org_id) {
+      setPeople([]);
+      return;
+    }
 
     setPeopleLoading(true);
-    setErrorMsg("");
+    setErrMsg("");
     try {
-      // Mismos filtros “universales”: no borrado y vigente si existe.
-      // Si tu tabla usa otros nombres, me pasas tu InvitarTracker.jsx real y lo alineo.
-      const { data, error } = await supabase
-        .from("personal")
-        .select("id, nombres, apellidos, email, is_deleted, vigente")
-        .eq("org_id", org_id)
-        .neq("is_deleted", true)
-        .order("apellidos", { ascending: true });
+      // Filtros universales: org_id + (is_deleted != true) si existe + vigente si existe
+      // Como NO sabemos tu esquema exacto, probamos selects con columnas alternativas.
+      const base = supabase.from("personal").eq("org_id", org_id);
 
-      if (error) throw error;
+      const tries = [
+        async () => {
+          const q = base
+            .select("id, email, nombres, apellidos, is_deleted, vigente")
+            .neq("is_deleted", true)
+            .order("apellidos", { ascending: true });
+          const { data, error } = await q;
+          return { data, error, usedSelect: "id,email,nombres,apellidos,is_deleted,vigente" };
+        },
+        async () => {
+          const q = base
+            .select("id, email, nombre, apellido, is_deleted, vigente")
+            .neq("is_deleted", true)
+            .order("apellido", { ascending: true });
+          const { data, error } = await q;
+          return { data, error, usedSelect: "id,email,nombre,apellido,is_deleted,vigente" };
+        },
+        async () => {
+          const q = base
+            .select("id, email, first_name, last_name, is_deleted, vigente")
+            .neq("is_deleted", true)
+            .order("last_name", { ascending: true });
+          const { data, error } = await q;
+          return { data, error, usedSelect: "id,email,first_name,last_name,is_deleted,vigente" };
+        },
+        async () => {
+          const q = base
+            .select("id, email, full_name, is_deleted, vigente")
+            .neq("is_deleted", true)
+            .order("full_name", { ascending: true });
+          const { data, error } = await q;
+          return { data, error, usedSelect: "id,email,full_name,is_deleted,vigente" };
+        },
+        async () => {
+          // Ultimo fallback: solo id/email (no asume columnas de nombres)
+          const q = base
+            .select("id, email, is_deleted, vigente")
+            .neq("is_deleted", true)
+            .order("email", { ascending: true });
+          const { data, error } = await q;
+          return { data, error, usedSelect: "id,email,is_deleted,vigente" };
+        },
+        async () => {
+          // Si ni siquiera existe is_deleted/vigente, hacemos lo mínimo:
+          const q = supabase.from("personal").select("id, email").eq("org_id", org_id).order("email", { ascending: true });
+          const { data, error } = await q;
+          return { data, error, usedSelect: "id,email" };
+        },
+      ];
 
-      // Si existe vigente, filtra vigente=true (si no existe, no filtra)
-      const cleaned = Array.isArray(data) ? data : [];
-      const finalList = cleaned.filter((p) => {
+      const { data, usedSelect } = await selectWithFallback(tries);
+
+      const list = Array.isArray(data) ? data : [];
+      // si hay vigente, filtra vigente=true
+      const filtered = list.filter((p) => {
         if (typeof p?.vigente === "boolean") return p.vigente === true;
         return true;
       });
 
-      setPeople(finalList);
+      setPeople(filtered);
+
+      // Si el seleccionado ya no existe, resetea
+      if (selectedPersonId && !filtered.some((p) => p.id === selectedPersonId)) {
+        setSelectedPersonId("");
+      }
+
+      console.log("[InvitarTracker] personal loaded using select:", usedSelect, "count:", filtered.length);
     } catch (e) {
-      setErrorMsg(String(e?.message || e));
+      setPeople([]);
+      setSelectedPersonId("");
+      setErrMsg(String(e?.message || e));
     } finally {
       setPeopleLoading(false);
     }
@@ -109,28 +212,22 @@ export default function InvitarTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org_id]);
 
-  // cuando selecciona persona: autocompleta email si existe
-  useEffect(() => {
-    if (selectedPerson?.email) setEmail(String(selectedPerson.email).trim().toLowerCase());
-    // no limpiamos email si no hay, para permitir manual.
-  }, [selectedPerson]);
-
   async function sendInvite() {
-    setSuccessMsg("");
-    setErrorMsg("");
+    setOkMsg("");
+    setErrMsg("");
 
     if (!org_id) {
-      setErrorMsg(t.missingOrg);
+      setErrMsg(t.missingOrg);
       return;
     }
     if (!selectedPersonId) {
-      setErrorMsg(t.selectPerson);
+      setErrMsg(t.selectPerson);
       return;
     }
 
-    const safeEmail = String(email || "").trim().toLowerCase();
+    const safeEmail = normEmail(email);
     if (!safeEmail) {
-      setErrorMsg("email required");
+      setErrMsg(t.emailRequired);
       return;
     }
 
@@ -141,126 +238,84 @@ export default function InvitarTracker() {
       resend: false,
     };
 
-    // LOG ÚTIL (siempre): te muestra si el i18n/refactor rompió keys
     console.log("[InvitarTracker] payload", payload);
 
-    setLoading(true);
+    setSending(true);
     try {
-      const { data, error } = await supabase.functions.invoke("invite-tracker", {
-        body: payload,
-      });
+      const { data, error } = await supabase.functions.invoke("invite-tracker", { body: payload });
+      if (error) throw new Error(error.message || t.genericError);
+      if (!data?.ok) throw new Error(data?.message || t.genericError);
 
-      if (error) {
-        // intenta extraer json de error
-        const msg = error?.message || t.errorGeneric;
-        throw new Error(msg);
-      }
-
-      if (!data?.ok) {
-        throw new Error(data?.message || t.errorGeneric);
-      }
-
-      setSuccessMsg(t.success(safeEmail));
+      setOkMsg(t.success(safeEmail));
     } catch (e) {
-      setErrorMsg(String(e?.message || e || t.errorGeneric));
+      setErrMsg(String(e?.message || e || t.genericError));
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>{t.title}</h1>
-      <p style={{ opacity: 0.8, marginBottom: 20 }}>{t.subtitle}</p>
+    <div className="max-w-3xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-2">{t.title}</h1>
+      <p className="text-gray-600 mb-4">{t.subtitle}</p>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 14, opacity: 0.8 }}>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="text-sm text-gray-600">
           {t.loaded}: {people.length}
         </div>
         <button
           type="button"
           onClick={loadPeople}
           disabled={peopleLoading || !org_id}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
-          }}
+          className="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60"
         >
           {t.refresh}
         </button>
       </div>
 
-      <div style={{ border: "1px solid #eee", borderRadius: 16, padding: 16, background: "#fff" }}>
-        <div style={{ marginBottom: 12 }}>
-          <select
-            value={selectedPersonId}
-            onChange={(e) => setSelectedPersonId(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "12px 12px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-            }}
-          >
-            <option value="">{t.personPlaceholder}</option>
-            {people.map((p) => {
-              const full = `${p.apellidos || ""} ${p.nombres || ""}`.trim();
-              const label = p.email ? `${full} — ${p.email}` : full;
-              return (
-                <option key={p.id} value={p.id}>
-                  {label}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+      <div className="bg-white border border-gray-200 rounded-2xl p-4">
+        <select
+          value={selectedPersonId}
+          onChange={(e) => setSelectedPersonId(e.target.value)}
+          className="w-full p-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <option value="">{t.personPlaceholder}</option>
+          {people.map((p) => (
+            <option key={p.id} value={p.id}>
+              {buildLabel(p)}
+            </option>
+          ))}
+        </select>
 
-        <div style={{ marginBottom: 6, fontSize: 14, fontWeight: 600 }}>{t.emailLabel}</div>
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="name@email.com"
-          style={{
-            width: "100%",
-            padding: "12px 12px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            marginBottom: 6,
-          }}
+          placeholder={t.emailPlaceholder}
+          className="w-full mt-3 p-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
         />
-        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 16 }}>{t.emailHint}</div>
+
+        <div className="text-xs text-gray-500 mt-1">{t.emailHint}</div>
 
         <button
           type="button"
           onClick={sendInvite}
-          disabled={loading || !org_id || !selectedPersonId}
-          style={{
-            width: "100%",
-            padding: "14px 14px",
-            borderRadius: 12,
-            border: "none",
-            background: loading ? "#999" : "#16a34a",
-            color: "#fff",
-            fontSize: 16,
-            fontWeight: 700,
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
+          disabled={sending || !org_id || !selectedPersonId}
+          className="w-full mt-4 py-4 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 disabled:opacity-60"
         >
-          {loading ? t.sending : t.send}
+          {sending ? t.sending : t.send}
         </button>
 
-        {successMsg ? (
-          <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#e7f9ee" }}>
-            {successMsg}
+        {/* ✅ Mensaje de éxito legible */}
+        {okMsg ? (
+          <div className="mt-4 p-3 rounded-xl border border-green-200 bg-green-50 text-green-800">
+            {okMsg}
           </div>
         ) : null}
 
-        {errorMsg ? (
-          <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#fde8e8" }}>
-            {errorMsg}
+        {/* ✅ Mensaje de error legible (fix del rosado) */}
+        {errMsg ? (
+          <div className="mt-4 p-3 rounded-xl border border-red-200 bg-red-50 text-red-800 break-words">
+            {errMsg}
           </div>
         ) : null}
       </div>
