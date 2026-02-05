@@ -80,12 +80,17 @@ function buildLabel(p) {
   return String(p?.id || "Personal");
 }
 
-async function trySelect(queryFn) {
-  const { data, error, usedSelect } = await queryFn();
-  if (!error) return { data: Array.isArray(data) ? data : [], usedSelect };
-  const msg = String(error?.message || "");
-  const missingCol = msg.toLowerCase().includes("does not exist") && msg.toLowerCase().includes("column");
-  return { error, missingCol, usedSelect };
+function extractFunctionErrorDetails(error) {
+  // Supabase Functions v2: error suele ser FunctionsHttpError con context.body
+  const ctxBody = error?.context?.body ?? null;
+  if (!ctxBody) return null;
+
+  try {
+    if (typeof ctxBody === "string") return JSON.parse(ctxBody);
+    return ctxBody; // a veces ya viene objeto
+  } catch {
+    return { raw: String(ctxBody) };
+  }
 }
 
 export default function InvitarTracker() {
@@ -123,90 +128,31 @@ export default function InvitarTracker() {
 
     setPeopleLoading(true);
     setErrMsg("");
+
     try {
-      const tries = [
-        async () => {
-          const q = supabase
-            .from("personal")
-            .select("id,email,nombres,apellidos,is_deleted,vigente")
-            .eq("org_id", org_id)
-            .neq("is_deleted", true)
-            .order("apellidos", { ascending: true });
-          const { data, error } = await q;
-          return { data, error, usedSelect: "id,email,nombres,apellidos,is_deleted,vigente" };
-        },
-        async () => {
-          const q = supabase
-            .from("personal")
-            .select("id,email,nombre,apellido,is_deleted,vigente")
-            .eq("org_id", org_id)
-            .neq("is_deleted", true)
-            .order("apellido", { ascending: true });
-          const { data, error } = await q;
-          return { data, error, usedSelect: "id,email,nombre,apellido,is_deleted,vigente" };
-        },
-        async () => {
-          const q = supabase
-            .from("personal")
-            .select("id,email,first_name,last_name,is_deleted,vigente")
-            .eq("org_id", org_id)
-            .neq("is_deleted", true)
-            .order("last_name", { ascending: true });
-          const { data, error } = await q;
-          return { data, error, usedSelect: "id,email,first_name,last_name,is_deleted,vigente" };
-        },
-        async () => {
-          const q = supabase
-            .from("personal")
-            .select("id,email,full_name,is_deleted,vigente")
-            .eq("org_id", org_id)
-            .neq("is_deleted", true)
-            .order("full_name", { ascending: true });
-          const { data, error } = await q;
-          return { data, error, usedSelect: "id,email,full_name,is_deleted,vigente" };
-        },
-        async () => {
-          const q = supabase
-            .from("personal")
-            .select("id,email,is_deleted,vigente")
-            .eq("org_id", org_id)
-            .neq("is_deleted", true)
-            .order("email", { ascending: true });
-          const { data, error } = await q;
-          return { data, error, usedSelect: "id,email,is_deleted,vigente" };
-        },
-        async () => {
-          const q = supabase
-            .from("personal")
-            .select("id,email")
-            .eq("org_id", org_id)
-            .order("email", { ascending: true });
-          const { data, error } = await q;
-          return { data, error, usedSelect: "id,email" };
-        },
-      ];
+      // ✅ Query simple y estable (evita 400 por columnas inexistentes)
+      // Tu tabla real tiene nombre/apellido y funciona (ya lo vimos).
+      // Ordenamos por email para no depender de columnas.
+      const { data, error } = await supabase
+        .from("personal")
+        .select("id,email,nombre,apellido,is_deleted,vigente")
+        .eq("org_id", org_id)
+        .neq("is_deleted", true)
+        .order("email", { ascending: true });
 
-      let final = [];
-      let used = "none";
+      if (error) throw error;
 
-      for (const fn of tries) {
-        const r = await trySelect(fn);
-        if (!r.error) {
-          final = r.data;
-          used = r.usedSelect;
-          break;
-        }
-        if (!r.missingCol) throw r.error;
-      }
+      const list = (Array.isArray(data) ? data : []).filter((p) =>
+        typeof p?.vigente === "boolean" ? p.vigente === true : true
+      );
 
-      final = final.filter((p) => (typeof p?.vigente === "boolean" ? p.vigente === true : true));
+      setPeople(list);
 
-      setPeople(final);
-      if (selectedPersonId && !final.some((p) => p.id === selectedPersonId)) {
+      if (selectedPersonId && !list.some((p) => p.id === selectedPersonId)) {
         setSelectedPersonId("");
       }
 
-      console.log("[InvitarTracker] personal loaded select:", used, "count:", final.length);
+      console.log("[InvitarTracker] personal loaded count:", list.length);
     } catch (e) {
       setPeople([]);
       setSelectedPersonId("");
@@ -232,11 +178,25 @@ export default function InvitarTracker() {
     if (!safeEmail) return setErrMsg(t.emailRequired);
 
     const payload = { email: safeEmail, org_id, person_id: selectedPersonId, resend: Boolean(resend) };
-    console.log("[InvitarTracker] payload", payload);
+
+    console.log("[InvitarTracker] payload", JSON.stringify(payload, null, 2));
 
     try {
       const { data, error } = await supabase.functions.invoke("invite-tracker", { body: payload });
-      if (error) throw new Error(error.message || t.genericError);
+
+      if (error) {
+        const details = extractFunctionErrorDetails(error);
+        console.error("[InvitarTracker] function error", error, details);
+
+        // si backend manda {code,message}, lo mostramos
+        const backendMsg =
+          details?.message ||
+          details?.error ||
+          (typeof details?.raw === "string" ? details.raw : null);
+
+        throw new Error(backendMsg || error.message || t.genericError);
+      }
+
       if (!data?.ok) throw new Error(data?.message || t.genericError);
 
       setOkMsg(resend ? t.resentOk(safeEmail) : t.success(safeEmail));
@@ -317,7 +277,6 @@ export default function InvitarTracker() {
           {sending ? t.sending : t.send}
         </button>
 
-        {/* ✅ Botón Reenviar */}
         <button
           type="button"
           onClick={resendInvite}
