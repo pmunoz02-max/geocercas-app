@@ -1,15 +1,18 @@
 // src/components/LanguageSwitcher.tsx
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { setLanguage, SUPPORTED } from "../i18n"; // <-- usa tu helper
 
 function cx(...arr: Array<string | false | null | undefined>) {
   return arr.filter(Boolean).join(" ");
 }
 
+type Lang = "es" | "en" | "fr";
+
 type LangBtnProps = {
-  code: "es" | "en" | "fr";
-  current: string;
-  onClick: (code: "es" | "en" | "fr") => void;
+  code: Lang;
+  current: Lang;
+  onClick: (code: Lang) => void;
 };
 
 function LangBtn({ code, current, onClick }: LangBtnProps) {
@@ -31,17 +34,24 @@ function LangBtn({ code, current, onClick }: LangBtnProps) {
   );
 }
 
+function norm2(input: unknown): Lang {
+  const base = String(input || "es").toLowerCase().split("-")[0].slice(0, 2) as Lang;
+  return (SUPPORTED.includes(base) ? base : "es") as Lang;
+}
+
 export default function LanguageSwitcher() {
   const { i18n } = useTranslation();
-  const current = String(i18n.resolvedLanguage || i18n.language || "es").slice(0, 2) as "es" | "en" | "fr";
+  const current = norm2(i18n.resolvedLanguage || i18n.language);
 
-  const setLang = async (lng: "es" | "en" | "fr") => {
-    const code = String(lng || "es").toLowerCase().slice(0, 2) as "es" | "en" | "fr";
-    if (!["es", "en", "fr"].includes(code)) return;
+  const setLang = async (lng: Lang) => {
+    const code = norm2(lng);
     try {
-      await i18n.changeLanguage(code);
+      await setLanguage(code); // <-- esto asegura init + persist + html lang
     } catch (e) {
-      console.error("[LanguageSwitcher] changeLanguage failed:", e);
+      console.error("[LanguageSwitcher] setLanguage failed:", e);
+      try {
+        await i18n.changeLanguage(code);
+      } catch {}
     }
   };
 

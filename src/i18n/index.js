@@ -7,119 +7,182 @@ import en from "./en.json";
 import fr from "./fr.json";
 
 export const SUPPORTED = ["es", "en", "fr"];
-const STORAGE_KEY = "i18nextLng";
+export const STORAGE_KEY = "i18nextLng";
+const DEFAULT_LNG = "es";
+const NS = "translation";
 
-const norm2 = (v) => String(v || "").toLowerCase().slice(0, 2);
-const isOk = (v) => SUPPORTED.includes(norm2(v));
+function normalizeLng(input) {
+  if (!input || typeof input !== "string") return null;
+  const raw = input.trim().toLowerCase();
 
-function readUrlLang() {
+  // acepta "en-US" -> "en"
+  const base = raw.split("-")[0];
+  if (SUPPORTED.includes(base)) return base;
+  return null;
+}
+
+function getQueryLang() {
   try {
     const url = new URL(window.location.href);
-    const v = url.searchParams.get("lang");
-    return isOk(v) ? norm2(v) : null;
+    return normalizeLng(url.searchParams.get("lang"));
   } catch {
     return null;
   }
 }
 
-function readStoredLang() {
+function getStoredLang() {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    return isOk(v) ? norm2(v) : null;
+    return normalizeLng(localStorage.getItem(STORAGE_KEY));
   } catch {
     return null;
   }
 }
 
-function readNavigatorLang() {
+function getNavigatorLang() {
   try {
-    const v = navigator.language;
-    return isOk(v) ? norm2(v) : null;
+    const nav = navigator.language || (navigator.languages && navigator.languages[0]);
+    return normalizeLng(nav);
   } catch {
     return null;
   }
 }
 
-function persistLang(code) {
-  const c = isOk(code) ? norm2(code) : "es";
-  try {
-    localStorage.setItem(STORAGE_KEY, c);
-  } catch {}
-  try {
-    document.documentElement.lang = c;
-  } catch {}
-  return c;
+export function computeInitialLanguage() {
+  return (
+    getQueryLang() ||
+    getStoredLang() ||
+    getNavigatorLang() ||
+    DEFAULT_LNG
+  );
 }
 
-function computeInitial() {
-  return persistLang(readUrlLang() || readStoredLang() || readNavigatorLang() || "es");
-}
-
-// ✅ SIEMPRE asegura bundles (aunque i18n ya esté inicializado por otro lado)
 function ensureBundles() {
-  // deep=true, overwrite=true para “forzar” que queden iguales a tus JSON
-  i18n.addResourceBundle("es", "translation", es, true, true);
-  i18n.addResourceBundle("en", "translation", en, true, true);
-  i18n.addResourceBundle("fr", "translation", fr, true, true);
+  // Importante: SIEMPRE asegurar que los 3 idiomas estén cargados
+  // deep=true, overwrite=true para reinyectar si alguien inicializó mal antes
+  const bundles = { es, en, fr };
+  for (const lng of SUPPORTED) {
+    const res = bundles[lng];
+    if (!res) continue;
+
+    if (!i18n.hasResourceBundle(lng, NS)) {
+      i18n.addResourceBundle(lng, NS, res, true, true);
+    } else {
+      // reinyecta por si estaba incompleto
+      i18n.addResourceBundle(lng, NS, res, true, true);
+    }
+  }
 }
 
-function ensureInit() {
-  const initial = computeInitial();
+function applyHtmlLang(lng) {
+  try {
+    document.documentElement.lang = lng || DEFAULT_LNG;
+  } catch {
+    // ignore
+  }
+}
 
-  // Si ya existe init previo, NO re-init: solo asegura bundles + opciones clave
-  if (i18n.isInitialized) {
+function persistLang(lng) {
+  try {
+    localStorage.setItem(STORAGE_KEY, lng);
+  } catch {
+    // ignore
+  }
+}
+
+let _initPromise = null;
+
+export async function ensureInit(forceLanguage) {
+  if (_initPromise) {
+    // si ya hay init en curso, espera y luego aplica idioma
+    await _initPromise;
+    ensureBundles();
+    const lng = normalizeLng(forceLanguage) || computeInitialLanguage();
+    if (i18n.language !== lng) await i18n.changeLanguage(lng);
+    return i18n;
+  }
+
+  _initPromise = (async () => {
+    // Si alguien inicializó i18n ANTES que este módulo:
+    // - no reiniciamos (evita warnings y duplicación)
+    // - pero SÍ reinyectamos bundles y forzamos opciones clave
     ensureBundles();
 
-    // refuerza settings importantes por si el init previo era distinto
-    i18n.options.supportedLngs = SUPPORTED;
-    i18n.options.nonExplicitSupportedLngs = true;
-    i18n.options.load = "languageOnly";
-    i18n.options.fallbackLng = "es";
+    const lng = normalizeLng(forceLanguage) || computeInitialLanguage();
 
-    // asegura que el idioma actual sea válido
-    const lng = isOk(i18n.language) ? norm2(i18n.language) : initial;
-    if (norm2(i18n.language) !== lng) i18n.changeLanguage(lng);
+    if (!i18n.isInitialized) {
+      await i18n
+        .use(initReactI18next)
+        .init({
+          resources: {
+            es: { [NS]: es },
+            en: { [NS]: en },
+            fr: { [NS]: fr },
+          },
+          lng,
+          fallbackLng: DEFAULT_LNG,
+          supportedLngs: SUPPORTED,
+          nonExplicitSupportedLngs: true,
+          ns: [NS],
+          defaultNS: NS,
+          interpolation: { escapeValue: false },
+          react: {
+            useSuspense: false,
+          },
+          // Evita comportamientos raros con claves vacías
+          returnEmptyString: false,
+        });
+    } else {
+      // Ya inicializado: asegura bundles y opciones importantes
+      ensureBundles();
+      i18n.options = {
+        ...i18n.options,
+        fallbackLng: DEFAULT_LNG,
+        supportedLngs: SUPPORTED,
+        nonExplicitSupportedLngs: true,
+        ns: [NS],
+        defaultNS: NS,
+        returnEmptyString: false,
+      };
 
-    return;
-  }
+      if (i18n.language !== lng) {
+        await i18n.changeLanguage(lng);
+      }
+    }
 
-  i18n.use(initReactI18next).init({
-    resources: {
-      es: { translation: es },
-      en: { translation: en },
-      fr: { translation: fr },
-    },
-    supportedLngs: SUPPORTED,
-    nonExplicitSupportedLngs: true,
-    load: "languageOnly",
-    lng: initial,
-    fallbackLng: "es",
-    interpolation: { escapeValue: false },
-    react: { useSuspense: false },
-    returnEmptyString: false,
-    returnNull: false,
-  });
+    // Listener único (evita duplicados)
+    if (!i18n.__geocercasLangListenerAttached) {
+      i18n.__geocercasLangListenerAttached = true;
+
+      i18n.on("languageChanged", (newLng) => {
+        const safe = normalizeLng(newLng) || DEFAULT_LNG;
+        persistLang(safe);
+        applyHtmlLang(safe);
+      });
+    }
+
+    // Set inicial html lang + persist (por si se inicia con querylang)
+    persistLang(i18n.language);
+    applyHtmlLang(i18n.language);
+
+    // Debug global para tu checklist
+    try {
+      window.__i18n = i18n;
+    } catch {
+      // ignore
+    }
+
+    return i18n;
+  })();
+
+  return _initPromise;
 }
 
-// ✅ Listener único (sin duplicar)
-function onLanguageChanged(lng) {
-  persistLang(lng);
-}
-
-function ensureListeners() {
-  try {
-    i18n.off("languageChanged", onLanguageChanged);
-  } catch {}
-  i18n.on("languageChanged", onLanguageChanged);
-}
-
-ensureInit();
-ensureBundles();
-ensureListeners();
-
-// Debug
-if (typeof window !== "undefined") {
-  window.__i18n = i18n;
+export async function setLanguage(lng) {
+  const safe = normalizeLng(lng);
+  if (!safe) return false;
+  await ensureInit(safe);
+  if (i18n.language !== safe) await i18n.changeLanguage(safe);
+  return true;
 }
 
 export default i18n;

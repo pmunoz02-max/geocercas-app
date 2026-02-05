@@ -5,15 +5,22 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import "./index.css";
 
-import "./i18n/index.js"; // IMPORT CRÍTICO i18n
+import { ensureInit } from "./i18n/index.js"; // <-- IMPORTA ensureInit (no solo side-effect)
 import { AuthProvider } from "./context/AuthContext.jsx";
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+async function boot() {
+  // Asegura bundles + idioma inicial (?lang -> storage -> navigator -> es)
+  await ensureInit();
+
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </React.StrictMode>
+  );
+}
+
+boot();
