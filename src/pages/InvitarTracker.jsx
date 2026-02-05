@@ -39,6 +39,56 @@ function useClickOutside(ref, onOutside) {
 }
 
 /* =========================
+   ORDEN UNIVERSAL (igual a Personal.jsx)
+========================= */
+function norm(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
+function isDeletedRow(r) {
+  return !!r?.is_deleted || !!r?.deleted_at;
+}
+
+function isVigenteActivaRow(r) {
+  if (isDeletedRow(r)) return false;
+  const vigente = r?.vigente !== false;
+  // En Personal se calcula activo con flags, pero para invitar usamos vigente
+  return vigente;
+}
+
+function rankRow(r) {
+  if (isDeletedRow(r)) return 2;
+  if (isVigenteActivaRow(r)) return 0;
+  return 1;
+}
+
+function sortPersonal(rows) {
+  const arr = Array.isArray(rows) ? [...rows] : [];
+  arr.sort((a, b) => {
+    const ra = rankRow(a);
+    const rb = rankRow(b);
+    if (ra !== rb) return ra - rb;
+
+    const last = norm(a?.apellido).localeCompare(norm(b?.apellido));
+    if (last !== 0) return last;
+
+    const first = norm(a?.nombre).localeCompare(norm(b?.nombre));
+    if (first !== 0) return first;
+
+    const email = norm(a?.email).localeCompare(norm(b?.email));
+    if (email !== 0) return email;
+
+    return norm(a?.id).localeCompare(norm(b?.id));
+  });
+  return arr;
+}
+
+function buildFullName(p) {
+  const full = `${p?.nombre || ""} ${p?.apellido || ""}`.trim();
+  return full || p?.email || String(p?.id || "");
+}
+
+/* =========================
    Dropdown (i18n-safe)
 ========================= */
 function Dropdown({ items, value, onChange, placeholder, t }) {
@@ -56,9 +106,11 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return items;
-    return items.filter((x) =>
-      `${x.full_name || ""} ${x.email || ""}`.toLowerCase().includes(s)
-    );
+
+    return items.filter((x) => {
+      const blob = `${x.full_name || ""} ${x.email || ""} ${x.telefono || ""}`.toLowerCase();
+      return blob.includes(s);
+    });
   }, [items, q]);
 
   return (
@@ -77,9 +129,7 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
             {selected.email || t("invite.noEmail")}
           </div>
         ) : (
-          <div className="text-gray-400">
-            {placeholder || t("common.search")}
-          </div>
+          <div className="text-gray-400">{placeholder || t("common.search")}</div>
         )}
       </button>
 
@@ -97,6 +147,7 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
                 {t("common.noResults")}
               </div>
             )}
+
             {filtered.map((it) => (
               <div
                 key={it.id}
@@ -106,8 +157,14 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
                   setOpen(false);
                 }}
               >
-                {it.full_name || t("invite.noName")} —{" "}
-                {it.email || t("invite.noEmail")}
+                <div className="font-medium">
+                  {it.full_name || t("invite.noName")}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {(it.email || t("invite.noEmail"))}
+                  {it.vigente === false ? ` • ${t("personal.status.inactive", { defaultValue: "No vigente" })}` : ""}
+                  {it.is_deleted || it.deleted_at ? ` • ${t("personal.status.deleted", { defaultValue: "Eliminado" })}` : ""}
+                </div>
               </div>
             ))}
           </div>
@@ -122,16 +179,15 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
 ========================= */
 export default function InvitarTracker() {
   const { t } = useTranslation();
-
-  // Nota: algunos AuthContext no exponen estos flags; por eso usamos fallback seguro
   const auth = useAuth();
 
   const user = auth?.user;
   const currentOrg = auth?.currentOrg;
 
+  // Compat: si existen flags, los respetamos; si no, seguimos con fallback
   const authLoading = auth?.loading ?? false;
-  const isAuthenticated = auth?.isAuthenticated ?? !!user;
   const contextLoading = auth?.contextLoading ?? false;
+  const isAuthenticated = auth?.isAuthenticated ?? !!user;
 
   const orgId = resolveOrgId(currentOrg);
   const orgName =
@@ -144,71 +200,48 @@ export default function InvitarTracker() {
   const [message, setMessage] = useState("");
 
   /* =========================
-     Load personnel (robusto)
+     Load personnel (MISMA BASE QUE Personal.jsx)
+     - from("personal").select("*").eq("org_id", ...).limit(500)
+     - orden universal en cliente
   ========================= */
   const loadPersonnel = useCallback(async () => {
-    if (!orgId) return;
+    if (!isAuthenticated || !orgId) return;
 
     setLoading(true);
     setMessage("");
 
     try {
-      // Intento 1: tabla con is_deleted (modelo común en tu app)
-      const r1 = await supabase
+      const { data, error } = await supabase
         .from("personal")
-        .select("id, nombre, apellido, email, is_deleted")
+        .select("*")
         .eq("org_id", orgId)
-        .order("nombre", { ascending: true });
+        .limit(500);
 
-      if (!r1.error) {
-        const mapped1 = (r1.data || [])
-          .filter((p) => p?.email) // solo con email
-          .filter((p) => p.is_deleted === false || p.is_deleted == null) // false o null
-          .map((p) => {
-            const full = `${p.nombre || ""} ${p.apellido || ""}`.trim();
-            return {
-              id: p.id,
-              full_name: full || p.email || String(p.id),
-              email: p.email || "",
-            };
-          });
+      if (error) throw error;
 
-        setPeople(mapped1);
-        return;
-      }
+      const sorted = sortPersonal(Array.isArray(data) ? data : []);
 
-      // Intento 2 (fallback): sin is_deleted (evita 400 si columna no existe)
-      const r2 = await supabase
-        .from("personal")
-        .select("id, nombre, apellido, email")
-        .eq("org_id", orgId)
-        .order("nombre", { ascending: true });
+      const mapped = sorted.map((p) => ({
+        id: p.id,
+        full_name: buildFullName(p),
+        email: p.email || "",
+        telefono: p.telefono || "",
+        vigente: p.vigente !== false,
+        is_deleted: !!p.is_deleted,
+        deleted_at: p.deleted_at || null,
+      }));
 
-      if (r2.error) throw r2.error;
-
-      const mapped2 = (r2.data || [])
-        .filter((p) => p?.email)
-        .map((p) => {
-          const full = `${p.nombre || ""} ${p.apellido || ""}`.trim();
-          return {
-            id: p.id,
-            full_name: full || p.email || String(p.id),
-            email: p.email || "",
-          };
-        });
-
-      setPeople(mapped2);
+      setPeople(mapped);
     } catch (e) {
       console.error("[InvitarTracker] loadPersonnel error:", e);
-      setMessage(t("invite.loadPersonalError"));
       setPeople([]);
+      setMessage(t("invite.loadPersonalError"));
     } finally {
       setLoading(false);
     }
-  }, [orgId, t]);
+  }, [isAuthenticated, orgId, t]);
 
   useEffect(() => {
-    // Espera a que exista orgId y sesión
     if (authLoading) return;
     if (isAuthenticated === false) return;
     if (contextLoading && !orgId) return;
@@ -217,6 +250,7 @@ export default function InvitarTracker() {
     loadPersonnel();
   }, [authLoading, isAuthenticated, contextLoading, orgId, loadPersonnel]);
 
+  // Al seleccionar persona, autocompleta email (si lo tiene)
   useEffect(() => {
     const p = people.find((x) => String(x.id) === String(selectedPersonId));
     if (p?.email) setEmail(p.email);
@@ -226,10 +260,8 @@ export default function InvitarTracker() {
      Actions
   ========================= */
   async function sendInvite(resend = false) {
-    if (!email) {
-      setMessage(t("inviteTracker.errors.emailRequired"));
-      return;
-    }
+    setMessage("");
+
     if (!orgId) {
       setMessage(
         t("inviteTracker.errors.orgRequired") || t("inviteTracker.orgFallback")
@@ -237,14 +269,29 @@ export default function InvitarTracker() {
       return;
     }
 
+    // Si escogieron una persona pero no tiene email, forzamos a ingresar manualmente
+    const picked = people.find((x) => String(x.id) === String(selectedPersonId));
+    if (picked && !picked.email && !email) {
+      setMessage(
+        t("inviteTracker.errors.selectedPersonNoEmail", {
+          defaultValue:
+            "Este personal no tiene correo registrado. Ingresa un correo manualmente.",
+        })
+      );
+      return;
+    }
+
+    if (!email) {
+      setMessage(t("inviteTracker.errors.emailRequired"));
+      return;
+    }
+
     setLoading(true);
-    setMessage("");
 
     try {
       const { error } = await supabase.functions.invoke("invite-tracker", {
         body: { email, org_id: orgId, resend },
       });
-
       if (error) throw error;
 
       setMessage(
@@ -289,12 +336,22 @@ export default function InvitarTracker() {
             t={t}
           />
 
-          {!loading && people.length === 0 ? (
-            <div className="mt-2 text-xs text-gray-500">
-              {t("inviteTracker.form.noPersonnelFound") ||
-                t("common.noResults")}
+          <div className="mt-2 flex items-center justify-between">
+            <div className="text-xs text-gray-500">
+              {t("inviteTracker.form.loadedCount", {
+                defaultValue: "Cargados: {{n}}",
+                n: people.length,
+              })}
             </div>
-          ) : null}
+            <button
+              type="button"
+              onClick={loadPersonnel}
+              className="text-xs px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-60"
+              disabled={loading}
+            >
+              {t("common.actions.refresh", { defaultValue: "Refrescar" })}
+            </button>
+          </div>
         </div>
 
         <div>
