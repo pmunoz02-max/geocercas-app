@@ -14,11 +14,22 @@
       "back": "Volver",
       "yes": "Sí",
       "no": "No",
-      "loading": "Cargando…"
+      "refresh": "Refrescar",
+      "clear": "Limpiar",
+      "loading": "Cargando…",
+      "saving": "Guardando…"
     },
     "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
     "createOrganization": "Crear organización",
-    "refreshContext": "Refrescar contexto"
+    "refreshContext": "Reintentar contexto"
+  },
+  "auth": {
+    "loginRequired": "Debes iniciar sesión.",
+    "processing": "Autenticando…",
+    "timeout": "La autenticación tardó demasiado. Inténtalo de nuevo.",
+    "invalidOrExpiredLink": "El enlace es inválido, expiró o ya fue usado.",
+    "errorTitle": "Falló la autenticación",
+    "backToLogin": "Volver al login"
   },
   "app": {
     "title": "App Geocercas",
@@ -37,7 +48,9 @@
     },
     "tabs": {
       "inicio": "Inicio",
+      "home": "Inicio",
       "geocercas": "Geocercas",
+      "geocerca": "Geocerca",
       "nuevaGeocerca": "Geocerca",
       "personal": "Personal",
       "actividades": "Actividades",
@@ -47,6 +60,7 @@
       "dashboardCostos": "Dashboard Costos",
       "tracker": "Tracker",
       "invitarTracker": "Invitar tracker",
+      "invitar_tracker": "Invitar tracker",
       "admins": "Administradores"
     }
   },
@@ -58,7 +72,7 @@
     "heroTitleHighlight": "con geocercas inteligentes",
     "heroTitleSuffix": "en cualquier parte del mundo",
     "heroSubtitle": "App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real.",
-    "ctaLogin": "Ir al panel de control",
+    "ctaLogin": "Ir al panel",
     "ctaMagic": "Entrar con link mágico",
     "bulletGeocercasTitle": "Geocercas",
     "bulletGeocercasBody": "Crea y administra geocercas para tus campos, fincas, plantas o puntos de servicio.",
@@ -84,9 +98,23 @@
     "loginButton": "Entrar",
     "accessTitle": "Acceso con cuenta autorizada",
     "accessBody": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
-    "accessHint": "Consejo: usa \"Link mágico\" si tu administrador te invitó con correo.",
+    "accessHint": "Consejo: usa “Link mágico” si tu administrador te invitó con correo.",
     "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
-    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario."
+    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
+    "login": "Iniciar sesión",
+    "heroTitle": "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo",
+    "goPanel": "Ir al panel",
+    "magicEnter": "Entrar con link mágico",
+    "quickAccessTitle": "Acceso rápido",
+    "quickAccessDesc": "Si prefieres, puedes ingresar usando un Link mágico (sin contraseña).",
+    "email": "Correo",
+    "sending": "Enviando…",
+    "sendMagic": "Enviar link mágico",
+    "magicNote": "Importante: el acceso funciona solo con el Link mágico real.",
+    "support": "Soporte",
+    "invalidEmail": "Correo inválido.",
+    "magicLinkSent": "Te enviamos un enlace de acceso. Revisa tu correo.",
+    "magicLinkError": "No se pudo enviar el enlace. Intenta de nuevo."
   },
   "login": {
     "title": "Iniciar sesión",
@@ -116,7 +144,7 @@
     "forgotPassword": "¿Olvidaste tu contraseña?",
     "forgotPasswordAlt": "¿Prefieres restablecer tu contraseña? (enviar correo)",
     "loadingSession": "Cargando tu sesión…",
-    "errorMissingCredentials": "Faltan usuario o contraseña.",
+    "errorMissingCredentials": "Faltan correo o contraseña.",
     "errorMissingEmail": "Debes ingresar un correo.",
     "errorInvalidCredentials": "Credenciales inválidas.",
     "errorUnexpected": "Error inesperado al iniciar sesión.",
@@ -126,7 +154,12 @@
     "errorMagicLinkUnexpected": "Error inesperado al enviar el link mágico.",
     "errorResetPassword": "No se pudo enviar el correo de recuperación.",
     "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.",
-    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación."
+    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación.",
+    "badge": "(LOGIN-V31 NO-JS)",
+    "info": "Login estable WebView/TWA: submit nativo (sin eventos JS), anti rate-limit por diseño.",
+    "modeTitle": "Modo: NO-JS (submit nativo del formulario)",
+    "modeDesc": "Si el login es correcto, el servidor redirige a /auth/callback con tokens.",
+    "back": "Volver"
   },
   "inicio": {
     "header": {
@@ -204,7 +237,27 @@
     "cardNewBody": "Crea una nueva geocerca en el mapa y asígnala a tu personal o actividades.",
     "cardNewCta": "Ir a Nueva geocerca →",
     "cardListTitle": "Listado de geocercas",
-    "cardListBody": "Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar."
+    "cardListBody": "Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar.",
+    "buttonShowOnMap": "Mostrar en mapa",
+    "loadingDataset": "Cargando dataset…",
+    "cursorHint": "Mueve el mouse sobre el mapa",
+    "lat": "Lat",
+    "lng": "Lng",
+    "draftLabel": "Borrador",
+    "pointsLabel": "Pts",
+    "modalTitle": "Dibujar por coordenadas",
+    "modalHintRule": "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
+    "modalInstruction": "Formato:",
+    "modalOnePerLine": "(uno por línea)",
+    "modalDraw": "Dibujar",
+    "errorNameRequired": "Por favor ingresa un nombre para la geocerca.",
+    "errorCoordsInvalid": "Coordenadas inválidas. Usa el formato: lat,lng (uno por línea).",
+    "errorNoShape": "Dibuja una geocerca en el mapa o créala por coordenadas antes de guardar.",
+    "errorSelectAtLeastOne": "Selecciona al menos una geocerca.",
+    "errorNoGeojson": "No se pudo cargar el GeoJSON de la geocerca.",
+    "deleteConfirm": "¿Eliminar las geocercas seleccionadas?",
+    "deletedCount": "Eliminadas: {{count}}",
+    "savedOk": "Geocerca guardada correctamente."
   },
   "personal": {
     "title": "Personal",
@@ -223,10 +276,10 @@
     "bannerUpdated": "Personal actualizado correctamente.",
     "bannerDeletedOk": "Registro eliminado correctamente.",
     "errorMissingUser": "No se pudo obtener el usuario autenticado.",
-    "formTitleNew": "Nuevo personal",
-    "formTitleEdit": "Editar personal",
     "errorNoAuthUser": "No existe un usuario autenticado.",
     "errorLoad": "Error al cargar el personal.",
+    "formTitleNew": "Nuevo personal",
+    "formTitleEdit": "Editar personal",
     "errorNoPermissionCreate": "No tienes permisos para crear personal.",
     "errorNoPermissionEdit": "No tienes permisos para editar personal.",
     "errorMustSelectForEdit": "Debes seleccionar un registro para editarlo.",
@@ -263,22 +316,39 @@
     "no": "No",
     "processing": "Procesando…",
     "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
+    "roleNone": "sin rol",
+    "orgLabel": "Org",
+    "errorMissingOrg": "No hay organización activa.",
+    "toggleVigente": "Activo / Inactivo",
+    "newButton": "+ Nuevo",
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "deleted": "Eliminado"
+    },
     "table": {
-      "loading": "Cargando…",
-      "noActive": "No hay personal activo.",
-      "columns": {
-        "firstName": "Nombre",
-        "lastName": "Apellido",
-        "email": "Correo",
-        "phone": "Teléfono",
-        "active": "Activo",
-        "start": "Inicio",
-        "end": "Fin"
-      }
+      "name": "Nombre",
+      "phone": "Teléfono",
+      "email": "Correo",
+      "status": "Estado",
+      "actions": "Acciones",
+      "empty": "No hay registros en esta organización."
+    },
+    "modal": {
+      "newTitle": "Nuevo personal",
+      "editTitle": "Editar personal"
+    },
+    "form": {
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "phone": "Teléfono",
+      "email": "Correo",
+      "vigente": "Activo"
     }
   },
   "actividades": {
     "title": "Actividades",
+    "includeInactive": "Incluir inactivas",
     "formTitleNew": "Nueva actividad",
     "formTitleEdit": "Editar actividad",
     "fieldName": "Nombre de la actividad",
@@ -302,8 +372,8 @@
       "LOCAL": "Moneda local"
     },
     "buttonCreate": "Crear actividad",
-    "buttonSave": "Guardar cambios",
-    "buttonUpdate": "Actualizar actividad",
+    "buttonSave": "Guardar",
+    "buttonUpdate": "Actualizar",
     "buttonCancel": "Cancelar",
     "tableTitle": "Listado de actividades",
     "thName": "Actividad",
@@ -383,7 +453,7 @@
       "buttonCancel": "Cancelar",
       "endOptionalHint": "Opcional",
       "quickActivity": {
-        "noActivitiesHint": "No hay actividades (cree una en el módulo Actividades o aquí abajo).",
+        "noActivitiesHint": "No hay actividades aún (cree una en el módulo Actividades o aquí abajo).",
         "newButton": "Nueva actividad",
         "newNamePlaceholder": "Nombre de la nueva actividad",
         "saveButton": "Guardar actividad",
@@ -427,10 +497,10 @@
       "updateGenericError": "No se pudo actualizar la asignación.",
       "updateSuccess": "Asignación actualizada correctamente.",
       "deleteError": "No se pudo eliminar la asignación.",
-      "deleteSuccess": "Asignación eliminada correctamente.",
+      "deleteSuccess": "Asignación eliminada.",
       "confirmDelete": "¿Seguro que deseas eliminar esta asignación?",
-      "noPersonal": "No hay personal vigente en esta organización. Reactiva o crea al menos una persona.",
-      "noActivities": "No hay actividades creadas. Crea al menos una Actividad para poder asignar."
+      "noPersonal": "No hay personal activo en esta organización. Crea o reactiva al menos una persona.",
+      "noActivities": "No hay actividades creadas. Crea al menos una actividad para poder asignar."
     },
     "table": {
       "title": "Asignaciones guardadas",
@@ -452,17 +522,21 @@
   "reportes": {
     "title": "Reportes de costos",
     "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
+    "currentOrg": "Organización actual:",
     "noAccessBody": "No tienes permisos para visualizar los reportes de costos. Este módulo está disponible solo para propietarios y administradores.",
     "loadingReport": "Cargando reporte…",
+    "loadingFilters": "Cargando…",
     "filtersTitle": "Filtros",
     "filtersFrom": "Desde",
     "filtersTo": "Hasta",
     "filtersPerson": "Persona",
     "filtersActivity": "Actividad",
     "filtersGeofence": "Geocerca",
+    "filtersAsignacion": "Asignaciones",
     "filtersAll": "Todos",
     "filtersClear": "Limpiar filtros",
     "filtersApply": "Aplicar filtros",
+    "multiTip": "Tip: Ctrl/Command para seleccionar múltiples.",
     "summaryTotalHoursLabel": "Horas totales",
     "summaryTotalHoursHelp": "Suma de las horas de todas las asignaciones en el rango seleccionado.",
     "summaryTotalCostLabel": "Costo total",
@@ -472,12 +546,20 @@
     "tableTitle": "Detalle de costos",
     "tableExportHelp": "Exporta el detalle actual como archivo CSV.",
     "tableExportButton": "Exportar CSV",
+    "colDia": "Día",
     "colPersona": "Persona",
+    "colEmail": "Correo",
     "colGeocerca": "Geocerca",
     "colActividad": "Actividad",
+    "colAsignacion": "Asignación",
     "colInicio": "Inicio",
     "colFin": "Fin",
+    "colEntrada": "Entrada",
+    "colSalida": "Salida",
     "colHoras": "Horas",
+    "colMarcajes": "Marcajes",
+    "colDentro": "Dentro",
+    "colDist": "Dist (m)",
     "colTarifa": "Tarifa/hora",
     "colCosto": "Costo",
     "colMoneda": "Moneda",
@@ -487,7 +569,7 @@
     "csvHeaderActividad": "Actividad",
     "csvHeaderGeocerca": "Geocerca",
     "csvHeaderHoras": "Horas",
-    "csvHeaderTarifa_hora": "Tarifa_hora",
+    "csvHeaderTarifa": "Tarifa_hora",
     "csvHeaderTotal": "Costo_total",
     "csvHeaderCosto": "Costo_total",
     "csvHeaderMoneda": "Moneda",
@@ -499,33 +581,13 @@
     "errorViewMissing": "La vista v_costos_detalle aún no está creada en Supabase.",
     "errorLoadReport": "Error al cargar el reporte de costos.",
     "errorLabel": "Error:",
+    "errorMissingAuth": "Falta autenticación.",
+    "errorMissingOrg": "No se pudo determinar la organización actual.",
     "exportNoData": "No hay datos para exportar.",
     "tableEmpty": "No hay registros para los filtros seleccionados.",
     "personNoName": "Persona sin nombre",
     "geofenceNoName": "Geocerca sin nombre",
-    "activityNoName": "Actividad sin nombre",
-    "filters": {
-      "dateFromLabel": "Desde",
-      "dateToLabel": "Hasta",
-      "personLabel": "Persona",
-      "activityLabel": "Actividad",
-      "geofenceLabel": "Geocerca",
-      "apply": "Aplicar filtros",
-      "clear": "Limpiar filtros"
-    },
-    "table": {
-      "title": "Detalle de costos",
-      "person": "Persona",
-      "activity": "Actividad",
-      "geofence": "Geocerca",
-      "start": "Inicio",
-      "end": "Fin",
-      "hours": "Horas",
-      "rate": "Tarifa/hora",
-      "total": "Costo total",
-      "currency": "Moneda",
-      "noResults": "No se encontraron registros para los filtros seleccionados."
-    }
+    "activityNoName": "Actividad sin nombre"
   },
   "dashboard": {
     "title": "Dashboard de costos",
@@ -552,8 +614,18 @@
   },
   "dashboardCostos": {
     "title": "Dashboard de costos",
-    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
+    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad, geocerca y moneda.",
+    "sessionLoading": "Cargando tu sesión…",
+    "noActiveSession": "No hay sesión activa.",
+    "loadingCurrentOrg": "Cargando organización actual…",
+    "noOrgAssigned": "No hay organización activa para este usuario.",
+    "currentOrgLabel": "Organización actual",
+    "loadingPermissions": "Cargando permisos…",
+    "noAccess": "No tienes acceso a este módulo.",
+    "currentRoleLabel": "Rol actual",
+    "roleNone": "sin rol",
     "refreshButton": "Refrescar datos",
+    "refreshing": "Actualizando…",
     "filtersTitle": "Filtros",
     "filtersFrom": "Desde",
     "filtersTo": "Hasta",
@@ -566,48 +638,36 @@
     "kpiTotalHours": "Horas totales",
     "kpiTotalCost": "Costo total",
     "kpiRecords": "Registros",
-    "kpiCurrencies": "Monedas",
+    "kpiAvgRate": "Tarifa promedio",
+    "currenciesSummaryTitle": "Resumen por moneda",
+    "labelHours": "horas",
+    "na": "N/A",
     "chartTitle": "Gráfico de costos",
     "chartDimension": "Dimensión",
     "chartMetric": "Métrica",
-    "dimensionPersona": "Persona",
-    "dimensionActividad": "Actividad",
-    "dimensionGeocerca": "Geocerca",
-    "dimensionFecha": "Fecha",
-    "metricCost": "Costo",
-    "metricHours": "Horas",
-    "metricRecords": "Registros",
-    "tableTitle": "Detalle para la dimensión seleccionada",
-    "colPersona": "Persona",
-    "colActividad": "Actividad",
-    "colGeocerca": "Geocerca",
-    "colFecha": "Fecha",
-    "colHoras": "Horas",
-    "colCosto": "Costo",
-    "colMoneda": "Moneda",
-    "tableNoResults": "No hay datos para los filtros actuales.",
-    "errorLoad": "Error al cargar el dashboard de costos.",
-    "exportDataButton": "Exportar datos",
-    "exportChartButton": "Exportar gráfico",
     "chartType": "Tipo de gráfico",
     "chartTypeBar": "Barras",
     "chartTypeLine": "Líneas",
-    "chartTypeArea": "Área",
     "chartTypePie": "Pastel",
+    "dimensionPersona": "Persona",
+    "dimensionActividad": "Actividad",
+    "dimensionGeocerca": "Geocerca",
+    "dimensionMoneda": "Moneda",
+    "metricCost": "Costo",
+    "metricHours": "Horas",
+    "metricAvgRate": "Tarifa promedio",
+    "metricRecords": "Registros",
+    "chartNoData": "No hay datos para mostrar.",
+    "unknownCategory": "Sin dato",
+    "tableTitle": "Detalle para la dimensión seleccionada",
     "colCategoria": "Categoría",
+    "colHoras": "Horas",
+    "colCosto": "Costo",
     "colTarifaPromedio": "Tarifa promedio",
     "colRegistros": "Registros",
     "tableEmpty": "No hay datos para mostrar",
-    "sessionLoading": "Cargando tu sesión…",
-    "noActiveSession": "No hay sesión activa.",
-    "loadingCurrentOrg": "Cargando organización actual…",
-    "noOrgAssigned": "No hay organización activa para este usuario.",
-    "loadingPermissions": "Cargando permisos…",
-    "noAccess": "No tienes acceso a este módulo.",
-    "currentOrgLabel": "Organización actual",
-    "currentRoleLabel": "Rol actual",
-    "roleNone": "sin rol",
-    "refreshing": "Actualizando…",
+    "exportDataButton": "Exportar datos (CSV)",
+    "exportChartButton": "Exportar gráfico (PNG)",
     "exportNoData": "No hay datos para exportar.",
     "exportChartError": "No se pudo exportar la gráfica.",
     "exportChartContainerNotFound": "No se encontró el contenedor de la gráfica.",
@@ -616,14 +676,236 @@
     "csvHeaderTotalHoras": "total_horas",
     "csvHeaderTotalCosto": "total_costo",
     "csvHeaderTarifaPromedio": "tarifa_promedio",
-    "csvHeaderRegistros": "registros",
-    "kpiAvgRate": "Tarifa promedio",
-    "currenciesSummaryTitle": "Resumen por moneda",
-    "labelHours": "horas",
-    "chartNoData": "No hay datos para graficar.",
-    "na": "N/A",
-    "unknownCategory": "Sin dato",
-    "dimensionMoneda": "Moneda",
-    "metricAvgRate": "Tarifa promedio"
+    "csvHeaderRegistros": "registros"
+  },
+  "tracker": {
+    "title": "Tracker GPS",
+    "subtitle": "Visualiza en tiempo real la ubicación de los trackers dentro de tus geocercas.",
+    "status": {
+      "online": "Tracker en línea",
+      "offline": "Sin datos recientes"
+    },
+    "controls": {
+      "centerOnUser": "Centrar en mi ubicación",
+      "refresh": "Refrescar posiciones",
+      "showAll": "Mostrar todo",
+      "showInside": "Solo dentro de geocercas"
+    },
+    "legend": {
+      "insideFence": "Dentro de la geocerca",
+      "outsideFence": "Fuera de la geocerca",
+      "geofence": "Geocerca"
+    },
+    "table": {
+      "title": "Últimas posiciones",
+      "person": "Persona",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "timestamp": "Fecha/hora",
+      "status": "Estado",
+      "noResults": "No hay posiciones registradas."
+    },
+    "errorLoad": "Error al cargar posiciones del tracker."
+  },
+  "trackerDashboard": {
+    "title": "Dashboard de Tracking en tiempo real",
+    "subtitle": "Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador.",
+    "filters": {
+      "trackerLabel": "Tracker",
+      "timeWindowLabel": "Ventana",
+      "timeWindowSuffix": "horas",
+      "geofenceLabel": "Geocerca",
+      "allTrackers": "Todos los trackers",
+      "allGeofences": "Todas las geocercas"
+    },
+    "summary": {
+      "title": "Resumen",
+      "geofencesActive": "Geocercas activas",
+      "trackersProfiles": "Trackers (perfiles)",
+      "pointsInMap": "Puntos en mapa (filtro actual)",
+      "lastPoint": "Último punto registrado",
+      "noPoints": "No hay puntos para el filtro actual."
+    },
+    "legend": {
+      "title": "Leyenda de trackers",
+      "points": "pts"
+    },
+    "popup": {
+      "tracker": "Tracker",
+      "time": "Hora",
+      "accuracy": "Precisión",
+      "countHere": "Registros en esta posición",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "inside": "Dentro de la geocerca",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "messages": {
+      "noOrg": "Debes seleccionar una organización.",
+      "autoRefresh": "Los puntos se actualizan automáticamente. No necesitas refrescar la página.",
+      "loading": "Cargando datos de tracking…",
+      "noData": "No se encontraron posiciones para los filtros seleccionados.",
+      "error": "Error al cargar datos de tracking.",
+      "checkConsole": "Revisa la consola si persiste."
+    }
+  },
+  "inviteTracker": {
+    "orgFallback": "tu organización",
+    "title": "Invitar tracker",
+    "subtitle": "Selecciona un miembro de personal activo o ingresa un correo manualmente para invitarlo como tracker en {{orgName}}.",
+    "form": {
+      "selectLabel": "Selecciona personal activo (opcional)",
+      "selectPlaceholder": "-- Selecciona personal --",
+      "selectHelp": "Si seleccionas personal, su correo se llenará automáticamente.",
+      "emailLabel": "Correo del tracker",
+      "emailPlaceholder": "tracker@ejemplo.com",
+      "emailHelp": "Se enviará una invitación a este correo.",
+      "buttonSending": "Enviando invitación…",
+      "buttonSend": "Enviar invitación"
+    },
+    "errors": {
+      "emailRequired": "Debes ingresar un correo.",
+      "emailInvalid": "Ingresa un correo válido."
+    },
+    "messages": {
+      "serverProblem": "Hubo un problema al contactar el servidor de invitaciones.",
+      "notOk": "No se pudo completar la invitación. Revisa el correo e intenta de nuevo.",
+      "invited": "Se envió una invitación a {{email}} para unirse como tracker en {{orgName}}.",
+      "magiclinkSent": "Se envió un link mágico a {{email}}.",
+      "linkOnlyWithLink": "La invitación fue creada. Usa este link para compartir acceso: {{link}}.",
+      "linkOnlyNoLink": "La invitación fue creada, pero no se recibió un link público.",
+      "createdWithoutEmail": "El acceso del tracker fue creado sin enviar correo.",
+      "genericProcessed": "La invitación para {{email}} fue procesada correctamente.",
+      "unexpectedError": "Error inesperado al procesar la invitación."
+    }
+  },
+  "admins": {
+    "title": "Administradores",
+    "subtitle": "Administra los administradores de tu organización y sus roles.",
+    "table": {
+      "name": "Nombre",
+      "email": "Correo",
+      "role": "Rol",
+      "status": "Estado",
+      "actions": "Acciones",
+      "noResults": "No hay administradores registrados."
+    },
+    "form": {
+      "inviteTitle": "Invitar a un nuevo administrador",
+      "emailLabel": "Correo",
+      "roleLabel": "Rol",
+      "buttonInvite": "Enviar invitación"
+    },
+    "actions": {
+      "makeOwner": "Hacer propietario",
+      "makeAdmin": "Hacer admin",
+      "remove": "Quitar acceso"
+    },
+    "banner": {
+      "invitationSent": "Invitación enviada correctamente.",
+      "roleUpdated": "Rol actualizado.",
+      "removed": "Administrador removido de la organización."
+    },
+    "error": {
+      "load": "Error al cargar la lista de administradores.",
+      "invite": "No se pudo enviar la invitación.",
+      "updateRole": "No se pudo actualizar el rol.",
+      "remove": "No se pudo quitar el administrador."
+    }
+  },
+  "help": {
+    "common": {
+      "breadcrumb": "Centro de ayuda",
+      "back": "Volver",
+      "goHome": "Ir a Inicio",
+      "viewFaq": "Ver FAQ",
+      "badge": "Centro de ayuda",
+      "quickGuideBadge": "Guía rápida"
+    },
+    "instructions": {
+      "title": "Guía rápida de configuración",
+      "subtitle": "Sigue estos pasos para configurar tu organización, crear geocercas, asignar personal y empezar el tracking.",
+      "jumpToSteps": "Ir a pasos",
+      "viewResult": "Ver resultado",
+      "tocTitle": "Tabla de contenidos",
+      "tocSubtitle": "Usa estos atajos para navegar la guía.",
+      "tocSteps": "Pasos",
+      "tocTips": "Buenas prácticas",
+      "tocResult": "Resultado esperado",
+      "recommendationTitle": "Recomendación",
+      "recommendationBody": "Empieza con 1 geocerca y 1 tracker. Cuando el flujo funcione, escala a más zonas y personas."
+    },
+    "faq": {
+      "title": "Preguntas frecuentes",
+      "subtitle": "Respuestas rápidas sobre invitaciones, roles, tracking, reportes y privacidad."
+    },
+    "support": {
+      "title": "Soporte",
+      "subtitle": "Contáctanos para soporte técnico, facturación u onboarding.",
+      "emailLabel": "Correo de soporte",
+      "notConfigured": "El contacto de soporte aún no está configurado."
+    }
+  },
+  "home": {
+    "open": "Abrir →",
+    "loadingPermissions": "Resolviendo permisos…",
+    "loginToContinue": "Inicia sesión para continuar.",
+    "goToLogin": "Ir a Login",
+    "welcome": "Bienvenido a App Geocercas",
+    "sessionAs": "Sesión iniciada como",
+    "labels": {
+      "email": "Correo:",
+      "organization": "Organización:",
+      "role": "Rol:"
+    },
+    "help": {
+      "title": "Centro de ayuda",
+      "quick": "Guía rápida",
+      "quickDesc": "Aprende a usar la app paso a paso.",
+      "faq": "FAQ",
+      "faqDesc": "Respuestas a las preguntas más comunes.",
+      "support": "Soporte",
+      "supportDesc": "¿Tienes un problema o una pregunta? Contáctanos.",
+      "news": "Novedades",
+      "newsDesc": "Cambios recientes, mejoras y actualizaciones."
+    },
+    "missingContextTitle": "Sesión iniciada, pero falta contexto",
+    "missingContextBody": "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
+    "orgNotResolved": "(no resuelto)",
+    "roleEmpty": "(vacío)",
+    "retry": "Reintentar"
+  },
+  "resetPassword": {
+    "title": "Restablecer contraseña",
+    "subtitle": "Crea una nueva contraseña para tu cuenta.",
+    "loading": "Preparando link de recuperación…",
+    "invalidOrExpired": "El link de recuperación es inválido o expiró. Solicita uno nuevo.",
+    "noSession": "No hay una sesión válida para restablecer tu contraseña. Solicita el link de nuevo.",
+    "noticeType": "Sesión detectada. Si este link no era para recuperación, inicia sesión normalmente otra vez.",
+    "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
+    "newPassword": "Nueva contraseña",
+    "newPasswordPlaceholder": "Mínimo 8 caracteres",
+    "confirmPassword": "Confirmar contraseña",
+    "confirmPlaceholder": "Repite",
+    "passwordMin": "La contraseña debe tener al menos 8 caracteres.",
+    "passwordMismatch": "Las contraseñas no coinciden.",
+    "saveButton": "Guardar nueva contraseña",
+    "saving": "Guardando…",
+    "updateFailed": "No se pudo actualizar la contraseña. Inténtalo de nuevo.",
+    "updateUnexpected": "Error inesperado al actualizar la contraseña.",
+    "success": "Contraseña actualizada correctamente. Ya puedes iniciar sesión.",
+    "backToLogin": "Volver al login",
+    "backHome": "Ir al landing",
+    "tip": "Tip: vuelve a /login, ingresa tu correo y usa “¿Olvidaste tu contraseña?” para generar un nuevo link."
+  },
+  "authInvite": {
+    "title": "Has sido invitado",
+    "processing": "Validando invitación…",
+    "notInviteLink": "Este enlace no es una invitación válida. Usa el enlace de invitación que recibiste por correo.",
+    "expiredOrUsed": "La invitación es inválida, expiró o ya fue usada.",
+    "continue": "Continuar",
+    "goToLogin": "Ir a login",
+    "timeout": "La validación de la invitación tardó demasiado. Inténtalo de nuevo."
   }
 }

@@ -710,44 +710,69 @@
   "trackerDashboard": {
     "title": "Real-time Tracking Dashboard",
     "subtitle": "Points update automatically. The send frequency is defined by the administrator.",
+    "meta": {
+      "activeOrg": "Active org",
+      "trackersMemberships": "Trackers (memberships)",
+      "missingPersonalSync": "Missing sync in Personnel"
+    },
     "filters": {
+      "windowLabel": "Window",
       "trackerLabel": "Tracker",
-      "timeWindowLabel": "Window",
-      "timeWindowSuffix": "hours",
       "geofenceLabel": "Geofence",
       "allTrackers": "All trackers",
-      "allGeofences": "All geofences"
+      "allGeofences": "All geofences",
+      "refreshNow": "Refresh now",
+      "refreshing": "Refreshing…",
+      "disabledNoTrackers": "No trackers in memberships for this org"
+    },
+    "timeWindows": {
+      "1h": "1 hour",
+      "6h": "6 hours",
+      "12h": "12 hours",
+      "24h": "24 hours"
+    },
+    "map": {
+      "title": "Positions map",
+      "pointsInWindow": "Points in window",
+      "noPointsWithTrackers": "No positions for the current filters/window.",
+      "noTrackersInOrg": "No trackers (memberships) in this org."
     },
     "summary": {
       "title": "Summary",
       "geofencesActive": "Active geofences",
-      "trackersProfiles": "Trackers (profiles)",
+      "trackersProfiles": "Trackers (memberships)",
       "pointsInMap": "Map points (current filter)",
       "lastPoint": "Last recorded point",
-      "noPoints": "No points for the current filter."
+      "updating": "Updating data…"
     },
     "legend": {
       "title": "Tracker legend",
-      "points": "pts"
+      "missingInPersonal": "(missing in Personnel: sync user_id)",
+      "noTrackers": "There are no trackers in memberships (role=tracker) for this organization."
+    },
+    "tips": {
+      "title": "Tip",
+      "intro": "If the tracker is sending but points don’t show up here:",
+      "items": [
+        "Check the time window (1h / 6h / 24h).",
+        "Try “All trackers”.",
+        "If you filtered by geofence, try “All geofences”.",
+        "If you see “missing in Personnel”, it means the tracker exists in memberships but has no synced record in Personnel (user_id)."
+      ]
+    },
+    "errors": {
+      "noOrg": "Configuration error: could not resolve the active organization (orgId).",
+      "loadMemberships": "Error loading trackers (memberships).",
+      "loadGeofences": "Could not load geofences (v_geocercas_tracker_ui).",
+      "loadPositions": "Error loading positions."
     },
     "popup": {
-      "tracker": "Tracker",
+      "trackerUid": "Tracker UID",
       "time": "Time",
-      "accuracy": "Accuracy",
-      "countHere": "Records at this position",
-      "activity": "Activity",
+      "lat": "Lat",
+      "lng": "Lng",
       "geofence": "Geofence",
-      "inside": "Inside geofence",
-      "yes": "Yes",
-      "no": "No"
-    },
-    "messages": {
-      "noOrg": "You must select an organization.",
-      "autoRefresh": "Points update automatically. You don’t need to refresh the page.",
-      "loading": "Loading tracking data…",
-      "noData": "No positions found for the selected filters.",
-      "error": "Error loading tracking data.",
-      "checkConsole": "Check the console if it persists."
+      "dash": "—"
     }
   },
   "inviteTracker": {
@@ -909,4 +934,3 @@
     "timeout": "Invitation validation took too long. Please try again."
   }
 }
-
