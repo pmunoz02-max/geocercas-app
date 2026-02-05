@@ -21,7 +21,11 @@
     },
     "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
     "createOrganization": "Crear organización",
-    "refreshContext": "Reintentar contexto"
+    "refreshContext": "Reintentar contexto",
+    "search": "Buscar…",
+    "noResults": "Sin resultados",
+    "unexpectedError": "Error inesperado",
+    "emptyInvalid": "(vacío / inválido)"
   },
   "auth": {
     "loginRequired": "Debes iniciar sesión.",
@@ -779,6 +783,17 @@
       "genericProcessed": "La invitación para {{email}} fue procesada correctamente.",
       "unexpectedError": "Error inesperado al procesar la invitación."
     }
+  },
+  "invite": {
+    "noEmail": "(sin email)",
+    "noName": "(Sin nombre)",
+    "loadPersonalFail": "No se pudo cargar el personal",
+    "loadPersonalError": "Error cargando personal",
+    "sendFail": "Error al enviar invitación",
+    "trackerDashboard": "Tracker Dashboard"
+  },
+  "org": {
+    "currentOrg": "Org actual"
   },
   "admins": {
     "title": "Administradores",

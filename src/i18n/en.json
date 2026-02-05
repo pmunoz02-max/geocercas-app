@@ -21,7 +21,11 @@
     },
     "orgNamePlaceholder": "Organization name (e.g., Farm A)",
     "createOrganization": "Create organization",
-    "refreshContext": "Retry context"
+    "refreshContext": "Retry context",
+    "search": "Search…",
+    "noResults": "No results",
+    "unexpectedError": "Unexpected error",
+    "emptyInvalid": "(empty / invalid)"
   },
   "auth": {
     "loginRequired": "You must log in.",
@@ -907,6 +911,16 @@
     "continue": "Continue",
     "goToLogin": "Go to login",
     "timeout": "Invitation validation took too long. Please try again."
+  },
+  "invite": {
+    "noEmail": "(no email)",
+    "noName": "(No name)",
+    "loadPersonalFail": "Could not load staff",
+    "loadPersonalError": "Error loading staff",
+    "sendFail": "Error sending invitation",
+    "trackerDashboard": "Tracker Dashboard"
+  },
+  "org": {
+    "currentOrg": "Current org"
   }
 }
-

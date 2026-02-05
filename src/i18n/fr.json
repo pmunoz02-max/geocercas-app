@@ -21,7 +21,11 @@
     },
     "orgNamePlaceholder": "Nom de l’organisation (ex. Ferme A)",
     "createOrganization": "Créer une organisation",
-    "refreshContext": "Réessayer le contexte"
+    "refreshContext": "Réessayer le contexte",
+    "search": "Rechercher…",
+    "noResults": "Aucun résultat",
+    "unexpectedError": "Erreur inattendue",
+    "emptyInvalid": "(vide / invalide)"
   },
   "auth": {
     "loginRequired": "Vous devez vous connecter.",
@@ -890,5 +894,16 @@
     "continue": "Continuer",
     "goToLogin": "Aller à la connexion",
     "timeout": "La validation de l’invitation a pris trop de temps. Veuillez réessayer."
+  },
+  "org": {
+    "currentOrg": "Organisation actuelle"
+  },
+  "invite": {
+    "noEmail": "(pas d’e-mail)",
+    "noName": "(Sans nom)",
+    "loadPersonalFail": "Impossible de charger le personnel",
+    "loadPersonalError": "Erreur lors du chargement du personnel",
+    "sendFail": "Erreur lors de l’envoi de l’invitation",
+    "trackerDashboard": "Tableau de bord Tracker"
   }
 }
