@@ -123,14 +123,15 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
 export default function InvitarTracker() {
   const { t } = useTranslation();
 
-  // ✅ Alineado al patrón nuevo (si tu AuthContext expone estos flags)
-  const {
-    user,
-    currentOrg,
-    loading: authLoading,
-    isAuthenticated,
-    contextLoading,
-  } = useAuth();
+  // Nota: algunos AuthContext no exponen estos flags; por eso usamos fallback seguro
+  const auth = useAuth();
+
+  const user = auth?.user;
+  const currentOrg = auth?.currentOrg;
+
+  const authLoading = auth?.loading ?? false;
+  const isAuthenticated = auth?.isAuthenticated ?? !!user;
+  const contextLoading = auth?.contextLoading ?? false;
 
   const orgId = resolveOrgId(currentOrg);
   const orgName =
@@ -143,50 +144,75 @@ export default function InvitarTracker() {
   const [message, setMessage] = useState("");
 
   /* =========================
-     Load personnel
+     Load personnel (robusto)
   ========================= */
   const loadPersonnel = useCallback(async () => {
-    // ✅ evita ejecutar query antes de tener orgId
     if (!orgId) return;
 
     setLoading(true);
     setMessage("");
 
     try {
-      // ✅ Usa columnas reales (coherente con el resto de tu app)
-      const { data, error } = await supabase
+      // Intento 1: tabla con is_deleted (modelo común en tu app)
+      const r1 = await supabase
         .from("personal")
         .select("id, nombre, apellido, email, is_deleted")
         .eq("org_id", orgId)
-        .eq("is_deleted", false)
         .order("nombre", { ascending: true });
 
-      if (error) throw error;
+      if (!r1.error) {
+        const mapped1 = (r1.data || [])
+          .filter((p) => p?.email) // solo con email
+          .filter((p) => p.is_deleted === false || p.is_deleted == null) // false o null
+          .map((p) => {
+            const full = `${p.nombre || ""} ${p.apellido || ""}`.trim();
+            return {
+              id: p.id,
+              full_name: full || p.email || String(p.id),
+              email: p.email || "",
+            };
+          });
 
-      const mapped =
-        (data || []).map((p) => {
+        setPeople(mapped1);
+        return;
+      }
+
+      // Intento 2 (fallback): sin is_deleted (evita 400 si columna no existe)
+      const r2 = await supabase
+        .from("personal")
+        .select("id, nombre, apellido, email")
+        .eq("org_id", orgId)
+        .order("nombre", { ascending: true });
+
+      if (r2.error) throw r2.error;
+
+      const mapped2 = (r2.data || [])
+        .filter((p) => p?.email)
+        .map((p) => {
           const full = `${p.nombre || ""} ${p.apellido || ""}`.trim();
           return {
             id: p.id,
             full_name: full || p.email || String(p.id),
             email: p.email || "",
           };
-        }) || [];
+        });
 
-      setPeople(mapped);
+      setPeople(mapped2);
     } catch (e) {
       console.error("[InvitarTracker] loadPersonnel error:", e);
       setMessage(t("invite.loadPersonalError"));
+      setPeople([]);
     } finally {
       setLoading(false);
     }
   }, [orgId, t]);
 
   useEffect(() => {
-    // ✅ Espera a que AuthContext tenga org listo si expone flags
+    // Espera a que exista orgId y sesión
     if (authLoading) return;
     if (isAuthenticated === false) return;
     if (contextLoading && !orgId) return;
+    if (!orgId) return;
 
     loadPersonnel();
   }, [authLoading, isAuthenticated, contextLoading, orgId, loadPersonnel]);
@@ -205,7 +231,9 @@ export default function InvitarTracker() {
       return;
     }
     if (!orgId) {
-      setMessage(t("inviteTracker.errors.orgRequired") || t("inviteTracker.orgFallback"));
+      setMessage(
+        t("inviteTracker.errors.orgRequired") || t("inviteTracker.orgFallback")
+      );
       return;
     }
 
@@ -213,7 +241,7 @@ export default function InvitarTracker() {
     setMessage("");
 
     try {
-      const { data, error } = await supabase.functions.invoke("invite-tracker", {
+      const { error } = await supabase.functions.invoke("invite-tracker", {
         body: { email, org_id: orgId, resend },
       });
 
@@ -261,11 +289,12 @@ export default function InvitarTracker() {
             t={t}
           />
 
-          {loading && (
+          {!loading && people.length === 0 ? (
             <div className="mt-2 text-xs text-gray-500">
-              {t("common.actions.loading")}
+              {t("inviteTracker.form.noPersonnelFound") ||
+                t("common.noResults")}
             </div>
-          )}
+          ) : null}
         </div>
 
         <div>
