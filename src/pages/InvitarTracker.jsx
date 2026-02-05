@@ -52,7 +52,6 @@ function isDeletedRow(r) {
 function isVigenteActivaRow(r) {
   if (isDeletedRow(r)) return false;
   const vigente = r?.vigente !== false;
-  // En Personal se calcula activo con flags, pero para invitar usamos vigente
   return vigente;
 }
 
@@ -157,13 +156,15 @@ function Dropdown({ items, value, onChange, placeholder, t }) {
                   setOpen(false);
                 }}
               >
-                <div className="font-medium">
-                  {it.full_name || t("invite.noName")}
-                </div>
+                <div className="font-medium">{it.full_name || t("invite.noName")}</div>
                 <div className="text-xs text-gray-500">
                   {(it.email || t("invite.noEmail"))}
-                  {it.vigente === false ? ` • ${t("personal.status.inactive", { defaultValue: "No vigente" })}` : ""}
-                  {it.is_deleted || it.deleted_at ? ` • ${t("personal.status.deleted", { defaultValue: "Eliminado" })}` : ""}
+                  {it.vigente === false
+                    ? ` • ${t("personal.status.inactive", { defaultValue: "No vigente" })}`
+                    : ""}
+                  {it.is_deleted || it.deleted_at
+                    ? ` • ${t("personal.status.deleted", { defaultValue: "Eliminado" })}`
+                    : ""}
                 </div>
               </div>
             ))}
@@ -269,6 +270,16 @@ export default function InvitarTracker() {
       return;
     }
 
+    // ✅ Back-end exige person_id: si no hay selección, no enviar
+    if (!selectedPersonId) {
+      setMessage(
+        t("inviteTracker.errors.selectPersonFirst", {
+          defaultValue: "Selecciona un miembro de Personal primero.",
+        })
+      );
+      return;
+    }
+
     // Si escogieron una persona pero no tiene email, forzamos a ingresar manualmente
     const picked = people.find((x) => String(x.id) === String(selectedPersonId));
     if (picked && !picked.email && !email) {
@@ -290,7 +301,12 @@ export default function InvitarTracker() {
 
     try {
       const { error } = await supabase.functions.invoke("invite-tracker", {
-        body: { email, org_id: orgId, resend },
+        body: {
+          email,
+          org_id: orgId,
+          person_id: selectedPersonId, // ✅ CLAVE
+          resend,
+        },
       });
       if (error) throw error;
 
@@ -327,7 +343,10 @@ export default function InvitarTracker() {
           <Dropdown
             items={people}
             value={selectedPersonId}
-            onChange={setSelectedPersonId}
+            onChange={(id) => {
+              setSelectedPersonId(id);
+              setMessage(""); // limpia mensajes al seleccionar
+            }}
             placeholder={
               loading
                 ? t("common.actions.loading")
@@ -378,7 +397,7 @@ export default function InvitarTracker() {
         <div className="flex gap-3 pt-2">
           <button
             className="flex-1 bg-green-600 text-white rounded-lg py-2 disabled:opacity-50"
-            disabled={loading}
+            disabled={loading || !selectedPersonId}
             onClick={() => sendInvite(false)}
           >
             {loading
@@ -388,12 +407,20 @@ export default function InvitarTracker() {
 
           <button
             className="flex-1 bg-blue-600 text-white rounded-lg py-2 disabled:opacity-50"
-            disabled={loading}
+            disabled={loading || !selectedPersonId}
             onClick={() => sendInvite(true)}
           >
             {t("inviteTracker.messages.magiclinkSent")}
           </button>
         </div>
+
+        {!selectedPersonId && (
+          <div className="text-xs text-gray-500">
+            {t("inviteTracker.form.selectRequiredHint", {
+              defaultValue: "Para invitar, primero selecciona un miembro de Personal.",
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
