@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient"; // ajusta si tu path difiere
-import { useAuth } from "../context/AuthProvider"; // ajusta si tu hook difiere
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthProvider";
 
-// i18n simple (no rompe lógica)
 const I18N = {
   es: {
     title: "Invitar tracker",
@@ -57,40 +56,27 @@ const I18N = {
   },
 };
 
-function normEmail(v) {
-  return String(v || "").trim().toLowerCase();
-}
+const normEmail = (v) => String(v || "").trim().toLowerCase();
 
 function buildLabel(p) {
-  // Intentos comunes de nombres (sin romper si no existen)
   const a = String(p?.apellidos || p?.apellido || p?.last_name || p?.lastname || "").trim();
   const n = String(p?.nombres || p?.nombre || p?.first_name || p?.firstname || "").trim();
   const full = String(p?.full_name || p?.fullname || p?.display_name || p?.name || "").trim();
-
-  const base = (a || n) ? `${a} ${n}`.trim() : (full || "");
   const email = String(p?.email || "").trim();
 
+  const base = (a || n) ? `${a} ${n}`.trim() : (full || "");
   if (base && email) return `${base} — ${email}`;
   if (base) return base;
   if (email) return email;
   return String(p?.id || "Personal");
 }
 
-async function selectWithFallback(tableQueryBuilders) {
-  // tableQueryBuilders: array de funciones que retornan { data, error }
-  for (const fn of tableQueryBuilders) {
-    const { data, error, usedSelect } = await fn();
-    if (!error) return { data, usedSelect };
-    // Si el error es "column ... does not exist", probamos el siguiente select
-    const msg = String(error?.message || "");
-    const missingCol = msg.toLowerCase().includes("does not exist") && msg.toLowerCase().includes("column");
-    if (!missingCol) {
-      // error distinto: paramos y devolvemos
-      throw error;
-    }
-  }
-  // si todo falla, devolvemos lista vacía
-  return { data: [], usedSelect: "none" };
+async function trySelect(queryFn) {
+  const { data, error, usedSelect } = await queryFn();
+  if (!error) return { data: Array.isArray(data) ? data : [], usedSelect };
+  const msg = String(error?.message || "");
+  const missingCol = msg.toLowerCase().includes("does not exist") && msg.toLowerCase().includes("column");
+  return { error, missingCol, usedSelect };
 }
 
 export default function InvitarTracker() {
@@ -121,83 +107,101 @@ export default function InvitarTracker() {
   async function loadPeople() {
     if (!org_id) {
       setPeople([]);
+      setSelectedPersonId("");
       return;
     }
 
     setPeopleLoading(true);
     setErrMsg("");
     try {
-      // Filtros universales: org_id + (is_deleted != true) si existe + vigente si existe
-      // Como NO sabemos tu esquema exacto, probamos selects con columnas alternativas.
-      const base = supabase.from("personal").eq("org_id", org_id);
-
+      // ✅ IMPORTANTE: en supabase-js v2, eq() va DESPUÉS de select()
       const tries = [
         async () => {
-          const q = base
-            .select("id, email, nombres, apellidos, is_deleted, vigente")
+          const q = supabase
+            .from("personal")
+            .select("id,email,nombres,apellidos,is_deleted,vigente")
+            .eq("org_id", org_id)
             .neq("is_deleted", true)
             .order("apellidos", { ascending: true });
           const { data, error } = await q;
           return { data, error, usedSelect: "id,email,nombres,apellidos,is_deleted,vigente" };
         },
         async () => {
-          const q = base
-            .select("id, email, nombre, apellido, is_deleted, vigente")
+          const q = supabase
+            .from("personal")
+            .select("id,email,nombre,apellido,is_deleted,vigente")
+            .eq("org_id", org_id)
             .neq("is_deleted", true)
             .order("apellido", { ascending: true });
           const { data, error } = await q;
           return { data, error, usedSelect: "id,email,nombre,apellido,is_deleted,vigente" };
         },
         async () => {
-          const q = base
-            .select("id, email, first_name, last_name, is_deleted, vigente")
+          const q = supabase
+            .from("personal")
+            .select("id,email,first_name,last_name,is_deleted,vigente")
+            .eq("org_id", org_id)
             .neq("is_deleted", true)
             .order("last_name", { ascending: true });
           const { data, error } = await q;
           return { data, error, usedSelect: "id,email,first_name,last_name,is_deleted,vigente" };
         },
         async () => {
-          const q = base
-            .select("id, email, full_name, is_deleted, vigente")
+          const q = supabase
+            .from("personal")
+            .select("id,email,full_name,is_deleted,vigente")
+            .eq("org_id", org_id)
             .neq("is_deleted", true)
             .order("full_name", { ascending: true });
           const { data, error } = await q;
           return { data, error, usedSelect: "id,email,full_name,is_deleted,vigente" };
         },
         async () => {
-          // Ultimo fallback: solo id/email (no asume columnas de nombres)
-          const q = base
-            .select("id, email, is_deleted, vigente")
+          const q = supabase
+            .from("personal")
+            .select("id,email,is_deleted,vigente")
+            .eq("org_id", org_id)
             .neq("is_deleted", true)
             .order("email", { ascending: true });
           const { data, error } = await q;
           return { data, error, usedSelect: "id,email,is_deleted,vigente" };
         },
         async () => {
-          // Si ni siquiera existe is_deleted/vigente, hacemos lo mínimo:
-          const q = supabase.from("personal").select("id, email").eq("org_id", org_id).order("email", { ascending: true });
+          const q = supabase
+            .from("personal")
+            .select("id,email")
+            .eq("org_id", org_id)
+            .order("email", { ascending: true });
           const { data, error } = await q;
           return { data, error, usedSelect: "id,email" };
         },
       ];
 
-      const { data, usedSelect } = await selectWithFallback(tries);
+      let final = [];
+      let used = "none";
 
-      const list = Array.isArray(data) ? data : [];
-      // si hay vigente, filtra vigente=true
-      const filtered = list.filter((p) => {
-        if (typeof p?.vigente === "boolean") return p.vigente === true;
-        return true;
-      });
+      for (const fn of tries) {
+        const r = await trySelect(fn);
+        if (!r.error) {
+          final = r.data;
+          used = r.usedSelect;
+          break;
+        }
+        if (!r.missingCol) {
+          // error real (RLS, permisos, etc.)
+          throw r.error;
+        }
+      }
 
-      setPeople(filtered);
+      // filtra vigente si existe
+      final = final.filter((p) => (typeof p?.vigente === "boolean" ? p.vigente === true : true));
 
-      // Si el seleccionado ya no existe, resetea
-      if (selectedPersonId && !filtered.some((p) => p.id === selectedPersonId)) {
+      setPeople(final);
+      if (selectedPersonId && !final.some((p) => p.id === selectedPersonId)) {
         setSelectedPersonId("");
       }
 
-      console.log("[InvitarTracker] personal loaded using select:", usedSelect, "count:", filtered.length);
+      console.log("[InvitarTracker] personal loaded select:", used, "count:", final.length);
     } catch (e) {
       setPeople([]);
       setSelectedPersonId("");
@@ -216,28 +220,13 @@ export default function InvitarTracker() {
     setOkMsg("");
     setErrMsg("");
 
-    if (!org_id) {
-      setErrMsg(t.missingOrg);
-      return;
-    }
-    if (!selectedPersonId) {
-      setErrMsg(t.selectPerson);
-      return;
-    }
+    if (!org_id) return setErrMsg(t.missingOrg);
+    if (!selectedPersonId) return setErrMsg(t.selectPerson);
 
     const safeEmail = normEmail(email);
-    if (!safeEmail) {
-      setErrMsg(t.emailRequired);
-      return;
-    }
+    if (!safeEmail) return setErrMsg(t.emailRequired);
 
-    const payload = {
-      email: safeEmail,
-      org_id,
-      person_id: selectedPersonId,
-      resend: false,
-    };
-
+    const payload = { email: safeEmail, org_id, person_id: selectedPersonId, resend: false };
     console.log("[InvitarTracker] payload", payload);
 
     setSending(true);
@@ -305,14 +294,12 @@ export default function InvitarTracker() {
           {sending ? t.sending : t.send}
         </button>
 
-        {/* ✅ Mensaje de éxito legible */}
         {okMsg ? (
           <div className="mt-4 p-3 rounded-xl border border-green-200 bg-green-50 text-green-800">
             {okMsg}
           </div>
         ) : null}
 
-        {/* ✅ Mensaje de error legible (fix del rosado) */}
         {errMsg ? (
           <div className="mt-4 p-3 rounded-xl border border-red-200 bg-red-50 text-red-800 break-words">
             {errMsg}
