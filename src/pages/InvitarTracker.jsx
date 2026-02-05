@@ -6,62 +6,72 @@ const I18N = {
   es: {
     title: "Invitar tracker",
     subtitle:
-      "Selecciona un miembro de personal activo o ingresa un correo manualmente para invitarlo como tracker en tu organización.",
+      "Selecciona un miembro de personal activo para invitarlo como tracker en tu organización.",
     loaded: "Cargados",
     refresh: "Refrescar",
     personPlaceholder: "Selecciona Personal…",
     emailPlaceholder: "name@email.com",
-    emailHint: "Se enviará una invitación a este correo.",
+    emailHint:
+      "Si el correo no llega, te mostraremos un link para copiar y enviar manualmente.",
     send: "Enviar invitación",
-    resend: "Reenviar a tracker registrado",
+    resend: "Reenviar acceso (magic link)",
     sending: "Enviando…",
     resending: "Reenviando…",
     selectPerson: "Debes seleccionar un miembro de Personal.",
     missingOrg: "No se encontró org_id activo. Refresca o vuelve a iniciar sesión.",
     emailRequired: "Debes ingresar un correo.",
-    success: (email) => `Se envió un link mágico a ${email}.`,
-    resentOk: (email) => `Se reenviaron credenciales a ${email}.`,
-    genericError: "No se pudo enviar la invitación.",
+    success: (email) => `Se generó una invitación para ${email}.`,
+    resentOk: (email) => `Se generó un acceso para ${email}.`,
+    copy: "Copiar link",
+    copied: "Copiado ✔",
+    linkTitle: "Link de acceso (manual):",
+    genericError: "No se pudo completar la operación.",
   },
   en: {
     title: "Invite tracker",
-    subtitle:
-      "Select an active staff member or enter an email to invite them as a tracker in your organization.",
+    subtitle: "Select an active staff member to invite them as a tracker.",
     loaded: "Loaded",
     refresh: "Refresh",
     personPlaceholder: "Select Staff…",
     emailPlaceholder: "name@email.com",
-    emailHint: "An invitation will be sent to this email.",
+    emailHint:
+      "If the email doesn't arrive, we'll show a link you can copy and send manually.",
     send: "Send invitation",
-    resend: "Resend to registered tracker",
+    resend: "Resend access (magic link)",
     sending: "Sending…",
     resending: "Resending…",
     selectPerson: "You must select a staff member.",
     missingOrg: "No active org_id found. Refresh or sign in again.",
     emailRequired: "You must enter an email.",
-    success: (email) => `A magic link was sent to ${email}.`,
-    resentOk: (email) => `Credentials were resent to ${email}.`,
-    genericError: "Could not send invitation.",
+    success: (email) => `Invitation generated for ${email}.`,
+    resentOk: (email) => `Access link generated for ${email}.`,
+    copy: "Copy link",
+    copied: "Copied ✔",
+    linkTitle: "Access link (manual):",
+    genericError: "Could not complete the operation.",
   },
   fr: {
     title: "Inviter un tracker",
-    subtitle:
-      "Sélectionnez un membre du personnel actif ou saisissez un e-mail pour l’inviter comme tracker dans votre organisation.",
+    subtitle: "Sélectionnez un membre du personnel actif pour l’inviter.",
     loaded: "Chargés",
     refresh: "Rafraîchir",
     personPlaceholder: "Sélectionnez Personnel…",
     emailPlaceholder: "name@email.com",
-    emailHint: "Une invitation sera envoyée à cet e-mail.",
+    emailHint:
+      "Si l’e-mail n’arrive pas, nous afficherons un lien à copier et envoyer manuellement.",
     send: "Envoyer l’invitation",
-    resend: "Renvoyer au tracker enregistré",
+    resend: "Renvoyer l’accès (lien magique)",
     sending: "Envoi…",
     resending: "Renvoi…",
     selectPerson: "Vous devez sélectionner un membre du personnel.",
     missingOrg: "Aucun org_id actif. Rafraîchissez ou reconnectez-vous.",
     emailRequired: "Vous devez saisir un e-mail.",
-    success: (email) => `Un lien magique a été envoyé à ${email}.`,
-    resentOk: (email) => `Les accès ont été renvoyés à ${email}.`,
-    genericError: "Impossible d’envoyer l’invitation.",
+    success: (email) => `Invitation générée pour ${email}.`,
+    resentOk: (email) => `Lien d’accès généré pour ${email}.`,
+    copy: "Copier le lien",
+    copied: "Copié ✔",
+    linkTitle: "Lien d’accès (manuel) :",
+    genericError: "Impossible de terminer l’opération.",
   },
 };
 
@@ -71,7 +81,6 @@ function buildLabel(p) {
   const a = String(p?.apellido || "").trim();
   const n = String(p?.nombre || "").trim();
   const email = String(p?.email || "").trim();
-
   const base = (a || n) ? `${a} ${n}`.trim() : "";
   if (base && email) return `${base} — ${email}`;
   if (base) return base;
@@ -95,10 +104,8 @@ async function readContextBody(body) {
 async function extractFunctionError(error) {
   const ctx = error?.context;
   if (!ctx) return null;
-
   const raw = await readContextBody(ctx.body);
   if (!raw) return null;
-
   try {
     if (typeof raw === "string") return JSON.parse(raw);
     return raw;
@@ -123,6 +130,8 @@ export default function InvitarTracker() {
 
   const [okMsg, setOkMsg] = useState("");
   const [errMsg, setErrMsg] = useState("");
+  const [actionLink, setActionLink] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const selectedPerson = useMemo(
     () => people.find((p) => p.id === selectedPersonId) || null,
@@ -181,6 +190,8 @@ export default function InvitarTracker() {
   async function callInvite({ resend }) {
     setOkMsg("");
     setErrMsg("");
+    setActionLink("");
+    setCopied(false);
 
     if (!org_id) return setErrMsg(t.missingOrg);
     if (!selectedPersonId) return setErrMsg(t.selectPerson);
@@ -196,7 +207,6 @@ export default function InvitarTracker() {
     };
 
     try {
-      console.log("[InvitarTracker] BUILD_MARKER 564ed23 calling invite_tracker");
       const { data, error } = await supabase.functions.invoke("invite_tracker", {
         body: payload,
       });
@@ -210,6 +220,10 @@ export default function InvitarTracker() {
       if (!data?.ok) throw new Error(data?.message || t.genericError);
 
       setOkMsg(resend ? t.resentOk(safeEmail) : t.success(safeEmail));
+
+      if (data?.action_link) {
+        setActionLink(String(data.action_link));
+      }
     } catch (e) {
       setErrMsg(String(e?.message || e || t.genericError));
     }
@@ -230,6 +244,16 @@ export default function InvitarTracker() {
       await callInvite({ resend: true });
     } finally {
       setResending(false);
+    }
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(actionLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // fallback: do nothing
     }
   }
 
@@ -295,6 +319,20 @@ export default function InvitarTracker() {
         >
           {resending ? t.resending : t.resend}
         </button>
+
+        {actionLink ? (
+          <div className="mt-4 p-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 break-words">
+            <div className="font-semibold mb-2">{t.linkTitle}</div>
+            <div className="text-sm select-all">{actionLink}</div>
+            <button
+              type="button"
+              onClick={copyLink}
+              className="mt-3 px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700"
+            >
+              {copied ? t.copied : t.copy}
+            </button>
+          </div>
+        ) : null}
 
         {okMsg ? (
           <div className="mt-4 p-3 rounded-xl border border-green-200 bg-green-50 text-green-800">
