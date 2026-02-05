@@ -3,6 +3,7 @@
 // ✅ Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id
 // ✅ FIX: activities por org_id (fallback legacy tenant_id)
 // ✅ i18n: 100% dashboardCostos.* (sin strings hardcodeados)
+// ✅ DatePicker con icono calendario (via DatePickerField) + validación Desde<=Hasta
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
@@ -11,6 +12,9 @@ import { useModuleAccess } from "../hooks/useModuleAccess";
 import { MODULE_KEYS } from "../lib/permissions";
 import { useTranslation } from "react-i18next";
 import html2canvas from "html2canvas/dist/html2canvas.esm.js";
+
+// ✅ DatePicker reutilizable (HTML nativo + icono)
+import DatePickerField from "../components/ui/DatePickerField";
 
 // Recharts
 import {
@@ -77,6 +81,12 @@ function buildDateRange(fromDateStr, toDateStr) {
   }
 
   return { fromIso, toIsoExclusive };
+}
+
+function isDateRangeInvalid(fromDateStr, toDateStr) {
+  if (!fromDateStr || !toDateStr) return false;
+  // YYYY-MM-DD permite comparación lexicográfica segura
+  return fromDateStr > toDateStr;
 }
 
 /* -----------------------------------------
@@ -341,6 +351,9 @@ const CostosDashboardPage = () => {
   const [selectedChartType, setSelectedChartType] = useState("bar");
   const [selectedMetric, setSelectedMetric] = useState("cost");
 
+  // ✅ Estado de validación rango fechas
+  const [dateRangeError, setDateRangeError] = useState("");
+
   // ✅ Loading correcto del contexto (antes de decidir nada)
   if (authLoading) {
     return <div className="p-4 text-sm text-gray-600">{t("dashboardCostos.sessionLoading")}</div>;
@@ -380,6 +393,17 @@ const CostosDashboardPage = () => {
       </div>
     );
   }
+
+  // ------------------------------
+  // Validación fechas (solo si ambos existen)
+  // ------------------------------
+  useEffect(() => {
+    if (isDateRangeInvalid(fromDate, toDate)) {
+      setDateRangeError(t("dashboardCostos.dateRangeInvalid") || "Rango de fechas inválido");
+    } else {
+      setDateRangeError("");
+    }
+  }, [fromDate, toDate, t]);
 
   // ------------------------------
   // Cargar filtros por org
@@ -425,6 +449,13 @@ const CostosDashboardPage = () => {
   // ------------------------------
   const fetchReport = async () => {
     if (!currentOrg?.id) return;
+
+    // ✅ Bloqueo si rango inválido
+    if (isDateRangeInvalid(fromDate, toDate)) {
+      setDateRangeError(t("dashboardCostos.dateRangeInvalid") || "Rango de fechas inválido");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -573,7 +604,8 @@ const CostosDashboardPage = () => {
           <button
             onClick={fetchReport}
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700"
-            disabled={loading}
+            disabled={loading || !!dateRangeError}
+            title={dateRangeError ? dateRangeError : undefined}
           >
             {loading ? t("dashboardCostos.refreshing") : t("dashboardCostos.refreshButton")}
           </button>
@@ -651,22 +683,22 @@ const CostosDashboardPage = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
-            <label className="text-xs text-gray-600">{t("dashboardCostos.filtersFrom")}</label>
-            <input
-              type="date"
+            <DatePickerField
+              label={t("dashboardCostos.filtersFrom")}
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm w-full"
+              onChange={setFromDate}
+              // ✅ si existe "Hasta", limita máximo en "Desde"
+              max={toDate || undefined}
             />
           </div>
 
           <div>
-            <label className="text-xs text-gray-600">{t("dashboardCostos.filtersTo")}</label>
-            <input
-              type="date"
+            <DatePickerField
+              label={t("dashboardCostos.filtersTo")}
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm w-full"
+              onChange={setToDate}
+              // ✅ si existe "Desde", limita mínimo en "Hasta"
+              min={fromDate || undefined}
             />
           </div>
 
@@ -719,6 +751,13 @@ const CostosDashboardPage = () => {
           </div>
         </div>
 
+        {/* ✅ error rango fechas */}
+        {dateRangeError && (
+          <div className="text-xs text-red-600">
+            {dateRangeError}
+          </div>
+        )}
+
         <div className="flex justify-end gap-2">
           <button
             className="px-3 py-1 border rounded-lg text-xs md:text-sm hover:bg-gray-50"
@@ -728,6 +767,7 @@ const CostosDashboardPage = () => {
               setSelectedPersonaId("");
               setSelectedActividadId("");
               setSelectedGeocercaId("");
+              setDateRangeError("");
             }}
           >
             {t("dashboardCostos.filtersClear")}
@@ -736,6 +776,8 @@ const CostosDashboardPage = () => {
           <button
             className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white text-xs md:text-sm hover:bg-emerald-700"
             onClick={fetchReport}
+            disabled={!!dateRangeError}
+            title={dateRangeError ? dateRangeError : undefined}
           >
             {t("dashboardCostos.filtersApply")}
           </button>

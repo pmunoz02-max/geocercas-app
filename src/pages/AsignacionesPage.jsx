@@ -1,33 +1,33 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.12 FINAL (Feb 2026) + i18n (ES/EN/FR)
+// Asignaciones v2.13 FINAL (Feb 2026) + i18n (ES/EN/FR)
 // - Lectura canónica: v_tracker_assignments_ui
 // - Escritura: RPC admin_upsert_tracker_assignment_v1
+// - ✅ Migrado a DatePickerField (HTML nativo + icono) para consistencia y WebView/TWA
+// - ✅ Fechas date-only (YYYY-MM-DD) coherentes con start_date/end_date (sin perder “hora” que igual no se guardaba)
 // - Fix permanente: fuerza visibilidad (Geocerca/Inicio/Fin) ante CSS/herencia/ancho 0
 // - DEBUG: ?debug=1
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
-
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-
 import { useTranslation } from "react-i18next";
+
+// ✅ DatePicker reutilizable (HTML nativo + icono)
+import DatePickerField from "../components/ui/DatePickerField";
 
 const ESTADOS = ["todos", "activa", "inactiva"];
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
 function shortId(uuid) {
   if (!uuid) return "";
   const s = String(uuid);
   return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
 }
-function toDateOnly(d) {
-  if (!(d instanceof Date) || isNaN(d)) return "";
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
 }
+
+// Convierte "YYYY-MM-DD" (o Date/string) a Date para mostrar en tabla (dd/mm/yyyy)
 function parseDateOnlyLoose(v) {
   if (!v) return null;
   if (v instanceof Date) return isNaN(v) ? null : v;
@@ -37,29 +37,34 @@ function parseDateOnlyLoose(v) {
   const d = new Date(s.includes(" ") ? s.replace(" ", "T") : s);
   return isNaN(d) ? null : d;
 }
+
 function formatDateDDMMYYYY(v) {
   const d = parseDateOnlyLoose(v);
   if (!d) return "";
   return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
-function nowDate() {
-  return new Date();
-}
-function plusDays(days) {
-  return new Date(Date.now() + days * 86400000);
+
+function todayYYYYMMDD() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${y}-${m}-${day}`;
 }
 
-function CalendarIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-gray-500">
-      <path
-        d="M7 3v2M17 3v2M4 9h16M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+function plusDaysYYYYMMDD(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + (Number(days) || 0));
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${y}-${m}-${day}`;
+}
+
+function isDateRangeInvalid(startDate, endDate) {
+  if (!startDate || !endDate) return false;
+  // YYYY-MM-DD permite comparación lexicográfica segura
+  return startDate > endDate;
 }
 
 export default function AsignacionesPage() {
@@ -82,14 +87,27 @@ export default function AsignacionesPage() {
 
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
-  const [startDt, setStartDt] = useState(nowDate());
-  const [endDt, setEndDt] = useState(plusDays(365));
+
+  // ✅ Ahora son strings "YYYY-MM-DD" (coherente con DB/RPC)
+  const [startDate, setStartDate] = useState(todayYYYYMMDD());
+  const [endDate, setEndDate] = useState(plusDaysYYYYMMDD(365));
   const [active, setActive] = useState(true);
 
   const [estadoFilter, setEstadoFilter] = useState("todos");
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  const [dateRangeError, setDateRangeError] = useState("");
+
+  // ✅ Validación rango (solo si ambos existen)
+  useEffect(() => {
+    if (isDateRangeInvalid(startDate, endDate)) {
+      setDateRangeError(t("asignaciones.messages.invalidDatesRange") || t("asignaciones.messages.invalidDates"));
+    } else {
+      setDateRangeError("");
+    }
+  }, [startDate, endDate, t]);
 
   async function loadAll() {
     if (!orgId) return;
@@ -164,14 +182,16 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccess(null);
 
-    if (!selectedPersonalId || !selectedGeofenceId) return setError(t("asignaciones.messages.selectTrackerAndGeofence"));
+    if (!selectedPersonalId || !selectedGeofenceId) {
+      return setError(t("asignaciones.messages.selectTrackerAndGeofence"));
+    }
 
     const p = personalOptions.find((x) => x.id === selectedPersonalId);
     if (!p?.user_id) return setError(t("asignaciones.messages.trackerMissingUserId"));
 
-    const startDate = toDateOnly(startDt);
-    const endDate = toDateOnly(endDt);
-    if (!startDate || !endDate) return setError(t("asignaciones.messages.invalidDates"));
+    if (!startDate || !endDate || isDateRangeInvalid(startDate, endDate)) {
+      return setError(t("asignaciones.messages.invalidDates"));
+    }
 
     try {
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
@@ -187,8 +207,8 @@ export default function AsignacionesPage() {
       setSuccess(t("asignaciones.banner.saved"));
       setSelectedPersonalId("");
       setSelectedGeofenceId("");
-      setStartDt(nowDate());
-      setEndDt(plusDays(365));
+      setStartDate(todayYYYYMMDD());
+      setEndDate(plusDaysYYYYMMDD(365));
       await loadAll();
     } catch (e) {
       setError(e?.message || String(e));
@@ -206,17 +226,18 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccess(null);
 
-    const startDate = toDateOnly(parseDateOnlyLoose(row?.start_date));
-    const endDate = toDateOnly(parseDateOnlyLoose(row?.end_date));
-    if (!startDate || !endDate) return setError(t("asignaciones.messages.toggleInvalidDates"));
+    // row.start_date / row.end_date vienen como date; garantizamos formato YYYY-MM-DD para RPC
+    const start = String(row?.start_date || "").slice(0, 10);
+    const end = String(row?.end_date || "").slice(0, 10);
+    if (!start || !end) return setError(t("asignaciones.messages.toggleInvalidDates"));
 
     try {
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
         p_org_id: orgId,
         p_tracker_user_id: row.tracker_user_id,
         p_geofence_id: row.geofence_id,
-        p_start_date: startDate,
-        p_end_date: endDate,
+        p_start_date: start,
+        p_end_date: end,
         p_active: !row.active,
       });
       if (rpcErr) throw rpcErr;
@@ -236,7 +257,8 @@ export default function AsignacionesPage() {
         <div className="mb-3 border rounded bg-yellow-50 px-3 py-2 text-xs text-yellow-900">
           <div className="font-semibold">DEBUG: src/pages/AsignacionesPage.jsx</div>
           <div>
-            {t("asignaciones.debug.source")} <span className="font-mono">v_tracker_assignments_ui</span> | {t("asignaciones.debug.rows")}: {rows?.length || 0}
+            {t("asignaciones.debug.source")} <span className="font-mono">v_tracker_assignments_ui</span> |{" "}
+            {t("asignaciones.debug.rows")}: {rows?.length || 0}
           </div>
         </div>
       ) : null}
@@ -250,58 +272,69 @@ export default function AsignacionesPage() {
       {success && <div className="mb-3 bg-green-50 border px-3 py-2 text-green-700">{success}</div>}
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 border rounded">
-        <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)}>
+        <select
+          className="border rounded px-3 py-2"
+          value={selectedPersonalId}
+          onChange={(e) => setSelectedPersonalId(e.target.value)}
+        >
           <option value="">{t("asignaciones.form.selectTracker")}</option>
           {personalOptions.map((p) => (
-            <option key={p.id} value={p.id}>{p.label}</option>
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
           ))}
         </select>
 
-        <select className="border rounded px-3 py-2" value={selectedGeofenceId} onChange={(e) => setSelectedGeofenceId(e.target.value)}>
+        <select
+          className="border rounded px-3 py-2"
+          value={selectedGeofenceId}
+          onChange={(e) => setSelectedGeofenceId(e.target.value)}
+        >
           <option value="">{t("asignaciones.form.selectGeofence")}</option>
           {geofenceOptions.map((g) => (
-            <option key={g.id} value={g.id}>{g.label}</option>
+            <option key={g.id} value={g.id}>
+              {g.label}
+            </option>
           ))}
         </select>
 
         <div className="w-full">
-          <DatePicker
-            selected={startDt}
-            onChange={(d) => d && setStartDt(d)}
-            showTimeSelect
-            dateFormat="dd/MM/yyyy HH:mm"
-            placeholderText={t("asignaciones.form.start")}
-            showIcon
-            icon={<CalendarIcon />}
-            toggleCalendarOnIconClick
-            wrapperClassName="w-full"
-            className="w-full border rounded px-3 py-2"
+          <DatePickerField
+            label={t("asignaciones.form.start")}
+            value={startDate}
+            onChange={setStartDate}
+            max={endDate || undefined}
           />
           <div className="text-xs text-gray-500 mt-1">{t("asignaciones.form.dateHint")}</div>
         </div>
 
         <div className="w-full">
-          <DatePicker
-            selected={endDt}
-            onChange={(d) => d && setEndDt(d)}
-            showTimeSelect
-            minDate={startDt}
-            dateFormat="dd/MM/yyyy HH:mm"
-            placeholderText={t("asignaciones.form.end")}
-            showIcon
-            icon={<CalendarIcon />}
-            toggleCalendarOnIconClick
-            wrapperClassName="w-full"
-            className="w-full border rounded px-3 py-2"
+          <DatePickerField
+            label={t("asignaciones.form.end")}
+            value={endDate}
+            onChange={setEndDate}
+            min={startDate || undefined}
           />
         </div>
 
-        <select className="border rounded px-3 py-2" value={active ? "activa" : "inactiva"} onChange={(e) => setActive(e.target.value === "activa")}>
+        <select
+          className="border rounded px-3 py-2"
+          value={active ? "activa" : "inactiva"}
+          onChange={(e) => setActive(e.target.value === "activa")}
+        >
           <option value="activa">{t("asignaciones.status.active")}</option>
           <option value="inactiva">{t("asignaciones.status.inactive")}</option>
         </select>
 
-        <button className="bg-blue-600 text-white rounded px-4 py-2">{t("common.actions.save")}</button>
+        <button className="bg-blue-600 text-white rounded px-4 py-2" disabled={!!dateRangeError}>
+          {t("common.actions.save")}
+        </button>
+
+        {dateRangeError ? (
+          <div className="md:col-span-2 text-xs text-red-600">
+            {dateRangeError}
+          </div>
+        ) : null}
       </form>
 
       <div className="mt-6 bg-white border rounded p-4">
@@ -310,7 +343,11 @@ export default function AsignacionesPage() {
 
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">{t("asignaciones.filters.statusLabel")}</span>
-            <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+            <select
+              className="border rounded px-3 py-2"
+              value={estadoFilter}
+              onChange={(e) => setEstadoFilter(e.target.value)}
+            >
               {ESTADOS.map((x) => (
                 <option key={x} value={x}>
                   {x === "todos"
@@ -348,7 +385,8 @@ export default function AsignacionesPage() {
 
               <tbody>
                 {filteredRows.map((r) => {
-                  const trackerText = r.tracker_label || r.tracker_name || r.tracker_email || shortId(r.tracker_user_id);
+                  const trackerText =
+                    r.tracker_label || r.tracker_name || r.tracker_email || shortId(r.tracker_user_id);
                   const geofenceText = r.geofence_name || shortId(r.geofence_id) || "—";
                   const startText = formatDateDDMMYYYY(r.start_date) || "—";
                   const endText = formatDateDDMMYYYY(r.end_date) || "—";
@@ -361,19 +399,28 @@ export default function AsignacionesPage() {
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap" title={String(geofenceText)}>
+                        <span
+                          className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap"
+                          title={String(geofenceText)}
+                        >
                           {geofenceText}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap" title={String(r.start_date)}>
+                        <span
+                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
+                          title={String(r.start_date)}
+                        >
                           {startText}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap" title={String(r.end_date)}>
+                        <span
+                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
+                          title={String(r.end_date)}
+                        >
                           {endText}
                         </span>
                       </td>
@@ -391,7 +438,11 @@ export default function AsignacionesPage() {
                       </td>
 
                       <td className="py-2 pr-3 text-right">
-                        <button type="button" className="border rounded px-3 py-1 hover:bg-gray-50" onClick={() => toggleActive(r)}>
+                        <button
+                          type="button"
+                          className="border rounded px-3 py-1 hover:bg-gray-50"
+                          onClick={() => toggleActive(r)}
+                        >
                           {r.active ? t("asignaciones.actions.deactivate") : t("asignaciones.actions.activate")}
                         </button>
                       </td>

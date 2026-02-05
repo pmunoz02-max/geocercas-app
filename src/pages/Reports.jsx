@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
+import DatePickerField from "../components/ui/DatePickerField";
 
 function toCsvValue(v) {
   const s = v === null || v === undefined ? "" : String(v);
@@ -242,15 +243,23 @@ export default function Reports() {
 
       <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
         <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersFrom", { defaultValue: "Desde" })}</label>
-            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="block border rounded-lg px-2 py-1 mt-1" />
-          </div>
+          <DatePickerField
+            label={t("reportes.filtersFrom", { defaultValue: "Desde" })}
+            value={start}
+            onChange={setStart}
+            max={end || undefined}
+            className="min-w-[170px]"
+            inputClassName="px-2 py-1"
+          />
 
-          <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersTo", { defaultValue: "Hasta" })}</label>
-            <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="block border rounded-lg px-2 py-1 mt-1" />
-          </div>
+          <DatePickerField
+            label={t("reportes.filtersTo", { defaultValue: "Hasta" })}
+            value={end}
+            onChange={setEnd}
+            min={start || undefined}
+            className="min-w-[170px]"
+            inputClassName="px-2 py-1"
+          />
 
           <button
             onClick={loadReport}
