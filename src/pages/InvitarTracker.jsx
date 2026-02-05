@@ -1,4 +1,3 @@
-@'
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthProvider";
@@ -316,4 +315,3 @@ export default function InvitarTracker() {
     </div>
   );
 }
-'@ | Set-Content -Encoding UTF8 src\pages\InvitarTracker.jsx
