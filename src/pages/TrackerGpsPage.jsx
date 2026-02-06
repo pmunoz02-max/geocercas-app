@@ -5,12 +5,14 @@ import { supabase } from "../lib/supabaseClient";
 /**
  * TrackerGpsPage — Universal + permanente (DB-driven)
  *
- * FIX CRÍTICO:
- * - NO hacer signOut/clear storage mientras la sesión del magiclink aún se está hidratando.
- * - Primero: consumir tokens del URL (getSessionFromUrl)
- * - Luego: validar mismatch real (si hay sesión y email distinto a invited_email)
- * - En tracker flow: intentar "swap" (signOut del admin + re-consumir URL) antes de bloquear.
+ * FIX DEFINITIVO:
+ * - Soporta PKCE (code) + OTP (token_hash/type) + hash tokens.
+ * - Consume sesión DESDE URL antes de cualquier guard.
+ * - NO borra tokens sb-* manualmente.
+ * - Solo bloquea por mismatch REAL (si hay sesión y email != invited_email).
  */
+
+const BUILD = "tracker_gps_v13_pkce";
 
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
@@ -28,24 +30,28 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function readQuery() {
-  const url = new URL(window.location.href);
-  const invite_id = url.searchParams.get("invite_id") || "";
-  const org_id = url.searchParams.get("org_id") || "";
-  const tg_flow = url.searchParams.get("tg_flow") || "";
-  const invited_email = (url.searchParams.get("invited_email") || "").trim();
-  return { invite_id, org_id, tg_flow, invited_email };
+function normEmail(v) {
+  return String(v || "").trim().toLowerCase();
 }
 
-function stripQueryParams(keys = []) {
-  try {
-    const url = new URL(window.location.href);
-    keys.forEach((k) => url.searchParams.delete(k));
-    const next = url.pathname + (url.search ? url.search : "") + (url.hash || "");
-    window.history.replaceState({}, "", next);
-  } catch {
-    // noop
-  }
+function readQuery() {
+  const url = new URL(window.location.href);
+  return {
+    invite_id: url.searchParams.get("invite_id") || "",
+    org_id: url.searchParams.get("org_id") || "",
+    tg_flow: url.searchParams.get("tg_flow") || "",
+    invited_email: (url.searchParams.get("invited_email") || "").trim(),
+
+    // PKCE / OTP params (pueden venir según el flujo)
+    code: url.searchParams.get("code"),
+    token_hash: url.searchParams.get("token_hash"),
+    type: url.searchParams.get("type"),
+  };
+}
+
+function normalizeType(raw) {
+  const v = String(raw || "").toLowerCase();
+  return v === "magiclink" || v === "recovery" || v === "signup" || v === "invite" ? v : null;
 }
 
 function hasHashTokens() {
@@ -53,8 +59,33 @@ function hasHashTokens() {
   return h.includes("access_token=") || h.includes("refresh_token=");
 }
 
-function normEmail(v) {
-  return String(v || "").trim().toLowerCase();
+function cleanAuthArtifactsFromUrl() {
+  // Limpia code/token_hash/type + hash tokens del address bar (sin recargar)
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("code");
+    url.searchParams.delete("token_hash");
+    url.searchParams.delete("type");
+    // NO borramos invite_id/org_id/tg_flow/invited_email aquí: eso se maneja después del accept.
+    const next = url.pathname + (url.search ? url.search : "");
+    window.history.replaceState({}, "", next); // sin hash
+    if (window.location.hash) {
+      window.history.replaceState({}, "", next); // doble por seguridad
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function stripQueryParams(keys = []) {
+  try {
+    const url = new URL(window.location.href);
+    keys.forEach((k) => url.searchParams.delete(k));
+    const next = url.pathname + (url.search ? url.search : "");
+    window.history.replaceState({}, "", next);
+  } catch {
+    // noop
+  }
 }
 
 async function fetchJsonWithTimeout(url, opts, ms, label) {
@@ -87,10 +118,8 @@ export default function TrackerGpsPage() {
   const [sendStatus, setSendStatus] = useState("idle");
   const [sendError, setSendError] = useState(null);
 
-  // diag real (uid/email)
   const [diag, setDiag] = useState({ uid: null, email: null });
 
-  // gating
   const [canSend, setCanSend] = useState(false);
   const [gateMsg, setGateMsg] = useState("Esperando asignación…");
   const [gateInfo, setGateInfo] = useState(null);
@@ -102,7 +131,6 @@ export default function TrackerGpsPage() {
   const gatePollRef = useRef(null);
   const startedRef = useRef(false);
 
-  // refs anti-closure
   const canSendRef = useRef(false);
   const intervalSecRef = useRef(30);
   const gateInfoRef = useRef(null);
@@ -110,7 +138,6 @@ export default function TrackerGpsPage() {
   const acceptedInviteRef = useRef(false);
   const orgIdFromUrlRef = useRef("");
 
-  // swap guard UI
   const swapCheckedRef = useRef(false);
   const [swapBlocked, setSwapBlocked] = useState(false);
   const [swapInfo, setSwapInfo] = useState({ expected: "", current: "" });
@@ -125,14 +152,15 @@ export default function TrackerGpsPage() {
     gateInfoRef.current = gateInfo || null;
   }, [gateInfo]);
 
-  async function refreshAuthDiagBestEffort() {
+  async function refreshAuthDiag() {
     setStep("auth:getSession");
     try {
       const { data } = await withTimeout(supabase.auth.getSession(), 6000, "getSession");
-      const u = data?.session?.user || null;
+      const s = data?.session || null;
+      const u = s?.user || null;
       if (u?.id) {
         setDiag({ uid: u.id, email: u.email || null });
-        return { uid: u.id, email: u.email || null, access_token: data?.session?.access_token || "" };
+        return { uid: u.id, email: u.email || null, access_token: s?.access_token || "" };
       }
     } catch {
       // ignore
@@ -141,19 +169,7 @@ export default function TrackerGpsPage() {
     return { uid: null, email: null, access_token: "" };
   }
 
-  async function consumeSessionFromUrlBestEffort() {
-    // Importante: en /tracker-gps el magiclink llega con hash tokens.
-    // Esto los consume y los guarda en storage/session.
-    setStep("auth:getSessionFromUrl");
-    try {
-      await withTimeout(supabase.auth.getSessionFromUrl({ storeSession: true }), 7000, "getSessionFromUrl");
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async function waitForSession(msTotal = 8000) {
+  async function waitForSession(msTotal = 9000) {
     const start = Date.now();
     while (Date.now() - start < msTotal) {
       const { data } = await supabase.auth.getSession();
@@ -164,73 +180,69 @@ export default function TrackerGpsPage() {
     return null;
   }
 
-  // ✅ Session Swap Guard (tracker-flow seguro)
-  async function runSessionSwapGuardIfNeeded() {
+  async function consumeSessionFromUrlUniversal() {
+    // Soporta: hash tokens, code PKCE, token_hash+type OTP
+    const q = readQuery();
+    const type = normalizeType(q.type);
+
+    setStep("auth:consume_url:start");
+
+    // 1) Hash tokens / url detect
+    if (hasHashTokens()) {
+      try {
+        await withTimeout(supabase.auth.getSessionFromUrl({ storeSession: true }), 8000, "getSessionFromUrl");
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2) PKCE code
+    if (q.code) {
+      setStep("auth:exchangeCodeForSession");
+      const { error } = await supabase.auth.exchangeCodeForSession(q.code);
+      if (error) throw new Error(error.message || "exchange_code_error");
+    }
+
+    // 3) token_hash + type (otp verify)
+    if (q.token_hash && type) {
+      setStep("auth:verifyOtp");
+      const { error } = await supabase.auth.verifyOtp({ token_hash: q.token_hash, type });
+      if (error) throw new Error(error.message || "verify_otp_error");
+    }
+
+    // Esperar que quede persistida
+    const s = await waitForSession(9000);
+    if (!s) throw new Error("No se pudo crear sesión desde el link. Abre el enlace nuevamente.");
+
+    // Limpia artefactos auth del URL para evitar re-procesos
+    cleanAuthArtifactsFromUrl();
+
+    setStep("auth:consume_url:ok");
+    return s;
+  }
+
+  // ✅ Guard: SOLO mismatch real (con sesión existente)
+  async function runInviteEmailGuardIfNeeded(session) {
     if (swapCheckedRef.current) return;
     swapCheckedRef.current = true;
 
     const q = readQuery();
     const isTrackerFlow = String(q.tg_flow || "").toLowerCase() === "tracker";
     const expected = normEmail(q.invited_email || "");
-
     if (!isTrackerFlow || !expected) return;
 
-    setStep("swap_guard:start");
+    const current = normEmail(session?.user?.email || "");
 
-    // 1) Consumir tokens del URL (si existen)
-    const hadHash = hasHashTokens();
-    if (hadHash) {
-      await consumeSessionFromUrlBestEffort();
-    }
+    // Si por alguna razón no hay email en sesión, no bloqueamos aquí
+    if (!current) return;
 
-    // 2) Esperar a que la sesión quede lista
-    const s1 = await waitForSession(8000);
-    const current1 = normEmail(s1?.user?.email || "");
-
-    // Caso A: sesión lista y coincide -> OK
-    if (current1 && current1 === expected) {
-      setStep("swap_guard:ok");
-      return;
-    }
-
-    // Caso B: hay sesión pero NO coincide -> intentar swap (signOut viejo + re-consumir URL)
-    if (current1 && current1 !== expected) {
-      setStep("swap_guard:mismatch_try_swap");
-      // Si NO hay hash tokens, no podemos hacer swap; bloqueamos sin destruir nada.
-      if (!hadHash) {
-        setSwapInfo({ expected, current: current1 });
-        setSwapBlocked(true);
-        throw new Error("swap_guard_blocked");
-      }
-
-      try {
-        await supabase.auth.signOut();
-      } catch {
-        // ignore
-      }
-
-      // Re-consumir el hash (todavía está en URL)
-      await consumeSessionFromUrlBestEffort();
-      const s2 = await waitForSession(8000);
-      const current2 = normEmail(s2?.user?.email || "");
-
-      if (current2 && current2 === expected) {
-        setStep("swap_guard:swap_ok");
-        return;
-      }
-
-      setSwapInfo({ expected, current: current2 || "(sin sesión)" });
+    if (current !== expected) {
+      setSwapInfo({ expected, current });
       setSwapBlocked(true);
-      throw new Error("swap_guard_blocked");
+      throw new Error("invite_email_mismatch");
     }
-
-    // Caso C: todavía no hay sesión -> NO es mismatch, es "sin sesión"
-    // No bloqueamos con "sesión incorrecta"; lo tratamos como error amigable más abajo.
-    setStep("swap_guard:no_session_yet");
-    return;
   }
 
-  // ✅ Gate DB-driven con timeout duro
   async function refreshGate() {
     try {
       setStep("gate:rpc tracker_can_send");
@@ -265,8 +277,7 @@ export default function TrackerGpsPage() {
     }
   }
 
-  // ✅ aceptar invitación si viene invite_id (Bearer-first)
-  async function acceptInviteIfPresent() {
+  async function acceptInviteIfPresent(access_token) {
     if (acceptedInviteRef.current) return;
     acceptedInviteRef.current = true;
 
@@ -276,12 +287,7 @@ export default function TrackerGpsPage() {
 
     setStep("invite:accept_tracker_invite");
 
-    // requiere uid real
-    const a = await refreshAuthDiagBestEffort();
-    if (!a?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
-
-    const token = a?.access_token || "";
-    if (!token) throw new Error("No access_token. Abre el link de invitación nuevamente.");
+    if (!access_token) throw new Error("No access_token. Abre el link de invitación nuevamente.");
 
     const res = await fetchJsonWithTimeout(
       "/api/auth/session",
@@ -290,7 +296,7 @@ export default function TrackerGpsPage() {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${access_token}`,
         },
         credentials: "include",
         body: JSON.stringify({ action: "accept_tracker_invite", invite_id }),
@@ -433,7 +439,7 @@ export default function TrackerGpsPage() {
 
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       if (!alive) return;
-      await refreshAuthDiagBestEffort();
+      await refreshAuthDiag();
       await refreshGate();
     });
 
@@ -445,22 +451,19 @@ export default function TrackerGpsPage() {
         const q = readQuery();
         if (q.org_id) orgIdFromUrlRef.current = q.org_id;
 
-        // ✅ 0) Consumir tokens del URL ANTES de cualquier chequeo
-        if (hasHashTokens()) {
-          await consumeSessionFromUrlBestEffort();
-        }
+        // ✅ 1) Consumir sesión desde URL (PKCE/OTP/hash)
+        const session = await consumeSessionFromUrlUniversal();
 
-        // ✅ 1) Swap guard seguro (no destruye tokens por "no session yet")
-        await runSessionSwapGuardIfNeeded();
+        if (!alive) return;
 
-        // ✅ 2) Auth base
-        const a = await refreshAuthDiagBestEffort();
-        if (!a?.uid) {
-          throw new Error("No autenticado. Abre el link de invitación nuevamente.");
-        }
+        // ✅ 2) Guard por invited_email SOLO con sesión real
+        await runInviteEmailGuardIfNeeded(session);
 
-        // ✅ 3) aceptar invite si viene
-        await acceptInviteIfPresent();
+        // ✅ 3) diag
+        setDiag({ uid: session.user.id, email: session.user.email || null });
+
+        // ✅ 4) aceptar invite si viene
+        await acceptInviteIfPresent(session.access_token);
 
         if (!alive) return;
 
@@ -477,7 +480,7 @@ export default function TrackerGpsPage() {
       } catch (e) {
         if (!alive) return;
 
-        if (String(e?.message || "") === "swap_guard_blocked") {
+        if (String(e?.message || "") === "invite_email_mismatch") {
           setLoading(false);
           return;
         }
@@ -498,10 +501,7 @@ export default function TrackerGpsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --------
-  // UI states
-  // --------
-
+  // UI
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-400">
@@ -509,7 +509,7 @@ export default function TrackerGpsPage() {
           <div className="text-sm">Cargando tracker…</div>
           <div className="text-xs opacity-70 mt-2">step: {step}</div>
           <div className="text-xs opacity-70 mt-1">
-            diag: {JSON.stringify({ uid: diag?.uid, email: diag?.email })}
+            build: {BUILD} — diag: {JSON.stringify({ uid: diag?.uid, email: diag?.email })}
           </div>
         </div>
       </div>
@@ -521,30 +521,14 @@ export default function TrackerGpsPage() {
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white border rounded-xl p-6 shadow">
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Sesión incorrecta</h2>
-
           <p className="text-sm text-slate-700">Esta sesión no corresponde al tracker invitado.</p>
 
           <div className="mt-3 text-xs bg-slate-50 border rounded p-3 overflow-auto">
-            <div>
-              <b>Esperado:</b> {swapInfo.expected || "—"}
-            </div>
-            <div>
-              <b>Actual:</b> {swapInfo.current || "—"}
-            </div>
+            <div><b>Esperado:</b> {swapInfo.expected || "—"}</div>
+            <div><b>Actual:</b> {swapInfo.current || "—"}</div>
           </div>
 
-          <div className="mt-4 text-sm text-slate-700">
-            Abre el enlace del email nuevamente (o en incógnito si estás logueado como admin).
-          </div>
-
-          <button
-            className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-white"
-            onClick={() => window.location.reload()}
-          >
-            Entendido
-          </button>
-
-          <div className="mt-3 text-[11px] opacity-70">step: {step}</div>
+          <div className="mt-3 text-[11px] opacity-70">build: {BUILD} — step: {step}</div>
         </div>
       </div>
     );
@@ -558,32 +542,14 @@ export default function TrackerGpsPage() {
           <p className="text-sm text-gray-700 mb-4">{error}</p>
 
           <div className="text-xs bg-gray-100 p-3 rounded overflow-auto">
-            <div>
-              <b>step:</b> {step}
-            </div>
-            <div>
-              <b>uid:</b> {diag?.uid || "—"}
-            </div>
-            <div>
-              <b>email:</b> {diag?.email || "—"}
-            </div>
-            <div>
-              <b>permission:</b> {permission}
-            </div>
-            <div>
-              <b>canSend:</b> {String(canSend)}
-            </div>
-            <div>
-              <b>gateMsg:</b> {gateMsg}
-            </div>
+            <div><b>build:</b> {BUILD}</div>
+            <div><b>step:</b> {step}</div>
+            <div><b>uid:</b> {diag?.uid || "—"}</div>
+            <div><b>email:</b> {diag?.email || "—"}</div>
+            <div><b>permission:</b> {permission}</div>
+            <div><b>canSend:</b> {String(canSend)}</div>
+            <div><b>gateMsg:</b> {gateMsg}</div>
           </div>
-
-          <button
-            className="mt-4 w-full rounded-lg bg-slate-900 py-3 text-white"
-            onClick={() => window.location.reload()}
-          >
-            Reintentar
-          </button>
         </div>
       </div>
     );
@@ -601,7 +567,7 @@ export default function TrackerGpsPage() {
         <p className="text-xs text-emerald-800 mt-1">
           Estado: <b>{canSend ? "Enviando ✅" : "En espera…"}</b> — {gateMsg}{" "}
           <span className="opacity-80">
-            diag={JSON.stringify({ uid: diag?.uid, email: diag?.email })}
+            build={BUILD} diag={JSON.stringify({ uid: diag?.uid, email: diag?.email })}
           </span>
         </p>
 
@@ -639,13 +605,9 @@ export default function TrackerGpsPage() {
           </div>
         )}
 
-        <div className="mt-4 text-[11px] text-emerald-900/80">
-          Tip: si no hay asignación activa, el tracker queda en espera y empieza a enviar
-          automáticamente cuando se active.
-        </div>
-
         <div className="mt-3 text-[11px] opacity-70">step: {step}</div>
       </div>
     </div>
   );
 }
+
