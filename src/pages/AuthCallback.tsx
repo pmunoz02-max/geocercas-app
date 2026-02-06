@@ -115,9 +115,6 @@ export default function AuthCallback() {
           (parsed.params.get("org_id") || "").trim() ||
           getParamFromPath(nextPath, "org_id");
 
-        // forzar swap siempre en tracker flow
-        const forceSwap = isTrackerFlow;
-
         const code = parsed.params.get("code");
         const token_hash = parsed.params.get("token_hash");
         const type = normalizeType(parsed.params.get("type"));
@@ -125,22 +122,12 @@ export default function AuthCallback() {
         setStep(
           `params_detected: code=${code ? "YES" : "NO"} token_hash=${token_hash ? "YES" : "NO"} type=${
             type || "null"
-          } trackerFlow=${isTrackerFlow ? "YES" : "NO"} forceSwap=${forceSwap ? "YES" : "NO"} next=${
-            nextPath ? "YES" : "NO"
-          } org_id=${orgId ? "YES" : "NO"} hashTokens=${hasInviteTokensInHash() ? "YES" : "NO"}`
+          } trackerFlow=${isTrackerFlow ? "YES" : "NO"} next=${nextPath ? "YES" : "NO"} org_id=${
+            orgId ? "YES" : "NO"
+          } hashTokens=${hasInviteTokensInHash() ? "YES" : "NO"}`
         );
 
-        // ✅ 0) Tracker flow: cerrar sesión y limpiar tokens para no heredar rol/org anterior
-        if (forceSwap) {
-          setStep("force_swap:signOut+clearStorage");
-          try {
-            await supabase.auth.signOut();
-          } catch {}
-          clearSbTokensBestEffort();
-          await sleep(200);
-        }
-
-        // ✅ 1) Consumir sesión desde URL
+        // ✅ 1) Consumir sesión desde URL (NO hacer signOut antes)
         setStep("getSessionFromUrl...");
         try {
           await supabase.auth.getSessionFromUrl({ storeSession: true });
@@ -194,12 +181,19 @@ export default function AuthCallback() {
           return;
         }
 
-        // ✅ 4) Tracker flow: fijar org invitada como org activa (clave para multi-org)
-        if (isTrackerFlow && orgId) {
-          setStep("tracker_flow:set_last_org");
-          try {
-            localStorage.setItem(LAST_ORG_KEY, orgId);
-          } catch {}
+        // ✅ 4) Tracker flow: limpiar tokens viejos + fijar org invitada como org activa
+        // IMPORTANTE: NO signOut aquí (ya consumimos la sesión del link)
+        if (isTrackerFlow) {
+          setStep("tracker_flow:clear_context_keep_session");
+          clearSbTokensBestEffort();
+          await sleep(100);
+
+          if (orgId) {
+            setStep("tracker_flow:set_last_org");
+            try {
+              localStorage.setItem(LAST_ORG_KEY, orgId);
+            } catch {}
+          }
         }
 
         // ✅ 5) Redirect a next si viene (preferido)
@@ -252,7 +246,15 @@ export default function AuthCallback() {
         <div>
           <b>location.href</b>
         </div>
-        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
+        <pre
+          style={{
+            whiteSpace: "pre-wrap",
+            background: "#111",
+            color: "#0f0",
+            padding: 12,
+            borderRadius: 8,
+          }}
+        >
           {String(window.location.href)}
         </pre>
       </div>
