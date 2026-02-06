@@ -1,5 +1,5 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V32 – WebView/TWA safe: NO setSession(), solo token en memoria + bootstrap RPC + redirect
+// CALLBACK-V34 – Universal: soporta hash access_token Y PKCE code exchange
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase, setMemoryAccessToken } from "../supabaseClient";
@@ -8,6 +8,7 @@ type Diag = {
   step: string;
   next?: string;
   hasAccessToken?: boolean;
+  hasCode?: boolean;
   bootstrapOrgId?: string;
   error?: string;
 };
@@ -17,10 +18,8 @@ function parseHashParams(hash: string) {
   const sp = new URLSearchParams(h);
   const access_token = sp.get("access_token") || "";
   const refresh_token = sp.get("refresh_token") || "";
-  const token_type = sp.get("token_type") || "";
-  const expires_in = sp.get("expires_in") || "";
   const error = sp.get("error") || sp.get("error_description") || "";
-  return { access_token, refresh_token, token_type, expires_in, error };
+  return { access_token, refresh_token, error };
 }
 
 function safeNext(raw: string | null | undefined) {
@@ -39,77 +38,89 @@ export default function AuthCallback() {
     fired.current = true;
 
     (async () => {
+      const next = safeNext(searchParams.get("next") || "/inicio");
       try {
-        setDiag({ step: "parse_url" });
+        setDiag({ step: "parse_url", next });
 
-        const next = safeNext(searchParams.get("next") || "/inicio");
-        const { access_token, error } = parseHashParams(window.location.hash || "");
+        const code = searchParams.get("code") || ""; // PKCE flow
+        const { access_token, refresh_token, error } = parseHashParams(window.location.hash || "");
 
         setDiag({
-          step: "hash_parsed",
+          step: "parsed",
           next,
           hasAccessToken: !!access_token,
+          hasCode: !!code,
           error: error || undefined,
         });
 
+        // 1) error explícito desde supabase
         if (error) {
           const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
-          try {
-            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-          } catch {}
+          try { window.history.replaceState({}, document.title, window.location.pathname + window.location.search); } catch {}
           window.location.replace(target);
           return;
         }
 
-        if (!access_token) {
-          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
-          try {
-            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-          } catch {}
-          window.location.replace(target);
+        // 2) Si vino en HASH (implicit)
+        if (access_token) {
+          setDiag({ step: "signout_local", next, hasAccessToken: true });
+          try { await supabase.auth.signOut({ scope: "local" }); } catch {}
+
+          // Si trae refresh_token, fija sesión completa
+          if (refresh_token) {
+            setDiag({ step: "set_session_from_hash", next, hasAccessToken: true });
+            const { error: setErr } = await supabase.auth.setSession({ access_token, refresh_token });
+            if (setErr) throw setErr;
+          }
+
+          setDiag({ step: "set_memory_token", next, hasAccessToken: true });
+          setMemoryAccessToken(access_token);
+
+          setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
+          const { data, error: rpcError } = await supabase.rpc("bootstrap_user_after_login");
+          if (rpcError) throw rpcError;
+
+          try { window.history.replaceState({}, document.title, window.location.pathname + window.location.search); } catch {}
+          setDiag({ step: "redirect", next, bootstrapOrgId: data ? String(data) : undefined });
+          window.location.replace(next);
           return;
         }
 
-        // ✅ token en memoria (NO setSession)
-        setDiag({ step: "set_memory_token", next, hasAccessToken: true });
-        setMemoryAccessToken(access_token);
+        // 3) Si vino en CODE (PKCE) → intercambiar por sesión
+        if (code) {
+          setDiag({ step: "exchange_code_for_session", next, hasCode: true });
 
-        // ✅ bootstrap post-login
-        setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
-        const { data, error: rpcError } = await supabase.rpc("bootstrap_user_after_login");
+          // Supabase-js v2: intercambia code por session y la guarda (persistSession=true lo persiste)
+          const { data, error: exErr } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          if (exErr) throw exErr;
 
-        if (rpcError) {
-          const msg = rpcError.message || "bootstrap_failed";
-          setDiag({ step: "bootstrap_failed", next, hasAccessToken: true, error: msg });
-          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
-          try {
-            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-          } catch {}
-          window.location.replace(target);
+          const sess = data?.session;
+          const at = sess?.access_token || "";
+          if (!at) throw new Error("exchange_no_access_token");
+
+          // Evita “sesión pegada” y asegura el token en memoria para tus RPC/fetch wrapper
+          setDiag({ step: "set_memory_token", next, hasAccessToken: true });
+          setMemoryAccessToken(at);
+
+          setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
+          const { data: orgId, error: rpcError } = await supabase.rpc("bootstrap_user_after_login");
+          if (rpcError) throw rpcError;
+
+          try { window.history.replaceState({}, document.title, window.location.pathname + window.location.search); } catch {}
+          setDiag({ step: "redirect", next, bootstrapOrgId: orgId ? String(orgId) : undefined });
+          window.location.replace(next);
           return;
         }
 
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        } catch {}
-
-        setDiag({
-          step: "redirect",
-          next,
-          hasAccessToken: true,
-          bootstrapOrgId: data ? String(data) : undefined,
-        });
-
-        window.location.replace(next);
+        // 4) No vino ni hash token ni code
+        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
+        try { window.history.replaceState({}, document.title, window.location.pathname + window.location.search); } catch {}
+        window.location.replace(target);
       } catch (e: any) {
         const msg = String(e?.message || e || "callback_error");
-        const next = safeNext(searchParams.get("next") || "/inicio");
         setDiag({ step: "fatal", next, error: msg });
-
         const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        } catch {}
+        try { window.history.replaceState({}, document.title, window.location.pathname + window.location.search); } catch {}
         window.location.replace(target);
       }
     })();
@@ -126,6 +137,7 @@ export default function AuthCallback() {
             <div>step: {diag.step}</div>
             <div>next: {diag.next || "-"}</div>
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
+            <div>hasCode: {String(diag.hasCode ?? "-")}</div>
             <div>bootstrapOrgId: {diag.bootstrapOrgId || "-"}</div>
             <div>error: {diag.error || "-"}</div>
           </div>
