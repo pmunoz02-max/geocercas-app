@@ -82,6 +82,31 @@ function buildTrackerUrl(invited_email?: string) {
     : `/tracker-gps?tg_flow=tracker`;
 }
 
+function normalizeNextToPath(nextRaw: string): { path: string; isExternal: boolean } {
+  const next = String(nextRaw || "").trim();
+  if (!next) return { path: "", isExternal: false };
+
+  // If it's a full URL, keep only pathname+search+hash (same-origin expected)
+  if (/^https?:\/\//i.test(next)) {
+    try {
+      const u = new URL(next);
+      return { path: `${u.pathname}${u.search}${u.hash}`, isExternal: true };
+    } catch {
+      return { path: "/inicio", isExternal: true };
+    }
+  }
+
+  // If it's relative without leading slash, normalize
+  if (!next.startsWith("/")) return { path: `/${next}`, isExternal: false };
+
+  return { path: next, isExternal: false };
+}
+
+function isTrackerNext(path: string) {
+  const p = String(path || "");
+  return p === "/tracker-gps" || p.startsWith("/tracker-gps?");
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
 
@@ -107,23 +132,25 @@ export default function AuthCallback() {
           return;
         }
 
-        const next = parsed.params.get("next") || "";
+        const nextRaw = parsed.params.get("next") || "";
+        const { path: nextPath } = normalizeNextToPath(nextRaw);
 
         // ---- detectar flow tracker ----
         const tg_flow =
           parsed.params.get("tg_flow") ||
-          (next.includes("tg_flow=tracker") ? "tracker" : "");
+          (nextPath.includes("tg_flow=tracker") ? "tracker" : "") ||
+          (isTrackerNext(nextPath) ? "tracker" : "");
 
         const force =
           parsed.params.get("force") ||
-          (next.includes("force=1") ? "1" : "0");
+          (nextPath.includes("force=1") ? "1" : "0");
 
         const isTrackerFlow = String(tg_flow).toLowerCase() === "tracker";
         const forceSwap = force === "1" || isTrackerFlow;
 
         const invited_email =
           (parsed.params.get("invited_email") || "").trim() ||
-          extractInvitedEmailFromNext(next);
+          extractInvitedEmailFromNext(nextPath);
 
         const code = parsed.params.get("code");
         const token_hash = parsed.params.get("token_hash");
@@ -136,10 +163,10 @@ export default function AuthCallback() {
             isTrackerFlow ? "YES" : "NO"
           } forceSwap=${forceSwap ? "YES" : "NO"} hashTokens=${
             hasInviteTokensInHash() ? "YES" : "NO"
-          } invited_email=${invited_email ? "YES" : "NO"}`
+          } invited_email=${invited_email ? "YES" : "NO"} next=${nextPath ? "YES" : "NO"}`
         );
 
-        // ✅ 0) Forzar swap SI es tracker flow
+        // ✅ 0) Forzar swap SI es tracker flow (evita que el admin quede logueado)
         if (forceSwap) {
           setStep("force_swap:signOut+clearStorage");
           try {
@@ -209,20 +236,19 @@ export default function AuthCallback() {
         }
 
         // ✅ 4) Redirect por next (si viene)
-        if (next) {
+        if (nextPath) {
           setStep("redirect_next");
-          navigate(next, { replace: true });
+          navigate(nextPath, { replace: true });
           return;
         }
 
-        // ✅ 5) Sin next: decide destino sin llamar RPC (AuthProvider es la única fuente de verdad)
+        // ✅ 5) Sin next: decide destino
         if (isTrackerFlow) {
           setStep("redirect_tracker_flow");
           navigate(buildTrackerUrl(invited_email), { replace: true });
           return;
         }
 
-        // Si hay un org recordado, entramos a inicio (AuthProvider fijará contexto)
         let lastOrg: string | null = null;
         try {
           lastOrg = localStorage.getItem(LAST_ORG_KEY);
