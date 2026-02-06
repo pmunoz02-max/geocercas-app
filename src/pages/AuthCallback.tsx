@@ -9,23 +9,6 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function getSbTokenKeys(): string[] {
-  try {
-    return Object.keys(window.localStorage || {}).filter((k) =>
-      /^sb-.*-auth-token$/i.test(String(k))
-    );
-  } catch {
-    return [];
-  }
-}
-
-function clearSbTokensBestEffort() {
-  try {
-    const keys = getSbTokenKeys();
-    for (const k of keys) window.localStorage.removeItem(k);
-  } catch {}
-}
-
 function parseParamsBoth() {
   const search = window.location.search || "";
   const hashRaw = window.location.hash || "";
@@ -79,10 +62,10 @@ function getParamFromPath(path: string, key: string) {
 export default function AuthCallback() {
   const navigate = useNavigate();
   const parsed = useMemo(() => parseParamsBoth(), []);
+
   const [step, setStep] = useState("init");
   const [err, setErr] = useState<string | null>(null);
   const [sessionExists, setSessionExists] = useState(false);
-  const [sbKeys, setSbKeys] = useState<string[]>([]);
 
   useEffect(() => {
     const run = async () => {
@@ -127,11 +110,13 @@ export default function AuthCallback() {
           } hashTokens=${hasInviteTokensInHash() ? "YES" : "NO"}`
         );
 
-        // ✅ 1) Consumir sesión desde URL (NO hacer signOut antes)
+        // ✅ 1) Consumir sesión desde URL (NO borrar tokens, NO signOut antes)
         setStep("getSessionFromUrl...");
         try {
           await supabase.auth.getSessionFromUrl({ storeSession: true });
-        } catch {}
+        } catch {
+          // seguimos con fallbacks
+        }
 
         // ✅ 2) Fallbacks
         if (code) {
@@ -167,7 +152,6 @@ export default function AuthCallback() {
           const { data } = await supabase.auth.getSession();
           const s = !!data?.session;
           setSessionExists(s);
-          setSbKeys(getSbTokenKeys());
           if (s) {
             ok = true;
             break;
@@ -181,29 +165,29 @@ export default function AuthCallback() {
           return;
         }
 
-        // ✅ 4) Tracker flow: limpiar tokens viejos + fijar org invitada como org activa
-        // IMPORTANTE: NO signOut aquí (ya consumimos la sesión del link)
-        if (isTrackerFlow) {
-          setStep("tracker_flow:clear_context_keep_session");
-          clearSbTokensBestEffort();
-          await sleep(100);
-
-          if (orgId) {
-            setStep("tracker_flow:set_last_org");
-            try {
-              localStorage.setItem(LAST_ORG_KEY, orgId);
-            } catch {}
-          }
+        // ✅ 4) Tracker flow: fijar org invitada como org activa (SIN tocar tokens)
+        if (isTrackerFlow && orgId) {
+          setStep("tracker_flow:set_last_org");
+          try {
+            localStorage.setItem(LAST_ORG_KEY, orgId);
+          } catch {}
         }
 
-        // ✅ 5) Redirect a next si viene (preferido)
+        // ✅ 5) Limpieza de URL (opcional pero recomendado): quita hash con tokens del address bar
+        // Evita re-procesos raros en navegadores y deja la URL limpia.
+        try {
+          if (window.location.hash) {
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          }
+        } catch {}
+
+        // ✅ 6) Redirect
         if (nextPath) {
           setStep("redirect_next");
           navigate(nextPath, { replace: true });
           return;
         }
 
-        // ✅ 6) Sin next: tracker a tracker-gps, otros a inicio
         if (isTrackerFlow) {
           setStep("redirect_tracker_default");
           navigate("/tracker-gps?tg_flow=tracker", { replace: true });
@@ -231,9 +215,6 @@ export default function AuthCallback() {
         </div>
         <div>
           <b>sessionExists:</b> {String(sessionExists)}
-        </div>
-        <div>
-          <b>sbKeys:</b> {sbKeys.length ? sbKeys.join(", ") : "[]"}
         </div>
         {err && (
           <div style={{ color: "#b00020", marginTop: 8 }}>
