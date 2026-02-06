@@ -5,11 +5,11 @@ import { supabase } from "../lib/supabaseClient";
 /**
  * TrackerGpsPage — Universal + permanente (DB-driven)
  *
- * - Fuente de arranque: storage local sb-*-auth-token (sin red).
- * - getSession/getUser: best-effort (no bloquean).
- * - Gate DB-driven: tracker_can_send() decide negocio.
- * - accept_tracker_invite: se ejecuta con Bearer token (no depende de cookies).
- * - Session Swap Guard (tg_flow=tracker + invited_email): evita heredar sesión previa.
+ * FIX CRÍTICO:
+ * - NO hacer signOut/clear storage mientras la sesión del magiclink aún se está hidratando.
+ * - Primero: consumir tokens del URL (getSessionFromUrl)
+ * - Luego: validar mismatch real (si hay sesión y email distinto a invited_email)
+ * - En tracker flow: intentar "swap" (signOut del admin + re-consumir URL) antes de bloquear.
  */
 
 function getSupabaseUrl() {
@@ -22,6 +22,10 @@ function withTimeout(promise, ms, label = "timeout") {
     t = setTimeout(() => reject(new Error(`${label}_after_${ms}ms`)), ms);
   });
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(t));
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function readQuery() {
@@ -44,64 +48,13 @@ function stripQueryParams(keys = []) {
   }
 }
 
-// --------------------
-// AUTH: storage-first
-// --------------------
-
-function getSbAuthTokenKeys() {
-  try {
-    return Object.keys(window.localStorage || {}).filter((x) =>
-      /^sb-.*-auth-token$/i.test(String(x))
-    );
-  } catch {
-    return [];
-  }
+function hasHashTokens() {
+  const h = (window.location.hash || "").toLowerCase();
+  return h.includes("access_token=") || h.includes("refresh_token=");
 }
 
-function clearSbTokensBestEffort() {
-  try {
-    for (const k of getSbAuthTokenKeys()) window.localStorage.removeItem(k);
-  } catch {
-    // ignore
-  }
-}
-
-function readSessionFromLocalStorage() {
-  try {
-    const keys = getSbAuthTokenKeys();
-    const k = keys[0] || "";
-    if (!k) return null;
-
-    const raw = window.localStorage.getItem(k);
-    if (!raw) return null;
-
-    const j = JSON.parse(raw);
-    const s = j?.currentSession || j?.data?.session || j?.session || j || null;
-
-    const access_token = s?.access_token || "";
-    const user = s?.user || null;
-
-    const uid = user?.id || null;
-    const email = user?.email || null;
-
-    if (!access_token || !uid) return null;
-
-    return { access_token, uid, email };
-  } catch {
-    return null;
-  }
-}
-
-async function getAccessTokenBestEffort() {
-  const ls = readSessionFromLocalStorage();
-  if (ls?.access_token) return ls.access_token;
-
-  try {
-    const { data } = await withTimeout(supabase.auth.getSession(), 6000, "getSession");
-    return data?.session?.access_token || "";
-  } catch {
-    return "";
-  }
+function normEmail(v) {
+  return String(v || "").trim().toLowerCase();
 }
 
 async function fetchJsonWithTimeout(url, opts, ms, label) {
@@ -114,9 +67,7 @@ async function fetchJsonWithTimeout(url, opts, ms, label) {
     return { ok: r.ok, status: r.status, json: j };
   } catch (e) {
     throw new Error(
-      `${label}_failed: ${
-        e?.name === "AbortError" ? "aborted" : e?.message || "network"
-      }`
+      `${label}_failed: ${e?.name === "AbortError" ? "aborted" : e?.message || "network"}`
     );
   } finally {
     clearTimeout(t);
@@ -159,7 +110,7 @@ export default function TrackerGpsPage() {
   const acceptedInviteRef = useRef(false);
   const orgIdFromUrlRef = useRef("");
 
-  // swap guard
+  // swap guard UI
   const swapCheckedRef = useRef(false);
   const [swapBlocked, setSwapBlocked] = useState(false);
   const [swapInfo, setSwapInfo] = useState({ expected: "", current: "" });
@@ -174,72 +125,116 @@ export default function TrackerGpsPage() {
     gateInfoRef.current = gateInfo || null;
   }, [gateInfo]);
 
-  async function refreshAuthDiagStorageFirst() {
-    setStep("auth:read_storage");
-    const ls = readSessionFromLocalStorage();
-    if (ls?.uid) {
-      setDiag({ uid: ls.uid, email: ls.email || null });
-      return { uid: ls.uid, email: ls.email || null };
-    }
-
-    setStep("auth:getSession_best_effort");
+  async function refreshAuthDiagBestEffort() {
+    setStep("auth:getSession");
     try {
       const { data } = await withTimeout(supabase.auth.getSession(), 6000, "getSession");
       const u = data?.session?.user || null;
       if (u?.id) {
         setDiag({ uid: u.id, email: u.email || null });
-        return { uid: u.id, email: u.email || null };
+        return { uid: u.id, email: u.email || null, access_token: data?.session?.access_token || "" };
       }
     } catch {
       // ignore
     }
-
     setDiag({ uid: null, email: null });
-    return { uid: null, email: null };
+    return { uid: null, email: null, access_token: "" };
   }
 
-  // ✅ Session Swap Guard (humano-proof)
+  async function consumeSessionFromUrlBestEffort() {
+    // Importante: en /tracker-gps el magiclink llega con hash tokens.
+    // Esto los consume y los guarda en storage/session.
+    setStep("auth:getSessionFromUrl");
+    try {
+      await withTimeout(supabase.auth.getSessionFromUrl({ storeSession: true }), 7000, "getSessionFromUrl");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function waitForSession(msTotal = 8000) {
+    const start = Date.now();
+    while (Date.now() - start < msTotal) {
+      const { data } = await supabase.auth.getSession();
+      const s = data?.session || null;
+      if (s?.access_token && s?.user?.id) return s;
+      await sleep(200);
+    }
+    return null;
+  }
+
+  // ✅ Session Swap Guard (tracker-flow seguro)
   async function runSessionSwapGuardIfNeeded() {
     if (swapCheckedRef.current) return;
     swapCheckedRef.current = true;
 
     const q = readQuery();
     const isTrackerFlow = String(q.tg_flow || "").toLowerCase() === "tracker";
-    const expected = (q.invited_email || "").trim().toLowerCase();
+    const expected = normEmail(q.invited_email || "");
 
-    // Solo aplica si el link trae invited_email
     if (!isTrackerFlow || !expected) return;
 
-    setStep("swap_guard:check");
+    setStep("swap_guard:start");
 
-    const a = await refreshAuthDiagStorageFirst();
-    const current = (a?.email || "").trim().toLowerCase();
+    // 1) Consumir tokens del URL (si existen)
+    const hadHash = hasHashTokens();
+    if (hadHash) {
+      await consumeSessionFromUrlBestEffort();
+    }
 
-    if (!current || current !== expected) {
-      setStep("swap_guard:mismatch_signout");
+    // 2) Esperar a que la sesión quede lista
+    const s1 = await waitForSession(8000);
+    const current1 = normEmail(s1?.user?.email || "");
+
+    // Caso A: sesión lista y coincide -> OK
+    if (current1 && current1 === expected) {
+      setStep("swap_guard:ok");
+      return;
+    }
+
+    // Caso B: hay sesión pero NO coincide -> intentar swap (signOut viejo + re-consumir URL)
+    if (current1 && current1 !== expected) {
+      setStep("swap_guard:mismatch_try_swap");
+      // Si NO hay hash tokens, no podemos hacer swap; bloqueamos sin destruir nada.
+      if (!hadHash) {
+        setSwapInfo({ expected, current: current1 });
+        setSwapBlocked(true);
+        throw new Error("swap_guard_blocked");
+      }
 
       try {
         await supabase.auth.signOut();
       } catch {
         // ignore
       }
-      clearSbTokensBestEffort();
 
-      setSwapInfo({ expected, current: current || "(sin sesión)" });
+      // Re-consumir el hash (todavía está en URL)
+      await consumeSessionFromUrlBestEffort();
+      const s2 = await waitForSession(8000);
+      const current2 = normEmail(s2?.user?.email || "");
+
+      if (current2 && current2 === expected) {
+        setStep("swap_guard:swap_ok");
+        return;
+      }
+
+      setSwapInfo({ expected, current: current2 || "(sin sesión)" });
       setSwapBlocked(true);
       throw new Error("swap_guard_blocked");
     }
+
+    // Caso C: todavía no hay sesión -> NO es mismatch, es "sin sesión"
+    // No bloqueamos con "sesión incorrecta"; lo tratamos como error amigable más abajo.
+    setStep("swap_guard:no_session_yet");
+    return;
   }
 
   // ✅ Gate DB-driven con timeout duro
   async function refreshGate() {
     try {
       setStep("gate:rpc tracker_can_send");
-      const { data, error } = await withTimeout(
-        supabase.rpc("tracker_can_send"),
-        9000,
-        "tracker_can_send"
-      );
+      const { data, error } = await withTimeout(supabase.rpc("tracker_can_send"), 9000, "tracker_can_send");
 
       if (error) {
         setCanSend(false);
@@ -282,10 +277,10 @@ export default function TrackerGpsPage() {
     setStep("invite:accept_tracker_invite");
 
     // requiere uid real
-    const a = await refreshAuthDiagStorageFirst();
+    const a = await refreshAuthDiagBestEffort();
     if (!a?.uid) throw new Error("No autenticado. Abre el link de invitación nuevamente.");
 
-    const token = await getAccessTokenBestEffort();
+    const token = a?.access_token || "";
     if (!token) throw new Error("No access_token. Abre el link de invitación nuevamente.");
 
     const res = await fetchJsonWithTimeout(
@@ -324,7 +319,8 @@ export default function TrackerGpsPage() {
     if (now - lastSentAtRef.current < minMs) return;
     lastSentAtRef.current = now;
 
-    const token = await getAccessTokenBestEffort();
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token || "";
     if (!token) {
       setSendStatus("error");
       setSendError("No access_token. Abre el link de invitación nuevamente.");
@@ -437,7 +433,7 @@ export default function TrackerGpsPage() {
 
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       if (!alive) return;
-      await refreshAuthDiagStorageFirst();
+      await refreshAuthDiagBestEffort();
       await refreshGate();
     });
 
@@ -449,11 +445,16 @@ export default function TrackerGpsPage() {
         const q = readQuery();
         if (q.org_id) orgIdFromUrlRef.current = q.org_id;
 
-        // ✅ 1) Guard primero (si el link trae invited_email)
+        // ✅ 0) Consumir tokens del URL ANTES de cualquier chequeo
+        if (hasHashTokens()) {
+          await consumeSessionFromUrlBestEffort();
+        }
+
+        // ✅ 1) Swap guard seguro (no destruye tokens por "no session yet")
         await runSessionSwapGuardIfNeeded();
 
         // ✅ 2) Auth base
-        const a = await refreshAuthDiagStorageFirst();
+        const a = await refreshAuthDiagBestEffort();
         if (!a?.uid) {
           throw new Error("No autenticado. Abre el link de invitación nuevamente.");
         }
@@ -533,8 +534,7 @@ export default function TrackerGpsPage() {
           </div>
 
           <div className="mt-4 text-sm text-slate-700">
-            Abre el enlace del email nuevamente (idealmente en una ventana incógnito o cerrando
-            sesión del admin antes).
+            Abre el enlace del email nuevamente (o en incógnito si estás logueado como admin).
           </div>
 
           <button

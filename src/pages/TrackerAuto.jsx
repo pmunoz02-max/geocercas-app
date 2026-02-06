@@ -1,7 +1,7 @@
 // src/pages/TrackerAuto.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import Tracker from "./Tracker";
 
 const LAST_ORG_KEY = "app_geocercas_last_org_id";
@@ -21,6 +21,11 @@ function parseQuery() {
     orgId: String(p.get("org_id") || "").trim(),
     tgFlow: String(p.get("tg_flow") || "").trim(),
   };
+}
+
+function hasHashTokens() {
+  const h = (window.location.hash || "").toLowerCase();
+  return h.includes("access_token=") || h.includes("refresh_token=");
 }
 
 export default function TrackerAuto() {
@@ -53,18 +58,24 @@ export default function TrackerAuto() {
         setErr("");
         setMismatch(false);
 
-        // Espera corta para que Supabase hidrate sesión desde tokens del callback
+        // ✅ Consumir tokens del URL si vienen (magic link directo a esta ruta)
+        if (hasHashTokens()) {
+          try {
+            await supabase.auth.getSessionFromUrl({ storeSession: true });
+          } catch {
+            // ignore
+          }
+        }
+
+        // Espera corta para que Supabase hidrate sesión desde tokens
         const start = Date.now();
         let found = null;
 
         while (Date.now() - start < 8000) {
-          const { data, error } = await supabase.auth.getSession();
-          if (error) {
-            // no abortamos; puede ser un estado transitorio
-          }
-
+          const { data } = await supabase.auth.getSession();
           const s = data?.session || null;
-          if (s?.user?.email) {
+
+          if (s?.user?.email && s?.access_token) {
             found = s;
             break;
           }
@@ -80,9 +91,7 @@ export default function TrackerAuto() {
         setSessionExists(has);
         setSessionEmail(se);
 
-        // ✅ Importante:
-        // - Si NO hay sesión aún: NO es mismatch, es "aún no autenticado"
-        // - Solo hay mismatch si HAY sesión y el email no coincide con invitedEmail
+        // mismatch REAL solo si hay sesión y email distinto
         if (has && invitedEmail && se !== invitedEmail) {
           setMismatch(true);
         } else {
@@ -112,9 +121,6 @@ export default function TrackerAuto() {
     navigate("/inicio", { replace: true });
   }
 
-  // =========================
-  // UI
-  // =========================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -140,7 +146,6 @@ export default function TrackerAuto() {
     );
   }
 
-  // Error técnico (excepción)
   if (err) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -159,7 +164,6 @@ export default function TrackerAuto() {
     );
   }
 
-  // ✅ Caso: No hay sesión aún (NO es mismatch). Pedimos abrir link nuevamente.
   if (!sessionExists) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -167,8 +171,8 @@ export default function TrackerAuto() {
           <h2 className="text-xl font-semibold mb-2">No hay sesión activa</h2>
 
           <p className="text-sm text-gray-700">
-            Esta pantalla necesita una sesión de tracker creada desde el enlace del email.
-            Abre el enlace nuevamente (idealmente en incógnito).
+            Esta pantalla necesita una sesión creada desde el enlace del email. Abre el enlace
+            nuevamente (idealmente en incógnito si estabas logueado como admin).
           </p>
 
           <div className="mt-4 text-xs text-gray-500 space-y-1">
@@ -194,16 +198,13 @@ export default function TrackerAuto() {
     );
   }
 
-  // ✅ Caso: Hay sesión pero NO corresponde al email invitado => mismatch REAL
   if (mismatch) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white border rounded-2xl p-6 shadow">
           <h2 className="text-xl font-semibold mb-2">Sesión incorrecta</h2>
 
-          <p className="text-sm text-gray-700">
-            Esta sesión no corresponde al tracker invitado.
-          </p>
+          <p className="text-sm text-gray-700">Esta sesión no corresponde al tracker invitado.</p>
 
           <div className="mt-4 text-xs text-gray-500 space-y-1">
             <div>
@@ -232,6 +233,5 @@ export default function TrackerAuto() {
     );
   }
 
-  // ✅ OK: sesión existe y (si invited_email existe) coincide. Entramos a Tracker.
   return <Tracker />;
 }
