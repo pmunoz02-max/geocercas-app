@@ -23,9 +23,7 @@ function clearSbTokensBestEffort() {
   try {
     const keys = getSbTokenKeys();
     for (const k of keys) window.localStorage.removeItem(k);
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 function parseParamsBoth() {
@@ -33,12 +31,7 @@ function parseParamsBoth() {
   const hashRaw = window.location.hash || "";
   const hash = hashRaw.replace(/^#/, "");
   const combined = [search.replace(/^\?/, ""), hash].filter(Boolean).join("&");
-  return {
-    search,
-    hash: hashRaw,
-    combined,
-    params: new URLSearchParams(combined),
-  };
+  return { search, hash: hashRaw, combined, params: new URLSearchParams(combined) };
 }
 
 function normalizeType(
@@ -46,8 +39,7 @@ function normalizeType(
 ): "magiclink" | "recovery" | "signup" | "invite" | null {
   if (!raw) return null;
   const v = raw.toLowerCase();
-  if (v === "magiclink" || v === "recovery" || v === "signup" || v === "invite")
-    return v as any;
+  if (v === "magiclink" || v === "recovery" || v === "signup" || v === "invite") return v as any;
   return null;
 }
 
@@ -56,60 +48,36 @@ function hasInviteTokensInHash(): boolean {
   return h.includes("access_token=") || h.includes("refresh_token=");
 }
 
-function extractInvitedEmailFromNext(next: string): string {
-  try {
-    if (!next) return "";
-    const u = new URL(next, window.location.origin);
-    return (u.searchParams.get("invited_email") || "").trim();
-  } catch {
-    const idx = next.indexOf("invited_email=");
-    if (idx === -1) return "";
-    const chunk = next.slice(idx + "invited_email=".length);
-    const end = chunk.indexOf("&");
-    const raw = end === -1 ? chunk : chunk.slice(0, end);
-    try {
-      return decodeURIComponent(raw).trim();
-    } catch {
-      return String(raw || "").trim();
-    }
-  }
-}
-
-function buildTrackerUrl(invited_email?: string) {
-  const ie = (invited_email || "").trim();
-  return ie
-    ? `/tracker-gps?tg_flow=tracker&invited_email=${encodeURIComponent(ie)}`
-    : `/tracker-gps?tg_flow=tracker`;
-}
-
-function normalizeNextToPath(nextRaw: string): { path: string; isExternal: boolean } {
+function normalizeNextToPath(nextRaw: string): string {
   const next = String(nextRaw || "").trim();
-  if (!next) return { path: "", isExternal: false };
-
-  // If it's a full URL, keep only pathname+search+hash (same-origin expected)
+  if (!next) return "";
   if (/^https?:\/\//i.test(next)) {
     try {
       const u = new URL(next);
-      return { path: `${u.pathname}${u.search}${u.hash}`, isExternal: true };
+      return `${u.pathname}${u.search}${u.hash}`;
     } catch {
-      return { path: "/inicio", isExternal: true };
+      return "";
     }
   }
-
-  // If it's relative without leading slash, normalize
-  if (!next.startsWith("/")) return { path: `/${next}`, isExternal: false };
-
-  return { path: next, isExternal: false };
+  if (!next.startsWith("/")) return `/${next}`;
+  return next;
 }
 
 function isTrackerNext(path: string) {
-  const p = String(path || "");
-  return p === "/tracker-gps" || p.startsWith("/tracker-gps?");
+  return path === "/tracker-gps" || path.startsWith("/tracker-gps?");
+}
+
+function getParamFromPath(path: string, key: string) {
+  try {
+    const u = new URL(path, window.location.origin);
+    return (u.searchParams.get(key) || "").trim();
+  } catch {
+    return "";
+  }
 }
 
 export default function AuthCallback() {
   const navigate = useNavigate();
-
   const parsed = useMemo(() => parseParamsBoth(), []);
   const [step, setStep] = useState("init");
   const [err, setErr] = useState<string | null>(null);
@@ -133,40 +101,36 @@ export default function AuthCallback() {
         }
 
         const nextRaw = parsed.params.get("next") || "";
-        const { path: nextPath } = normalizeNextToPath(nextRaw);
+        const nextPath = normalizeNextToPath(nextRaw);
 
-        // ---- detectar flow tracker ----
         const tg_flow =
-          parsed.params.get("tg_flow") ||
+          (parsed.params.get("tg_flow") || "").trim() ||
           (nextPath.includes("tg_flow=tracker") ? "tracker" : "") ||
           (isTrackerNext(nextPath) ? "tracker" : "");
 
-        const force =
-          parsed.params.get("force") ||
-          (nextPath.includes("force=1") ? "1" : "0");
-
         const isTrackerFlow = String(tg_flow).toLowerCase() === "tracker";
-        const forceSwap = force === "1" || isTrackerFlow;
 
-        const invited_email =
-          (parsed.params.get("invited_email") || "").trim() ||
-          extractInvitedEmailFromNext(nextPath);
+        // org_id puede venir directo en callback o dentro del next
+        const orgId =
+          (parsed.params.get("org_id") || "").trim() ||
+          getParamFromPath(nextPath, "org_id");
+
+        // forzar swap siempre en tracker flow
+        const forceSwap = isTrackerFlow;
 
         const code = parsed.params.get("code");
         const token_hash = parsed.params.get("token_hash");
         const type = normalizeType(parsed.params.get("type"));
 
         setStep(
-          `params_detected: code=${code ? "YES" : "NO"} token_hash=${
-            token_hash ? "YES" : "NO"
-          } type=${type || "null"} trackerFlow=${
-            isTrackerFlow ? "YES" : "NO"
-          } forceSwap=${forceSwap ? "YES" : "NO"} hashTokens=${
-            hasInviteTokensInHash() ? "YES" : "NO"
-          } invited_email=${invited_email ? "YES" : "NO"} next=${nextPath ? "YES" : "NO"}`
+          `params_detected: code=${code ? "YES" : "NO"} token_hash=${token_hash ? "YES" : "NO"} type=${
+            type || "null"
+          } trackerFlow=${isTrackerFlow ? "YES" : "NO"} forceSwap=${forceSwap ? "YES" : "NO"} next=${
+            nextPath ? "YES" : "NO"
+          } org_id=${orgId ? "YES" : "NO"} hashTokens=${hasInviteTokensInHash() ? "YES" : "NO"}`
         );
 
-        // ✅ 0) Forzar swap SI es tracker flow (evita que el admin quede logueado)
+        // ✅ 0) Tracker flow: cerrar sesión y limpiar tokens para no heredar rol/org anterior
         if (forceSwap) {
           setStep("force_swap:signOut+clearStorage");
           try {
@@ -180,9 +144,7 @@ export default function AuthCallback() {
         setStep("getSessionFromUrl...");
         try {
           await supabase.auth.getSessionFromUrl({ storeSession: true });
-        } catch {
-          // seguimos
-        }
+        } catch {}
 
         // ✅ 2) Fallbacks
         if (code) {
@@ -195,10 +157,7 @@ export default function AuthCallback() {
           }
         } else if (token_hash && type) {
           setStep("verifyOtp...");
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash,
-            type: type as any,
-          });
+          const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any });
           if (error) {
             setErr(error.message || "verifyOtp_error");
             setStep("verify_failed");
@@ -235,27 +194,30 @@ export default function AuthCallback() {
           return;
         }
 
-        // ✅ 4) Redirect por next (si viene)
+        // ✅ 4) Tracker flow: fijar org invitada como org activa (clave para multi-org)
+        if (isTrackerFlow && orgId) {
+          setStep("tracker_flow:set_last_org");
+          try {
+            localStorage.setItem(LAST_ORG_KEY, orgId);
+          } catch {}
+        }
+
+        // ✅ 5) Redirect a next si viene (preferido)
         if (nextPath) {
           setStep("redirect_next");
           navigate(nextPath, { replace: true });
           return;
         }
 
-        // ✅ 5) Sin next: decide destino
+        // ✅ 6) Sin next: tracker a tracker-gps, otros a inicio
         if (isTrackerFlow) {
-          setStep("redirect_tracker_flow");
-          navigate(buildTrackerUrl(invited_email), { replace: true });
+          setStep("redirect_tracker_default");
+          navigate("/tracker-gps?tg_flow=tracker", { replace: true });
           return;
         }
 
-        let lastOrg: string | null = null;
-        try {
-          lastOrg = localStorage.getItem(LAST_ORG_KEY);
-        } catch {}
-
-        setStep(lastOrg ? "redirect_inicio_with_lastOrg_present" : "redirect_inicio");
-        navigate(`/inicio`, { replace: true });
+        setStep("redirect_inicio");
+        navigate("/inicio", { replace: true });
       } catch (e: any) {
         setErr(e?.message || "auth_callback_exception");
         setStep("exception");
@@ -269,14 +231,7 @@ export default function AuthCallback() {
     <div style={{ minHeight: "100vh", padding: 16, fontFamily: "sans-serif" }}>
       <h2>AuthCallback Debug</h2>
 
-      <div
-        style={{
-          marginTop: 8,
-          padding: 12,
-          background: "#f5f5f5",
-          borderRadius: 8,
-        }}
-      >
+      <div style={{ marginTop: 8, padding: 12, background: "#f5f5f5", borderRadius: 8 }}>
         <div>
           <b>step:</b> {step}
         </div>
@@ -297,15 +252,7 @@ export default function AuthCallback() {
         <div>
           <b>location.href</b>
         </div>
-        <pre
-          style={{
-            whiteSpace: "pre-wrap",
-            background: "#111",
-            color: "#0f0",
-            padding: 12,
-            borderRadius: 8,
-          }}
-        >
+        <pre style={{ whiteSpace: "pre-wrap", background: "#111", color: "#0f0", padding: 12, borderRadius: 8 }}>
           {String(window.location.href)}
         </pre>
       </div>
