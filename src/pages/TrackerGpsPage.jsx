@@ -9,10 +9,11 @@ import { supabase } from "../lib/supabaseClient";
  * - Soporta PKCE (code) + OTP (token_hash/type) + hash tokens.
  * - Consume sesión DESDE URL antes de cualquier guard.
  * - NO borra tokens sb-* manualmente.
- * - Solo bloquea por mismatch REAL (si hay sesión y email != invited_email).
+ * - SOLO mismatch real (si hay sesión y email != invited_email).
+ * - ✅ FORZA ORG ACTIVA = org_id del link (set_current_org) para que el RPC vea asignaciones.
  */
 
-const BUILD = "tracker_gps_v13_pkce";
+const BUILD = "tracker_gps_v14_force_org";
 
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
@@ -66,11 +67,11 @@ function cleanAuthArtifactsFromUrl() {
     url.searchParams.delete("code");
     url.searchParams.delete("token_hash");
     url.searchParams.delete("type");
-    // NO borramos invite_id/org_id/tg_flow/invited_email aquí: eso se maneja después del accept.
+    // No tocamos invite_id/org_id/tg_flow/invited_email aquí.
     const next = url.pathname + (url.search ? url.search : "");
-    window.history.replaceState({}, "", next); // sin hash
+    window.history.replaceState({}, "", next);
     if (window.location.hash) {
-      window.history.replaceState({}, "", next); // doble por seguridad
+      window.history.replaceState({}, "", next);
     }
   } catch {
     // ignore
@@ -181,16 +182,19 @@ export default function TrackerGpsPage() {
   }
 
   async function consumeSessionFromUrlUniversal() {
-    // Soporta: hash tokens, code PKCE, token_hash+type OTP
     const q = readQuery();
     const type = normalizeType(q.type);
 
     setStep("auth:consume_url:start");
 
-    // 1) Hash tokens / url detect
+    // 1) Hash tokens
     if (hasHashTokens()) {
       try {
-        await withTimeout(supabase.auth.getSessionFromUrl({ storeSession: true }), 8000, "getSessionFromUrl");
+        await withTimeout(
+          supabase.auth.getSessionFromUrl({ storeSession: true }),
+          8000,
+          "getSessionFromUrl"
+        );
       } catch {
         // ignore
       }
@@ -203,25 +207,21 @@ export default function TrackerGpsPage() {
       if (error) throw new Error(error.message || "exchange_code_error");
     }
 
-    // 3) token_hash + type (otp verify)
+    // 3) OTP token_hash + type
     if (q.token_hash && type) {
       setStep("auth:verifyOtp");
       const { error } = await supabase.auth.verifyOtp({ token_hash: q.token_hash, type });
       if (error) throw new Error(error.message || "verify_otp_error");
     }
 
-    // Esperar que quede persistida
     const s = await waitForSession(9000);
     if (!s) throw new Error("No se pudo crear sesión desde el link. Abre el enlace nuevamente.");
 
-    // Limpia artefactos auth del URL para evitar re-procesos
     cleanAuthArtifactsFromUrl();
-
     setStep("auth:consume_url:ok");
     return s;
   }
 
-  // ✅ Guard: SOLO mismatch real (con sesión existente)
   async function runInviteEmailGuardIfNeeded(session) {
     if (swapCheckedRef.current) return;
     swapCheckedRef.current = true;
@@ -232,8 +232,6 @@ export default function TrackerGpsPage() {
     if (!isTrackerFlow || !expected) return;
 
     const current = normEmail(session?.user?.email || "");
-
-    // Si por alguna razón no hay email en sesión, no bloqueamos aquí
     if (!current) return;
 
     if (current !== expected) {
@@ -243,10 +241,31 @@ export default function TrackerGpsPage() {
     }
   }
 
+  // ✅ NUEVO: forzar org activa desde el link (universal)
+  async function forceActiveOrgFromInvite() {
+    const q = readQuery();
+    const orgId = (orgIdFromUrlRef.current || q.org_id || "").trim();
+    if (!orgId) return;
+
+    setStep("org:set_current_org");
+
+    // intenta setear org activa; si falla, seguimos pero lo dejamos visible en gateMsg
+    const { error } = await supabase.rpc("set_current_org", { p_org: orgId });
+    if (error) {
+      console.warn("set_current_org error:", error);
+      setGateMsg(`No se pudo fijar org activa (${error.message || "set_current_org_error"}).`);
+      return;
+    }
+  }
+
   async function refreshGate() {
     try {
       setStep("gate:rpc tracker_can_send");
-      const { data, error } = await withTimeout(supabase.rpc("tracker_can_send"), 9000, "tracker_can_send");
+      const { data, error } = await withTimeout(
+        supabase.rpc("tracker_can_send"),
+        9000,
+        "tracker_can_send"
+      );
 
       if (error) {
         setCanSend(false);
@@ -391,9 +410,7 @@ export default function TrackerGpsPage() {
       });
     } catch (e) {
       setSendStatus("error");
-      setSendError(
-        e?.name === "AbortError" ? "Timeout enviando posición" : e?.message || "Network error"
-      );
+      setSendError(e?.name === "AbortError" ? "Timeout enviando posición" : e?.message || "Network error");
     }
   }
 
@@ -453,7 +470,6 @@ export default function TrackerGpsPage() {
 
         // ✅ 1) Consumir sesión desde URL (PKCE/OTP/hash)
         const session = await consumeSessionFromUrlUniversal();
-
         if (!alive) return;
 
         // ✅ 2) Guard por invited_email SOLO con sesión real
@@ -464,8 +480,10 @@ export default function TrackerGpsPage() {
 
         // ✅ 4) aceptar invite si viene
         await acceptInviteIfPresent(session.access_token);
-
         if (!alive) return;
+
+        // ✅ 5) FORZAR org activa (clave del comportamiento original)
+        await forceActiveOrgFromInvite();
 
         setStep("ready");
         setLoading(false);
@@ -610,4 +628,3 @@ export default function TrackerGpsPage() {
     </div>
   );
 }
-
