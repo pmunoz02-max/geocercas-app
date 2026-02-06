@@ -1,13 +1,14 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V31 – WebView/TWA safe: NO setSession(), solo token en memoria + redirect
+// CALLBACK-V32 – WebView/TWA safe: NO setSession(), solo token en memoria + bootstrap RPC + redirect
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { setMemoryAccessToken } from "../supabaseClient";
+import { supabase, setMemoryAccessToken } from "../supabaseClient";
 
 type Diag = {
   step: string;
   next?: string;
   hasAccessToken?: boolean;
+  bootstrapOrgId?: string;
   error?: string;
 };
 
@@ -22,6 +23,13 @@ function parseHashParams(hash: string) {
   return { access_token, refresh_token, token_type, expires_in, error };
 }
 
+function safeNext(raw: string | null | undefined) {
+  const n = (raw || "").trim();
+  // evita open-redirect: solo paths internos
+  if (!n || !n.startsWith("/")) return "/inicio";
+  return n;
+}
+
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const fired = useRef(false);
@@ -32,67 +40,86 @@ export default function AuthCallback() {
     if (fired.current) return;
     fired.current = true;
 
-    try {
-      setDiag({ step: "parse_url" });
+    (async () => {
+      try {
+        setDiag({ step: "parse_url" });
 
-      const next = searchParams.get("next") || "/inicio";
-      const { access_token, error } = parseHashParams(window.location.hash || "");
+        const next = safeNext(searchParams.get("next") || "/inicio");
+        const { access_token, error } = parseHashParams(window.location.hash || "");
 
-      setDiag({
-        step: "hash_parsed",
-        next,
-        hasAccessToken: !!access_token,
-        error: error || undefined,
-      });
+        setDiag({
+          step: "hash_parsed",
+          next,
+          hasAccessToken: !!access_token,
+          error: error || undefined,
+        });
 
-      // Si Supabase devolvió error
-      if (error) {
-        // Redirige a login con mensaje, sin loops
-        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
-        // Limpia hash para evitar re-proceso si el WebView reusa la URL
+        // Si Supabase devolvió error
+        if (error) {
+          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch {}
+          window.location.replace(target);
+          return;
+        }
+
+        if (!access_token) {
+          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch {}
+          window.location.replace(target);
+          return;
+        }
+
+        // ✅ Fuente de verdad: token en memoria (NO setSession)
+        setDiag({ step: "set_memory_token", next, hasAccessToken: true });
+        setMemoryAccessToken(access_token);
+
+        // ✅ Bootstrap post-login: crea/asegura org/rol owner sin triggers en auth.users
+        setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
+        const { data, error: rpcError } = await supabase.rpc("bootstrap_user_after_login");
+
+        if (rpcError) {
+          // Si falla bootstrap, NO loops. Mandamos a login con error claro.
+          const msg = rpcError.message || "bootstrap_failed";
+          setDiag({ step: "bootstrap_failed", next, hasAccessToken: true, error: msg });
+          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch {}
+          window.location.replace(target);
+          return;
+        }
+
+        // Limpia hash (evita repetir callback si la WebView re-renderiza)
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        } catch {}
+
+        setDiag({
+          step: "redirect",
+          next,
+          hasAccessToken: true,
+          bootstrapOrgId: data ? String(data) : undefined,
+        });
+
+        // ✅ Redirección directa (sin navigate, sin timers)
+        window.location.replace(next);
+      } catch (e: any) {
+        const msg = String(e?.message || e || "callback_error");
+        const next = safeNext(searchParams.get("next") || "/inicio");
+
+        setDiag({ step: "fatal", next, error: msg });
+
+        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
         try {
           window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
         } catch {}
         window.location.replace(target);
-        return;
       }
-
-      if (!access_token) {
-        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-        } catch {}
-        window.location.replace(target);
-        return;
-      }
-
-      // ✅ Fuente de verdad: token en memoria (NO setSession)
-      setDiag({ step: "set_memory_token", next, hasAccessToken: true });
-      setMemoryAccessToken(access_token);
-
-      // Limpia hash (evita repetir callback si la WebView re-renderiza)
-      try {
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname + window.location.search
-        );
-      } catch {}
-
-      // ✅ Redirección directa (sin navigate, sin timers)
-      setDiag({ step: "redirect", next, hasAccessToken: true });
-      window.location.replace(next);
-    } catch (e: any) {
-      const msg = String(e?.message || e || "callback_error");
-      setDiag({ step: "fatal", error: msg });
-
-      const next = searchParams.get("next") || "/inicio";
-      const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
-      try {
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-      } catch {}
-      window.location.replace(target);
-    }
+    })();
   }, [searchParams]);
 
   return (
@@ -106,6 +133,7 @@ export default function AuthCallback() {
             <div>step: {diag.step}</div>
             <div>next: {diag.next || "-"}</div>
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
+            <div>bootstrapOrgId: {diag.bootstrapOrgId || "-"}</div>
             <div>error: {diag.error || "-"}</div>
           </div>
         </div>
