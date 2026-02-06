@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
  * - SOLO usa variables VITE_*
  * - Falla temprano si faltan
  * - Log claro para verificar Preview vs Prod
+ * - Mantiene compatibilidad con AuthCallback.tsx (setMemoryAccessToken)
  */
 
 function normUrl(u) {
@@ -37,6 +38,22 @@ const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
 
+// ✅ Compat: token en memoria (usado por AuthCallback.tsx)
+let __memoryAccessToken = null;
+
+/**
+ * Guarda (o limpia) un access token en memoria para flujos legacy/diagnóstico.
+ * No persiste en storage. No expone el token en logs.
+ */
+export function setMemoryAccessToken(token) {
+  __memoryAccessToken = token ? String(token) : null;
+}
+
+/** (Opcional) por si lo usas en otra parte */
+export function getMemoryAccessToken() {
+  return __memoryAccessToken;
+}
+
 // ❌ Falla temprano si algo está mal
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
@@ -45,9 +62,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 if (!isSupabaseUrl(SUPABASE_URL)) {
-  throw new Error(
-    `[supabaseClient] Invalid Supabase URL: ${SUPABASE_URL}`
-  );
+  throw new Error(`[supabaseClient] Invalid Supabase URL: ${SUPABASE_URL}`);
 }
 
 const storage =
@@ -79,4 +94,6 @@ if (typeof window !== "undefined") {
 
   // mismo singleton
   window.__supabase__ = supabase;
+  // extra debug si lo necesitas
+  window.__supabase_memory_token_set__ = () => Boolean(__memoryAccessToken);
 }
