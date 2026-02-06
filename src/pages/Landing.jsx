@@ -1,6 +1,6 @@
 // src/pages/Landing.jsx
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import LanguageSwitcher from "../components/LanguageSwitcher";
@@ -18,8 +18,15 @@ function safeT(value, fallback = "") {
   }
 }
 
+function safeNext(raw) {
+  const n = String(raw || "").trim();
+  if (!n || !n.startsWith("/")) return "/inicio";
+  return n;
+}
+
 export default function Landing() {
   const { t } = useTranslation();
+  const location = useLocation();
 
   // helper i18n: nunca mostrar la key
   const tt = useMemo(() => {
@@ -50,7 +57,11 @@ export default function Landing() {
 
     setLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      const sp = new URLSearchParams(location.search || "");
+      const next = safeNext(sp.get("next") || "/inicio");
+
+      // ✅ Mantener next en el callback
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email: em,

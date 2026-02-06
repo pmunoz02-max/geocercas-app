@@ -1,9 +1,24 @@
 // src/pages/AuthCallback.tsx
+<<<<<<< HEAD
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
 const LAST_ORG_KEY = "app_geocercas_last_org_id";
+=======
+// CALLBACK-V32 – WebView/TWA safe: NO setSession(), solo token en memoria + bootstrap RPC + redirect
+import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { supabase, setMemoryAccessToken } from "../supabaseClient";
+
+type Diag = {
+  step: string;
+  next?: string;
+  hasAccessToken?: boolean;
+  bootstrapOrgId?: string;
+  error?: string;
+};
+>>>>>>> fix/magiclink-bootstrap
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -59,6 +74,13 @@ function getParamFromPath(path: string, key: string) {
   }
 }
 
+function safeNext(raw: string | null | undefined) {
+  const n = (raw || "").trim();
+  // evita open-redirect: solo paths internos
+  if (!n || !n.startsWith("/")) return "/inicio";
+  return n;
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
   const parsed = useMemo(() => parseParamsBoth(), []);
@@ -68,6 +90,7 @@ export default function AuthCallback() {
   const [sessionExists, setSessionExists] = useState(false);
 
   useEffect(() => {
+<<<<<<< HEAD
     const run = async () => {
       try {
         setStep("reading_params");
@@ -204,14 +227,110 @@ export default function AuthCallback() {
 
     run();
   }, [parsed, navigate]);
+=======
+    if (fired.current) return;
+    fired.current = true;
+
+    (async () => {
+      try {
+        setDiag({ step: "parse_url" });
+
+        const next = safeNext(searchParams.get("next") || "/inicio");
+        const { access_token, error } = parseHashParams(window.location.hash || "");
+
+        setDiag({
+          step: "hash_parsed",
+          next,
+          hasAccessToken: !!access_token,
+          error: error || undefined,
+        });
+
+        // Si Supabase devolvió error
+        if (error) {
+          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch {}
+          window.location.replace(target);
+          return;
+        }
+
+        if (!access_token) {
+          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch {}
+          window.location.replace(target);
+          return;
+        }
+
+        // ✅ Fuente de verdad: token en memoria (NO setSession)
+        setDiag({ step: "set_memory_token", next, hasAccessToken: true });
+        setMemoryAccessToken(access_token);
+
+        // ✅ Bootstrap post-login: crea/asegura org/rol owner sin triggers en auth.users
+        setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
+        const { data, error: rpcError } = await supabase.rpc("bootstrap_user_after_login");
+
+        if (rpcError) {
+          // Si falla bootstrap, NO loops. Mandamos a login con error claro.
+          const msg = rpcError.message || "bootstrap_failed";
+          setDiag({ step: "bootstrap_failed", next, hasAccessToken: true, error: msg });
+          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch {}
+          window.location.replace(target);
+          return;
+        }
+
+        // Limpia hash (evita repetir callback si la WebView re-renderiza)
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        } catch {}
+
+        setDiag({
+          step: "redirect",
+          next,
+          hasAccessToken: true,
+          bootstrapOrgId: data ? String(data) : undefined,
+        });
+
+        // ✅ Redirección directa (sin navigate, sin timers)
+        window.location.replace(next);
+      } catch (e: any) {
+        const msg = String(e?.message || e || "callback_error");
+        const next = safeNext(searchParams.get("next") || "/inicio");
+
+        setDiag({ step: "fatal", next, error: msg });
+
+        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        } catch {}
+        window.location.replace(target);
+      }
+    })();
+  }, [searchParams]);
+>>>>>>> fix/magiclink-bootstrap
 
   return (
     <div style={{ minHeight: "100vh", padding: 16, fontFamily: "sans-serif" }}>
       <h2>AuthCallback Debug</h2>
 
+<<<<<<< HEAD
       <div style={{ marginTop: 8, padding: 12, background: "#f5f5f5", borderRadius: 8 }}>
         <div>
           <b>step:</b> {step}
+=======
+          <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 space-y-1">
+            <div>step: {diag.step}</div>
+            <div>next: {diag.next || "-"}</div>
+            <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
+            <div>bootstrapOrgId: {diag.bootstrapOrgId || "-"}</div>
+            <div>error: {diag.error || "-"}</div>
+          </div>
+>>>>>>> fix/magiclink-bootstrap
         </div>
         <div>
           <b>sessionExists:</b> {String(sessionExists)}
