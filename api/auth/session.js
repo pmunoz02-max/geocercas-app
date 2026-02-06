@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
+// -------------------- utils --------------------
+
 function parseCookies(cookieHeader) {
   const out = {};
   if (!cookieHeader) return out;
@@ -41,6 +43,22 @@ function makeCookie(name, value, opts = {}) {
   return s;
 }
 
+function appendSetCookie(res, cookies) {
+  const next = Array.isArray(cookies) ? cookies.filter(Boolean) : [cookies].filter(Boolean);
+  if (!next.length) return;
+
+  const prev = res.getHeader("Set-Cookie");
+  if (!prev) {
+    res.setHeader("Set-Cookie", next);
+    return;
+  }
+  if (Array.isArray(prev)) {
+    res.setHeader("Set-Cookie", [...prev, ...next]);
+    return;
+  }
+  res.setHeader("Set-Cookie", [String(prev), ...next]);
+}
+
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
@@ -64,10 +82,37 @@ function getBearer(req) {
   return m ? String(m[1]).trim() : "";
 }
 
-async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
-  const url = `${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/token?grant_type=refresh_token`;
+function normalizeUrl(u) {
+  const s = String(u || "").trim();
+  if (!s) return "";
+  return s.replace(/\/$/, "");
+}
 
-  const r = await fetch(url, {
+function envFirst(...keys) {
+  for (const k of keys) {
+    const v = process.env[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+function jsonError(res, status, payload) {
+  res.status(status).json(payload);
+}
+
+// -------------------- supabase helpers --------------------
+
+async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
+  const fetchFn = globalThis.fetch;
+  if (typeof fetchFn !== "function") {
+    const e = new Error("fetch is not available in this runtime");
+    e.status = 500;
+    throw e;
+  }
+
+  const url = `${normalizeUrl(supabaseUrl)}/auth/v1/token?grant_type=refresh_token`;
+
+  const r = await fetchFn(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -96,7 +141,7 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   return json;
 }
 
-// ✅ Usamos Admin API si tenemos service role: robusto, no requiere refresh cookie
+// ✅ Admin API si tenemos service role
 async function getUserFromAccessTokenAdmin({ supabaseUrl, serviceKey, accessToken }) {
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const { data, error } = await admin.auth.getUser(accessToken);
@@ -104,7 +149,7 @@ async function getUserFromAccessTokenAdmin({ supabaseUrl, serviceKey, accessToke
   return { user: data?.user || null, error: null };
 }
 
-// Fallback (si no hay service role): el método anterior con anonKey
+// Fallback con anonKey
 async function getUserFromAccessTokenAnon({ url, anonKey, accessToken }) {
   const sbUser = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -209,14 +254,19 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
   }
 
   if (existing?.role && existing.role !== "tracker") {
-    const e = new Error(`Este usuario ya tiene rol '${existing.role}' en esta organización. No puede ser tracker.`);
+    const e = new Error(
+      `Este usuario ya tiene rol '${existing.role}' en esta organización. No puede ser tracker.`
+    );
     e.status = 409;
     throw e;
   }
 
   const { error: upErr } = await serviceClient
     .from("memberships")
-    .upsert({ org_id: orgId, user_id: user.id, role: "tracker", is_default: false }, { onConflict: "org_id,user_id" });
+    .upsert(
+      { org_id: orgId, user_id: user.id, role: "tracker", is_default: false },
+      { onConflict: "org_id,user_id" }
+    );
 
   if (upErr) {
     const e = new Error(upErr.message || "Error creando rol tracker");
@@ -297,10 +347,13 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
     rows.find((r) => {
       const rr = normalizeRole(r?.role);
       return (rr === "owner" || rr === "admin") && r?.org_id;
-    }) || rows.find((r) => r?.org_id) || null;
+    }) ||
+    rows.find((r) => r?.org_id) ||
+    null;
 
   if (!candidate?.org_id) return { changed: false, org_id: null };
 
+  // Limpia cualquier default anterior (por si quedó basura)
   await serviceClient
     .from("memberships")
     .update({ is_default: false })
@@ -320,79 +373,88 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
   return { changed: true, org_id: candidate.org_id };
 }
 
+// -------------------- handler --------------------
+
 export default async function handler(req, res) {
-  const build_tag = "auth-session-v23-bearer-first";
+  const build_tag = "auth-session-v24-env-fallback-cookie-append";
   const debug = process.env.AUTH_DEBUG === "1";
 
   try {
     if (req.method === "OPTIONS") {
-      res.statusCode = 204;
-      res.end();
+      res.status(204).end();
       return;
     }
 
-    const url = process.env.SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // ✅ ENV (server-side) with safe fallback to VITE_* for Preview resilience
+    const url = normalizeUrl(envFirst("SUPABASE_URL", "VITE_SUPABASE_URL"));
+    const anonKey = envFirst("SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY");
+    const serviceKey = envFirst("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!url || !anonKey) {
-      return res.status(500).json({
+      return jsonError(res, 500, {
         build_tag,
         ok: false,
-        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY",
+        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY (or VITE_* fallback)",
+        ...(debug
+          ? {
+              debug: {
+                env_present: {
+                  SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+                  SUPABASE_ANON_KEY: Boolean(process.env.SUPABASE_ANON_KEY),
+                  SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+                  VITE_SUPABASE_URL: Boolean(process.env.VITE_SUPABASE_URL),
+                  VITE_SUPABASE_ANON_KEY: Boolean(process.env.VITE_SUPABASE_ANON_KEY),
+                },
+              },
+            }
+          : {}),
       });
     }
 
-    const cookieDomain = process.env.COOKIE_DOMAIN || "";
+    const cookieDomain = (process.env.COOKIE_DOMAIN || "").trim();
     const cookies = parseCookies(req.headers.cookie || "");
 
-    // ✅ 1) Preferir Bearer token (frontend sb-*-auth-token)
+    // ✅ 1) Bearer first
     const bearer = getBearer(req);
 
-    // ✅ 2) Fallback cookies (legacy)
+    // ✅ 2) cookie fallback
     let access_token = bearer || cookies.tg_at || "";
     const refresh_token = cookies.tg_rt || "";
     const forced_org = cookies.tg_org || "";
 
     const body = req.method === "POST" ? safeJsonBody(req) : {};
     if (req.method === "POST" && body === null) {
-      return res.status(400).json({ build_tag, ok: false, error: "Invalid JSON body" });
+      return jsonError(res, 400, { build_tag, ok: false, error: "Invalid JSON body" });
     }
 
     const bodyAccess = String(body?.access_token || "").trim();
     const bodyRefresh = String(body?.refresh_token || "").trim();
 
-    const setCookieParts = [];
-
-    // Si el cliente envía access_token explícito en body, lo aceptamos
+    // Accept explicit body tokens (optional flow)
     if (bodyAccess) {
       access_token = bodyAccess;
-      setCookieParts.push(
-        makeCookie("tg_at", access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: 3600,
-        })
-      );
+      appendSetCookie(res, makeCookie("tg_at", access_token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        path: "/",
+        domain: cookieDomain || undefined,
+        maxAge: 3600,
+      }));
     }
 
     if (bodyRefresh) {
-      setCookieParts.push(
-        makeCookie("tg_rt", bodyRefresh, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: 30 * 24 * 60 * 60,
-        })
-      );
+      appendSetCookie(res, makeCookie("tg_rt", bodyRefresh, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        path: "/",
+        domain: cookieDomain || undefined,
+        maxAge: 30 * 24 * 60 * 60,
+      }));
     }
 
-    // ✅ Solo intentamos refresh si NO hay bearer/access y sí hay refresh cookie
+    // ✅ Refresh only if no access token and yes refresh cookie
     if (!access_token && refresh_token) {
       const r = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
       access_token = r.access_token;
@@ -400,7 +462,7 @@ export default async function handler(req, res) {
       const accessMaxAge = Number(r.expires_in || 3600);
       const refreshMaxAge = 30 * 24 * 60 * 60;
 
-      setCookieParts.push(
+      appendSetCookie(res, [
         makeCookie("tg_at", r.access_token, {
           httpOnly: true,
           secure: true,
@@ -416,26 +478,23 @@ export default async function handler(req, res) {
           path: "/",
           domain: cookieDomain || undefined,
           maxAge: refreshMaxAge,
-        })
-      );
-    }
-
-    if (setCookieParts.length) {
-      res.setHeader("Set-Cookie", setCookieParts);
+        }),
+      ]);
     }
 
     if (!access_token) {
       return res.status(200).json({ build_tag, ok: true, authenticated: false });
     }
 
-    // ✅ Resolver user (prefer admin getUser si hay serviceKey)
+    // ✅ Resolve user
     let user = null;
     let sbUser = null;
 
     if (serviceKey) {
       const r = await getUserFromAccessTokenAdmin({ supabaseUrl: url, serviceKey, accessToken: access_token });
       user = r.user || null;
-      // Para RPCs (bootstrap_session_context) seguimos usando un cliente anon con header Authorization
+
+      // Client anon for RPCs using Authorization header
       sbUser = createClient(url, anonKey, {
         auth: { persistSession: false, autoRefreshToken: false },
         global: { headers: { Authorization: `Bearer ${access_token}` } },
@@ -446,7 +505,7 @@ export default async function handler(req, res) {
       user = r.user;
     }
 
-    // Si aún no hay user y hay refresh cookie, intentamos refresh (legacy)
+    // If still no user and refresh cookie exists, try refresh once more (legacy)
     if (!user && refresh_token) {
       const refreshed = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
       access_token = refreshed.access_token;
@@ -454,7 +513,7 @@ export default async function handler(req, res) {
       const accessMaxAge = Number(refreshed.expires_in || 3600);
       const refreshMaxAge = 30 * 24 * 60 * 60;
 
-      res.setHeader("Set-Cookie", [
+      appendSetCookie(res, [
         makeCookie("tg_at", refreshed.access_token, {
           httpOnly: true,
           secure: true,
@@ -493,13 +552,13 @@ export default async function handler(req, res) {
 
     const serviceClient = serviceKey ? createClient(url, serviceKey, { auth: { persistSession: false } }) : null;
 
-    // POST actions
+    // ---------------- POST actions ----------------
     if (req.method === "POST") {
       const action = String(body?.action || "").trim();
 
       if (action === "accept_tracker_invite") {
         if (!serviceClient) {
-          return res.status(500).json({ build_tag, ok: false, error: "Missing service role key" });
+          return jsonError(res, 500, { build_tag, ok: false, error: "Missing service role key" });
         }
 
         const result = await acceptTrackerInvite({
@@ -508,16 +567,14 @@ export default async function handler(req, res) {
           user,
         });
 
-        res.setHeader("Set-Cookie", [
-          makeCookie("tg_org", String(result.org_id), {
-            httpOnly: true,
-            secure: true,
-            sameSite: "Lax",
-            path: "/",
-            domain: cookieDomain || undefined,
-            maxAge: 30 * 24 * 60 * 60,
-          }),
-        ]);
+        appendSetCookie(res, makeCookie("tg_org", String(result.org_id), {
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+          path: "/",
+          domain: cookieDomain || undefined,
+          maxAge: 30 * 24 * 60 * 60,
+        }));
 
         return res.status(200).json({
           build_tag,
@@ -531,7 +588,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ build_tag, ok: true, authenticated: true });
     }
 
-    // GET session (legacy)
+    // ---------------- GET session ----------------
     let current_org_id = null;
     let role = null;
 
@@ -556,7 +613,7 @@ export default async function handler(req, res) {
         current_org_id = boot?.[0]?.org_id || null;
         role = role ?? (boot?.[0]?.role || null);
       } catch {
-        // ok: tracker flow no requiere esto estrictamente
+        // ok
       }
     }
 
@@ -582,16 +639,14 @@ export default async function handler(req, res) {
     }
 
     if (current_org_id && !forced_org) {
-      res.setHeader("Set-Cookie", [
-        makeCookie("tg_org", String(current_org_id), {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: 30 * 24 * 60 * 60,
-        }),
-      ]);
+      appendSetCookie(res, makeCookie("tg_org", String(current_org_id), {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        path: "/",
+        domain: cookieDomain || undefined,
+        maxAge: 30 * 24 * 60 * 60,
+      }));
     }
 
     const is_app_root = await computeIsAppRoot({
@@ -620,6 +675,13 @@ export default async function handler(req, res) {
       ...(debug
         ? {
             debug: {
+              env_present: {
+                SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+                SUPABASE_ANON_KEY: Boolean(process.env.SUPABASE_ANON_KEY),
+                SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+                VITE_SUPABASE_URL: Boolean(process.env.VITE_SUPABASE_URL),
+                VITE_SUPABASE_ANON_KEY: Boolean(process.env.VITE_SUPABASE_ANON_KEY),
+              },
               auth_mode: bearer ? "bearer" : "cookie",
               forced_org: forced_org || null,
               memberships: {
@@ -633,8 +695,10 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error("[api/auth/session] fatal:", e);
-    return res.status(500).json({
-      build_tag: "auth-session-v23-bearer-first",
+    const status = Number(e?.status || 500);
+
+    return jsonError(res, status >= 400 && status <= 599 ? status : 500, {
+      build_tag: "auth-session-v24-env-fallback-cookie-append",
       ok: false,
       error: String(e?.message || e),
       ...(process.env.AUTH_DEBUG === "1"
