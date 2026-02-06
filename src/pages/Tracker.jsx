@@ -1,6 +1,6 @@
 // src/pages/Tracker.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
 import {
@@ -46,9 +46,6 @@ export default function Tracker() {
     return Boolean(user?.id) && guard.checked && guard.ok;
   }, [user?.id, guard.checked, guard.ok]);
 
-  // ==============================
-  // Helpers UI
-  // ==============================
   function humanGuardReason(reason) {
     switch (reason) {
       case "no_auth":
@@ -66,48 +63,18 @@ export default function Tracker() {
     }
   }
 
-  async function signOutHard(message) {
-    try {
-      setStatusMessage(message || "Cerrando sesión...");
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.error("signOut error:", e);
-    }
-  }
-
-  // ==============================
-  // Cola: stats simples
-  // ==============================
-  async function updateQueueInfo() {
-    try {
-      const stats = await getQueueStats();
-      setQueueInfo({
-        pending: stats?.pending ?? 0,
-        lastSentAt: stats?.lastSentAt ?? null,
-      });
-      return stats;
-    } catch (err) {
-      console.error("Error getQueueStats():", err);
-      return null;
-    }
-  }
-
-  // ==============================
-  // Guard universal: DB-driven
-  // - Usa RPC: public.rpc_tracker_can_send()
-  // ==============================
+  // ⚠️ Regla universal: NO signOut automático en flujo tracker
   async function refreshGuard(reason = "auto") {
     try {
       if (!user?.id) {
-        setGuard((g) => ({
-          ...g,
+        setGuard({
           checked: true,
           ok: false,
           reason: "no_auth",
           role: null,
           total: 0,
           active: 0,
-        }));
+        });
         return { ok: false, reason: "no_auth" };
       }
 
@@ -138,11 +105,6 @@ export default function Tracker() {
 
       setGuard(next);
 
-      if (!next.ok && next.reason === "role_not_tracker") {
-        await signOutHard(humanGuardReason(next.reason));
-        return { ok: false, reason: next.reason };
-      }
-
       if (!next.ok) {
         setStatusMessage(`${humanGuardReason(next.reason)} (${reason})`);
       }
@@ -156,11 +118,20 @@ export default function Tracker() {
     }
   }
 
-  // ==============================
-  // Intervalo universal (DESDE VISTA CANÓNICA)
-  // - Máximo: el mínimo de frequency_minutes activos
-  // - Mínimo: 5 min (MIN_INTERVAL_SEC)
-  // ==============================
+  async function updateQueueInfo() {
+    try {
+      const stats = await getQueueStats();
+      setQueueInfo({
+        pending: stats?.pending ?? 0,
+        lastSentAt: stats?.lastSentAt ?? null,
+      });
+      return stats;
+    } catch (err) {
+      console.error("Error getQueueStats():", err);
+      return null;
+    }
+  }
+
   async function loadIntervalFromAssignments() {
     try {
       if (!user?.id) return MIN_INTERVAL_SEC;
@@ -176,9 +147,7 @@ export default function Tracker() {
         return MIN_INTERVAL_SEC;
       }
 
-      if (!data || data.length === 0) {
-        return MIN_INTERVAL_SEC;
-      }
+      if (!data || data.length === 0) return MIN_INTERVAL_SEC;
 
       const mins = data
         .map((r) => Number(r.frequency_minutes))
@@ -194,9 +163,6 @@ export default function Tracker() {
     }
   }
 
-  // ==============================
-  // Llamada a Edge Function send_position
-  // ==============================
   async function sendPositionEdge(payload) {
     try {
       const { data, error } = await supabase.functions.invoke("send_position", {
@@ -208,16 +174,13 @@ export default function Tracker() {
         return { ok: false, error: error.message || "Error send_position" };
       }
 
-      return data; // { ok, stored, reason, min_interval_ms, ... }
+      return data;
     } catch (err) {
       console.error("[send_position] exception:", err);
       return { ok: false, error: err?.message || "Error de red send_position" };
     }
   }
 
-  // ==============================
-  // Flush cola (con guard)
-  // ==============================
   async function flushQueue(reason = "auto") {
     try {
       if (!isOnline) {
@@ -263,9 +226,6 @@ export default function Tracker() {
     }
   }
 
-  // ==============================
-  // Geolocalización
-  // ==============================
   function startWatch() {
     if (!("geolocation" in navigator)) {
       setStatusMessage("Geolocalización no soportada.");
@@ -295,11 +255,7 @@ export default function Tracker() {
           console.error("Error GPS:", err);
           setStatusMessage(`Error GPS: ${err.message}`);
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 10000,
-        }
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 }
       );
 
       watchIdRef.current = id;
@@ -320,9 +276,6 @@ export default function Tracker() {
     watchIdRef.current = null;
   }
 
-  // ==============================
-  // Efectos
-  // ==============================
   useEffect(() => {
     let cancelled = false;
 
@@ -352,54 +305,34 @@ export default function Tracker() {
 
       setIntervalSec(sec);
 
-      if (g.ok) {
-        setStatusMessage(`Tracker listo. Intervalo: ${Math.round(sec / 60)} min`);
-      } else {
-        setStatusMessage(humanGuardReason(g.reason));
-      }
+      if (g.ok) setStatusMessage(`Tracker listo. Intervalo: ${Math.round(sec / 60)} min`);
+      else setStatusMessage(humanGuardReason(g.reason));
 
       setIsReady(true);
     }
 
     boot();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+    return () => { cancelled = true; };
+  }, [user?.id]); // eslint-disable-line
 
   useEffect(() => {
     if (!user?.id) return;
-
-    const t = setInterval(() => {
-      refreshGuard("poll");
-    }, CAN_SEND_REFRESH_MS);
-
+    const t = setInterval(() => refreshGuard("poll"), CAN_SEND_REFRESH_MS);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id]); // eslint-disable-line
 
   useEffect(() => {
     if (!isReady) return;
-
-    if (!user?.id) {
-      setIsTracking(false);
-      return;
-    }
-
+    if (!user?.id) { setIsTracking(false); return; }
     if (!guard.checked) return;
-
     setIsTracking(guard.ok);
   }, [isReady, user?.id, guard.checked, guard.ok]);
 
   useEffect(() => {
     if (!isTracking) {
       stopWatch();
-      if (flushTimerRef.current) {
-        clearInterval(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
+      if (flushTimerRef.current) clearInterval(flushTimerRef.current);
+      flushTimerRef.current = null;
       return;
     }
 
@@ -410,22 +343,17 @@ export default function Tracker() {
     flushTimerRef.current = setInterval(() => {
       const now = Date.now();
       const diff = now - lastFlushTsRef.current;
-      if (diff >= ms) {
-        flushQueue("interval");
-      }
+      if (diff >= ms) flushQueue("interval");
     }, ms / 2);
 
     flushQueue("start");
 
     return () => {
       stopWatch();
-      if (flushTimerRef.current) {
-        clearInterval(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
+      if (flushTimerRef.current) clearInterval(flushTimerRef.current);
+      flushTimerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTracking, intervalSec, canOperate]);
+  }, [isTracking, intervalSec, canOperate]); // eslint-disable-line
 
   useEffect(() => {
     function handleOnline() {
@@ -433,7 +361,6 @@ export default function Tracker() {
       setStatusMessage("Conexión restaurada. Enviando cola...");
       flushQueue("online");
     }
-
     function handleOffline() {
       setIsOnline(false);
       setStatusMessage("Sin conexión. Encolando posiciones...");
@@ -441,20 +368,14 @@ export default function Tracker() {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line
 
-  // ==============================
-  // Render
-  // ==============================
   const onlineLabel = isOnline ? "Online" : "Offline";
   const onlineBadgeClass = isOnline ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800";
-
   const guardBadgeClass = guard.ok ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800";
 
   return (
@@ -485,23 +406,15 @@ export default function Tracker() {
         <p className="text-sm text-gray-700 mb-2">{statusMessage}</p>
 
         <div className="text-xs text-gray-500 space-y-1">
-          <p>
-            <strong>Assignments:</strong> total {guard.total} / activos {guard.active}
-          </p>
-
-          <p>
-            <strong>En cola:</strong> {queueInfo.pending ?? 0} posiciones
-          </p>
+          <p><strong>Assignments:</strong> total {guard.total} / activos {guard.active}</p>
+          <p><strong>En cola:</strong> {queueInfo.pending ?? 0} posiciones</p>
 
           {queueInfo.lastSentAt && (
-            <p>
-              <strong>Último envío:</strong> {new Date(queueInfo.lastSentAt).toLocaleString()}
-            </p>
+            <p><strong>Último envío:</strong> {new Date(queueInfo.lastSentAt).toLocaleString()}</p>
           )}
 
           <p className="mt-2">
-            Tracker DB-driven: el backend decide si puedes enviar (roles + assignments). Este dispositivo fuerza cuentas{" "}
-            <strong>tracker</strong> y bloquea owner/admin.
+            Tracker DB-driven: el backend decide si puedes enviar (roles + assignments). Este dispositivo muestra estado y nunca cierra sesión automáticamente.
           </p>
         </div>
       </div>

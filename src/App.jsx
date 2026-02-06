@@ -14,13 +14,13 @@ import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
-// ✅ Claim Invite (nuevo)
+// ✅ Claim Invite (public)
 import ClaimInvite from "./pages/ClaimInvite.jsx";
 
 // ✅ Privacy Policy (public)
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 
-// Tracker GPS
+// Tracker GPS (public)
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 import TrackerAuthBridge from "./pages/TrackerAuthBridge.jsx";
 
@@ -52,6 +52,15 @@ function CallbackCatcher() {
     const pathname = location.pathname || "";
     const search = location.search || "";
     const hash = typeof location.hash === "string" ? location.hash : "";
+
+    // ✅ EXCLUSIONES UNIVERSALES: tracker maneja su propio callback
+    const isTrackerRoute =
+      pathname === "/tracker-gps" ||
+      pathname.startsWith("/tracker-gps/") ||
+      pathname === "/tracker-auth-bridge" ||
+      pathname.startsWith("/tracker-auth-bridge/");
+
+    if (isTrackerRoute) return;
 
     const hasAccessToken = hash.includes("access_token=");
     const hasCode = search.includes("code=");
@@ -87,13 +96,13 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* ✅ Privacy Policy (public, required by Google Play) */}
+        {/* ✅ Privacy Policy (public) */}
         <Route path="/privacy" element={<PrivacyPolicy />} />
 
         {/* ✅ Claim invite (public) */}
         <Route path="/claim" element={<ClaimInvite />} />
 
-        {/* ✅ TRACKER GPS */}
+        {/* ✅ TRACKER GPS (PUBLIC + owner del callback) */}
         <Route path="/tracker-gps" element={<TrackerGpsPage />} />
         <Route path="/tracker-auth-bridge" element={<TrackerAuthBridge />} />
 
