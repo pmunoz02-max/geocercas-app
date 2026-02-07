@@ -1,170 +1,131 @@
 // src/lib/geocercasApi.js
-// ============================================================
-// CANONICAL client for /api/geocercas (TENANT-SAFE) — Feb 2026
-// ✅ Endpoint legacy /api/geocercas, pero backend ya usa public.geofences
-// - Auth universal: Authorization Bearer desde localStorage (sb-*-auth-token)
-// - Scoping UI por orgId
-// ============================================================
+// API canónica DB-driven (sin endpoints /api/*).
+// Guarda/edita/elimina geocercas directo en Supabase con RLS.
+// Requiere que tu DB asigne org_id y user_id (o valide) vía triggers/RLS.
+//
+// Uso típico:
+//   import { saveGeocerca, deleteGeocerca, listGeocercas } from "@/lib/geocercasApi";
+//   await saveGeocerca({ name, polygon_geojson, ... });
 
-function pickErrorMessage(payload) {
-  if (!payload) return null;
-  if (typeof payload === "string") return payload;
-  return (
-    payload.error ||
-    payload.message ||
-    payload.detail ||
-    payload.hint ||
-    (Array.isArray(payload.errors) ? payload.errors.map((e) => e.message || e).join(" | ") : null) ||
-    null
-  );
-}
+import { supabase } from "./supabaseClient";
 
-function getSupabaseAccessTokenFromLocalStorage() {
-  try {
-    const keys = Object.keys(window.localStorage || {});
-    const k = keys.find((x) => /^sb-.*-auth-token$/i.test(String(x)));
-    if (!k) return "";
-    const raw = window.localStorage.getItem(k);
-    if (!raw) return "";
-    const j = JSON.parse(raw);
-    const token =
-      j?.access_token ||
-      j?.currentSession?.access_token ||
-      j?.data?.session?.access_token ||
-      "";
-    return String(token || "").trim();
-  } catch {
-    return "";
+/**
+ * Normaliza un GeoJSON Polygon/MultiPolygon a JSON serializable.
+ * Acepta objeto o string JSON.
+ */
+function normalizeGeoJSON(input) {
+  if (!input) return null;
+  if (typeof input === "string") {
+    try {
+      return JSON.parse(input);
+    } catch {
+      // Si te llega ya como string válido pero no parseable, lo devolvemos tal cual
+      // (Postgres jsonb acepta string solo si se parsea; mejor fallar antes)
+      throw new Error("polygon_geojson no es JSON válido");
+    }
   }
+  return input;
 }
 
-function getAuthHeadersOrThrow() {
-  if (typeof window === "undefined") return {};
-  const token = getSupabaseAccessTokenFromLocalStorage();
-  if (!token) throw new Error("No autenticado (sin access_token). Cierra sesión y vuelve a entrar.");
-  return { Authorization: `Bearer ${token}` };
-}
+/**
+ * Construye el payload permitido para la tabla `geocercas`.
+ * Ajusta los nombres de columnas si tu esquema difiere.
+ */
+function buildGeocercaPayload(data) {
+  const payload = {
+    // Recomendado: columna "name" o "nombre"
+    name: data.name ?? data.nombre ?? null,
 
-async function requestJson(url, { method = "GET", body } = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(typeof window !== "undefined" ? getAuthHeadersOrThrow() : {}),
+    // GeoJSON (jsonb)
+    polygon_geojson: normalizeGeoJSON(data.polygon_geojson ?? data.geojson ?? data.poligono ?? null),
+
+    // Campos opcionales (ajusta a tu DB)
+    color: data.color ?? null,
+    notes: data.notes ?? data.notas ?? null,
+
+    // IMPORTANTE:
+    // No seteamos org_id ni user_id aquí: debe resolverse por triggers/RLS (canon).
+    // Si tu DB exige estos campos explícitos, avísame y lo adaptamos.
   };
 
-  const res = await fetch(url, {
-    method,
-    credentials: "include",
-    cache: "no-store",
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const ct = res.headers.get("content-type") || "";
-  let payload = null;
-
-  try {
-    if (ct.includes("application/json")) payload = await res.json();
-    else payload = await res.text();
-  } catch {
-    payload = null;
-  }
-
-  if (!res.ok) {
-    const msg =
-      pickErrorMessage(payload) ||
-      `HTTP ${res.status} ${res.statusText || ""}`.trim() ||
-      "Request failed";
-    const err = new Error(msg);
-    err.status = res.status;
-    err.payload = payload;
-    err.url = url;
-    throw err;
-  }
-
+  // Limpieza de undefined para evitar errores
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   return payload;
 }
 
-function normalizeRows(data) {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.rows)) return data.rows;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.result)) return data.result;
-  return [];
-}
-
 /**
- * LIST (canonical)
- * Backend decide tenant + org(s). Args opcionales solo para scoping UI.
+ * Inserta o actualiza una geocerca.
+ * - Si `data.id` existe => UPDATE
+ * - Si no => INSERT
+ *
+ * Retorna la fila guardada.
  */
-export async function listGeocercas({ orgId } = {}) {
-  const data = await requestJson("/api/geocercas", { method: "GET" });
-  const rows = normalizeRows(data);
+export async function saveGeocerca(data) {
+  if (!data || typeof data !== "object") {
+    throw new Error("saveGeocerca: data inválida");
+  }
 
-  if (!orgId) return rows;
-  return rows.filter((r) => String(r.org_id ?? "") === String(orgId));
-}
+  const payload = buildGeocercaPayload(data);
 
-/** Helper que tu Geocercas.jsx usa */
-export async function listGeocercasForOrg(orgId) {
-  return await listGeocercas({ orgId });
-}
+  // Validación mínima (evita inserts vacíos)
+  if (!payload.name) {
+    throw new Error("Falta el nombre de la geocerca");
+  }
+  if (!payload.polygon_geojson) {
+    throw new Error("Falta el polígono (polygon_geojson)");
+  }
 
-/**
- * GET ONE
- */
-export async function getGeocerca({ id, orgId } = {}) {
-  if (!id) throw new Error("getGeocerca requiere id");
-  const data = await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, { method: "GET" });
+  // Sesión activa requerida
+  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+  if (sessionErr) throw sessionErr;
+  if (!sessionData?.session?.user) {
+    throw new Error("No hay sesión activa. Vuelve a iniciar sesión.");
+  }
 
-  // backend puede devolver row directo
-  const row = data?.row || data?.data || data;
-  if (!row) return null;
+  const isUpdate = !!data.id;
 
-  // scoping UI extra
-  if (orgId && row?.org_id && String(row.org_id) !== String(orgId)) return null;
+  if (isUpdate) {
+    const { data: row, error } = await supabase
+      .from("geocercas")
+      .update(payload)
+      .eq("id", data.id)
+      .select("*")
+      .single();
 
+    if (error) throw error;
+    return row;
+  }
+
+  const { data: row, error } = await supabase
+    .from("geocercas")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) throw error;
   return row;
 }
 
 /**
- * UPSERT
- * body: { org_id, nombre, geojson/geometry, ... }
+ * Lista geocercas visibles por RLS para el usuario actual.
  */
-export async function upsertGeocerca(payload = {}) {
-  const nombre = payload.nombre ?? payload.name ?? "";
-  if (!String(nombre).trim()) throw new Error("upsertGeocerca requiere nombre");
+export async function listGeocercas({ limit = 500, orderBy = "created_at", ascending = false } = {}) {
+  const { data, error } = await supabase
+    .from("geocercas")
+    .select("*")
+    .order(orderBy, { ascending })
+    .limit(limit);
 
-  const body = { ...payload, nombre: String(nombre).trim() };
-  const data = await requestJson("/api/geocercas", { method: "POST", body });
-
-  return data?.row || data?.data || data || { ok: true };
+  if (error) throw error;
+  return data ?? [];
 }
 
 /**
- * DELETE
- * - deleteGeocerca(id) o deleteGeocerca({id})
- * - bulk: deleteGeocerca({ orgId, nombres_ci })
+ * Elimina geocerca por id (RLS debe permitir).
  */
-export async function deleteGeocerca(arg = {}) {
-  // Caso 1: por id
-  if (typeof arg === "string" || typeof arg === "number") {
-    const id = String(arg);
-    return await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-  }
-
-  const id = arg?.id ? String(arg.id) : "";
-  if (id) return await requestJson(`/api/geocercas?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-
-  // Caso 2: bulk por nombres_ci (tu UI)
-  const nombres_ci = Array.isArray(arg?.nombres_ci) ? arg.nombres_ci : [];
-  const orgId = arg?.orgId || arg?.org_id || null;
-
-  if (orgId && nombres_ci.length) {
-    return await requestJson("/api/geocercas", {
-      method: "DELETE",
-      body: { orgId, nombres_ci },
-    });
-  }
-
-  throw new Error("deleteGeocerca requiere id (o { orgId, nombres_ci[] }).");
+export async function deleteGeocerca(id) {
+  if (!id) throw new Error("deleteGeocerca: id requerido");
+  const { error } = await supabase.from("geocercas").delete().eq("id", id);
+  if (error) throw error;
+  return true;
 }
