@@ -1,699 +1,441 @@
-// api/auth.js
-import { createClient } from "@supabase/supabase-js";
+// src/pages/Reports.jsx
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useAuth } from "../context/AuthContext";
+import DatePickerField from "../components/ui/DatePickerField";
 
-export const config = { runtime: "nodejs" };
+function toCsvValue(v) {
+  const s = v === null || v === undefined ? "" : String(v);
+  return `"${s.replaceAll('"', '""')}"`;
+}
 
-// ---------- shared helpers ----------
-function parseCookies(cookieHeader) {
-  const out = {};
-  if (!cookieHeader) return out;
-  for (const p of cookieHeader.split(";")) {
-    const i = p.indexOf("=");
-    if (i === -1) continue;
-    const k = p.slice(0, i).trim();
-    const v = p.slice(i + 1).trim();
-    if (!k) continue;
-    try {
-      out[k] = decodeURIComponent(v);
-    } catch {
-      out[k] = v;
-    }
+function exportRowsToCSV(rows, filenameBase = "reporte") {
+  if (!rows?.length) return;
+  const columns = Object.keys(rows[0]);
+  const header = columns.map(toCsvValue).join(",");
+  const lines = rows.map((r) => columns.map((k) => toCsvValue(r[k])).join(","));
+  const csv = [header, ...lines].join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filenameBase}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function dedupeById(arr) {
+  const list = Array.isArray(arr) ? arr : [];
+  const map = new Map();
+  for (const it of list) {
+    const id = it?.id;
+    if (!id) continue;
+    if (!map.has(id)) map.set(id, it);
   }
-  return out;
+  return Array.from(map.values());
 }
 
-function makeCookie(name, value, opts = {}) {
-  const { httpOnly = true, secure = true, sameSite = "Lax", path = "/", maxAge, domain } = opts;
-
-  let s = `${name}=${encodeURIComponent(value ?? "")}`;
-  if (domain) s += `; Domain=${domain}`;
-  if (path) s += `; Path=${path}`;
-  if (typeof maxAge === "number") s += `; Max-Age=${maxAge}`;
-  if (sameSite) s += `; SameSite=${sameSite}`;
-  if (secure) s += `; Secure`;
-  if (httpOnly) s += `; HttpOnly`;
-  return s;
+function normalizeGeocercas(arr) {
+  return dedupeById(
+    (Array.isArray(arr) ? arr : [])
+      .map((g) => ({ ...g, nombre: (g?.nombre || g?.name || "").trim() || g?.id }))
+      .filter((g) => g?.id)
+  );
 }
 
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
+function normalizePersonas(arr) {
+  return dedupeById(
+    (Array.isArray(arr) ? arr : [])
+      .map((p) => ({ ...p, nombre: p?.nombre || "", apellido: p?.apellido || "", email: p?.email || "" }))
+      .filter((p) => p?.id)
+  );
 }
 
-function safeJsonBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string" && req.body.trim()) {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return null;
-    }
-  }
-  return {};
+function normalizeActivities(arr) {
+  return dedupeById(
+    (Array.isArray(arr) ? arr : [])
+      .map((a) => ({ ...a, name: (a?.name || a?.nombre || "").trim() || a?.id }))
+      .filter((a) => a?.id)
+  );
 }
 
-async function safeGetBody(req, debug = false) {
+function normalizeAsignaciones(arr) {
+  return dedupeById((Array.isArray(arr) ? arr : []).filter((a) => a?.id));
+}
+
+function stringifyDetails(d) {
+  if (!d) return "";
+  if (typeof d === "string") return d;
   try {
-    if (req.body && typeof req.body === "object") return req.body;
-    if (typeof req.body === "string" && req.body.trim()) return JSON.parse(req.body);
-  } catch (e) {
-    if (debug) console.log("[auth] req.body parse failed:", String(e?.message || e));
-  }
-  if (req.readableEnded || req.complete) return {};
-  const raw = await new Promise((resolve) => {
-    let data = "";
-    const timer = setTimeout(() => resolve("__TIMEOUT__"), 2500);
-    req.on("data", (chunk) => (data += chunk));
-    req.on("end", () => {
-      clearTimeout(timer);
-      resolve(data);
-    });
-    req.on("error", () => {
-      clearTimeout(timer);
-      resolve("__ERROR__");
-    });
-  });
-  if (raw === "__TIMEOUT__") throw new Error("Body read timeout");
-  if (raw === "__ERROR__") throw new Error("Body read error");
-  if (!raw || !String(raw).trim()) return {};
-  try {
-    return JSON.parse(String(raw));
+    return JSON.stringify(d);
   } catch {
-    throw new Error("Invalid JSON body");
+    return String(d);
   }
 }
 
-function getBearer(req) {
-  const h = String(req.headers?.authorization || req.headers?.Authorization || "").trim();
-  if (!h) return "";
-  const m = h.match(/^bearer\s+(.+)$/i);
-  return m ? String(m[1]).trim() : "";
-}
+export default function Reports() {
+  const { t } = useTranslation();
+  const { loading, isAuthenticated, currentOrg, contextLoading, session } = useAuth();
 
-async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
-  const url = `${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/token?grant_type=refresh_token`;
+  const orgId = currentOrg?.id || null;
+  const token = session?.access_token || null;
 
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
+  const [errorMsg, setErrorMsg] = useState("");
+  const [loadingFilters, setLoadingFilters] = useState(false);
+  const [loadingReport, setLoadingReport] = useState(false);
 
-  const text = await r.text();
-  let json = {};
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    json = { raw: text };
-  }
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
 
-  if (!r.ok || !json?.access_token) {
-    const msg = json?.error_description || json?.error || "Failed to refresh token";
-    const err = new Error(msg);
-    err.status = 401;
-    err.body = json || null;
-    throw err;
-  }
+  const [filters, setFilters] = useState({ geocercas: [], personas: [], activities: [], asignaciones: [] });
 
-  return json;
-}
+  const [selectedGeocercaIds, setSelectedGeocercaIds] = useState([]);
+  const [selectedPersonalIds, setSelectedPersonalIds] = useState([]);
+  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
+  const [selectedAsignacionIds, setSelectedAsignacionIds] = useState([]);
 
-// ✅ Admin API si tenemos service role
-async function getUserFromAccessTokenAdmin({ supabaseUrl, serviceKey, accessToken }) {
-  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-  const { data, error } = await admin.auth.getUser(accessToken);
-  if (error) return { user: null, error };
-  return { user: data?.user || null, error: null };
-}
+  const [rows, setRows] = useState([]);
 
-// fallback anon
-async function getUserFromAccessTokenAnon({ url, anonKey, accessToken }) {
-  const sbUser = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  });
-  const { data } = await sbUser.auth.getUser();
-  return { sbUser, user: data?.user || null };
-}
+  const canRun = useMemo(() => !loading && isAuthenticated && !contextLoading, [loading, isAuthenticated, contextLoading]);
 
-async function computeIsAppRoot({ userEmail, roleFromBoot, serviceClient }) {
-  const role = String(roleFromBoot || "").toLowerCase();
-  if (role === "root" || role === "root_owner") return true;
+  async function apiGet(url) {
+    const headers = { "cache-control": "no-cache", pragma: "no-cache" };
+    if (token) headers.Authorization = `Bearer ${token}`;
 
-  const email = normalizeEmail(userEmail);
-  const envRaw = process.env.APP_ROOT_EMAILS || "";
-  const envList = envRaw
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+    const resp = await fetch(url, { method: "GET", headers, credentials: "include" });
+    const json = await resp.json().catch(() => ({}));
 
-  if (envList.includes(email)) return true;
-
-  if (serviceClient) {
-    const { data } = await serviceClient.from("app_root_users").select("email").eq("email", email).maybeSingle();
-    if (data) return true;
-  }
-  return false;
-}
-
-// ---------- tracker invite (copiado tal cual de session.js) ----------
-async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
-  const inviteId = String(invite_id || "").trim();
-  if (!inviteId) {
-    const e = new Error("invite_id requerido");
-    e.status = 400;
-    throw e;
-  }
-
-  const userEmail = normalizeEmail(user?.email);
-  if (!userEmail) {
-    const e = new Error("user email no disponible");
-    e.status = 400;
-    throw e;
-  }
-
-  const { data: inv, error: invErr } = await serviceClient
-    .from("tracker_invites")
-    .select("id, org_id, email_norm, expires_at, used_at")
-    .eq("id", inviteId)
-    .maybeSingle();
-
-  if (invErr) {
-    const e = new Error(invErr.message || "Error leyendo tracker_invites");
-    e.status = 500;
-    throw e;
-  }
-  if (!inv) {
-    const e = new Error("Invitación no encontrada");
-    e.status = 404;
-    throw e;
-  }
-  if (inv.used_at) {
-    const e = new Error("Invitación ya fue usada");
-    e.status = 409;
-    throw e;
-  }
-
-  const exp = inv.expires_at ? new Date(inv.expires_at).getTime() : 0;
-  if (exp && Date.now() > exp) {
-    const e = new Error("Invitación expirada");
-    e.status = 410;
-    throw e;
-  }
-
-  if (normalizeEmail(inv.email_norm) !== userEmail) {
-    const e = new Error("Email no coincide con invitación");
-    e.status = 403;
-    throw e;
-  }
-
-  const orgId = inv.org_id;
-
-  // Regla: admin NO puede ser tracker
-  const { data: existing, error: exErr } = await serviceClient
-    .from("memberships")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("org_id", orgId)
-    .maybeSingle();
-
-  if (exErr) {
-    const e = new Error(exErr.message || "Error leyendo memberships");
-    e.status = 500;
-    throw e;
-  }
-
-  if (existing?.role && existing.role !== "tracker") {
-    const e = new Error(`Este usuario ya tiene rol '${existing.role}' en esta organización. No puede ser tracker.`);
-    e.status = 409;
-    throw e;
-  }
-
-  const { error: upErr } = await serviceClient
-    .from("memberships")
-    .upsert({ org_id: orgId, user_id: user.id, role: "tracker", is_default: false }, { onConflict: "org_id,user_id" });
-
-  if (upErr) {
-    const e = new Error(upErr.message || "Error creando rol tracker");
-    e.status = 500;
-    throw e;
-  }
-
-  const { error: useErr } = await serviceClient
-    .from("tracker_invites")
-    .update({ used_at: new Date().toISOString(), used_by_user_id: user.id })
-    .eq("id", inviteId);
-
-  if (useErr) {
-    const e = new Error(useErr.message || "Error marcando invitación usada");
-    e.status = 500;
-    throw e;
-  }
-
-  return { org_id: orgId, role: "tracker" };
-}
-
-// ---------- memberships helpers (copiado tal cual) ----------
-async function listMembershipsForUser({ sbUser, serviceClient, userId }) {
-  const base = serviceClient || sbUser;
-
-  let r = await base
-    .from("memberships")
-    .select("org_id, role, is_default, created_at")
-    .eq("user_id", userId)
-    .order("is_default", { ascending: false })
-    .order("created_at", { ascending: true });
-
-  if (r?.error && String(r.error.message || "").toLowerCase().includes("is_default")) {
-    r = await base
-      .from("memberships")
-      .select("org_id, role, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true });
-  }
-
-  if (r.error) return { rows: [], error: r.error };
-  const rows = Array.isArray(r.data) ? r.data : [];
-  return { rows, error: null };
-}
-
-function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
-}
-
-function pickOrgFromMemberships(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) return null;
-
-  const def = rows.find((x) => x?.is_default === true && x?.org_id);
-  if (def?.org_id) return def.org_id;
-
-  const preferred = rows.find((x) => {
-    const r = normalizeRole(x?.role);
-    return (r === "owner" || r === "admin") && x?.org_id;
-  });
-  if (preferred?.org_id) return preferred.org_id;
-
-  const first = rows.find((x) => x?.org_id);
-  return first?.org_id || null;
-}
-
-async function ensureDefaultMembership({ serviceClient, userId, rows }) {
-  if (!serviceClient) return { changed: false, org_id: null };
-
-  const hasDefault = rows.some((r) => r?.is_default === true);
-  if (hasDefault) {
-    const def = rows.find((r) => r?.is_default === true);
-    return { changed: false, org_id: def?.org_id || null };
-  }
-
-  const candidate =
-    rows.find((r) => {
-      const rr = normalizeRole(r?.role);
-      return (rr === "owner" || rr === "admin") && r?.org_id;
-    }) || rows.find((r) => r?.org_id) || null;
-
-  if (!candidate?.org_id) return { changed: false, org_id: null };
-
-  await serviceClient.from("memberships").update({ is_default: false }).eq("user_id", userId).eq("is_default", true);
-
-  const { error: upErr } = await serviceClient
-    .from("memberships")
-    .update({ is_default: true })
-    .eq("user_id", userId)
-    .eq("org_id", candidate.org_id);
-
-  if (upErr) return { changed: false, org_id: candidate.org_id };
-  return { changed: true, org_id: candidate.org_id };
-}
-
-// ---------- action handlers ----------
-async function handleMagic(req, res) {
-  const version = "auth-magic-v5-safe-body-2026-01-12";
-  const debug = process.env.AUTH_DEBUG === "1";
-  const send = (status, payload) => res.status(status).json({ version, ...payload });
-
-  try {
-    if (req.method !== "POST") {
-      res.setHeader("Allow", "POST");
-      return send(405, { error: "Method Not Allowed" });
+    if (!resp.ok) {
+      const base = json?.error || json?.message || `HTTP ${resp.status}`;
+      const det = stringifyDetails(json?.details);
+      const ver = json?.version ? ` | ${json.version}` : "";
+      const msg = det ? `${base} — ${det}${ver}` : `${base}${ver}`;
+      throw new Error(msg);
     }
+    return json;
+  }
 
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return send(500, { error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
+  useEffect(() => {
+    if (!canRun) return;
+    loadFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canRun]);
 
-    const body = await safeGetBody(req, debug);
-    const email = String(body?.email || "").trim().toLowerCase();
-    const redirectTo = String(body?.redirectTo || "").trim();
-    if (!email || !redirectTo) return send(400, { error: "Email and redirectTo required" });
-
-    const url = `${SUPABASE_URL}/auth/v1/otp`;
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ email, create_user: true, email_redirect_to: redirectTo }),
-    });
-
-    const text = await r.text();
-    let data = {};
+  async function loadFilters() {
+    setLoadingFilters(true);
+    setErrorMsg("");
     try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { raw: text };
-    }
+      const json = await apiGet("/api/auth?action=reportes&op=filters");
+      const data = json?.data || {};
 
-    if (!r.ok) {
-      return res.status(r.status).json({
-        version,
-        error: data?.error_description || data?.msg || data?.error || "Could not send magic link",
-        ...(debug ? { debug: { status: r.status, url, response: data } } : {}),
-      });
-    }
+      const geocercas = normalizeGeocercas(data.geocercas);
+      const personas = normalizePersonas(data.personas);
+      const activities = normalizeActivities(data.activities);
+      const asignaciones = normalizeAsignaciones(data.asignaciones);
 
-    return send(200, { ok: true });
-  } catch (e) {
-    console.error("[api/auth magic] fatal:", e);
-    return res.status(500).json({
-      version,
-      error: "Server error",
-      ...(process.env.AUTH_DEBUG === "1"
-        ? { debug: { message: String(e?.message || e), stack: String(e?.stack || "") } }
-        : {}),
-    });
+      setFilters({ geocercas, personas, activities, asignaciones });
+
+      const mkSet = (arr) => new Set(arr.map((x) => String(x.id)));
+      const gSet = mkSet(geocercas);
+      const pSet = mkSet(personas);
+      const aSet = mkSet(activities);
+      const asSet = mkSet(asignaciones);
+
+      setSelectedGeocercaIds((prev) => prev.filter((id) => gSet.has(String(id))));
+      setSelectedPersonalIds((prev) => prev.filter((id) => pSet.has(String(id))));
+      setSelectedActivityIds((prev) => prev.filter((id) => aSet.has(String(id))));
+      setSelectedAsignacionIds((prev) => prev.filter((id) => asSet.has(String(id))));
+    } catch (e) {
+      console.error("[Reports] loadFilters:", e);
+      setErrorMsg(e?.message || t("reportes.errorLoadFilters", { defaultValue: "Error cargando filtros." }));
+      setFilters({ geocercas: [], personas: [], activities: [], asignaciones: [] });
+    } finally {
+      setLoadingFilters(false);
+    }
   }
-}
 
-async function handleSession(req, res) {
-  const build_tag = "auth-session-v23-bearer-first";
-  const debug = process.env.AUTH_DEBUG === "1";
+  async function loadReport() {
+    setErrorMsg("");
+    setRows([]);
+    setLoadingReport(true);
 
-  try {
-    if (req.method === "OPTIONS") {
-      res.statusCode = 204;
-      res.end();
-      return;
-    }
-
-    const url = process.env.SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!url || !anonKey) {
-      return res.status(500).json({ build_tag, ok: false, error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
-    }
-
-    const cookieDomain = process.env.COOKIE_DOMAIN || "";
-    const cookies = parseCookies(req.headers.cookie || "");
-
-    // ✅ 1) Preferir Bearer token
-    const bearer = getBearer(req);
-
-    // ✅ 2) Fallback cookies
-    let access_token = bearer || cookies.tg_at || "";
-    const refresh_token = cookies.tg_rt || "";
-    const forced_org = cookies.tg_org || "";
-
-    const body = req.method === "POST" ? safeJsonBody(req) : {};
-    if (req.method === "POST" && body === null) {
-      return res.status(400).json({ build_tag, ok: false, error: "Invalid JSON body" });
-    }
-
-    const bodyAccess = String(body?.access_token || "").trim();
-    const bodyRefresh = String(body?.refresh_token || "").trim();
-
-    const setCookieParts = [];
-
-    if (bodyAccess) {
-      access_token = bodyAccess;
-      setCookieParts.push(
-        makeCookie("tg_at", access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: 3600,
-        })
-      );
-    }
-
-    if (bodyRefresh) {
-      setCookieParts.push(
-        makeCookie("tg_rt", bodyRefresh, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: 30 * 24 * 60 * 60,
-        })
-      );
-    }
-
-    if (!access_token && refresh_token) {
-      const r = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
-      access_token = r.access_token;
-
-      const accessMaxAge = Number(r.expires_in || 3600);
-      const refreshMaxAge = 30 * 24 * 60 * 60;
-
-      setCookieParts.push(
-        makeCookie("tg_at", r.access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: accessMaxAge,
-        }),
-        makeCookie("tg_rt", r.refresh_token || refresh_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: refreshMaxAge,
-        })
-      );
-    }
-
-    if (setCookieParts.length) res.setHeader("Set-Cookie", setCookieParts);
-
-    if (!access_token) return res.status(200).json({ build_tag, ok: true, authenticated: false });
-
-    // ✅ Resolver user
-    let user = null;
-    let sbUser = null;
-
-    if (serviceKey) {
-      const r = await getUserFromAccessTokenAdmin({ supabaseUrl: url, serviceKey, accessToken: access_token });
-      user = r.user || null;
-      sbUser = createClient(url, anonKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: { headers: { Authorization: `Bearer ${access_token}` } },
-      });
-    } else {
-      const r = await getUserFromAccessTokenAnon({ url, anonKey, accessToken: access_token });
-      sbUser = r.sbUser;
-      user = r.user;
-    }
-
-    if (!user && refresh_token) {
-      const refreshed = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
-      access_token = refreshed.access_token;
-
-      const accessMaxAge = Number(refreshed.expires_in || 3600);
-      const refreshMaxAge = 30 * 24 * 60 * 60;
-
-      res.setHeader("Set-Cookie", [
-        makeCookie("tg_at", refreshed.access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: accessMaxAge,
-        }),
-        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: refreshMaxAge,
-        }),
-      ]);
-
-      if (serviceKey) {
-        const r2 = await getUserFromAccessTokenAdmin({ supabaseUrl: url, serviceKey, accessToken: access_token });
-        user = r2.user || null;
-        sbUser = createClient(url, anonKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-          global: { headers: { Authorization: `Bearer ${access_token}` } },
-        });
-      } else {
-        const r2 = await getUserFromAccessTokenAnon({ url, anonKey, accessToken: access_token });
-        sbUser = r2.sbUser;
-        user = r2.user;
-      }
-    }
-
-    if (!user) return res.status(200).json({ build_tag, ok: true, authenticated: false });
-
-    const serviceClient = serviceKey ? createClient(url, serviceKey, { auth: { persistSession: false } }) : null;
-
-    // POST actions
-    if (req.method === "POST") {
-      const action = String(body?.action || "").trim();
-
-      if (action === "accept_tracker_invite") {
-        if (!serviceClient) return res.status(500).json({ build_tag, ok: false, error: "Missing service role key" });
-
-        const result = await acceptTrackerInvite({ serviceClient, invite_id: body?.invite_id, user });
-
-        res.setHeader("Set-Cookie", [
-          makeCookie("tg_org", String(result.org_id), {
-            httpOnly: true,
-            secure: true,
-            sameSite: "Lax",
-            path: "/",
-            domain: cookieDomain || undefined,
-            maxAge: 30 * 24 * 60 * 60,
-          }),
-        ]);
-
-        return res.status(200).json({
-          build_tag,
-          ok: true,
-          accepted: true,
-          org_id: result.org_id,
-          role: "tracker",
-        });
+    try {
+      if (!canRun) {
+        throw new Error(t("auth.loginRequired", { defaultValue: "No hay sesión activa. Inicia sesión nuevamente." }));
       }
 
-      return res.status(200).json({ build_tag, ok: true, authenticated: true });
-    }
-
-    // GET session (legacy)
-    let current_org_id = null;
-    let role = null;
-
-    if (forced_org) {
-      current_org_id = forced_org;
-
-      if (serviceClient) {
-        const { data: rRow, error: rErr } = await serviceClient
-          .from("memberships")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("org_id", current_org_id)
-          .maybeSingle();
-
-        if (!rErr) role = rRow?.role || null;
+      if (start && end && start > end) {
+        throw new Error(
+          t("reportes.errorRangeInvalid", {
+            defaultValue: 'La fecha "Desde" no puede ser mayor que la fecha "Hasta".',
+          })
+        );
       }
+
+      const params = new URLSearchParams();
+      params.set("action", "reportes");
+      params.set("op", "report");
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+      if (selectedGeocercaIds.length) params.set("geocerca_ids", selectedGeocercaIds.join(","));
+      if (selectedPersonalIds.length) params.set("personal_ids", selectedPersonalIds.join(","));
+      if (selectedActivityIds.length) params.set("activity_ids", selectedActivityIds.join(","));
+      if (selectedAsignacionIds.length) params.set("asignacion_ids", selectedAsignacionIds.join(","));
+      params.set("limit", "500");
+      params.set("offset", "0");
+
+      const json = await apiGet(`/api/auth?${params.toString()}`);
+      setRows(Array.isArray(json?.data) ? json.data : []);
+    } catch (e) {
+      console.error("[Reports] loadReport:", e);
+      setErrorMsg(e?.message || t("reportes.errorLoadReport", { defaultValue: "Error generando reporte." }));
+    } finally {
+      setLoadingReport(false);
     }
-
-    if (!current_org_id) {
-      try {
-        const { data: boot } = await sbUser.rpc("bootstrap_session_context");
-        current_org_id = boot?.[0]?.org_id || null;
-        role = role ?? (boot?.[0]?.role || null);
-      } catch {
-        // ok
-      }
-    }
-
-    const { rows: membershipRows, error: memErr } = await listMembershipsForUser({ sbUser, serviceClient, userId: user.id });
-
-    let defaultFix = { changed: false, org_id: null };
-    if (!memErr && membershipRows.length > 0) {
-      defaultFix = await ensureDefaultMembership({ serviceClient, userId: user.id, rows: membershipRows });
-    }
-
-    if (!forced_org) {
-      const picked = pickOrgFromMemberships(membershipRows);
-      current_org_id = defaultFix.org_id || current_org_id || picked || null;
-
-      if (!role && current_org_id) {
-        const hit = membershipRows.find((m) => m?.org_id === current_org_id);
-        role = hit?.role || role;
-      }
-    }
-
-    if (current_org_id && !forced_org) {
-      res.setHeader("Set-Cookie", [
-        makeCookie("tg_org", String(current_org_id), {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          domain: cookieDomain || undefined,
-          maxAge: 30 * 24 * 60 * 60,
-        }),
-      ]);
-    }
-
-    const is_app_root = await computeIsAppRoot({ userEmail: user.email, roleFromBoot: role, serviceClient });
-
-    const organizations =
-      membershipRows.length > 0
-        ? membershipRows.map((m) => (m?.org_id ? { id: m.org_id } : null)).filter(Boolean)
-        : current_org_id
-        ? [{ id: current_org_id }]
-        : [];
-
-    return res.status(200).json({
-      build_tag,
-      ok: true,
-      authenticated: true,
-      bootstrapped: true,
-      user: { id: user.id, email: user.email },
-      current_org_id,
-      role,
-      is_app_root,
-      organizations,
-      ...(debug
-        ? {
-            debug: {
-              auth_mode: bearer ? "bearer" : "cookie",
-              forced_org: forced_org || null,
-              memberships: {
-                total: membershipRows.length,
-                fixed_default: defaultFix.changed,
-                fixed_to: defaultFix.org_id || null,
-              },
-            },
-          }
-        : {}),
-    });
-  } catch (e) {
-    console.error("[api/auth session] fatal:", e);
-    return res.status(500).json({
-      build_tag: "auth-session-v23-bearer-first",
-      ok: false,
-      error: String(e?.message || e),
-      ...(process.env.AUTH_DEBUG === "1" ? { debug: { body: e?.body || null, status: e?.status || null } } : {}),
-    });
   }
-}
 
-// ---------- main router ----------
-export default async function handler(req, res) {
-  const action = String(req.query?.action || "").trim().toLowerCase();
+  function onMultiSelectChange(setter) {
+    return (e) => {
+      const values = Array.from(e.target.selectedOptions).map((o) => o.value);
+      setter(values);
+    };
+  }
 
-  if (action === "magic") return handleMagic(req, res);
-  if (action === "session") return handleSession(req, res);
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          {t("common.actions.loading", { defaultValue: "Cargando…" })}
+        </div>
+      </div>
+    );
+  }
 
-  return res.status(404).json({
-    ok: false,
-    error: "Unknown auth action",
-    hint: "Use /api/auth?action=magic or /api/auth?action=session",
-  });
+  if (!isAuthenticated) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {t("auth.loginRequired", { defaultValue: "No hay sesión activa. Inicia sesión nuevamente." })}
+        </div>
+      </div>
+    );
+  }
+
+  if (contextLoading && !orgId) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          {t("home.missingContextBody", { defaultValue: "Cargando organización…" })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold">{t("reportes.title", { defaultValue: "Reportes de costos" })}</h1>
+        <p className="text-sm text-slate-600">
+          {t("reportes.headerSubtitle", { defaultValue: "Consulta y exporta los costos por persona, actividad y geocerca." })}
+        </p>
+        <p className="text-xs text-gray-500">
+          {t("reportes.currentOrg", { defaultValue: "Organización actual:" })}{" "}
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
+        </p>
+      </div>
+
+      {errorMsg && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 whitespace-pre-wrap">
+          {errorMsg}
+        </div>
+      )}
+
+      <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
+        <div className="flex flex-wrap gap-3 items-end">
+          <DatePickerField
+            label={t("reportes.filtersFrom", { defaultValue: "Desde" })}
+            value={start}
+            onChange={setStart}
+            max={end || undefined}
+            className="min-w-[170px]"
+            inputClassName="px-2 py-1"
+          />
+
+          <DatePickerField
+            label={t("reportes.filtersTo", { defaultValue: "Hasta" })}
+            value={end}
+            onChange={setEnd}
+            min={start || undefined}
+            className="min-w-[170px]"
+            inputClassName="px-2 py-1"
+          />
+
+          <button
+            onClick={loadReport}
+            disabled={loadingReport}
+            className="px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-60"
+          >
+            {loadingReport
+              ? t("reportes.generating", { defaultValue: "Generando…" })
+              : t("reportes.filtersApply", { defaultValue: "Aplicar filtros" })}
+          </button>
+
+          <button
+            onClick={() => exportRowsToCSV(rows, "reportes")}
+            disabled={!rows.length}
+            className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
+          >
+            {t("reportes.tableExportButton", { defaultValue: "Exportar CSV" })}
+          </button>
+
+          <button
+            onClick={loadFilters}
+            disabled={loadingFilters}
+            className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
+          >
+            {loadingFilters
+              ? t("common.actions.loading", { defaultValue: "Cargando…" })
+              : t("reportes.refreshFilters", { defaultValue: "Recargar filtros" })}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersGeofence", { defaultValue: "Geocerca (multi)" })}
+            </label>
+            <select
+              multiple
+              value={selectedGeocercaIds}
+              onChange={onMultiSelectChange(setSelectedGeocercaIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.geocercas.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersPerson", { defaultValue: "Persona (multi)" })}
+            </label>
+            <select
+              multiple
+              value={selectedPersonalIds}
+              onChange={onMultiSelectChange(setSelectedPersonalIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.personas.map((p) => {
+                const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
+                return (
+                  <option key={p.id} value={p.id}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersActivity", { defaultValue: "Actividad (multi)" })}
+            </label>
+            <select
+              multiple
+              value={selectedActivityIds}
+              onChange={onMultiSelectChange(setSelectedActivityIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.activities.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersAsignacion", { defaultValue: "Asignaciones (multi)" })}
+            </label>
+            <select
+              multiple
+              value={selectedAsignacionIds}
+              onChange={onMultiSelectChange(setSelectedAsignacionIds)}
+              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
+              disabled={loadingFilters}
+            >
+              {filters.asignaciones.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {(a.status || a.estado || t("reportes.asignacion", { defaultValue: "asignación" }))} —{" "}
+                  {String(a.id).slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        {loadingReport ? (
+          <p className="p-4 text-sm text-slate-500">{t("common.actions.loading", { defaultValue: "Cargando…" })}</p>
+        ) : rows.length === 0 ? (
+          <p className="p-4 text-sm text-slate-500">
+            {t("reportes.tableEmpty", { defaultValue: "No hay datos con los filtros seleccionados." })}
+          </p>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr>
+                <th className="p-2 text-left">{t("reportes.colDia", { defaultValue: "Día" })}</th>
+                <th className="p-2 text-left">{t("reportes.colPersona", { defaultValue: "Persona" })}</th>
+                <th className="p-2 text-left">{t("reportes.colEmail", { defaultValue: "Email" })}</th>
+                <th className="p-2 text-left">{t("reportes.colGeocerca", { defaultValue: "Geocerca" })}</th>
+                <th className="p-2 text-left">{t("reportes.colActividad", { defaultValue: "Actividad" })}</th>
+                <th className="p-2 text-left">{t("reportes.colAsignacion", { defaultValue: "Asignación" })}</th>
+                <th className="p-2 text-left">{t("reportes.colEntrada", { defaultValue: "Entrada" })}</th>
+                <th className="p-2 text-left">{t("reportes.colSalida", { defaultValue: "Salida" })}</th>
+                <th className="p-2 text-center">{t("reportes.colMarcajes", { defaultValue: "Marcajes" })}</th>
+                <th className="p-2 text-center">{t("reportes.colDentro", { defaultValue: "Dentro" })}</th>
+                <th className="p-2 text-center">{t("reportes.colDist", { defaultValue: "Dist (m)" })}</th>
+                <th className="p-2 text-left">{t("reportes.colTarifa", { defaultValue: "Tarifa" })}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr
+                  key={r.attendance_id ? `${r.attendance_id}-${i}` : i}
+                  className={`border-t hover:bg-slate-50 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
+                >
+                  <td className="p-2">{r.work_day || "—"}</td>
+                  <td className="p-2">{r.personal_nombre || "—"}</td>
+                  <td className="p-2">{r.email || "—"}</td>
+                  <td className="p-2">{r.geofence_name || "—"}</td>
+                  <td className="p-2">{r.activity_name || "—"}</td>
+                  <td className="p-2">
+                    {r.asignacion_id ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})` : "—"}
+                  </td>
+                  <td className="p-2">{r.first_check_in || "—"}</td>
+                  <td className="p-2">{r.last_check_out || "—"}</td>
+                  <td className="p-2 text-center">{r.total_marks ?? "—"}</td>
+                  <td className="p-2 text-center">{r.inside_count ?? "—"}</td>
+                  <td className="p-2 text-center">{r.avg_distance_m ?? "—"}</td>
+                  <td className="p-2">{r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  );
 }
