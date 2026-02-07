@@ -55,6 +55,18 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
+function normalizeRole(role) {
+  return String(role || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isTrackerRole(role) {
+  const r = normalizeRole(role);
+  // Universal/permanente: acepta "tracker", "Tracker", "tracker ", "tracker_device", "tracker:xyz"
+  return r === "tracker" || r.startsWith("tracker");
+}
+
 /** Diagnóstico interno del mapa: tamaño + invalidateSize */
 function MapDiagnostics({ setDiag }) {
   const map = useMap();
@@ -74,7 +86,6 @@ function MapDiagnostics({ setDiag }) {
       }));
     };
 
-    // invalidate y medir varias veces (grid/flex en prod)
     const doInvalidate = () => {
       try { map.invalidateSize(); } catch {}
       updateSize();
@@ -85,14 +96,11 @@ function MapDiagnostics({ setDiag }) {
     const t2 = setTimeout(doInvalidate, 250);
     const t3 = setTimeout(doInvalidate, 1000);
 
-    // ResizeObserver (si cambia el layout)
     let ro = null;
     try {
       ro = new ResizeObserver(() => doInvalidate());
       ro.observe(container);
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     return () => {
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
@@ -130,30 +138,77 @@ export default function TrackerDashboard() {
     tileLoads: 0,
     tileErrors: 0,
     lastTileError: null,
+
+    membershipsRows: 0,
+    trackersFound: 0,
+    positionsFound: 0,
+    lastMembershipError: null,
+    lastPositionsError: null,
+    lastFromIso: null,
+    lastTargetCount: 0,
   });
 
+  /**
+   * UNIVERSAL Y PERMANENTE:
+   * - 1er intento: filtra server-side por role ilike 'tracker%' (case-insensitive)
+   * - fallback: si llega vacío, trae memberships sin filtro y filtra client-side
+   */
   const fetchMembershipTrackers = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
-    const { data, error } = await supabase
+
+    setDiag((d) => ({ ...d, lastMembershipError: null }));
+
+    // Intento 1: server-side, tolerante a mayúsculas y variantes
+    const q1 = await supabase
       .from("memberships")
       .select("user_id, role, org_id")
       .eq("org_id", currentOrgId)
-      .eq("role", "tracker");
+      .ilike("role", "tracker%");
 
-    if (error) {
-      console.error("[TrackerDashboard] memberships trackers error", error);
+    if (q1.error) {
+      console.error("[TrackerDashboard] memberships trackers error (q1)", q1.error);
+      setDiag((d) => ({ ...d, lastMembershipError: q1.error.message || String(q1.error) }));
       setMembershipTrackers([]);
       return;
     }
 
-    const uniq = Array.from(new Set((data || []).map((r) => String(r.user_id)).filter(Boolean)))
-      .map((user_id) => ({ user_id }));
+    let rows = Array.isArray(q1.data) ? q1.data : [];
+    let trackers = rows.filter((r) => isTrackerRole(r?.role));
+
+    // Fallback: si vino vacío, trae memberships sin filtro y filtra local (universal)
+    if (!trackers.length) {
+      const q2 = await supabase
+        .from("memberships")
+        .select("user_id, role, org_id")
+        .eq("org_id", currentOrgId);
+
+      if (q2.error) {
+        console.error("[TrackerDashboard] memberships trackers error (q2)", q2.error);
+        setDiag((d) => ({ ...d, lastMembershipError: q2.error.message || String(q2.error) }));
+        setMembershipTrackers([]);
+        return;
+      }
+
+      rows = Array.isArray(q2.data) ? q2.data : [];
+      trackers = rows.filter((r) => isTrackerRole(r?.role));
+    }
+
+    const uniq = Array.from(
+      new Set(trackers.map((r) => String(r.user_id)).filter(Boolean))
+    ).map((user_id) => ({ user_id }));
+
+    setDiag((d) => ({
+      ...d,
+      membershipsRows: rows.length,
+      trackersFound: uniq.length,
+    }));
 
     setMembershipTrackers(uniq);
   }, []);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
+
     const { data, error } = await supabase
       .from("personal")
       .select("*")
@@ -166,8 +221,7 @@ export default function TrackerDashboard() {
       return;
     }
 
-    const arr = Array.isArray(data) ? data : [];
-    setPersonalRows(arr);
+    setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
   const fetchPositions = useCallback(async (currentOrgId, options = { showSpinner: true }) => {
@@ -177,13 +231,24 @@ export default function TrackerDashboard() {
     try {
       if (showSpinner) setLoading(true);
       setErrorMsg("");
+      setDiag((d) => ({ ...d, lastPositionsError: null }));
 
       const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
       const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
       const allowedTrackerIds = (membershipTrackers || []).map((x) => x.user_id).filter(Boolean);
+
+      setDiag((d) => ({
+        ...d,
+        lastFromIso: fromIso,
+        lastTargetCount: allowedTrackerIds.length,
+      }));
+
       if (!allowedTrackerIds.length) {
+        // Clave: esto explica por qué nunca ves tracker_positions en Network
         setPositions([]);
+        setDiag((d) => ({ ...d, positionsFound: 0 }));
+        setErrorMsg("No hay trackers en memberships para esta org (role tracker).");
         return;
       }
 
@@ -203,6 +268,7 @@ export default function TrackerDashboard() {
 
       if (error) {
         console.error("[TrackerDashboard] positions error", error);
+        setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
         setErrorMsg("Error al cargar posiciones.");
         return;
       }
@@ -223,6 +289,7 @@ export default function TrackerDashboard() {
         .filter((p) => p._valid);
 
       setPositions(normalized);
+      setDiag((d) => ({ ...d, positionsFound: normalized.length }));
     } finally {
       if (showSpinner) setLoading(false);
     }
@@ -359,6 +426,18 @@ export default function TrackerDashboard() {
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
           <b>lastTileError</b>: {diag.lastTileError || "—"}
         </div>
+
+        <div><b>membershipsRows</b>: {diag.membershipsRows}</div>
+        <div><b>trackersFound</b>: {diag.trackersFound}</div>
+        <div><b>targets</b>: {diag.lastTargetCount}</div>
+        <div><b>positionsFound</b>: {diag.positionsFound}</div>
+        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
+          <b>fromIso</b>: {diag.lastFromIso || "—"}
+        </div>
+        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
+          <b>lastMembershipError</b>: {diag.lastMembershipError || "—"} |{" "}
+          <b>lastPositionsError</b>: {diag.lastPositionsError || "—"}
+        </div>
       </div>
 
       {/* Contenedor MAPA con altura FORZADA */}
@@ -387,7 +466,7 @@ export default function TrackerDashboard() {
             }}
           />
 
-          {/* Puntos/rutas (solo para ver si leaflet está vivo) */}
+          {/* Puntos/rutas */}
           {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
             const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
             const chron = [...pts].reverse();
