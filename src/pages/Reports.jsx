@@ -65,6 +65,16 @@ function normalizeAsignaciones(arr) {
   return dedupeById((Array.isArray(arr) ? arr : []).filter((a) => a?.id));
 }
 
+function stringifyDetails(d) {
+  if (!d) return "";
+  if (typeof d === "string") return d;
+  try {
+    return JSON.stringify(d);
+  } catch {
+    return String(d);
+  }
+}
+
 export default function Reports() {
   const { t } = useTranslation();
   const { loading, isAuthenticated, currentOrg, contextLoading, session } = useAuth();
@@ -72,7 +82,7 @@ export default function Reports() {
   // Solo para UX (mostrar nombre). NO se usa para auth multi-tenant.
   const orgId = currentOrg?.id || null;
 
-  // Si existe token, lo mandamos como Bearer. Si no, cookie tg_at debe funcionar.
+  // Bearer opcional. Si no hay, cookie tg_at debe funcionar.
   const token = session?.access_token || null;
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -91,7 +101,6 @@ export default function Reports() {
 
   const [rows, setRows] = useState([]);
 
-  // ✅ Ya no bloqueamos por orgId/token: backend resuelve org server-side.
   const canRun = useMemo(() => !loading && isAuthenticated && !contextLoading, [loading, isAuthenticated, contextLoading]);
 
   async function apiGet(url) {
@@ -99,18 +108,24 @@ export default function Reports() {
       "cache-control": "no-cache",
       pragma: "no-cache",
     };
-
-    // ✅ Bearer opcional (si no hay, igual funciona con cookie tg_at)
     if (token) headers.Authorization = `Bearer ${token}`;
 
     const resp = await fetch(url, {
       method: "GET",
       headers,
-      credentials: "include", // ✅ CRÍTICO: permite cookie HttpOnly tg_at/tg_rt
+      credentials: "include",
     });
 
     const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(json?.error || json?.message || `HTTP ${resp.status}`);
+
+    if (!resp.ok) {
+      const base = json?.error || json?.message || `HTTP ${resp.status}`;
+      const det = stringifyDetails(json?.details);
+      const ver = json?.version ? ` | ${json.version}` : "";
+      const msg = det ? `${base} — ${det}${ver}` : `${base}${ver}`;
+      throw new Error(msg);
+    }
+
     return json;
   }
 
@@ -245,7 +260,9 @@ export default function Reports() {
       </div>
 
       {errorMsg && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMsg}</div>
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 whitespace-pre-wrap">
+          {errorMsg}
+        </div>
       )}
 
       <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
@@ -292,7 +309,7 @@ export default function Reports() {
             className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
           >
             {loadingFilters
-              ? t("common.actions.loading", { defaultValue: "Cargando…" })
+              ? t("common.actions.loading", { defaultValue: "Cargando…" })}
               : t("reportes.refreshFilters", { defaultValue: "Recargar filtros" })}
           </button>
         </div>
@@ -315,9 +332,6 @@ export default function Reports() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">
-              {t("reportes.multiTip", { defaultValue: "Tip: Ctrl/Command para seleccionar múltiples." })}
-            </p>
           </div>
 
           <div>
@@ -384,6 +398,7 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* tabla igual que antes */}
       <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         {loadingReport ? (
           <p className="p-4 text-sm text-slate-500">{t("common.actions.loading", { defaultValue: "Cargando…" })}</p>
