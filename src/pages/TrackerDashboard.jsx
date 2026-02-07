@@ -55,15 +55,6 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
-function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
-}
-
-function isTrackerRole(role) {
-  const r = normalizeRole(role);
-  return r === "tracker" || r.startsWith("tracker");
-}
-
 /** Diagnóstico interno del mapa: tamaño + invalidateSize */
 function MapDiagnostics({ setDiag }) {
   const map = useMap();
@@ -122,11 +113,10 @@ export default function TrackerDashboard() {
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
 
-  const [membershipTrackers, setMembershipTrackers] = useState([]); // [{user_id}]
+  const [assignmentTrackers, setAssignmentTrackers] = useState([]); // [{user_id}]
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
 
-  // DIAG
   const [diag, setDiag] = useState({
     mapCreated: false,
     w: 0,
@@ -136,56 +126,59 @@ export default function TrackerDashboard() {
     tileErrors: 0,
     lastTileError: null,
 
-    membershipsRows: 0,
+    assignmentsRows: 0,
     trackersFound: 0,
     positionsFound: 0,
-    lastMembershipError: null,
+    lastAssignmentsError: null,
     lastPositionsError: null,
     lastFromIso: null,
     lastTargetCount: 0,
   });
 
-  /**
-   * UNIVERSAL Y PERMANENTE:
-   * - No usamos ilike (evita 404/compatibilidad PostgREST)
-   * - Traemos memberships por org_id y filtramos local por role (tracker*)
-   */
-  const fetchMembershipTrackers = useCallback(async (currentOrgId) => {
+  // FUENTE CANÓNICA: tracker_assignments (activos/vigentes)
+  const fetchAssignmentTrackers = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
-    setDiag((d) => ({ ...d, lastMembershipError: null }));
+    setDiag((d) => ({ ...d, lastAssignmentsError: null }));
+
+    // Fecha "hoy" para filtros date (evita líos TZ)
+    const today = new Date();
+    const yyyy = today.getUTCFullYear();
+    const mm = String(today.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(today.getUTCDate()).padStart(2, "0");
+    const todayStr = `${yyyy}-${mm}-${dd}`;
 
     const { data, error } = await supabase
-      .from("memberships")
-      .select("user_id, role, org_id")
-      .eq("org_id", currentOrgId);
+      .from("tracker_assignments")
+      .select("tracker_user_id, org_id, active, start_date, end_date")
+      .eq("org_id", currentOrgId)
+      .eq("active", true)
+      .lte("start_date", todayStr)
+      .gte("end_date", todayStr);
 
     if (error) {
-      console.error("[TrackerDashboard] memberships trackers error", error);
-      setDiag((d) => ({ ...d, lastMembershipError: error.message || String(error) }));
-      setMembershipTrackers([]);
+      console.error("[TrackerDashboard] tracker_assignments error", error);
+      setDiag((d) => ({ ...d, lastAssignmentsError: error.message || String(error) }));
+      setAssignmentTrackers([]);
       return;
     }
 
     const rows = Array.isArray(data) ? data : [];
-    const trackers = rows.filter((r) => isTrackerRole(r?.role));
-
     const uniq = Array.from(
-      new Set(trackers.map((r) => String(r.user_id)).filter(Boolean))
+      new Set(rows.map((r) => String(r.tracker_user_id)).filter(Boolean))
     ).map((user_id) => ({ user_id }));
 
     setDiag((d) => ({
       ...d,
-      membershipsRows: rows.length,
+      assignmentsRows: rows.length,
       trackersFound: uniq.length,
     }));
 
-    setMembershipTrackers(uniq);
+    setAssignmentTrackers(uniq);
   }, []);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
-
     const { data, error } = await supabase
       .from("personal")
       .select("*")
@@ -213,7 +206,7 @@ export default function TrackerDashboard() {
       const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
       const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
-      const allowedTrackerIds = (membershipTrackers || []).map((x) => x.user_id).filter(Boolean);
+      const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
 
       setDiag((d) => ({
         ...d,
@@ -224,7 +217,7 @@ export default function TrackerDashboard() {
       if (!allowedTrackerIds.length) {
         setPositions([]);
         setDiag((d) => ({ ...d, positionsFound: 0 }));
-        setErrorMsg("No hay trackers en memberships para esta org (role tracker*).");
+        setErrorMsg("No hay trackers asignados (tracker_assignments) vigentes para esta org.");
         return;
       }
 
@@ -269,26 +262,26 @@ export default function TrackerDashboard() {
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, [membershipTrackers, selectedTrackerId, timeWindowId]);
+  }, [assignmentTrackers, selectedTrackerId, timeWindowId]);
 
   useEffect(() => {
     if (!orgId) return;
     (async () => {
-      await Promise.all([fetchMembershipTrackers(orgId), fetchPersonalCatalog(orgId)]);
+      await Promise.all([fetchAssignmentTrackers(orgId), fetchPersonalCatalog(orgId)]);
     })();
-  }, [orgId, fetchMembershipTrackers, fetchPersonalCatalog]);
+  }, [orgId, fetchAssignmentTrackers, fetchPersonalCatalog]);
 
   useEffect(() => {
     if (!orgId) return;
     fetchPositions(orgId, { showSpinner: true });
-  }, [orgId, membershipTrackers, timeWindowId, selectedTrackerId, fetchPositions]);
+  }, [orgId, assignmentTrackers, timeWindowId, selectedTrackerId, fetchPositions]);
 
   useEffect(() => {
     if (!orgId) return;
-    if (!membershipTrackers?.length) return;
+    if (!assignmentTrackers?.length) return;
     const id = setInterval(() => fetchPositions(orgId, { showSpinner: false }), 30_000);
     return () => clearInterval(id);
-  }, [orgId, membershipTrackers, fetchPositions]);
+  }, [orgId, assignmentTrackers, fetchPositions]);
 
   const personalByUserId = useMemo(() => {
     const m = new Map();
@@ -300,13 +293,13 @@ export default function TrackerDashboard() {
   }, [personalRows]);
 
   const trackersUi = useMemo(() => {
-    return (membershipTrackers || []).map((tRow) => {
+    return (assignmentTrackers || []).map((tRow) => {
       const user_id = String(tRow.user_id);
       const p = personalByUserId.get(user_id) || null;
       const label = p?.nombre || p?.email || user_id;
       return { user_id, label };
     });
-  }, [membershipTrackers, personalByUserId]);
+  }, [assignmentTrackers, personalByUserId]);
 
   const mapCenter = useMemo(() => {
     const last = positions?.[0];
@@ -392,43 +385,31 @@ export default function TrackerDashboard() {
         </div>
       )}
 
-      {/* Panel diagnóstico */}
       <div className="rounded border bg-white p-3 text-xs grid grid-cols-2 md:grid-cols-6 gap-2">
         <div><b>mapCreated</b>: {String(diag.mapCreated)}</div>
         <div><b>size</b>: {diag.w}x{diag.h}</div>
         <div><b>zoom</b>: {String(diag.zoom)}</div>
-        <div><b>tiles ok</b>: {diag.tileLoads}</div>
-        <div><b>tiles err</b>: {diag.tileErrors}</div>
-        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>lastTileError</b>: {diag.lastTileError || "—"}
-        </div>
-
-        <div><b>membershipsRows</b>: {diag.membershipsRows}</div>
+        <div><b>assignmentsRows</b>: {diag.assignmentsRows}</div>
         <div><b>trackersFound</b>: {diag.trackersFound}</div>
-        <div><b>targets</b>: {diag.lastTargetCount}</div>
         <div><b>positionsFound</b>: {diag.positionsFound}</div>
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>fromIso</b>: {diag.lastFromIso || "—"}
+          <b>fromIso</b>: {diag.lastFromIso || "—"} | <b>targets</b>: {diag.lastTargetCount}
         </div>
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>lastMembershipError</b>: {diag.lastMembershipError || "—"} |{" "}
+          <b>lastAssignmentsError</b>: {diag.lastAssignmentsError || "—"} |{" "}
           <b>lastPositionsError</b>: {diag.lastPositionsError || "—"}
         </div>
       </div>
 
-      {/* Contenedor MAPA */}
       <div className="rounded-lg border bg-white overflow-hidden" style={{ height: 520, minHeight: 420 }}>
         <MapContainer
           center={mapCenter}
           zoom={12}
           style={{ height: "100%", width: "100%" }}
           scrollWheelZoom
-          whenCreated={(map) => {
-            try { map.invalidateSize(); } catch {}
-          }}
+          whenCreated={(map) => { try { map.invalidateSize(); } catch {} }}
         >
           <MapDiagnostics setDiag={setDiag} />
-
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
@@ -438,14 +419,12 @@ export default function TrackerDashboard() {
             const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
             const chron = [...pts].reverse();
             const latlngs = chron.map((p) => [p.lat, p.lng]).filter(Boolean);
-
             const latest = pts[0];
             if (!latest) return null;
 
             return (
               <React.Fragment key={trackerId}>
                 {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
-
                 <CircleMarker
                   center={[latest.lat, latest.lng]}
                   radius={7}
