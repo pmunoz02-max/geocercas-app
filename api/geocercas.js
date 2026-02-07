@@ -2,16 +2,20 @@
 // ============================================================
 // TENANT-SAFE Geocercas API (CANONICAL) — Feb 2026
 // ✅ Usa public.geofences (source of truth real)
+// ✅ Membership universal: public.memberships (revoked_at IS NULL)
+// ✅ Org resuelta de forma segura (x-org-id o default/fallback)
 // - Endpoint se mantiene /api/geocercas por compatibilidad
 // - Mapeo legacy:
 //    nombre  <-> geofences.name
 //    geojson <-> geofences.geojson || geofences.geometry
 // - Auth universal: Bearer token (preferido) o cookie tg_at (legacy)
-// - Contexto por sesión: bootstrap_session_context()
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { resolveOrgAndMembership } from "../src/server/lib/resolveOrg.js";
+
+export const config = { runtime: "nodejs" };
 
 function send(res, status, payload) {
   res.setHeader("Content-Type", "application/json");
@@ -28,47 +32,40 @@ function parseCookies(req) {
   header.split(";").forEach((part) => {
     const [k, ...rest] = part.trim().split("=");
     if (!k) return;
-    out[k] = decodeURIComponent(rest.join("=") || "");
+    try {
+      out[k] = decodeURIComponent(rest.join("=") || "");
+    } catch {
+      out[k] = rest.join("=") || "";
+    }
   });
   return out;
 }
 
 function getBearerToken(req) {
-  const h = String(req.headers?.authorization || "").trim();
+  const h = String(req.headers?.authorization || req.headers?.Authorization || "").trim();
   if (!h) return "";
   const m = h.match(/^Bearer\s+(.+)$/i);
   return m ? String(m[1] || "").trim() : "";
 }
 
-function supabaseForToken(accessToken) {
-  const url = process.env.SUPABASE_URL;
-  const anon = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("Missing SUPABASE env vars");
-
-  return createClient(url, anon, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
-  });
+function getAccessToken(req) {
+  const bearer = getBearerToken(req);
+  if (bearer) return bearer;
+  const cookies = parseCookies(req);
+  return cookies.tg_at || "";
 }
 
-async function getContextOr401(req) {
-  const bearer = getBearerToken(req);
-  if (bearer) {
-    const supabase = supabaseForToken(bearer);
-    const { error } = await supabase.rpc("bootstrap_session_context");
-    if (error) return { ok: false, status: 401, error: error.message || "ctx error (bearer)" };
-    return { ok: true, supabase };
-  }
+function isMissingColumnError(err, colRef) {
+  const msg = String(err?.message || "").toLowerCase();
+  return msg.includes(`column ${String(colRef).toLowerCase()}`) && msg.includes("does not exist");
+}
 
-  const cookies = parseCookies(req);
-  const token = cookies.tg_at || "";
-  if (!token) return { ok: false, status: 401, error: "missing auth (no Bearer, no tg_at cookie)" };
+function normalizeCi(s) {
+  return String(s || "").trim().toLowerCase();
+}
 
-  const supabase = supabaseForToken(token);
-  const { error } = await supabase.rpc("bootstrap_session_context");
-  if (error) return { ok: false, status: 401, error: error.message || "ctx error (cookie)" };
-
-  return { ok: true, supabase };
+function newUuid() {
+  return crypto.randomUUID();
 }
 
 function mapGeofenceRowToLegacy(row) {
@@ -83,26 +80,64 @@ function mapGeofenceRowToLegacy(row) {
   };
 }
 
-function isMissingColumnError(err, colRef) {
-  const msg = String(err?.message || "").toLowerCase();
-  return msg.includes(`column ${String(colRef).toLowerCase()}`) && msg.includes("does not exist");
-}
-
-function normalizeCi(s) {
-  return String(s || "").trim().toLowerCase();
-}
-
-function newUuid() {
-  // node 18+: crypto.randomUUID()
-  return crypto.randomUUID();
+function getEnv(nameList) {
+  for (const n of nameList) {
+    const v = process.env[n];
+    if (v && String(v).trim()) return String(v).trim();
+  }
+  return null;
 }
 
 export default async function handler(req, res) {
-  try {
-    const ctx = await getContextOr401(req);
-    if (!ctx.ok) return send(res, ctx.status, { ok: false, error: ctx.error });
+  const build_tag = "geocercas-v2026-02-memberships";
 
-    const { supabase } = ctx;
+  try {
+    const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
+    const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return send(res, 500, {
+        ok: false,
+        build_tag,
+        error: "Missing Supabase env vars (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)",
+      });
+    }
+
+    // ===== AUTH =====
+    const accessToken = getAccessToken(req);
+    if (!accessToken) {
+      return send(res, 401, {
+        ok: false,
+        build_tag,
+        error: "Missing authentication (no Bearer, no tg_at cookie)",
+      });
+    }
+
+    // ===== ADMIN CLIENT (bypass RLS) =====
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
+
+    // Validar usuario desde token
+    const { data: userData, error: userErr } = await admin.auth.getUser(accessToken);
+    const user = userData?.user || null;
+    if (userErr || !user) {
+      return send(res, 401, { ok: false, build_tag, error: "Invalid user" });
+    }
+
+    // Org solicitada (si viene). Igual se valida contra memberships.
+    const requestedOrgId = req.headers["x-org-id"] ? String(req.headers["x-org-id"]) : "";
+
+    // ===== MEMBERSHIP (UNIVERSAL) =====
+    const membership = await resolveOrgAndMembership(admin, user.id, requestedOrgId);
+    if (!membership?.org_id) {
+      return send(res, 403, {
+        ok: false,
+        build_tag,
+        error: "User not member of organization",
+      });
+    }
+
+    const orgId = membership.org_id;
 
     // -------------------------
     // GET → list geofences (legacy "geocercas")
@@ -111,13 +146,27 @@ export default async function handler(req, res) {
       const id = req.query?.id ? String(req.query.id) : "";
 
       if (id) {
-        const { data, error } = await supabase.from("geofences").select("*").eq("id", id).maybeSingle();
-        if (error) return send(res, 500, { ok: false, error: error.message });
+        // Seguridad: siempre filtrar por org_id
+        const { data, error } = await admin
+          .from("geofences")
+          .select("*")
+          .eq("id", id)
+          .eq("org_id", orgId)
+          .maybeSingle();
+
+        if (error) return send(res, 500, { ok: false, build_tag, error: error.message });
+        if (!data) return send(res, 404, { ok: false, build_tag, error: "Not found" });
+
         return send(res, 200, mapGeofenceRowToLegacy(data));
       }
 
-      const { data, error } = await supabase.from("geofences").select("*").order("created_at", { ascending: false });
-      if (error) return send(res, 500, { ok: false, error: error.message });
+      const { data, error } = await admin
+        .from("geofences")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false });
+
+      if (error) return send(res, 500, { ok: false, build_tag, error: error.message });
       return send(res, 200, (data || []).map(mapGeofenceRowToLegacy));
     }
 
@@ -128,42 +177,33 @@ export default async function handler(req, res) {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
       let id = body.id || null;
-      const org_id = body.org_id || body.orgId || null;
       const name = String(body.nombre || body.name || "").trim();
+      if (!name) return send(res, 422, { ok: false, build_tag, error: "nombre (o name) is required" });
 
-      if (!name) return send(res, 422, { ok: false, error: "nombre (o name) is required" });
-      if (!org_id) return send(res, 422, { ok: false, error: "org_id is required" });
-
+      // ⚠️ org_id del body NO se usa (evita cross-tenant). Siempre usamos orgId resuelto.
       const geo = body.geojson || body.geometry || body.geom || null;
 
-      // ✅ FIX anti-duplicados:
-      // si no viene id, intentamos encontrar uno existente por (org_id + lower(name))
+      // Anti-duplicados: si no viene id, buscar por (org_id + name CI)
       if (!id) {
-        const { data: existing, error: e0 } = await supabase
+        const { data: existing, error: e0 } = await admin
           .from("geofences")
           .select("id")
-          .eq("org_id", org_id)
-          .ilike("name", name) // ilike equivale a CI
+          .eq("org_id", orgId)
+          .ilike("name", name)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        if (e0) {
-          // no matamos el request por esto, solo logico: seguimos
-          console.warn("[api/geocercas] lookup existing failed", e0.message);
-        } else if (existing?.id) {
-          id = existing.id;
-        }
+        if (!e0 && existing?.id) id = existing.id;
       }
 
-      // ✅ FIX id NOT NULL: si aún no hay id, generamos uno
       if (!id) id = newUuid();
 
       // Intento 1: columna geojson
-      let payload = { id, org_id, name };
+      let payload = { id, org_id: orgId, name };
       if (geo !== null) payload.geojson = geo;
 
-      let { data, error } = await supabase
+      let { data, error } = await admin
         .from("geofences")
         .upsert(payload, { onConflict: "id" })
         .select("*")
@@ -171,8 +211,8 @@ export default async function handler(req, res) {
 
       // Fallback: si no existe geojson, probamos geometry
       if (error && geo !== null && isMissingColumnError(error, "geofences.geojson")) {
-        payload = { id, org_id, name, geometry: geo };
-        const r2 = await supabase
+        payload = { id, org_id: orgId, name, geometry: geo };
+        const r2 = await admin
           .from("geofences")
           .upsert(payload, { onConflict: "id" })
           .select("*")
@@ -181,40 +221,39 @@ export default async function handler(req, res) {
         error = r2.error;
       }
 
-      if (error) return send(res, 500, { ok: false, error: error.message });
-      return send(res, 200, { ok: true, row: mapGeofenceRowToLegacy(data) });
+      if (error) return send(res, 500, { ok: false, build_tag, error: error.message });
+      return send(res, 200, { ok: true, row: mapGeofenceRowToLegacy(data), org_id: orgId });
     }
 
     // -------------------------
     // DELETE → delete geofence
-    // - por id (query ?id=)
-    // - bulk por { orgId, nombres_ci } (body)
+    // - por id (query ?id=)  (siempre dentro del org)
+    // - bulk por { nombres_ci } (body)  (org se toma de memberships)
     // -------------------------
     if (req.method === "DELETE") {
       const id = req.query?.id ? String(req.query.id) : "";
 
       if (id) {
-        const { error } = await supabase.from("geofences").delete().eq("id", id);
-        if (error) return send(res, 500, { ok: false, error: error.message });
+        const { error } = await admin.from("geofences").delete().eq("id", id).eq("org_id", orgId);
+        if (error) return send(res, 500, { ok: false, build_tag, error: error.message });
         return send(res, 200, { ok: true });
       }
 
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
-      const orgId = body.orgId || body.org_id || null;
       const nombres_ci = Array.isArray(body.nombres_ci) ? body.nombres_ci : [];
 
-      if (!orgId || !nombres_ci.length) {
-        return send(res, 422, { ok: false, error: "id (query) OR { orgId, nombres_ci[] } is required" });
+      if (!nombres_ci.length) {
+        return send(res, 422, { ok: false, build_tag, error: "id (query) OR { nombres_ci[] } is required" });
       }
 
       const wanted = new Set(nombres_ci.map(normalizeCi).filter(Boolean));
 
-      const { data: rows, error: listErr } = await supabase
+      const { data: rows, error: listErr } = await admin
         .from("geofences")
         .select("id, org_id, name")
         .eq("org_id", orgId);
 
-      if (listErr) return send(res, 500, { ok: false, error: listErr.message });
+      if (listErr) return send(res, 500, { ok: false, build_tag, error: listErr.message });
 
       const ids = (rows || [])
         .filter((r) => wanted.has(normalizeCi(r?.name)))
@@ -223,16 +262,16 @@ export default async function handler(req, res) {
 
       if (!ids.length) return send(res, 200, { ok: true, deleted: 0 });
 
-      const { error: delErr } = await supabase.from("geofences").delete().in("id", ids);
-      if (delErr) return send(res, 500, { ok: false, error: delErr.message });
+      const { error: delErr } = await admin.from("geofences").delete().in("id", ids).eq("org_id", orgId);
+      if (delErr) return send(res, 500, { ok: false, build_tag, error: delErr.message });
 
       return send(res, 200, { ok: true, deleted: ids.length });
     }
 
     res.setHeader("Allow", ["GET", "POST", "DELETE"]);
-    return send(res, 405, { ok: false, error: "Method not allowed" });
+    return send(res, 405, { ok: false, build_tag, error: "Method not allowed" });
   } catch (err) {
     console.error("[api/geocercas][FATAL]", err);
-    return send(res, 500, { ok: false, error: err?.message || "fatal" });
+    return send(res, 500, { ok: false, build_tag: "geocercas-v2026-02-memberships", error: err?.message || "fatal" });
   }
 }
