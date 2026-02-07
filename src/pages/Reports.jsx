@@ -89,12 +89,13 @@ export default function Reports() {
   const [rows, setRows] = useState([]);
 
   const canRun = useMemo(
-    () => !loading && isAuthenticated && !!orgId && !!token,
-    [loading, isAuthenticated, orgId, token]
+    () => !loading && isAuthenticated && !!token && !!orgId,
+    [loading, isAuthenticated, token, orgId]
   );
 
   async function apiGet(url) {
     if (!token) throw new Error(t("reportes.errorMissingAuth", { defaultValue: "Missing authentication" }));
+    // orgId es requerido en UI, pero el backend ya soporta fallback. Igual lo exigimos aquí para UX.
     if (!orgId) throw new Error(t("reportes.errorMissingOrg", { defaultValue: "Cannot resolve current organization" }));
 
     const resp = await fetch(url, {
@@ -103,8 +104,8 @@ export default function Reports() {
         Authorization: `Bearer ${token}`,
         "x-org-id": String(orgId),
         "cache-control": "no-cache",
-        pragma: "no-cache"
-      }
+        pragma: "no-cache",
+      },
     });
 
     const json = await resp.json().catch(() => ({}));
@@ -161,7 +162,7 @@ export default function Reports() {
       if (start && end && start > end) {
         throw new Error(
           t("reportes.errorRangeInvalid", {
-            defaultValue: 'La fecha "Desde" no puede ser mayor que la fecha "Hasta".'
+            defaultValue: 'La fecha "Desde" no puede ser mayor que la fecha "Hasta".',
           })
         );
       }
@@ -224,12 +225,27 @@ export default function Reports() {
     );
   }
 
+  if (!orgId) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {t("reportes.errorMissingOrg", { defaultValue: "No se pudo resolver la organización actual." })}
+          <div className="text-xs text-red-700/70 mt-1">
+            Debug: currentOrg={String(currentOrg?.id || "")}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold">{t("reportes.title", { defaultValue: "Reportes de costos" })}</h1>
         <p className="text-sm text-slate-600">
-          {t("reportes.headerSubtitle", { defaultValue: "Consulta y exporta los costos por persona, actividad y geocerca." })}
+          {t("reportes.headerSubtitle", {
+            defaultValue: "Consulta y exporta los costos por persona, actividad y geocerca.",
+          })}
         </p>
         <p className="text-xs text-gray-500">
           {t("reportes.currentOrg", { defaultValue: "Organización actual:" })}{" "}
@@ -292,7 +308,9 @@ export default function Reports() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersGeofence", { defaultValue: "Geocerca (multi)" })}</label>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersGeofence", { defaultValue: "Geocerca (multi)" })}
+            </label>
             <select
               multiple
               value={selectedGeocercaIds}
@@ -301,14 +319,20 @@ export default function Reports() {
               disabled={loadingFilters}
             >
               {filters.geocercas.map((g) => (
-                <option key={g.id} value={g.id}>{g.nombre}</option>
+                <option key={g.id} value={g.id}>
+                  {g.nombre}
+                </option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">{t("reportes.multiTip", { defaultValue: "Tip: Ctrl/Command para seleccionar múltiples." })}</p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {t("reportes.multiTip", { defaultValue: "Tip: Ctrl/Command para seleccionar múltiples." })}
+            </p>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersPerson", { defaultValue: "Persona (multi)" })}</label>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersPerson", { defaultValue: "Persona (multi)" })}
+            </label>
             <select
               multiple
               value={selectedPersonalIds}
@@ -318,13 +342,19 @@ export default function Reports() {
             >
               {filters.personas.map((p) => {
                 const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
-                return <option key={p.id} value={p.id}>{label}</option>;
+                return (
+                  <option key={p.id} value={p.id}>
+                    {label}
+                  </option>
+                );
               })}
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersActivity", { defaultValue: "Actividad (multi)" })}</label>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersActivity", { defaultValue: "Actividad (multi)" })}
+            </label>
             <select
               multiple
               value={selectedActivityIds}
@@ -334,14 +364,17 @@ export default function Reports() {
             >
               {filters.activities.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}{a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
+                  {a.name}
+                  {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">{t("reportes.filtersAsignacion", { defaultValue: "Asignaciones (multi)" })}</label>
+            <label className="text-sm font-medium text-slate-700">
+              {t("reportes.filtersAsignacion", { defaultValue: "Asignaciones (multi)" })}
+            </label>
             <select
               multiple
               value={selectedAsignacionIds}
@@ -351,7 +384,8 @@ export default function Reports() {
             >
               {filters.asignaciones.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {(a.status || a.estado || t("reportes.asignacion", { defaultValue: "asignación" }))} — {String(a.id).slice(0, 8)}
+                  {(a.status || a.estado || t("reportes.asignacion", { defaultValue: "asignación" }))} —{" "}
+                  {String(a.id).slice(0, 8)}
                 </option>
               ))}
             </select>
@@ -363,7 +397,9 @@ export default function Reports() {
         {loadingReport ? (
           <p className="p-4 text-sm text-slate-500">{t("common.actions.loading", { defaultValue: "Cargando…" })}</p>
         ) : rows.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">{t("reportes.tableEmpty", { defaultValue: "No hay datos con los filtros seleccionados." })}</p>
+          <p className="p-4 text-sm text-slate-500">
+            {t("reportes.tableEmpty", { defaultValue: "No hay datos con los filtros seleccionados." })}
+          </p>
         ) : (
           <table className="min-w-full text-sm">
             <thead className="bg-slate-100 text-slate-700">
