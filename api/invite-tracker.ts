@@ -2,6 +2,9 @@
 import { createClient } from "@supabase/supabase-js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+// ✅ Canonical resolver (server-side org + membership)
+import { resolveOrgAndMembership } from "../src/server/lib/resolveOrg.js";
+
 const supabaseUrl = process.env.SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const anonKey = process.env.SUPABASE_ANON_KEY!;
@@ -10,18 +13,12 @@ const anonKey = process.env.SUPABASE_ANON_KEY!;
 const PUBLIC_SITE_URL_ENV = (process.env.PUBLIC_SITE_URL || "").replace(/\/+$/, "");
 
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-  auth: { persistSession: false },
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
 const supabaseAnon = createClient(supabaseUrl, anonKey, {
-  auth: { persistSession: false },
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
-
-function isUuid(v: any) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    String(v || "").trim()
-  );
-}
 
 function normEmail(v: any) {
   return String(v || "").trim().toLowerCase();
@@ -38,9 +35,7 @@ function toBool(v: any, def = false) {
 function safePathOrDefault(v: any, def: string) {
   const s = String(v || "").trim();
   if (!s) return def;
-  // Permitimos solo paths relativos seguros (evitar open-redirect)
   if (!s.startsWith("/")) return def;
-  // Evitar protocolos escondidos
   if (s.startsWith("//")) return def;
   return s;
 }
@@ -52,10 +47,7 @@ function safePathOrDefault(v: any, def: string) {
 function getPublicSiteUrl(req: VercelRequest) {
   if (PUBLIC_SITE_URL_ENV) return PUBLIC_SITE_URL_ENV;
 
-  // Fallback Vercel: construir desde headers
-  const proto = String(req.headers["x-forwarded-proto"] || "https")
-    .split(",")[0]
-    .trim();
+  const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "")
     .split(",")[0]
     .trim();
@@ -65,12 +57,11 @@ function getPublicSiteUrl(req: VercelRequest) {
 }
 
 /* ------------------------------------------------------------------ */
-/* AUTH HELPERS */
+/* AUTH USERS: find/create by email */
 /* ------------------------------------------------------------------ */
 
 // ✅ Preferir getUserByEmail si existe; fallback a listUsers paginado
 async function findUserIdByEmail(email: string): Promise<string | null> {
-  // 1) Si la lib soporta getUserByEmail (según versión)
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const anyAdmin: any = supabaseAdmin.auth.admin as any;
@@ -80,10 +71,9 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
       if (data?.user?.id) return String(data.user.id);
     }
   } catch {
-    // seguimos al fallback
+    // seguimos
   }
 
-  // 2) Fallback robusto: listUsers paginado
   let page = 1;
   const perPage = 200;
 
@@ -102,74 +92,109 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 }
 
 /* ------------------------------------------------------------------ */
-/* PERMISSIONS: solo owner/admin pueden invitar trackers en esa org */
+/* MEMBERSHIPS: única fuente de verdad */
 /* ------------------------------------------------------------------ */
 
-async function assertInviterCanInvite(params: { inviter_user_id: string; org_id: string }) {
-  const { inviter_user_id, org_id } = params;
-
-  const { data, error } = await supabaseAdmin
-    .from("memberships")
-    .select("role")
-    .eq("user_id", inviter_user_id)
-    .eq("org_id", org_id)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  const role = String(data?.role || "").toLowerCase();
-  if (role !== "owner" && role !== "admin") {
-    throw new Error("Forbidden: inviter is not owner/admin in this org");
-  }
+function isIncompatibleRole(role: string) {
+  const r = String(role || "").toLowerCase();
+  // “incompatible” = roles con más privilegio o distinto propósito
+  return r === "owner" || r === "admin" || r === "root" || r === "root_owner";
 }
 
-/* ------------------------------------------------------------------ */
-/* MEMBERSHIP (FUENTE ÚNICA DE VERDAD) */
-/* ------------------------------------------------------------------ */
+/**
+ * Regla:
+ * - Si ya es tracker en esa org => OK
+ * - Si es owner/admin/root => FORBIDDEN (no degradamos)
+ * - Si es viewer/otro => si force_swap=true, se actualiza a tracker; si no, error
+ */
+async function ensureTrackerMembership(params: {
+  user_id: string;
+  org_id: string;
+  inviter_user_id: string;
+  force_swap: boolean;
+}) {
+  const { user_id, org_id, inviter_user_id, force_swap } = params;
 
-async function ensureTrackerMembership(params: { user_id: string; org_id: string }) {
-  const { user_id, org_id } = params;
-
-  const { data, error } = await supabaseAdmin
+  const { data: existing, error } = await supabaseAdmin
     .from("memberships")
-    .select("id")
+    .select("id, role")
     .eq("user_id", user_id)
     .eq("org_id", org_id)
-    .eq("role", "tracker")
     .maybeSingle();
 
   if (error) throw error;
-  if (data?.id) return;
 
+  const existingRole = String(existing?.role || "").toLowerCase();
+
+  if (existing?.id) {
+    if (existingRole === "tracker") return;
+
+    if (isIncompatibleRole(existingRole)) {
+      throw new Error("Forbidden: invited user already has incompatible role in this org");
+    }
+
+    if (!force_swap) {
+      throw new Error("Forbidden: invited user already belongs to this org with a different role (set force_swap=1)");
+    }
+
+    const { error: updErr } = await supabaseAdmin
+      .from("memberships")
+      .update({
+        role: "tracker",
+        updated_at: new Date().toISOString(),
+        updated_by: inviter_user_id,
+      })
+      .eq("id", existing.id);
+
+    if (updErr) throw updErr;
+    return;
+  }
+
+  // No existe membership aún => insertar tracker
   const { error: insErr } = await supabaseAdmin.from("memberships").insert({
     user_id,
     org_id,
     role: "tracker",
+    created_at: new Date().toISOString(),
+    created_by: inviter_user_id,
+    updated_at: new Date().toISOString(),
+    updated_by: inviter_user_id,
+    // is_default: false (si existe). No lo ponemos para no fallar si no existe la columna.
   });
 
-  if (insErr) throw insErr;
+  if (insErr) {
+    // Si falla por columnas audit inexistentes, reintenta mínimo
+    if (/column .* does not exist/i.test(String(insErr.message || ""))) {
+      const { error: insErr2 } = await supabaseAdmin.from("memberships").insert({
+        user_id,
+        org_id,
+        role: "tracker",
+      });
+      if (insErr2) throw insErr2;
+      return;
+    }
+    throw insErr;
+  }
 }
 
 /* ------------------------------------------------------------------ */
-/* INVITES (DB) */
+/* INVITES: tracker_invites */
 /* ------------------------------------------------------------------ */
 
 async function getOrCreateActiveInvite(params: {
   org_id: string;
   email: string;
   inviter_user_id: string;
+  invited_user_id: string;
   expires_days?: number;
   mode?: "invite" | "resend";
 }) {
-  const { org_id, email, inviter_user_id } = params;
+  const { org_id, email, inviter_user_id, invited_user_id } = params;
   const expiresDays = Number(params.expires_days ?? 7);
-  const mode = params.mode === "resend" ? "resend" : "invite";
 
-  // En "resend" podemos reutilizar link vigente.
-  // En "invite" también reutilizamos para evitar duplicados (tu UI ya lo muestra como reused_invite).
   const { data: existing, error: selErr } = await supabaseAdmin
     .from("tracker_invites")
-    .select("id, expires_at, is_active")
+    .select("id, expires_at, is_active, used_by_user_id")
     .eq("org_id", org_id)
     .eq("email_norm", email)
     .eq("is_active", true)
@@ -179,34 +204,66 @@ async function getOrCreateActiveInvite(params: {
 
   if (selErr) throw selErr;
 
+  // Reutiliza el invite activo si existe (evita duplicados)
   if (existing?.id) {
-    // Si está activo, lo reutilizamos (independiente de mode).
+    // “Marcar used_by_user_id” si la columna existe y está vacía (no rompe si no existe)
+    if (!existing.used_by_user_id) {
+      try {
+        await supabaseAdmin
+          .from("tracker_invites")
+          .update({ used_by_user_id: invited_user_id })
+          .eq("id", existing.id);
+      } catch {
+        // noop
+      }
+    }
+
     return { invite_id: String(existing.id), reused_invite: true };
   }
 
   const expiresAt = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: created, error } = await supabaseAdmin
-    .from("tracker_invites")
-    .insert({
-      org_id,
-      email_norm: email,
-      created_by_user_id: inviter_user_id,
-      expires_at: expiresAt,
-      is_active: true,
-    })
-    .select("id")
-    .single();
+  // Insert robusto: intenta con used_by_user_id / used_at; si columnas no existen, reintenta mínimo
+  const base = {
+    org_id,
+    email_norm: email,
+    created_by_user_id: inviter_user_id,
+    expires_at: expiresAt,
+    is_active: true,
+  };
 
-  if (error || !created?.id) {
+  // Intento 1 (más completo)
+  {
+    const { data: created, error } = await supabaseAdmin
+      .from("tracker_invites")
+      .insert({
+        ...base,
+        used_by_user_id: invited_user_id, // “marcado” del usuario invitado (no consume el invite)
+        // used_at: null (se marca al consumir en callback/flow)
+      })
+      .select("id")
+      .single();
+
+    if (!error && created?.id) return { invite_id: String(created.id), reused_invite: false };
+
+    // Si falla por columna inexistente, reintenta mínimo
+    if (error && /column .* does not exist/i.test(String(error.message || ""))) {
+      const { data: created2, error: error2 } = await supabaseAdmin
+        .from("tracker_invites")
+        .insert(base)
+        .select("id")
+        .single();
+
+      if (error2 || !created2?.id) throw error2 || new Error("Failed to create invite");
+      return { invite_id: String(created2.id), reused_invite: false };
+    }
+
     throw error || new Error("Failed to create invite");
   }
-
-  return { invite_id: String(created.id), reused_invite: false };
 }
 
 /* ------------------------------------------------------------------ */
-/* REDIRECT: respeta redirect_to de UI (path relativo) + añade contexto */
+/* REDIRECT: path relativo + añade contexto */
 /* ------------------------------------------------------------------ */
 
 function buildRedirectTo(params: {
@@ -219,21 +276,13 @@ function buildRedirectTo(params: {
   force_swap: boolean;
   person_id?: string;
 }) {
-  const {
-    publicSiteUrl,
-    redirect_to_path,
-    org_id,
-    invite_id,
-    email,
-    tg_flow,
-    force_swap,
-    person_id,
-  } = params;
+  const { publicSiteUrl, redirect_to_path, org_id, invite_id, email, tg_flow, force_swap, person_id } =
+    params;
 
-  // Construimos "next" como URL relativa (ruta final dentro de la app)
-  // y le anexamos params útiles para el callback/flow.
-  const u = new URL(redirect_to_path, "https://local.invalid"); // base dummy
+  const u = new URL(redirect_to_path, "https://local.invalid");
   u.searchParams.set("tg_flow", tg_flow || "tracker");
+
+  // ✅ org_id / invite_id son server-side
   u.searchParams.set("org_id", org_id);
   u.searchParams.set("invite_id", invite_id);
   u.searchParams.set("invited_email", email);
@@ -242,8 +291,6 @@ function buildRedirectTo(params: {
 
   const next = `${u.pathname}?${u.searchParams.toString()}`;
 
-  // Supabase manda al callback de tu app, y tu callback redirige a `next`.
-  // También repetimos params principales a nivel callback por si tu callback los lee directo.
   const cb = new URL(`${publicSiteUrl}/auth/callback`);
   cb.searchParams.set("next", next);
   cb.searchParams.set("tg_flow", tg_flow || "tracker");
@@ -274,65 +321,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const authHeader = String(req.headers.authorization || "");
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    if (!token) return res.status(401).json({ error: "Missing Authorization" });
+    // ✅ Canonical server-side context (no org_id from frontend)
+    const ctx: any = await resolveOrgAndMembership(req, res);
+    if (!ctx?.ok && ctx?.status) {
+      return res.status(ctx.status).json({ error: ctx.error || "Unauthorized", details: ctx.details });
+    }
 
-    const { data: userData, error: getUserErr } = await supabaseAdmin.auth.getUser(token);
-    if (getUserErr) return res.status(401).json({ error: "Invalid session" });
+    const inviter_user_id: string = String(ctx.user_id || ctx.user?.id || "");
+    const org_id: string = String(ctx.org_id || "");
+    const inviter_role: string = String(ctx.role || "").toLowerCase();
 
-    const inviter = userData?.user;
-    if (!inviter?.id) return res.status(401).json({ error: "Invalid session" });
+    if (!inviter_user_id || !org_id) {
+      return res.status(500).json({
+        error: "Contexto incompleto",
+        details: "resolveOrgAndMembership no devolvió org_id/user_id",
+      });
+    }
 
-    const body = req.body || {};
+    // ✅ Solo owner/admin pueden invitar trackers en ESA org resuelta
+    if (inviter_role !== "owner" && inviter_role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: inviter is not owner/admin in this org" });
+    }
+
+    const body = (req.body as any) || {};
 
     const email = normEmail(body.email);
-    const org_id = String(body.org_id || "").trim();
 
-    // Params que manda tu UI
+    // Params UI (permitidos)
     const mode: "invite" | "resend" = body.mode === "resend" ? "resend" : "invite";
     const tg_flow = String(body.tg_flow || "tracker").trim() || "tracker";
     const force_swap = toBool(body.force_swap, true);
 
-    // El UI manda redirect_to (path relativo); si no, usamos default
-    const redirect_to_path = safePathOrDefault(
-      body.redirect_to,
-      "/tracker-gps?tg_flow=tracker"
-    );
+    const redirect_to_path = safePathOrDefault(body.redirect_to, "/tracker-gps?tg_flow=tracker");
 
-    // Opcional: para debug/flujo (no lo guardamos en DB a ciegas)
+    // Opcional: solo se propaga como param, NO toca DB
     const person_id = body.person_id ? String(body.person_id) : undefined;
 
     if (!email || !email.includes("@")) {
       return res.status(400).json({ error: "Invalid email" });
     }
-    if (!isUuid(org_id)) {
-      return res.status(400).json({ error: "Invalid org_id" });
-    }
-
-    // ✅ Seguridad multi-tenant: validar que inviter pueda invitar en esa org
-    await assertInviterCanInvite({ inviter_user_id: inviter.id, org_id });
 
     /* ------------------------------------------------------------ */
     /* 1) USER AUTH: crear user si no existe */
     /* ------------------------------------------------------------ */
 
     let trackerUserId = await findUserIdByEmail(email);
+
     if (!trackerUserId) {
       const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
         email,
         email_confirm: false,
-        // Opcional: marca para analytics/debug
         user_metadata: {
           invited_as: "tracker",
-          invited_by: inviter.id,
+          invited_by: inviter_user_id,
           invited_org_id: org_id,
         },
       });
 
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
+      if (error) return res.status(400).json({ error: error.message });
       trackerUserId = created?.user?.id || null;
     }
 
@@ -341,22 +387,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     /* ------------------------------------------------------------ */
-    /* 2) MEMBERSHIP (fuente única de verdad) */
+    /* 2) VALIDACIÓN: no roles incompatibles y membership tracker */
     /* ------------------------------------------------------------ */
 
     await ensureTrackerMembership({
       user_id: trackerUserId,
       org_id,
+      inviter_user_id,
+      force_swap,
     });
 
     /* ------------------------------------------------------------ */
-    /* 3) INVITE (db) */
+    /* 3) INVITE (DB) - NO cross-org */
     /* ------------------------------------------------------------ */
 
     const { invite_id, reused_invite } = await getOrCreateActiveInvite({
       org_id,
       email,
-      inviter_user_id: inviter.id,
+      inviter_user_id,
+      invited_user_id: trackerUserId,
       mode,
     });
 
@@ -387,20 +436,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    if (otpErr) {
-      return res.status(400).json({ error: otpErr.message });
-    }
+    if (otpErr) return res.status(400).json({ error: otpErr.message });
 
     return res.status(200).json({
       ok: true,
       email,
-      org_id,
+      org_id, // server-side
       invite_id,
       reused_invite,
       email_sent: true,
       invite_link: redirectTo,
 
-      // extras útiles para debug UI
+      // extras debug UI
       mode,
       tg_flow,
       force_swap,
@@ -412,7 +459,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error("invite-tracker error", e);
     const msg = String(e?.message || "Internal error");
 
-    // Mensajes más claros
     if (msg.toLowerCase().includes("forbidden")) {
       return res.status(403).json({ error: msg });
     }
