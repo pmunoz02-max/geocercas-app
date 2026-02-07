@@ -1,11 +1,10 @@
 // api/reportes.js
 import { resolveOrgAndMembership } from "../src/server/lib/resolveOrg.js";
 
-const VERSION = "reportes-api-v24-canonical-supabase-from";
+const VERSION = "reportes-api-v25-robust-softdelete-schema";
 
 function setCors(req, res) {
   const origin = req.headers.origin || "*";
-  // Alineado con patrón que ya usas en otros endpoints:
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -34,7 +33,6 @@ function safeInt(v, def, min, max) {
 function normalizeDateISO(d) {
   if (!d) return null;
   const s = String(d).trim();
-  // Esperamos YYYY-MM-DD
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   return s;
 }
@@ -43,18 +41,96 @@ function err(res, status, error, details) {
   res.status(status).json({ ok: false, error, details, version: VERSION });
 }
 
+// Detecta errores típicos de “columna no existe”
+function isMissingColumnError(e) {
+  const msg = e?.message || "";
+  return /column .* does not exist/i.test(msg);
+}
+
+/**
+ * Ejecuta un SELECT y, si falla por columna inexistente (soft-delete),
+ * reintenta sin filtros de soft-delete.
+ *
+ * Esto permite que el endpoint funcione en DBs con y sin deleted_at,
+ * sin tocar el esquema.
+ */
+async function selectWithSoftDeleteFallback({ supabase, table, select, org_id, softDeleteCandidates = [] }) {
+  // softDeleteCandidates = ["deleted_at", "is_deleted", "deleted", "active"]
+  // estrategia:
+  // - si existe deleted_at (o similar), aplicamos filtro “no borrado”
+  // - si no existe, reintentamos sin ese filtro
+  // Nota: no podemos detectar columnas sin DB, así que hacemos try/catch.
+
+  // 1) Intento con primer candidato (si existe lista)
+  const attempts = [];
+
+  // Construye query base
+  const base = () => supabase.from(table).select(select).eq("org_id", org_id);
+
+  // Genera variantes a intentar
+  if (softDeleteCandidates.length) {
+    for (const col of softDeleteCandidates) {
+      // Reglas comunes:
+      // - deleted_at: is null
+      // - is_deleted/deleted: eq false
+      // - active: eq true
+      attempts.push({ col, q: (q) => applySoftDeleteFilter(q, col) });
+    }
+  }
+
+  // Siempre último intento sin filtro
+  attempts.push({ col: null, q: (q) => q });
+
+  let lastErr = null;
+
+  for (const a of attempts) {
+    try {
+      let q = base();
+      q = a.q(q);
+      const out = await q.order("created_at", { ascending: false }).limit(2000);
+
+      if (out.error) {
+        // Si es por columna inexistente y estábamos usando filtro, reintentar
+        if (a.col && isMissingColumnError(out.error)) {
+          lastErr = out.error;
+          continue;
+        }
+        // Si no es missing column, error real: abortar
+        return { data: null, error: out.error, usedSoftDelete: a.col };
+      }
+
+      return { data: out.data || [], error: null, usedSoftDelete: a.col };
+    } catch (e) {
+      // fetch/runtime
+      lastErr = e;
+      if (a.col && isMissingColumnError(e)) continue;
+      return { data: null, error: e, usedSoftDelete: a.col };
+    }
+  }
+
+  return { data: null, error: lastErr || new Error("Unknown error"), usedSoftDelete: null };
+}
+
+function applySoftDeleteFilter(q, col) {
+  if (!col) return q;
+  const c = String(col);
+
+  if (c === "deleted_at") return q.is("deleted_at", null);
+  if (c === "is_deleted") return q.eq("is_deleted", false);
+  if (c === "deleted") return q.eq("deleted", false);
+  if (c === "active") return q.eq("active", true);
+
+  // Default conservador: tratar como deleted_at
+  return q.is(c, null);
+}
+
 export default async function handler(req, res) {
   try {
     setCors(req, res);
 
-    if (req.method === "OPTIONS") {
-      return res.status(204).end();
-    }
-    if (req.method !== "GET") {
-      return err(res, 405, "Method not allowed", { method: req.method });
-    }
+    if (req.method === "OPTIONS") return res.status(204).end();
+    if (req.method !== "GET") return err(res, 405, "Method not allowed", { method: req.method });
 
-    // 🔒 Canon: resolver tenant + membership server-side
     const ctx = await resolveOrgAndMembership(req, res);
     if (!ctx?.ok) {
       return res
@@ -64,79 +140,88 @@ export default async function handler(req, res) {
 
     const { org_id, role, supabase } = ctx;
 
-    // ✅ Guardia universal: asegurar que estamos usando el cliente correcto
-    // Si alguien “refactoriza” y pasa supabase.auth.admin aquí, esto lo detecta con mensaje claro.
     if (!supabase || typeof supabase.from !== "function") {
       return err(res, 500, "Server misconfigured", {
-        hint: "Expected a Supabase client with .from(). Do NOT use supabase.auth.admin for queries.",
-        gotType: typeof supabase,
+        hint: "Expected a Supabase client with .from().",
         hasFrom: !!supabase?.from,
       });
     }
 
     const action = String(req.query?.action || "").toLowerCase();
 
-    // =========================
-    // ACTION: FILTERS
-    // =========================
+    // ========= FILTERS =========
     if (action === "filters") {
-      // Nota: NO tocar DB. Solo select con org_id y soft-delete.
-      const [geocercasQ, personasQ, activitiesQ, asignacionesQ] = await Promise.all([
-        supabase
-          .from("geocercas")
-          .select("id,nombre,created_at")
-          .eq("org_id", org_id)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .limit(2000),
+      // Candidatos universales de soft-delete (sin asumir esquema)
+      const softDelete = ["deleted_at", "is_deleted", "deleted", "active"];
 
-        supabase
-          .from("personal")
-          .select("id,nombre,apellido,email,created_at")
-          .eq("org_id", org_id)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .limit(2000),
-
-        supabase
-          .from("activities")
-          .select("id,name,hourly_rate,currency_code,created_at")
-          .eq("org_id", org_id)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .limit(2000),
-
-        supabase
-          .from("asignaciones")
-          .select("id,status,estado,created_at")
-          .eq("org_id", org_id)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .limit(2000),
+      const [geoc, pers, act, asig] = await Promise.all([
+        selectWithSoftDeleteFallback({
+          supabase,
+          table: "geocercas",
+          select: "id,nombre,created_at",
+          org_id,
+          softDeleteCandidates: softDelete,
+        }),
+        selectWithSoftDeleteFallback({
+          supabase,
+          table: "personal",
+          select: "id,nombre,apellido,email,created_at",
+          org_id,
+          softDeleteCandidates: softDelete,
+        }),
+        selectWithSoftDeleteFallback({
+          supabase,
+          table: "activities",
+          select: "id,name,hourly_rate,currency_code,created_at",
+          org_id,
+          softDeleteCandidates: softDelete,
+        }),
+        selectWithSoftDeleteFallback({
+          supabase,
+          table: "asignaciones",
+          select: "id,status,estado,created_at",
+          org_id,
+          softDeleteCandidates: softDelete,
+        }),
       ]);
 
-      // Si alguna falla, devolvemos detalle completo sin romper otros módulos
-      const errors = [geocercasQ.error, personasQ.error, activitiesQ.error, asignacionesQ.error].filter(Boolean);
+      const errors = [
+        geoc.error && { scope: "geocercas", message: geoc.error.message, details: geoc.error.details },
+        pers.error && { scope: "personal", message: pers.error.message, details: pers.error.details },
+        act.error && { scope: "activities", message: act.error.message, details: act.error.details },
+        asig.error && { scope: "asignaciones", message: asig.error.message, details: asig.error.details },
+      ].filter(Boolean);
+
       if (errors.length) {
-        return err(res, 500, "Failed loading filters", errors.map((e) => ({ message: e.message, details: e.details })));
+        return err(res, 500, "Failed loading filters", {
+          errors,
+          hint: "One or more filter queries failed. This endpoint auto-falls back when soft-delete columns don't exist.",
+        });
       }
 
       return res.status(200).json({
         ok: true,
         data: {
-          geocercas: geocercasQ.data || [],
-          personas: personasQ.data || [],
-          activities: activitiesQ.data || [],
-          asignaciones: asignacionesQ.data || [],
+          geocercas: geoc.data,
+          personas: pers.data,
+          activities: act.data,
+          asignaciones: asig.data,
         },
-        meta: { org_id, role },
+        meta: {
+          org_id,
+          role,
+          softDeleteApplied: {
+            geocercas: geoc.usedSoftDelete,
+            personal: pers.usedSoftDelete,
+            activities: act.usedSoftDelete,
+            asignaciones: asig.usedSoftDelete,
+          },
+        },
         version: VERSION,
       });
     }
 
-    // =========================
-    // ACTION: REPORT
-    // =========================
+    // ========= REPORT =========
     if (action === "report") {
       const start = normalizeDateISO(req.query?.start);
       const end = normalizeDateISO(req.query?.end);
@@ -149,7 +234,6 @@ export default async function handler(req, res) {
       const limit = safeInt(req.query?.limit, 500, 1, 2000);
       const offset = safeInt(req.query?.offset, 0, 0, 50000);
 
-      // 👇 View canónica (sin DB changes). Si falla por permisos, lo veremos claro en details.
       let q = supabase
         .from("v_reportes_diario_con_asignacion")
         .select("*")
@@ -172,7 +256,7 @@ export default async function handler(req, res) {
           message: out.error.message,
           details: out.error.details,
           hint:
-            "If this is permission denied, it's RLS/view grants. But this endpoint is now correct (supabase.from).",
+            "If permission denied, it's RLS/view grants. If column missing, schema mismatch in the view. No DB changes in this fix.",
         });
       }
 
@@ -184,17 +268,8 @@ export default async function handler(req, res) {
       });
     }
 
-    // =========================
-    // DEFAULT
-    // =========================
-    return err(res, 400, "Invalid action", {
-      allowed: ["filters", "report"],
-      got: action || null,
-    });
+    return err(res, 400, "Invalid action", { allowed: ["filters", "report"], got: action || null });
   } catch (e) {
-    return err(res, 500, "Server error", {
-      message: e?.message || String(e),
-      stack: process.env.NODE_ENV === "production" ? undefined : e?.stack,
-    });
+    return err(res, 500, "Server error", { message: e?.message || String(e) });
   }
 }
