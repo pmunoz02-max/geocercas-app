@@ -1,8 +1,9 @@
-// api/auth/session.js
+// api/auth.js
 import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
+// ---------- shared helpers ----------
 function parseCookies(cookieHeader) {
   const out = {};
   if (!cookieHeader) return out;
@@ -22,14 +23,7 @@ function parseCookies(cookieHeader) {
 }
 
 function makeCookie(name, value, opts = {}) {
-  const {
-    httpOnly = true,
-    secure = true,
-    sameSite = "Lax",
-    path = "/",
-    maxAge,
-    domain,
-  } = opts;
+  const { httpOnly = true, secure = true, sameSite = "Lax", path = "/", maxAge, domain } = opts;
 
   let s = `${name}=${encodeURIComponent(value ?? "")}`;
   if (domain) s += `; Domain=${domain}`;
@@ -55,6 +49,37 @@ function safeJsonBody(req) {
     }
   }
   return {};
+}
+
+async function safeGetBody(req, debug = false) {
+  try {
+    if (req.body && typeof req.body === "object") return req.body;
+    if (typeof req.body === "string" && req.body.trim()) return JSON.parse(req.body);
+  } catch (e) {
+    if (debug) console.log("[auth] req.body parse failed:", String(e?.message || e));
+  }
+  if (req.readableEnded || req.complete) return {};
+  const raw = await new Promise((resolve) => {
+    let data = "";
+    const timer = setTimeout(() => resolve("__TIMEOUT__"), 2500);
+    req.on("data", (chunk) => (data += chunk));
+    req.on("end", () => {
+      clearTimeout(timer);
+      resolve(data);
+    });
+    req.on("error", () => {
+      clearTimeout(timer);
+      resolve("__ERROR__");
+    });
+  });
+  if (raw === "__TIMEOUT__") throw new Error("Body read timeout");
+  if (raw === "__ERROR__") throw new Error("Body read error");
+  if (!raw || !String(raw).trim()) return {};
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    throw new Error("Invalid JSON body");
+  }
 }
 
 function getBearer(req) {
@@ -96,7 +121,7 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   return json;
 }
 
-// ✅ Usamos Admin API si tenemos service role: robusto, no requiere refresh cookie
+// ✅ Admin API si tenemos service role
 async function getUserFromAccessTokenAdmin({ supabaseUrl, serviceKey, accessToken }) {
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const { data, error } = await admin.auth.getUser(accessToken);
@@ -104,7 +129,7 @@ async function getUserFromAccessTokenAdmin({ supabaseUrl, serviceKey, accessToke
   return { user: data?.user || null, error: null };
 }
 
-// Fallback (si no hay service role): el método anterior con anonKey
+// fallback anon
 async function getUserFromAccessTokenAnon({ url, anonKey, accessToken }) {
   const sbUser = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -119,7 +144,6 @@ async function computeIsAppRoot({ userEmail, roleFromBoot, serviceClient }) {
   if (role === "root" || role === "root_owner") return true;
 
   const email = normalizeEmail(userEmail);
-
   const envRaw = process.env.APP_ROOT_EMAILS || "";
   const envList = envRaw
     .split(",")
@@ -129,17 +153,13 @@ async function computeIsAppRoot({ userEmail, roleFromBoot, serviceClient }) {
   if (envList.includes(email)) return true;
 
   if (serviceClient) {
-    const { data } = await serviceClient
-      .from("app_root_users")
-      .select("email")
-      .eq("email", email)
-      .maybeSingle();
+    const { data } = await serviceClient.from("app_root_users").select("email").eq("email", email).maybeSingle();
     if (data) return true;
   }
-
   return false;
 }
 
+// ---------- tracker invite (copiado tal cual de session.js) ----------
 async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
   const inviteId = String(invite_id || "").trim();
   if (!inviteId) {
@@ -166,13 +186,11 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
     e.status = 500;
     throw e;
   }
-
   if (!inv) {
     const e = new Error("Invitación no encontrada");
     e.status = 404;
     throw e;
   }
-
   if (inv.used_at) {
     const e = new Error("Invitación ya fue usada");
     e.status = 409;
@@ -238,8 +256,7 @@ async function acceptTrackerInvite({ serviceClient, invite_id, user }) {
   return { org_id: orgId, role: "tracker" };
 }
 
-// ---------- memberships helpers (UNIVERSAL) ----------
-
+// ---------- memberships helpers (copiado tal cual) ----------
 async function listMembershipsForUser({ sbUser, serviceClient, userId }) {
   const base = serviceClient || sbUser;
 
@@ -259,7 +276,6 @@ async function listMembershipsForUser({ sbUser, serviceClient, userId }) {
   }
 
   if (r.error) return { rows: [], error: r.error };
-
   const rows = Array.isArray(r.data) ? r.data : [];
   return { rows, error: null };
 }
@@ -301,11 +317,7 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
 
   if (!candidate?.org_id) return { changed: false, org_id: null };
 
-  await serviceClient
-    .from("memberships")
-    .update({ is_default: false })
-    .eq("user_id", userId)
-    .eq("is_default", true);
+  await serviceClient.from("memberships").update({ is_default: false }).eq("user_id", userId).eq("is_default", true);
 
   const { error: upErr } = await serviceClient
     .from("memberships")
@@ -313,14 +325,72 @@ async function ensureDefaultMembership({ serviceClient, userId, rows }) {
     .eq("user_id", userId)
     .eq("org_id", candidate.org_id);
 
-  if (upErr) {
-    return { changed: false, org_id: candidate.org_id };
-  }
-
+  if (upErr) return { changed: false, org_id: candidate.org_id };
   return { changed: true, org_id: candidate.org_id };
 }
 
-export default async function handler(req, res) {
+// ---------- action handlers ----------
+async function handleMagic(req, res) {
+  const version = "auth-magic-v5-safe-body-2026-01-12";
+  const debug = process.env.AUTH_DEBUG === "1";
+  const send = (status, payload) => res.status(status).json({ version, ...payload });
+
+  try {
+    if (req.method !== "POST") {
+      res.setHeader("Allow", "POST");
+      return send(405, { error: "Method Not Allowed" });
+    }
+
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return send(500, { error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
+
+    const body = await safeGetBody(req, debug);
+    const email = String(body?.email || "").trim().toLowerCase();
+    const redirectTo = String(body?.redirectTo || "").trim();
+    if (!email || !redirectTo) return send(400, { error: "Email and redirectTo required" });
+
+    const url = `${SUPABASE_URL}/auth/v1/otp`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ email, create_user: true, email_redirect_to: redirectTo }),
+    });
+
+    const text = await r.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!r.ok) {
+      return res.status(r.status).json({
+        version,
+        error: data?.error_description || data?.msg || data?.error || "Could not send magic link",
+        ...(debug ? { debug: { status: r.status, url, response: data } } : {}),
+      });
+    }
+
+    return send(200, { ok: true });
+  } catch (e) {
+    console.error("[api/auth magic] fatal:", e);
+    return res.status(500).json({
+      version,
+      error: "Server error",
+      ...(process.env.AUTH_DEBUG === "1"
+        ? { debug: { message: String(e?.message || e), stack: String(e?.stack || "") } }
+        : {}),
+    });
+  }
+}
+
+async function handleSession(req, res) {
   const build_tag = "auth-session-v23-bearer-first";
   const debug = process.env.AUTH_DEBUG === "1";
 
@@ -336,20 +406,16 @@ export default async function handler(req, res) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !anonKey) {
-      return res.status(500).json({
-        build_tag,
-        ok: false,
-        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY",
-      });
+      return res.status(500).json({ build_tag, ok: false, error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY" });
     }
 
     const cookieDomain = process.env.COOKIE_DOMAIN || "";
     const cookies = parseCookies(req.headers.cookie || "");
 
-    // ✅ 1) Preferir Bearer token (frontend sb-*-auth-token)
+    // ✅ 1) Preferir Bearer token
     const bearer = getBearer(req);
 
-    // ✅ 2) Fallback cookies (legacy)
+    // ✅ 2) Fallback cookies
     let access_token = bearer || cookies.tg_at || "";
     const refresh_token = cookies.tg_rt || "";
     const forced_org = cookies.tg_org || "";
@@ -364,7 +430,6 @@ export default async function handler(req, res) {
 
     const setCookieParts = [];
 
-    // Si el cliente envía access_token explícito en body, lo aceptamos
     if (bodyAccess) {
       access_token = bodyAccess;
       setCookieParts.push(
@@ -392,7 +457,6 @@ export default async function handler(req, res) {
       );
     }
 
-    // ✅ Solo intentamos refresh si NO hay bearer/access y sí hay refresh cookie
     if (!access_token && refresh_token) {
       const r = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
       access_token = r.access_token;
@@ -420,22 +484,17 @@ export default async function handler(req, res) {
       );
     }
 
-    if (setCookieParts.length) {
-      res.setHeader("Set-Cookie", setCookieParts);
-    }
+    if (setCookieParts.length) res.setHeader("Set-Cookie", setCookieParts);
 
-    if (!access_token) {
-      return res.status(200).json({ build_tag, ok: true, authenticated: false });
-    }
+    if (!access_token) return res.status(200).json({ build_tag, ok: true, authenticated: false });
 
-    // ✅ Resolver user (prefer admin getUser si hay serviceKey)
+    // ✅ Resolver user
     let user = null;
     let sbUser = null;
 
     if (serviceKey) {
       const r = await getUserFromAccessTokenAdmin({ supabaseUrl: url, serviceKey, accessToken: access_token });
       user = r.user || null;
-      // Para RPCs (bootstrap_session_context) seguimos usando un cliente anon con header Authorization
       sbUser = createClient(url, anonKey, {
         auth: { persistSession: false, autoRefreshToken: false },
         global: { headers: { Authorization: `Bearer ${access_token}` } },
@@ -446,7 +505,6 @@ export default async function handler(req, res) {
       user = r.user;
     }
 
-    // Si aún no hay user y hay refresh cookie, intentamos refresh (legacy)
     if (!user && refresh_token) {
       const refreshed = await refreshAccessToken({ supabaseUrl: url, anonKey, refreshToken: refresh_token });
       access_token = refreshed.access_token;
@@ -487,9 +545,7 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!user) {
-      return res.status(200).json({ build_tag, ok: true, authenticated: false });
-    }
+    if (!user) return res.status(200).json({ build_tag, ok: true, authenticated: false });
 
     const serviceClient = serviceKey ? createClient(url, serviceKey, { auth: { persistSession: false } }) : null;
 
@@ -498,15 +554,9 @@ export default async function handler(req, res) {
       const action = String(body?.action || "").trim();
 
       if (action === "accept_tracker_invite") {
-        if (!serviceClient) {
-          return res.status(500).json({ build_tag, ok: false, error: "Missing service role key" });
-        }
+        if (!serviceClient) return res.status(500).json({ build_tag, ok: false, error: "Missing service role key" });
 
-        const result = await acceptTrackerInvite({
-          serviceClient,
-          invite_id: body?.invite_id,
-          user,
-        });
+        const result = await acceptTrackerInvite({ serviceClient, invite_id: body?.invite_id, user });
 
         res.setHeader("Set-Cookie", [
           makeCookie("tg_org", String(result.org_id), {
@@ -556,15 +606,11 @@ export default async function handler(req, res) {
         current_org_id = boot?.[0]?.org_id || null;
         role = role ?? (boot?.[0]?.role || null);
       } catch {
-        // ok: tracker flow no requiere esto estrictamente
+        // ok
       }
     }
 
-    const { rows: membershipRows, error: memErr } = await listMembershipsForUser({
-      sbUser,
-      serviceClient,
-      userId: user.id,
-    });
+    const { rows: membershipRows, error: memErr } = await listMembershipsForUser({ sbUser, serviceClient, userId: user.id });
 
     let defaultFix = { changed: false, org_id: null };
     if (!memErr && membershipRows.length > 0) {
@@ -594,11 +640,7 @@ export default async function handler(req, res) {
       ]);
     }
 
-    const is_app_root = await computeIsAppRoot({
-      userEmail: user.email,
-      roleFromBoot: role,
-      serviceClient,
-    });
+    const is_app_root = await computeIsAppRoot({ userEmail: user.email, roleFromBoot: role, serviceClient });
 
     const organizations =
       membershipRows.length > 0
@@ -632,14 +674,26 @@ export default async function handler(req, res) {
         : {}),
     });
   } catch (e) {
-    console.error("[api/auth/session] fatal:", e);
+    console.error("[api/auth session] fatal:", e);
     return res.status(500).json({
       build_tag: "auth-session-v23-bearer-first",
       ok: false,
       error: String(e?.message || e),
-      ...(process.env.AUTH_DEBUG === "1"
-        ? { debug: { body: e?.body || null, status: e?.status || null } }
-        : {}),
+      ...(process.env.AUTH_DEBUG === "1" ? { debug: { body: e?.body || null, status: e?.status || null } } : {}),
     });
   }
+}
+
+// ---------- main router ----------
+export default async function handler(req, res) {
+  const action = String(req.query?.action || "").trim().toLowerCase();
+
+  if (action === "magic") return handleMagic(req, res);
+  if (action === "session") return handleSession(req, res);
+
+  return res.status(404).json({
+    ok: false,
+    error: "Unknown auth action",
+    hint: "Use /api/auth?action=magic or /api/auth?action=session",
+  });
 }
