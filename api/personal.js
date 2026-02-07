@@ -1,12 +1,12 @@
 // api/personal.js
-import { createClient } from "@supabase/supabase-js";
+import { resolveOrgAndMembership } from "../src/server/lib/resolveOrg.js";
 
 export const config = { runtime: "nodejs" };
 
-const VERSION = "personal-api-v22-order-vigente-then-deleted";
+const VERSION = "personal-api-v23-memberships-resolveOrg";
 
 /* =========================
-   Helpers
+   Response helpers
 ========================= */
 function json(res, status, payload) {
   res.statusCode = status;
@@ -15,12 +15,9 @@ function json(res, status, payload) {
   res.end(JSON.stringify({ ...payload, version: VERSION }));
 }
 
-function getEnv(nameList) {
-  for (const n of nameList) {
-    const v = process.env[n];
-    if (v && String(v).trim()) return String(v).trim();
-  }
-  return null;
+function requireWriteRole(role) {
+  const r = String(role || "").toLowerCase();
+  return r === "owner" || r === "admin" || r === "root" || r === "root_owner";
 }
 
 async function readBody(req) {
@@ -33,269 +30,6 @@ async function readBody(req) {
   } catch {
     return {};
   }
-}
-
-function normalizeCtx(data) {
-  if (!data) return null;
-  if (Array.isArray(data)) return data[0] || null;
-  return data;
-}
-
-function requireWriteRole(role) {
-  const r = String(role || "").toLowerCase();
-  return r === "owner" || r === "admin" || r === "root" || r === "root_owner";
-}
-
-function safeUuid(s) {
-  const x = String(s || "").trim();
-  if (!x) return null;
-  if (!/^[0-9a-fA-F-]{32,36}$/.test(x)) return null;
-  return x;
-}
-
-function parseCookies(cookieHeader) {
-  const out = {};
-  if (!cookieHeader) return out;
-  for (const p of cookieHeader.split(";")) {
-    const i = p.indexOf("=");
-    if (i === -1) continue;
-    const k = p.slice(0, i).trim();
-    const v = p.slice(i + 1).trim();
-    if (!k) continue;
-    try {
-      out[k] = decodeURIComponent(v);
-    } catch {
-      out[k] = v;
-    }
-  }
-  return out;
-}
-
-function getBearerToken(req) {
-  const h = req.headers?.authorization || req.headers?.Authorization || "";
-  const s = String(h || "").trim();
-  if (!s) return "";
-  const m = s.match(/^Bearer\s+(.+)$/i);
-  return m?.[1]?.trim() || "";
-}
-
-/* =========================
-   Cookie refresh (legacy compat)
-========================= */
-async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
-  const url = `${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/token?grant_type=refresh_token`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-
-  const text = await r.text();
-  let j = {};
-  try {
-    j = text ? JSON.parse(text) : {};
-  } catch {
-    j = { raw: text };
-  }
-
-  if (!r.ok || !j?.access_token) {
-    const msg = j?.error_description || j?.error || "Failed to refresh token";
-    const err = new Error(msg);
-    err.status = 401;
-    throw err;
-  }
-  return j;
-}
-
-function makeCookie(name, value, opts = {}) {
-  const {
-    httpOnly = true,
-    secure = true,
-    sameSite = "Lax",
-    path = "/",
-    maxAge,
-  } = opts;
-
-  let s = `${name}=${encodeURIComponent(value ?? "")}`;
-  if (path) s += `; Path=${path}`;
-  if (typeof maxAge === "number") s += `; Max-Age=${maxAge}`;
-  if (sameSite) s += `; SameSite=${sameSite}`;
-  if (secure) s += `; Secure`;
-  if (httpOnly) s += `; HttpOnly`;
-  return s;
-}
-
-async function getUserFromAccessToken({ url, anonKey, accessToken }) {
-  const sbUser = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  });
-  const { data, error } = await sbUser.auth.getUser();
-  if (error) return { sbUser, user: null, error };
-  return { sbUser, user: data?.user || null, error: null };
-}
-
-/* =========================
-   Context resolver (DUAL)
-   Priority:
-   1) Authorization Bearer
-   2) Cookies tg_at/tg_rt (legacy)
-========================= */
-async function resolveContext(req, res) {
-  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
-  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
-  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
-
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      ok: false,
-      status: 500,
-      error: "Configuración incompleta del servidor (Supabase)",
-      details: {
-        has: {
-          SUPABASE_URL: Boolean(SUPABASE_URL),
-          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-          SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
-        },
-      },
-    };
-  }
-
-  // 1) Bearer
-  let access_token = getBearerToken(req);
-
-  // 2) Legacy cookies if no bearer
-  const cookies = parseCookies(req.headers.cookie || "");
-  const cookie_at = cookies.tg_at || "";
-  const refresh_token = cookies.tg_rt || "";
-
-  if (!access_token) access_token = cookie_at;
-
-  // refresh legacy if needed (only if using cookies path)
-  if (!access_token && refresh_token) {
-    const r = await refreshAccessToken({
-      supabaseUrl: SUPABASE_URL,
-      anonKey: SUPABASE_ANON_KEY,
-      refreshToken: refresh_token,
-    });
-    access_token = r.access_token;
-
-    // keep legacy cookies updated for old modules
-    res.setHeader("Set-Cookie", [
-      makeCookie("tg_at", r.access_token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        path: "/",
-        maxAge: Number(r.expires_in || 3600),
-      }),
-      makeCookie("tg_rt", r.refresh_token || refresh_token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-        path: "/",
-        maxAge: 30 * 24 * 60 * 60,
-      }),
-    ]);
-  }
-
-  if (!access_token) {
-    return {
-      ok: false,
-      status: 401,
-      error: "No autenticado",
-      details: "Falta Authorization: Bearer <token> y/o cookies tg_at/tg_rt",
-    };
-  }
-
-  // validate user
-  let sbUser, user;
-  {
-    const r = await getUserFromAccessToken({
-      url: SUPABASE_URL,
-      anonKey: SUPABASE_ANON_KEY,
-      accessToken: access_token,
-    });
-    sbUser = r.sbUser;
-    user = r.user;
-
-    // legacy: if token invalid and refresh exists, refresh once
-    if (!user && refresh_token && !getBearerToken(req)) {
-      const refreshed = await refreshAccessToken({
-        supabaseUrl: SUPABASE_URL,
-        anonKey: SUPABASE_ANON_KEY,
-        refreshToken: refresh_token,
-      });
-      access_token = refreshed.access_token;
-
-      res.setHeader("Set-Cookie", [
-        makeCookie("tg_at", refreshed.access_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          maxAge: Number(refreshed.expires_in || 3600),
-        }),
-        makeCookie("tg_rt", refreshed.refresh_token || refresh_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          maxAge: 30 * 24 * 60 * 60,
-        }),
-      ]);
-
-      const r2 = await getUserFromAccessToken({
-        url: SUPABASE_URL,
-        anonKey: SUPABASE_ANON_KEY,
-        accessToken: access_token,
-      });
-      sbUser = r2.sbUser;
-      user = r2.user;
-    }
-  }
-
-  if (!user) return { ok: false, status: 401, error: "Sesión inválida", details: "No user" };
-
-  const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-
-  // ctx via RPC (user)
-  let ctx = null;
-  try {
-    const { data, error } = await sbUser.rpc("bootstrap_session_context");
-    if (!error) ctx = normalizeCtx(data);
-  } catch {}
-
-  if (!ctx?.org_id || !ctx?.role) {
-    return { ok: false, status: 403, error: "Contexto incompleto", details: "Falta org_id o role" };
-  }
-
-  return { ok: true, user, ctx, supaSrv };
-}
-
-async function resolveEffectiveOrgId({ req, ctx, userId, supaSrv }) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const requestedOrgId = safeUuid(url.searchParams.get("org_id"));
-
-  if (!requestedOrgId) return { org_id: ctx.org_id, source: "ctx" };
-  if (String(requestedOrgId) === String(ctx.org_id)) return { org_id: ctx.org_id, source: "ctx_match" };
-
-  const { data, error } = await supaSrv
-    .from("memberships")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("org_id", requestedOrgId)
-    .maybeSingle();
-
-  if (error) return { org_id: ctx.org_id, source: "ctx_membership_check_error" };
-  if (!data?.role) return { org_id: ctx.org_id, source: "ctx_not_member" };
-  return { org_id: requestedOrgId, source: `query_member:${String(data.role).toLowerCase()}` };
 }
 
 /* =========================
@@ -342,13 +76,63 @@ function sortPersonal(items) {
 }
 
 /* =========================
+   Payload allowlist (universal & safe)
+   - Mantiene UI estable
+   - Evita meter columnas sorpresa
+========================= */
+function pickUpsertFields(payload) {
+  const p = payload && typeof payload === "object" ? payload : {};
+
+  // Campos típicos UI
+  const out = {};
+
+  // Strings
+  for (const k of [
+    "nombre",
+    "apellido",
+    "email",
+    "telefono",
+    "documento",
+    "cargo",
+    "notas",
+    "observaciones",
+  ]) {
+    if (p[k] !== undefined) out[k] = p[k] === null ? null : String(p[k]);
+  }
+
+  // Boolean
+  if (p.vigente !== undefined) out.vigente = !!p.vigente;
+
+  // Si tu UI manda "is_deleted" por error, lo ignoramos (soft-delete solo server)
+  // Si tu UI manda org_id, lo ignoramos SIEMPRE
+
+  return out;
+}
+
+function normalizeEmail(email) {
+  const s = String(email || "").trim().toLowerCase();
+  return s || "";
+}
+
+/* =========================
    GET (list)
 ========================= */
 async function handleList(req, res) {
-  const ctxRes = await resolveContext(req, res);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  const ctx = await resolveOrgAndMembership(req, res);
 
-  const { ctx, user, supaSrv } = ctxRes;
+  // Compat: si helper ya responde con status/error, respetamos
+  if (!ctx?.ok && ctx?.status) {
+    return json(res, ctx.status, { error: ctx.error || "Unauthorized", details: ctx.details });
+  }
+
+  const org_id = ctx.org_id;
+  const role = ctx.role;
+  const supabase = ctx.supabase;
+  const user_id = ctx.user_id || ctx.user?.id;
+
+  if (!org_id || !supabase || !user_id) {
+    return json(res, 500, { error: "Contexto incompleto", details: "resolveOrgAndMembership no devolvió org_id/supabase/user_id" });
+  }
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   const q = (url.searchParams.get("q") || "").trim();
@@ -356,22 +140,18 @@ async function handleList(req, res) {
   const limit = Math.min(Number(url.searchParams.get("limit") || 500), 2000);
   const debug = url.searchParams.get("debug") === "1";
 
-  const eff = await resolveEffectiveOrgId({ req, ctx, userId: user.id, supaSrv });
-  const orgIdToUse = eff.org_id;
-
-  // Base query: siempre por org. Traemos lo necesario para ordenar.
-  let query = supaSrv
+  let query = supabase
     .from("personal")
     .select("*")
-    .eq("org_id", orgIdToUse)
+    .eq("org_id", org_id)
     .limit(limit);
 
-  // onlyActive=1 => como hoy: vigentes y NO eliminados
+  // onlyActive=1 => vigentes y NO eliminados
   if (onlyActive) {
     query = query.eq("is_deleted", false).eq("vigente", true);
   }
 
-  // Búsqueda: aplicamos sobre el set actual (sea activo o completo)
+  // búsqueda
   if (q) {
     const pattern = `%${q}%`;
     query = query.or(
@@ -388,7 +168,6 @@ async function handleList(req, res) {
   const { data, error } = await query;
   if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
 
-  // Orden universal requerido (vigentes -> no vigentes -> eliminados, luego apellido/nombre)
   const ordered = sortPersonal(data || []);
 
   return json(res, 200, {
@@ -396,10 +175,8 @@ async function handleList(req, res) {
     ...(debug
       ? {
           debug: {
-            ctx_org_id: ctx.org_id,
-            effective_org_id: orgIdToUse,
-            org_source: eff.source,
-            role: ctx.role,
+            org_id,
+            role,
             onlyActive,
             limit,
             returned: ordered.length,
@@ -410,64 +187,200 @@ async function handleList(req, res) {
 }
 
 /* =========================
-   POST (writes via RPC)
+   POST (writes direct, no RPCs)
+   Actions:
+   - upsert (default)
+   - toggle (vigente)
+   - delete (soft delete)
 ========================= */
 async function handlePost(req, res) {
-  const ctxRes = await resolveContext(req, res);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  const ctx = await resolveOrgAndMembership(req, res);
 
-  const { ctx, user, supaSrv } = ctxRes;
-
-  if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
+  if (!ctx?.ok && ctx?.status) {
+    return json(res, ctx.status, { error: ctx.error || "Unauthorized", details: ctx.details });
   }
 
-  const eff = await resolveEffectiveOrgId({ req, ctx, userId: user.id, supaSrv });
-  const orgIdToUse = eff.org_id;
+  const org_id = ctx.org_id;
+  const role = ctx.role;
+  const supabase = ctx.supabase;
+  const user_id = ctx.user_id || ctx.user?.id;
+
+  if (!org_id || !supabase || !user_id) {
+    return json(res, 500, { error: "Contexto incompleto", details: "resolveOrgAndMembership no devolvió org_id/supabase/user_id" });
+  }
+
+  if (!requireWriteRole(role)) {
+    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
+  }
 
   const payload = (await readBody(req)) || {};
   const action = String(payload.action || "").toLowerCase();
 
+  // ===== toggle vigente =====
   if (action === "toggle") {
     const id = payload.id;
     if (!id) return json(res, 400, { error: "Falta id" });
 
-    const { data, error } = await supaSrv.rpc("personal_toggle_admin", {
-      p_org_id: orgIdToUse,
-      p_user_id: user.id,
-      p_id: id,
-    });
+    // Traemos vigente actual (y evitamos togglear si está eliminado)
+    const { data: row, error: e1 } = await supabase
+      .from("personal")
+      .select("id, vigente, is_deleted, deleted_at")
+      .eq("org_id", org_id)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (e1) return json(res, 500, { error: "No se pudo leer registro", details: e1.message });
+    if (!row) return json(res, 404, { error: "No encontrado" });
+
+    const deleted = !!row.is_deleted || !!row.deleted_at;
+    if (deleted) return json(res, 400, { error: "No se puede togglear un registro eliminado" });
+
+    const nextVigente = row.vigente === false ? true : false;
+
+    const { data, error } = await supabase
+      .from("personal")
+      .update({
+        vigente: nextVigente,
+        updated_at: new Date().toISOString(),
+        updated_by: user_id,
+      })
+      .eq("org_id", org_id)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
 
     if (error) return json(res, 500, { error: "No se pudo cambiar estado", details: error.message });
     return json(res, 200, { item: data });
   }
 
+  // ===== soft delete =====
   if (action === "delete") {
     const id = payload.id;
     if (!id) return json(res, 400, { error: "Falta id" });
 
-    const { data, error } = await supaSrv.rpc("personal_delete_admin", {
-      p_org_id: orgIdToUse,
-      p_user_id: user.id,
-      p_id: id,
-    });
+    const { data, error } = await supabase
+      .from("personal")
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        deleted_by: user_id,
+        updated_at: new Date().toISOString(),
+        updated_by: user_id,
+      })
+      .eq("org_id", org_id)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
 
     if (error) return json(res, 500, { error: "No se pudo eliminar", details: error.message });
+    if (!data) return json(res, 404, { error: "No encontrado" });
     return json(res, 200, { item: data });
   }
 
-  const { data, error } = await supaSrv.rpc("personal_upsert_admin", {
-    p_org_id: orgIdToUse,
-    p_user_id: user.id,
-    p_payload: payload,
-  });
+  // ===== upsert (default) =====
+  const id = payload.id || payload.person_id || payload.personal_id || null;
 
-  if (error) {
-    const isValidation = String(error.code || "") === "P0001";
-    return json(res, isValidation ? 400 : 500, { error: "No se pudo crear personal", details: error.message });
+  const upsertFields = pickUpsertFields(payload);
+
+  // Normalización ligera (mantiene UI estable)
+  if (upsertFields.email !== undefined) {
+    upsertFields.email = normalizeEmail(upsertFields.email);
   }
 
-  return json(res, 200, { item: data });
+  // Seguridad universal: org_id siempre server-side
+  upsertFields.org_id = org_id;
+
+  // Auditoría (si existen columnas, quedará; si no existen, Supabase devolverá error)
+  // Para hacerlo universal, intentamos sin romper: primero probamos incluir audit fields,
+  // y si falla por columna inexistente, reintentamos sin ellas.
+  const nowIso = new Date().toISOString();
+
+  async function tryInsert(updateOrInsert) {
+    // updateOrInsert = "insert" | "update"
+    if (updateOrInsert === "insert") {
+      return await supabase
+        .from("personal")
+        .insert({
+          ...upsertFields,
+          created_at: nowIso,
+          created_by: user_id,
+          updated_at: nowIso,
+          updated_by: user_id,
+          is_deleted: false,
+        })
+        .select("*")
+        .maybeSingle();
+    }
+
+    return await supabase
+      .from("personal")
+      .update({
+        ...upsertFields,
+        updated_at: nowIso,
+        updated_by: user_id,
+      })
+      .eq("org_id", org_id)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+  }
+
+  async function tryInsertWithoutAudit(updateOrInsert) {
+    if (updateOrInsert === "insert") {
+      const minimal = { ...upsertFields };
+      // si UI no manda vigente, default true
+      if (minimal.vigente === undefined) minimal.vigente = true;
+      // si UI no manda is_deleted, default false
+      minimal.is_deleted = false;
+
+      return await supabase
+        .from("personal")
+        .insert(minimal)
+        .select("*")
+        .maybeSingle();
+    }
+
+    return await supabase
+      .from("personal")
+      .update({ ...upsertFields })
+      .eq("org_id", org_id)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+  }
+
+  // Si es insert y no manda vigente, default true (mantiene comportamiento común)
+  if (!id && upsertFields.vigente === undefined) upsertFields.vigente = true;
+
+  // Ejecutamos con retry universal (por si no existen columnas audit)
+  let result;
+
+  if (!id) {
+    result = await tryInsert("insert");
+    if (result?.error && /column .* does not exist/i.test(String(result.error.message || ""))) {
+      result = await tryInsertWithoutAudit("insert");
+    }
+  } else {
+    result = await tryInsert("update");
+    if (result?.error && /column .* does not exist/i.test(String(result.error.message || ""))) {
+      result = await tryInsertWithoutAudit("update");
+    }
+  }
+
+  if (result?.error) {
+    // Validaciones típicas: unique email/doc, etc.
+    const msg = result.error.message || "Error";
+    const isValidation = /violates|duplicate|invalid|constraint/i.test(msg);
+    return json(res, isValidation ? 400 : 500, { error: "No se pudo guardar personal", details: msg });
+  }
+
+  if (!result?.data) {
+    // update con id no encontrado
+    if (id) return json(res, 404, { error: "No encontrado" });
+    return json(res, 500, { error: "No se pudo guardar personal", details: "Sin data" });
+  }
+
+  return json(res, 200, { item: result.data });
 }
 
 export default async function handler(req, res) {
