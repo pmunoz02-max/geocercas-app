@@ -56,14 +56,11 @@ function resolveTrackerAuthIdFromPersonal(row) {
 }
 
 function normalizeRole(role) {
-  return String(role || "")
-    .trim()
-    .toLowerCase();
+  return String(role || "").trim().toLowerCase();
 }
 
 function isTrackerRole(role) {
   const r = normalizeRole(role);
-  // Universal/permanente: acepta "tracker", "Tracker", "tracker ", "tracker_device", "tracker:xyz"
   return r === "tracker" || r.startsWith("tracker");
 }
 
@@ -150,48 +147,28 @@ export default function TrackerDashboard() {
 
   /**
    * UNIVERSAL Y PERMANENTE:
-   * - 1er intento: filtra server-side por role ilike 'tracker%' (case-insensitive)
-   * - fallback: si llega vacío, trae memberships sin filtro y filtra client-side
+   * - No usamos ilike (evita 404/compatibilidad PostgREST)
+   * - Traemos memberships por org_id y filtramos local por role (tracker*)
    */
   const fetchMembershipTrackers = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
     setDiag((d) => ({ ...d, lastMembershipError: null }));
 
-    // Intento 1: server-side, tolerante a mayúsculas y variantes
-    const q1 = await supabase
+    const { data, error } = await supabase
       .from("memberships")
       .select("user_id, role, org_id")
-      .eq("org_id", currentOrgId)
-      .ilike("role", "tracker%");
+      .eq("org_id", currentOrgId);
 
-    if (q1.error) {
-      console.error("[TrackerDashboard] memberships trackers error (q1)", q1.error);
-      setDiag((d) => ({ ...d, lastMembershipError: q1.error.message || String(q1.error) }));
+    if (error) {
+      console.error("[TrackerDashboard] memberships trackers error", error);
+      setDiag((d) => ({ ...d, lastMembershipError: error.message || String(error) }));
       setMembershipTrackers([]);
       return;
     }
 
-    let rows = Array.isArray(q1.data) ? q1.data : [];
-    let trackers = rows.filter((r) => isTrackerRole(r?.role));
-
-    // Fallback: si vino vacío, trae memberships sin filtro y filtra local (universal)
-    if (!trackers.length) {
-      const q2 = await supabase
-        .from("memberships")
-        .select("user_id, role, org_id")
-        .eq("org_id", currentOrgId);
-
-      if (q2.error) {
-        console.error("[TrackerDashboard] memberships trackers error (q2)", q2.error);
-        setDiag((d) => ({ ...d, lastMembershipError: q2.error.message || String(q2.error) }));
-        setMembershipTrackers([]);
-        return;
-      }
-
-      rows = Array.isArray(q2.data) ? q2.data : [];
-      trackers = rows.filter((r) => isTrackerRole(r?.role));
-    }
+    const rows = Array.isArray(data) ? data : [];
+    const trackers = rows.filter((r) => isTrackerRole(r?.role));
 
     const uniq = Array.from(
       new Set(trackers.map((r) => String(r.user_id)).filter(Boolean))
@@ -245,10 +222,9 @@ export default function TrackerDashboard() {
       }));
 
       if (!allowedTrackerIds.length) {
-        // Clave: esto explica por qué nunca ves tracker_positions en Network
         setPositions([]);
         setDiag((d) => ({ ...d, positionsFound: 0 }));
-        setErrorMsg("No hay trackers en memberships para esta org (role tracker).");
+        setErrorMsg("No hay trackers en memberships para esta org (role tracker*).");
         return;
       }
 
@@ -440,7 +416,7 @@ export default function TrackerDashboard() {
         </div>
       </div>
 
-      {/* Contenedor MAPA con altura FORZADA */}
+      {/* Contenedor MAPA */}
       <div className="rounded-lg border bg-white overflow-hidden" style={{ height: 520, minHeight: 420 }}>
         <MapContainer
           center={mapCenter}
@@ -456,17 +432,8 @@ export default function TrackerDashboard() {
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
-            eventHandlers={{
-              tileload: () => setDiag((d) => ({ ...d, tileLoads: d.tileLoads + 1 })),
-              tileerror: (e) => {
-                const url = e?.tile?.src || "tileerror";
-                console.warn("[TileLayer] tileerror:", url);
-                setDiag((d) => ({ ...d, tileErrors: d.tileErrors + 1, lastTileError: String(url) }));
-              },
-            }}
           />
 
-          {/* Puntos/rutas */}
           {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
             const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
             const chron = [...pts].reverse();
