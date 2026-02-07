@@ -1,5 +1,5 @@
 // src/pages/AdminAssign.tsx
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 type Notice = { type: "ok" | "err" | "info"; text: string };
@@ -17,7 +17,6 @@ function normalizeEmail(raw: string) {
 
 function defaultOrgNameFromEmail(email: string) {
   const part = email.split("@")[0] || email;
-  // limpia caracteres raros para que sea un nombre presentable
   const clean = part.replace(/[^a-z0-9._-]/gi, " ").replace(/\s+/g, " ").trim();
   return clean ? `Org de ${clean}` : "Organización personal";
 }
@@ -29,10 +28,11 @@ export default function AdminAssign() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [invite, setInvite] = useState<InviteResult | null>(null);
 
+  const claimInputRef = useRef<HTMLInputElement | null>(null);
+
   const targetEmail = useMemo(() => normalizeEmail(email), [email]);
 
   const canSend = useMemo(() => {
-    // validación simple y universal (evita emails vacíos)
     return targetEmail.includes("@") && targetEmail.includes(".") && targetEmail.length > 5 && !loading;
   }, [targetEmail, loading]);
 
@@ -44,13 +44,37 @@ export default function AdminAssign() {
       : "bg-slate-50 border-slate-200 text-slate-800";
 
   async function copyToClipboard(text: string) {
+    const t = String(text || "");
+    if (!t) return;
+
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(t);
       setNotice({ type: "ok", text: "✅ Código copiado al portapapeles." });
     } catch {
-      setNotice({ type: "info", text: "No pude copiar automáticamente. Copia el código manualmente." });
+      // fallback: seleccionar el input para copiado manual
+      if (claimInputRef.current) {
+        claimInputRef.current.focus();
+        claimInputRef.current.select();
+      }
+      setNotice({ type: "info", text: "No pude copiar automáticamente. El código quedó seleccionado para copiar." });
     }
   }
+
+  function focusAndSelectClaim() {
+    const el = claimInputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }
+
+  // Cuando llegue un invite, enfocamos y seleccionamos automáticamente el claim
+  useEffect(() => {
+    if (invite?.claim_code) {
+      // pequeño delay para asegurar render
+      setTimeout(() => focusAndSelectClaim(), 50);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invite?.claim_code]);
 
   async function generateInvite() {
     const e = targetEmail;
@@ -59,7 +83,6 @@ export default function AdminAssign() {
       return;
     }
 
-    // IMPORTANTE: Este nombre es para la ORG PERSONAL del invitado
     const suggestedPersonalOrgName = (orgName || "").trim() || defaultOrgNameFromEmail(e);
 
     setLoading(true);
@@ -75,12 +98,6 @@ export default function AdminAssign() {
         return;
       }
 
-      /**
-       * Payload UNIVERSAL:
-       * - NO enviamos org_id
-       * - role está implícito en la Edge Function (owner)
-       * - enviamos personal_org_name y también org_name por compatibilidad (si tu Edge aún usa org_name)
-       */
       const payload = {
         email: e,
         personal_org_name: suggestedPersonalOrgName,
@@ -102,7 +119,8 @@ export default function AdminAssign() {
       }
 
       const inv = data?.invite;
-      const claim = inv?.claim_code;
+      const claim = String(inv?.claim_code || "").trim();
+
       if (!claim) {
         setNotice({ type: "err", text: "Respuesta inesperada: no llegó claim_code." });
         return;
@@ -185,9 +203,14 @@ export default function AdminAssign() {
               <div className="text-sm font-semibold text-slate-800 mb-1">Código (claim_code)</div>
 
               <div className="flex items-center gap-2">
-                <code className="flex-1 rounded bg-white border border-slate-200 px-3 py-2 text-xs break-all">
-                  {invite.claim_code}
-                </code>
+                <input
+                  ref={claimInputRef}
+                  className="flex-1 rounded bg-white border border-slate-200 px-3 py-2 text-xs"
+                  value={invite.claim_code}
+                  readOnly
+                  onFocus={focusAndSelectClaim}
+                  onClick={focusAndSelectClaim}
+                />
                 <button
                   className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-100"
                   onClick={() => copyToClipboard(invite.claim_code)}
