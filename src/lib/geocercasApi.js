@@ -1,131 +1,171 @@
+@'
 // src/lib/geocercasApi.js
-// API canónica DB-driven (sin endpoints /api/*).
-// Guarda/edita/elimina geocercas directo en Supabase con RLS.
-// Requiere que tu DB asigne org_id y user_id (o valide) vía triggers/RLS.
-//
-// Uso típico:
-//   import { saveGeocerca, deleteGeocerca, listGeocercas } from "@/lib/geocercasApi";
-//   await saveGeocerca({ name, polygon_geojson, ... });
+// ============================================================
+// CANONICAL Geocercas client (TENANT-SAFE) — Feb 2026
+// ✅ Compatible con UI existente: exports upsertGeocerca()
+// ✅ No usa /api/geocercas (evita 405). Usa Supabase directo.
+// ============================================================
 
 import { supabase } from "./supabaseClient";
 
-/**
- * Normaliza un GeoJSON Polygon/MultiPolygon a JSON serializable.
- * Acepta objeto o string JSON.
- */
+// ---------------------------
+// Helpers
+// ---------------------------
+
+function pickErrorMessage(err) {
+  if (!err) return "Error desconocido";
+  if (typeof err === "string") return err;
+  return (
+    err.message ||
+    err.error_description ||
+    err.details ||
+    err.detail ||
+    err.hint ||
+    (Array.isArray(err.errors) ? err.errors.map((e) => e.message || e).join(" | ") : null) ||
+    "Request failed"
+  );
+}
+
+function throwNice(err) {
+  const msg = pickErrorMessage(err);
+  const e = new Error(msg);
+  if (err?.status) e.status = err.status;
+  if (err?.code) e.code = err.code;
+  e.raw = err;
+  throw e;
+}
+
 function normalizeGeoJSON(input) {
   if (!input) return null;
   if (typeof input === "string") {
-    try {
-      return JSON.parse(input);
-    } catch {
-      // Si te llega ya como string válido pero no parseable, lo devolvemos tal cual
-      // (Postgres jsonb acepta string solo si se parsea; mejor fallar antes)
-      throw new Error("polygon_geojson no es JSON válido");
-    }
+    try { return JSON.parse(input); } catch { throw new Error("GeoJSON inválido"); }
   }
   return input;
 }
 
-/**
- * Construye el payload permitido para la tabla `geocercas`.
- * Ajusta los nombres de columnas si tu esquema difiere.
- */
-function buildGeocercaPayload(data) {
-  const payload = {
-    // Recomendado: columna "name" o "nombre"
-    name: data.name ?? data.nombre ?? null,
-
-    // GeoJSON (jsonb)
-    polygon_geojson: normalizeGeoJSON(data.polygon_geojson ?? data.geojson ?? data.poligono ?? null),
-
-    // Campos opcionales (ajusta a tu DB)
-    color: data.color ?? null,
-    notes: data.notes ?? data.notas ?? null,
-
-    // IMPORTANTE:
-    // No seteamos org_id ni user_id aquí: debe resolverse por triggers/RLS (canon).
-    // Si tu DB exige estos campos explícitos, avísame y lo adaptamos.
-  };
-
-  // Limpieza de undefined para evitar errores
-  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
-  return payload;
+async function requireAuth() {
+  const { data: sess, error } = await supabase.auth.getSession();
+  if (error) throwNice(error);
+  if (!sess?.session?.user) throw new Error("No autenticado. Cierra sesión y entra de nuevo.");
+  return sess.session;
 }
 
 /**
- * Inserta o actualiza una geocerca.
- * - Si `data.id` existe => UPDATE
- * - Si no => INSERT
- *
- * Retorna la fila guardada.
+ * Ajusta columnas aquí si tu tabla usa geometry en vez de geojson.
  */
-export async function saveGeocerca(data) {
-  if (!data || typeof data !== "object") {
-    throw new Error("saveGeocerca: data inválida");
-  }
+function buildPayload(payload = {}) {
+  const name = String(payload.nombre ?? payload.name ?? "").trim();
+  const geojson = normalizeGeoJSON(payload.geojson ?? payload.geometry ?? payload.polygon_geojson ?? null);
+  return { name: name || null, geojson };
+}
 
-  const payload = buildGeocercaPayload(data);
+function filterByOrg(rows, orgId) {
+  if (!orgId) return rows || [];
+  return (rows || []).filter((r) => String(r?.org_id ?? "") === String(orgId));
+}
 
-  // Validación mínima (evita inserts vacíos)
-  if (!payload.name) {
-    throw new Error("Falta el nombre de la geocerca");
-  }
-  if (!payload.polygon_geojson) {
-    throw new Error("Falta el polígono (polygon_geojson)");
-  }
+// ---------------------------
+// Exports compatibles con UI
+// ---------------------------
 
-  // Sesión activa requerida
-  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-  if (sessionErr) throw sessionErr;
-  if (!sessionData?.session?.user) {
-    throw new Error("No hay sesión activa. Vuelve a iniciar sesión.");
-  }
+export async function listGeocercas({ orgId } = {}) {
+  await requireAuth();
+  const { data, error } = await supabase
+    .from("geofences")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throwNice(error);
+  return filterByOrg(data || [], orgId);
+}
 
-  const isUpdate = !!data.id;
+export async function listGeocercasForOrg(orgId) {
+  return await listGeocercas({ orgId });
+}
 
-  if (isUpdate) {
-    const { data: row, error } = await supabase
-      .from("geocercas")
-      .update(payload)
-      .eq("id", data.id)
+export async function getGeocerca({ id, orgId } = {}) {
+  if (!id) throw new Error("getGeocerca requiere id");
+  await requireAuth();
+  const { data, error } = await supabase
+    .from("geofences")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throwNice(error);
+  if (!data) return null;
+  if (orgId && data?.org_id && String(data.org_id) !== String(orgId)) return null;
+  return data;
+}
+
+/**
+ * upsertGeocerca(payload)
+ * - Si payload.id => update
+ * - Si no => insert
+ */
+export async function upsertGeocerca(payload = {}) {
+  const body = buildPayload(payload);
+  if (!body.name) throw new Error("upsertGeocerca requiere nombre");
+  if (!body.geojson) throw new Error("upsertGeocerca requiere geojson");
+  await requireAuth();
+
+  const id = payload?.id ? String(payload.id) : "";
+
+  if (id) {
+    const { data, error } = await supabase
+      .from("geofences")
+      .update(body)
+      .eq("id", id)
       .select("*")
       .single();
-
-    if (error) throw error;
-    return row;
+    if (error) throwNice(error);
+    return data;
   }
 
-  const { data: row, error } = await supabase
-    .from("geocercas")
-    .insert(payload)
+  const { data, error } = await supabase
+    .from("geofences")
+    .insert(body)
     .select("*")
     .single();
-
-  if (error) throw error;
-  return row;
+  if (error) throwNice(error);
+  return data;
 }
 
 /**
- * Lista geocercas visibles por RLS para el usuario actual.
+ * deleteGeocerca(id) o deleteGeocerca({id}) o bulk deleteGeocerca({orgId, nombres_ci})
  */
-export async function listGeocercas({ limit = 500, orderBy = "created_at", ascending = false } = {}) {
-  const { data, error } = await supabase
-    .from("geocercas")
-    .select("*")
-    .order(orderBy, { ascending })
-    .limit(limit);
+export async function deleteGeocerca(arg = {}) {
+  await requireAuth();
 
-  if (error) throw error;
-  return data ?? [];
-}
+  // por id directo
+  if (typeof arg === "string" || typeof arg === "number") {
+    const id = String(arg);
+    const { error } = await supabase.from("geofences").delete().eq("id", id);
+    if (error) throwNice(error);
+    return { ok: true };
+  }
 
-/**
- * Elimina geocerca por id (RLS debe permitir).
- */
-export async function deleteGeocerca(id) {
-  if (!id) throw new Error("deleteGeocerca: id requerido");
-  const { error } = await supabase.from("geocercas").delete().eq("id", id);
-  if (error) throw error;
-  return true;
+  const id = arg?.id ? String(arg.id) : "";
+  if (id) {
+    const { error } = await supabase.from("geofences").delete().eq("id", id);
+    if (error) throwNice(error);
+    return { ok: true };
+  }
+
+  // bulk por nombres_ci (usa columna name)
+  const nombres_ci = Array.isArray(arg?.nombres_ci) ? arg.nombres_ci : [];
+  const orgId = arg?.orgId || arg?.org_id || null;
+
+  if (nombres_ci.length) {
+    const names = nombres_ci.map((x) => String(x || "").trim()).filter(Boolean);
+    const orParts = names.map((n) => `name.ilike.${encodeURIComponent(n)}`).join(",");
+
+    let q = supabase.from("geofences").delete();
+    if (orgId) q = q.eq("org_id", orgId);
+
+    const { error } = await q.or(orParts);
+    if (error) throwNice(error);
+    return { ok: true, deleted: names.length };
+  }
+
+  throw new Error("deleteGeocerca requiere id (o { orgId, nombres_ci[] }).");
 }
+'@ | Set-Content -Encoding UTF8 src\lib\geocercasApi.js
