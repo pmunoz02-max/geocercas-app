@@ -1,5 +1,6 @@
 // api/reportes.js
 import { createClient } from "@supabase/supabase-js";
+import { resolveOrgAndMembership } from "../src/server/lib/resolveOrg.js";
 
 function getEnv(nameList) {
   for (const n of nameList) {
@@ -29,54 +30,6 @@ function normalizeOffset(v) {
   return Math.floor(n);
 }
 
-async function resolveOrgIdAndMembership(admin, userId, requestedOrgId) {
-  // 1) Si viene orgId por header, validarlo contra memberships activas
-  if (requestedOrgId) {
-    const { data, error } = await admin
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", userId)
-      .eq("org_id", requestedOrgId)
-      .is("revoked_at", null)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-    if (data) return { orgId: data.org_id, role: data.role, is_default: data.is_default };
-    return null; // requested org no válida
-  }
-
-  // 2) Si NO viene orgId, usar default activa si existe
-  {
-    const { data, error } = await admin
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", userId)
-      .is("revoked_at", null)
-      .eq("is_default", true)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-    if (data) return { orgId: data.org_id, role: data.role, is_default: data.is_default };
-  }
-
-  // 3) Fallback: primera org activa
-  {
-    const { data, error } = await admin
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", userId)
-      .is("revoked_at", null)
-      .order("created_at", { ascending: true })
-      .limit(1);
-
-    if (error) throw new Error(error.message);
-    const row = Array.isArray(data) ? data[0] : null;
-    if (row) return { orgId: row.org_id, role: row.role, is_default: row.is_default };
-  }
-
-  return null;
-}
-
 export default async function handler(req, res) {
   try {
     if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
@@ -97,7 +50,6 @@ export default async function handler(req, res) {
     }
     const token = authHeader.slice(7).trim();
 
-    // orgId es opcional: si no viene, resolvemos default
     const requestedOrgId = req.headers["x-org-id"] ? String(req.headers["x-org-id"]) : "";
 
     // ===== ADMIN CLIENT (bypass RLS) =====
@@ -111,7 +63,7 @@ export default async function handler(req, res) {
     if (userErr || !user) return res.status(401).json({ error: "Invalid user" });
 
     // ===== MEMBERSHIP (UNIVERSAL): public.memberships =====
-    const membership = await resolveOrgIdAndMembership(admin, user.id, requestedOrgId);
+    const membership = await resolveOrgAndMembership(admin, user.id, requestedOrgId);
 
     if (!membership) {
       return res.status(403).json({
@@ -120,7 +72,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const orgId = membership.orgId;
+    const orgId = membership.org_id;
     const action = String(req.query.action || "").toLowerCase();
 
     // ======================
@@ -128,30 +80,10 @@ export default async function handler(req, res) {
     // ======================
     if (action === "filters") {
       const [geocercasRes, personasRes, activitiesRes, asignacionesRes] = await Promise.all([
-        admin
-          .from("geocercas")
-          .select("id, nombre, org_id")
-          .eq("org_id", orgId)
-          .eq("is_deleted", false)
-          .order("nombre"),
-        admin
-          .from("personal")
-          .select("id, nombre, apellido, email, org_id")
-          .eq("org_id", orgId)
-          .eq("is_deleted", false)
-          .order("nombre"),
-        admin
-          .from("activities")
-          .select("id, name, hourly_rate, currency_code, org_id")
-          .eq("org_id", orgId)
-          .eq("active", true)
-          .order("name"),
-        admin
-          .from("asignaciones")
-          .select("id, status, personal_id, geocerca_id, activity_id, org_id")
-          .eq("org_id", orgId)
-          .eq("is_deleted", false)
-          .order("created_at", { ascending: false }),
+        admin.from("geocercas").select("id, nombre, org_id").eq("org_id", orgId).eq("is_deleted", false).order("nombre"),
+        admin.from("personal").select("id, nombre, apellido, email, org_id").eq("org_id", orgId).eq("is_deleted", false).order("nombre"),
+        admin.from("activities").select("id, name, hourly_rate, currency_code, org_id").eq("org_id", orgId).eq("active", true).order("name"),
+        admin.from("asignaciones").select("id, status, personal_id, geocerca_id, activity_id, org_id").eq("org_id", orgId).eq("is_deleted", false).order("created_at", { ascending: false }),
       ]);
 
       const errors = [];

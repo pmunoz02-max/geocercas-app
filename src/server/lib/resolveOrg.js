@@ -1,4 +1,4 @@
-// api/lib/resolveOrg.js
+// src/server/lib/resolveOrg.js
 export async function resolveOrgAndMembership(admin, userId, requestedOrgId) {
   // 1) Org explícita desde header
   if (requestedOrgId) {
