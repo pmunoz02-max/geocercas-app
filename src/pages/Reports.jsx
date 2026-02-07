@@ -79,7 +79,7 @@ export default function Reports() {
   const { t } = useTranslation();
   const { loading, isAuthenticated, currentOrg, contextLoading, session } = useAuth();
 
-  // Solo para UX (mostrar nombre). NO se usa para auth multi-tenant.
+  // Solo UX (mostrar org). NO se usa para auth multi-tenant.
   const orgId = currentOrg?.id || null;
 
   // Bearer opcional. Si no hay, cookie tg_at debe funcionar.
@@ -101,7 +101,10 @@ export default function Reports() {
 
   const [rows, setRows] = useState([]);
 
-  const canRun = useMemo(() => !loading && isAuthenticated && !contextLoading, [loading, isAuthenticated, contextLoading]);
+  const canRun = useMemo(
+    () => !loading && isAuthenticated && !contextLoading,
+    [loading, isAuthenticated, contextLoading]
+  );
 
   async function apiGet(url) {
     const headers = {
@@ -309,7 +312,7 @@ export default function Reports() {
             className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
           >
             {loadingFilters
-              ? t("common.actions.loading", { defaultValue: "Cargando…" })}
+              ? t("common.actions.loading", { defaultValue: "Cargando…" })
               : t("reportes.refreshFilters", { defaultValue: "Recargar filtros" })}
           </button>
         </div>
@@ -398,7 +401,6 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* tabla igual que antes */}
       <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         {loadingReport ? (
           <p className="p-4 text-sm text-slate-500">{t("common.actions.loading", { defaultValue: "Cargando…" })}</p>
