@@ -1,4 +1,3 @@
-@'
 // src/lib/geocercasApi.js
 // ============================================================
 // CANONICAL Geocercas client (TENANT-SAFE) — Feb 2026
@@ -38,7 +37,11 @@ function throwNice(err) {
 function normalizeGeoJSON(input) {
   if (!input) return null;
   if (typeof input === "string") {
-    try { return JSON.parse(input); } catch { throw new Error("GeoJSON inválido"); }
+    try {
+      return JSON.parse(input);
+    } catch {
+      throw new Error("GeoJSON inválido");
+    }
   }
   return input;
 }
@@ -52,6 +55,7 @@ async function requireAuth() {
 
 /**
  * Ajusta columnas aquí si tu tabla usa geometry en vez de geojson.
+ * Por defecto envía: { name, geojson }
  */
 function buildPayload(payload = {}) {
   const name = String(payload.nombre ?? payload.name ?? "").trim();
@@ -74,6 +78,7 @@ export async function listGeocercas({ orgId } = {}) {
     .from("geofences")
     .select("*")
     .order("created_at", { ascending: false });
+
   if (error) throwNice(error);
   return filterByOrg(data || [], orgId);
 }
@@ -85,13 +90,16 @@ export async function listGeocercasForOrg(orgId) {
 export async function getGeocerca({ id, orgId } = {}) {
   if (!id) throw new Error("getGeocerca requiere id");
   await requireAuth();
+
   const { data, error } = await supabase
     .from("geofences")
     .select("*")
     .eq("id", id)
     .maybeSingle();
+
   if (error) throwNice(error);
   if (!data) return null;
+
   if (orgId && data?.org_id && String(data.org_id) !== String(orgId)) return null;
   return data;
 }
@@ -103,8 +111,10 @@ export async function getGeocerca({ id, orgId } = {}) {
  */
 export async function upsertGeocerca(payload = {}) {
   const body = buildPayload(payload);
+
   if (!body.name) throw new Error("upsertGeocerca requiere nombre");
   if (!body.geojson) throw new Error("upsertGeocerca requiere geojson");
+
   await requireAuth();
 
   const id = payload?.id ? String(payload.id) : "";
@@ -116,6 +126,7 @@ export async function upsertGeocerca(payload = {}) {
       .eq("id", id)
       .select("*")
       .single();
+
     if (error) throwNice(error);
     return data;
   }
@@ -125,6 +136,7 @@ export async function upsertGeocerca(payload = {}) {
     .insert(body)
     .select("*")
     .single();
+
   if (error) throwNice(error);
   return data;
 }
@@ -156,6 +168,9 @@ export async function deleteGeocerca(arg = {}) {
 
   if (nombres_ci.length) {
     const names = nombres_ci.map((x) => String(x || "").trim()).filter(Boolean);
+
+    // OJO: esto no hace "contiene", hace match de patrón exacto (sin *). Si quieres "contiene",
+    // cambia a: `name.ilike.%${encodeURIComponent(n)}%`
     const orParts = names.map((n) => `name.ilike.${encodeURIComponent(n)}`).join(",");
 
     let q = supabase.from("geofences").delete();
@@ -168,4 +183,3 @@ export async function deleteGeocerca(arg = {}) {
 
   throw new Error("deleteGeocerca requiere id (o { orgId, nombres_ci[] }).");
 }
-'@ | Set-Content -Encoding UTF8 src\lib\geocercasApi.js
