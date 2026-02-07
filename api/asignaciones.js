@@ -1,19 +1,28 @@
 // api/asignaciones.js
 // ============================================================
-// TENANT-SAFE Asignaciones API (CANONICAL) - ESM safe
-// Fix Enero 2026:
-//  - Evita dependencia de RPC bootstrap_session_context (puede tocar app_user_roles y chocar con RLS).
-//  - Determina org actual desde memberships (is_default) usando el user del JWT.
-//  - activities usa tenant_id (NOT NULL). org_id puede ser NULL.
-//  - Catálogo activities y validación cross-org basadas en tenant_id.
-//  - Mantiene campos planos resilientes para UI.
+// TENANT-SAFE Asignaciones API (CANONICAL) — Feb 2026
+// ✅ NO depende de bootstrap_session_context()
+// ✅ Resuelve org actual desde public.memberships (revoked_at IS NULL)
+// ✅ Auth universal: Bearer token (preferido) o cookie tg_at (legacy)
+// ✅ Valida membership con resolveOrgAndMembership() (service role)
+// ✅ activities valida por tenant_id (NOT NULL) — tenant==org en tu arquitectura
+// ✅ Catalogs resilientes para UI
+//
+// NOTAS:
+// - La relación FK usada en select (geocerca:geocerca_id ...) se mantiene tal cual,
+//   para no romper el join que ya tienes en Supabase.
+// - ensureGeocercaInOrg intenta validar en geofences y cae a geocercas si aplica.
+//
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
+import { resolveOrgAndMembership } from "../src/server/lib/resolveOrg.js";
 
+export const config = { runtime: "nodejs" };
+
+// ---------------- helpers ----------------
 function parseCookies(req) {
-  const header =
-    req && req.headers && req.headers.cookie ? req.headers.cookie : "";
+  const header = (req && req.headers && req.headers.cookie) ? req.headers.cookie : "";
   const out = {};
   header.split(";").forEach((part) => {
     const trimmed = String(part || "").trim();
@@ -31,28 +40,26 @@ function parseCookies(req) {
   return out;
 }
 
+function getBearerToken(req) {
+  const h = String(req.headers?.authorization || req.headers?.Authorization || "").trim();
+  if (!h) return "";
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m ? String(m[1] || "").trim() : "";
+}
+
+function getAccessToken(req) {
+  const bearer = getBearerToken(req);
+  if (bearer) return bearer;
+  const cookies = parseCookies(req);
+  return cookies.tg_at || "";
+}
+
 function json(res, status, body) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("cache-control", "no-store");
+  res.setHeader("vary", "Cookie, Authorization, x-org-id");
   res.end(JSON.stringify(body));
-}
-
-function supabaseForToken(accessToken) {
-  const url = process.env.SUPABASE_URL;
-  const anon = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
-
-  return createClient(url, anon, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: accessToken ? { Authorization: "Bearer " + accessToken } : {},
-    },
-  });
 }
 
 function readJson(req) {
@@ -67,70 +74,16 @@ function readJson(req) {
         reject(e);
       }
     });
+    req.on("error", reject);
   });
 }
 
-/**
- * Determina el "org actual" de forma tenant-safe SIN depender de RPCs que puedan
- * tocar app_user_roles (y chocar con RLS).
- *
- * Regla:
- * 1) user = auth.getUser() usando el JWT del cookie tg_at
- * 2) org = memberships.is_default=true (si existe)
- * 3) fallback: primer membership por created_at desc
- */
-async function getContextOr401(req) {
-  const cookies = parseCookies(req);
-  const token = cookies.tg_at || null;
-  if (!token) return { ok: false, status: 401, error: "missing tg_at cookie" };
-
-  const supabase = supabaseForToken(token);
-
-  const u = await supabase.auth.getUser();
-  if (u.error || !u.data?.user?.id) {
-    return {
-      ok: false,
-      status: 401,
-      error: (u.error && u.error.message) || "invalid user",
-    };
+function getEnv(nameList) {
+  for (const n of nameList) {
+    const v = process.env[n];
+    if (v && String(v).trim()) return String(v).trim();
   }
-  const userId = u.data.user.id;
-
-  // 1) default org
-  const qDefault = await supabase
-    .from("memberships")
-    .select("org_id, role, is_default, created_at")
-    .eq("user_id", userId)
-    .eq("is_default", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let orgId = qDefault.data?.org_id || null;
-
-  // 2) fallback: any membership
-  if (!orgId) {
-    const qAny = await supabase
-      .from("memberships")
-      .select("org_id, role, is_default, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    orgId = qAny.data?.org_id || null;
-  }
-
-  if (!orgId) {
-    return {
-      ok: false,
-      status: 403,
-      error: "no memberships found for current user",
-    };
-  }
-
-  const tenantId = orgId; // tenant==org (tu arquitectura actual)
-  return { ok: true, supabase, orgId, tenantId, userId };
+  return null;
 }
 
 function normalizeGeocercas(rows) {
@@ -142,49 +95,6 @@ function normalizeGeocercas(rows) {
       name: (g && g.name) || null,
     }))
     .filter((g) => g && g.id);
-}
-
-async function loadCatalogs(supabase, tenantId) {
-  // Personal por org (RLS + filtro explícito)
-  const pResp = await supabase
-    .from("personal")
-    .select("id,nombre,apellido,email,org_id,is_deleted")
-    .eq("is_deleted", false)
-    .order("nombre", { ascending: true });
-
-  // Geocercas por org (RPC canónica). Si falla, la UI usa fallback /api/geocercas
-  let geocercas = [];
-  const gResp = await supabase.rpc("get_geocercas_for_current_org");
-  if (gResp.error) {
-    console.error("[api/asignaciones] geocercas rpc error:", gResp.error);
-  } else {
-    geocercas = normalizeGeocercas(gResp.data);
-  }
-
-  // Activities por org (NO usar org_id; usar tenant_id)
-  const aResp = await supabase
-    .from("activities")
-    .select("id,name,tenant_id,active")
-    .eq("tenant_id", tenantId)
-    .eq("active", true)
-    .order("name", { ascending: true });
-
-  const activities = aResp.error
-    ? []
-    : (aResp.data || []).map((a) => ({ id: a.id, name: a.name }));
-
-  const personal = pResp.error ? [] : pResp.data || [];
-
-  // Compat legacy: people[]
-  const people = personal.map((p) => ({
-    org_people_id: p.id,
-    nombre: p.nombre,
-    apellido: p.apellido,
-    email: p.email,
-    org_id: p.org_id || null,
-  }));
-
-  return { personal, geocercas, activities, people };
 }
 
 function toInt(v) {
@@ -223,8 +133,107 @@ function enrichAsignacionRow(row) {
   };
 }
 
-async function ensureGeocercaInOrg(supabase, orgId, geocercaId) {
-  const q = await supabase
+// ---------------- membership context (UNIVERSAL) ----------------
+async function getContextOr401(req) {
+  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
+  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, status: 500, error: "Missing SUPABASE env vars" };
+  }
+
+  const token = getAccessToken(req);
+  if (!token) return { ok: false, status: 401, error: "Missing authentication (no Bearer, no tg_at cookie)" };
+
+  // admin: validar user + memberships
+  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: userData, error: userErr } = await admin.auth.getUser(token);
+  const user = userData?.user || null;
+  if (userErr || !user?.id) return { ok: false, status: 401, error: "Invalid user" };
+
+  const requestedOrgId = req.headers["x-org-id"] ? String(req.headers["x-org-id"]) : "";
+  const membership = await resolveOrgAndMembership(admin, user.id, requestedOrgId);
+
+  if (!membership?.org_id) {
+    return { ok: false, status: 403, error: "User not member of organization" };
+  }
+
+  const orgId = membership.org_id;
+  const tenantId = orgId; // tenant==org
+
+  // user client (RLS): para leer/escribir asignaciones con policies
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  return { ok: true, supabase, admin, orgId, tenantId, userId: user.id };
+}
+
+// ---------------- catalogs ----------------
+async function loadCatalogs(supabase, orgId, tenantId) {
+  // Personal por org (filtro explícito)
+  const pResp = await supabase
+    .from("personal")
+    .select("id,nombre,apellido,email,org_id,is_deleted")
+    .eq("org_id", orgId)
+    .eq("is_deleted", false)
+    .order("nombre", { ascending: true });
+
+  // Geocercas: preferimos RPC canónica; fallback a geofences list por org
+  let geocercas = [];
+  const gResp = await supabase.rpc("get_geocercas_for_current_org");
+  if (gResp.error) {
+    // fallback seguro: geofences por org (si existe y RLS permite)
+    const gf = await supabase.from("geofences").select("id,name").eq("org_id", orgId).order("created_at", { ascending: false });
+    if (!gf.error) geocercas = normalizeGeocercas((gf.data || []).map((x) => ({ id: x.id, nombre: x.name, name: x.name })));
+  } else {
+    geocercas = normalizeGeocercas(gResp.data);
+  }
+
+  // Activities por tenant (NOT NULL)
+  const aResp = await supabase
+    .from("activities")
+    .select("id,name,tenant_id,active")
+    .eq("tenant_id", tenantId)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  const activities = aResp.error ? [] : (aResp.data || []).map((a) => ({ id: a.id, name: a.name }));
+  const personal = pResp.error ? [] : (pResp.data || []);
+
+  // Compat legacy: people[]
+  const people = personal.map((p) => ({
+    org_people_id: p.id,
+    nombre: p.nombre,
+    apellido: p.apellido,
+    email: p.email,
+    org_id: p.org_id || null,
+  }));
+
+  return { personal, geocercas, activities, people };
+}
+
+// ---------------- cross-org validation ----------------
+async function ensureGeocercaInOrg({ supabase, orgId, geocercaId }) {
+  // 1) Prefer geofences (nuevo canonical)
+  {
+    const q = await supabase
+      .from("geofences")
+      .select("id,org_id,name")
+      .eq("id", geocercaId)
+      .eq("org_id", orgId)
+      .limit(1)
+      .maybeSingle();
+
+    if (!q.error && q.data) return { ok: true };
+
+    // Si la tabla no existe o RLS no deja leer, seguimos a fallback legacy
+  }
+
+  // 2) Fallback legacy geocercas (si existe en tu schema)
+  const q2 = await supabase
     .from("geocercas")
     .select("id,org_id,name,nombre")
     .eq("id", geocercaId)
@@ -232,14 +241,12 @@ async function ensureGeocercaInOrg(supabase, orgId, geocercaId) {
     .limit(1)
     .maybeSingle();
 
-  if (q.error) return { ok: false, error: q.error.message };
-  if (!q.data)
-    return { ok: false, error: "geocerca_id no pertenece a la org actual" };
+  if (q2.error) return { ok: false, error: q2.error.message };
+  if (!q2.data) return { ok: false, error: "geocerca_id no pertenece a la org actual" };
   return { ok: true };
 }
 
 async function ensureActivityInTenant(supabase, tenantId, activityId) {
-  // activities.tenant_id es la fuente de verdad (NOT NULL)
   const q = await supabase
     .from("activities")
     .select("id,tenant_id,name,active")
@@ -249,16 +256,17 @@ async function ensureActivityInTenant(supabase, tenantId, activityId) {
     .maybeSingle();
 
   if (q.error) return { ok: false, error: q.error.message };
-  if (!q.data)
-    return { ok: false, error: "activity_id no pertenece a la org actual" };
+  if (!q.data) return { ok: false, error: "activity_id no pertenece a la org actual" };
   return { ok: true };
 }
 
+// ---------------- handler ----------------
 export default async function handler(req, res) {
+  const build_tag = "asignaciones-v2026-02-memberships";
+
   try {
     const ctxRes = await getContextOr401(req);
-    if (!ctxRes.ok)
-      return json(res, ctxRes.status, { ok: false, error: ctxRes.error });
+    if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, build_tag, error: ctxRes.error });
 
     const supabase = ctxRes.supabase;
     const orgId = ctxRes.orgId;
@@ -294,17 +302,13 @@ export default async function handler(req, res) {
         .eq("org_id", orgId)
         .order("start_time", { ascending: true });
 
-      if (resp.error)
-        return json(res, 500, { ok: false, error: resp.error.message });
+      if (resp.error) return json(res, 500, { ok: false, build_tag, error: resp.error.message });
 
       const rows = Array.isArray(resp.data) ? resp.data : [];
       const enriched = rows.map(enrichAsignacionRow);
 
-      const catalogs = await loadCatalogs(supabase, tenantId);
-      return json(res, 200, {
-        ok: true,
-        data: { asignaciones: enriched, catalogs },
-      });
+      const catalogs = await loadCatalogs(supabase, orgId, tenantId);
+      return json(res, 200, { ok: true, build_tag, data: { asignaciones: enriched, catalogs } });
     }
 
     // =========================
@@ -313,20 +317,20 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = (await readJson(req)) || {};
 
-      if (!body.personal_id)
-        return json(res, 400, { ok: false, error: "personal_id is required" });
-      if (!body.geocerca_id)
-        return json(res, 400, { ok: false, error: "geocerca_id is required" });
-      if (!body.activity_id)
-        return json(res, 400, { ok: false, error: "activity_id is required" });
+      if (!body.personal_id) return json(res, 400, { ok: false, build_tag, error: "personal_id is required" });
+      if (!body.geocerca_id) return json(res, 400, { ok: false, build_tag, error: "geocerca_id is required" });
+      if (!body.activity_id) return json(res, 400, { ok: false, build_tag, error: "activity_id is required" });
 
-      const okG = await ensureGeocercaInOrg(supabase, orgId, body.geocerca_id);
-      if (!okG.ok) return json(res, 400, { ok: false, error: okG.error });
+      const okG = await ensureGeocercaInOrg({ supabase, orgId, geocercaId: body.geocerca_id });
+      if (!okG.ok) return json(res, 400, { ok: false, build_tag, error: okG.error });
 
       const okA = await ensureActivityInTenant(supabase, tenantId, body.activity_id);
-      if (!okA.ok) return json(res, 400, { ok: false, error: okA.error });
+      if (!okA.ok) return json(res, 400, { ok: false, build_tag, error: okA.error });
 
+      // Blindaje: org_id / tenant_id siempre del server
       const payload = { ...body, org_id: orgId, tenant_id: tenantId };
+      delete payload.orgId;
+      delete payload.tenantId;
 
       const ins = await supabase
         .from("asignaciones")
@@ -353,10 +357,9 @@ export default async function handler(req, res) {
         )
         .single();
 
-      if (ins.error)
-        return json(res, 400, { ok: false, error: ins.error.message });
+      if (ins.error) return json(res, 400, { ok: false, build_tag, error: ins.error.message });
 
-      return json(res, 200, { ok: true, data: enrichAsignacionRow(ins.data) });
+      return json(res, 200, { ok: true, build_tag, data: enrichAsignacionRow(ins.data) });
     }
 
     // =========================
@@ -367,20 +370,21 @@ export default async function handler(req, res) {
       const id = body.id;
       const patch = body.patch;
 
-      if (!id || !patch)
-        return json(res, 400, { ok: false, error: "missing id/patch" });
+      if (!id || !patch) return json(res, 400, { ok: false, build_tag, error: "missing id/patch" });
 
       const safe = { ...patch };
       delete safe.org_id;
       delete safe.tenant_id;
+      delete safe.orgId;
+      delete safe.tenantId;
 
       if (safe.geocerca_id) {
-        const okG = await ensureGeocercaInOrg(supabase, orgId, safe.geocerca_id);
-        if (!okG.ok) return json(res, 400, { ok: false, error: okG.error });
+        const okG = await ensureGeocercaInOrg({ supabase, orgId, geocercaId: safe.geocerca_id });
+        if (!okG.ok) return json(res, 400, { ok: false, build_tag, error: okG.error });
       }
       if (safe.activity_id) {
         const okA = await ensureActivityInTenant(supabase, tenantId, safe.activity_id);
-        if (!okA.ok) return json(res, 400, { ok: false, error: okA.error });
+        if (!okA.ok) return json(res, 400, { ok: false, build_tag, error: okA.error });
       }
 
       const up = await supabase
@@ -410,10 +414,9 @@ export default async function handler(req, res) {
         )
         .single();
 
-      if (up.error)
-        return json(res, 400, { ok: false, error: up.error.message });
+      if (up.error) return json(res, 400, { ok: false, build_tag, error: up.error.message });
 
-      return json(res, 200, { ok: true, data: enrichAsignacionRow(up.data) });
+      return json(res, 200, { ok: true, build_tag, data: enrichAsignacionRow(up.data) });
     }
 
     // =========================
@@ -422,7 +425,7 @@ export default async function handler(req, res) {
     if (req.method === "DELETE") {
       const body = (await readJson(req)) || {};
       const id = body.id;
-      if (!id) return json(res, 400, { ok: false, error: "missing id" });
+      if (!id) return json(res, 400, { ok: false, build_tag, error: "missing id" });
 
       const del = await supabase
         .from("asignaciones")
@@ -430,18 +433,14 @@ export default async function handler(req, res) {
         .eq("id", id)
         .eq("org_id", orgId);
 
-      if (del.error)
-        return json(res, 400, { ok: false, error: del.error.message });
+      if (del.error) return json(res, 400, { ok: false, build_tag, error: del.error.message });
 
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, build_tag });
     }
 
-    return json(res, 405, { ok: false, error: "method not allowed" });
+    return json(res, 405, { ok: false, build_tag, error: "method not allowed" });
   } catch (e) {
     console.error("[api/asignaciones] fatal:", e);
-    return json(res, 500, {
-      ok: false,
-      error: e && e.message ? e.message : "fatal",
-    });
+    return json(res, 500, { ok: false, build_tag: "asignaciones-v2026-02-memberships", error: e?.message || "fatal" });
   }
 }
