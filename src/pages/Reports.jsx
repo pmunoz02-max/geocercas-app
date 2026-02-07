@@ -69,7 +69,10 @@ export default function Reports() {
   const { t } = useTranslation();
   const { loading, isAuthenticated, currentOrg, contextLoading, session } = useAuth();
 
+  // Solo para UX (mostrar nombre). NO se usa para auth multi-tenant.
   const orgId = currentOrg?.id || null;
+
+  // Si existe token, lo mandamos como Bearer. Si no, cookie tg_at debe funcionar.
   const token = session?.access_token || null;
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -88,28 +91,26 @@ export default function Reports() {
 
   const [rows, setRows] = useState([]);
 
-  const canRun = useMemo(
-    () => !loading && isAuthenticated && !!token && !!orgId,
-    [loading, isAuthenticated, token, orgId]
-  );
+  // ✅ Ya no bloqueamos por orgId/token: backend resuelve org server-side.
+  const canRun = useMemo(() => !loading && isAuthenticated && !contextLoading, [loading, isAuthenticated, contextLoading]);
 
   async function apiGet(url) {
-    if (!token) throw new Error(t("reportes.errorMissingAuth", { defaultValue: "Missing authentication" }));
-    // orgId es requerido en UI, pero el backend ya soporta fallback. Igual lo exigimos aquí para UX.
-    if (!orgId) throw new Error(t("reportes.errorMissingOrg", { defaultValue: "Cannot resolve current organization" }));
+    const headers = {
+      "cache-control": "no-cache",
+      pragma: "no-cache",
+    };
+
+    // ✅ Bearer opcional (si no hay, igual funciona con cookie tg_at)
+    if (token) headers.Authorization = `Bearer ${token}`;
 
     const resp = await fetch(url, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "x-org-id": String(orgId),
-        "cache-control": "no-cache",
-        pragma: "no-cache",
-      },
+      headers,
+      credentials: "include", // ✅ CRÍTICO: permite cookie HttpOnly tg_at/tg_rt
     });
 
     const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(json?.error || json?.message || `HTTP ${resp.status}`);
     return json;
   }
 
@@ -158,7 +159,10 @@ export default function Reports() {
     setLoadingReport(true);
 
     try {
-      if (!canRun) throw new Error(!token ? t("reportes.errorMissingAuth") : t("reportes.errorMissingOrg"));
+      if (!canRun) {
+        throw new Error(t("auth.loginRequired", { defaultValue: "No hay sesión activa. Inicia sesión nuevamente." }));
+      }
+
       if (start && end && start > end) {
         throw new Error(
           t("reportes.errorRangeInvalid", {
@@ -225,19 +229,6 @@ export default function Reports() {
     );
   }
 
-  if (!orgId) {
-    return (
-      <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {t("reportes.errorMissingOrg", { defaultValue: "No se pudo resolver la organización actual." })}
-          <div className="text-xs text-red-700/70 mt-1">
-            Debug: currentOrg={String(currentOrg?.id || "")}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
       <div className="flex flex-col gap-1">
@@ -249,7 +240,7 @@ export default function Reports() {
         </p>
         <p className="text-xs text-gray-500">
           {t("reportes.currentOrg", { defaultValue: "Organización actual:" })}{" "}
-          <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id || "—"}</span>
         </p>
       </div>
 
