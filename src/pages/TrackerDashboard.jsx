@@ -4,7 +4,16 @@ import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
 
-import TrackerMap from "../components/tracker/TrackerMap.jsx";
+import {
+  MapContainer,
+  TileLayer,
+  CircleMarker,
+  Polyline,
+  Tooltip,
+  useMap,
+} from "react-leaflet";
+
+import "leaflet/dist/leaflet.css";
 
 const TIME_WINDOWS = [
   { id: "1h", labelKey: "trackerDashboard.timeWindows.1h", fallback: "1 hora", ms: 1 * 60 * 60 * 1000 },
@@ -13,38 +22,7 @@ const TIME_WINDOWS = [
   { id: "24h", labelKey: "trackerDashboard.timeWindows.24h", fallback: "24 horas", ms: 24 * 60 * 60 * 1000 },
 ];
 
-function formatDateTime(dtString) {
-  if (!dtString) return "-";
-  try {
-    const d = new Date(dtString);
-    return d.toLocaleString();
-  } catch {
-    return dtString;
-  }
-}
-
-function formatTime(dtString) {
-  if (!dtString) return "-";
-  try {
-    const d = new Date(dtString);
-    return d.toLocaleTimeString();
-  } catch {
-    return dtString;
-  }
-}
-
-function safeJson(input) {
-  if (!input) return null;
-  if (typeof input === "object") return input;
-  if (typeof input === "string") {
-    try {
-      return JSON.parse(input);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
+const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
 
 function toNum(v) {
   if (v === null || v === undefined) return null;
@@ -63,29 +41,66 @@ function isValidLatLng(lat, lng) {
   );
 }
 
+function formatTime(dtString) {
+  if (!dtString) return "-";
+  try {
+    return new Date(dtString).toLocaleTimeString();
+  } catch {
+    return dtString;
+  }
+}
+
 function resolveTrackerAuthIdFromPersonal(row) {
   if (!row) return null;
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
-/**
- * Resolver robusto de shape: incluye polygon_geojson (clave)
- * y varias alternativas por compatibilidad.
- */
-function resolveGeofenceShape(g) {
-  if (!g) return null;
-  const raw =
-    g.geojson ??
-    g.polygon_geojson ??
-    g.geometry ??
-    g.geom ??
-    g.polygon ??
-    g.shape ??
-    g.area_geojson ??
-    null;
+/** Diagnóstico interno del mapa: tamaño + invalidateSize */
+function MapDiagnostics({ setDiag }) {
+  const map = useMap();
 
-  const parsed = safeJson(raw);
-  return parsed || (typeof raw === "object" ? raw : null);
+  useEffect(() => {
+    if (!map) return;
+
+    const container = map.getContainer();
+    const updateSize = () => {
+      const r = container?.getBoundingClientRect?.();
+      setDiag((d) => ({
+        ...d,
+        mapCreated: true,
+        w: Math.round(r?.width ?? 0),
+        h: Math.round(r?.height ?? 0),
+        zoom: map.getZoom?.() ?? null,
+      }));
+    };
+
+    // invalidate y medir varias veces (grid/flex en prod)
+    const doInvalidate = () => {
+      try { map.invalidateSize(); } catch {}
+      updateSize();
+    };
+
+    doInvalidate();
+    const t1 = setTimeout(doInvalidate, 0);
+    const t2 = setTimeout(doInvalidate, 250);
+    const t3 = setTimeout(doInvalidate, 1000);
+
+    // ResizeObserver (si cambia el layout)
+    let ro = null;
+    try {
+      ro = new ResizeObserver(() => doInvalidate());
+      ro.observe(container);
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      try { ro?.disconnect?.(); } catch {}
+    };
+  }, [map, setDiag]);
+
+  return null;
 }
 
 export default function TrackerDashboard() {
@@ -97,23 +112,28 @@ export default function TrackerDashboard() {
     typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
 
   const [loading, setLoading] = useState(false);
-  const [loadingSummary, setLoadingSummary] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
-  const [selectedGeofenceId, setSelectedGeofenceId] = useState("all");
 
-  const [positions, setPositions] = useState([]);
   const [membershipTrackers, setMembershipTrackers] = useState([]); // [{user_id}]
   const [personalRows, setPersonalRows] = useState([]);
-  const [geofences, setGeofences] = useState([]);
+  const [positions, setPositions] = useState([]);
+
+  // DIAG
+  const [diag, setDiag] = useState({
+    mapCreated: false,
+    w: 0,
+    h: 0,
+    zoom: null,
+    tileLoads: 0,
+    tileErrors: 0,
+    lastTileError: null,
+  });
 
   const fetchMembershipTrackers = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
-
-    setErrorMsg("");
-
     const { data, error } = await supabase
       .from("memberships")
       .select("user_id, role, org_id")
@@ -121,24 +141,19 @@ export default function TrackerDashboard() {
       .eq("role", "tracker");
 
     if (error) {
-      console.error("[TrackerDashboard] error fetching memberships trackers", error);
-      setErrorMsg(tOr("trackerDashboard.errors.loadMemberships", "Error al cargar trackers (memberships)."));
+      console.error("[TrackerDashboard] memberships trackers error", error);
       setMembershipTrackers([]);
       return;
     }
 
-    const arr = Array.isArray(data) ? data : [];
-    const normalized = arr
-      .map((r) => ({ user_id: r?.user_id ? String(r.user_id) : null }))
-      .filter((r) => !!r.user_id);
+    const uniq = Array.from(new Set((data || []).map((r) => String(r.user_id)).filter(Boolean)))
+      .map((user_id) => ({ user_id }));
 
-    const uniq = Array.from(new Set(normalized.map((x) => x.user_id))).map((user_id) => ({ user_id }));
     setMembershipTrackers(uniq);
-  }, [tOr]);
+  }, []);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
-
     const { data, error } = await supabase
       .from("personal")
       .select("*")
@@ -146,175 +161,89 @@ export default function TrackerDashboard() {
       .order("nombre", { ascending: true });
 
     if (error) {
-      console.error("[TrackerDashboard] error fetching personal", error);
+      console.error("[TrackerDashboard] personal error", error);
       setPersonalRows([]);
       return;
     }
 
     const arr = Array.isArray(data) ? data : [];
-
-    const activos =
-      arr.filter(
-        (p) =>
-          (p.activo_bool ?? true) === true &&
-          (p.vigente ?? true) === true &&
-          (p.is_deleted ?? false) === false
-      ) ?? [];
-
-    setPersonalRows(activos);
+    setPersonalRows(arr);
   }, []);
 
-  /**
-   * Cargar geocercas:
-   * 1) View v_geocercas_tracker_ui (si existe)
-   * 2) Fallback tabla geofences (id, name, geojson)
-   * Normalizamos __shape y __label para el mapa.
-   */
-  const fetchGeofences = useCallback(async (currentOrgId) => {
+  const fetchPositions = useCallback(async (currentOrgId, options = { showSpinner: true }) => {
     if (!currentOrgId) return;
+    const { showSpinner } = options;
 
-    setErrorMsg("");
+    try {
+      if (showSpinner) setLoading(true);
+      setErrorMsg("");
 
-    let rows = [];
-    const viewRes = await supabase
-      .from("v_geocercas_tracker_ui")
-      .select("*")
-      .eq("org_id", currentOrgId);
+      const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+      const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
-    if (viewRes.error) {
-      console.warn("[TrackerDashboard] v_geocercas_tracker_ui failed, fallback geofences:", viewRes.error);
-
-      const tblRes = await supabase
-        .from("geofences")
-        .select("id, org_id, name, geojson, created_at")
-        .eq("org_id", currentOrgId)
-        .order("name", { ascending: true });
-
-      if (tblRes.error) {
-        console.error("[TrackerDashboard] error fetching geofences", tblRes.error);
-        setErrorMsg(tOr("trackerDashboard.errors.loadGeofences", "No se pudieron cargar las geocercas."));
-        setGeofences([]);
+      const allowedTrackerIds = (membershipTrackers || []).map((x) => x.user_id).filter(Boolean);
+      if (!allowedTrackerIds.length) {
+        setPositions([]);
         return;
       }
-      rows = tblRes.data || [];
-    } else {
-      rows = viewRes.data || [];
-    }
 
-    const normalized = (rows || []).map((g) => {
-      const label = (g?.name || g?.nombre || g?.label || g?.id || "").toString();
-      const shape = resolveGeofenceShape(g);
-      return { ...g, __label: label, __shape: shape };
-    });
-
-    normalized.sort((a, b) => a.__label.toLowerCase().localeCompare(b.__label.toLowerCase()));
-    setGeofences(normalized);
-  }, [tOr]);
-
-  const fetchPositions = useCallback(
-    async (currentOrgId, options = { showSpinner: true }) => {
-      if (!currentOrgId) return;
-
-      const { showSpinner } = options;
-      try {
-        if (showSpinner) setLoading(true);
-        setErrorMsg("");
-
-        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
-        const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
-
-        const allowedTrackerIds = (membershipTrackers || [])
-          .map((t) => t?.user_id)
-          .filter(Boolean)
-          .map((x) => String(x));
-
-        if (allowedTrackerIds.length === 0) {
-          setPositions([]);
-          return;
-        }
-
-        let targetIds = allowedTrackerIds;
-        if (selectedTrackerId !== "all") {
-          const wanted = String(selectedTrackerId);
-          if (!allowedTrackerIds.includes(wanted)) {
-            setSelectedTrackerId("all");
-            targetIds = allowedTrackerIds;
-          } else {
-            targetIds = [wanted];
-          }
-        }
-
-        const { data, error } = await supabase
-          .from("tracker_positions")
-          .select("id, user_id, geocerca_id, latitude, longitude, accuracy, speed, created_at")
-          .gte("created_at", fromIso)
-          .in("user_id", targetIds)
-          .order("created_at", { ascending: false })
-          .limit(1000);
-
-        if (error) {
-          console.error("[TrackerDashboard] error fetching positions (tracker_positions)", error);
-          setErrorMsg(tOr("trackerDashboard.errors.loadPositions", "Error al cargar posiciones."));
-          return;
-        }
-
-        const normalized = (data ?? [])
-          .map((r) => {
-            const lat = toNum(r.latitude);
-            const lng = toNum(r.longitude);
-            return {
-              id: r.id,
-              user_id: r.user_id ? String(r.user_id) : null,
-              geocerca_id: r.geocerca_id,
-              lat,
-              lng,
-              accuracy: r.accuracy,
-              speed: r.speed,
-              recorded_at: r.created_at,
-              _valid: isValidLatLng(lat, lng),
-            };
-          })
-          .filter((p) => p._valid);
-
-        setPositions(normalized);
-      } finally {
-        if (showSpinner) setLoading(false);
+      let targetIds = allowedTrackerIds;
+      if (selectedTrackerId !== "all") {
+        const wanted = String(selectedTrackerId);
+        targetIds = allowedTrackerIds.includes(wanted) ? [wanted] : allowedTrackerIds;
       }
-    },
-    [membershipTrackers, selectedTrackerId, timeWindowId, tOr]
-  );
+
+      const { data, error } = await supabase
+        .from("tracker_positions")
+        .select("id, user_id, latitude, longitude, accuracy, created_at")
+        .gte("created_at", fromIso)
+        .in("user_id", targetIds)
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      if (error) {
+        console.error("[TrackerDashboard] positions error", error);
+        setErrorMsg("Error al cargar posiciones.");
+        return;
+      }
+
+      const normalized = (data || [])
+        .map((r) => {
+          const lat = toNum(r.latitude);
+          const lng = toNum(r.longitude);
+          return {
+            id: r.id,
+            user_id: r.user_id ? String(r.user_id) : null,
+            lat,
+            lng,
+            recorded_at: r.created_at,
+            _valid: isValidLatLng(lat, lng),
+          };
+        })
+        .filter((p) => p._valid);
+
+      setPositions(normalized);
+    } finally {
+      if (showSpinner) setLoading(false);
+    }
+  }, [membershipTrackers, selectedTrackerId, timeWindowId]);
 
   useEffect(() => {
     if (!orgId) return;
-    setLoadingSummary(true);
     (async () => {
-      try {
-        await Promise.all([
-          fetchMembershipTrackers(orgId),
-          fetchPersonalCatalog(orgId),
-          fetchGeofences(orgId),
-        ]);
-      } finally {
-        setLoadingSummary(false);
-      }
+      await Promise.all([fetchMembershipTrackers(orgId), fetchPersonalCatalog(orgId)]);
     })();
-  }, [orgId, fetchMembershipTrackers, fetchPersonalCatalog, fetchGeofences]);
+  }, [orgId, fetchMembershipTrackers, fetchPersonalCatalog]);
 
   useEffect(() => {
     if (!orgId) return;
-    if (!membershipTrackers || membershipTrackers.length === 0) {
-      setPositions([]);
-      return;
-    }
     fetchPositions(orgId, { showSpinner: true });
   }, [orgId, membershipTrackers, timeWindowId, selectedTrackerId, fetchPositions]);
 
   useEffect(() => {
     if (!orgId) return;
-    if (!membershipTrackers || membershipTrackers.length === 0) return;
-    const id = setInterval(() => {
-      fetchPositions(orgId, { showSpinner: false });
-    }, 30_000);
+    if (!membershipTrackers?.length) return;
+    const id = setInterval(() => fetchPositions(orgId, { showSpinner: false }), 30_000);
     return () => clearInterval(id);
   }, [orgId, membershipTrackers, fetchPositions]);
 
@@ -332,93 +261,50 @@ export default function TrackerDashboard() {
       const user_id = String(tRow.user_id);
       const p = personalByUserId.get(user_id) || null;
       const label = p?.nombre || p?.email || user_id;
-      return { user_id, personal: p, label };
+      return { user_id, label };
     });
   }, [membershipTrackers, personalByUserId]);
 
-  const trackersMissingPersonalSync = useMemo(() => trackersUi.filter((x) => !x.personal), [trackersUi]);
-
-  const filteredPositions = useMemo(() => {
-    let pts = positions ?? [];
-    if (selectedGeofenceId !== "all") {
-      const wanted = String(selectedGeofenceId);
-      pts = pts.filter((p) => String(p?.geocerca_id || "") === wanted);
-    }
-    return pts;
-  }, [positions, selectedGeofenceId]);
-
-  const visibleGeofences = useMemo(() => {
-    if (selectedGeofenceId === "all") return geofences || [];
-    const wanted = String(selectedGeofenceId);
-    return (geofences || []).filter((g) => String(g?.id) === wanted);
-  }, [geofences, selectedGeofenceId]);
-
-  // Para TrackerMap: pasamos solo shapes válidos (no rompe si hay basura)
-  const geofenceShapesForMap = useMemo(() => {
-    return (visibleGeofences || [])
-      .map((g) => g.__shape)
-      .filter(Boolean);
-  }, [visibleGeofences]);
-
   const mapCenter = useMemo(() => {
-    const last = filteredPositions[0] ?? null;
-    const lat = toNum(last?.lat);
-    const lng = toNum(last?.lng);
-    if (isValidLatLng(lat, lng)) return [lat, lng];
-    return null; // TrackerMap calcula centro por geofence/markers/quito
-  }, [filteredPositions]);
+    const last = positions?.[0];
+    if (last && isValidLatLng(last.lat, last.lng)) return [last.lat, last.lng];
+    return [-0.22985, -78.52495]; // Quito
+  }, [positions]);
 
-  const totalTrackers = trackersUi.length;
-  const totalGeofences = geofences.length;
-  const totalPoints = filteredPositions.length;
-
-  const lastPoint = filteredPositions[0] ?? null;
-  const lastPointTime = lastPoint?.recorded_at ?? null;
+  const pointsByTracker = useMemo(() => {
+    const map = new Map();
+    for (const p of positions || []) {
+      const key = p.user_id || "unknown";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(p);
+    }
+    return map;
+  }, [positions]);
 
   if (!orgId) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-4">
-          {tOr("trackerDashboard.title", "Dashboard de Tracking")}
-        </h1>
-        <p className="text-red-600">
-          {tOr(
-            "trackerDashboard.errors.noOrg",
-            "Error de configuración: no se pudo resolver la organización activa (orgId)."
-          )}
-        </p>
+        <h1 className="text-2xl font-semibold mb-3">Tracker Dashboard</h1>
+        <p className="text-red-600">No se pudo resolver orgId.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-3 md:p-6 space-y-3 md:space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3">
-        <div className="space-y-1">
-          <h1 className="text-xl md:text-2xl font-semibold leading-tight">
-            {tOr("trackerDashboard.title", "Dashboard de Tracking en tiempo real")}
-          </h1>
-
-          <p className="text-[11px] text-slate-500">
-            {tOr("trackerDashboard.meta.activeOrg", "Org activa")}:{" "}
-            <span className="font-mono">{String(orgId)}</span>{" "}
-            <span className="ml-2">
-              {tOr("trackerDashboard.meta.trackersMemberships", "Trackers (memberships)")} <b>{totalTrackers}</b>
-            </span>
-            {trackersMissingPersonalSync.length > 0 && (
-              <span className="ml-2 text-amber-700">
-                | {tOr("trackerDashboard.meta.missingPersonalSync", "Sin sync en Personal")}:{" "}
-                <b>{trackersMissingPersonalSync.length}</b>
-              </span>
-            )}
-          </p>
+    <div className="p-3 md:p-6 space-y-3">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+          <h1 className="text-xl md:text-2xl font-semibold">Tracker Dashboard (DEBUG MAP)</h1>
+          <div className="text-[11px] text-slate-500">
+            Org: <span className="font-mono">{String(orgId)}</span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:gap-3">
-          <label className="text-xs md:text-sm flex items-center gap-2">
-            <span className="font-medium">{tOr("trackerDashboard.filters.timeWindowLabel", "Ventana")}:</span>
+        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
+          <label className="text-xs flex items-center gap-2">
+            <span className="font-medium">Ventana:</span>
             <select
-              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:w-auto"
+              className="border rounded px-2 py-1 text-xs"
               value={timeWindowId}
               onChange={(e) => setTimeWindowId(e.target.value)}
             >
@@ -430,14 +316,14 @@ export default function TrackerDashboard() {
             </select>
           </label>
 
-          <label className="text-xs md:text-sm flex items-center gap-2">
-            <span className="font-medium">{tOr("trackerDashboard.filters.trackerLabel", "Tracker")}:</span>
+          <label className="text-xs flex items-center gap-2">
+            <span className="font-medium">Tracker:</span>
             <select
-              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[180px]"
+              className="border rounded px-2 py-1 text-xs min-w-[180px]"
               value={selectedTrackerId}
               onChange={(e) => setSelectedTrackerId(e.target.value)}
             >
-              <option value="all">{tOr("trackerDashboard.filters.allTrackers", "Todos los trackers")}</option>
+              <option value="all">Todos</option>
               {trackersUi.map((x) => (
                 <option key={x.user_id} value={x.user_id}>
                   {x.label}
@@ -446,30 +332,13 @@ export default function TrackerDashboard() {
             </select>
           </label>
 
-          <label className="text-xs md:text-sm flex items-center gap-2">
-            <span className="font-medium">{tOr("trackerDashboard.filters.geofenceLabel", "Geocerca")}:</span>
-            <select
-              className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[180px]"
-              value={selectedGeofenceId}
-              onChange={(e) => setSelectedGeofenceId(e.target.value)}
-            >
-              <option value="all">{tOr("trackerDashboard.filters.allGeofences", "Todas las geocercas")}</option>
-              {geofences.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.__label || g.name || g.nombre || g.label || g.id}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <button
             type="button"
             onClick={() => fetchPositions(orgId, { showSpinner: true })}
-            className="col-span-2 md:col-span-1 border rounded px-3 py-2 md:py-1 text-xs md:text-sm bg-white hover:bg-slate-50"
-            disabled={loading || !membershipTrackers?.length}
-            title={!membershipTrackers?.length ? "No hay trackers en memberships para esta org" : ""}
+            className="col-span-2 md:col-span-1 border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
+            disabled={loading}
           >
-            {loading ? "Cargando…" : "Actualizar ahora"}
+            {loading ? "Cargando…" : "Actualizar"}
           </button>
         </div>
       </div>
@@ -480,74 +349,75 @@ export default function TrackerDashboard() {
         </div>
       )}
 
-      {/* MAPA (usa TrackerMap para evitar que un GeoJSON inválido “rompa” el render) */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-3 md:gap-4">
-        <div className="rounded-lg border bg-white overflow-hidden">
-          <div className="border-b px-2 py-2 md:px-3 md:py-2 flex items-center justify-between">
-            <span className="text-xs md:text-sm font-medium">Mapa</span>
-            <span className="text-[11px] md:text-xs text-slate-500">
-              Puntos: <span className="font-semibold">{totalPoints}</span>
-            </span>
-          </div>
-
-          <div className="p-2">
-            <TrackerMap
-              geofences={geofenceShapesForMap}
-              positions={(filteredPositions || []).map((p) => ({
-                lat: p.lat,
-                lng: p.lng,
-                user_id: p.user_id,
-                recorded_at: p.recorded_at,
-              }))}
-              center={mapCenter}
-              zoom={12}
-              className="w-full h-[65vh] md:h-[480px] rounded-lg border border-slate-200 overflow-hidden"
-            />
-
-            {!geofenceShapesForMap.length && (
-              <div className="mt-2 text-xs text-slate-500">
-                No hay geocercas dibujables para los filtros actuales (shape vacío/invalid).
-              </div>
-            )}
-          </div>
+      {/* Panel diagnóstico */}
+      <div className="rounded border bg-white p-3 text-xs grid grid-cols-2 md:grid-cols-6 gap-2">
+        <div><b>mapCreated</b>: {String(diag.mapCreated)}</div>
+        <div><b>size</b>: {diag.w}x{diag.h}</div>
+        <div><b>zoom</b>: {String(diag.zoom)}</div>
+        <div><b>tiles ok</b>: {diag.tileLoads}</div>
+        <div><b>tiles err</b>: {diag.tileErrors}</div>
+        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
+          <b>lastTileError</b>: {diag.lastTileError || "—"}
         </div>
+      </div>
 
-        {/* RESUMEN */}
-        <div className="space-y-3 md:space-y-4">
-          <div className="rounded-lg border bg-white px-4 py-3">
-            <h2 className="text-base md:text-lg font-semibold mb-2 md:mb-3">Resumen</h2>
+      {/* Contenedor MAPA con altura FORZADA */}
+      <div className="rounded-lg border bg-white overflow-hidden" style={{ height: 520, minHeight: 420 }}>
+        <MapContainer
+          center={mapCenter}
+          zoom={12}
+          style={{ height: "100%", width: "100%" }}
+          scrollWheelZoom
+          whenCreated={(map) => {
+            try { map.invalidateSize(); } catch {}
+          }}
+        >
+          <MapDiagnostics setDiag={setDiag} />
 
-            <dl className="space-y-1 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="font-medium">Geocercas:</dt>
-                <dd>{totalGeofences}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="font-medium">Trackers:</dt>
-                <dd>{totalTrackers}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="font-medium">Sin sync en Personal:</dt>
-                <dd>{trackersMissingPersonalSync.length}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="font-medium">Puntos en mapa:</dt>
-                <dd>{totalPoints}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="font-medium">Último punto:</dt>
-                <dd>{lastPointTime ? formatDateTime(lastPointTime) : "-"}</dd>
-              </div>
-              {lastPoint && (
-                <div className="text-xs text-slate-500 mt-2">
-                  Última hora: {formatTime(lastPoint.recorded_at)} | lat {lastPoint.lat?.toFixed?.(6)} | lng {lastPoint.lng?.toFixed?.(6)}
-                </div>
-              )}
-            </dl>
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
+            eventHandlers={{
+              tileload: () => setDiag((d) => ({ ...d, tileLoads: d.tileLoads + 1 })),
+              tileerror: (e) => {
+                const url = e?.tile?.src || "tileerror";
+                console.warn("[TileLayer] tileerror:", url);
+                setDiag((d) => ({ ...d, tileErrors: d.tileErrors + 1, lastTileError: String(url) }));
+              },
+            }}
+          />
 
-            {loadingSummary && <p className="mt-2 md:mt-3 text-xs text-slate-500">Actualizando datos…</p>}
-          </div>
-        </div>
+          {/* Puntos/rutas (solo para ver si leaflet está vivo) */}
+          {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
+            const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
+            const chron = [...pts].reverse();
+            const latlngs = chron.map((p) => [p.lat, p.lng]).filter(Boolean);
+
+            const latest = pts[0];
+            if (!latest) return null;
+
+            return (
+              <React.Fragment key={trackerId}>
+                {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
+
+                <CircleMarker
+                  center={[latest.lat, latest.lng]}
+                  radius={7}
+                  pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
+                >
+                  <Tooltip direction="top">
+                    <div className="text-xs">
+                      <div><b>Tracker</b>: {trackerId}</div>
+                      <div><b>Hora</b>: {formatTime(latest.recorded_at)}</div>
+                      <div><b>Lat</b>: {latest.lat.toFixed(6)}</div>
+                      <div><b>Lng</b>: {latest.lng.toFixed(6)}</div>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              </React.Fragment>
+            );
+          })}
+        </MapContainer>
       </div>
     </div>
   );
