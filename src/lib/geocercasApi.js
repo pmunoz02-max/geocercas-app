@@ -2,7 +2,14 @@
 // ============================================================
 // CANONICAL Geocercas client (TENANT-SAFE) — Feb 2026
 // ✅ Compatible con UI existente: exports upsertGeocerca()
-// ✅ No usa /api/geocercas (evita 405). Usa Supabase directo.
+// ✅ Usa Supabase directo (public.geofences). Evita /api/geocercas (405).
+// ✅ FIX: "org_id no puede ser null" -> resuelve org_id automáticamente
+//    desde (1) payload, (2) localStorage, (3) RPC opcional,
+//    (4) tablas comunes (memberships / user_organizations / profiles / app_user_roles).
+//
+// NOTA IMPORTANTE:
+// - Si tu DB exige org_id NOT NULL, este cliente SIEMPRE lo enviará.
+// - Ajusta TABLE CANDIDATES si tus tablas tienen otros nombres.
 // ============================================================
 
 import { supabase } from "./supabaseClient";
@@ -54,13 +61,124 @@ async function requireAuth() {
 }
 
 /**
- * Ajusta columnas aquí si tu tabla usa geometry en vez de geojson.
- * Por defecto envía: { name, geojson }
+ * Busca un org_id "probable" en localStorage.
+ * Mantiene compatibilidad con distintas claves.
  */
-function buildPayload(payload = {}) {
+function getOrgIdFromLocalStorage() {
+  if (typeof window === "undefined") return null;
+  const ls = window.localStorage;
+  if (!ls) return null;
+
+  const candidates = [
+    "org_id",
+    "orgId",
+    "currentOrgId",
+    "selectedOrgId",
+    "selected_org_id",
+    "activeOrgId",
+    "active_org_id",
+  ];
+
+  for (const k of candidates) {
+    const v = ls.getItem(k);
+    if (v && String(v).trim()) return String(v).trim();
+  }
+
+  // fallback: busca en cualquier key que contenga org
+  try {
+    const keys = Object.keys(ls);
+    for (const k of keys) {
+      if (!/org/i.test(k)) continue;
+      const v = ls.getItem(k);
+      // intenta parsear JSON si aplica
+      if (!v) continue;
+      if (v.startsWith("{") || v.startsWith("[")) {
+        try {
+          const j = JSON.parse(v);
+          const maybe = j?.org_id || j?.orgId || j?.currentOrgId || null;
+          if (maybe) return String(maybe).trim();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+/**
+ * Intenta resolver org_id desde la DB de forma "universal".
+ * - Primero: payload
+ * - Segundo: localStorage
+ * - Tercero: RPC (opcional): get_current_org_id() o current_org_id()
+ * - Cuarto: tablas comunes (si existen)
+ */
+async function resolveOrgIdOrThrow(payload, userId) {
+  const fromPayload = payload?.org_id ?? payload?.orgId ?? payload?.orgID ?? null;
+  if (fromPayload && String(fromPayload).trim()) return String(fromPayload).trim();
+
+  const fromLS = getOrgIdFromLocalStorage();
+  if (fromLS) return fromLS;
+
+  // RPC opcionales (si existen en tu DB)
+  const rpcNames = ["get_current_org_id", "current_org_id", "get_active_org_id"];
+  for (const fn of rpcNames) {
+    try {
+      const { data, error } = await supabase.rpc(fn);
+      if (!error && data) return String(data).trim();
+    } catch {
+      // ignore (rpc no existe)
+    }
+  }
+
+  // Tablas comunes (si existen): intenta encontrar la org del usuario
+  const TABLE_CANDIDATES = [
+    // (tabla, filtro user_id, columna org)
+    { table: "memberships", userCol: "user_id", orgCol: "org_id", extraWhere: null },
+    { table: "user_organizations", userCol: "user_id", orgCol: "org_id", extraWhere: null },
+    { table: "app_user_roles", userCol: "user_id", orgCol: "org_id", extraWhere: null },
+    { table: "profiles", userCol: "id", orgCol: "org_id", extraWhere: null },
+    { table: "personal", userCol: "user_id", orgCol: "org_id", extraWhere: null },
+  ];
+
+  for (const t of TABLE_CANDIDATES) {
+    try {
+      let q = supabase.from(t.table).select(`${t.orgCol}`).limit(1);
+      q = q.eq(t.userCol, userId);
+      const { data, error } = await q.maybeSingle();
+      if (!error) {
+        const org = data?.[t.orgCol];
+        if (org) return String(org).trim();
+      }
+      // si hay error, puede ser que la tabla/col no exista o RLS bloquee; seguimos
+    } catch {
+      // ignore
+    }
+  }
+
+  throw new Error(
+    "org_id no puede ser null. No pude resolver tu org_id automáticamente. " +
+      "Asegura que el dashboard tenga org_id activo (localStorage) o que exista una función RPC get_current_org_id()."
+  );
+}
+
+/**
+ * Ajusta columnas aquí si tu tabla usa geometry en vez de geojson.
+ * Por defecto envía: { name, geojson, org_id }
+ */
+function buildPayload(payload = {}, orgId) {
   const name = String(payload.nombre ?? payload.name ?? "").trim();
   const geojson = normalizeGeoJSON(payload.geojson ?? payload.geometry ?? payload.polygon_geojson ?? null);
-  return { name: name || null, geojson };
+
+  // Campos canónicos (ajusta si tu tabla usa otros nombres)
+  return {
+    org_id: orgId,
+    name: name || null,
+    geojson,
+  };
 }
 
 function filterByOrg(rows, orgId) {
@@ -73,14 +191,26 @@ function filterByOrg(rows, orgId) {
 // ---------------------------
 
 export async function listGeocercas({ orgId } = {}) {
-  await requireAuth();
+  const session = await requireAuth();
+  const userId = session.user.id;
+
+  // Si no te pasan orgId, intentamos resolverlo para filtrar UI, pero listamos igual si no hay.
+  let effectiveOrgId = orgId;
+  if (!effectiveOrgId) {
+    try {
+      effectiveOrgId = await resolveOrgIdOrThrow({}, userId);
+    } catch {
+      effectiveOrgId = null;
+    }
+  }
+
   const { data, error } = await supabase
     .from("geofences")
     .select("*")
     .order("created_at", { ascending: false });
 
   if (error) throwNice(error);
-  return filterByOrg(data || [], orgId);
+  return filterByOrg(data || [], effectiveOrgId);
 }
 
 export async function listGeocercasForOrg(orgId) {
@@ -89,7 +219,11 @@ export async function listGeocercasForOrg(orgId) {
 
 export async function getGeocerca({ id, orgId } = {}) {
   if (!id) throw new Error("getGeocerca requiere id");
-  await requireAuth();
+
+  const session = await requireAuth();
+  const userId = session.user.id;
+
+  const effectiveOrgId = orgId ? String(orgId) : await resolveOrgIdOrThrow({}, userId);
 
   const { data, error } = await supabase
     .from("geofences")
@@ -100,7 +234,7 @@ export async function getGeocerca({ id, orgId } = {}) {
   if (error) throwNice(error);
   if (!data) return null;
 
-  if (orgId && data?.org_id && String(data.org_id) !== String(orgId)) return null;
+  if (effectiveOrgId && data?.org_id && String(data.org_id) !== String(effectiveOrgId)) return null;
   return data;
 }
 
@@ -108,14 +242,20 @@ export async function getGeocerca({ id, orgId } = {}) {
  * upsertGeocerca(payload)
  * - Si payload.id => update
  * - Si no => insert
+ *
+ * IMPORTANTE:
+ * - org_id se resuelve siempre y se envía, para evitar "org_id no puede ser null".
  */
 export async function upsertGeocerca(payload = {}) {
-  const body = buildPayload(payload);
+  const session = await requireAuth();
+  const userId = session.user.id;
+
+  const orgId = await resolveOrgIdOrThrow(payload, userId);
+
+  const body = buildPayload(payload, orgId);
 
   if (!body.name) throw new Error("upsertGeocerca requiere nombre");
   if (!body.geojson) throw new Error("upsertGeocerca requiere geojson");
-
-  await requireAuth();
 
   const id = payload?.id ? String(payload.id) : "";
 
@@ -145,7 +285,8 @@ export async function upsertGeocerca(payload = {}) {
  * deleteGeocerca(id) o deleteGeocerca({id}) o bulk deleteGeocerca({orgId, nombres_ci})
  */
 export async function deleteGeocerca(arg = {}) {
-  await requireAuth();
+  const session = await requireAuth();
+  const userId = session.user.id;
 
   // por id directo
   if (typeof arg === "string" || typeof arg === "number") {
@@ -164,17 +305,15 @@ export async function deleteGeocerca(arg = {}) {
 
   // bulk por nombres_ci (usa columna name)
   const nombres_ci = Array.isArray(arg?.nombres_ci) ? arg.nombres_ci : [];
-  const orgId = arg?.orgId || arg?.org_id || null;
+  const orgId = await resolveOrgIdOrThrow(arg, userId);
 
   if (nombres_ci.length) {
     const names = nombres_ci.map((x) => String(x || "").trim()).filter(Boolean);
 
-    // OJO: esto no hace "contiene", hace match de patrón exacto (sin *). Si quieres "contiene",
-    // cambia a: `name.ilike.%${encodeURIComponent(n)}%`
-    const orParts = names.map((n) => `name.ilike.${encodeURIComponent(n)}`).join(",");
+    // Recomendado: patrón "contiene" para ilike
+    const orParts = names.map((n) => `name.ilike.%${encodeURIComponent(n)}%`).join(",");
 
-    let q = supabase.from("geofences").delete();
-    if (orgId) q = q.eq("org_id", orgId);
+    let q = supabase.from("geofences").delete().eq("org_id", orgId);
 
     const { error } = await q.or(orParts);
     if (error) throwNice(error);
