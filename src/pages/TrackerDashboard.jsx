@@ -56,7 +56,7 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
-/** GeoJSON -> lista de polígonos (cada polígono = array de [lat,lng]) */
+// ---------------- GeoJSON normalization ----------------
 function toLatLng(coord) {
   if (!coord) return null;
   if (Array.isArray(coord) && coord.length >= 2) {
@@ -78,59 +78,49 @@ function toLatLng(coord) {
   return null;
 }
 
-function normalizeGeoJSONToPolygons(obj) {
+function normalizeGeoJSONToPolygons(input) {
   const polygons = [];
-  if (!obj) return polygons;
+  if (!input) return polygons;
 
-  const pushPolygonFromRing = (ring) => {
-    if (!Array.isArray(ring)) return;
-    const poly = ring.map(toLatLng).filter(Boolean);
-    if (poly.length > 2) polygons.push(poly);
-  };
-
-  const processGeometry = (g) => {
-    if (!g || typeof g !== "object") return;
-    const { type, coordinates } = g;
-
-    if (type === "Polygon" && Array.isArray(coordinates)) {
-      // coordinates[0] = outer ring
-      pushPolygonFromRing(coordinates[0]);
-      return;
-    }
-
-    if (type === "MultiPolygon" && Array.isArray(coordinates)) {
-      // coordinates = [ polygon1, polygon2, ... ] ; polygon = [ring1, ring2...]
-      coordinates.forEach((poly) => pushPolygonFromRing(poly?.[0]));
-    }
-  };
-
-  if (typeof obj === "string") {
+  let obj = input;
+  if (typeof input === "string") {
     try {
-      return normalizeGeoJSONToPolygons(JSON.parse(obj));
+      obj = JSON.parse(input);
     } catch {
       return polygons;
     }
   }
 
-  if (obj.type === "FeatureCollection" && Array.isArray(obj.features)) {
-    obj.features.forEach((f) => processGeometry(f?.geometry));
+  const pushRing = (ring) => {
+    if (!Array.isArray(ring)) return;
+    const poly = ring.map(toLatLng).filter(Boolean);
+    if (poly.length > 2) polygons.push(poly);
+  };
+
+  const handleGeometry = (g) => {
+    if (!g || typeof g !== "object") return;
+    if (g.type === "Polygon") {
+      pushRing(g.coordinates?.[0]);
+    } else if (g.type === "MultiPolygon") {
+      (g.coordinates || []).forEach((poly) => pushRing(poly?.[0]));
+    }
+  };
+
+  if (obj?.type === "FeatureCollection") {
+    (obj.features || []).forEach((f) => handleGeometry(f?.geometry));
     return polygons;
   }
-
-  if (obj.type === "Feature") {
-    processGeometry(obj.geometry);
+  if (obj?.type === "Feature") {
+    handleGeometry(obj.geometry);
     return polygons;
   }
-
-  // geometry directo
-  if (obj.type) {
-    processGeometry(obj);
+  if (obj?.type) {
+    handleGeometry(obj);
   }
-
   return polygons;
 }
 
-/** Diagnóstico interno del mapa: tamaño + invalidateSize */
+// ---------------- Map diagnostics ----------------
 function MapDiagnostics({ setDiag }) {
   const map = useMap();
 
@@ -188,18 +178,17 @@ export default function TrackerDashboard() {
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
 
-  const [assignments, setAssignments] = useState([]);           // rows tracker_assignments activos/vigentes
+  const [assignments, setAssignments] = useState([]);
   const [assignmentTrackers, setAssignmentTrackers] = useState([]); // [{user_id}]
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
 
-  // geocercas para dibujar
-  const [geofenceRows, setGeofenceRows] = useState([]); // [{id, nombre, geojson}]
+  const [geofenceRows, setGeofenceRows] = useState([]); // [{id,nombre,geojson}]
   const geofencePolygons = useMemo(() => {
     const out = [];
     for (const g of geofenceRows || []) {
       const polys = normalizeGeoJSONToPolygons(g.geojson);
-      polys.forEach((p) => out.push({ geofenceId: g.id, name: g.nombre || g.id, positions: p }));
+      polys.forEach((p, i) => out.push({ geofenceId: g.id, name: g.nombre || g.id, positions: p, idx: i }));
     }
     return out;
   }, [geofenceRows]);
@@ -209,12 +198,10 @@ export default function TrackerDashboard() {
     w: 0,
     h: 0,
     zoom: null,
-
     assignmentsRows: 0,
     trackersFound: 0,
     geofencesFound: 0,
     geofencePolys: 0,
-
     positionsFound: 0,
     lastAssignmentsError: null,
     lastGeofencesError: null,
@@ -231,10 +218,8 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // 1) tracker_assignments activos/vigentes => trackers + geofence_ids
   const fetchAssignments = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
-
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
     const { data, error } = await supabase
@@ -268,10 +253,8 @@ export default function TrackerDashboard() {
     }));
   }, [todayStrUtc]);
 
-  // 2) geocercas por geofence_id de assignments
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
-
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
 
     const geofenceIds = Array.from(
@@ -284,12 +267,13 @@ export default function TrackerDashboard() {
       return;
     }
 
-    // OJO: ajusta el nombre de tabla/columnas si en tu DB no es "geocercas"
     const { data, error } = await supabase
       .from("geocercas")
       .select("id, nombre, geojson, org_id")
       .eq("org_id", currentOrgId)
       .in("id", geofenceIds);
+
+    console.log("[TrackerDashboard] geocercas fetched:", { count: (data || []).length, error });
 
     if (error) {
       console.error("[TrackerDashboard] geocercas error", error);
@@ -301,9 +285,7 @@ export default function TrackerDashboard() {
     const rows = Array.isArray(data) ? data : [];
     setGeofenceRows(rows);
 
-    // polígonos reales calculados
     const polysCount = rows.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
-
     setDiag((d) => ({ ...d, geofencesFound: rows.length, geofencePolys: polysCount }));
   }, []);
 
@@ -320,7 +302,6 @@ export default function TrackerDashboard() {
       setPersonalRows([]);
       return;
     }
-
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
@@ -404,7 +385,6 @@ export default function TrackerDashboard() {
     })();
   }, [orgId, fetchAssignments, fetchPersonalCatalog]);
 
-  // Cuando cambian assignments, cargamos geocercas
   useEffect(() => {
     if (!orgId) return;
     fetchGeofences(orgId, assignments);
@@ -443,9 +423,8 @@ export default function TrackerDashboard() {
   const mapCenter = useMemo(() => {
     const last = positions?.[0];
     if (last && isValidLatLng(last.lat, last.lng)) return [last.lat, last.lng];
-    // si hay geocerca, centra en primer punto del primer polígono
     if (geofencePolygons.length && geofencePolygons[0]?.positions?.length) return geofencePolygons[0].positions[0];
-    return [-0.22985, -78.52495]; // Quito
+    return [-0.22985, -78.52495];
   }, [positions, geofencePolygons]);
 
   const pointsByTracker = useMemo(() => {
@@ -530,17 +509,19 @@ export default function TrackerDashboard() {
         <div><b>mapCreated</b>: {String(diag.mapCreated)}</div>
         <div><b>size</b>: {diag.w}x{diag.h}</div>
         <div><b>zoom</b>: {String(diag.zoom)}</div>
+
         <div><b>assignmentsRows</b>: {diag.assignmentsRows}</div>
         <div><b>trackersFound</b>: {diag.trackersFound}</div>
         <div><b>positionsFound</b>: {diag.positionsFound}</div>
-        <div><b>geocercas</b>: {diag.geofencesFound}</div>
-        <div><b>polys</b>: {diag.geofencePolys}</div>
+
+        <div><b>geofencesFound</b>: {diag.geofencesFound}</div>
+        <div><b>geofencePolys</b>: {diag.geofencePolys}</div>
+
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
           <b>fromIso</b>: {diag.lastFromIso || "—"} | <b>targets</b>: {diag.lastTargetCount}
         </div>
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>assignErr</b>: {diag.lastAssignmentsError || "—"} | <b>geoErr</b>: {diag.lastGeofencesError || "—"} |{" "}
-          <b>posErr</b>: {diag.lastPositionsError || "—"}
+          <b>assignErr</b>: {diag.lastAssignmentsError || "—"} | <b>geoErr</b>: {diag.lastGeofencesError || "—"} | <b>posErr</b>: {diag.lastPositionsError || "—"}
         </div>
       </div>
 
@@ -559,12 +540,12 @@ export default function TrackerDashboard() {
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
           />
 
-          {/* Geocercas (de assignments) */}
-          {geofencePolygons.map((g, idx) => (
+          {/* Geocercas */}
+          {geofencePolygons.map((g) => (
             <Polygon
-              key={`${g.geofenceId}-${idx}`}
+              key={`${g.geofenceId}-${g.idx}`}
               positions={g.positions}
-              pathOptions={{ weight: 2, fillOpacity: 0.08 }}
+              pathOptions={{ weight: 2, fillOpacity: 0.12 }}
             >
               <Tooltip sticky>{g.name}</Tooltip>
             </Polygon>
@@ -575,14 +556,12 @@ export default function TrackerDashboard() {
             const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
             const chron = [...pts].reverse();
             const latlngs = chron.map((p) => [p.lat, p.lng]).filter(Boolean);
-
             const latest = pts[0];
             if (!latest) return null;
 
             return (
               <React.Fragment key={trackerId}>
                 {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
-
                 <CircleMarker
                   center={[latest.lat, latest.lng]}
                   radius={7}
