@@ -1,5 +1,8 @@
 {
   "rewrites": [
+    { "source": "/api/auth/magic", "destination": "/api/auth?action=magic" },
+    { "source": "/api/auth/session", "destination": "/api/auth?action=session" },
+
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/" }
   ]
