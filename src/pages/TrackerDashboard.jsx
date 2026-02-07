@@ -77,15 +77,29 @@ function isValidLatLng(lat, lng) {
 
 function resolveTrackerAuthIdFromPersonal(row) {
   if (!row) return null;
-  return (
-    row.user_id ||
-    row.owner_id ||
-    row.auth_user_id ||
-    row.auth_uid ||
-    row.uid ||
-    row.user_uuid ||
-    null
-  );
+  return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
+}
+
+/**
+ * Resuelve la geometría de una geocerca de forma robusta.
+ * MUY IMPORTANTE: incluye polygon_geojson (que era el hueco).
+ */
+function resolveGeofenceShape(g) {
+  if (!g) return null;
+
+  // Orden de preferencia (incluye polygon_geojson)
+  const raw =
+    g.geojson ??
+    g.polygon_geojson ??
+    g.geometry ??
+    g.geom ??
+    g.polygon ??
+    g.shape ??
+    g.area_geojson ??
+    null;
+
+  const parsed = safeJson(raw);
+  return parsed || (typeof raw === "object" ? raw : null);
 }
 
 function FitToPoints({ points, enabled }) {
@@ -122,8 +136,7 @@ export default function TrackerDashboard() {
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
 
   const { currentOrg } = useAuth();
-  const orgId =
-    typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
+  const orgId = typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
 
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -139,32 +152,35 @@ export default function TrackerDashboard() {
   const [personalRows, setPersonalRows] = useState([]);
   const [geofences, setGeofences] = useState([]);
 
-  const fetchMembershipTrackers = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
+  const fetchMembershipTrackers = useCallback(
+    async (currentOrgId) => {
+      if (!currentOrgId) return;
 
-    setErrorMsg("");
+      setErrorMsg("");
 
-    const { data, error } = await supabase
-      .from("memberships")
-      .select("user_id, role, org_id")
-      .eq("org_id", currentOrgId)
-      .eq("role", "tracker");
+      const { data, error } = await supabase
+        .from("memberships")
+        .select("user_id, role, org_id")
+        .eq("org_id", currentOrgId)
+        .eq("role", "tracker");
 
-    if (error) {
-      console.error("[TrackerDashboard] error fetching memberships trackers", error);
-      setErrorMsg(tOr("trackerDashboard.errors.loadMemberships", "Error al cargar trackers (memberships)."));
-      setMembershipTrackers([]);
-      return;
-    }
+      if (error) {
+        console.error("[TrackerDashboard] error fetching memberships trackers", error);
+        setErrorMsg(tOr("trackerDashboard.errors.loadMemberships", "Error al cargar trackers (memberships)."));
+        setMembershipTrackers([]);
+        return;
+      }
 
-    const arr = Array.isArray(data) ? data : [];
-    const normalized = arr
-      .map((r) => ({ user_id: r?.user_id ? String(r.user_id) : null }))
-      .filter((r) => !!r.user_id);
+      const arr = Array.isArray(data) ? data : [];
+      const normalized = arr
+        .map((r) => ({ user_id: r?.user_id ? String(r.user_id) : null }))
+        .filter((r) => !!r.user_id);
 
-    const uniq = Array.from(new Set(normalized.map((x) => x.user_id))).map((user_id) => ({ user_id }));
-    setMembershipTrackers(uniq);
-  }, [tOr]);
+      const uniq = Array.from(new Set(normalized.map((x) => x.user_id))).map((user_id) => ({ user_id }));
+      setMembershipTrackers(uniq);
+    },
+    [tOr]
+  );
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
@@ -187,42 +203,70 @@ export default function TrackerDashboard() {
 
     const activos =
       arr.filter(
-        (p) =>
-          (p.activo_bool ?? true) === true &&
-          (p.vigente ?? true) === true &&
-          (p.is_deleted ?? false) === false
+        (p) => (p.activo_bool ?? true) === true && (p.vigente ?? true) === true && (p.is_deleted ?? false) === false
       ) ?? [];
 
     setPersonalRows(activos);
   }, []);
 
-  const fetchGeofences = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
+  /**
+   * Carga geocercas (con fallback).
+   * - Primero intenta view v_geocercas_tracker_ui (si existe).
+   * - Si falla, cae a tabla geofences (y toma geojson).
+   * Además, normaliza shape en __shape para render.
+   */
+  const fetchGeofences = useCallback(
+    async (currentOrgId) => {
+      if (!currentOrgId) return;
 
-    setErrorMsg("");
+      setErrorMsg("");
 
-    const { data, error } = await supabase
-      .from("v_geocercas_tracker_ui")
-      .select("*")
-      .eq("org_id", currentOrgId);
+      // 1) intento: vista
+      let data = null;
+      let error = null;
 
-    if (error) {
-      console.error("[TrackerDashboard] error fetching geocercas", error);
-      setErrorMsg(tOr("trackerDashboard.errors.loadGeofences", "No se pudieron cargar las geocercas."));
-      setGeofences([]);
-      return;
-    }
+      const viewRes = await supabase
+        .from("v_geocercas_tracker_ui")
+        .select("*")
+        .eq("org_id", currentOrgId);
 
-    const arr = Array.isArray(data) ? data : [];
+      data = viewRes.data;
+      error = viewRes.error;
 
-    arr.sort((a, b) => {
-      const labelA = (a.name || a.nombre || a.label || a.id || "").toString().toLowerCase();
-      const labelB = (b.name || b.nombre || b.label || b.id || "").toString().toLowerCase();
-      return labelA.localeCompare(labelB);
-    });
+      // 2) fallback: tabla
+      if (error) {
+        console.warn("[TrackerDashboard] v_geocercas_tracker_ui failed, fallback to geofences:", error);
 
-    setGeofences(arr);
-  }, [tOr]);
+        const tblRes = await supabase
+          .from("geofences")
+          .select("id, org_id, name, geojson, created_at")
+          .eq("org_id", currentOrgId)
+          .order("name", { ascending: true });
+
+        data = tblRes.data;
+        error = tblRes.error;
+      }
+
+      if (error) {
+        console.error("[TrackerDashboard] error fetching geofences", error);
+        setErrorMsg(tOr("trackerDashboard.errors.loadGeofences", "No se pudieron cargar las geocercas."));
+        setGeofences([]);
+        return;
+      }
+
+      const arr = Array.isArray(data) ? data : [];
+
+      const normalized = arr.map((g) => ({
+        ...g,
+        __label: (g?.name || g?.nombre || g?.label || g?.id || "").toString(),
+        __shape: resolveGeofenceShape(g),
+      }));
+
+      normalized.sort((a, b) => a.__label.toLowerCase().localeCompare(b.__label.toLowerCase()));
+      setGeofences(normalized);
+    },
+    [tOr]
+  );
 
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
@@ -303,11 +347,7 @@ export default function TrackerDashboard() {
     setLoadingSummary(true);
     (async () => {
       try {
-        await Promise.all([
-          fetchMembershipTrackers(orgId),
-          fetchPersonalCatalog(orgId),
-          fetchGeofences(orgId),
-        ]);
+        await Promise.all([fetchMembershipTrackers(orgId), fetchPersonalCatalog(orgId), fetchGeofences(orgId)]);
       } finally {
         setLoadingSummary(false);
       }
@@ -360,7 +400,7 @@ export default function TrackerDashboard() {
   }, [membershipTrackers, personalByUserId]);
 
   const trackersMissingPersonalSync = useMemo(() => {
-    return trackersUi.filter((t) => !t.personal);
+    return trackersUi.filter((tRow) => !tRow.personal);
   }, [trackersUi]);
 
   const filteredPositions = useMemo(() => {
@@ -406,9 +446,7 @@ export default function TrackerDashboard() {
   if (!orgId) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-4">
-          {tOr("trackerDashboard.title", "Dashboard de Tracking")}
-        </h1>
+        <h1 className="text-2xl font-semibold mb-4">{tOr("trackerDashboard.title", "Dashboard de Tracking")}</h1>
         <p className="text-red-600">
           {tOr(
             "trackerDashboard.errors.noOrg",
@@ -437,8 +475,7 @@ export default function TrackerDashboard() {
             {tOr("trackerDashboard.meta.activeOrg", "Org activa")}:{" "}
             <span className="font-mono">{String(orgId)}</span>{" "}
             <span className="ml-2">
-              {tOr("trackerDashboard.meta.trackersMemberships", "Trackers (memberships)")}{" "}
-              <b>{totalTrackers}</b>
+              {tOr("trackerDashboard.meta.trackersMemberships", "Trackers (memberships)")} <b>{totalTrackers}</b>
             </span>
             {trackersMissingPersonalSync.length > 0 && (
               <span className="ml-2 text-amber-700">
@@ -451,9 +488,7 @@ export default function TrackerDashboard() {
 
         <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center md:gap-3">
           <label className="text-xs md:text-sm flex items-center gap-2">
-            <span className="font-medium">
-              {tOr("trackerDashboard.filters.timeWindowLabel", "Ventana")}:
-            </span>
+            <span className="font-medium">{tOr("trackerDashboard.filters.timeWindowLabel", "Ventana")}:</span>
             <select
               className="border rounded px-2 py-1 text-xs md:text-sm w-full md:w-auto"
               value={timeWindowId}
@@ -468,17 +503,13 @@ export default function TrackerDashboard() {
           </label>
 
           <label className="text-xs md:text-sm flex items-center gap-2">
-            <span className="font-medium">
-              {tOr("trackerDashboard.filters.trackerLabel", "Tracker")}:
-            </span>
+            <span className="font-medium">{tOr("trackerDashboard.filters.trackerLabel", "Tracker")}:</span>
             <select
               className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[180px]"
               value={selectedTrackerId}
               onChange={(e) => setSelectedTrackerId(e.target.value)}
             >
-              <option value="all">
-                {tOr("trackerDashboard.filters.allTrackers", "Todos los trackers")}
-              </option>
+              <option value="all">{tOr("trackerDashboard.filters.allTrackers", "Todos los trackers")}</option>
               {trackersUi.map((tRow) => (
                 <option key={tRow.user_id} value={tRow.user_id}>
                   {tRow.label}
@@ -488,17 +519,13 @@ export default function TrackerDashboard() {
           </label>
 
           <label className="text-xs md:text-sm flex items-center gap-2">
-            <span className="font-medium">
-              {tOr("trackerDashboard.filters.geofenceLabel", "Geocerca")}:
-            </span>
+            <span className="font-medium">{tOr("trackerDashboard.filters.geofenceLabel", "Geocerca")}:</span>
             <select
               className="border rounded px-2 py-1 text-xs md:text-sm w-full md:min-w-[180px]"
               value={selectedGeofenceId}
               onChange={(e) => setSelectedGeofenceId(e.target.value)}
             >
-              <option value="all">
-                {tOr("trackerDashboard.filters.allGeofences", "Todas las geocercas")}
-              </option>
+              <option value="all">{tOr("trackerDashboard.filters.allGeofences", "Todas las geocercas")}</option>
               {geofences.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name || g.nombre || g.label || g.id}
@@ -518,25 +545,19 @@ export default function TrackerDashboard() {
                 : ""
             }
           >
-            {loading
-              ? tOr("common.actions.loading", "Cargando…")
-              : tOr("trackerDashboard.filters.refreshNow", "Actualizar ahora")}
+            {loading ? tOr("common.actions.loading", "Cargando…") : tOr("trackerDashboard.filters.refreshNow", "Actualizar ahora")}
           </button>
         </div>
       </div>
 
       {errorMsg && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded text-sm">
-          {errorMsg}
-        </div>
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded text-sm">{errorMsg}</div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-3 md:gap-4">
         <div className="rounded-lg border bg-white overflow-hidden">
           <div className="border-b px-2 py-2 md:px-3 md:py-2 flex items-center justify-between">
-            <span className="text-xs md:text-sm font-medium">
-              {tOr("trackerDashboard.map.title", "Mapa de posiciones")}
-            </span>
+            <span className="text-xs md:text-sm font-medium">{tOr("trackerDashboard.map.title", "Mapa de posiciones")}</span>
             <span className="text-[11px] md:text-xs text-slate-500">
               {tOr("trackerDashboard.map.pointsInWindow", "Puntos en ventana")}:{" "}
               <span className="font-semibold">{totalPoints}</span>
@@ -553,14 +574,13 @@ export default function TrackerDashboard() {
               <FitToPoints points={filteredPositions} enabled={totalPoints > 0} />
 
               {visibleGeofences.map((g) => {
-                const label = g.name || g.nombre || g.label || g.id;
+                const label = g.__label || g.name || g.nombre || g.label || g.id;
 
                 const lat = toNum(g.lat ?? g.center_lat);
                 const lng = toNum(g.lng ?? g.center_lng);
                 const radius = toNum(g.radius_m ?? g.radius) ?? 0;
 
-                const shapeRaw = g.geojson || g.geometry || g.geom || g.polygon || null;
-                const shape = safeJson(shapeRaw) || shapeRaw || null;
+                const shape = g.__shape || null;
 
                 const layers = [];
 
@@ -576,6 +596,7 @@ export default function TrackerDashboard() {
                   );
                 }
 
+                // fallback centro/radio (si existiera)
                 if (isValidLatLng(lat, lng)) {
                   if (radius) {
                     layers.push(
@@ -627,9 +648,7 @@ export default function TrackerDashboard() {
 
                 return (
                   <React.Fragment key={trackerId}>
-                    {positionsLatLng.length > 1 && (
-                      <Polyline positions={positionsLatLng} pathOptions={{ color, weight: 3 }} />
-                    )}
+                    {positionsLatLng.length > 1 && <Polyline positions={positionsLatLng} pathOptions={{ color, weight: 3 }} />}
 
                     {isValidLatLng(latestLat, latestLng) && (
                       <CircleMarker
@@ -643,8 +662,7 @@ export default function TrackerDashboard() {
                               <strong>{tOr("trackerDashboard.popup.tracker", "Tracker UID")}:</strong> {trackerId}
                             </div>
                             <div>
-                              <strong>{tOr("trackerDashboard.popup.time", "Hora")}:</strong>{" "}
-                              {formatTime(latest.recorded_at)}
+                              <strong>{tOr("trackerDashboard.popup.time", "Hora")}:</strong> {formatTime(latest.recorded_at)}
                             </div>
                             <div>
                               <strong>{tOr("trackerDashboard.popup.lat", "Lat")}:</strong> {latestLat.toFixed(6)}
@@ -668,14 +686,8 @@ export default function TrackerDashboard() {
                 <div className="leaflet-bottom leaflet-left mb-2 ml-2">
                   <div className="bg-white/90 text-xs px-2 py-1 rounded shadow">
                     {membershipTrackers?.length
-                      ? tOr(
-                          "trackerDashboard.map.noPointsWithTrackers",
-                          "No hay posiciones para los filtros/ventana actuales."
-                        )
-                      : tOr(
-                          "trackerDashboard.map.noTrackersInOrg",
-                          "No hay trackers (memberships) en esta org."
-                        )}
+                      ? tOr("trackerDashboard.map.noPointsWithTrackers", "No hay posiciones para los filtros/ventana actuales.")
+                      : tOr("trackerDashboard.map.noTrackersInOrg", "No hay trackers (memberships) en esta org.")}
                   </div>
                 </div>
               )}
@@ -699,9 +711,7 @@ export default function TrackerDashboard() {
                 <dd>{totalTrackers}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="font-medium">
-                  {tOr("trackerDashboard.legend.missingInPersonal", "Sin sync en Personal")}:
-                </dt>
+                <dt className="font-medium">{tOr("trackerDashboard.legend.missingInPersonal", "Sin sync en Personal")}:</dt>
                 <dd>{trackersMissingPersonalSync.length}</dd>
               </div>
               <div className="flex justify-between gap-4">
