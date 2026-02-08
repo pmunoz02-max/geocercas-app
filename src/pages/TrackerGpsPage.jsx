@@ -5,15 +5,18 @@ import { supabase } from "../lib/supabaseClient";
 /**
  * TrackerGpsPage — Universal + permanente (DB-driven)
  *
- * FIX DEFINITIVO:
- * - Soporta PKCE (code) + OTP (token_hash/type) + hash tokens.
- * - Consume sesión DESDE URL antes de cualquier guard.
- * - NO borra tokens sb-* manualmente.
- * - SOLO mismatch real (si hay sesión y email != invited_email).
- * - ✅ FORZA ORG ACTIVA = org_id del link (set_current_org) para que el RPC vea asignaciones.
+ * FIX v15 ALWAYS-SEND (Feb-2026):
+ * - SIEMPRE envía puntos (tenga o no “in_range”).
+ * - Gate (tracker_can_send) se usa SOLO para:
+ *    - mostrar estado
+ *    - ajustar frecuencia (rápida dentro / lenta fuera)
+ *    - opcionalmente adjuntar geofence_id
+ * - Incluye user_id en payload (robusto con RLS / Edge Function).
+ * - Muestra errores reales de envío (no “silencioso”).
+ * - Mantiene: consumo de sesión desde URL (PKCE/OTP/hash) + guard de email + set_current_org.
  */
 
-const BUILD = "tracker_gps_v14_force_org";
+const BUILD = "tracker_gps_v15_always_send";
 
 function getSupabaseUrl() {
   return (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
@@ -43,7 +46,6 @@ function readQuery() {
     tg_flow: url.searchParams.get("tg_flow") || "",
     invited_email: (url.searchParams.get("invited_email") || "").trim(),
 
-    // PKCE / OTP params (pueden venir según el flujo)
     code: url.searchParams.get("code"),
     token_hash: url.searchParams.get("token_hash"),
     type: url.searchParams.get("type"),
@@ -61,13 +63,11 @@ function hasHashTokens() {
 }
 
 function cleanAuthArtifactsFromUrl() {
-  // Limpia code/token_hash/type + hash tokens del address bar (sin recargar)
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete("code");
     url.searchParams.delete("token_hash");
     url.searchParams.delete("type");
-    // No tocamos invite_id/org_id/tg_flow/invited_email aquí.
     const next = url.pathname + (url.search ? url.search : "");
     window.history.replaceState({}, "", next);
     if (window.location.hash) {
@@ -116,25 +116,38 @@ export default function TrackerGpsPage() {
 
   const [lastPosition, setLastPosition] = useState(null);
   const [lastSend, setLastSend] = useState(null);
-  const [sendStatus, setSendStatus] = useState("idle");
+  const [sendStatus, setSendStatus] = useState("idle"); // idle | sending | ok | error
   const [sendError, setSendError] = useState(null);
 
   const [diag, setDiag] = useState({ uid: null, email: null });
 
-  const [canSend, setCanSend] = useState(false);
+  // Gate (solo informativo + tuning de frecuencia)
+  const [hasAssignment, setHasAssignment] = useState(false);
   const [gateMsg, setGateMsg] = useState("Esperando asignación…");
   const [gateInfo, setGateInfo] = useState(null);
 
-  const [intervalSec, setIntervalSec] = useState(30);
+  // Frecuencia efectiva (segundos)
+  // - dentro: más frecuente (p.ej. 30s)
+  // - fuera: más lento (p.ej. 60-120s)
+  const [intervalSec, setIntervalSec] = useState(60);
+
+  // contadores debug
+  const [counters, setCounters] = useState({
+    gps_reads: 0,
+    send_attempts: 0,
+    send_ok: 0,
+    send_err: 0,
+    throttled: 0,
+  });
 
   const lastSentAtRef = useRef(0);
   const watchIdRef = useRef(null);
   const gatePollRef = useRef(null);
   const startedRef = useRef(false);
 
-  const canSendRef = useRef(false);
-  const intervalSecRef = useRef(30);
+  const intervalSecRef = useRef(60);
   const gateInfoRef = useRef(null);
+  const uidRef = useRef(null);
 
   const acceptedInviteRef = useRef(false);
   const orgIdFromUrlRef = useRef("");
@@ -144,11 +157,9 @@ export default function TrackerGpsPage() {
   const [swapInfo, setSwapInfo] = useState({ expected: "", current: "" });
 
   useEffect(() => {
-    canSendRef.current = !!canSend;
-  }, [canSend]);
-  useEffect(() => {
-    intervalSecRef.current = Number(intervalSec || 30);
+    intervalSecRef.current = Number(intervalSec || 60);
   }, [intervalSec]);
+
   useEffect(() => {
     gateInfoRef.current = gateInfo || null;
   }, [gateInfo]);
@@ -160,12 +171,14 @@ export default function TrackerGpsPage() {
       const s = data?.session || null;
       const u = s?.user || null;
       if (u?.id) {
+        uidRef.current = u.id;
         setDiag({ uid: u.id, email: u.email || null });
         return { uid: u.id, email: u.email || null, access_token: s?.access_token || "" };
       }
     } catch {
       // ignore
     }
+    uidRef.current = null;
     setDiag({ uid: null, email: null });
     return { uid: null, email: null, access_token: "" };
   }
@@ -241,15 +254,13 @@ export default function TrackerGpsPage() {
     }
   }
 
-  // ✅ NUEVO: forzar org activa desde el link (universal)
+  // Forzar org activa desde el link (universal)
   async function forceActiveOrgFromInvite() {
     const q = readQuery();
     const orgId = (orgIdFromUrlRef.current || q.org_id || "").trim();
     if (!orgId) return;
 
     setStep("org:set_current_org");
-
-    // intenta setear org activa; si falla, seguimos pero lo dejamos visible en gateMsg
     const { error } = await supabase.rpc("set_current_org", { p_org: orgId });
     if (error) {
       console.warn("set_current_org error:", error);
@@ -258,6 +269,10 @@ export default function TrackerGpsPage() {
     }
   }
 
+  /**
+   * Gate: ahora NO bloquea envío.
+   * Solo informa estado y sugiere frecuencia.
+   */
   async function refreshGate() {
     try {
       setStep("gate:rpc tracker_can_send");
@@ -268,31 +283,51 @@ export default function TrackerGpsPage() {
       );
 
       if (error) {
-        setCanSend(false);
+        setHasAssignment(false);
         setGateInfo(null);
         setGateMsg(`Gate error: ${error.message || "rpc_error"}`);
+        // frecuencia segura en caso de error
+        setIntervalSec(60);
         return;
       }
 
       const row = Array.isArray(data) ? data?.[0] : data;
-      const ok = !!row?.can_send;
-
-      setCanSend(ok);
       setGateInfo(row || null);
 
-      if (!ok) {
-        setGateMsg(row?.reason || "Esperando asignación…");
-        return;
-      }
+      // “asignación activa” ≠ “in_range”
+      // Esto depende de tu RPC; usamos señales típicas:
+      const total = Number(row?.total ?? row?.assignments_total ?? 0);
+      const active = Number(row?.active ?? row?.assignments_active ?? 0);
+      const has = (active > 0) || (total > 0) || !!row?.geofence_id;
 
+      setHasAssignment(has);
+
+      const inRange = Number(row?.in_range ?? 0) > 0;
+
+      // frecuencia:
+      // - dentro: usa frequency_minutes si viene, si no 30s
+      // - fuera: más lento (60s) para ahorrar, pero SIEMPRE envía
+      let secInside = 30;
       const fm = Number(row?.frequency_minutes);
-      const sec = Number.isFinite(fm) && fm > 0 ? fm * 60 : 300;
-      setIntervalSec(sec);
-      setGateMsg("Asignación activa ✅ (enviando automáticamente)");
+      if (Number.isFinite(fm) && fm > 0) secInside = Math.max(10, Math.round(fm * 60));
+
+      const secOutside = Math.max(60, Math.min(180, secInside * 2)); // 60..180
+
+      setIntervalSec(inRange ? secInside : secOutside);
+
+      // mensaje UI
+      if (!has) {
+        setGateMsg("Esperando asignación… (igual enviando puntos a baja frecuencia)");
+      } else if (inRange) {
+        setGateMsg("Asignación activa ✅ (dentro de geocerca — enviando más frecuente)");
+      } else {
+        setGateMsg("Asignación activa ✅ (fuera de geocerca — enviando más lento)");
+      }
     } catch (e) {
-      setCanSend(false);
+      setHasAssignment(false);
       setGateInfo(null);
       setGateMsg(`Gate exception: ${e?.message || "exception"}`);
+      setIntervalSec(60);
     }
   }
 
@@ -332,23 +367,35 @@ export default function TrackerGpsPage() {
       throw new Error(msg);
     }
 
-    // ✅ limpiar params de invite (incluye invited_email)
     stripQueryParams(["invite_id", "org_id", "tg_flow", "invited_email"]);
   }
 
+  /**
+   * ✅ Envío universal (SIEMPRE):
+   * - throttle por intervalSecRef
+   * - usa Edge Function send_position (como antes)
+   * - incluye user_id y org_id (robusto)
+   */
   async function sendPosition(pos) {
-    if (!canSendRef.current) return;
-
     const now = Date.now();
-    const minMs = Math.max(5, Number(intervalSecRef.current || 30)) * 1000;
-    if (now - lastSentAtRef.current < minMs) return;
+    const minMs = Math.max(5, Number(intervalSecRef.current || 60)) * 1000;
+
+    if (now - lastSentAtRef.current < minMs) {
+      setCounters((c) => ({ ...c, throttled: c.throttled + 1 }));
+      return;
+    }
     lastSentAtRef.current = now;
+
+    setCounters((c) => ({ ...c, send_attempts: c.send_attempts + 1 }));
 
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token || "";
-    if (!token) {
+    const uid = data?.session?.user?.id || uidRef.current || null;
+
+    if (!token || !uid) {
       setSendStatus("error");
-      setSendError("No access_token. Abre el link de invitación nuevamente.");
+      setSendError("No hay sesión válida (token/uid). Abre el link de invitación nuevamente.");
+      setCounters((c) => ({ ...c, send_err: c.send_err + 1 }));
       return;
     }
 
@@ -356,20 +403,25 @@ export default function TrackerGpsPage() {
     const url = `${supabaseUrl}/functions/v1/send_position`;
 
     const gi = gateInfoRef.current;
+    const orgId = (orgIdFromUrlRef.current || readQuery().org_id || "").trim() || null;
 
     const payload = {
-      org_id: orgIdFromUrlRef.current || undefined,
+      org_id: orgId,
+      user_id: uid, // ✅ importante
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       accuracy: pos.coords.accuracy ?? null,
       captured_at: new Date().toISOString(),
+      geofence_id: gi?.geofence_id ?? null,
       meta: {
         source: "tracker-gps",
+        build: BUILD,
         altitude: pos.coords.altitude ?? null,
         heading: pos.coords.heading ?? null,
         speed: pos.coords.speed ?? null,
+        // info útil para debugging server-side
+        gate: gi ? { total: gi.total, active: gi.active, in_range: gi.in_range } : null,
       },
-      geofence_id: gi?.geofence_id ?? null,
     };
 
     setSendStatus("sending");
@@ -397,12 +449,16 @@ export default function TrackerGpsPage() {
       }
 
       if (!r.ok || !j?.ok) {
+        const msg = j?.error || j?.details || `Error enviando posición (${r.status})`;
         setSendStatus("error");
-        setSendError(j?.error || j?.details || "Error enviando posición");
+        setSendError(msg);
+        setCounters((c) => ({ ...c, send_err: c.send_err + 1 }));
         return;
       }
 
       setSendStatus("ok");
+      setCounters((c) => ({ ...c, send_ok: c.send_ok + 1 }));
+
       setLastSend({
         ts: payload.captured_at,
         inserted_id: j?.inserted_id ?? null,
@@ -411,6 +467,7 @@ export default function TrackerGpsPage() {
     } catch (e) {
       setSendStatus("error");
       setSendError(e?.name === "AbortError" ? "Timeout enviando posición" : e?.message || "Network error");
+      setCounters((c) => ({ ...c, send_err: c.send_err + 1 }));
     }
   }
 
@@ -433,6 +490,7 @@ export default function TrackerGpsPage() {
     watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
         setGpsActive(true);
+        setCounters((c) => ({ ...c, gps_reads: c.gps_reads + 1 }));
 
         const current = {
           lat: pos.coords.latitude,
@@ -468,26 +526,29 @@ export default function TrackerGpsPage() {
         const q = readQuery();
         if (q.org_id) orgIdFromUrlRef.current = q.org_id;
 
-        // ✅ 1) Consumir sesión desde URL (PKCE/OTP/hash)
+        // 1) Consumir sesión desde URL (PKCE/OTP/hash)
         const session = await consumeSessionFromUrlUniversal();
         if (!alive) return;
 
-        // ✅ 2) Guard por invited_email SOLO con sesión real
+        uidRef.current = session?.user?.id || null;
+
+        // 2) Guard por invited_email SOLO con sesión real
         await runInviteEmailGuardIfNeeded(session);
 
-        // ✅ 3) diag
+        // 3) diag
         setDiag({ uid: session.user.id, email: session.user.email || null });
 
-        // ✅ 4) aceptar invite si viene
+        // 4) aceptar invite si viene
         await acceptInviteIfPresent(session.access_token);
         if (!alive) return;
 
-        // ✅ 5) FORZAR org activa (clave del comportamiento original)
+        // 5) FORZAR org activa
         await forceActiveOrgFromInvite();
 
         setStep("ready");
         setLoading(false);
 
+        // gate informativo + tuning
         await refreshGate();
         gatePollRef.current = setInterval(() => refreshGate(), 15000);
 
@@ -565,13 +626,16 @@ export default function TrackerGpsPage() {
             <div><b>uid:</b> {diag?.uid || "—"}</div>
             <div><b>email:</b> {diag?.email || "—"}</div>
             <div><b>permission:</b> {permission}</div>
-            <div><b>canSend:</b> {String(canSend)}</div>
+            <div><b>hasAssignment:</b> {String(hasAssignment)}</div>
             <div><b>gateMsg:</b> {gateMsg}</div>
+            <div><b>intervalSec:</b> {intervalSec}</div>
           </div>
         </div>
       </div>
     );
   }
+
+  const gi = gateInfo || null;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -583,14 +647,17 @@ export default function TrackerGpsPage() {
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
-          Estado: <b>{canSend ? "Enviando ✅" : "En espera…"}</b> — {gateMsg}{" "}
+          Estado: <b>{hasAssignment ? "Asignado ✅" : "Sin asignación…"}</b> — {gateMsg}{" "}
           <span className="opacity-80">
             build={BUILD} diag={JSON.stringify({ uid: diag?.uid, email: diag?.email })}
           </span>
         </p>
 
         <p className="text-xs text-emerald-800 mt-1">
-          Frecuencia: <b>{intervalSec}s</b>
+          Frecuencia actual: <b>{intervalSec}s</b>
+          {gi && (
+            <span className="opacity-80"> — diag={JSON.stringify({ total: gi.total, active: gi.active, in_range: gi.in_range })}</span>
+          )}
         </p>
 
         {lastPosition && (
@@ -607,8 +674,8 @@ export default function TrackerGpsPage() {
                   : sendStatus === "sending"
                   ? "Enviando…"
                   : sendStatus === "ok"
-                  ? "OK"
-                  : "Error"}
+                  ? "OK ✅"
+                  : "Error ❌"}
               </b>
             </div>
 
@@ -620,6 +687,11 @@ export default function TrackerGpsPage() {
             )}
 
             {sendError && <div className="text-xs text-red-700 mt-1">{sendError}</div>}
+
+            <div className="mt-3 text-[11px] opacity-75">
+              <div>gps_reads={counters.gps_reads} · send_attempts={counters.send_attempts}</div>
+              <div>send_ok={counters.send_ok} · send_err={counters.send_err} · throttled={counters.throttled}</div>
+            </div>
           </div>
         )}
 
