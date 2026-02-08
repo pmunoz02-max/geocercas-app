@@ -60,7 +60,6 @@ function toLatLngStrict(coord) {
   const lat = Number(coord[1]);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
-  // sanity check
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
 
   return [lat, lng];
@@ -148,32 +147,42 @@ function MapDiagnostics({ setDiag }) {
   return null;
 }
 
-// ---------------- Fit bounds when geofence loads (so you ALWAYS see it) ----------------
-function FitToGeofences({ geofencePolygons, positionsCount }) {
+// ✅ FIT inteligente: si la geocerca NO está dentro del viewport actual -> fitBounds
+function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed }) {
   const map = useMap();
+
+  const bounds = useMemo(() => {
+    try {
+      const all = [];
+      (geofencePolygons || []).forEach((g) => (g.positions || []).forEach((p) => all.push(p)));
+      if (all.length < 3) return null;
+      const b = L.latLngBounds(all);
+      return b.isValid() ? b : null;
+    } catch {
+      return null;
+    }
+  }, [geofencePolygons]);
 
   useEffect(() => {
     if (!map) return;
-    if (!geofencePolygons?.length) return;
+    if (!bounds) return;
 
-    // Si hay posiciones, no forzamos el fit (para no “pelear” con el usuario)
-    if ((positionsCount || 0) > 0) return;
+    // expone bounds a UI
+    onBoundsComputed?.(bounds);
 
+    // si fitSignal cambia (botón), siempre fit
+    // si no, solo fit si no intersecta viewport actual
     try {
-      const all = [];
-      geofencePolygons.forEach((g) => {
-        (g.positions || []).forEach((p) => all.push(p));
-      });
-      if (all.length < 3) return;
+      const view = map.getBounds?.();
+      const shouldFit = fitSignal > 0 ? true : !(view && view.isValid && view.isValid() && view.intersects(bounds));
 
-      const bounds = L.latLngBounds(all);
-      if (bounds.isValid()) {
+      if (shouldFit) {
         map.fitBounds(bounds, { padding: [24, 24] });
       }
     } catch {
       // ignore
     }
-  }, [map, geofencePolygons, positionsCount]);
+  }, [map, bounds, fitSignal, onBoundsComputed]);
 
   return null;
 }
@@ -200,8 +209,6 @@ export default function TrackerDashboard() {
 
   const [geoDbg, setGeoDbg] = useState({
     rows: 0,
-    firstId: null,
-    firstName: null,
     firstType: null,
     geomType: null,
     parseOk: null,
@@ -233,6 +240,9 @@ export default function TrackerDashboard() {
     lastFromIso: null,
     lastTargetCount: 0,
   });
+
+  const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
+  const [fitSignal, setFitSignal] = useState(0);
 
   const todayStrUtc = useMemo(() => {
     const d = new Date();
@@ -286,7 +296,8 @@ export default function TrackerDashboard() {
     if (!geofenceIds.length) {
       setGeofenceRows([]);
       setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
-      setGeoDbg((g) => ({ ...g, rows: 0, polysComputed: 0, parseOk: null }));
+      setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: null, polysComputed: 0 });
+      setGeofenceBoundsText("—");
       return;
     }
 
@@ -299,7 +310,7 @@ export default function TrackerDashboard() {
     if (error) {
       setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error) }));
       setGeofenceRows([]);
-      setGeoDbg((g) => ({ ...g, rows: 0, polysComputed: 0, parseOk: false }));
+      setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: false, polysComputed: 0 });
       return;
     }
 
@@ -334,13 +345,14 @@ export default function TrackerDashboard() {
 
     setGeoDbg({
       rows: normalized.length,
-      firstId: first?.id ?? null,
-      firstName: first?.name ?? null,
       firstType,
       geomType: first?.geom_type ?? null,
       parseOk,
       polysComputed: firstPolys,
     });
+
+    // 🔥 dispara un fit inicial (para garantizar visibilidad)
+    setFitSignal((x) => x + 1);
   }, []);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
@@ -377,7 +389,6 @@ export default function TrackerDashboard() {
       if (!allowedTrackerIds.length) {
         setPositions([]);
         setDiag((d) => ({ ...d, positionsFound: 0 }));
-        setErrorMsg("No hay trackers asignados vigentes para esta org.");
         return;
       }
 
@@ -483,6 +494,9 @@ export default function TrackerDashboard() {
           <div className="text-[11px] text-slate-500">
             Org: <span className="font-mono">{String(orgId || "—")}</span>
           </div>
+          <div className="text-[11px] text-slate-500">
+            Bounds geocerca: <span className="font-mono">{geofenceBoundsText}</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
@@ -512,10 +526,18 @@ export default function TrackerDashboard() {
           <button
             type="button"
             onClick={() => fetchPositions(orgId, { showSpinner: true })}
-            className="col-span-2 md:col-span-1 border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
+            className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
             disabled={loading}
           >
             {loading ? "Cargando…" : "Actualizar"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFitSignal((x) => x + 1)}
+            className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
+          >
+            Centrar geocerca
           </button>
         </div>
       </div>
@@ -526,7 +548,6 @@ export default function TrackerDashboard() {
         </div>
       )}
 
-      {/* DEBUG */}
       <div className="rounded border bg-white p-3 text-xs grid grid-cols-2 md:grid-cols-6 gap-2">
         <div><b>assignmentsRows</b>: {diag.assignmentsRows}</div>
         <div><b>trackersFound</b>: {diag.trackersFound}</div>
@@ -543,7 +564,7 @@ export default function TrackerDashboard() {
           <b>assignErr</b>: {diag.lastAssignmentsError || "—"} | <b>geoErr</b>: {diag.lastGeofencesError || "—"} | <b>posErr</b>: {diag.lastPositionsError || "—"}
         </div>
 
-        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500 break-all">
+        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
           <b>geoDbg</b>: rows={geoDbg.rows} geom_type={String(geoDbg.geomType)} geojson_type={String(geoDbg.firstType)} polys(first)={geoDbg.polysComputed}
         </div>
       </div>
@@ -557,25 +578,37 @@ export default function TrackerDashboard() {
           whenCreated={(map) => { try { map.invalidateSize(); } catch {} }}
         >
           <MapDiagnostics setDiag={setDiag} />
-          <FitToGeofences geofencePolygons={geofencePolygons} positionsCount={positions?.length || 0} />
+          <FitIfOutOfView
+            geofencePolygons={geofencePolygons}
+            fitSignal={fitSignal}
+            onBoundsComputed={(b) => {
+              try {
+                const sw = b.getSouthWest();
+                const ne = b.getNorthEast();
+                setGeofenceBoundsText(
+                  `SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`
+                );
+              } catch {
+                setGeofenceBoundsText("—");
+              }
+            }}
+          />
 
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
           />
 
-          {/* Geofences */}
           {geofencePolygons.map((g) => (
             <Polygon
               key={`${g.geofenceId}-${g.idx}`}
               positions={g.positions}
-              pathOptions={{ weight: 3, fillOpacity: 0.12 }}
+              pathOptions={{ weight: 4, fillOpacity: 0.10 }}
             >
               <Tooltip sticky>{g.name}</Tooltip>
             </Polygon>
           ))}
 
-          {/* Trackers */}
           {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
             const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
             const chron = [...pts].reverse();
