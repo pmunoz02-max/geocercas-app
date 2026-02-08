@@ -1,12 +1,13 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.13 FINAL (Feb 2026) + i18n (ES/EN/FR)
+// Asignaciones v2.14 FINAL (Feb 2026) + i18n (ES/EN/FR)
 // - Lectura canónica: v_tracker_assignments_ui
 // - Escritura: RPC admin_upsert_tracker_assignment_v1
 // - ✅ Migrado a DatePickerField (HTML nativo + icono) para consistencia y WebView/TWA
 // - ✅ Fechas date-only (YYYY-MM-DD) coherentes con start_date/end_date
 // - Fix permanente: fuerza visibilidad (Geocerca/Inicio/Fin) ante CSS/herencia/ancho 0
 // - DEBUG: ?debug=1
-// - ✅ FIX Feb-2026: selector de geofences SOLO active=true (no mostrar QuitoA inactive)
+// - ✅ FIX Feb-2026: selector de geofences SOLO active=true (no mostrar inactive)
+// - ✅ FIX Feb-2026: vuelve botón ELIMINAR (soft-delete lógico = desactivar + end_date=hoy)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -68,6 +69,14 @@ function isDateRangeInvalid(startDate, endDate) {
   return startDate > endDate;
 }
 
+// Traducción con fallback si el key no existe (i18next suele devolver el key literal)
+function tSafe(t, key, fallback) {
+  const v = t(key);
+  if (!v) return fallback;
+  if (v === key) return fallback;
+  return v;
+}
+
 export default function AsignacionesPage() {
   const { t } = useTranslation();
   const { loading, isAuthenticated, user, currentOrg } = useAuth();
@@ -104,9 +113,7 @@ export default function AsignacionesPage() {
   // ✅ Validación rango (solo si ambos existen)
   useEffect(() => {
     if (isDateRangeInvalid(startDate, endDate)) {
-      setDateRangeError(
-        t("asignaciones.messages.invalidDatesRange") || t("asignaciones.messages.invalidDates")
-      );
+      setDateRangeError(tSafe(t, "asignaciones.messages.invalidDatesRange", tSafe(t, "asignaciones.messages.invalidDates", "Rango de fechas inválido")));
     } else {
       setDateRangeError("");
     }
@@ -157,7 +164,7 @@ export default function AsignacionesPage() {
 
       setGeofenceOptions((g || []).map((x) => ({ id: x.id, label: x.name })));
 
-      // Si la geofence seleccionada ya no está activa (ej QuitoA), limpiamos selección
+      // Si la geofence seleccionada ya no está activa, limpiamos selección
       if (selectedGeofenceId) {
         const stillExists = (g || []).some((x) => String(x.id) === String(selectedGeofenceId));
         if (!stillExists) setSelectedGeofenceId("");
@@ -201,14 +208,14 @@ export default function AsignacionesPage() {
     setSuccess(null);
 
     if (!selectedPersonalId || !selectedGeofenceId) {
-      return setError(t("asignaciones.messages.selectTrackerAndGeofence"));
+      return setError(tSafe(t, "asignaciones.messages.selectTrackerAndGeofence", "Selecciona tracker y geocerca"));
     }
 
     const p = personalOptions.find((x) => x.id === selectedPersonalId);
-    if (!p?.user_id) return setError(t("asignaciones.messages.trackerMissingUserId"));
+    if (!p?.user_id) return setError(tSafe(t, "asignaciones.messages.trackerMissingUserId", "El tracker no tiene user_id"));
 
     if (!startDate || !endDate || isDateRangeInvalid(startDate, endDate)) {
-      return setError(t("asignaciones.messages.invalidDates"));
+      return setError(tSafe(t, "asignaciones.messages.invalidDates", "Fechas inválidas"));
     }
 
     try {
@@ -223,7 +230,7 @@ export default function AsignacionesPage() {
 
       if (rpcErr) throw rpcErr;
 
-      setSuccess(t("asignaciones.banner.saved"));
+      setSuccess(tSafe(t, "asignaciones.banner.saved", "Guardado"));
       setSelectedPersonalId("");
       setSelectedGeofenceId("");
       setStartDate(todayYYYYMMDD());
@@ -248,7 +255,7 @@ export default function AsignacionesPage() {
     // row.start_date / row.end_date vienen como date; garantizamos YYYY-MM-DD para RPC
     const start = String(row?.start_date || "").slice(0, 10);
     const end = String(row?.end_date || "").slice(0, 10);
-    if (!start || !end) return setError(t("asignaciones.messages.toggleInvalidDates"));
+    if (!start || !end) return setError(tSafe(t, "asignaciones.messages.toggleInvalidDates", "Fechas inválidas"));
 
     try {
       const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
@@ -262,14 +269,61 @@ export default function AsignacionesPage() {
 
       if (rpcErr) throw rpcErr;
 
-      setSuccess(!row.active ? t("asignaciones.banner.activated") : t("asignaciones.banner.deactivated"));
+      setSuccess(!row.active ? tSafe(t, "asignaciones.banner.activated", "Activado") : tSafe(t, "asignaciones.banner.deactivated", "Desactivado"));
       await loadAll();
     } catch (e) {
       setError(e?.message || String(e));
     }
   }
 
-  if (!isAuthenticated) return <div className="p-4">{t("auth.loginRequired")}</div>;
+  // ✅ ELIMINAR lógico (universal): desactivar + end_date=hoy (sin delete físico)
+  async function deleteAssignment(row) {
+    setError(null);
+    setSuccess(null);
+
+    const trackerText = row?.tracker_label || row?.tracker_name || row?.tracker_email || shortId(row?.tracker_user_id);
+    const geofenceText = row?.geofence_name || shortId(row?.geofence_id) || "—";
+
+    const confirmMsg =
+      tSafe(t, "asignaciones.confirmDelete", "¿Eliminar esta asignación?") +
+      `\n\n${tSafe(t, "asignaciones.table.tracker", "Tracker")}: ${trackerText}\n${tSafe(t, "asignaciones.table.geofence", "Geocerca")}: ${geofenceText}`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    // Garantizamos rango válido y cerramos hoy
+    const start = String(row?.start_date || "").slice(0, 10);
+    const endCurrent = String(row?.end_date || "").slice(0, 10);
+    if (!start) return setError(tSafe(t, "asignaciones.messages.toggleInvalidDates", "Fechas inválidas"));
+
+    const today = todayYYYYMMDD();
+    let end = today;
+
+    // Si start > today, end debe ser start para mantener rango válido
+    if (start > end) end = start;
+
+    // Si existía un end anterior más temprano, respetarlo (no extender)
+    if (endCurrent && endCurrent < end) end = endCurrent;
+
+    try {
+      const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
+        p_org_id: orgId,
+        p_tracker_user_id: row.tracker_user_id,
+        p_geofence_id: row.geofence_id,
+        p_start_date: start,
+        p_end_date: end,
+        p_active: false,
+      });
+
+      if (rpcErr) throw rpcErr;
+
+      setSuccess(tSafe(t, "asignaciones.banner.deleted", "Asignación eliminada"));
+      await loadAll();
+    } catch (e) {
+      setError(e?.message || String(e));
+    }
+  }
+
+  if (!isAuthenticated) return <div className="p-4">{tSafe(t, "auth.loginRequired", "Inicia sesión")}</div>;
 
   return (
     <div className="p-4 w-full">
@@ -277,27 +331,23 @@ export default function AsignacionesPage() {
         <div className="mb-3 border rounded bg-yellow-50 px-3 py-2 text-xs text-yellow-900">
           <div className="font-semibold">DEBUG: src/pages/AsignacionesPage.jsx</div>
           <div>
-            {t("asignaciones.debug.source")} <span className="font-mono">v_tracker_assignments_ui</span> |{" "}
-            {t("asignaciones.debug.rows")}: {rows?.length || 0}
+            {tSafe(t, "asignaciones.debug.source", "Fuente")} <span className="font-mono">v_tracker_assignments_ui</span> |{" "}
+            {tSafe(t, "asignaciones.debug.rows", "Filas")}: {rows?.length || 0}
           </div>
         </div>
       ) : null}
 
-      <h1 className="text-2xl font-bold mb-2">{t("asignaciones.title")}</h1>
+      <h1 className="text-2xl font-bold mb-2">{tSafe(t, "asignaciones.title", "Asignaciones")}</h1>
       <p className="text-xs text-gray-500 mb-4">
-        {t("asignaciones.orgCurrent")}: {currentOrg?.name} ({shortId(orgId)})
+        {tSafe(t, "asignaciones.orgCurrent", "Org actual")}: {currentOrg?.name} ({shortId(orgId)})
       </p>
 
       {error && <div className="mb-3 bg-red-50 border px-3 py-2 text-red-700">{error}</div>}
       {success && <div className="mb-3 bg-green-50 border px-3 py-2 text-green-700">{success}</div>}
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 border rounded">
-        <select
-          className="border rounded px-3 py-2"
-          value={selectedPersonalId}
-          onChange={(e) => setSelectedPersonalId(e.target.value)}
-        >
-          <option value="">{t("asignaciones.form.selectTracker")}</option>
+        <select className="border rounded px-3 py-2" value={selectedPersonalId} onChange={(e) => setSelectedPersonalId(e.target.value)}>
+          <option value="">{tSafe(t, "asignaciones.form.selectTracker", "Selecciona tracker")}</option>
           {personalOptions.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
@@ -305,12 +355,8 @@ export default function AsignacionesPage() {
           ))}
         </select>
 
-        <select
-          className="border rounded px-3 py-2"
-          value={selectedGeofenceId}
-          onChange={(e) => setSelectedGeofenceId(e.target.value)}
-        >
-          <option value="">{t("asignaciones.form.selectGeofence")}</option>
+        <select className="border rounded px-3 py-2" value={selectedGeofenceId} onChange={(e) => setSelectedGeofenceId(e.target.value)}>
+          <option value="">{tSafe(t, "asignaciones.form.selectGeofence", "Selecciona geocerca")}</option>
           {geofenceOptions.map((g) => (
             <option key={g.id} value={g.id}>
               {g.label}
@@ -319,35 +365,21 @@ export default function AsignacionesPage() {
         </select>
 
         <div className="w-full">
-          <DatePickerField
-            label={t("asignaciones.form.start")}
-            value={startDate}
-            onChange={setStartDate}
-            max={endDate || undefined}
-          />
-          <div className="text-xs text-gray-500 mt-1">{t("asignaciones.form.dateHint")}</div>
+          <DatePickerField label={tSafe(t, "asignaciones.form.start", "Inicio")} value={startDate} onChange={setStartDate} max={endDate || undefined} />
+          <div className="text-xs text-gray-500 mt-1">{tSafe(t, "asignaciones.form.dateHint", "Formato YYYY-MM-DD")}</div>
         </div>
 
         <div className="w-full">
-          <DatePickerField
-            label={t("asignaciones.form.end")}
-            value={endDate}
-            onChange={setEndDate}
-            min={startDate || undefined}
-          />
+          <DatePickerField label={tSafe(t, "asignaciones.form.end", "Fin")} value={endDate} onChange={setEndDate} min={startDate || undefined} />
         </div>
 
-        <select
-          className="border rounded px-3 py-2"
-          value={active ? "activa" : "inactiva"}
-          onChange={(e) => setActive(e.target.value === "activa")}
-        >
-          <option value="activa">{t("asignaciones.status.active")}</option>
-          <option value="inactiva">{t("asignaciones.status.inactive")}</option>
+        <select className="border rounded px-3 py-2" value={active ? "activa" : "inactiva"} onChange={(e) => setActive(e.target.value === "activa")}>
+          <option value="activa">{tSafe(t, "asignaciones.status.active", "Activa")}</option>
+          <option value="inactiva">{tSafe(t, "asignaciones.status.inactive", "Inactiva")}</option>
         </select>
 
         <button className="bg-blue-600 text-white rounded px-4 py-2" disabled={!!dateRangeError}>
-          {t("common.actions.save")}
+          {tSafe(t, "common.actions.save", "Guardar")}
         </button>
 
         {dateRangeError ? <div className="md:col-span-2 text-xs text-red-600">{dateRangeError}</div> : null}
@@ -355,43 +387,43 @@ export default function AsignacionesPage() {
 
       <div className="mt-6 bg-white border rounded p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-          <h2 className="text-lg font-semibold">{t("asignaciones.table.title")}</h2>
+          <h2 className="text-lg font-semibold">{tSafe(t, "asignaciones.table.title", "Asignaciones")}</h2>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">{t("asignaciones.filters.statusLabel")}</span>
+            <span className="text-sm text-gray-600">{tSafe(t, "asignaciones.filters.statusLabel", "Estado")}</span>
             <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
               {ESTADOS.map((x) => (
                 <option key={x} value={x}>
                   {x === "todos"
-                    ? t("asignaciones.filters.status.todos")
+                    ? tSafe(t, "asignaciones.filters.status.todos", "Todos")
                     : x === "activa"
-                    ? t("asignaciones.filters.status.activa")
-                    : t("asignaciones.filters.status.inactiva")}
+                    ? tSafe(t, "asignaciones.filters.status.activa", "Activas")
+                    : tSafe(t, "asignaciones.filters.status.inactiva", "Inactivas")}
                 </option>
               ))}
             </select>
 
             <button type="button" className="border rounded px-3 py-2 hover:bg-gray-50" onClick={loadAll}>
-              {t("common.actions.refresh")}
+              {tSafe(t, "common.actions.refresh", "Refrescar")}
             </button>
           </div>
         </div>
 
         {loadingData ? (
-          <div className="text-sm text-gray-600">{t("common.actions.loading")}</div>
+          <div className="text-sm text-gray-600">{tSafe(t, "common.actions.loading", "Cargando…")}</div>
         ) : filteredRows.length === 0 ? (
-          <div className="text-sm text-gray-600">{t("asignaciones.table.empty")}</div>
+          <div className="text-sm text-gray-600">{tSafe(t, "asignaciones.table.empty", "Sin registros")}</div>
         ) : (
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left border-b bg-slate-900 text-white">
-                  <th className="py-2 pr-3">{t("asignaciones.table.tracker")}</th>
-                  <th className="py-2 pr-3">{t("asignaciones.table.geofence")}</th>
-                  <th className="py-2 pr-3">{t("asignaciones.table.start")}</th>
-                  <th className="py-2 pr-3">{t("asignaciones.table.end")}</th>
-                  <th className="py-2 pr-3">{t("asignaciones.table.status")}</th>
-                  <th className="py-2 pr-3 text-right">{t("asignaciones.table.action")}</th>
+                  <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.tracker", "Tracker")}</th>
+                  <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.geofence", "Geocerca")}</th>
+                  <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.start", "Inicio")}</th>
+                  <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.end", "Fin")}</th>
+                  <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.status", "Estado")}</th>
+                  <th className="py-2 pr-3 text-right">{tSafe(t, "asignaciones.table.action", "Acciones")}</th>
                 </tr>
               </thead>
 
@@ -435,14 +467,25 @@ export default function AsignacionesPage() {
                               : "inline-flex items-center px-2 py-1 rounded bg-gray-50 text-gray-700 border"
                           }
                         >
-                          {r.active ? t("asignaciones.status.active") : t("asignaciones.status.inactive")}
+                          {r.active ? tSafe(t, "asignaciones.status.active", "Activa") : tSafe(t, "asignaciones.status.inactive", "Inactiva")}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3 text-right">
-                        <button type="button" className="border rounded px-3 py-1 hover:bg-gray-50" onClick={() => toggleActive(r)}>
-                          {r.active ? t("asignaciones.actions.deactivate") : t("asignaciones.actions.activate")}
-                        </button>
+                        <div className="inline-flex gap-2">
+                          <button type="button" className="border rounded px-3 py-1 hover:bg-gray-50" onClick={() => toggleActive(r)}>
+                            {r.active ? tSafe(t, "asignaciones.actions.deactivate", "Desactivar") : tSafe(t, "asignaciones.actions.activate", "Activar")}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="border rounded px-3 py-1 hover:bg-red-50 text-red-700 border-red-200"
+                            onClick={() => deleteAssignment(r)}
+                            title={tSafe(t, "asignaciones.actions.deleteHint", "Eliminar (desactivar y cerrar hoy)")}
+                          >
+                            {tSafe(t, "common.actions.delete", "Eliminar")}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -451,13 +494,11 @@ export default function AsignacionesPage() {
             </table>
 
             <div className="mt-2 text-xs text-gray-500">
-              {t("asignaciones.table.showing", { shown: filteredRows.length, total: rows.length })}
+              {tSafe(t, "asignaciones.table.showing", "Mostrando {{shown}} de {{total}}").replace("{{shown}}", String(filteredRows.length)).replace("{{total}}", String(rows.length))}
             </div>
 
             {debug ? (
-              <pre className="mt-3 text-xs bg-gray-50 border rounded p-2 overflow-auto">
-                {JSON.stringify(rows?.[0] || null, null, 2)}
-              </pre>
+              <pre className="mt-3 text-xs bg-gray-50 border rounded p-2 overflow-auto">{JSON.stringify(rows?.[0] || null, null, 2)}</pre>
             ) : null}
           </div>
         )}
