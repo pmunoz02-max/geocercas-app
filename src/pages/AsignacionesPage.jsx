@@ -6,6 +6,7 @@
 // - ✅ Fechas date-only (YYYY-MM-DD) coherentes con start_date/end_date
 // - Fix permanente: fuerza visibilidad (Geocerca/Inicio/Fin) ante CSS/herencia/ancho 0
 // - DEBUG: ?debug=1
+// - ✅ FIX Feb-2026: selector de geofences SOLO active=true (no mostrar QuitoA inactive)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -144,15 +145,23 @@ export default function AsignacionesPage() {
       }
       setPersonalOptions(deduped);
 
-      // 2) Geofences canónicas
+      // 2) Geofences canónicas (✅ SOLO active=true)
       const { data: g, error: gErr } = await supabase
         .from("geofences")
-        .select("id, name, org_id, created_at")
+        .select("id, name, org_id, created_at, active")
         .eq("org_id", orgId)
+        .eq("active", true)
         .order("created_at", { ascending: false });
 
       if (gErr) throw gErr;
+
       setGeofenceOptions((g || []).map((x) => ({ id: x.id, label: x.name })));
+
+      // Si la geofence seleccionada ya no está activa (ej QuitoA), limpiamos selección
+      if (selectedGeofenceId) {
+        const stillExists = (g || []).some((x) => String(x.id) === String(selectedGeofenceId));
+        if (!stillExists) setSelectedGeofenceId("");
+      }
 
       // 3) Asignaciones del tracker (vista canónica)
       const { data: a, error: aErr } = await supabase
@@ -170,6 +179,8 @@ export default function AsignacionesPage() {
         console.log("DEBUG orgId:", orgId);
         // eslint-disable-next-line no-console
         console.log("DEBUG first row:", (a || [])[0] || null);
+        // eslint-disable-next-line no-console
+        console.log("DEBUG geofences(active) count:", (g || []).length);
       }
 
       setLoadingData(false);
