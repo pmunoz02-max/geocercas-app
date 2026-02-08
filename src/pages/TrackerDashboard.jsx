@@ -50,22 +50,16 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
-// ---------------- STRICT GeoJSON normalization (NO heuristics) ----------------
-// GeoJSON siempre es [lng, lat] => Leaflet espera [lat, lng]
+// GeoJSON siempre es [lng,lat] => Leaflet [lat,lng]
 function toLatLngStrict(coord) {
-  if (!coord) return null;
-  if (!Array.isArray(coord) || coord.length < 2) return null;
-
+  if (!coord || !Array.isArray(coord) || coord.length < 2) return null;
   const lng = Number(coord[0]);
   const lat = Number(coord[1]);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
-
   return [lat, lng];
 }
 
-// Devuelve array de "polígonos", cada uno como un ring (outer) en formato [ [lat,lng], ... ]
 function normalizeGeoJSONToPolygons(input) {
   const polygons = [];
   if (!input) return polygons;
@@ -83,12 +77,8 @@ function normalizeGeoJSONToPolygons(input) {
 
   const handleGeometry = (g) => {
     if (!g || typeof g !== "object") return;
-
-    if (g.type === "Polygon") {
-      pushRing(g.coordinates?.[0]);
-    } else if (g.type === "MultiPolygon") {
-      (g.coordinates || []).forEach((poly) => pushRing(poly?.[0]));
-    }
+    if (g.type === "Polygon") pushRing(g.coordinates?.[0]);
+    else if (g.type === "MultiPolygon") (g.coordinates || []).forEach((poly) => pushRing(poly?.[0]));
   };
 
   if (obj?.type === "FeatureCollection") {
@@ -104,13 +94,39 @@ function normalizeGeoJSONToPolygons(input) {
   return polygons;
 }
 
-// ---------------- Map diagnostics ----------------
+function boundsFromPolys(polys) {
+  try {
+    const all = [];
+    (polys || []).forEach((ring) => (ring || []).forEach((p) => all.push(p)));
+    if (all.length < 3) return null;
+    const b = L.latLngBounds(all);
+    return b.isValid() ? b : null;
+  } catch {
+    return null;
+  }
+}
+
+// Heurística SOLO para descartar basura 0,0 (no para invertir coords)
+function isProbablyZeroZeroBounds(b) {
+  try {
+    if (!b?.isValid?.()) return false;
+    const c = b.getCenter();
+    const sw = b.getSouthWest();
+    const ne = b.getNorthEast();
+    const w = Math.abs(ne.lng - sw.lng);
+    const h = Math.abs(ne.lat - sw.lat);
+    const nearZero = Math.abs(c.lat) < 0.01 && Math.abs(c.lng) < 0.01;
+    const tiny = w < 0.01 && h < 0.01;
+    return nearZero && tiny;
+  } catch {
+    return false;
+  }
+}
+
 function MapDiagnostics({ setDiag }) {
   const map = useMap();
-
   useEffect(() => {
     if (!map) return;
-
     const container = map.getContainer();
     const updateSize = () => {
       const r = container?.getBoundingClientRect?.();
@@ -122,12 +138,10 @@ function MapDiagnostics({ setDiag }) {
         zoom: map.getZoom?.() ?? null,
       }));
     };
-
     const doInvalidate = () => {
       try { map.invalidateSize(); } catch {}
       updateSize();
     };
-
     doInvalidate();
     const t1 = setTimeout(doInvalidate, 0);
     const t2 = setTimeout(doInvalidate, 250);
@@ -178,14 +192,12 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
   useEffect(() => {
     if (!map) return;
 
-    // viewport debug siempre
     try {
       const v = map.getBounds?.();
       if (v?.isValid?.()) onViewportComputed?.(v);
     } catch {}
 
     if (!bounds) return;
-
     onBoundsComputed?.(bounds);
 
     try {
@@ -203,9 +215,7 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
           } catch {}
         }, 50);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [map, bounds, fitSignal, onBoundsComputed, onViewportComputed]);
 
   return null;
@@ -241,15 +251,6 @@ export default function TrackerDashboard() {
     polysComputed: 0,
   });
 
-  const geofencePolygons = useMemo(() => {
-    const out = [];
-    for (const g of geofenceRows || []) {
-      const polys = normalizeGeoJSONToPolygons(g.geojson);
-      polys.forEach((p, i) => out.push({ geofenceId: g.id, name: g.name || g.id, positions: p, idx: i }));
-    }
-    return out;
-  }, [geofenceRows]);
-
   const [diag, setDiag] = useState({
     mapCreated: false,
     w: 0,
@@ -265,6 +266,8 @@ export default function TrackerDashboard() {
     lastPositionsError: null,
     lastFromIso: null,
     lastTargetCount: 0,
+    assignedGeofenceIds: 0,
+    skippedZeroZero: 0,
   });
 
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
@@ -298,7 +301,7 @@ export default function TrackerDashboard() {
       .or(orVigencia);
 
     if (error) {
-      setDiag((d) => ({ ...d, lastAssignmentsError: error.message || String(error) }));
+      setDiag((d) => ({ ...d, lastAssignmentsError: error.message || String(error), assignmentsRows: 0, trackersFound: 0, assignedGeofenceIds: 0 }));
       setAssignments([]);
       setAssignmentTrackers([]);
       return;
@@ -310,70 +313,54 @@ export default function TrackerDashboard() {
     const uniqTrackers = Array.from(new Set(rows.map((r) => String(r.tracker_user_id)).filter(Boolean)))
       .map((user_id) => ({ user_id }));
 
+    const uniqGeof = Array.from(new Set(rows.map((r) => String(r.geofence_id)).filter(Boolean)));
+
     setAssignmentTrackers(uniqTrackers);
-    setDiag((d) => ({ ...d, assignmentsRows: rows.length, trackersFound: uniqTrackers.length }));
+    setDiag((d) => ({ ...d, assignmentsRows: rows.length, trackersFound: uniqTrackers.length, assignedGeofenceIds: uniqGeof.length }));
   }, [todayStrUtc]);
 
-  // ✅ FIX DEFINITIVO: Filtrar active=true en tabla geofences, pero GeoJSON canónico desde v_geofences_ui
+  // ✅ Trae SIEMPRE geojson canónico desde v_geofences_ui y descarta basura 0,0 por geometría
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
 
-    const assignedIds = Array.from(
-      new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
-    );
+    const geofenceIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
 
-    if (!assignedIds.length) {
+    if (!geofenceIds.length) {
       setGeofenceRows([]);
-      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
       setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: null, polysComputed: 0 });
-      setGeofenceBoundsText("—");
-      setViewportText("—");
-      setIntersectsText("—");
+      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, skippedZeroZero: 0 }));
+      setErrorMsg("No hay geocercas asignadas (tracker_assignments.geofence_id).");
       return;
     }
 
-    // (1) IDs activos (para evitar geocercas corruptas/inactivas)
-    const { data: activeRows, error: activeErr } = await supabase
-      .from("geofences")
-      .select("id")
-      .eq("org_id", currentOrgId)
-      .eq("active", true)
-      .in("id", assignedIds);
-
-    if (activeErr) {
-      setDiag((d) => ({ ...d, lastGeofencesError: activeErr.message || String(activeErr) }));
-      setGeofenceRows([]);
-      setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: false, polysComputed: 0 });
-      return;
-    }
-
-    const activeIds = Array.from(new Set((activeRows || []).map((r) => r?.id).filter(Boolean).map(String)));
-
-    if (!activeIds.length) {
-      setGeofenceRows([]);
-      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
-      setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: true, polysComputed: 0 });
-      setGeofenceBoundsText("—");
-      return;
-    }
-
-    // (2) GeoJSON canónico desde v_geofences_ui (sale de geom)
     const { data, error } = await supabase
       .from("v_geofences_ui")
       .select("id, org_id, name, geojson, geom_type")
       .eq("org_id", currentOrgId)
-      .in("id", activeIds);
+      .in("id", geofenceIds);
 
     if (error) {
-      setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error) }));
+      setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error), geofencesFound: 0, geofencePolys: 0, skippedZeroZero: 0 }));
       setGeofenceRows([]);
       setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: false, polysComputed: 0 });
+      setErrorMsg("Error al cargar geocercas (v_geofences_ui).");
       return;
     }
 
     const rows = Array.isArray(data) ? data : [];
-    const normalized = rows.map((r) => ({
+
+    // Filtra geocercas corruptas cerca de 0,0
+    let skipped = 0;
+    const filtered = rows.filter((r) => {
+      const polys = normalizeGeoJSONToPolygons(r.geojson);
+      const b = boundsFromPolys(polys);
+      const bad = isProbablyZeroZeroBounds(b);
+      if (bad) skipped += 1;
+      return !bad;
+    });
+
+    const normalized = filtered.map((r) => ({
       id: r.id,
       name: r.name || r.id,
       geojson: r.geojson,
@@ -383,7 +370,7 @@ export default function TrackerDashboard() {
     const polysCount = normalized.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
 
     setGeofenceRows(normalized);
-    setDiag((d) => ({ ...d, geofencesFound: normalized.length, geofencePolys: polysCount }));
+    setDiag((d) => ({ ...d, geofencesFound: normalized.length, geofencePolys: polysCount, skippedZeroZero: skipped }));
 
     const first = normalized[0] || null;
     let firstType = null;
@@ -409,6 +396,12 @@ export default function TrackerDashboard() {
       polysComputed: firstPolys,
     });
 
+    if (!normalized.length) {
+      setErrorMsg("No hay geocercas visibles: o están inactivas, o solo existe la corrupta (0,0), o no hay asignaciones válidas.");
+      return;
+    }
+
+    setErrorMsg("");
     setFitSignal((x) => x + 1);
   }, []);
 
@@ -525,6 +518,15 @@ export default function TrackerDashboard() {
     });
   }, [assignmentTrackers, personalByUserId]);
 
+  const geofencePolygons = useMemo(() => {
+    const out = [];
+    for (const g of geofenceRows || []) {
+      const polys = normalizeGeoJSONToPolygons(g.geojson);
+      polys.forEach((p, i) => out.push({ geofenceId: g.id, name: g.name || g.id, positions: p, idx: i }));
+    }
+    return out;
+  }, [geofenceRows]);
+
   const mapCenter = useMemo(() => {
     const last = positions?.[0];
     if (last && isValidLatLng(last.lat, last.lng)) return [last.lat, last.lng];
@@ -596,6 +598,8 @@ export default function TrackerDashboard() {
             type="button"
             onClick={() => setFitSignal((x) => x + 1)}
             className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
+            disabled={geofencePolygons.length === 0}
+            title={geofencePolygons.length === 0 ? "No hay geocercas para centrar" : "Centrar geocerca"}
           >
             Centrar geocerca
           </button>
@@ -614,7 +618,7 @@ export default function TrackerDashboard() {
         <div><b>positionsFound</b>: {diag.positionsFound}</div>
         <div><b>geofencesFound</b>: {diag.geofencesFound}</div>
         <div><b>geofencePolys</b>: {diag.geofencePolys}</div>
-        <div><b>targets</b>: {diag.lastTargetCount}</div>
+        <div><b>assignedGeofenceIds</b>: {diag.assignedGeofenceIds}</div>
 
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
           <b>fromIso</b>: {diag.lastFromIso || "—"}
@@ -625,7 +629,7 @@ export default function TrackerDashboard() {
         </div>
 
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>geoDbg</b>: rows={geoDbg.rows} geom_type={String(geoDbg.geomType)} geojson_type={String(geoDbg.firstType)} polys(first)={geoDbg.polysComputed}
+          <b>geoDbg</b>: rows={geoDbg.rows} geom_type={String(geoDbg.geomType)} geojson_type={String(geoDbg.firstType)} polys(first)={geoDbg.polysComputed} | <b>skippedZeroZero</b>: {diag.skippedZeroZero}
         </div>
       </div>
 
@@ -687,12 +691,7 @@ export default function TrackerDashboard() {
             <Polygon
               key={`${g.geofenceId}-${g.idx}`}
               positions={g.positions}
-              pathOptions={{
-                color: "#2563eb",
-                weight: 4,
-                opacity: 1,
-                fillOpacity: 0.25,
-              }}
+              pathOptions={{ color: "#2563eb", weight: 4, opacity: 1, fillOpacity: 0.25 }}
             >
               <Tooltip sticky>{g.name}</Tooltip>
             </Polygon>
