@@ -12,6 +12,42 @@ function withTimeout(promise, ms, label = "timeout") {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
+// --------------------------------------------------
+// ORG STORAGE (compatibilidad universal)
+// - Fuente de verdad: backend (get_my_context / set_current_org)
+// - Storage: solo cache + compat para módulos legacy (tg_current_org_id, tenant_id, org_id)
+// --------------------------------------------------
+function persistActiveOrgToStorage(orgId) {
+  try {
+    if (orgId && String(orgId).trim()) {
+      const v = String(orgId).trim();
+
+      // canónica del proyecto (ya existe en tu app)
+      localStorage.setItem("app_geocercas_last_org_id", v);
+
+      // compat legacy (varios módulos)
+      localStorage.setItem("org_id", v);
+      localStorage.setItem("tenant_id", v);
+
+      // compat específica actividades (actual)
+      localStorage.setItem("tg_current_org_id", v);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function clearActiveOrgFromStorage() {
+  try {
+    localStorage.removeItem("app_geocercas_last_org_id");
+    localStorage.removeItem("org_id");
+    localStorage.removeItem("tenant_id");
+    localStorage.removeItem("tg_current_org_id");
+  } catch {
+    // ignore
+  }
+}
+
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [contextLoading, setContextLoading] = useState(false);
@@ -36,12 +72,12 @@ export function AuthProvider({ children }) {
   const rootInFlightRef = useRef(null);
   const rootLastRef = useRef({ userId: null, at: 0, ok: false });
 
-  // TTLs (balance: evita doble-hit pero permite refresh natural)
+  // TTLs
   const CTX_TTL_MS = 10_000;
   const ROOT_TTL_MS = 60_000;
 
   // --------------------------------------------------
-  // ROOT OWNER CHECK (independiente de org) — single-flight + cache
+  // ROOT OWNER CHECK
   // --------------------------------------------------
   const fetchIsAppRoot = async (u, { force = false } = {}) => {
     const uid = u?.id;
@@ -99,14 +135,20 @@ export function AuthProvider({ children }) {
     setCtx(data || null);
 
     if (data?.ok && data.org_id) {
+      const orgId = data.org_id;
+
       setCurrentOrg({
-        id: data.org_id,
+        id: orgId,
         name: data.org_name || null,
       });
       setRole(data.role || null);
+
+      // ✅ Universal: sincroniza org activa para módulos legacy (incluye Actividades)
+      persistActiveOrgToStorage(orgId);
     } else {
       setCurrentOrg(null);
       setRole(null);
+      clearActiveOrgFromStorage();
     }
   };
 
@@ -174,7 +216,7 @@ export function AuthProvider({ children }) {
   };
 
   // --------------------------------------------------
-  // CAMBIAR ORG ACTIVA (UNIVERSAL)
+  // CAMBIAR ORG ACTIVA
   // --------------------------------------------------
   const switchOrg = async (orgId) => {
     if (!orgId) return { ok: false, error: "org_required" };
@@ -205,7 +247,6 @@ export function AuthProvider({ children }) {
         setUser(sess?.user ?? null);
 
         if (sess?.user) {
-          // ✅ paralelo, pero single-flight evita doble
           fetchIsAppRoot(sess.user);
           fetchContext();
         } else {
@@ -228,7 +269,6 @@ export function AuthProvider({ children }) {
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mountedRef.current) return;
 
-      // ✅ Clave: evita el "doble-hit" inicial
       if (event === "INITIAL_SESSION") return;
 
       setSession(newSession);
@@ -273,6 +313,9 @@ export function AuthProvider({ children }) {
         setCurrentOrg(null);
         setRole(null);
         setIsAppRoot(false);
+
+        clearActiveOrgFromStorage();
+
         // limpia cache local
         ctxInFlightRef.current = null;
         rootInFlightRef.current = null;
