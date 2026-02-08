@@ -1,28 +1,41 @@
 // src/lib/activityAssignmentsApi.js
-// API para asignar actividades a trackers/personas
+// ============================================================
+// ACTIVITY ASSIGNMENTS API (CANÓNICO) — Supabase + Multi-org real
+// Feb 2026 — App Geocercas
+//
+// FIX universal y permanente:
+// - NO usar my_org_ids para "org activa" (en multi-org es ambiguo y en SQL Editor es NULL)
+// - Usar SIEMPRE tg_current_org_id (igual que asignacionesApi.js)
+// - En esta tabla, tenant_id = org_id (modelo legacy pero válido)
+// - Tenant-safe: SIEMPRE filtrar por tenant_id
+// ============================================================
 
-import { supabase } from "../supabaseClient";
+import { supabase } from "./supabaseClient";
 
-/**
- * tenant_id = org_id, lo sacamos de my_org_ids
- */
-async function getCurrentTenantId() {
-  const { data, error } = await supabase
-    .from("my_org_ids")
-    .select("org_id")
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Error leyendo my_org_ids en activityAssignmentsApi:", error);
-    throw new Error("No se pudo obtener la organización activa");
+function getActiveOrgId() {
+  try {
+    const v = localStorage.getItem("tg_current_org_id");
+    return v && String(v).trim() ? String(v).trim() : null;
+  } catch {
+    return null;
   }
+}
 
-  if (!data || !data.org_id) {
-    throw new Error("El usuario no tiene organización activa (my_org_ids vacío)");
-  }
+function wrap(data, error) {
+  return { data: data ?? null, error: error ?? null };
+}
 
-  return data.org_id;
+function errMsg(e, fallback = "Error") {
+  if (!e) return { message: fallback };
+  if (typeof e === "string") return { message: e };
+  return { message: e.message || e.details || e.hint || fallback };
+}
+
+// tenant_id en activity_assignments = org_id canónico
+function getTenantIdOrThrow() {
+  const orgId = getActiveOrgId();
+  if (!orgId) throw new Error("No hay org activa (tg_current_org_id es null)");
+  return orgId;
 }
 
 /**
@@ -35,124 +48,124 @@ async function getCurrentTenantId() {
  *  - end_date (YYYY-MM-DD)   -> end_date   <=
  */
 export async function listActivityAssignments(filters = {}) {
-  const tenantId = await getCurrentTenantId();
+  try {
+    const tenantId = getTenantIdOrThrow();
 
-  let query = supabase
-    .from("activity_assignments")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("start_date", { ascending: true });
+    let query = supabase
+      .from("activity_assignments")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("start_date", { ascending: true });
 
-  const { tracker_user_id, activity_id, start_date, end_date } = filters;
+    const { tracker_user_id, activity_id, start_date, end_date } = filters || {};
 
-  if (tracker_user_id) {
-    query = query.eq("tracker_user_id", tracker_user_id);
+    if (tracker_user_id) query = query.eq("tracker_user_id", tracker_user_id);
+    if (activity_id) query = query.eq("activity_id", activity_id);
+    if (start_date) query = query.gte("start_date", start_date);
+    if (end_date) query = query.lte("end_date", end_date);
+
+    const { data, error } = await query;
+    if (error) return wrap(null, errMsg(error, "Error listActivityAssignments"));
+
+    return wrap(data || [], null);
+  } catch (e) {
+    return wrap(null, errMsg(e, "Error listActivityAssignments"));
   }
-  if (activity_id) {
-    query = query.eq("activity_id", activity_id);
-  }
-  if (start_date) {
-    query = query.gte("start_date", start_date);
-  }
-  if (end_date) {
-    query = query.lte("end_date", end_date);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("Error listActivityAssignments:", error);
-    throw error;
-  }
-
-  return data || [];
 }
 
 /**
  * Crea una nueva asignación de actividad.
- * La constraint activity_assignments_no_overlap impedirá solapes
- * para el mismo tracker y tenant.
+ * Nota: si tienes una constraint anti-solapes, Supabase devolverá error si choca.
  */
 export async function createActivityAssignment(payload) {
-  const tenantId = await getCurrentTenantId();
-  const { tracker_user_id, activity_id, start_date, end_date } = payload || {};
+  try {
+    const tenantId = getTenantIdOrThrow();
 
-  if (!tracker_user_id || !activity_id || !start_date) {
-    throw new Error("tracker, actividad y fecha de inicio son obligatorios");
+    const { tracker_user_id, activity_id, start_date, end_date } = payload || {};
+    if (!tracker_user_id || !activity_id || !start_date) {
+      return wrap(null, errMsg("tracker, actividad y fecha de inicio son obligatorios"));
+    }
+
+    const insertRow = {
+      tenant_id: tenantId,
+      tracker_user_id,
+      activity_id,
+      start_date,
+      end_date: end_date || null,
+    };
+
+    const { data, error } = await supabase
+      .from("activity_assignments")
+      .insert(insertRow)
+      .select("*")
+      .maybeSingle();
+
+    if (error) return wrap(null, errMsg(error, "Error createActivityAssignment"));
+
+    return wrap(data || null, null);
+  } catch (e) {
+    return wrap(null, errMsg(e, "Error createActivityAssignment"));
   }
-
-  const insertRow = {
-    tenant_id: tenantId,
-    tracker_user_id,
-    activity_id,
-    start_date,
-    end_date: end_date || null,
-  };
-
-  const { data, error } = await supabase
-    .from("activity_assignments")
-    .insert(insertRow)
-    .select("*")
-    .maybeSingle();
-
-  if (error) {
-    console.error("Error createActivityAssignment:", error);
-    throw error;
-  }
-
-  return data;
 }
 
 /**
  * Actualiza una asignación de actividad.
+ * Tenant-safe: no permite mover de tenant, y filtra por tenant_id.
  */
 export async function updateActivityAssignment(id, patch) {
-  if (!id) throw new Error("updateActivityAssignment requiere id");
+  try {
+    const tenantId = getTenantIdOrThrow();
+    if (!id) return wrap(null, errMsg("updateActivityAssignment requiere id"));
 
-  const updateRow = {};
-  ["tracker_user_id", "activity_id", "start_date", "end_date"].forEach(
-    (field) => {
-      if (typeof patch[field] !== "undefined") {
+    const updateRow = {};
+    ["tracker_user_id", "activity_id", "start_date", "end_date"].forEach((field) => {
+      if (typeof (patch || {})[field] !== "undefined") {
         updateRow[field] = patch[field] || null;
       }
+    });
+
+    if (Object.keys(updateRow).length === 0) {
+      return wrap(null, errMsg("No hay campos que actualizar en updateActivityAssignment"));
     }
-  );
 
-  if (Object.keys(updateRow).length === 0) {
-    throw new Error("No hay campos que actualizar en updateActivityAssignment");
+    // Seguridad: jamás permitir cambiar tenant_id desde UI
+    delete updateRow.tenant_id;
+
+    const { data, error } = await supabase
+      .from("activity_assignments")
+      .update(updateRow)
+      .eq("id", id)
+      .eq("tenant_id", tenantId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) return wrap(null, errMsg(error, "Error updateActivityAssignment"));
+
+    return wrap(data || null, null);
+  } catch (e) {
+    return wrap(null, errMsg(e, "Error updateActivityAssignment"));
   }
-
-  const { data, error } = await supabase
-    .from("activity_assignments")
-    .update(updateRow)
-    .eq("id", id)
-    .select("*")
-    .maybeSingle();
-
-  if (error) {
-    console.error("Error updateActivityAssignment:", error);
-    throw error;
-  }
-
-  return data;
 }
 
 /**
  * Elimina una asignación de actividad (DELETE real).
- * Si prefieres soft-delete, aquí se puede adaptar.
+ * Tenant-safe: filtra por tenant_id.
  */
 export async function deleteActivityAssignment(id) {
-  if (!id) throw new Error("deleteActivityAssignment requiere id");
+  try {
+    const tenantId = getTenantIdOrThrow();
+    if (!id) return wrap(null, errMsg("deleteActivityAssignment requiere id"));
 
-  const { error } = await supabase
-    .from("activity_assignments")
-    .delete()
-    .eq("id", id);
+    const { error } = await supabase
+      .from("activity_assignments")
+      .delete()
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
 
-  if (error) {
-    console.error("Error deleteActivityAssignment:", error);
-    throw error;
+    if (error) return wrap(null, errMsg(error, "Error deleteActivityAssignment"));
+
+    return wrap(true, null);
+  } catch (e) {
+    return wrap(null, errMsg(e, "Error deleteActivityAssignment"));
   }
-
-  return true;
 }
