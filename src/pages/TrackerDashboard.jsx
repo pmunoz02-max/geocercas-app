@@ -66,7 +66,6 @@ function toLatLngStrict(coord) {
 }
 
 // Devuelve array de "polígonos", cada uno como un ring (outer) en formato [ [lat,lng], ... ]
-// (Mantiene tu enfoque: primer anillo / outer ring; suficiente para visibilidad + bounds)
 function normalizeGeoJSONToPolygons(input) {
   const polygons = [];
   if (!input) return polygons;
@@ -149,7 +148,6 @@ function MapDiagnostics({ setDiag }) {
   return null;
 }
 
-// Helper: decide fit con pad para evitar falsos positivos de intersección
 function shouldFitToBounds(map, bounds) {
   try {
     if (!map || !bounds?.isValid?.()) return false;
@@ -161,8 +159,6 @@ function shouldFitToBounds(map, bounds) {
   }
 }
 
-// ✅ FIT inteligente: si la geocerca NO está dentro del viewport actual -> fitBounds
-// + FIX: el botón/fitsignal solo fuerza cuando cambia (no "fit eterno")
 function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewportComputed }) {
   const map = useMap();
   const lastFitSignalRef = useRef(0);
@@ -190,7 +186,6 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
 
     if (!bounds) return;
 
-    // expone bounds a UI
     onBoundsComputed?.(bounds);
 
     try {
@@ -207,9 +202,6 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
             if (v2?.isValid?.()) onViewportComputed?.(v2);
           } catch {}
         }, 50);
-      } else {
-        const v = map.getBounds?.();
-        if (v?.isValid?.()) onViewportComputed?.(v);
       }
     } catch {
       // ignore
@@ -319,19 +311,19 @@ export default function TrackerDashboard() {
       .map((user_id) => ({ user_id }));
 
     setAssignmentTrackers(uniqTrackers);
-
     setDiag((d) => ({ ...d, assignmentsRows: rows.length, trackersFound: uniqTrackers.length }));
   }, [todayStrUtc]);
 
-  // ✅ FIX UNIVERSAL: traer geocercas desde tabla `geofences` filtrando active=true
-  // (No dependemos de que v_geofences_ui exponga active)
+  // ✅ FIX DEFINITIVO: Filtrar active=true en tabla geofences, pero GeoJSON canónico desde v_geofences_ui
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
 
-    const geofenceIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
+    const assignedIds = Array.from(
+      new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
+    );
 
-    if (!geofenceIds.length) {
+    if (!assignedIds.length) {
       setGeofenceRows([]);
       setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
       setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: null, polysComputed: 0 });
@@ -341,12 +333,37 @@ export default function TrackerDashboard() {
       return;
     }
 
-    const { data, error } = await supabase
+    // (1) IDs activos (para evitar geocercas corruptas/inactivas)
+    const { data: activeRows, error: activeErr } = await supabase
       .from("geofences")
-      .select("id, org_id, name, geojson, active")
+      .select("id")
       .eq("org_id", currentOrgId)
       .eq("active", true)
-      .in("id", geofenceIds);
+      .in("id", assignedIds);
+
+    if (activeErr) {
+      setDiag((d) => ({ ...d, lastGeofencesError: activeErr.message || String(activeErr) }));
+      setGeofenceRows([]);
+      setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: false, polysComputed: 0 });
+      return;
+    }
+
+    const activeIds = Array.from(new Set((activeRows || []).map((r) => r?.id).filter(Boolean).map(String)));
+
+    if (!activeIds.length) {
+      setGeofenceRows([]);
+      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
+      setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: true, polysComputed: 0 });
+      setGeofenceBoundsText("—");
+      return;
+    }
+
+    // (2) GeoJSON canónico desde v_geofences_ui (sale de geom)
+    const { data, error } = await supabase
+      .from("v_geofences_ui")
+      .select("id, org_id, name, geojson, geom_type")
+      .eq("org_id", currentOrgId)
+      .in("id", activeIds);
 
     if (error) {
       setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error) }));
@@ -360,8 +377,7 @@ export default function TrackerDashboard() {
       id: r.id,
       name: r.name || r.id,
       geojson: r.geojson,
-      geom_type: null, // no lo necesitamos aquí; tu debug lo muestra como string igual
-      active: r.active ?? true,
+      geom_type: r.geom_type || null,
     }));
 
     const polysCount = normalized.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
@@ -388,12 +404,11 @@ export default function TrackerDashboard() {
     setGeoDbg({
       rows: normalized.length,
       firstType,
-      geomType: "—",
+      geomType: first?.geom_type ?? null,
       parseOk,
       polysComputed: firstPolys,
     });
 
-    // 🔥 fit inicial
     setFitSignal((x) => x + 1);
   }, []);
 
@@ -425,7 +440,6 @@ export default function TrackerDashboard() {
       const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
       const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
-
       setDiag((d) => ({ ...d, lastFromIso: fromIso, lastTargetCount: allowedTrackerIds.length }));
 
       if (!allowedTrackerIds.length) {
