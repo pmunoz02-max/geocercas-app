@@ -1,23 +1,20 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.14 FINAL (Feb 2026) + i18n (ES/EN/FR)
+// Asignaciones v2.15 FINAL (Feb 2026) + i18n (ES/EN/FR)
 // - Lectura canónica: v_tracker_assignments_ui
 // - Escritura: RPC admin_upsert_tracker_assignment_v1
-// - ✅ Migrado a DatePickerField (HTML nativo + icono) para consistencia y WebView/TWA
-// - ✅ Fechas date-only (YYYY-MM-DD) coherentes con start_date/end_date
-// - Fix permanente: fuerza visibilidad (Geocerca/Inicio/Fin) ante CSS/herencia/ancho 0
+// - ✅ Geofences SOLO active=true
+// - ✅ Botón ELIMINAR (lógico) = desactivar + cerrar hoy
+// - ✅ UX: por defecto muestra SOLO asignaciones ACTIVAS (las inactivas no estorban)
 // - DEBUG: ?debug=1
-// - ✅ FIX Feb-2026: selector de geofences SOLO active=true (no mostrar inactive)
-// - ✅ FIX Feb-2026: vuelve botón ELIMINAR (soft-delete lógico = desactivar + end_date=hoy)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
 import { useTranslation } from "react-i18next";
 
-// ✅ DatePicker reutilizable (HTML nativo + icono)
 import DatePickerField from "../components/ui/DatePickerField";
 
-const ESTADOS = ["todos", "activa", "inactiva"];
+const ESTADOS = ["activa", "todos", "inactiva"];
 
 function shortId(uuid) {
   if (!uuid) return "";
@@ -29,7 +26,6 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
-// Convierte "YYYY-MM-DD" (o Date/string) a Date para mostrar en tabla (dd/mm/yyyy)
 function parseDateOnlyLoose(v) {
   if (!v) return null;
   if (v instanceof Date) return isNaN(v) ? null : v;
@@ -65,11 +61,9 @@ function plusDaysYYYYMMDD(days) {
 
 function isDateRangeInvalid(startDate, endDate) {
   if (!startDate || !endDate) return false;
-  // YYYY-MM-DD permite comparación lexicográfica segura
   return startDate > endDate;
 }
 
-// Traducción con fallback si el key no existe (i18next suele devolver el key literal)
 function tSafe(t, key, fallback) {
   const v = t(key);
   if (!v) return fallback;
@@ -98,22 +92,28 @@ export default function AsignacionesPage() {
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
 
-  // ✅ Ahora son strings "YYYY-MM-DD" (coherente con DB/RPC)
   const [startDate, setStartDate] = useState(todayYYYYMMDD());
   const [endDate, setEndDate] = useState(plusDaysYYYYMMDD(365));
   const [active, setActive] = useState(true);
 
-  const [estadoFilter, setEstadoFilter] = useState("todos");
+  // ✅ UX: por defecto SOLO activas para que lo “eliminado” no estorbe
+  const [estadoFilter, setEstadoFilter] = useState("activa");
+
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
   const [dateRangeError, setDateRangeError] = useState("");
 
-  // ✅ Validación rango (solo si ambos existen)
   useEffect(() => {
     if (isDateRangeInvalid(startDate, endDate)) {
-      setDateRangeError(tSafe(t, "asignaciones.messages.invalidDatesRange", tSafe(t, "asignaciones.messages.invalidDates", "Rango de fechas inválido")));
+      setDateRangeError(
+        tSafe(
+          t,
+          "asignaciones.messages.invalidDatesRange",
+          tSafe(t, "asignaciones.messages.invalidDates", "Rango de fechas inválido")
+        )
+      );
     } else {
       setDateRangeError("");
     }
@@ -164,7 +164,6 @@ export default function AsignacionesPage() {
 
       setGeofenceOptions((g || []).map((x) => ({ id: x.id, label: x.name })));
 
-      // Si la geofence seleccionada ya no está activa, limpiamos selección
       if (selectedGeofenceId) {
         const stillExists = (g || []).some((x) => String(x.id) === String(selectedGeofenceId));
         if (!stillExists) setSelectedGeofenceId("");
@@ -231,6 +230,10 @@ export default function AsignacionesPage() {
       if (rpcErr) throw rpcErr;
 
       setSuccess(tSafe(t, "asignaciones.banner.saved", "Guardado"));
+
+      // ✅ al guardar, volvemos a vista “activa”
+      setEstadoFilter("activa");
+
       setSelectedPersonalId("");
       setSelectedGeofenceId("");
       setStartDate(todayYYYYMMDD());
@@ -245,14 +248,13 @@ export default function AsignacionesPage() {
     const base = rows || [];
     if (estadoFilter === "activa") return base.filter((r) => r?.active === true);
     if (estadoFilter === "inactiva") return base.filter((r) => r?.active === false);
-    return base;
+    return base; // "todos"
   }, [rows, estadoFilter]);
 
   async function toggleActive(row) {
     setError(null);
     setSuccess(null);
 
-    // row.start_date / row.end_date vienen como date; garantizamos YYYY-MM-DD para RPC
     const start = String(row?.start_date || "").slice(0, 10);
     const end = String(row?.end_date || "").slice(0, 10);
     if (!start || !end) return setError(tSafe(t, "asignaciones.messages.toggleInvalidDates", "Fechas inválidas"));
@@ -276,7 +278,6 @@ export default function AsignacionesPage() {
     }
   }
 
-  // ✅ ELIMINAR lógico (universal): desactivar + end_date=hoy (sin delete físico)
   async function deleteAssignment(row) {
     setError(null);
     setSuccess(null);
@@ -290,7 +291,6 @@ export default function AsignacionesPage() {
 
     if (!window.confirm(confirmMsg)) return;
 
-    // Garantizamos rango válido y cerramos hoy
     const start = String(row?.start_date || "").slice(0, 10);
     const endCurrent = String(row?.end_date || "").slice(0, 10);
     if (!start) return setError(tSafe(t, "asignaciones.messages.toggleInvalidDates", "Fechas inválidas"));
@@ -298,10 +298,7 @@ export default function AsignacionesPage() {
     const today = todayYYYYMMDD();
     let end = today;
 
-    // Si start > today, end debe ser start para mantener rango válido
     if (start > end) end = start;
-
-    // Si existía un end anterior más temprano, respetarlo (no extender)
     if (endCurrent && endCurrent < end) end = endCurrent;
 
     try {
@@ -317,6 +314,10 @@ export default function AsignacionesPage() {
       if (rpcErr) throw rpcErr;
 
       setSuccess(tSafe(t, "asignaciones.banner.deleted", "Asignación eliminada"));
+
+      // ✅ CLAVE: que desaparezca de la UI sin estorbar
+      setEstadoFilter("activa");
+
       await loadAll();
     } catch (e) {
       setError(e?.message || String(e));
@@ -494,7 +495,9 @@ export default function AsignacionesPage() {
             </table>
 
             <div className="mt-2 text-xs text-gray-500">
-              {tSafe(t, "asignaciones.table.showing", "Mostrando {{shown}} de {{total}}").replace("{{shown}}", String(filteredRows.length)).replace("{{total}}", String(rows.length))}
+              {tSafe(t, "asignaciones.table.showing", "Mostrando {{shown}} de {{total}}")
+                .replace("{{shown}}", String(filteredRows.length))
+                .replace("{{total}}", String(rows.length))}
             </div>
 
             {debug ? (
