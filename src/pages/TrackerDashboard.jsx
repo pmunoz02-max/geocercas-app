@@ -49,36 +49,36 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
-// ---------------- Robust polygon normalization (UNIVERSAL) ----------------
+// ---------------- GeoJSON -> Leaflet Polygon (canonical) ----------------
 function toLatLng(coord) {
   if (!coord) return null;
-
-  // GeoJSON: [lng, lat] o [lat, lng]
   if (Array.isArray(coord) && coord.length >= 2) {
     const a = Number(coord[0]);
     const b = Number(coord[1]);
     if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
 
-    // si parece [lng,lat]
+    // GeoJSON típico [lng,lat]
     if (Math.abs(a) <= 180 && Math.abs(b) <= 90) return [b, a];
-    // si parece [lat,lng]
+    // fallback [lat,lng]
     if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return [a, b];
-
     return null;
   }
-
-  // Objeto {lat,lng}
   if (typeof coord === "object" && coord !== null) {
     const lat = Number(coord.lat);
     const lng = Number(coord.lng);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
-
   return null;
 }
 
-function normalizeGeoJSONToPolygons(obj) {
+function normalizeGeoJSONToPolygons(input) {
   const polygons = [];
+  if (!input) return polygons;
+
+  let obj = input;
+  if (typeof input === "string") {
+    try { obj = JSON.parse(input); } catch { return polygons; }
+  }
 
   const pushRing = (ring) => {
     if (!Array.isArray(ring)) return;
@@ -88,119 +88,24 @@ function normalizeGeoJSONToPolygons(obj) {
 
   const handleGeometry = (g) => {
     if (!g || typeof g !== "object") return;
-
-    // Caso: geometry sin type pero con coordinates
-    if (!g.type && Array.isArray(g.coordinates)) {
-      // intenta inferir
-      const coords = g.coordinates;
-      const isMulti = Array.isArray(coords?.[0]?.[0]?.[0]);
-      if (isMulti) {
-        (coords || []).forEach((poly) => pushRing(poly?.[0]));
-      } else {
-        pushRing(coords?.[0]);
-      }
-      return;
+    if (g.type === "Polygon") {
+      pushRing(g.coordinates?.[0]);
+    } else if (g.type === "MultiPolygon") {
+      (g.coordinates || []).forEach((poly) => pushRing(poly?.[0]));
     }
-
-    if (g.type === "Polygon") pushRing(g.coordinates?.[0]);
-    if (g.type === "MultiPolygon") (g.coordinates || []).forEach((poly) => pushRing(poly?.[0]));
   };
 
-  // FeatureCollection
   if (obj?.type === "FeatureCollection") {
-    (obj.features || []).forEach((f) => handleGeometry(f?.geometry || f));
+    (obj.features || []).forEach((f) => handleGeometry(f?.geometry));
     return polygons;
   }
-
-  // Feature
   if (obj?.type === "Feature") {
-    handleGeometry(obj.geometry || obj);
+    handleGeometry(obj.geometry);
     return polygons;
   }
-
-  // Geometry directo
-  if (obj?.type || obj?.coordinates) {
-    handleGeometry(obj);
-  }
+  if (obj?.type) handleGeometry(obj);
 
   return polygons;
-}
-
-/**
- * normalizeGeofenceToPolygons(input)
- * Acepta:
- * - GeoJSON / Feature / FC
- * - string JSON
- * - array coords: [[lng,lat],...], [[lat,lng],...]
- * - array de rings / arrays anidados
- */
-function normalizeGeofenceToPolygons(input) {
-  const result = [];
-  if (!input) return result;
-
-  // string -> JSON
-  if (typeof input === "string") {
-    try {
-      return normalizeGeofenceToPolygons(JSON.parse(input));
-    } catch {
-      return result;
-    }
-  }
-
-  // GeoJSON-like object
-  if (typeof input === "object" && input?.type) {
-    return normalizeGeoJSONToPolygons(input);
-  }
-
-  // object sin type pero con geometry/coordenadas
-  if (typeof input === "object" && input?.geometry) {
-    return normalizeGeoJSONToPolygons(input.geometry);
-  }
-  if (typeof input === "object" && Array.isArray(input?.coordinates)) {
-    return normalizeGeoJSONToPolygons(input);
-  }
-
-  // Array coords (ring simple)
-  if (Array.isArray(input)) {
-    // Caso: ring simple [[x,y],...]
-    const looksRing = input.every(
-      (c) =>
-        Array.isArray(c) ||
-        (c && typeof c === "object" && "lat" in c && "lng" in c)
-    );
-
-    if (looksRing) {
-      const poly = input.map(toLatLng).filter(Boolean);
-      if (poly.length > 2) result.push(poly);
-      return result;
-    }
-
-    // Caso: array de items (rings, geojsons, etc.)
-    input.forEach((item) => {
-      if (!item) return;
-      if (typeof item === "string") {
-        try {
-          result.push(...normalizeGeofenceToPolygons(JSON.parse(item)));
-        } catch {
-          // ignore
-        }
-        return;
-      }
-      if (typeof item === "object" && item?.type) {
-        result.push(...normalizeGeoJSONToPolygons(item));
-        return;
-      }
-      // fallback: tratar item como ring
-      if (Array.isArray(item)) {
-        const poly = item.map(toLatLng).filter(Boolean);
-        if (poly.length > 2) result.push(poly);
-      }
-    });
-
-    return result;
-  }
-
-  return result;
 }
 
 // ---------------- Map diagnostics ----------------
@@ -247,27 +152,6 @@ function MapDiagnostics({ setDiag }) {
   return null;
 }
 
-// ---------------- Multi-source geofence fetch ----------------
-const GEOFENCE_SOURCES = [
-  { table: "v_geofences_ui", idCol: "id", nameCols: ["name"], geoCols: ["geojson"] },
-  { table: "geofences", idCol: "id", nameCols: ["name"], geoCols: ["polygon_geojson", "geojson"] },
-  { table: "geocercas", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geometry", "polygon", "geom"] },
-];
-
-function pickFirstNonNull(obj, keys) {
-  for (const k of keys) if (obj && obj[k] != null) return { value: obj[k], used: k };
-  return { value: null, used: null };
-}
-
-function safeSample(v, max = 220) {
-  try {
-    const s = typeof v === "string" ? v : JSON.stringify(v);
-    return s.length > max ? s.slice(0, max) + "…" : s;
-  } catch {
-    return String(v ?? "");
-  }
-}
-
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -286,28 +170,25 @@ export default function TrackerDashboard() {
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
 
+  // geofences canónica: SOLO vista
   const [geofenceRows, setGeofenceRows] = useState([]);
 
   const [geoDbg, setGeoDbg] = useState({
-    sourceUsed: null,
-    fetchCount: 0,
+    rows: 0,
+    field: "geojson",
     firstId: null,
     firstName: null,
     firstType: null,
-    firstKeys: null,
-    firstIsString: false,
-    firstStrLen: 0,
+    geomType: null,
     parseOk: null,
     polysComputed: 0,
-    rawFieldUsed: null,
     sample: null,
-    hint: null,
   });
 
   const geofencePolygons = useMemo(() => {
     const out = [];
     for (const g of geofenceRows || []) {
-      const polys = normalizeGeofenceToPolygons(g.geo);
+      const polys = normalizeGeoJSONToPolygons(g.geojson);
       polys.forEach((p, i) => out.push({ geofenceId: g.id, name: g.name || g.id, positions: p, idx: i }));
     }
     return out;
@@ -342,6 +223,7 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
+    // Open-ended vigencia
     const orVigencia =
       `and(start_date.is.null,end_date.is.null),` +
       `and(start_date.is.null,end_date.gte.${todayStrUtc}),` +
@@ -377,107 +259,83 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
 
-    const geofenceIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
+    const geofenceIds = Array.from(
+      new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
+    );
 
     if (!geofenceIds.length) {
       setGeofenceRows([]);
       setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
-      setGeoDbg((g) => ({ ...g, fetchCount: 0, sourceUsed: null, hint: null }));
+      setGeoDbg((g) => ({ ...g, rows: 0, polysComputed: 0, parseOk: null }));
       return;
     }
 
-    const errors = [];
+    // ✅ CANÓNICO: vista desde geom PostGIS
+    const { data, error } = await supabase
+      .from("v_geofences_ui")
+      .select("id, org_id, name, geojson, geom_type")
+      .eq("org_id", currentOrgId)
+      .in("id", geofenceIds);
 
-    for (const src of GEOFENCE_SOURCES) {
-      const selectCols = [src.idCol, ...src.nameCols, "org_id", ...src.geoCols].join(", ");
-
-      const { data, error } = await supabase
-        .from(src.table)
-        .select(selectCols)
-        .eq("org_id", currentOrgId)
-        .in(src.idCol, geofenceIds);
-
-      if (error) {
-        errors.push(`${src.table}: ${error.message || String(error)}`);
-        continue;
-      }
-
-      const raw = Array.isArray(data) ? data : [];
-      if (!raw.length) continue;
-
-      const normalizedRows = raw.map((r) => {
-        const pickedName = pickFirstNonNull(r, src.nameCols).value;
-        const pickedGeo = pickFirstNonNull(r, src.geoCols);
-        return {
-          id: r?.[src.idCol],
-          name: pickedName || r?.[src.idCol],
-          geo: pickedGeo.value,
-          _src: src.table,
-          _geoField: pickedGeo.used,
-        };
-      });
-
-      const first = normalizedRows[0] || null;
-
-      // debug detallado aunque falle
-      let firstType = null;
-      let firstKeys = null;
-      let firstIsString = false;
-      let firstStrLen = 0;
-      let parseOk = null;
-
-      if (first?.geo != null) {
-        firstIsString = typeof first.geo === "string";
-        firstStrLen = firstIsString ? String(first.geo).length : 0;
-        try {
-          const obj = firstIsString ? JSON.parse(first.geo) : first.geo;
-          firstType = obj?.type ?? null;
-          firstKeys = obj && typeof obj === "object" ? Object.keys(obj).slice(0, 16).join(",") : null;
-          parseOk = true;
-        } catch {
-          parseOk = false;
-        }
-      }
-
-      const polysCount = normalizedRows.reduce((acc, g) => acc + normalizeGeofenceToPolygons(g.geo).length, 0);
-      const firstPolys = normalizeGeofenceToPolygons(first?.geo).length;
-
-      setGeoDbg({
-        sourceUsed: src.table,
-        fetchCount: normalizedRows.length,
-        firstId: first?.id ?? null,
-        firstName: first?.name ?? null,
-        firstType,
-        firstKeys,
-        firstIsString,
-        firstStrLen,
-        parseOk,
-        polysComputed: firstPolys,
-        rawFieldUsed: first?._geoField ?? null,
-        sample: safeSample(first?.geo),
-        hint: polysCount > 0 ? null : "El campo viene en formato no-GeoJSON o ring/array; se intenta normalizar. Revisa sample/keys.",
-      });
-
-      if (polysCount <= 0) {
-        errors.push(`${src.table}: filas=${normalizedRows.length} pero 0 polígonos (geoField=${normalizedRows[0]?._geoField || "?"})`);
-        continue;
-      }
-
-      setGeofenceRows(normalizedRows);
-      setDiag((d) => ({ ...d, geofencesFound: normalizedRows.length, geofencePolys: polysCount }));
+    if (error) {
+      setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error) }));
+      setGeofenceRows([]);
+      setGeoDbg((g) => ({ ...g, rows: 0, polysComputed: 0, parseOk: false }));
       return;
     }
 
-    setGeofenceRows([]);
-    setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, lastGeofencesError: errors.join(" | ") }));
+    const rows = Array.isArray(data) ? data : [];
 
-    setGeoDbg((g) => ({
-      ...g,
-      sourceUsed: null,
-      fetchCount: 0,
-      polysComputed: 0,
-      hint: "No se obtuvo GeoJSON renderizable. Revisa el formato real de polygon_geojson/geojson (sample).",
+    // filtra solo geojson válido
+    const normalized = rows.map((r) => ({
+      id: r.id,
+      name: r.name || r.id,
+      geojson: r.geojson,
+      geom_type: r.geom_type || null,
     }));
+
+    const polysCount = normalized.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
+
+    setGeofenceRows(normalized);
+    setDiag((d) => ({ ...d, geofencesFound: normalized.length, geofencePolys: polysCount }));
+
+    const first = normalized[0] || null;
+    let firstType = null;
+    let parseOk = null;
+    let sample = null;
+    let firstPolys = 0;
+
+    if (first?.geojson != null) {
+      try {
+        const obj = typeof first.geojson === "string" ? JSON.parse(first.geojson) : first.geojson;
+        firstType = obj?.type ?? null;
+        parseOk = true;
+        sample = JSON.stringify(obj)?.slice(0, 220);
+      } catch {
+        parseOk = false;
+        sample = String(first.geojson)?.slice(0, 220);
+      }
+      firstPolys = normalizeGeoJSONToPolygons(first.geojson).length;
+    }
+
+    setGeoDbg({
+      rows: normalized.length,
+      field: "geojson",
+      firstId: first?.id ?? null,
+      firstName: first?.name ?? null,
+      firstType,
+      geomType: first?.geom_type ?? null,
+      parseOk,
+      polysComputed: firstPolys,
+      sample,
+    });
+
+    if (normalized.length > 0 && polysCount === 0) {
+      setDiag((d) => ({
+        ...d,
+        lastGeofencesError: "v_geofences_ui: filas>0 pero 0 polígonos (geojson no Polygon/MultiPolygon)",
+      }));
+    }
   }, []);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
@@ -616,7 +474,7 @@ export default function TrackerDashboard() {
     <div className="p-3 md:p-6 space-y-3">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold">Tracker Dashboard (DEBUG MAP)</h1>
+          <h1 className="text-xl md:text-2xl font-semibold">Tracker Dashboard</h1>
           <div className="text-[11px] text-slate-500">
             Org: <span className="font-mono">{String(orgId || "—")}</span>
           </div>
@@ -680,19 +538,9 @@ export default function TrackerDashboard() {
           <b>assignErr</b>: {diag.lastAssignmentsError || "—"} | <b>geoErr</b>: {diag.lastGeofencesError || "—"} | <b>posErr</b>: {diag.lastPositionsError || "—"}
         </div>
 
-        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>geoDbg</b>: src={String(geoDbg.sourceUsed || "—")}, fetchCount={geoDbg.fetchCount}, field={String(geoDbg.rawFieldUsed)}, firstType={String(geoDbg.firstType)}, parseOk={String(geoDbg.parseOk)}, polysComputed={geoDbg.polysComputed}
-        </div>
-
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500 break-all">
-          <b>sample</b>: {geoDbg.sample || "—"}
+          <b>geoDbg</b>: rows={geoDbg.rows} geom_type={String(geoDbg.geomType)} geojson_type={String(geoDbg.firstType)} polys(first)={geoDbg.polysComputed}
         </div>
-
-        {geoDbg.hint && (
-          <div className="col-span-2 md:col-span-6 text-[11px] text-amber-700">
-            <b>HINT</b>: {geoDbg.hint}
-          </div>
-        )}
       </div>
 
       <div className="rounded-lg border bg-white overflow-hidden" style={{ height: 520, minHeight: 420 }}>
@@ -710,7 +558,7 @@ export default function TrackerDashboard() {
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
           />
 
-          {/* Geofences */}
+          {/* Geofences (CANÓNICO) */}
           {geofencePolygons.map((g) => (
             <Polygon key={`${g.geofenceId}-${g.idx}`} positions={g.positions} pathOptions={{ weight: 2, fillOpacity: 0.18 }}>
               <Tooltip sticky>{g.name}</Tooltip>
