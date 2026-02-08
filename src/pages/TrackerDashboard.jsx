@@ -85,6 +85,11 @@ function normalizeGeoJSONToPolygons(input) {
   let obj = input;
 
   if (typeof input === "string") {
+    // si parece WKB/hex (geometry PostGIS), no es GeoJSON
+    const s = input.trim();
+    const looksHex = /^[0-9A-Fa-f]+$/.test(s) && s.length > 20;
+    if (looksHex) return polygons;
+
     try {
       obj = JSON.parse(input);
     } catch {
@@ -166,6 +171,28 @@ function MapDiagnostics({ setDiag }) {
   return null;
 }
 
+// ---------------- Multi-source geofence fetch ----------------
+const GEOFENCE_SOURCES = [
+  // vistas comunes (si existen) que ya exponen geojson listo
+  { table: "v_geofences_ui", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geometry_geojson", "geo"] },
+  { table: "v_geocercas_ui", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geometry_geojson", "geo"] },
+
+  // tablas comunes
+  { table: "geofences", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geo"] },
+  { table: "geocercas", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geo"] },
+
+  // fallback (si solo hay geometry PostGIS, esto no se podrá dibujar sin vista)
+  { table: "geofences", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geom", "geometry"] },
+  { table: "geocercas", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geom", "geometry"] },
+];
+
+function pickFirstNonNull(obj, keys) {
+  for (const k of keys) {
+    if (obj && obj[k] != null) return { value: obj[k], used: k };
+  }
+  return { value: null, used: null };
+}
+
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -186,11 +213,11 @@ export default function TrackerDashboard() {
   const [positions, setPositions] = useState([]);
 
   // geofences canónica (robusto)
-  // guardamos: { id, name, geo }
+  // guardamos: { id, name, geo, _src, _geoField }
   const [geofenceRows, setGeofenceRows] = useState([]);
 
-  // DEBUG HARD: snapshot del primer geojson
   const [geoDbg, setGeoDbg] = useState({
+    sourceUsed: null,
     fetchCount: 0,
     firstId: null,
     firstName: null,
@@ -201,6 +228,7 @@ export default function TrackerDashboard() {
     parseOk: null,
     polysComputed: 0,
     rawFieldUsed: null,
+    hint: null,
   });
 
   const geofencePolygons = useMemo(() => {
@@ -241,18 +269,20 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
-    // ✅ Rango vigente con soporte para NULLs (open-ended)
-    // start_date <= today OR start_date IS NULL
-    // end_date >= today OR end_date IS NULL
-    const q = supabase
+    // NOTA: PostgREST solo permite UN parámetro or= (encadenar .or() puede pisarse)
+    // Hacemos la condición vigente con una sola .or() agrupada.
+    const orVigencia =
+      `and(start_date.is.null,end_date.is.null),` +
+      `and(start_date.is.null,end_date.gte.${todayStrUtc}),` +
+      `and(start_date.lte.${todayStrUtc},end_date.is.null),` +
+      `and(start_date.lte.${todayStrUtc},end_date.gte.${todayStrUtc})`;
+
+    const { data, error } = await supabase
       .from("tracker_assignments")
       .select("tracker_user_id, geofence_id, org_id, active, start_date, end_date")
       .eq("org_id", currentOrgId)
       .eq("active", true)
-      .or(`start_date.is.null,start_date.lte.${todayStrUtc}`)
-      .or(`end_date.is.null,end_date.gte.${todayStrUtc}`);
-
-    const { data, error } = await q;
+      .or(orVigencia);
 
     if (error) {
       console.error("[TrackerDashboard] tracker_assignments error", error);
@@ -288,85 +318,125 @@ export default function TrackerDashboard() {
     if (!geofenceIds.length) {
       setGeofenceRows([]);
       setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
-      setGeoDbg((g) => ({ ...g, fetchCount: 0 }));
+      setGeoDbg((g) => ({ ...g, fetchCount: 0, sourceUsed: null, hint: null }));
       return;
     }
 
-    // ✅ CANÓNICO: geofences (no geocercas)
-    // Robusto: algunas instalaciones exponen geojson/geom_geojson/geom/geometry
-    const { data, error } = await supabase
-      .from("geofences")
-      .select("id, name, nombre, org_id, geojson, geom_geojson, geom, geometry")
-      .eq("org_id", currentOrgId)
-      .in("id", geofenceIds);
-
-    console.log("[TrackerDashboard] geofences fetched:", { count: (data || []).length, error });
-
-    if (error) {
-      setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error) }));
-      setGeofenceRows([]);
-      setGeoDbg((g) => ({ ...g, fetchCount: 0, parseOk: false }));
-      return;
-    }
-
-    const raw = Array.isArray(data) ? data : [];
-
-    const normalizedRows = raw.map((r) => {
-      // elegir campo de geometría disponible (universal)
-      let geo = null;
-      let used = null;
-
-      if (r?.geojson != null) { geo = r.geojson; used = "geojson"; }
-      else if (r?.geom_geojson != null) { geo = r.geom_geojson; used = "geom_geojson"; }
-      else if (r?.geom != null) { geo = r.geom; used = "geom"; }
-      else if (r?.geometry != null) { geo = r.geometry; used = "geometry"; }
-
-      return {
-        id: r.id,
-        name: r.name || r.nombre || r.id,
-        geo,
-        _geoField: used,
-      };
-    });
-
-    setGeofenceRows(normalizedRows);
-
-    const polysCount = normalizedRows.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geo).length, 0);
-    setDiag((d) => ({ ...d, geofencesFound: normalizedRows.length, geofencePolys: polysCount }));
-
-    const first = normalizedRows[0] || null;
-    let firstType = null;
-    let firstKeys = null;
-    let firstIsString = false;
-    let firstStrLen = 0;
-    let parseOk = null;
-    let polysComputed = 0;
-
-    if (first?.geo != null) {
-      firstIsString = typeof first.geo === "string";
-      firstStrLen = firstIsString ? first.geo.length : 0;
+    // intentamos múltiples fuentes y elegimos la primera que produzca polígonos
+    const errors = [];
+    for (const src of GEOFENCE_SOURCES) {
       try {
-        const obj = firstIsString ? JSON.parse(first.geo) : first.geo;
-        firstType = obj?.type ?? null;
-        firstKeys = obj && typeof obj === "object" ? Object.keys(obj).slice(0, 12).join(",") : null;
-        parseOk = true;
-      } catch {
-        parseOk = false;
+        const selectCols = [
+          src.idCol,
+          ...src.nameCols,
+          "org_id",
+          ...src.geoCols,
+        ].join(", ");
+
+        const { data, error } = await supabase
+          .from(src.table)
+          .select(selectCols)
+          .eq("org_id", currentOrgId)
+          .in(src.idCol, geofenceIds);
+
+        if (error) {
+          errors.push(`${src.table}: ${error.message || String(error)}`);
+          continue;
+        }
+
+        const raw = Array.isArray(data) ? data : [];
+        if (!raw.length) {
+          // no hay filas en esta fuente, probamos otra
+          continue;
+        }
+
+        const normalizedRows = raw.map((r) => {
+          const pickedName = pickFirstNonNull(r, src.nameCols).value;
+          const pickedGeo = pickFirstNonNull(r, src.geoCols);
+          return {
+            id: r?.[src.idCol],
+            name: pickedName || r?.[src.idCol],
+            geo: pickedGeo.value,
+            _src: src.table,
+            _geoField: pickedGeo.used,
+          };
+        });
+
+        const polysCount = normalizedRows.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geo).length, 0);
+
+        // si esta fuente no genera polígonos, probamos la siguiente
+        if (polysCount <= 0) {
+          // pero si al menos hay filas, probablemente es geometry no-geojson
+          // guardamos hint y seguimos
+          errors.push(`${src.table}: filas=${normalizedRows.length} pero 0 polígonos (geoField=${normalizedRows[0]?._geoField || "?"})`);
+          continue;
+        }
+
+        // ✅ esta fuente sirve
+        setGeofenceRows(normalizedRows);
+        setDiag((d) => ({ ...d, geofencesFound: normalizedRows.length, geofencePolys: polysCount }));
+
+        const first = normalizedRows[0] || null;
+        let firstType = null;
+        let firstKeys = null;
+        let firstIsString = false;
+        let firstStrLen = 0;
+        let parseOk = null;
+        let polysComputed = 0;
+
+        if (first?.geo != null) {
+          firstIsString = typeof first.geo === "string";
+          firstStrLen = firstIsString ? String(first.geo).length : 0;
+          try {
+            const obj = firstIsString ? JSON.parse(first.geo) : first.geo;
+            firstType = obj?.type ?? null;
+            firstKeys = obj && typeof obj === "object" ? Object.keys(obj).slice(0, 12).join(",") : null;
+            parseOk = true;
+          } catch {
+            parseOk = false;
+          }
+          polysComputed = normalizeGeoJSONToPolygons(first.geo).length;
+        }
+
+        setGeoDbg({
+          sourceUsed: src.table,
+          fetchCount: normalizedRows.length,
+          firstId: first?.id ?? null,
+          firstName: first?.name ?? null,
+          firstType,
+          firstKeys,
+          firstIsString,
+          firstStrLen,
+          parseOk,
+          polysComputed,
+          rawFieldUsed: first?._geoField ?? null,
+          hint: null,
+        });
+
+        return; // listo
+      } catch (e) {
+        errors.push(`${src.table}: ${e?.message || String(e)}`);
       }
-      polysComputed = normalizeGeoJSONToPolygons(first.geo).length;
     }
+
+    // si llegamos aquí, nada sirvió
+    setGeofenceRows([]);
+    setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, lastGeofencesError: errors.join(" | ") }));
 
     setGeoDbg({
-      fetchCount: normalizedRows.length,
-      firstId: first?.id ?? null,
-      firstName: first?.name ?? null,
-      firstType,
-      firstKeys,
-      firstIsString,
-      firstStrLen,
-      parseOk,
-      polysComputed,
-      rawFieldUsed: first?._geoField ?? null,
+      sourceUsed: null,
+      fetchCount: 0,
+      firstId: null,
+      firstName: null,
+      firstType: null,
+      firstKeys: null,
+      firstIsString: false,
+      firstStrLen: 0,
+      parseOk: false,
+      polysComputed: 0,
+      rawFieldUsed: null,
+      hint:
+        "No se obtuvo GeoJSON renderizable. Si tu geometría está en PostGIS (geom/geometry), crea una vista (v_geofences_ui o v_geocercas_ui) que exponga ST_AsGeoJSON(geom) como geojson.",
     });
   }, []);
 
@@ -585,11 +655,14 @@ export default function TrackerDashboard() {
         </div>
 
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>geoDbg</b>: fetchCount={geoDbg.fetchCount}, field={String(geoDbg.rawFieldUsed)}, firstType={String(geoDbg.firstType)}, parseOk={String(geoDbg.parseOk)}, polysComputed={geoDbg.polysComputed}
+          <b>geoDbg</b>: src={String(geoDbg.sourceUsed || "—")}, fetchCount={geoDbg.fetchCount}, field={String(geoDbg.rawFieldUsed)}, firstType={String(geoDbg.firstType)}, parseOk={String(geoDbg.parseOk)}, polysComputed={geoDbg.polysComputed}
         </div>
-        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          firstId={String(geoDbg.firstId || "—")} | firstName={String(geoDbg.firstName || "—")} | isString={String(geoDbg.firstIsString)} | strLen={geoDbg.firstStrLen} | keys={String(geoDbg.firstKeys || "—")}
-        </div>
+
+        {geoDbg.hint && (
+          <div className="col-span-2 md:col-span-6 text-[11px] text-amber-700">
+            <b>HINT</b>: {geoDbg.hint}
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border bg-white overflow-hidden" style={{ height: 520, minHeight: 420 }}>
@@ -607,7 +680,7 @@ export default function TrackerDashboard() {
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
           />
 
-          {/* Geofences (CANÓNICO) */}
+          {/* Geofences */}
           {geofencePolygons.map((g) => (
             <Polygon
               key={`${g.geofenceId}-${g.idx}`}
