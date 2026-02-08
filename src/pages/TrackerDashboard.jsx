@@ -14,6 +14,7 @@ import {
   useMap,
 } from "react-leaflet";
 
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const TIME_WINDOWS = [
@@ -49,26 +50,20 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
-// ---------------- GeoJSON -> Leaflet Polygon (canonical) ----------------
-function toLatLng(coord) {
+// ---------------- STRICT GeoJSON normalization (NO heuristics) ----------------
+// GeoJSON siempre es [lng, lat] => Leaflet espera [lat, lng]
+function toLatLngStrict(coord) {
   if (!coord) return null;
-  if (Array.isArray(coord) && coord.length >= 2) {
-    const a = Number(coord[0]);
-    const b = Number(coord[1]);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  if (!Array.isArray(coord) || coord.length < 2) return null;
 
-    // GeoJSON típico [lng,lat]
-    if (Math.abs(a) <= 180 && Math.abs(b) <= 90) return [b, a];
-    // fallback [lat,lng]
-    if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return [a, b];
-    return null;
-  }
-  if (typeof coord === "object" && coord !== null) {
-    const lat = Number(coord.lat);
-    const lng = Number(coord.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
-  }
-  return null;
+  const lng = Number(coord[0]);
+  const lat = Number(coord[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  // sanity check
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  return [lat, lng];
 }
 
 function normalizeGeoJSONToPolygons(input) {
@@ -82,12 +77,13 @@ function normalizeGeoJSONToPolygons(input) {
 
   const pushRing = (ring) => {
     if (!Array.isArray(ring)) return;
-    const poly = ring.map(toLatLng).filter(Boolean);
+    const poly = ring.map(toLatLngStrict).filter(Boolean);
     if (poly.length > 2) polygons.push(poly);
   };
 
   const handleGeometry = (g) => {
     if (!g || typeof g !== "object") return;
+
     if (g.type === "Polygon") {
       pushRing(g.coordinates?.[0]);
     } else if (g.type === "MultiPolygon") {
@@ -152,6 +148,36 @@ function MapDiagnostics({ setDiag }) {
   return null;
 }
 
+// ---------------- Fit bounds when geofence loads (so you ALWAYS see it) ----------------
+function FitToGeofences({ geofencePolygons, positionsCount }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+    if (!geofencePolygons?.length) return;
+
+    // Si hay posiciones, no forzamos el fit (para no “pelear” con el usuario)
+    if ((positionsCount || 0) > 0) return;
+
+    try {
+      const all = [];
+      geofencePolygons.forEach((g) => {
+        (g.positions || []).forEach((p) => all.push(p));
+      });
+      if (all.length < 3) return;
+
+      const bounds = L.latLngBounds(all);
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [24, 24] });
+      }
+    } catch {
+      // ignore
+    }
+  }, [map, geofencePolygons, positionsCount]);
+
+  return null;
+}
+
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -170,19 +196,16 @@ export default function TrackerDashboard() {
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
 
-  // geofences canónica: SOLO vista
   const [geofenceRows, setGeofenceRows] = useState([]);
 
   const [geoDbg, setGeoDbg] = useState({
     rows: 0,
-    field: "geojson",
     firstId: null,
     firstName: null,
     firstType: null,
     geomType: null,
     parseOk: null,
     polysComputed: 0,
-    sample: null,
   });
 
   const geofencePolygons = useMemo(() => {
@@ -223,7 +246,6 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
-    // Open-ended vigencia
     const orVigencia =
       `and(start_date.is.null,end_date.is.null),` +
       `and(start_date.is.null,end_date.gte.${todayStrUtc}),` +
@@ -259,9 +281,7 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
 
-    const geofenceIds = Array.from(
-      new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
-    );
+    const geofenceIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
 
     if (!geofenceIds.length) {
       setGeofenceRows([]);
@@ -270,7 +290,6 @@ export default function TrackerDashboard() {
       return;
     }
 
-    // ✅ CANÓNICO: vista desde geom PostGIS
     const { data, error } = await supabase
       .from("v_geofences_ui")
       .select("id, org_id, name, geojson, geom_type")
@@ -285,8 +304,6 @@ export default function TrackerDashboard() {
     }
 
     const rows = Array.isArray(data) ? data : [];
-
-    // filtra solo geojson válido
     const normalized = rows.map((r) => ({
       id: r.id,
       name: r.name || r.id,
@@ -302,7 +319,6 @@ export default function TrackerDashboard() {
     const first = normalized[0] || null;
     let firstType = null;
     let parseOk = null;
-    let sample = null;
     let firstPolys = 0;
 
     if (first?.geojson != null) {
@@ -310,32 +326,21 @@ export default function TrackerDashboard() {
         const obj = typeof first.geojson === "string" ? JSON.parse(first.geojson) : first.geojson;
         firstType = obj?.type ?? null;
         parseOk = true;
-        sample = JSON.stringify(obj)?.slice(0, 220);
       } catch {
         parseOk = false;
-        sample = String(first.geojson)?.slice(0, 220);
       }
       firstPolys = normalizeGeoJSONToPolygons(first.geojson).length;
     }
 
     setGeoDbg({
       rows: normalized.length,
-      field: "geojson",
       firstId: first?.id ?? null,
       firstName: first?.name ?? null,
       firstType,
       geomType: first?.geom_type ?? null,
       parseOk,
       polysComputed: firstPolys,
-      sample,
     });
-
-    if (normalized.length > 0 && polysCount === 0) {
-      setDiag((d) => ({
-        ...d,
-        lastGeofencesError: "v_geofences_ui: filas>0 pero 0 polígonos (geojson no Polygon/MultiPolygon)",
-      }));
-    }
   }, []);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
@@ -552,15 +557,20 @@ export default function TrackerDashboard() {
           whenCreated={(map) => { try { map.invalidateSize(); } catch {} }}
         >
           <MapDiagnostics setDiag={setDiag} />
+          <FitToGeofences geofencePolygons={geofencePolygons} positionsCount={positions?.length || 0} />
 
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
           />
 
-          {/* Geofences (CANÓNICO) */}
+          {/* Geofences */}
           {geofencePolygons.map((g) => (
-            <Polygon key={`${g.geofenceId}-${g.idx}`} positions={g.positions} pathOptions={{ weight: 2, fillOpacity: 0.18 }}>
+            <Polygon
+              key={`${g.geofenceId}-${g.idx}`}
+              positions={g.positions}
+              pathOptions={{ weight: 3, fillOpacity: 0.12 }}
+            >
               <Tooltip sticky>{g.name}</Tooltip>
             </Polygon>
           ))}
