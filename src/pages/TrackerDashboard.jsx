@@ -1,5 +1,5 @@
 // src/pages/TrackerDashboard.jsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -65,6 +65,8 @@ function toLatLngStrict(coord) {
   return [lat, lng];
 }
 
+// Devuelve array de "polígonos", cada uno como un ring (outer) en formato [ [lat,lng], ... ]
+// (Mantengo tu enfoque: primer anillo / outer ring; suficiente para visibilidad + bounds)
 function normalizeGeoJSONToPolygons(input) {
   const polygons = [];
   if (!input) return polygons;
@@ -147,8 +149,21 @@ function MapDiagnostics({ setDiag }) {
   return null;
 }
 
+// Helper: decide fit con pad para evitar falsos positivos de intersección
+function shouldFitToBounds(map, bounds) {
+  try {
+    if (!map || !bounds?.isValid?.()) return false;
+    const view = map.getBounds?.();
+    if (!view?.isValid?.()) return true;
+    // pad del target para hacer la prueba más robusta
+    return !view.intersects(bounds.pad(0.05));
+  } catch {
+    return true;
+  }
+}
+
 // ✅ FIT inteligente: si la geocerca NO está dentro del viewport actual -> fitBounds
-function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed }) {
+function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewportComputed }) {
   const map = useMap();
 
   const bounds = useMemo(() => {
@@ -165,24 +180,41 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed }) {
 
   useEffect(() => {
     if (!map) return;
+
+    // viewport debug siempre
+    try {
+      const v = map.getBounds?.();
+      if (v?.isValid?.()) onViewportComputed?.(v);
+    } catch {}
+
     if (!bounds) return;
 
     // expone bounds a UI
     onBoundsComputed?.(bounds);
 
-    // si fitSignal cambia (botón), siempre fit
-    // si no, solo fit si no intersecta viewport actual
+    // fit: si botón presionado => siempre fit; si no => fit sólo si fuera de view
     try {
-      const view = map.getBounds?.();
-      const shouldFit = fitSignal > 0 ? true : !(view && view.isValid && view.isValid() && view.intersects(bounds));
+      const force = fitSignal > 0;
+      const doFit = force ? true : shouldFitToBounds(map, bounds);
 
-      if (shouldFit) {
+      if (doFit) {
         map.fitBounds(bounds, { padding: [24, 24] });
+        // Actualiza viewport después del fit (para debug UI)
+        setTimeout(() => {
+          try {
+            const v2 = map.getBounds?.();
+            if (v2?.isValid?.()) onViewportComputed?.(v2);
+          } catch {}
+        }, 50);
+      } else {
+        // igual refresca viewport por debug
+        const v = map.getBounds?.();
+        if (v?.isValid?.()) onViewportComputed?.(v);
       }
     } catch {
       // ignore
     }
-  }, [map, bounds, fitSignal, onBoundsComputed]);
+  }, [map, bounds, fitSignal, onBoundsComputed, onViewportComputed]);
 
   return null;
 }
@@ -193,6 +225,8 @@ export default function TrackerDashboard() {
 
   const { currentOrg } = useAuth();
   const orgId = typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
+
+  const mapRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -242,6 +276,8 @@ export default function TrackerDashboard() {
   });
 
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
+  const [viewportText, setViewportText] = useState("—");
+  const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
 
   const todayStrUtc = useMemo(() => {
@@ -298,6 +334,8 @@ export default function TrackerDashboard() {
       setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0 }));
       setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: null, polysComputed: 0 });
       setGeofenceBoundsText("—");
+      setViewportText("—");
+      setIntersectsText("—");
       return;
     }
 
@@ -497,6 +535,10 @@ export default function TrackerDashboard() {
           <div className="text-[11px] text-slate-500">
             Bounds geocerca: <span className="font-mono">{geofenceBoundsText}</span>
           </div>
+          <div className="text-[11px] text-slate-500">
+            Viewport mapa: <span className="font-mono">{viewportText}</span> | intersects:{" "}
+            <span className="font-mono">{intersectsText}</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
@@ -575,9 +617,17 @@ export default function TrackerDashboard() {
           zoom={12}
           style={{ height: "100%", width: "100%" }}
           scrollWheelZoom
-          whenCreated={(map) => { try { map.invalidateSize(); } catch {} }}
+          whenCreated={(map) => {
+            mapRef.current = map;
+            try { map.invalidateSize(); } catch {}
+          }}
+          whenReady={() => {
+            // fuerza invalidación al estar listo (por layouts dinámicos)
+            try { mapRef.current?.invalidateSize?.(); } catch {}
+          }}
         >
           <MapDiagnostics setDiag={setDiag} />
+
           <FitIfOutOfView
             geofencePolygons={geofencePolygons}
             fitSignal={fitSignal}
@@ -588,8 +638,31 @@ export default function TrackerDashboard() {
                 setGeofenceBoundsText(
                   `SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`
                 );
+
+                // intersects info (si ya hay viewport)
+                const v = mapRef.current?.getBounds?.();
+                if (v?.isValid?.()) {
+                  setIntersectsText(String(v.intersects(b.pad(0.05))));
+                }
               } catch {
                 setGeofenceBoundsText("—");
+              }
+            }}
+            onViewportComputed={(v) => {
+              try {
+                const sw = v.getSouthWest();
+                const ne = v.getNorthEast();
+                setViewportText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
+
+                // intersects info (si ya hay bounds)
+                const all = [];
+                geofencePolygons.forEach((g) => (g.positions || []).forEach((p) => all.push(p)));
+                if (all.length >= 3) {
+                  const b = L.latLngBounds(all);
+                  if (b?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
+                }
+              } catch {
+                setViewportText("—");
               }
             }}
           />
@@ -603,7 +676,12 @@ export default function TrackerDashboard() {
             <Polygon
               key={`${g.geofenceId}-${g.idx}`}
               positions={g.positions}
-              pathOptions={{ weight: 4, fillOpacity: 0.10 }}
+              pathOptions={{
+                color: "#2563eb",
+                weight: 4,
+                opacity: 1,
+                fillOpacity: 0.25,
+              }}
             >
               <Tooltip sticky>{g.name}</Tooltip>
             </Polygon>
