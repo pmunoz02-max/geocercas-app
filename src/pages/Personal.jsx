@@ -1,13 +1,13 @@
+// src/pages/Personal.jsx — i18n edition (CANÓNICO)
+// - Supabase-only, multi-org real
+// - Soft delete: oculta eliminados por defecto
+// - Toggle: "Incluir eliminados"
+// - Query con fallback: is_deleted o deleted_at (universal)
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 import { supabase } from "../lib/supabaseClient";
-
-/**
- * src/pages/Personal.jsx — i18n edition
- * - Mantiene tu lógica Supabase/RLS/orden universal
- * - Cambia TODOS los textos a t(...)
- */
 
 function cls(...a) {
   return a.filter(Boolean).join(" ");
@@ -65,10 +65,8 @@ function isDeletedRow(r) {
 
 function isVigenteActivaRow(r) {
   if (isDeletedRow(r)) return false;
-
   const vigente = r?.vigente !== false;
   const activo = r?.activo_bool === true || r?.activo === true;
-
   return vigente && activo;
 }
 
@@ -103,13 +101,11 @@ export default function Personal() {
   const { t } = useTranslation();
   const { loading, isAuthenticated, user, currentOrg, role, refreshContext } = useAuth();
 
-  // ✅ Rol efectivo (si AuthContext falla, lo resolvemos acá)
+  // ✅ Rol efectivo (fallback)
   const [effectiveRole, setEffectiveRole] = useState(role ?? null);
   const [roleBusy, setRoleBusy] = useState(false);
 
-  useEffect(() => {
-    setEffectiveRole(role ?? null);
-  }, [role]);
+  useEffect(() => setEffectiveRole(role ?? null), [role]);
 
   async function resolveRoleFallback() {
     if (!isAuthenticated || !user?.id || !currentOrg?.id) return;
@@ -125,9 +121,7 @@ export default function Personal() {
         .eq("org_id", currentOrg.id)
         .limit(1)
         .maybeSingle();
-
       if (aurErr) throw aurErr;
-
       if (aur?.role) {
         setEffectiveRole(aur.role);
         refreshContext?.();
@@ -141,9 +135,7 @@ export default function Personal() {
         .eq("org_id", currentOrg.id)
         .limit(1)
         .maybeSingle();
-
       if (memErr) throw memErr;
-
       if (mem?.role) {
         setEffectiveRole(mem.role);
         refreshContext?.();
@@ -173,6 +165,9 @@ export default function Personal() {
   const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // ✅ Por defecto: NO mostrar eliminados
+  const [includeDeleted, setIncludeDeleted] = useState(false);
 
   const [openNew, setOpenNew] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -221,21 +216,51 @@ export default function Personal() {
     return null;
   }
 
+  // Query universal con fallback: is_deleted o deleted_at
+  async function fetchPersonal(orgId) {
+    let qy = supabase.from("personal").select("*").eq("org_id", orgId).limit(500);
+
+    const or = buildOrFilter(q);
+    if (or) qy = qy.or(or);
+
+    if (!includeDeleted) {
+      // Intento 1: is_deleted=false
+      const { data, error } = await qy.eq("is_deleted", false);
+      if (!error) return data || [];
+
+      // Si la columna no existe, fallback a deleted_at is null
+      const msg = String(error?.message || "");
+      const code = String(error?.code || "");
+      const looksLikeMissingColumn = code === "42703" || msg.toLowerCase().includes("column") || msg.toLowerCase().includes("is_deleted");
+      if (!looksLikeMissingColumn) throw error;
+
+      const q2 = supabase.from("personal").select("*").eq("org_id", orgId).limit(500);
+      const or2 = buildOrFilter(q);
+      const q2Final = or2 ? q2.or(or2) : q2;
+
+      const { data: data2, error: error2 } = await q2Final.is("deleted_at", null);
+      if (error2) throw error2;
+      return data2 || [];
+    }
+
+    // Incluye eliminados
+    const { data, error } = await qy;
+    if (error) throw error;
+    return data || [];
+  }
+
   async function load() {
     setMsg("");
     if (!isAuthenticated || !currentOrg?.id) return;
 
     setBusy(true);
     try {
-      let qy = supabase.from("personal").select("*").eq("org_id", currentOrg.id).limit(500);
+      const data = await fetchPersonal(currentOrg.id);
 
-      const or = buildOrFilter(q);
-      if (or) qy = qy.or(or);
+      // Seguridad extra: si NO incluye eliminados, filtrar por cliente también
+      const cleaned = includeDeleted ? data : (data || []).filter((r) => !isDeletedRow(r));
 
-      const { data, error } = await qy;
-      if (error) throw error;
-
-      setRows(sortPersonal(Array.isArray(data) ? data : []));
+      setRows(sortPersonal(Array.isArray(cleaned) ? cleaned : []));
     } catch (e) {
       console.error("[Personal] load error", e);
       setMsg(e?.message || t("personal.errorLoad", { defaultValue: "No se pudo cargar el listado." }));
@@ -250,7 +275,7 @@ export default function Personal() {
     };
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, isAuthenticated, currentOrg?.id]);
+  }, [loading, isAuthenticated, currentOrg?.id, includeDeleted]);
 
   async function onSave() {
     if (!canEdit) return;
@@ -307,7 +332,6 @@ export default function Personal() {
         .eq("id", row.id)
         .eq("org_id", currentOrg.id);
       if (error) throw error;
-
       await load();
     } catch (e) {
       console.error("[Personal] toggle vigente error", e);
@@ -321,17 +345,27 @@ export default function Personal() {
     if (!canEdit) return;
 
     const ok = window.confirm(
-      t("personal.confirmDelete", { defaultValue: "¿Eliminar este registro?" })
+      t("personal.confirmDelete", { defaultValue: "¿Está seguro que desea eliminar este registro? (soft delete)" })
     );
     if (!ok) return;
 
     setMsg("");
     setBusy(true);
     try {
-      if ("is_deleted" in row) {
+      // Soft delete preferido
+      // - Si existe is_deleted -> update is_deleted=true
+      // - Si no existe -> fallback a delete físico (legacy)
+      if ("is_deleted" in row || typeof row?.is_deleted !== "undefined") {
         const { error } = await supabase
           .from("personal")
           .update({ is_deleted: true, vigente: false })
+          .eq("id", row.id)
+          .eq("org_id", currentOrg.id);
+        if (error) throw error;
+      } else if ("deleted_at" in row || typeof row?.deleted_at !== "undefined") {
+        const { error } = await supabase
+          .from("personal")
+          .update({ deleted_at: new Date().toISOString(), vigente: false })
           .eq("id", row.id)
           .eq("org_id", currentOrg.id);
         if (error) throw error;
@@ -344,7 +378,13 @@ export default function Personal() {
         if (error) throw error;
       }
 
-      await load();
+      // ✅ UX: si NO estamos incluyendo eliminados, sácalo de la UI inmediatamente
+      if (!includeDeleted) {
+        setRows((prev) => prev.filter((x) => x.id !== row.id));
+      } else {
+        // Si los mostramos, refrescamos para que cambie el badge a "Eliminado"
+        await load();
+      }
     } catch (e) {
       console.error("[Personal] delete error", e);
       setMsg(e?.message || t("personal.errorDelete", { defaultValue: "No se pudo eliminar." }));
@@ -353,7 +393,9 @@ export default function Personal() {
     }
   }
 
-  if (loading) return <div className="p-6 text-slate-600">{t("common.actions.loading", { defaultValue: "Cargando…" })}</div>;
+  if (loading) {
+    return <div className="p-6 text-slate-600">{t("common.actions.loading", { defaultValue: "Cargando…" })}</div>;
+  }
 
   if (!isAuthenticated || !user) {
     return (
@@ -421,7 +463,16 @@ export default function Personal() {
           onChange={(e) => setQ(e.target.value)}
         />
 
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={includeDeleted}
+              onChange={(e) => setIncludeDeleted(e.target.checked)}
+            />
+            {t("personal.includeDeleted", { defaultValue: "Incluir eliminados" })}
+          </label>
+
           <button
             type="button"
             className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800 transition disabled:opacity-60"
