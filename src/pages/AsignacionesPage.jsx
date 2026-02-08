@@ -3,7 +3,7 @@
 // - Lectura canónica: v_tracker_assignments_ui
 // - Escritura: RPC admin_upsert_tracker_assignment_v1
 // - ✅ Migrado a DatePickerField (HTML nativo + icono) para consistencia y WebView/TWA
-// - ✅ Fechas date-only (YYYY-MM-DD) coherentes con start_date/end_date (sin perder “hora” que igual no se guardaba)
+// - ✅ Fechas date-only (YYYY-MM-DD) coherentes con start_date/end_date
 // - Fix permanente: fuerza visibilidad (Geocerca/Inicio/Fin) ante CSS/herencia/ancho 0
 // - DEBUG: ?debug=1
 
@@ -103,7 +103,9 @@ export default function AsignacionesPage() {
   // ✅ Validación rango (solo si ambos existen)
   useEffect(() => {
     if (isDateRangeInvalid(startDate, endDate)) {
-      setDateRangeError(t("asignaciones.messages.invalidDatesRange") || t("asignaciones.messages.invalidDates"));
+      setDateRangeError(
+        t("asignaciones.messages.invalidDatesRange") || t("asignaciones.messages.invalidDates")
+      );
     } else {
       setDateRangeError("");
     }
@@ -115,10 +117,12 @@ export default function AsignacionesPage() {
     setError(null);
 
     try {
+      // 1) Personal: solo trackers válidos (user_id presente y no deleted)
       const { data: p, error: pErr } = await supabase
         .from("personal")
         .select("id, nombre, apellido, email, user_id, org_id, is_deleted")
         .eq("org_id", orgId);
+
       if (pErr) throw pErr;
 
       const ppl = (p || [])
@@ -140,20 +144,23 @@ export default function AsignacionesPage() {
       }
       setPersonalOptions(deduped);
 
+      // 2) Geofences canónicas
       const { data: g, error: gErr } = await supabase
         .from("geofences")
         .select("id, name, org_id, created_at")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
-      if (gErr) throw gErr;
 
+      if (gErr) throw gErr;
       setGeofenceOptions((g || []).map((x) => ({ id: x.id, label: x.name })));
 
+      // 3) Asignaciones del tracker (vista canónica)
       const { data: a, error: aErr } = await supabase
         .from("v_tracker_assignments_ui")
         .select("*")
         .eq("org_id", orgId)
         .order("created_at", { ascending: false });
+
       if (aErr) throw aErr;
 
       setRows(a || []);
@@ -202,6 +209,7 @@ export default function AsignacionesPage() {
         p_end_date: endDate,
         p_active: active,
       });
+
       if (rpcErr) throw rpcErr;
 
       setSuccess(t("asignaciones.banner.saved"));
@@ -226,7 +234,7 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccess(null);
 
-    // row.start_date / row.end_date vienen como date; garantizamos formato YYYY-MM-DD para RPC
+    // row.start_date / row.end_date vienen como date; garantizamos YYYY-MM-DD para RPC
     const start = String(row?.start_date || "").slice(0, 10);
     const end = String(row?.end_date || "").slice(0, 10);
     if (!start || !end) return setError(t("asignaciones.messages.toggleInvalidDates"));
@@ -240,6 +248,7 @@ export default function AsignacionesPage() {
         p_end_date: end,
         p_active: !row.active,
       });
+
       if (rpcErr) throw rpcErr;
 
       setSuccess(!row.active ? t("asignaciones.banner.activated") : t("asignaciones.banner.deactivated"));
@@ -330,11 +339,7 @@ export default function AsignacionesPage() {
           {t("common.actions.save")}
         </button>
 
-        {dateRangeError ? (
-          <div className="md:col-span-2 text-xs text-red-600">
-            {dateRangeError}
-          </div>
-        ) : null}
+        {dateRangeError ? <div className="md:col-span-2 text-xs text-red-600">{dateRangeError}</div> : null}
       </form>
 
       <div className="mt-6 bg-white border rounded p-4">
@@ -343,11 +348,7 @@ export default function AsignacionesPage() {
 
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">{t("asignaciones.filters.statusLabel")}</span>
-            <select
-              className="border rounded px-3 py-2"
-              value={estadoFilter}
-              onChange={(e) => setEstadoFilter(e.target.value)}
-            >
+            <select className="border rounded px-3 py-2" value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
               {ESTADOS.map((x) => (
                 <option key={x} value={x}>
                   {x === "todos"
@@ -385,8 +386,7 @@ export default function AsignacionesPage() {
 
               <tbody>
                 {filteredRows.map((r) => {
-                  const trackerText =
-                    r.tracker_label || r.tracker_name || r.tracker_email || shortId(r.tracker_user_id);
+                  const trackerText = r.tracker_label || r.tracker_name || r.tracker_email || shortId(r.tracker_user_id);
                   const geofenceText = r.geofence_name || shortId(r.geofence_id) || "—";
                   const startText = formatDateDDMMYYYY(r.start_date) || "—";
                   const endText = formatDateDDMMYYYY(r.end_date) || "—";
@@ -399,28 +399,19 @@ export default function AsignacionesPage() {
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span
-                          className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap"
-                          title={String(geofenceText)}
-                        >
+                        <span className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap" title={String(geofenceText)}>
                           {geofenceText}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span
-                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
-                          title={String(r.start_date)}
-                        >
+                        <span className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap" title={String(r.start_date)}>
                           {startText}
                         </span>
                       </td>
 
                       <td className="py-2 pr-3">
-                        <span
-                          className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap"
-                          title={String(r.end_date)}
-                        >
+                        <span className="inline-block min-w-[120px] text-gray-900 whitespace-nowrap" title={String(r.end_date)}>
                           {endText}
                         </span>
                       </td>
@@ -438,11 +429,7 @@ export default function AsignacionesPage() {
                       </td>
 
                       <td className="py-2 pr-3 text-right">
-                        <button
-                          type="button"
-                          className="border rounded px-3 py-1 hover:bg-gray-50"
-                          onClick={() => toggleActive(r)}
-                        >
+                        <button type="button" className="border rounded px-3 py-1 hover:bg-gray-50" onClick={() => toggleActive(r)}>
                           {r.active ? t("asignaciones.actions.deactivate") : t("asignaciones.actions.activate")}
                         </button>
                       </td>

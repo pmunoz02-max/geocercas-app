@@ -3,26 +3,29 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
-import {
-  enqueuePosition,
-  flushQueue as flushQueueCore,
-  getQueueStats,
-} from "../lib/trackerQueue";
+import { enqueuePosition, flushQueue as flushQueueCore, getQueueStats } from "../lib/trackerQueue";
 
 // Backend es la fuente de verdad: mínimo real permitido hoy
 const MIN_INTERVAL_SEC = 5 * 60; // 5 minutos
 const CAN_SEND_REFRESH_MS = 20_000; // refresco “barato” del guard
 
+function getActiveOrgIdFromStorage() {
+  try {
+    const v = localStorage.getItem("tg_current_org_id");
+    return v && String(v).trim() ? String(v).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Tracker() {
-  const { user } = useAuth();
+  const { user, currentOrg } = useAuth();
 
   const [isReady, setIsReady] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  );
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
 
-  // Intervalo efectivo (universal): viene del backend/assignments (vista canónica)
+  // Intervalo efectivo: viene del backend/assignments (vista canónica)
   const [intervalSec, setIntervalSec] = useState(MIN_INTERVAL_SEC);
 
   const [statusMessage, setStatusMessage] = useState("Preparando tracker...");
@@ -42,9 +45,11 @@ export default function Tracker() {
   const flushTimerRef = useRef(null);
   const lastFlushTsRef = useRef(0);
 
+  const orgId = currentOrg?.id || getActiveOrgIdFromStorage();
+
   const canOperate = useMemo(() => {
-    return Boolean(user?.id) && guard.checked && guard.ok;
-  }, [user?.id, guard.checked, guard.ok]);
+    return Boolean(user?.id) && Boolean(orgId) && guard.checked && guard.ok;
+  }, [user?.id, orgId, guard.checked, guard.ok]);
 
   function humanGuardReason(reason) {
     switch (reason) {
@@ -58,6 +63,8 @@ export default function Tracker() {
         return "No tienes asignaciones de geocercas (tracker_assignments).";
       case "no_active_assignments":
         return "Tus asignaciones existen, pero están inactivas.";
+      case "no_org":
+        return "No hay organización activa (tg_current_org_id).";
       default:
         return reason ? `No autorizado: ${reason}` : "No autorizado.";
     }
@@ -67,27 +74,19 @@ export default function Tracker() {
   async function refreshGuard(reason = "auto") {
     try {
       if (!user?.id) {
-        setGuard({
-          checked: true,
-          ok: false,
-          reason: "no_auth",
-          role: null,
-          total: 0,
-          active: 0,
-        });
+        setGuard({ checked: true, ok: false, reason: "no_auth", role: null, total: 0, active: 0 });
         return { ok: false, reason: "no_auth" };
+      }
+      if (!orgId) {
+        setGuard({ checked: true, ok: false, reason: "no_org", role: null, total: 0, active: 0 });
+        return { ok: false, reason: "no_org" };
       }
 
       const { data, error } = await supabase.rpc("rpc_tracker_can_send");
 
       if (error) {
         console.error("rpc_tracker_can_send error:", error);
-        setGuard((g) => ({
-          ...g,
-          checked: true,
-          ok: false,
-          reason: "rpc_error",
-        }));
+        setGuard((g) => ({ ...g, checked: true, ok: false, reason: "rpc_error" }));
         setStatusMessage("Error consultando permisos del tracker (rpc).");
         return { ok: false, reason: "rpc_error" };
       }
@@ -105,10 +104,7 @@ export default function Tracker() {
 
       setGuard(next);
 
-      if (!next.ok) {
-        setStatusMessage(`${humanGuardReason(next.reason)} (${reason})`);
-      }
-
+      if (!next.ok) setStatusMessage(`${humanGuardReason(next.reason)} (${reason})`);
       return { ok: next.ok, reason: next.reason };
     } catch (err) {
       console.error("refreshGuard exception:", err);
@@ -135,10 +131,12 @@ export default function Tracker() {
   async function loadIntervalFromAssignments() {
     try {
       if (!user?.id) return MIN_INTERVAL_SEC;
+      if (!orgId) return MIN_INTERVAL_SEC;
 
       const { data, error } = await supabase
         .from("v_tracker_assignments_ui")
-        .select("frequency_minutes, active")
+        .select("frequency_minutes, active, org_id")
+        .eq("org_id", orgId)
         .eq("tracker_user_id", user.id)
         .eq("active", true);
 
@@ -165,9 +163,8 @@ export default function Tracker() {
 
   async function sendPositionEdge(payload) {
     try {
-      const { data, error } = await supabase.functions.invoke("send_position", {
-        body: payload,
-      });
+      // Supabase Edge Function canónica
+      const { data, error } = await supabase.functions.invoke("send_position", { body: payload });
 
       if (error) {
         console.error("[send_position] error invoke:", error);
@@ -185,9 +182,7 @@ export default function Tracker() {
     try {
       if (!isOnline) {
         const stats = await updateQueueInfo();
-        setStatusMessage(
-          `Sin conexión. Cola pendiente: ${stats?.pending ?? queueInfo.pending} (motivo: ${reason})`
-        );
+        setStatusMessage(`Sin conexión. Cola pendiente: ${stats?.pending ?? queueInfo.pending} (motivo: ${reason})`);
         return;
       }
 
@@ -199,7 +194,8 @@ export default function Tracker() {
       setStatusMessage(`Enviando cola (${reason})...`);
 
       await flushQueueCore(async (item) => {
-        const res = await sendPositionEdge(item);
+        // Adjuntamos org_id siempre
+        const res = await sendPositionEdge({ ...item, org_id: orgId });
 
         if (res?.min_interval_ms) {
           const sec = Math.max(MIN_INTERVAL_SEC, Math.ceil(res.min_interval_ms / 1000));
@@ -284,14 +280,15 @@ export default function Tracker() {
       setStatusMessage("Preparando tracker...");
 
       if (!user?.id) {
-        setGuard({
-          checked: true,
-          ok: false,
-          reason: "no_auth",
-          role: null,
-          total: 0,
-          active: 0,
-        });
+        setGuard({ checked: true, ok: false, reason: "no_auth", role: null, total: 0, active: 0 });
+        setIsReady(true);
+        setIsTracking(false);
+        return;
+      }
+
+      if (!orgId) {
+        setGuard({ checked: true, ok: false, reason: "no_org", role: null, total: 0, active: 0 });
+        setStatusMessage(humanGuardReason("no_org"));
         setIsReady(true);
         setIsTracking(false);
         return;
@@ -312,21 +309,28 @@ export default function Tracker() {
     }
 
     boot();
-    return () => { cancelled = true; };
-  }, [user?.id]); // eslint-disable-line
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, orgId]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !orgId) return;
     const t = setInterval(() => refreshGuard("poll"), CAN_SEND_REFRESH_MS);
     return () => clearInterval(t);
-  }, [user?.id]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, orgId]);
 
   useEffect(() => {
     if (!isReady) return;
-    if (!user?.id) { setIsTracking(false); return; }
+    if (!user?.id || !orgId) {
+      setIsTracking(false);
+      return;
+    }
     if (!guard.checked) return;
     setIsTracking(guard.ok);
-  }, [isReady, user?.id, guard.checked, guard.ok]);
+  }, [isReady, user?.id, orgId, guard.checked, guard.ok]);
 
   useEffect(() => {
     if (!isTracking) {
@@ -353,7 +357,8 @@ export default function Tracker() {
       if (flushTimerRef.current) clearInterval(flushTimerRef.current);
       flushTimerRef.current = null;
     };
-  }, [isTracking, intervalSec, canOperate]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTracking, intervalSec, canOperate]);
 
   useEffect(() => {
     function handleOnline() {
@@ -372,7 +377,8 @@ export default function Tracker() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, []); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onlineLabel = isOnline ? "Online" : "Offline";
   const onlineBadgeClass = isOnline ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800";
@@ -388,6 +394,12 @@ export default function Tracker() {
         </p>
       )}
 
+      {orgId ? (
+        <p className="text-xs text-gray-500 mb-3">
+          Org activa: <span className="font-mono">{orgId}</span>
+        </p>
+      ) : null}
+
       <div className="border rounded-lg p-4 bg-white shadow-sm">
         <div className="flex justify-between items-center mb-3 gap-2">
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${onlineBadgeClass}`}>
@@ -398,23 +410,28 @@ export default function Tracker() {
             {guard.ok ? "Autorizado" : "Bloqueado"}
           </span>
 
-          <span className="text-xs text-gray-500">
-            Intervalo: {Math.round(intervalSec / 60)} min (mín. 5 min)
-          </span>
+          <span className="text-xs text-gray-500">Intervalo: {Math.round(intervalSec / 60)} min (mín. 5 min)</span>
         </div>
 
         <p className="text-sm text-gray-700 mb-2">{statusMessage}</p>
 
         <div className="text-xs text-gray-500 space-y-1">
-          <p><strong>Assignments:</strong> total {guard.total} / activos {guard.active}</p>
-          <p><strong>En cola:</strong> {queueInfo.pending ?? 0} posiciones</p>
+          <p>
+            <strong>Assignments:</strong> total {guard.total} / activos {guard.active}
+          </p>
+          <p>
+            <strong>En cola:</strong> {queueInfo.pending ?? 0} posiciones
+          </p>
 
           {queueInfo.lastSentAt && (
-            <p><strong>Último envío:</strong> {new Date(queueInfo.lastSentAt).toLocaleString()}</p>
+            <p>
+              <strong>Último envío:</strong> {new Date(queueInfo.lastSentAt).toLocaleString()}
+            </p>
           )}
 
           <p className="mt-2">
-            Tracker DB-driven: el backend decide si puedes enviar (roles + assignments). Este dispositivo muestra estado y nunca cierra sesión automáticamente.
+            Tracker DB-driven: el backend decide si puedes enviar (roles + assignments). Este dispositivo muestra estado y nunca
+            cierra sesión automáticamente.
           </p>
         </div>
       </div>

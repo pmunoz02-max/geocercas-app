@@ -8,6 +8,7 @@
 // - Lectura canónica desde v_asignaciones_ui (sin joins frágiles)
 // - Escritura en public.asignaciones usando geofence_id (NO geocerca_id)
 // - Soft-delete: is_deleted=true (+ deleted_at si existe)
+// - ✅ SIN FALLBACK A LEGACY (geocercas)
 // ============================================================
 
 import { supabase } from "./supabaseClient";
@@ -33,7 +34,8 @@ function errMsg(e, fallback = "Error") {
 
 // ============================================================
 // READ: bundle para UI (asignaciones + catálogos mínimos)
-// - Usa v_asignaciones_ui para traer label canónica sin mezclar org
+// - Usa v_asignaciones_ui canónica
+// - ✅ Solo geofences (geofence_id + geofence_name)
 // ============================================================
 export async function getAsignacionesBundle() {
   const orgId = getActiveOrgId();
@@ -49,7 +51,6 @@ export async function getAsignacionesBundle() {
       personal_id,
       org_people_id,
       activity_id,
-      geocerca_id,
       geofence_id,
       start_time,
       end_time,
@@ -66,9 +67,7 @@ export async function getAsignacionesBundle() {
 
       activity_name,
 
-      geofence_name,
-      geocerca_name,
-      geocerca_label_ui
+      geofence_name
     `
     )
     .eq("org_id", orgId)
@@ -81,7 +80,6 @@ export async function getAsignacionesBundle() {
 
 // ============================================================
 // CREATE: canónico (requiere personal_id + geofence_id + activity_id)
-// - geocerca_id queda solo legacy (no se usa)
 // ============================================================
 export async function createAsignacion(payload) {
   const orgId = getActiveOrgId();
@@ -92,14 +90,11 @@ export async function createAsignacion(payload) {
   }
 
   // Tenant-safe: forzamos org_id desde contexto
-  const insertPayload = {
-    ...payload,
-    org_id: orgId,
-  };
+  const insertPayload = { ...payload, org_id: orgId };
 
-  // Seguridad: no permitir que UI meta campos legacy que causen mezclas
-  delete insertPayload.tenant_id; // si quieres permitirlo, quita esta línea
-  delete insertPayload.geocerca_id;
+  // Seguridad: no permitir que UI meta campos que mezclen
+  delete insertPayload.tenant_id;
+  delete insertPayload.geocerca_id; // legacy fuera
 
   const { data, error } = await supabase
     .from("asignaciones")
@@ -142,7 +137,7 @@ export async function updateAsignacion(id, patch) {
   delete safePatch.tenant_id;
   delete safePatch.geocerca_id; // legacy fuera
 
-  // Si intentan dejar geofence_id null, lo bloqueamos (evita huérfanos canónicos)
+  // Evitar huérfanos canónicos
   if ("geofence_id" in safePatch && !safePatch.geofence_id) {
     return wrap(null, errMsg("geofence_id no puede ser null en asignaciones canónicas"));
   }
