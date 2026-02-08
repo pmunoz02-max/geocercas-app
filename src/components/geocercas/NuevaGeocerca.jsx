@@ -10,6 +10,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
 
+// ✅ Mantenemos imports (compat), pero YA escriben/leen de public.geofences
 import { listGeocercas, getGeocerca, upsertGeocerca, deleteGeocerca } from "../../lib/geocercasApi.js";
 
 const DATA_SOURCE = null; // 'geojson' | 'csv' | null
@@ -25,18 +26,27 @@ function normalizeLang(code) {
 }
 
 const PM_LANG = {
-  en: { name: "English", geoman: { draw: "Draw", edit: "Edit", drag: "Drag", cut: "Cut", removal: "Remove", rotate: "Rotate", snapping: "Snapping", pinning: "Pinning", actions: "Actions" },
+  en: {
+    name: "English",
+    geoman: { draw: "Draw", edit: "Edit", drag: "Drag", cut: "Cut", removal: "Remove", rotate: "Rotate", snapping: "Snapping", pinning: "Pinning", actions: "Actions" },
     tooltips: { placeMarker: "Click to place marker", firstVertex: "Click to place first vertex", continueLine: "Click to continue drawing", finishLine: "Click any existing marker to finish", finishPoly: "Click first marker to finish", finishRect: "Release to finish", startCircle: "Click and drag to draw circle", finishCircle: "Release to finish circle", edit: "Drag handles to edit", drag: "Drag layer to move", cut: "Drag to cut", remove: "Click to remove" },
     actions: { finish: "Finish", cancel: "Cancel", removeLastVertex: "Remove last vertex" },
-    buttonTitles: { drawPolygonButton: "Draw polygon", drawRectangleButton: "Draw rectangle", drawCircleButton: "Draw circle", drawMarkerButton: "Draw marker", drawCircleMarkerButton: "Draw circle marker", drawPolylineButton: "Draw polyline", drawTextButton: "Draw text", editButton: "Edit layers", dragButton: "Drag layers", cutButton: "Cut layers", deleteButton: "Delete layers", rotateButton: "Rotate layers", snappingButton: "Snapping", pinningButton: "Pinning" } },
-  es: { name: "Español", geoman: { draw: "Dibujar", edit: "Editar", drag: "Mover", cut: "Cortar", removal: "Eliminar", rotate: "Rotar", snapping: "Ajuste", pinning: "Fijar", actions: "Acciones" },
+    buttonTitles: { drawPolygonButton: "Draw polygon", drawRectangleButton: "Draw rectangle", drawCircleButton: "Draw circle", drawMarkerButton: "Draw marker", drawCircleMarkerButton: "Draw circle marker", drawPolylineButton: "Draw polyline", drawTextButton: "Draw text", editButton: "Edit layers", dragButton: "Drag layers", cutButton: "Cut layers", deleteButton: "Delete layers", rotateButton: "Rotate layers", snappingButton: "Snapping", pinningButton: "Pinning" },
+  },
+  es: {
+    name: "Español",
+    geoman: { draw: "Dibujar", edit: "Editar", drag: "Mover", cut: "Cortar", removal: "Eliminar", rotate: "Rotar", snapping: "Ajuste", pinning: "Fijar", actions: "Acciones" },
     tooltips: { placeMarker: "Haz clic para colocar un marcador", firstVertex: "Haz clic para colocar el primer vértice", continueLine: "Haz clic para seguir dibujando", finishLine: "Haz clic en un marcador para terminar", finishPoly: "Haz clic en el primer punto para cerrar", finishRect: "Suelta para terminar", startCircle: "Haz clic y arrastra para dibujar un círculo", finishCircle: "Suelta para terminar el círculo", edit: "Arrastra los puntos para editar", drag: "Arrastra la figura para mover", cut: "Arrastra para cortar", remove: "Haz clic para eliminar" },
     actions: { finish: "Finalizar", cancel: "Cancelar", removeLastVertex: "Eliminar último punto" },
-    buttonTitles: { drawPolygonButton: "Dibujar polígono", drawRectangleButton: "Dibujar rectángulo", drawCircleButton: "Dibujar círculo", drawMarkerButton: "Poner marcador", drawCircleMarkerButton: "Marcador circular", drawPolylineButton: "Dibujar línea", drawTextButton: "Texto", editButton: "Editar", dragButton: "Mover", cutButton: "Cortar", deleteButton: "Eliminar", rotateButton: "Rotar", snappingButton: "Ajuste", pinningButton: "Fijar" } },
-  fr: { name: "Français", geoman: { draw: "Dessiner", edit: "Modifier", drag: "Déplacer", cut: "Découper", removal: "Supprimer", rotate: "Rotation", snapping: "Accrochage", pinning: "Épingler", actions: "Actions" },
+    buttonTitles: { drawPolygonButton: "Dibujar polígono", drawRectangleButton: "Dibujar rectángulo", drawCircleButton: "Dibujar círculo", drawMarkerButton: "Poner marcador", drawCircleMarkerButton: "Marcador circular", drawPolylineButton: "Dibujar línea", drawTextButton: "Texto", editButton: "Editar", dragButton: "Mover", cutButton: "Cortar", deleteButton: "Eliminar", rotateButton: "Rotar", snappingButton: "Ajuste", pinningButton: "Fijar" },
+  },
+  fr: {
+    name: "Français",
+    geoman: { draw: "Dessiner", edit: "Modifier", drag: "Déplacer", cut: "Découper", removal: "Supprimer", rotate: "Rotation", snapping: "Accrochage", pinning: "Épingler", actions: "Actions" },
     tooltips: { placeMarker: "Cliquez pour placer un marqueur", firstVertex: "Cliquez pour placer le premier sommet", continueLine: "Cliquez pour continuer le dessin", finishLine: "Cliquez sur un marqueur existant pour terminer", finishPoly: "Cliquez sur le premier point pour fermer", finishRect: "Relâchez pour terminer", startCircle: "Cliquez et glissez pour dessiner un cercle", finishCircle: "Relâchez pour terminer le cercle", edit: "Faites glisser les poignées pour modifier", drag: "Faites glisser la forme pour déplacer", cut: "Glissez pour découper", remove: "Cliquez pour supprimer" },
     actions: { finish: "Terminer", cancel: "Annuler", removeLastVertex: "Supprimer le dernier point" },
-    buttonTitles: { drawPolygonButton: "Dessiner un polygone", drawRectangleButton: "Dessiner un rectangle", drawCircleButton: "Dessiner un cercle", drawMarkerButton: "Placer un marqueur", drawCircleMarkerButton: "Marqueur circulaire", drawPolylineButton: "Dessiner une ligne", drawTextButton: "Texte", editButton: "Modifier", dragButton: "Déplacer", cutButton: "Découper", deleteButton: "Supprimer", rotateButton: "Rotation", snappingButton: "Accrochage", pinningButton: "Épingler" } },
+    buttonTitles: { drawPolygonButton: "Dessiner un polygone", drawRectangleButton: "Dessiner un rectangle", drawCircleButton: "Dessiner un cercle", drawMarkerButton: "Placer un marqueur", drawCircleMarkerButton: "Marqueur circulaire", drawPolylineButton: "Dessiner une ligne", drawTextButton: "Texte", editButton: "Modifier", dragButton: "Déplacer", cutButton: "Découper", deleteButton: "Supprimer", rotateButton: "Rotation", snappingButton: "Accrochage", pinningButton: "Épingler" },
+  },
 };
 
 function applyGeomanLang(map, lang) {
@@ -158,13 +168,13 @@ function filterSoftDeleted(items) {
 function makeLocalKey(orgId, nombre) {
   const oid = String(orgId || "").trim();
   const nm = String(nombre || "").trim();
-  return `geocerca_${oid}_${nm}`;
+  return `geofence_${oid}_${nm}`;
 }
 
 function readLocalGeocercas(orgId) {
   const list = [];
   if (typeof window === "undefined") return list;
-  const prefix = `geocerca_${String(orgId || "").trim()}_`;
+  const prefix = `geofence_${String(orgId || "").trim()}_`;
   if (!orgId) return list;
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
@@ -172,7 +182,7 @@ function readLocalGeocercas(orgId) {
     if (!k.startsWith(prefix)) continue;
     try {
       const obj = JSON.parse(localStorage.getItem(k) || "{}");
-      const nombre = obj?.nombre || k.slice(prefix.length);
+      const nombre = obj?.nombre || obj?.name || k.slice(prefix.length);
       if (!isSoftDeletedName(nombre)) list.push({ key: k, nombre, source: "local" });
     } catch {}
   }
@@ -183,19 +193,20 @@ function mergeUniqueByNombre(items) {
   const seen = new Set();
   const unique = [];
   for (const g of items || []) {
-    const nm = String(g?.nombre || "").trim();
+    const nm = String(g?.nombre || g?.name || "").trim();
     if (!nm) continue;
-    if (seen.has(nm)) continue;
-    seen.add(nm);
+    const key = nm.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     unique.push({ ...g, nombre: nm });
   }
-  unique.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  unique.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
   return unique;
 }
 
 async function listGeofencesUnified({ orgId }) {
   try {
-    const apiItems = await listGeocercas({ orgId });
+    const apiItems = await listGeocercas({ orgId }); // ya viene desde geofences active=true
     const apiList = (apiItems || [])
       .map((r) => ({ id: r.id, nombre: r.nombre || r.name, source: "api" }))
       .filter((g) => !!g.nombre);
@@ -464,17 +475,18 @@ export default function NuevaGeocerca() {
       return;
     }
 
+    // ✅ guardamos SIEMPRE como FeatureCollection (consistente)
     const fc = { type: "FeatureCollection", features: [feature] };
 
     try {
-      // ✅ GUARDA EN DB CANÓNICA (public.geocercas) vía API corregida
       const saved = await upsertGeocerca({
         org_id: orgId,
         nombre: nm,
-        geojson: feature, // guardamos feature (o fc) según diseño; aquí feature es suficiente
+        geojson: fc,
+        active: true,
       });
 
-      // ✅ SOLO SI API OK, cache local (opcional, tenant-safe)
+      // Cache local opcional (tenant-safe)
       try {
         if (typeof window !== "undefined") {
           localStorage.setItem(
@@ -506,7 +518,6 @@ export default function NuevaGeocerca() {
       await refreshGeofenceList();
       showOk(t("geocercas.saved", { defaultValue: "Geocerca guardada." }));
     } catch (e) {
-      // si falla API, ahí sí puedes permitir fallback local explícito
       showErr(t("geocercas.saveError", { defaultValue: "No se pudo guardar en la nube. Revisa permisos/org y reintenta." }), e);
       try { await refreshGeofenceList(); } catch {}
     }
@@ -531,6 +542,7 @@ export default function NuevaGeocerca() {
       return;
     }
 
+    // optimista UI
     setGeofenceList((prev) => (prev || []).filter((g) => !names.includes(String(g?.nombre || "").trim())));
     setSelectedNames(() => new Set());
     setLastSelectedName(null);
@@ -538,7 +550,7 @@ export default function NuevaGeocerca() {
     setViewCentroid(null);
 
     try {
-      for (const id of idsToDelete) await deleteGeocerca(id);
+      for (const id of idsToDelete) await deleteGeocerca(id); // soft: active=false
 
       await refreshGeofenceList();
       clearCanvas();
@@ -581,14 +593,16 @@ export default function NuevaGeocerca() {
 
       if (!geo) { showErr(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON." })); return; }
 
-      setViewFeature(geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] });
-      setViewCentroid(centroidFeatureFromGeojson(geo));
+      const fc = geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
+
+      setViewFeature(fc);
+      setViewCentroid(centroidFeatureFromGeojson(fc));
       setViewId((x) => x + 1);
 
       if (mapRef.current) {
         try {
           mapRef.current.invalidateSize?.();
-          const bounds = L.geoJSON(geo).getBounds();
+          const bounds = L.geoJSON(fc).getBounds();
           if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
         } catch {}
       }

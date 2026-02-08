@@ -1,9 +1,10 @@
 // src/lib/geocercasApi.js
 // ============================================================
-// CANONICAL Geocercas client (TENANT-SAFE) — Feb 2026
-// ✅ Tabla canónica: public.geocercas  (NO geofences)
-// ✅ Columnas canónicas: org_id, nombre, geojson
-// ✅ org_id siempre resuelto (payload -> localStorage -> RPC -> tablas comunes)
+// CANONICAL Geofences client (TENANT-SAFE) — Feb 2026
+// ✅ Tabla canónica: public.geofences
+// ✅ org_id obligatorio, siempre filtrado
+// ✅ Soft-delete: active=false (no delete físico)
+// ✅ Mantiene exports legacy (listGeocercas/upsertGeocerca/etc) para compatibilidad UI
 // ============================================================
 
 import { supabase } from "./supabaseClient";
@@ -101,7 +102,7 @@ async function resolveOrgIdOrThrow(payload, userId) {
   if (fromLS) return fromLS;
 
   // RPC opcionales
-  const rpcNames = ["get_current_org_id", "current_org_id", "get_active_org_id"];
+  const rpcNames = ["get_current_org_id", "current_org_id", "get_active_org_id", "app.current_org_id"];
   for (const fn of rpcNames) {
     try {
       const { data, error } = await supabase.rpc(fn);
@@ -145,58 +146,93 @@ function buildPayload(payload = {}, orgId) {
 
   return {
     org_id: orgId,
-    nombre: nombre || null,
+    name: nombre || null,
     geojson,
+    active: payload?.active ?? true,
     updated_at: new Date().toISOString(),
   };
 }
 
 // ---------------------------
-// Exports compatibles con UI
+// Exports compatibles con UI (nombres legacy)
 // ---------------------------
 
-export async function listGeocercas({ orgId } = {}) {
+/**
+ * listGeocercas({ orgId })
+ * Devuelve SOLO geofences activas por defecto (active=true).
+ */
+export async function listGeocercas({ orgId, includeInactive = false } = {}) {
   const session = await requireAuth();
   const userId = session.user.id;
 
   const effectiveOrgId = orgId ? String(orgId).trim() : await resolveOrgIdOrThrow({}, userId);
 
-  const { data, error } = await supabase
-    .from("geocercas")
-    .select("id, org_id, nombre, geojson, created_at, updated_at")
+  let q = supabase
+    .from("geofences")
+    .select("id, org_id, name, geojson, active, created_at, updated_at")
     .eq("org_id", effectiveOrgId)
     .order("created_at", { ascending: false });
 
+  if (!includeInactive) q = q.eq("active", true);
+
+  const { data, error } = await q;
   if (error) throwNice(error);
-  return data || [];
+
+  // mapea a forma esperada por UI (nombre)
+  return (data || []).map((r) => ({
+    id: r.id,
+    org_id: r.org_id,
+    nombre: r.name,
+    name: r.name,
+    geojson: r.geojson,
+    active: r.active,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  }));
 }
 
 export async function listGeocercasForOrg(orgId) {
   return await listGeocercas({ orgId });
 }
 
-export async function getGeocerca({ id, orgId } = {}) {
+export async function getGeocerca({ id, orgId, includeInactive = true } = {}) {
   if (!id) throw new Error("getGeocerca requiere id");
 
   const session = await requireAuth();
   const userId = session.user.id;
   const effectiveOrgId = orgId ? String(orgId).trim() : await resolveOrgIdOrThrow({}, userId);
 
-  const { data, error } = await supabase
-    .from("geocercas")
-    .select("id, org_id, nombre, geojson, created_at, updated_at")
+  let q = supabase
+    .from("geofences")
+    .select("id, org_id, name, geojson, active, created_at, updated_at")
     .eq("id", id)
     .eq("org_id", effectiveOrgId)
     .maybeSingle();
 
+  // si NO quieres permitir ver inactivas, se controla aquí
+  if (!includeInactive) q = q.eq("active", true);
+
+  const { data, error } = await q;
   if (error) throwNice(error);
-  return data || null;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    org_id: data.org_id,
+    nombre: data.name,
+    name: data.name,
+    geojson: data.geojson,
+    active: data.active,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+  };
 }
 
 /**
  * upsertGeocerca(payload)
  * - Si payload.id => update
  * - Si no => insert
+ * Escribe SIEMPRE en public.geofences (canónica)
  */
 export async function upsertGeocerca(payload = {}) {
   const session = await requireAuth();
@@ -205,80 +241,85 @@ export async function upsertGeocerca(payload = {}) {
   const orgId = await resolveOrgIdOrThrow(payload, userId);
   const body = buildPayload(payload, orgId);
 
-  if (!body.nombre) throw new Error("upsertGeocerca requiere nombre");
+  if (!body.name) throw new Error("upsertGeocerca requiere nombre");
   if (!body.geojson) throw new Error("upsertGeocerca requiere geojson");
 
   const id = payload?.id ? String(payload.id) : "";
 
   if (id) {
     const { data, error } = await supabase
-      .from("geocercas")
-      .update(body)
+      .from("geofences")
+      .update({
+        name: body.name,
+        geojson: body.geojson,
+        active: body.active,
+        updated_at: body.updated_at,
+      })
       .eq("id", id)
       .eq("org_id", orgId)
-      .select("id, org_id, nombre, geojson, created_at, updated_at")
+      .select("id, org_id, name, geojson, active, created_at, updated_at")
       .single();
 
     if (error) throwNice(error);
-    return data;
+
+    return {
+      id: data.id,
+      org_id: data.org_id,
+      nombre: data.name,
+      name: data.name,
+      geojson: data.geojson,
+      active: data.active,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
   }
 
   const { data, error } = await supabase
-    .from("geocercas")
+    .from("geofences")
     .insert({
       org_id: body.org_id,
-      nombre: body.nombre,
+      name: body.name,
       geojson: body.geojson,
+      active: body.active ?? true,
     })
-    .select("id, org_id, nombre, geojson, created_at, updated_at")
+    .select("id, org_id, name, geojson, active, created_at, updated_at")
     .single();
 
   if (error) throwNice(error);
-  return data;
+
+  return {
+    id: data.id,
+    org_id: data.org_id,
+    nombre: data.name,
+    name: data.name,
+    geojson: data.geojson,
+    active: data.active,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+  };
 }
 
 /**
- * deleteGeocerca(id) o deleteGeocerca({id}) o bulk deleteGeocerca({orgId, nombres_ci})
+ * deleteGeocerca(id | {id})
+ * ✅ Soft delete: active=false (NO delete físico)
  */
 export async function deleteGeocerca(arg = {}) {
-  const session = await requireAuth();
-  const userId = session.user.id;
+  await requireAuth();
 
-  // id directo
-  if (typeof arg === "string" || typeof arg === "number") {
-    const id = String(arg);
-    const { error } = await supabase.from("geocercas").delete().eq("id", id);
-    if (error) throwNice(error);
-    return { ok: true };
-  }
+  const id =
+    typeof arg === "string" || typeof arg === "number"
+      ? String(arg)
+      : arg?.id
+      ? String(arg.id)
+      : "";
 
-  const id = arg?.id ? String(arg.id) : "";
-  if (id) {
-    const { error } = await supabase.from("geocercas").delete().eq("id", id);
-    if (error) throwNice(error);
-    return { ok: true };
-  }
+  if (!id) throw new Error("deleteGeocerca requiere id");
 
-  // bulk por nombres_ci
-  const nombres_ci = Array.isArray(arg?.nombres_ci) ? arg.nombres_ci : [];
-  const orgId = await resolveOrgIdOrThrow(arg, userId);
+  const { error } = await supabase
+    .from("geofences")
+    .update({ active: false, updated_at: new Date().toISOString() })
+    .eq("id", id);
 
-  if (nombres_ci.length) {
-    const names = nombres_ci.map((x) => String(x || "").trim()).filter(Boolean);
-    if (!names.length) throw new Error("nombres_ci vacío");
-
-    // OR de ilike sobre columna nombre
-    const orParts = names.map((n) => `nombre.ilike.%${encodeURIComponent(n)}%`).join(",");
-
-    const { error } = await supabase
-      .from("geocercas")
-      .delete()
-      .eq("org_id", orgId)
-      .or(orParts);
-
-    if (error) throwNice(error);
-    return { ok: true, deleted: names.length };
-  }
-
-  throw new Error("deleteGeocerca requiere id (o { orgId, nombres_ci[] }).");
+  if (error) throwNice(error);
+  return { ok: true };
 }
