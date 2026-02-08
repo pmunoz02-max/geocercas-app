@@ -1,11 +1,23 @@
+// src/pages/ActividadesPage.jsx
+// ============================================================
+// ACTIVIDADES — UI canónica (Feb 2026)
+// - Backend único: Supabase vía src/lib/activitiesApi.js
+// - org activa: tg_current_org_id
+// - Soft delete: active=false (NO delete físico)
+// ============================================================
+
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../lib/supabaseClient";
 
-const TABLE = "activities";
+import {
+  listActivities,
+  createActivity,
+  updateActivity,
+  deleteActivity,
+  toggleActivityActive,
+} from "../lib/activitiesApi";
 
-// Si quieres "LOCAL" también, agrégalo aquí.
 const CURRENCIES = ["USD", "EUR", "MXN", "COP", "PEN", "CLP", "ARS", "BRL", "CAD", "GBP"];
 
 function toNumber(v) {
@@ -13,16 +25,27 @@ function toNumber(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+function getActiveOrgIdSafe() {
+  try {
+    const v = localStorage.getItem("tg_current_org_id");
+    return v && String(v).trim() ? String(v).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ActividadesPage() {
   const { t } = useTranslation();
 
   // ⚠️ Usamos loading (no ready), porque ready puede no existir
-  const { loading, isAuthenticated, user, currentOrg, role, currentRole } = useAuth();
+  const { loading, isAuthenticated, user, role, currentRole } = useAuth();
 
   const effectiveRole = useMemo(
     () => String(currentRole || role || "").toLowerCase(),
     [currentRole, role]
   );
+
+  // Nota: aunque canEdit controla UI, la autoridad real es RLS
   const canEdit = effectiveRole === "owner" || effectiveRole === "admin";
 
   const [includeInactive, setIncludeInactive] = useState(true);
@@ -38,6 +61,8 @@ export default function ActividadesPage() {
   const [description, setDescription] = useState("");
   const [currencyCode, setCurrencyCode] = useState("USD");
   const [hourlyRate, setHourlyRate] = useState("");
+
+  const activeOrgId = useMemo(() => getActiveOrgIdSafe(), [loading]);
 
   function resetForm() {
     setMode("create");
@@ -59,33 +84,28 @@ export default function ActividadesPage() {
   }
 
   async function load() {
-    if (!currentOrg?.id) return;
+    const orgId = getActiveOrgIdSafe();
+    if (!orgId) {
+      setRows([]);
+      setLoadingList(false);
+      setErrorMsg(
+        t("actividades.errorMissingTenant", { defaultValue: "No hay organización activa." })
+      );
+      return;
+    }
 
     setLoadingList(true);
     setErrorMsg("");
+
     try {
-      const orgId = currentOrg.id;
-
-      let q = supabase
-        .from(TABLE)
-        .select(
-          "id, tenant_id, org_id, name, description, active, hourly_rate, currency_code, created_at, created_by"
-        )
-        .or(`tenant_id.eq.${orgId},org_id.eq.${orgId}`)
-        .order("created_at", { ascending: false });
-
-      if (!includeInactive) q = q.eq("active", true);
-
-      const { data, error } = await q;
+      const { data, error } = await listActivities({ includeInactive });
       if (error) throw error;
-
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("[ActividadesPage] load error", e);
       setRows([]);
       setErrorMsg(
-        e?.message ||
-          t("actividades.errorLoad", { defaultValue: "No se pudo cargar actividades." })
+        e?.message || t("actividades.errorLoad", { defaultValue: "No se pudo cargar actividades." })
       );
     } finally {
       setLoadingList(false);
@@ -93,9 +113,9 @@ export default function ActividadesPage() {
   }
 
   useEffect(() => {
-    if (!loading && isAuthenticated && currentOrg?.id) load();
+    if (!loading && isAuthenticated && user) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, isAuthenticated, currentOrg?.id, includeInactive]);
+  }, [loading, isAuthenticated, user?.id, includeInactive]);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -129,36 +149,27 @@ export default function ActividadesPage() {
 
     setBusy(true);
     try {
-      const orgId = currentOrg.id;
-
       if (mode === "create") {
         const payload = {
-          tenant_id: orgId, // ✅ NOT NULL
-          org_id: orgId, // ✅ tu RLS suele mirar org_id
           name: name.trim(),
           description: description.trim() || null,
           active: true,
           hourly_rate: rate,
           currency_code: currencyCode,
-          created_by: user?.id ?? null,
+          // created_by lo setea el server si tienes trigger; si no, lo dejamos fuera
         };
 
-        const { error } = await supabase.from(TABLE).insert([payload]);
+        const { error } = await createActivity(payload);
         if (error) throw error;
       } else if (editingId) {
-        const payload = {
+        const patch = {
           name: name.trim(),
           description: description.trim() || null,
           hourly_rate: rate,
           currency_code: currencyCode,
         };
 
-        const { error } = await supabase
-          .from(TABLE)
-          .update(payload)
-          .eq("id", editingId)
-          .or(`tenant_id.eq.${orgId},org_id.eq.${orgId}`);
-
+        const { error } = await updateActivity(editingId, patch);
         if (error) throw error;
       }
 
@@ -177,13 +188,9 @@ export default function ActividadesPage() {
   async function toggleActive(id, nextActive) {
     if (!canEdit) return;
     setErrorMsg("");
+
     try {
-      const orgId = currentOrg.id;
-      const { error } = await supabase
-        .from(TABLE)
-        .update({ active: !!nextActive })
-        .eq("id", id)
-        .or(`tenant_id.eq.${orgId},org_id.eq.${orgId}`);
+      const { error } = await toggleActivityActive(id, !!nextActive);
       if (error) throw error;
       await load();
     } catch (e) {
@@ -204,12 +211,8 @@ export default function ActividadesPage() {
 
     setErrorMsg("");
     try {
-      const orgId = currentOrg.id;
-      const { error } = await supabase
-        .from(TABLE)
-        .delete()
-        .eq("id", id)
-        .or(`tenant_id.eq.${orgId},org_id.eq.${orgId}`);
+      // ✅ Soft delete canónico
+      const { error } = await deleteActivity(id);
       if (error) throw error;
       await load();
     } catch (e) {
@@ -241,7 +244,7 @@ export default function ActividadesPage() {
     );
   }
 
-  if (!currentOrg?.id) {
+  if (!activeOrgId) {
     return (
       <div className="p-4 max-w-3xl mx-auto">
         <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -259,8 +262,10 @@ export default function ActividadesPage() {
         </h1>
 
         <div className="text-xs text-gray-600 text-right">
-          <div className="font-mono">{currentOrg.id}</div>
-          <div>{(effectiveRole || t("common.loading", { defaultValue: "cargando" })).toUpperCase()}</div>
+          <div className="font-mono">{activeOrgId}</div>
+          <div>
+            {(effectiveRole || t("common.loading", { defaultValue: "cargando" })).toUpperCase()}
+          </div>
         </div>
       </div>
 
