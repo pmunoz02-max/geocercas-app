@@ -1,10 +1,12 @@
 // src/pages/AsignacionesPage.jsx
-// Asignaciones v2.15 FINAL (Feb 2026) + i18n (ES/EN/FR)
+// Asignaciones v2.16 FINAL (Feb 2026) + i18n (ES/EN/FR)
 // - Lectura canónica: v_tracker_assignments_ui
-// - Escritura: RPC admin_upsert_tracker_assignment_v1
+// - Escritura: RPC admin_upsert_tracker_assignment_v2 (con activity_id)
+// - Compat: toggle/delete usan v2 si row.activity_id existe, si no usan v1
 // - ✅ Geofences SOLO active=true
+// - ✅ Activities SOLO active=true (por org_id)
 // - ✅ Botón ELIMINAR (lógico) = desactivar + cerrar hoy
-// - ✅ UX: por defecto muestra SOLO asignaciones ACTIVAS (las inactivas no estorban)
+// - ✅ UX: por defecto muestra SOLO asignaciones ACTIVAS
 // - DEBUG: ?debug=1
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -87,16 +89,18 @@ export default function AsignacionesPage() {
 
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geofenceOptions, setGeofenceOptions] = useState([]);
+  const [activityOptions, setActivityOptions] = useState([]);
   const [rows, setRows] = useState([]);
 
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeofenceId, setSelectedGeofenceId] = useState("");
+  const [selectedActivityId, setSelectedActivityId] = useState("");
 
   const [startDate, setStartDate] = useState(todayYYYYMMDD());
   const [endDate, setEndDate] = useState(plusDaysYYYYMMDD(365));
   const [active, setActive] = useState(true);
 
-  // ✅ UX: por defecto SOLO activas para que lo “eliminado” no estorbe
+  // ✅ UX: por defecto SOLO activas
   const [estadoFilter, setEstadoFilter] = useState("activa");
 
   const [loadingData, setLoadingData] = useState(true);
@@ -104,6 +108,13 @@ export default function AsignacionesPage() {
   const [success, setSuccess] = useState(null);
 
   const [dateRangeError, setDateRangeError] = useState("");
+
+  // Mapa rápido id->name para mostrar Activity aun si la vista no trae activity_name
+  const activityMap = useMemo(() => {
+    const m = new Map();
+    for (const a of activityOptions) m.set(String(a.id), a.label);
+    return m;
+  }, [activityOptions]);
 
   useEffect(() => {
     if (isDateRangeInvalid(startDate, endDate)) {
@@ -152,7 +163,26 @@ export default function AsignacionesPage() {
       }
       setPersonalOptions(deduped);
 
-      // 2) Geofences canónicas (✅ SOLO active=true)
+      // 2) Activities canónicas (✅ SOLO active=true)
+      const { data: act, error: actErr } = await supabase
+        .from("activities")
+        .select("id, name, org_id, active, created_at")
+        .eq("org_id", orgId)
+        .eq("active", true)
+        .order("created_at", { ascending: false });
+
+      if (actErr) throw actErr;
+
+      const acts = (act || []).map((x) => ({ id: x.id, label: x.name }));
+      setActivityOptions(acts);
+
+      // Si la actividad seleccionada ya no está activa, limpiamos selección
+      if (selectedActivityId) {
+        const stillExists = (act || []).some((x) => String(x.id) === String(selectedActivityId));
+        if (!stillExists) setSelectedActivityId("");
+      }
+
+      // 3) Geofences canónicas (✅ SOLO active=true)
       const { data: g, error: gErr } = await supabase
         .from("geofences")
         .select("id, name, org_id, created_at, active")
@@ -169,7 +199,7 @@ export default function AsignacionesPage() {
         if (!stillExists) setSelectedGeofenceId("");
       }
 
-      // 3) Asignaciones del tracker (vista canónica)
+      // 4) Asignaciones del tracker (vista canónica)
       const { data: a, error: aErr } = await supabase
         .from("v_tracker_assignments_ui")
         .select("*")
@@ -187,6 +217,8 @@ export default function AsignacionesPage() {
         console.log("DEBUG first row:", (a || [])[0] || null);
         // eslint-disable-next-line no-console
         console.log("DEBUG geofences(active) count:", (g || []).length);
+        // eslint-disable-next-line no-console
+        console.log("DEBUG activities(active) count:", (act || []).length);
       }
 
       setLoadingData(false);
@@ -206,8 +238,10 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccess(null);
 
-    if (!selectedPersonalId || !selectedGeofenceId) {
-      return setError(tSafe(t, "asignaciones.messages.selectTrackerAndGeofence", "Selecciona tracker y geocerca"));
+    if (!selectedPersonalId || !selectedGeofenceId || !selectedActivityId) {
+      return setError(
+        tSafe(t, "asignaciones.messages.selectTrackerGeofenceActivity", "Selecciona tracker, geocerca y actividad")
+      );
     }
 
     const p = personalOptions.find((x) => x.id === selectedPersonalId);
@@ -218,10 +252,12 @@ export default function AsignacionesPage() {
     }
 
     try {
-      const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
+      // ✅ v2 exige activity_id
+      const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v2", {
         p_org_id: orgId,
         p_tracker_user_id: p.user_id,
         p_geofence_id: selectedGeofenceId,
+        p_activity_id: selectedActivityId,
         p_start_date: startDate,
         p_end_date: endDate,
         p_active: active,
@@ -231,11 +267,11 @@ export default function AsignacionesPage() {
 
       setSuccess(tSafe(t, "asignaciones.banner.saved", "Guardado"));
 
-      // ✅ al guardar, volvemos a vista “activa”
       setEstadoFilter("activa");
 
       setSelectedPersonalId("");
       setSelectedGeofenceId("");
+      setSelectedActivityId("");
       setStartDate(todayYYYYMMDD());
       setEndDate(plusDaysYYYYMMDD(365));
       await loadAll();
@@ -260,15 +296,30 @@ export default function AsignacionesPage() {
     if (!start || !end) return setError(tSafe(t, "asignaciones.messages.toggleInvalidDates", "Fechas inválidas"));
 
     try {
-      const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
-        p_org_id: orgId,
-        p_tracker_user_id: row.tracker_user_id,
-        p_geofence_id: row.geofence_id,
-        p_start_date: start,
-        p_end_date: end,
-        p_active: !row.active,
-      });
+      // Preferimos v2 si la fila ya tiene activity_id (cuando actualices la vista)
+      const hasActivity = !!row?.activity_id;
 
+      const rpcName = hasActivity ? "admin_upsert_tracker_assignment_v2" : "admin_upsert_tracker_assignment_v1";
+      const rpcArgs = hasActivity
+        ? {
+            p_org_id: orgId,
+            p_tracker_user_id: row.tracker_user_id,
+            p_geofence_id: row.geofence_id,
+            p_activity_id: row.activity_id,
+            p_start_date: start,
+            p_end_date: end,
+            p_active: !row.active,
+          }
+        : {
+            p_org_id: orgId,
+            p_tracker_user_id: row.tracker_user_id,
+            p_geofence_id: row.geofence_id,
+            p_start_date: start,
+            p_end_date: end,
+            p_active: !row.active,
+          };
+
+      const { error: rpcErr } = await supabase.rpc(rpcName, rpcArgs);
       if (rpcErr) throw rpcErr;
 
       setSuccess(!row.active ? tSafe(t, "asignaciones.banner.activated", "Activado") : tSafe(t, "asignaciones.banner.deactivated", "Desactivado"));
@@ -285,9 +336,16 @@ export default function AsignacionesPage() {
     const trackerText = row?.tracker_label || row?.tracker_name || row?.tracker_email || shortId(row?.tracker_user_id);
     const geofenceText = row?.geofence_name || shortId(row?.geofence_id) || "—";
 
+    const activityText =
+      row?.activity_name ||
+      (row?.activity_id ? activityMap.get(String(row.activity_id)) : null) ||
+      (row?.activity_id ? shortId(row.activity_id) : "—");
+
     const confirmMsg =
       tSafe(t, "asignaciones.confirmDelete", "¿Eliminar esta asignación?") +
-      `\n\n${tSafe(t, "asignaciones.table.tracker", "Tracker")}: ${trackerText}\n${tSafe(t, "asignaciones.table.geofence", "Geocerca")}: ${geofenceText}`;
+      `\n\n${tSafe(t, "asignaciones.table.tracker", "Tracker")}: ${trackerText}` +
+      `\n${tSafe(t, "asignaciones.table.activity", "Actividad")}: ${activityText}` +
+      `\n${tSafe(t, "asignaciones.table.geofence", "Geocerca")}: ${geofenceText}`;
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -302,22 +360,34 @@ export default function AsignacionesPage() {
     if (endCurrent && endCurrent < end) end = endCurrent;
 
     try {
-      const { error: rpcErr } = await supabase.rpc("admin_upsert_tracker_assignment_v1", {
-        p_org_id: orgId,
-        p_tracker_user_id: row.tracker_user_id,
-        p_geofence_id: row.geofence_id,
-        p_start_date: start,
-        p_end_date: end,
-        p_active: false,
-      });
+      const hasActivity = !!row?.activity_id;
 
+      // Si no hay activity_id en la fila (vista aún vieja), usamos v1 para no romper histórico
+      const rpcName = hasActivity ? "admin_upsert_tracker_assignment_v2" : "admin_upsert_tracker_assignment_v1";
+      const rpcArgs = hasActivity
+        ? {
+            p_org_id: orgId,
+            p_tracker_user_id: row.tracker_user_id,
+            p_geofence_id: row.geofence_id,
+            p_activity_id: row.activity_id,
+            p_start_date: start,
+            p_end_date: end,
+            p_active: false,
+          }
+        : {
+            p_org_id: orgId,
+            p_tracker_user_id: row.tracker_user_id,
+            p_geofence_id: row.geofence_id,
+            p_start_date: start,
+            p_end_date: end,
+            p_active: false,
+          };
+
+      const { error: rpcErr } = await supabase.rpc(rpcName, rpcArgs);
       if (rpcErr) throw rpcErr;
 
       setSuccess(tSafe(t, "asignaciones.banner.deleted", "Asignación eliminada"));
-
-      // ✅ CLAVE: que desaparezca de la UI sin estorbar
       setEstadoFilter("activa");
-
       await loadAll();
     } catch (e) {
       setError(e?.message || String(e));
@@ -352,6 +422,16 @@ export default function AsignacionesPage() {
           {personalOptions.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
+            </option>
+          ))}
+        </select>
+
+        {/* ✅ NUEVO: Actividad */}
+        <select className="border rounded px-3 py-2" value={selectedActivityId} onChange={(e) => setSelectedActivityId(e.target.value)}>
+          <option value="">{tSafe(t, "asignaciones.form.selectActivity", "Selecciona actividad")}</option>
+          {activityOptions.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label}
             </option>
           ))}
         </select>
@@ -420,6 +500,7 @@ export default function AsignacionesPage() {
               <thead>
                 <tr className="text-left border-b bg-slate-900 text-white">
                   <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.tracker", "Tracker")}</th>
+                  <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.activity", "Actividad")}</th>
                   <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.geofence", "Geocerca")}</th>
                   <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.start", "Inicio")}</th>
                   <th className="py-2 pr-3">{tSafe(t, "asignaciones.table.end", "Fin")}</th>
@@ -431,6 +512,10 @@ export default function AsignacionesPage() {
               <tbody>
                 {filteredRows.map((r) => {
                   const trackerText = r.tracker_label || r.tracker_name || r.tracker_email || shortId(r.tracker_user_id);
+                  const activityText =
+                    r.activity_name ||
+                    (r.activity_id ? activityMap.get(String(r.activity_id)) : null) ||
+                    (r.activity_id ? shortId(r.activity_id) : "—");
                   const geofenceText = r.geofence_name || shortId(r.geofence_id) || "—";
                   const startText = formatDateDDMMYYYY(r.start_date) || "—";
                   const endText = formatDateDDMMYYYY(r.end_date) || "—";
@@ -440,6 +525,12 @@ export default function AsignacionesPage() {
                       <td className="py-2 pr-3">
                         <div className="font-medium text-gray-900">{trackerText || "—"}</div>
                         {r.tracker_email ? <div className="text-xs text-gray-500">{r.tracker_email}</div> : null}
+                      </td>
+
+                      <td className="py-2 pr-3">
+                        <span className="inline-block min-w-[140px] text-gray-900 whitespace-nowrap" title={String(activityText)}>
+                          {activityText}
+                        </span>
                       </td>
 
                       <td className="py-2 pr-3">
