@@ -59,6 +59,8 @@ function resolveTrackerAuthIdFromPersonal(row) {
 // ---------------- GeoJSON normalization ----------------
 function toLatLng(coord) {
   if (!coord) return null;
+
+  // GeoJSON: [lng, lat]
   if (Array.isArray(coord) && coord.length >= 2) {
     const a = Number(coord[0]);
     const b = Number(coord[1]);
@@ -68,13 +70,17 @@ function toLatLng(coord) {
     if (Math.abs(a) <= 180 && Math.abs(b) <= 90) return [b, a];
     // fallback [lat,lng]
     if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return [a, b];
+
     return null;
   }
-  if (typeof coord === "object") {
+
+  // Objeto {lat,lng}
+  if (typeof coord === "object" && coord !== null) {
     const lat = Number(coord.lat);
     const lng = Number(coord.lng);
     if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
   }
+
   return null;
 }
 
@@ -84,8 +90,8 @@ function normalizeGeoJSONToPolygons(input) {
 
   let obj = input;
 
+  // si es string intenta parsear json; si parece hex WKB, se ignora
   if (typeof input === "string") {
-    // si parece WKB/hex (geometry PostGIS), no es GeoJSON
     const s = input.trim();
     const looksHex = /^[0-9A-Fa-f]+$/.test(s) && s.length > 20;
     if (looksHex) return polygons;
@@ -173,17 +179,14 @@ function MapDiagnostics({ setDiag }) {
 
 // ---------------- Multi-source geofence fetch ----------------
 const GEOFENCE_SOURCES = [
-  // vistas comunes (si existen) que ya exponen geojson listo
-  { table: "v_geofences_ui", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geometry_geojson", "geo"] },
-  { table: "v_geocercas_ui", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geometry_geojson", "geo"] },
+  // ✅ Vista canónica (debes crearla con el SQL)
+  { table: "v_geofences_ui", idCol: "id", nameCols: ["name"], geoCols: ["geojson"] },
 
-  // tablas comunes
-  { table: "geofences", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geo"] },
-  { table: "geocercas", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geom_geojson", "geo"] },
+  // ✅ Tablas: jsonb renderizable
+  { table: "geofences", idCol: "id", nameCols: ["name"], geoCols: ["polygon_geojson", "geojson"] },
 
-  // fallback (si solo hay geometry PostGIS, esto no se podrá dibujar sin vista)
-  { table: "geofences", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geom", "geometry"] },
-  { table: "geocercas", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geom", "geometry"] },
+  // ✅ Legacy: geocercas
+  { table: "geocercas", idCol: "id", nameCols: ["name", "nombre"], geoCols: ["geojson", "geometry", "polygon", "geom"] },
 ];
 
 function pickFirstNonNull(obj, keys) {
@@ -212,7 +215,6 @@ export default function TrackerDashboard() {
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
 
-  // geofences canónica (robusto)
   // guardamos: { id, name, geo, _src, _geoField }
   const [geofenceRows, setGeofenceRows] = useState([]);
 
@@ -269,8 +271,7 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
-    // NOTA: PostgREST solo permite UN parámetro or= (encadenar .or() puede pisarse)
-    // Hacemos la condición vigente con una sola .or() agrupada.
+    // ✅ Vigencia en 1 solo .or() (PostgREST)
     const orVigencia =
       `and(start_date.is.null,end_date.is.null),` +
       `and(start_date.is.null,end_date.gte.${todayStrUtc}),` +
@@ -322,8 +323,8 @@ export default function TrackerDashboard() {
       return;
     }
 
-    // intentamos múltiples fuentes y elegimos la primera que produzca polígonos
     const errors = [];
+
     for (const src of GEOFENCE_SOURCES) {
       try {
         const selectCols = [
@@ -331,6 +332,8 @@ export default function TrackerDashboard() {
           ...src.nameCols,
           "org_id",
           ...src.geoCols,
+          // campos opcionales (si existen en la vista/tabla, si no, PostgREST ignora? NO: falla.
+          // por eso NO los incluimos aquí.
         ].join(", ");
 
         const { data, error } = await supabase
@@ -345,10 +348,7 @@ export default function TrackerDashboard() {
         }
 
         const raw = Array.isArray(data) ? data : [];
-        if (!raw.length) {
-          // no hay filas en esta fuente, probamos otra
-          continue;
-        }
+        if (!raw.length) continue;
 
         const normalizedRows = raw.map((r) => {
           const pickedName = pickFirstNonNull(r, src.nameCols).value;
@@ -364,15 +364,11 @@ export default function TrackerDashboard() {
 
         const polysCount = normalizedRows.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geo).length, 0);
 
-        // si esta fuente no genera polígonos, probamos la siguiente
         if (polysCount <= 0) {
-          // pero si al menos hay filas, probablemente es geometry no-geojson
-          // guardamos hint y seguimos
           errors.push(`${src.table}: filas=${normalizedRows.length} pero 0 polígonos (geoField=${normalizedRows[0]?._geoField || "?"})`);
           continue;
         }
 
-        // ✅ esta fuente sirve
         setGeofenceRows(normalizedRows);
         setDiag((d) => ({ ...d, geofencesFound: normalizedRows.length, geofencePolys: polysCount }));
 
@@ -390,7 +386,7 @@ export default function TrackerDashboard() {
           try {
             const obj = firstIsString ? JSON.parse(first.geo) : first.geo;
             firstType = obj?.type ?? null;
-            firstKeys = obj && typeof obj === "object" ? Object.keys(obj).slice(0, 12).join(",") : null;
+            firstKeys = obj && typeof obj === "object" ? Object.keys(obj).slice(0, 16).join(",") : null;
             parseOk = true;
           } catch {
             parseOk = false;
@@ -413,15 +409,19 @@ export default function TrackerDashboard() {
           hint: null,
         });
 
-        return; // listo
+        return;
       } catch (e) {
         errors.push(`${src.table}: ${e?.message || String(e)}`);
       }
     }
 
-    // si llegamos aquí, nada sirvió
     setGeofenceRows([]);
-    setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, lastGeofencesError: errors.join(" | ") }));
+    setDiag((d) => ({
+      ...d,
+      geofencesFound: 0,
+      geofencePolys: 0,
+      lastGeofencesError: errors.join(" | "),
+    }));
 
     setGeoDbg({
       sourceUsed: null,
@@ -436,7 +436,7 @@ export default function TrackerDashboard() {
       polysComputed: 0,
       rawFieldUsed: null,
       hint:
-        "No se obtuvo GeoJSON renderizable. Si tu geometría está en PostGIS (geom/geometry), crea una vista (v_geofences_ui o v_geocercas_ui) que exponga ST_AsGeoJSON(geom) como geojson.",
+        "No se obtuvo GeoJSON renderizable. Verifica que v_geofences_ui exista y exponga una columna geojson (json/jsonb) tipo Polygon/MultiPolygon.",
     });
   }, []);
 
