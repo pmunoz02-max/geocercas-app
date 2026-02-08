@@ -66,7 +66,7 @@ function toLatLngStrict(coord) {
 }
 
 // Devuelve array de "polígonos", cada uno como un ring (outer) en formato [ [lat,lng], ... ]
-// (Mantengo tu enfoque: primer anillo / outer ring; suficiente para visibilidad + bounds)
+// (Mantiene tu enfoque: primer anillo / outer ring; suficiente para visibilidad + bounds)
 function normalizeGeoJSONToPolygons(input) {
   const polygons = [];
   if (!input) return polygons;
@@ -155,7 +155,6 @@ function shouldFitToBounds(map, bounds) {
     if (!map || !bounds?.isValid?.()) return false;
     const view = map.getBounds?.();
     if (!view?.isValid?.()) return true;
-    // pad del target para hacer la prueba más robusta
     return !view.intersects(bounds.pad(0.05));
   } catch {
     return true;
@@ -163,8 +162,10 @@ function shouldFitToBounds(map, bounds) {
 }
 
 // ✅ FIT inteligente: si la geocerca NO está dentro del viewport actual -> fitBounds
+// + FIX: el botón/fitsignal solo fuerza cuando cambia (no "fit eterno")
 function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewportComputed }) {
   const map = useMap();
+  const lastFitSignalRef = useRef(0);
 
   const bounds = useMemo(() => {
     try {
@@ -192,14 +193,14 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
     // expone bounds a UI
     onBoundsComputed?.(bounds);
 
-    // fit: si botón presionado => siempre fit; si no => fit sólo si fuera de view
     try {
-      const force = fitSignal > 0;
+      const force = fitSignal > lastFitSignalRef.current;
       const doFit = force ? true : shouldFitToBounds(map, bounds);
 
       if (doFit) {
         map.fitBounds(bounds, { padding: [24, 24] });
-        // Actualiza viewport después del fit (para debug UI)
+        lastFitSignalRef.current = fitSignal;
+
         setTimeout(() => {
           try {
             const v2 = map.getBounds?.();
@@ -207,7 +208,6 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
           } catch {}
         }, 50);
       } else {
-        // igual refresca viewport por debug
         const v = map.getBounds?.();
         if (v?.isValid?.()) onViewportComputed?.(v);
       }
@@ -323,6 +323,8 @@ export default function TrackerDashboard() {
     setDiag((d) => ({ ...d, assignmentsRows: rows.length, trackersFound: uniqTrackers.length }));
   }, [todayStrUtc]);
 
+  // ✅ FIX UNIVERSAL: traer geocercas desde tabla `geofences` filtrando active=true
+  // (No dependemos de que v_geofences_ui exponga active)
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
@@ -340,9 +342,10 @@ export default function TrackerDashboard() {
     }
 
     const { data, error } = await supabase
-      .from("v_geofences_ui")
-      .select("id, org_id, name, geojson, geom_type")
+      .from("geofences")
+      .select("id, org_id, name, geojson, active")
       .eq("org_id", currentOrgId)
+      .eq("active", true)
       .in("id", geofenceIds);
 
     if (error) {
@@ -357,7 +360,8 @@ export default function TrackerDashboard() {
       id: r.id,
       name: r.name || r.id,
       geojson: r.geojson,
-      geom_type: r.geom_type || null,
+      geom_type: null, // no lo necesitamos aquí; tu debug lo muestra como string igual
+      active: r.active ?? true,
     }));
 
     const polysCount = normalized.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
@@ -384,12 +388,12 @@ export default function TrackerDashboard() {
     setGeoDbg({
       rows: normalized.length,
       firstType,
-      geomType: first?.geom_type ?? null,
+      geomType: "—",
       parseOk,
       polysComputed: firstPolys,
     });
 
-    // 🔥 dispara un fit inicial (para garantizar visibilidad)
+    // 🔥 fit inicial
     setFitSignal((x) => x + 1);
   }, []);
 
@@ -622,7 +626,6 @@ export default function TrackerDashboard() {
             try { map.invalidateSize(); } catch {}
           }}
           whenReady={() => {
-            // fuerza invalidación al estar listo (por layouts dinámicos)
             try { mapRef.current?.invalidateSize?.(); } catch {}
           }}
         >
@@ -635,15 +638,10 @@ export default function TrackerDashboard() {
               try {
                 const sw = b.getSouthWest();
                 const ne = b.getNorthEast();
-                setGeofenceBoundsText(
-                  `SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`
-                );
+                setGeofenceBoundsText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
 
-                // intersects info (si ya hay viewport)
                 const v = mapRef.current?.getBounds?.();
-                if (v?.isValid?.()) {
-                  setIntersectsText(String(v.intersects(b.pad(0.05))));
-                }
+                if (v?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
               } catch {
                 setGeofenceBoundsText("—");
               }
@@ -654,7 +652,6 @@ export default function TrackerDashboard() {
                 const ne = v.getNorthEast();
                 setViewportText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
 
-                // intersects info (si ya hay bounds)
                 const all = [];
                 geofencePolygons.forEach((g) => (g.positions || []).forEach((p) => all.push(p)));
                 if (all.length >= 3) {
