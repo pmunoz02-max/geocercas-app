@@ -185,7 +185,9 @@ export default function TrackerDashboard() {
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
 
-  const [geofenceRows, setGeofenceRows] = useState([]); // [{id,nombre,geojson}]
+  // geofences canónica (robusto)
+  // guardamos: { id, name, geo }
+  const [geofenceRows, setGeofenceRows] = useState([]);
 
   // DEBUG HARD: snapshot del primer geojson
   const [geoDbg, setGeoDbg] = useState({
@@ -198,13 +200,14 @@ export default function TrackerDashboard() {
     firstStrLen: 0,
     parseOk: null,
     polysComputed: 0,
+    rawFieldUsed: null,
   });
 
   const geofencePolygons = useMemo(() => {
     const out = [];
     for (const g of geofenceRows || []) {
-      const polys = normalizeGeoJSONToPolygons(g.geojson);
-      polys.forEach((p, i) => out.push({ geofenceId: g.id, name: g.nombre || g.id, positions: p, idx: i }));
+      const polys = normalizeGeoJSONToPolygons(g.geo);
+      polys.forEach((p, i) => out.push({ geofenceId: g.id, name: g.name || g.id, positions: p, idx: i }));
     }
     return out;
   }, [geofenceRows]);
@@ -238,13 +241,18 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
-    const { data, error } = await supabase
+    // ✅ Rango vigente con soporte para NULLs (open-ended)
+    // start_date <= today OR start_date IS NULL
+    // end_date >= today OR end_date IS NULL
+    const q = supabase
       .from("tracker_assignments")
       .select("tracker_user_id, geofence_id, org_id, active, start_date, end_date")
       .eq("org_id", currentOrgId)
       .eq("active", true)
-      .lte("start_date", todayStrUtc)
-      .gte("end_date", todayStrUtc);
+      .or(`start_date.is.null,start_date.lte.${todayStrUtc}`)
+      .or(`end_date.is.null,end_date.gte.${todayStrUtc}`);
+
+    const { data, error } = await q;
 
     if (error) {
       console.error("[TrackerDashboard] tracker_assignments error", error);
@@ -284,13 +292,15 @@ export default function TrackerDashboard() {
       return;
     }
 
+    // ✅ CANÓNICO: geofences (no geocercas)
+    // Robusto: algunas instalaciones exponen geojson/geom_geojson/geom/geometry
     const { data, error } = await supabase
-      .from("geocercas")
-      .select("id, nombre, geojson, org_id")
+      .from("geofences")
+      .select("id, name, nombre, org_id, geojson, geom_geojson, geom, geometry")
       .eq("org_id", currentOrgId)
       .in("id", geofenceIds);
 
-    console.log("[TrackerDashboard] geocercas fetched:", { count: (data || []).length, error });
+    console.log("[TrackerDashboard] geofences fetched:", { count: (data || []).length, error });
 
     if (error) {
       setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error) }));
@@ -299,13 +309,32 @@ export default function TrackerDashboard() {
       return;
     }
 
-    const rows = Array.isArray(data) ? data : [];
-    setGeofenceRows(rows);
+    const raw = Array.isArray(data) ? data : [];
 
-    const polysCount = rows.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
-    setDiag((d) => ({ ...d, geofencesFound: rows.length, geofencePolys: polysCount }));
+    const normalizedRows = raw.map((r) => {
+      // elegir campo de geometría disponible (universal)
+      let geo = null;
+      let used = null;
 
-    const first = rows[0] || null;
+      if (r?.geojson != null) { geo = r.geojson; used = "geojson"; }
+      else if (r?.geom_geojson != null) { geo = r.geom_geojson; used = "geom_geojson"; }
+      else if (r?.geom != null) { geo = r.geom; used = "geom"; }
+      else if (r?.geometry != null) { geo = r.geometry; used = "geometry"; }
+
+      return {
+        id: r.id,
+        name: r.name || r.nombre || r.id,
+        geo,
+        _geoField: used,
+      };
+    });
+
+    setGeofenceRows(normalizedRows);
+
+    const polysCount = normalizedRows.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geo).length, 0);
+    setDiag((d) => ({ ...d, geofencesFound: normalizedRows.length, geofencePolys: polysCount }));
+
+    const first = normalizedRows[0] || null;
     let firstType = null;
     let firstKeys = null;
     let firstIsString = false;
@@ -313,30 +342,31 @@ export default function TrackerDashboard() {
     let parseOk = null;
     let polysComputed = 0;
 
-    if (first?.geojson != null) {
-      firstIsString = typeof first.geojson === "string";
-      firstStrLen = firstIsString ? first.geojson.length : 0;
+    if (first?.geo != null) {
+      firstIsString = typeof first.geo === "string";
+      firstStrLen = firstIsString ? first.geo.length : 0;
       try {
-        const obj = firstIsString ? JSON.parse(first.geojson) : first.geojson;
+        const obj = firstIsString ? JSON.parse(first.geo) : first.geo;
         firstType = obj?.type ?? null;
         firstKeys = obj && typeof obj === "object" ? Object.keys(obj).slice(0, 12).join(",") : null;
         parseOk = true;
       } catch {
         parseOk = false;
       }
-      polysComputed = normalizeGeoJSONToPolygons(first.geojson).length;
+      polysComputed = normalizeGeoJSONToPolygons(first.geo).length;
     }
 
     setGeoDbg({
-      fetchCount: rows.length,
+      fetchCount: normalizedRows.length,
       firstId: first?.id ?? null,
-      firstName: first?.nombre ?? null,
+      firstName: first?.name ?? null,
       firstType,
       firstKeys,
       firstIsString,
       firstStrLen,
       parseOk,
       polysComputed,
+      rawFieldUsed: first?._geoField ?? null,
     });
   }, []);
 
@@ -555,7 +585,7 @@ export default function TrackerDashboard() {
         </div>
 
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>geoDbg</b>: fetchCount={geoDbg.fetchCount}, firstType={String(geoDbg.firstType)}, parseOk={String(geoDbg.parseOk)}, polysComputed={geoDbg.polysComputed}
+          <b>geoDbg</b>: fetchCount={geoDbg.fetchCount}, field={String(geoDbg.rawFieldUsed)}, firstType={String(geoDbg.firstType)}, parseOk={String(geoDbg.parseOk)}, polysComputed={geoDbg.polysComputed}
         </div>
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
           firstId={String(geoDbg.firstId || "—")} | firstName={String(geoDbg.firstName || "—")} | isString={String(geoDbg.firstIsString)} | strLen={geoDbg.firstStrLen} | keys={String(geoDbg.firstKeys || "—")}
@@ -577,7 +607,7 @@ export default function TrackerDashboard() {
             attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
           />
 
-          {/* Geocercas */}
+          {/* Geofences (CANÓNICO) */}
           {geofencePolygons.map((g) => (
             <Polygon
               key={`${g.geofenceId}-${g.idx}`}
