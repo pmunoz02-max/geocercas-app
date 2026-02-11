@@ -38,3 +38,15 @@ pnpm-debug.log*
 # =========================
 .supabase/
 .env*.local
+
+# Supabase artifacts / previews / backups
+_archive/
+*_preview_*.sql
+prod_public_schema.sql
+supabase/*_preview_*.sql
+supabase/_dupe_migrations/
+supabase/_invalid_migrations/
+supabase/migrations_backup/
+supabase/migrations_backup_*/
+supabase/migrations_backup_*
+
