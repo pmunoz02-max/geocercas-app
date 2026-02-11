@@ -1,11 +1,41 @@
-// /src/services/auth.js
-import { supabase } from "../supabaseClient";
+// src/services/auth.js
+import { supabase } from "../lib/supabaseClient";
+
+/**
+ * Envío UNIVERSAL de Magic Link:
+ * - SIEMPRE fuerza /auth/callback como destino (PKCE)
+ * - Evita caer en /?code=... por usar Site URL por defecto
+ * - Permite override opcional (redirectTo), pero si viene vacío usa window.location.origin
+ */
+
+function buildEmailRedirectTo(redirectTo) {
+  // Si el caller pasa un redirectTo explícito, lo usamos tal cual.
+  if (redirectTo && typeof redirectTo === "string" && redirectTo.trim()) {
+    return redirectTo.trim();
+  }
+
+  // Default universal: mismo origin + /auth/callback
+  // (funciona en preview/prod, y evita hardcodes)
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
+
+  // Si por alguna razón no hay window (SSR), igual devolvemos ruta relativa
+  return origin ? `${origin}/auth/callback` : "/auth/callback";
+}
 
 export async function sendMagicLink(email, redirectTo) {
+  const emailRedirectTo = buildEmailRedirectTo(redirectTo);
+
   const { data, error } = await supabase.auth.signInWithOtp({
     email,
-    options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+    options: {
+      emailRedirectTo,
+      // NO tocamos shouldCreateUser aquí; que cada flujo invite/signup lo maneje si aplica.
+    },
   });
+
   if (error) throw error;
   return data;
 }
@@ -23,7 +53,6 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback) {
-  // Devuelve la suscripción para que puedas .unsubscribe() en cleanup
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
     callback(session);
   });
