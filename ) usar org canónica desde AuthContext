@@ -1,0 +1,210 @@
+[1mdiff --git a/src/pages/ActividadesPage.jsx b/src/pages/ActividadesPage.jsx[m
+[1mindex 4ae48ec..5f10c27 100644[m
+[1m--- a/src/pages/ActividadesPage.jsx[m
+[1m+++ b/src/pages/ActividadesPage.jsx[m
+[36m@@ -1,9 +1,7 @@[m
+ // src/pages/ActividadesPage.jsx[m
+ // ============================================================[m
+ // ACTIVIDADES — UI canónica (Feb 2026)[m
+[31m-// - Backend único: Supabase vía src/lib/activitiesApi.js[m
+[31m-// - org activa: tg_current_org_id[m
+[31m-// - Soft delete: active=false (NO delete físico)[m
+[32m+[m[32m// - Fuente de verdad: AuthContext (backend)[m
+ // ============================================================[m
+ [m
+ import { useEffect, useMemo, useState } from "react";[m
+[36m@@ -25,27 +23,25 @@[m [mfunction toNumber(v) {[m
+   return Number.isFinite(n) ? n : NaN;[m
+ }[m
+ [m
+[31m-function getActiveOrgIdSafe() {[m
+[31m-  try {[m
+[31m-    const v = localStorage.getItem("tg_current_org_id");[m
+[31m-    return v && String(v).trim() ? String(v).trim() : null;[m
+[31m-  } catch {[m
+[31m-    return null;[m
+[31m-  }[m
+[31m-}[m
+[31m-[m
+ export default function ActividadesPage() {[m
+   const { t } = useTranslation();[m
+ [m
+[31m-  // ⚠️ Usamos loading (no ready), porque ready puede no existir[m
+[31m-  const { loading, isAuthenticated, user, role, currentRole } = useAuth();[m
+[32m+[m[32m  const {[m
+[32m+[m[32m    loading,[m
+[32m+[m[32m    isAuthenticated,[m
+[32m+[m[32m    user,[m
+[32m+[m[32m    role,[m
+[32m+[m[32m    currentRole,[m
+[32m+[m[32m    currentOrg, // ✅ org canónica[m
+[32m+[m[32m  } = useAuth();[m
+[32m+[m
+[32m+[m[32m  const activeOrgId = currentOrg?.id ?? null;[m
+ [m
+   const effectiveRole = useMemo([m
+     () => String(currentRole || role || "").toLowerCase(),[m
+     [currentRole, role][m
+   );[m
+ [m
+[31m-  // Nota: aunque canEdit controla UI, la autoridad real es RLS[m
+   const canEdit = effectiveRole === "owner" || effectiveRole === "admin";[m
+ [m
+   const [includeInactive, setIncludeInactive] = useState(true);[m
+[36m@@ -54,7 +50,7 @@[m [mexport default function ActividadesPage() {[m
+   const [loadingList, setLoadingList] = useState(true);[m
+   const [errorMsg, setErrorMsg] = useState("");[m
+ [m
+[31m-  const [mode, setMode] = useState("create"); // create | edit[m
+[32m+[m[32m  const [mode, setMode] = useState("create");[m
+   const [editingId, setEditingId] = useState(null);[m
+ [m
+   const [name, setName] = useState("");[m
+[36m@@ -62,8 +58,6 @@[m [mexport default function ActividadesPage() {[m
+   const [currencyCode, setCurrencyCode] = useState("USD");[m
+   const [hourlyRate, setHourlyRate] = useState("");[m
+ [m
+[31m-  const activeOrgId = useMemo(() => getActiveOrgIdSafe(), [loading]);[m
+[31m-[m
+   function resetForm() {[m
+     setMode("create");[m
+     setEditingId(null);[m
+[36m@@ -84,12 +78,13 @@[m [mexport default function ActividadesPage() {[m
+   }[m
+ [m
+   async function load() {[m
+[31m-    const orgId = getActiveOrgIdSafe();[m
+[31m-    if (!orgId) {[m
+[32m+[m[32m    if (!activeOrgId) {[m
+       setRows([]);[m
+       setLoadingList(false);[m
+       setErrorMsg([m
+[31m-        t("actividades.errorMissingTenant", { defaultValue: "No hay organización activa." })[m
+[32m+[m[32m        t("actividades.errorMissingTenant", {[m
+[32m+[m[32m          defaultValue: "No se encontró la organización del usuario.",[m
+[32m+[m[32m        })[m
+       );[m
+       return;[m
+     }[m
+[36m@@ -115,113 +110,7 @@[m [mexport default function ActividadesPage() {[m
+   useEffect(() => {[m
+     if (!loading && isAuthenticated && user) load();[m
+     // eslint-disable-next-line react-hooks/exhaustive-deps[m
+[31m-  }, [loading, isAuthenticated, user?.id, includeInactive]);[m
+[31m-[m
+[31m-  async function onSubmit(e) {[m
+[31m-    e.preventDefault();[m
+[31m-    setErrorMsg("");[m
+[31m-[m
+[31m-    if (!canEdit) {[m
+[31m-      setErrorMsg([m
+[31m-        t("actividades.readOnlyNote", {[m
+[31m-          defaultValue: "No tienes permisos para editar actividades.",[m
+[31m-        })[m
+[31m-      );[m
+[31m-      return;[m
+[31m-    }[m
+[31m-[m
+[31m-    if (!name.trim()) {[m
+[31m-      setErrorMsg([m
+[31m-        t("actividades.errorNameRequired", { defaultValue: "El nombre es obligatorio." })[m
+[31m-      );[m
+[31m-      return;[m
+[31m-    }[m
+[31m-[m
+[31m-    const rate = toNumber(hourlyRate);[m
+[31m-    if (!Number.isFinite(rate) || rate <= 0) {[m
+[31m-      setErrorMsg([m
+[31m-        t("actividades.errorRatePositive", {[m
+[31m-          defaultValue: "La tarifa por hora debe ser un número mayor a 0.",[m
+[31m-        })[m
+[31m-      );[m
+[31m-      return;[m
+[31m-    }[m
+[31m-[m
+[31m-    setBusy(true);[m
+[31m-    try {[m
+[31m-      if (mode === "create") {[m
+[31m-        const payload = {[m
+[31m-          name: name.trim(),[m
+[31m-          description: description.trim() || null,[m
+[31m-          active: true,[m
+[31m-          hourly_rate: rate,[m
+[31m-          currency_code: currencyCode,[m
+[31m-          // created_by lo setea el server si tienes trigger; si no, lo dejamos fuera[m
+[31m-        };[m
+[31m-[m
+[31m-        const { error } = await createActivity(payload);[m
+[31m-        if (error) throw error;[m
+[31m-      } else if (editingId) {[m
+[31m-        const patch = {[m
+[31m-          name: name.trim(),[m
+[31m-          description: description.trim() || null,[m
+[31m-          hourly_rate: rate,[m
+[31m-          currency_code: currencyCode,[m
+[31m-        };[m
+[31m-[m
+[31m-        const { error } = await updateActivity(editingId, patch);[m
+[31m-        if (error) throw error;[m
+[31m-      }[m
+[31m-[m
+[31m-      resetForm();[m
+[31m-      await load();[m
+[31m-    } catch (e) {[m
+[31m-      console.error("[ActividadesPage] save error", e);[m
+[31m-      setErrorMsg([m
+[31m-        e?.message || t("actividades.errorSave", { defaultValue: "No se pudo guardar." })[m
+[31m-      );[m
+[31m-    } finally {[m
+[31m-      setBusy(false);[m
+[31m-    }[m
+[31m-  }[m
+[31m-[m
+[31m-  async function toggleActive(id, nextActive) {[m
+[31m-    if (!canEdit) return;[m
+[31m-    setErrorMsg("");[m
+[31m-[m
+[31m-    try {[m
+[31m-      const { error } = await toggleActivityActive(id, !!nextActive);[m
+[31m-      if (error) throw error;[m
+[31m-      await load();[m
+[31m-    } catch (e) {[m
+[31m-      console.error("[ActividadesPage] toggle error", e);[m
+[31m-      setErrorMsg([m
+[31m-        e?.message || t("actividades.errorToggle", { defaultValue: "No se pudo actualizar." })[m
+[31m-      );[m
+[31m-    }[m
+[31m-  }[m
+[31m-[m
+[31m-  async function deleteOne(id) {[m
+[31m-    if (!canEdit) return;[m
+[31m-[m
+[31m-    const ok = window.confirm([m
+[31m-      t("actividades.confirmDeleteGeneric", { defaultValue: "¿Eliminar esta actividad?" })[m
+[31m-    );[m
+[31m-    if (!ok) return;[m
+[31m-[m
+[31m-    setErrorMsg("");[m
+[31m-    try {[m
+[31m-      // ✅ Soft delete canónico[m
+[31m-      const { error } = await deleteActivity(id);[m
+[31m-      if (error) throw error;[m
+[31m-      await load();[m
+[31m-    } catch (e) {[m
+[31m-      console.error("[ActividadesPage] delete error", e);[m
+[31m-      setErrorMsg([m
+[31m-        e?.message || t("actividades.errorDelete", { defaultValue: "No se pudo eliminar." })[m
+[31m-      );[m
+[31m-    }[m
+[31m-  }[m
+[32m+[m[32m  }, [loading, isAuthenticated, user?.id, includeInactive, activeOrgId]);[m
+ [m
+   // --- UI estados ---[m
+   if (loading) {[m
+[36m@@ -248,193 +137,14 @@[m [mexport default function ActividadesPage() {[m
+     return ([m
+       <div className="p-4 max-w-3xl mx-auto">[m
+         <div className="border rounded bg-red-50 px-4 py-3 text-sm text-red-700">[m
+[31m-          {t("actividades.errorMissingTenant", { defaultValue: "No hay organización activa." })}[m
+[32m+[m[32m          {t("actividades.errorMissingTenant", {[m
+[32m+[m[32m            defaultValue: "No se encontró la organización de

@@ -221,6 +221,189 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
   return null;
 }
 
+/** =========================
+ * MultiSelect Geocercas UI
+ * ========================= */
+function MultiGeofenceSelect({
+  geofences,
+  selectedIds,
+  setSelectedIds,
+  disabled,
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const rootRef = useRef(null);
+
+  const selectedSet = useMemo(() => new Set((selectedIds || []).map(String)), [selectedIds]);
+
+  const filtered = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    const rows = Array.isArray(geofences) ? geofences : [];
+    if (!qq) return rows;
+    return rows.filter((g) => {
+      const name = String(g?.name || "").toLowerCase();
+      const id = String(g?.id || "").toLowerCase();
+      return name.includes(qq) || id.includes(qq);
+    });
+  }, [geofences, q]);
+
+  const effectiveSelectedCount = useMemo(() => {
+    // selectedIds.length === 0 significa "Todas"
+    if (!geofences?.length) return 0;
+    return selectedIds?.length ? selectedIds.length : geofences.length;
+  }, [geofences, selectedIds]);
+
+  const label = useMemo(() => {
+    if (!geofences?.length) return "Geocercas: 0";
+    if (!selectedIds?.length) return `Geocercas: Todas (${geofences.length})`;
+    return `Geocercas: ${effectiveSelectedCount}`;
+  }, [geofences, selectedIds, effectiveSelectedCount]);
+
+  const toggle = (id) => {
+  const sid = String(id);
+  setSelectedIds((prev) => {
+    const arr = Array.isArray(prev) ? prev.map(String) : [];
+
+    // si estaba en modo NONE, al marcar una geocerca salimos de NONE y dejamos solo esa
+    if (arr.length === 1 && arr[0] === "__none__") {
+      return [sid];
+    }
+
+    // si estaba en "Todas" (arr vacío), expandimos a todas menos la que desmarcamos
+    if (arr.length === 0) {
+      const all = (geofences || []).map((g) => String(g.id));
+      return all.filter((x) => x !== sid);
+    }
+
+    const set = new Set(arr);
+    if (set.has(sid)) set.delete(sid);
+    else set.add(sid);
+
+    const next = Array.from(set);
+
+    // si quedó vacío, volvemos a "todas"
+    return next.length ? next : [];
+  });
+};
+
+const setAll = () => setSelectedIds([]); // vacío = Todas
+const setNone = () => setSelectedIds(["__none__"]); // sentinel para "ninguna"
+
+const isNoneMode = useMemo(() => {
+  return Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__";
+}, [selectedIds]);
+
+// cerrar al hacer click afuera
+useEffect(() => {
+  if (!open) return;
+  const onDoc = (e) => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (!el.contains(e.target)) setOpen(false);
+  };
+  document.addEventListener("mousedown", onDoc);
+  return () => document.removeEventListener("mousedown", onDoc);
+}, [open]);
+
+  // Si estamos en modo NONE, no hay seleccionadas
+  const isChecked = (id) => {
+    if (isNoneMode) return false;
+    if (!selectedIds?.length) return true; // Todas
+    return selectedSet.has(String(id));
+  };
+
+  const countText = useMemo(() => {
+    if (!geofences?.length) return "0";
+    if (isNoneMode) return "0";
+    if (!selectedIds?.length) return String(geofences.length);
+    return String(selectedIds.length);
+  }, [geofences, selectedIds, isNoneMode]);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50 flex items-center justify-between gap-2 min-w-[220px]"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        title={disabled ? "No hay geocercas" : "Seleccionar geocercas"}
+      >
+        <span className="truncate">{label}</span>
+        <span className="text-slate-500">({countText})</span>
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute right-0 mt-2 w-[320px] max-w-[90vw] bg-white border rounded shadow-lg p-2 z-[9999]">
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar geocerca…"
+              className="border rounded px-2 py-1 text-xs w-full"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              type="button"
+              className="border rounded px-2 py-1 text-[11px] hover:bg-slate-50"
+              onClick={setAll}
+              title="Seleccionar todas"
+            >
+              Todas
+            </button>
+            <button
+              type="button"
+              className="border rounded px-2 py-1 text-[11px] hover:bg-slate-50"
+              onClick={setNone}
+              title="Quitar todas"
+            >
+              Ninguna
+            </button>
+
+            <div className="ml-auto text-[11px] text-slate-500">
+              {filtered.length}/{geofences?.length || 0}
+            </div>
+          </div>
+
+          <div className="max-h-[260px] overflow-auto border rounded">
+            {filtered.map((g) => (
+              <label
+                key={g.id}
+                className="flex items-center gap-2 px-2 py-1 text-xs hover:bg-slate-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked(g.id)}
+                  onChange={() => toggle(g.id)}
+                />
+                <span className="truncate">{g.name || g.id}</span>
+                <span className="ml-auto text-[10px] text-slate-400 font-mono truncate max-w-[120px]">
+                  {String(g.id).slice(0, 8)}
+                </span>
+              </label>
+            ))}
+
+            {!filtered.length && (
+              <div className="p-3 text-xs text-slate-500">Sin resultados…</div>
+            )}
+          </div>
+
+          <div className="flex justify-end mt-2">
+            <button
+              type="button"
+              className="border rounded px-2 py-1 text-xs hover:bg-slate-50"
+              onClick={() => setOpen(false)}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -242,6 +425,9 @@ export default function TrackerDashboard() {
   const [positions, setPositions] = useState([]);
 
   const [geofenceRows, setGeofenceRows] = useState([]);
+
+  // ✅ NUEVO: selección multi de geocercas (vacío = "todas", ["__none__"] = ninguna)
+  const [selectedGeofenceIds, setSelectedGeofenceIds] = useState([]);
 
   const [geoDbg, setGeoDbg] = useState({
     rows: 0,
@@ -268,6 +454,9 @@ export default function TrackerDashboard() {
     lastTargetCount: 0,
     assignedGeofenceIds: 0,
     skippedZeroZero: 0,
+
+    // NUEVO diag
+    selectedGeofences: 0,
   });
 
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
@@ -301,7 +490,13 @@ export default function TrackerDashboard() {
       .or(orVigencia);
 
     if (error) {
-      setDiag((d) => ({ ...d, lastAssignmentsError: error.message || String(error), assignmentsRows: 0, trackersFound: 0, assignedGeofenceIds: 0 }));
+      setDiag((d) => ({
+        ...d,
+        lastAssignmentsError: error.message || String(error),
+        assignmentsRows: 0,
+        trackersFound: 0,
+        assignedGeofenceIds: 0,
+      }));
       setAssignments([]);
       setAssignmentTrackers([]);
       return;
@@ -316,10 +511,17 @@ export default function TrackerDashboard() {
     const uniqGeof = Array.from(new Set(rows.map((r) => String(r.geofence_id)).filter(Boolean)));
 
     setAssignmentTrackers(uniqTrackers);
-    setDiag((d) => ({ ...d, assignmentsRows: rows.length, trackersFound: uniqTrackers.length, assignedGeofenceIds: uniqGeof.length }));
+    setDiag((d) => ({
+      ...d,
+      assignmentsRows: rows.length,
+      trackersFound: uniqTrackers.length,
+      assignedGeofenceIds: uniqGeof.length,
+    }));
   }, [todayStrUtc]);
 
-  // ✅ Trae SIEMPRE geojson canónico desde v_geofences_ui y descarta basura 0,0 por geometría
+  // ✅ Trae SIEMPRE geojson canónico desde vista.
+  //    1) Intenta v_geofences_ui
+  //    2) Si falla, cae a v_geocercas_tracker_ui
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
@@ -329,22 +531,51 @@ export default function TrackerDashboard() {
     if (!geofenceIds.length) {
       setGeofenceRows([]);
       setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: null, polysComputed: 0 });
-      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, skippedZeroZero: 0 }));
+      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
+      setSelectedGeofenceIds([]); // reset a "todas" (pero no hay)
       setErrorMsg("No hay geocercas asignadas (tracker_assignments.geofence_id).");
       return;
     }
 
-    const { data, error } = await supabase
-      .from("v_geofences_ui")
-      .select("id, org_id, name, geojson, geom_type")
-      .eq("org_id", currentOrgId)
-      .in("id", geofenceIds);
+    // --- intento #1
+    let data = null;
+    let error = null;
+
+    {
+      const res = await supabase
+        .from("v_geofences_ui")
+        .select("id, org_id, name, geojson, geom_type")
+        .eq("org_id", currentOrgId)
+        .in("id", geofenceIds);
+
+      data = res.data;
+      error = res.error;
+    }
+
+    // --- fallback #2
+    if (error) {
+      const res2 = await supabase
+        .from("v_geocercas_tracker_ui")
+        .select("id, org_id, name, geojson, geom_type")
+        .eq("org_id", currentOrgId)
+        .in("id", geofenceIds);
+
+      data = res2.data;
+      error = res2.error;
+    }
 
     if (error) {
-      setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error), geofencesFound: 0, geofencePolys: 0, skippedZeroZero: 0 }));
+      setDiag((d) => ({
+        ...d,
+        lastGeofencesError: error.message || String(error),
+        geofencesFound: 0,
+        geofencePolys: 0,
+        skippedZeroZero: 0,
+        selectedGeofences: 0,
+      }));
       setGeofenceRows([]);
       setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: false, polysComputed: 0 });
-      setErrorMsg("Error al cargar geocercas (v_geofences_ui).");
+      setErrorMsg("Error al cargar geocercas (vista UI).");
       return;
     }
 
@@ -370,7 +601,23 @@ export default function TrackerDashboard() {
     const polysCount = normalized.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
 
     setGeofenceRows(normalized);
-    setDiag((d) => ({ ...d, geofencesFound: normalized.length, geofencePolys: polysCount, skippedZeroZero: skipped }));
+
+    // ✅ si había selección previa, la “recortamos” a las que aún existen (y si era NONE, se queda NONE)
+    setSelectedGeofenceIds((prev) => {
+      const arr = Array.isArray(prev) ? prev.map(String) : [];
+      if (arr.length === 1 && arr[0] === "__none__") return ["__none__"];
+      if (arr.length === 0) return []; // "todas"
+      const allowed = new Set(normalized.map((g) => String(g.id)));
+      const next = arr.filter((id) => allowed.has(String(id)));
+      return next.length ? next : []; // si quedó vacío, volvemos a "todas"
+    });
+
+    setDiag((d) => ({
+      ...d,
+      geofencesFound: normalized.length,
+      geofencePolys: polysCount,
+      skippedZeroZero: skipped,
+    }));
 
     const first = normalized[0] || null;
     let firstType = null;
@@ -518,14 +765,36 @@ export default function TrackerDashboard() {
     });
   }, [assignmentTrackers, personalByUserId]);
 
+  // ✅ Aplicar filtro de geocercas seleccionadas
+  const filteredGeofenceRows = useMemo(() => {
+    const all = Array.isArray(geofenceRows) ? geofenceRows : [];
+    if (!all.length) return [];
+
+    // modo none
+    if (Array.isArray(selectedGeofenceIds) && selectedGeofenceIds.length === 1 && selectedGeofenceIds[0] === "__none__") {
+      return [];
+    }
+
+    // vacío = todas
+    if (!selectedGeofenceIds?.length) return all;
+
+    const set = new Set(selectedGeofenceIds.map(String));
+    return all.filter((g) => set.has(String(g.id)));
+  }, [geofenceRows, selectedGeofenceIds]);
+
+  useEffect(() => {
+    const cnt = filteredGeofenceRows.length;
+    setDiag((d) => ({ ...d, selectedGeofences: cnt }));
+  }, [filteredGeofenceRows]);
+
   const geofencePolygons = useMemo(() => {
     const out = [];
-    for (const g of geofenceRows || []) {
+    for (const g of filteredGeofenceRows || []) {
       const polys = normalizeGeoJSONToPolygons(g.geojson);
       polys.forEach((p, i) => out.push({ geofenceId: g.id, name: g.name || g.id, positions: p, idx: i }));
     }
     return out;
-  }, [geofenceRows]);
+  }, [filteredGeofenceRows]);
 
   const mapCenter = useMemo(() => {
     const last = positions?.[0];
@@ -585,6 +854,14 @@ export default function TrackerDashboard() {
             </select>
           </label>
 
+          {/* ✅ NUEVO: droplist multi geocercas */}
+          <MultiGeofenceSelect
+            geofences={geofenceRows}
+            selectedIds={selectedGeofenceIds}
+            setSelectedIds={setSelectedGeofenceIds}
+            disabled={!geofenceRows?.length}
+          />
+
           <button
             type="button"
             onClick={() => fetchPositions(orgId, { showSpinner: true })}
@@ -599,7 +876,7 @@ export default function TrackerDashboard() {
             onClick={() => setFitSignal((x) => x + 1)}
             className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
             disabled={geofencePolygons.length === 0}
-            title={geofencePolygons.length === 0 ? "No hay geocercas para centrar" : "Centrar geocerca"}
+            title={geofencePolygons.length === 0 ? "No hay geocercas seleccionadas para centrar" : "Centrar geocerca(s) seleccionada(s)"}
           >
             Centrar geocerca
           </button>
@@ -619,6 +896,8 @@ export default function TrackerDashboard() {
         <div><b>geofencesFound</b>: {diag.geofencesFound}</div>
         <div><b>geofencePolys</b>: {diag.geofencePolys}</div>
         <div><b>assignedGeofenceIds</b>: {diag.assignedGeofenceIds}</div>
+
+        <div><b>selectedGeofences</b>: {diag.selectedGeofences}</div>
 
         <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
           <b>fromIso</b>: {diag.lastFromIso || "—"}

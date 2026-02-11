@@ -3,9 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 
 /**
  * Supabase client — FRONTEND (Vite)
- * - Compatible con flujo normal (persistSession=true, detectSessionInUrl=true)
- * - Compatible con AuthCallback.tsx (token en memoria) vía setMemoryAccessToken
- * - Env: acepta VITE_* y fallbacks (por seguridad de deploys)
+ * Fuente única de verdad:
+ *   - VITE_SUPABASE_URL
+ *   - VITE_SUPABASE_ANON_KEY
+ *
+ * No se permiten fallbacks para evitar apuntar a proyectos incorrectos.
  */
 
 function normUrl(u) {
@@ -29,43 +31,17 @@ function projectRefFromUrl(u) {
   }
 }
 
-// Env (Vite + fallbacks)
-const RAW_SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ||
-  import.meta.env.SUPABASE_URL ||
-  import.meta.env.NEXT_PUBLIC_SUPABASE_URL ||
-  "";
-
-const RAW_SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY_PUBLIC ||
-  import.meta.env.SUPABASE_ANON_KEY ||
-  import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "";
+// ✅ SOLO VITE_
+const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
 
-// ✅ Token en memoria (para AuthCallback.tsx)
-let __memoryAccessToken = null;
-
-/**
- * Guarda (o limpia) un access token en memoria.
- * No persiste en storage. No loguea token.
- */
-export function setMemoryAccessToken(token) {
-  __memoryAccessToken = token ? String(token) : null;
-}
-
-/** (Opcional) por si lo usas en otra parte */
-export function getMemoryAccessToken() {
-  return __memoryAccessToken;
-}
-
-// Falla temprano si faltan variables
+// Fail fast
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
-    "[supabaseClient] Faltan env vars. Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY (o fallbacks equivalentes)."
+    "[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build."
   );
 }
 
@@ -73,12 +49,31 @@ if (!isSupabaseUrl(SUPABASE_URL)) {
   throw new Error(`[supabaseClient] Supabase URL inválida: ${SUPABASE_URL}`);
 }
 
+// 🔒 Blindaje opcional: fija tu project ref esperado
+const EXPECTED_PROJECT_REF = "mujwsfhkocsuuahlrssn";
+const currentRef = projectRefFromUrl(SUPABASE_URL);
+
+if (currentRef !== EXPECTED_PROJECT_REF) {
+  throw new Error(
+    `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
+  );
+}
+
+let __memoryAccessToken = null;
+
+export function setMemoryAccessToken(token) {
+  __memoryAccessToken = token ? String(token) : null;
+}
+
+export function getMemoryAccessToken() {
+  return __memoryAccessToken;
+}
+
 const storage =
   typeof window !== "undefined" && window.localStorage
     ? window.localStorage
     : undefined;
 
-// ✅ Wrapper fetch: si hay token en memoria, lo agrega como Authorization Bearer
 const wrappedFetch = async (url, options = {}) => {
   const headers = new Headers(options.headers || {});
   if (__memoryAccessToken && !headers.has("Authorization")) {
@@ -100,18 +95,14 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
-// Debug browser (NO expone key)
 if (typeof window !== "undefined") {
-  const info = {
+  console.info("[ENV CHECK]", {
     MODE: import.meta.env.MODE,
     ORIGIN: window.location.origin,
     SUPABASE_URL,
-    PROJECT_REF: projectRefFromUrl(SUPABASE_URL),
+    PROJECT_REF: currentRef,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-  };
-
-  console.info("[ENV CHECK]", info);
+  });
 
   window.__supabase__ = supabase;
-  window.__supabase_memory_token_set__ = () => Boolean(__memoryAccessToken);
 }
