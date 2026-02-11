@@ -2,15 +2,13 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../lib/supabaseClient"; // ✅ cliente canónico (evita 2 clientes)
+import { supabase } from "../lib/supabaseClient";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
 /**
  * Landing UNIVERSAL:
  * - Público: NO consulta sesión, NO usa useAuth, NO hace getSession.
- * - ES/EN/FR visible (LanguageSwitcher)
- * - Navegación SPA con <Link>
- * - Anti-spam OTP: cooldown para evitar 429 (rate limit)
+ * - Anti-spam OTP: cooldown + lock persistente por email (localStorage)
  */
 
 function safeT(value, fallback = "") {
@@ -26,10 +24,40 @@ function safeT(value, fallback = "") {
   }
 }
 
+const LS_LOCK_PREFIX = "tg_otp_lock_v1:"; // lock por email
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+function normEmail(v) {
+  return String(v || "").trim().toLowerCase();
+}
+function isValidEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+function getEmailLockSeconds(email) {
+  try {
+    const key = LS_LOCK_PREFIX + normEmail(email);
+    const until = parseInt(localStorage.getItem(key) || "0", 10);
+    const left = until - nowSec();
+    return Number.isFinite(left) ? Math.max(0, left) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setEmailLockSeconds(email, seconds) {
+  try {
+    const key = LS_LOCK_PREFIX + normEmail(email);
+    const until = nowSec() + Math.max(0, seconds);
+    localStorage.setItem(key, String(until));
+  } catch {
+    // ignore
+  }
+}
+
 export default function Landing() {
   const { t } = useTranslation();
 
-  // helper i18n: nunca mostrar la key
   const tt = useMemo(() => {
     return (key, fallback) => {
       const v = t(key, { defaultValue: fallback });
@@ -42,29 +70,45 @@ export default function Landing() {
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ✅ Cooldown anti-spam (segundos)
+  // Cooldown de UI (segundos)
   const [cooldownSec, setCooldownSec] = useState(0);
+
+  // Cuando cambia el email, cargar lock persistente
+  useEffect(() => {
+    const em = normEmail(email);
+    if (!em) return;
+    const locked = getEmailLockSeconds(em);
+    if (locked > 0) setCooldownSec((s) => Math.max(s, locked));
+    // no dependas de cooldownSec aquí (evita loops)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email]);
+
+  // Tick de cooldown
   useEffect(() => {
     if (cooldownSec <= 0) return;
-    const id = setInterval(() => setCooldownSec((s) => Math.max(0, s - 1)), 1000);
+    const id = setInterval(() => {
+      setCooldownSec((s) => Math.max(0, s - 1));
+    }, 1000);
     return () => clearInterval(id);
   }, [cooldownSec]);
-
-  const normEmail = (v) => String(v || "").trim().toLowerCase();
-  const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
   const handleSendMagicLink = async (e) => {
     e.preventDefault();
     setStatusMsg("");
     setErrorMsg("");
 
-    // evita spam por UX
-    if (cooldownSec > 0) {
-      setErrorMsg(tt("landing.cooldown", `Espera ${cooldownSec}s antes de volver a intentar.`));
+    const em = normEmail(email);
+
+    // Reglas anti-spam
+    const locked = em ? getEmailLockSeconds(em) : 0;
+    const effectiveCooldown = Math.max(cooldownSec, locked);
+
+    if (effectiveCooldown > 0) {
+      setCooldownSec(effectiveCooldown);
+      setErrorMsg(tt("landing.cooldown", `Espera ${effectiveCooldown}s antes de volver a intentar.`));
       return;
     }
 
-    const em = normEmail(email);
     if (!em || !isValidEmail(em)) {
       setErrorMsg(tt("landing.invalidEmail", "Correo inválido."));
       return;
@@ -83,8 +127,9 @@ export default function Landing() {
 
       setStatusMsg(tt("landing.magicLinkSent", "Te enviamos un enlace de acceso. Revisa tu correo."));
 
-      // ✅ cooldown normal (evita 429 por clicks repetidos)
+      // Cooldown normal (persistente también)
       setCooldownSec(75);
+      setEmailLockSeconds(em, 75);
     } catch (err) {
       console.error("[Landing] signInWithOtp error", err);
 
@@ -93,11 +138,13 @@ export default function Landing() {
         err?.status === 429 ||
         msg.includes("rate limit") ||
         msg.includes("too many") ||
-        msg.includes("exceeded");
+        msg.includes("exceeded") ||
+        msg.includes("over_email_send_rate_limit");
 
       if (isRate) {
-        // ✅ cuando Supabase bloquea, evita seguir pegándole
-        setCooldownSec(90);
+        // Cuando Supabase bloquea, alarga lock persistente
+        setCooldownSec(120);
+        setEmailLockSeconds(em, 120);
         setErrorMsg(
           tt(
             "landing.rateLimit",
@@ -127,10 +174,7 @@ export default function Landing() {
                 {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}
               </div>
               <div className="text-xs text-white/60">
-                {safeT(
-                  tt("landing.brandTagline", "Control de personal por geocercas"),
-                  "Control de personal por geocercas"
-                )}
+                {safeT(tt("landing.brandTagline", "Control de personal por geocercas"), "Control de personal por geocercas")}
               </div>
             </div>
           </div>
@@ -152,10 +196,7 @@ export default function Landing() {
           <div>
             <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
               {safeT(
-                tt(
-                  "landing.heroTitle",
-                  "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo"
-                ),
+                tt("landing.heroTitle", "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo"),
                 "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo"
               )}
             </h1>
@@ -188,9 +229,7 @@ export default function Landing() {
           </div>
 
           <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
-            <h2 className="text-xl font-bold">
-              {safeT(tt("landing.quickAccessTitle", "Acceso rápido"), "Acceso rápido")}
-            </h2>
+            <h2 className="text-xl font-bold">{safeT(tt("landing.quickAccessTitle", "Acceso rápido"), "Acceso rápido")}</h2>
 
             <p className="mt-2 text-sm text-white/70">
               {safeT(
@@ -200,9 +239,7 @@ export default function Landing() {
             </p>
 
             <form onSubmit={handleSendMagicLink} className="mt-6">
-              <label className="block text-xs text-white/70 mb-2">
-                {safeT(tt("landing.email", "Correo"), "Correo")}
-              </label>
+              <label className="block text-xs text-white/70 mb-2">{safeT(tt("landing.email", "Correo"), "Correo")}</label>
 
               <input
                 value={email}
@@ -228,10 +265,7 @@ export default function Landing() {
               {errorMsg && <div className="mt-4 text-sm text-red-300">{errorMsg}</div>}
 
               <p className="mt-4 text-xs text-white/50">
-                {safeT(
-                  tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."),
-                  "Importante: el acceso funciona solo con el Magic Link real."
-                )}
+                {safeT(tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."), "Importante: el acceso funciona solo con el Magic Link real.")}
               </p>
 
               <Link className="mt-2 inline-block text-xs text-white/60 underline" to="/help/support">
