@@ -1,0 +1,23688 @@
+
+
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+
+CREATE SCHEMA IF NOT EXISTS "public";
+
+
+ALTER SCHEMA "public" OWNER TO "pg_database_owner";
+
+
+COMMENT ON SCHEMA "public" IS 'standard public schema';
+
+
+
+CREATE TYPE "public"."app_role" AS ENUM (
+    'owner',
+    'admin',
+    'tracker'
+);
+
+
+ALTER TYPE "public"."app_role" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."assign_result" AS (
+	"status" "text",
+	"message" "text"
+);
+
+
+ALTER TYPE "public"."assign_result" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."attendance_kind" AS ENUM (
+    'check_in',
+    'check_out'
+);
+
+
+ALTER TYPE "public"."attendance_kind" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."invite_status" AS ENUM (
+    'pending',
+    'accepted',
+    'cancelled',
+    'expired'
+);
+
+
+ALTER TYPE "public"."invite_status" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."plan_code" AS ENUM (
+    'starter',
+    'pro',
+    'enterprise',
+    'free',
+    'elite',
+    'elite_plus'
+);
+
+
+ALTER TYPE "public"."plan_code" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."role_type" AS ENUM (
+    'owner',
+    'admin',
+    'tracker',
+    'viewer'
+);
+
+
+ALTER TYPE "public"."role_type" OWNER TO "postgres";
+
+SET default_tablespace = '';
+
+SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."memberships" (
+    "org_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "role" "public"."role_type" DEFAULT 'viewer'::"public"."role_type" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "is_default" boolean DEFAULT false NOT NULL,
+    "revoked_at" timestamp with time zone
+);
+
+
+ALTER TABLE "public"."memberships" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_col_exists"("p_table" "regclass", "p_col" "text") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = p_table
+      and a.attname = p_col
+      and a.attnum > 0
+      and not a.attisdropped
+  )
+$$;
+
+
+ALTER FUNCTION "public"."_col_exists"("p_table" "regclass", "p_col" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_col_exists"("p_table" "text", "p_col" "text") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema='public'
+      AND table_name = p_table
+      AND column_name = p_col
+  );
+$$;
+
+
+ALTER FUNCTION "public"."_col_exists"("p_table" "text", "p_col" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_email_norm"("p_email" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select lower(trim(coalesce(p_email,'')));
+$$;
+
+
+ALTER FUNCTION "public"."_email_norm"("p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_geojson_extract_geometry"("p_geojson" "jsonb") RETURNS "jsonb"
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+declare
+  v_type text;
+  v_geom jsonb;
+begin
+  if p_geojson is null then
+    raise exception 'geojson is required';
+  end if;
+
+  v_type := lower(coalesce(p_geojson->>'type',''));
+
+  if v_type = 'featurecollection' then
+    v_geom := p_geojson #> '{features,0,geometry}';
+  elsif v_type = 'feature' then
+    v_geom := p_geojson -> 'geometry';
+  else
+    v_geom := p_geojson;
+  end if;
+
+  if v_geom is null then
+    raise exception 'Invalid GeoJSON: missing geometry';
+  end if;
+
+  return v_geom;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_geojson_extract_geometry"("p_geojson" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_geojson_extract_radius_m"("p_geojson" "jsonb") RETURNS integer
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+declare
+  v_type text;
+  v_rad text;
+  v_val integer;
+begin
+  if p_geojson is null then
+    return null;
+  end if;
+
+  v_type := lower(coalesce(p_geojson->>'type',''));
+
+  if v_type = 'featurecollection' then
+    v_rad := (p_geojson #>> '{features,0,properties,radius_m}');
+  elsif v_type = 'feature' then
+    v_rad := (p_geojson #>> '{properties,radius_m}');
+  else
+    -- si es geometry puro, no hay properties
+    v_rad := null;
+  end if;
+
+  if v_rad is null then
+    return null;
+  end if;
+
+  begin
+    v_val := nullif(trim(v_rad),'')::integer;
+  exception when others then
+    v_val := null;
+  end;
+
+  return v_val;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_geojson_extract_radius_m"("p_geojson" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_geojson_to_multipolygon_4326"("p_geojson" "jsonb") RETURNS "public"."geometry"
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+declare
+  v_geom_json jsonb;
+  v_g geometry;
+  v_t text;
+  v_radius_m integer;
+begin
+  v_geom_json := public._geojson_extract_geometry(p_geojson);
+
+  v_g := ST_SetSRID(ST_GeomFromGeoJSON(v_geom_json::text), 4326);
+  v_t := upper(GeometryType(v_g));
+
+  if v_t = 'POLYGON' then
+    return ST_Multi(v_g);
+  elsif v_t = 'MULTIPOLYGON' then
+    return v_g;
+  elsif v_t = 'POINT' then
+    v_radius_m := public._geojson_extract_radius_m(p_geojson);
+    if v_radius_m is null or v_radius_m <= 0 then
+      raise exception 'Point geometry requires properties.radius_m (>0)';
+    end if;
+
+    -- buffer en metros usando geography
+    return ST_Multi(
+      (ST_Buffer(v_g::geography, v_radius_m)::geometry)
+    );
+  else
+    raise exception 'GeometryType % not supported (expected POLYGON/MULTIPOLYGON or POINT+radius_m)', v_t;
+  end if;
+
+exception
+  when others then
+    raise exception 'invalid GeoJson representation: %', SQLERRM;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_geojson_to_multipolygon_4326"("p_geojson" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_geom_from_geometry"("_geom_json" "jsonb") RETURNS "public"."geometry"
+    LANGUAGE "plpgsql"
+    AS $$
+DECLARE
+  _g geometry;
+BEGIN
+  IF _geom_json IS NULL THEN
+    RAISE EXCEPTION 'GeoJSON geometry nula';
+  END IF;
+
+  _g := ST_GeomFromGeoJSON(_geom_json::text);
+  IF _g IS NULL THEN
+    RAISE EXCEPTION 'No se pudo parsear GeoJSON geometry';
+  END IF;
+
+  IF GeometryType(_g) <> 'POLYGON' THEN
+    RAISE EXCEPTION 'Se esperaba Polygon pero llegó: %', GeometryType(_g);
+  END IF;
+
+  _g := ST_SetSRID(_g, 4326);
+
+  IF NOT ST_IsValid(_g) THEN
+    RAISE EXCEPTION 'Geometría inválida (¿autointersección?)';
+  END IF;
+
+  IF ST_NPoints(_g) < 4 THEN
+    RAISE EXCEPTION 'El polígono requiere mínimo 3 vértices (anillo cerrado)';
+  END IF;
+
+  RETURN _g;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."_geom_from_geometry"("_geom_json" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_is_root_claim"() RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  SELECT coalesce((auth.jwt() ->> 'root_owner')::boolean, false)
+     OR coalesce((auth.jwt() -> 'app_metadata' ->> 'root_owner')::boolean, false)
+     OR coalesce((auth.jwt() -> 'user_metadata' ->> 'root_owner')::boolean, false);
+$$;
+
+
+ALTER FUNCTION "public"."_is_root_claim"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_memberships_role_type"() RETURNS "text"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select c.udt_name
+  from information_schema.columns c
+  where c.table_schema='public'
+    and c.table_name='memberships'
+    and c.column_name='role'
+  limit 1;
+$$;
+
+
+ALTER FUNCTION "public"."_memberships_role_type"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_normalize_role_for_app_user_roles"("p_user" "uuid", "p_org" "uuid", "p_role" "text") RETURNS "text"
+    LANGUAGE "sql" STABLE
+    AS $$
+  SELECT
+    CASE
+      WHEN lower(coalesce(p_role,'')) = 'owner'
+           AND EXISTS (
+             SELECT 1
+             FROM public.organizations o
+             WHERE o.id = p_org AND o.owner_id = p_user
+           )
+        THEN 'owner'
+      WHEN lower(coalesce(p_role,'')) = 'owner'
+        THEN 'admin'
+      WHEN lower(coalesce(p_role,'')) IN ('admin','viewer','tracker','owner')
+        THEN lower(p_role)
+      ELSE 'viewer'
+    END;
+$$;
+
+
+ALTER FUNCTION "public"."_normalize_role_for_app_user_roles"("p_user" "uuid", "p_org" "uuid", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_org_members_enforce_is_active_for_admins"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF NEW.role IN ('owner','admin') THEN
+    NEW.is_active := true;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."_org_members_enforce_is_active_for_admins"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_org_members_user_col"() RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if exists(select 1 from information_schema.columns where table_schema='public' and table_name='org_members' and column_name='user_id') then
+    return 'user_id';
+  elsif exists(select 1 from information_schema.columns where table_schema='public' and table_name='org_members' and column_name='profile_id') then
+    return 'profile_id';
+  else
+    raise exception 'org_members no tiene user_id ni profile_id';
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_org_members_user_col"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_org_parent_table_of_org_members"() RETURNS "text"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select format('%I.%I', n2.nspname, c2.relname) as parent_table
+  from pg_constraint fk
+  join pg_class c1 on c1.oid = fk.conrelid
+  join pg_namespace n1 on n1.oid = c1.relnamespace
+  join pg_class c2 on c2.oid = fk.confrelid
+  join pg_namespace n2 on n2.oid = c2.relnamespace
+  join pg_attribute a1 on a1.attrelid = c1.oid and a1.attnum = fk.conkey[1]
+  where fk.contype = 'f'
+    and n1.nspname = 'public'
+    and c1.relname = 'org_members'
+    and a1.attname = 'org_id'
+  limit 1;
+$$;
+
+
+ALTER FUNCTION "public"."_org_parent_table_of_org_members"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_organizations_plan_default_label"() RETURNS "text"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select e.enumlabel
+  from pg_type t
+  join pg_enum e on e.enumtypid = t.oid
+  where t.typname = public._organizations_plan_type()
+  order by e.enumsortorder
+  limit 1;
+$$;
+
+
+ALTER FUNCTION "public"."_organizations_plan_default_label"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_organizations_plan_type"() RETURNS "text"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select c.udt_name
+  from information_schema.columns c
+  where c.table_schema='public'
+    and c.table_name='organizations'
+    and c.column_name='plan'
+  limit 1;
+$$;
+
+
+ALTER FUNCTION "public"."_organizations_plan_type"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_pick_membership_role_label"("p_desired" "text") RETURNS "text"
+    LANGUAGE "sql" STABLE
+    AS $$
+  with role_type as (
+    select a.atttypid as typoid
+    from pg_attribute a
+    where a.attrelid = 'public.memberships'::regclass
+      and a.attname  = 'role'
+      and a.attnum   > 0
+      and not a.attisdropped
+    limit 1
+  ),
+  labels as (
+    select lower(e.enumlabel) as enumlabel, e.enumsortorder
+    from pg_enum e
+    join role_type rt on rt.typoid = e.enumtypid
+    order by e.enumsortorder
+  )
+  select
+    coalesce(
+      (select enumlabel from labels where enumlabel = lower(coalesce(p_desired,'')) limit 1),
+      (select enumlabel from labels where enumlabel = 'owner' limit 1),
+      (select enumlabel from labels where enumlabel = 'admin' limit 1),
+      (select enumlabel from labels order by enumsortorder limit 1)
+    );
+$$;
+
+
+ALTER FUNCTION "public"."_pick_membership_role_label"("p_desired" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_pick_org_table"() RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tbl text;
+begin
+  select t.table_name into v_tbl
+  from information_schema.tables t
+  where t.table_schema='public'
+    and t.table_type='BASE TABLE'
+    and t.table_name in ('organizations','orgs','orgs_legacy')
+  order by case t.table_name
+    when 'organizations' then 1
+    when 'orgs' then 2
+    when 'orgs_legacy' then 3
+    else 9 end
+  limit 1;
+
+  if v_tbl is null then
+    raise exception 'No se encontró tabla de organizaciones (organizations/orgs/orgs_legacy)';
+  end if;
+
+  return v_tbl;
+end $$;
+
+
+ALTER FUNCTION "public"."_pick_org_table"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_require_owner_or_admin"("p_org_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_role text;
+begin
+  if auth.uid() is null then
+    raise exception 'no_auth' using errcode='P0001';
+  end if;
+
+  select m.role::text
+    into v_role
+  from public.memberships m
+  where m.user_id = auth.uid()
+    and m.org_id = p_org_id;
+
+  if v_role is null or v_role not in ('owner','admin') then
+    raise exception 'not_allowed' using errcode='P0001';
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_require_owner_or_admin"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_resolve_tenant_for_current_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_role text;
+begin
+  perform set_config('row_security','off', true);
+
+  select b.org_id, b.role
+    into v_org_id, v_role
+  from public.bootstrap_session_context() b
+  limit 1;
+
+  if v_org_id is null then
+    raise exception 'No org context (bootstrap_session_context returned null)';
+  end if;
+
+  perform set_config('app.tenant_id', v_org_id::text, true);
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_resolve_tenant_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_set_current_org_for_user"("p_user_id" "uuid", "p_org_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- ✅ Habilita escrituras controladas SOLO dentro de esta transacción
+  perform set_config('app.allow_profiles_write', '1', true);
+
+  insert into public.profiles (id, current_org_id)
+  values (p_user_id, p_org_id)
+  on conflict (id) do update
+    set current_org_id = excluded.current_org_id;
+
+  -- (opcional) limpiar el flag
+  perform set_config('app.allow_profiles_write', '0', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."_set_current_org_for_user"("p_user_id" "uuid", "p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."_user_has_org"("p_user" "uuid", "p_org" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    SET "search_path" TO 'public'
+    AS $$
+  select exists(
+    select 1
+    from public.memberships m
+    where m.user_id = p_user
+      and m.org_id  = p_org
+  );
+$$;
+
+
+ALTER FUNCTION "public"."_user_has_org"("p_user" "uuid", "p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."accept_invitation"("p_token" "uuid") RETURNS "public"."memberships"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_inv public.invitations;
+  v_mem public.memberships;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_inv
+  from public.invitations
+  where token = p_token
+    and status = 'pending'
+    and expires_at > now()
+  limit 1;
+
+  if not found then
+    raise exception 'Invalid or expired invitation';
+  end if;
+
+  -- crea membresía si no existe
+  insert into public.memberships(org_id, user_id, role)
+  values (v_inv.org_id, auth.uid(), v_inv.role)
+  on conflict (org_id, user_id) do update
+    set role = excluded.role
+  returning * into v_mem;
+
+  -- marca como aceptada
+  update public.invitations
+     set status='accepted'
+   where id = v_inv.id;
+
+  perform public.log_event('invite_accepted', 'invitation', v_inv.id, to_jsonb(v_inv));
+  return v_mem;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."accept_invitation"("p_token" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."accept_invite_on_login"() RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_user_id uuid := auth.uid();
+  v_email   text;
+  v_invitation record;
+begin
+  -- 0) Seguridad: si no hay usuario autenticado, salir
+  if v_user_id is null then
+    return;
+  end if;
+
+  -- 1) Obtener email del usuario autenticado
+  select email
+  into v_email
+  from auth.users
+  where id = v_user_id;
+
+  if v_email is null then
+    return;
+  end if;
+
+  -- 2) Buscar invitación pendiente para ese email
+  select *
+  into v_invitation
+  from public.org_invites
+  where lower(email) = lower(v_email)
+    and status = 'pending'
+  order by created_at desc
+  limit 1;
+
+  if not found then
+    return; -- no hay invitaciones pendientes
+  end if;
+
+  -- 3) Crear / actualizar membresía en user_organizations
+  --    (esta es la tabla que tu AuthContext usa)
+  insert into public.user_organizations (org_id, user_id, role)
+  values (v_invitation.org_id, v_user_id, upper(v_invitation.role))
+  on conflict (org_id, user_id) do update
+    set role = excluded.role;
+
+  -- 4) Marcar invitación como aceptada
+  update public.org_invites
+  set status = 'accepted',
+      accepted_at = now()
+  where id = v_invitation.id;
+
+end;
+$$;
+
+
+ALTER FUNCTION "public"."accept_invite_on_login"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."accept_org_invites_for_current_user"() RETURNS TABLE("accepted" boolean, "org_id" "uuid", "role" "text", "invite_id" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_email text;
+  rec record;
+begin
+  if v_user is null then
+    raise exception 'accept_org_invites_for_current_user: not authenticated';
+  end if;
+
+  select u.email into v_email
+  from auth.users u
+  where u.id = v_user;
+
+  accepted := false; org_id := null; role := null; invite_id := null;
+
+  for rec in
+    select id, org_id, role
+    from public.org_invites
+    where lower(email)=lower(v_email)
+      and status='pending'
+      and revoked_at is null
+    order by created_at asc
+  loop
+    perform public.ensure_user_role(v_user, rec.org_id, rec.role);
+
+    update public.org_invites
+    set status='accepted',
+        accepted_at=coalesce(accepted_at, now())
+    where id = rec.id;
+
+    accepted := true;
+    org_id := rec.org_id;
+    role := rec.role;
+    invite_id := rec.id;
+    return next;
+  end loop;
+
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."accept_org_invites_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."accept_pending_invite_for_current_user"() RETURNS TABLE("accepted" boolean, "org_id" "uuid", "role" "text", "email" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_email text;
+  v_role text;
+  v_org uuid;
+  v_role_id uuid;
+begin
+  if v_user is null then
+    raise exception 'accept_pending_invite_for_current_user: not authenticated';
+  end if;
+
+  select u.email into v_email
+  from auth.users u
+  where u.id = v_user;
+
+  accepted := false; org_id := null; role := null; email := v_email;
+
+  select p.role_id into v_role_id
+  from public.pending_invites p
+  where lower(p.email)=lower(v_email)
+  limit 1;
+
+  if v_role_id is null then
+    return;
+  end if;
+
+  v_role := coalesce(public.role_id_to_role(v_role_id), 'admin');
+  if v_role not in ('owner','admin','tracker') then v_role := 'admin'; end if;
+
+  v_org := public.ensure_default_org_for_user(v_user);
+
+  perform public.ensure_user_role(v_user, v_org, v_role);
+
+  delete from public.pending_invites
+  where lower(email)=lower(v_email);
+
+  accepted := true;
+  org_id := v_org;
+  role := v_role;
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."accept_pending_invite_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."activities_create"("p_name" "text", "p_description" "text" DEFAULT NULL::"text", "p_active" boolean DEFAULT true, "p_currency_code" "text" DEFAULT 'USD'::"text", "p_hourly_rate" numeric DEFAULT NULL::numeric) RETURNS TABLE("id" "uuid", "tenant_id" "uuid", "org_id" "uuid", "name" "text", "description" "text", "active" boolean, "currency_code" "text", "hourly_rate" numeric, "created_at" timestamp with time zone, "created_by" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+begin
+  perform set_config('row_security','off', true);
+  v_tenant := public._resolve_tenant_for_current_user();
+
+  if p_name is null or btrim(p_name) = '' then
+    raise exception 'Missing name';
+  end if;
+
+  insert into public.activities (tenant_id, org_id, name, description, active, currency_code, hourly_rate)
+  values (v_tenant, v_tenant, btrim(p_name), p_description, coalesce(p_active,true), coalesce(p_currency_code,'USD'), p_hourly_rate)
+  returning
+    activities.id,
+    activities.tenant_id,
+    activities.org_id,
+    activities.name,
+    activities.description,
+    activities.active,
+    activities.currency_code,
+    activities.hourly_rate,
+    activities.created_at,
+    activities.created_by
+  into id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by;
+
+  return next;
+end $$;
+
+
+ALTER FUNCTION "public"."activities_create"("p_name" "text", "p_description" "text", "p_active" boolean, "p_currency_code" "text", "p_hourly_rate" numeric) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."activities_delete"("p_id" "uuid") RETURNS boolean
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+  v_deleted int;
+begin
+  perform set_config('row_security','off', true);
+  v_tenant := public._resolve_tenant_for_current_user();
+
+  delete from public.activities a
+   where a.id = p_id
+     and a.tenant_id = v_tenant;
+
+  get diagnostics v_deleted = row_count;
+  return (v_deleted > 0);
+end $$;
+
+
+ALTER FUNCTION "public"."activities_delete"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."activities_list"("p_include_inactive" boolean DEFAULT false) RETURNS TABLE("id" "uuid", "tenant_id" "uuid", "org_id" "uuid", "name" "text", "description" "text", "active" boolean, "currency_code" "text", "hourly_rate" numeric, "created_at" timestamp with time zone, "created_by" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+begin
+  perform set_config('row_security','off', true);
+  v_tenant := public._resolve_tenant_for_current_user();
+
+  return query
+  select a.id, a.tenant_id, a.org_id, a.name, a.description, a.active, a.currency_code, a.hourly_rate, a.created_at, a.created_by
+  from public.activities a
+  where a.tenant_id = v_tenant
+    and (p_include_inactive or a.active = true)
+  order by a.name asc;
+end $$;
+
+
+ALTER FUNCTION "public"."activities_list"("p_include_inactive" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."activities_set_active"("p_id" "uuid", "p_active" boolean) RETURNS TABLE("id" "uuid", "tenant_id" "uuid", "org_id" "uuid", "name" "text", "description" "text", "active" boolean, "currency_code" "text", "hourly_rate" numeric, "created_at" timestamp with time zone, "created_by" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+begin
+  perform set_config('row_security','off', true);
+  v_tenant := public._resolve_tenant_for_current_user();
+
+  update public.activities a
+     set active = coalesce(p_active,false)
+   where a.id = p_id
+     and a.tenant_id = v_tenant
+  returning a.id, a.tenant_id, a.org_id, a.name, a.description, a.active, a.currency_code, a.hourly_rate, a.created_at, a.created_by
+   into id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by;
+
+  if id is null then
+    raise exception 'Not found';
+  end if;
+
+  return next;
+end $$;
+
+
+ALTER FUNCTION "public"."activities_set_active"("p_id" "uuid", "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."activities_sync_org_tenant"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Si llega org_id pero no tenant_id, lo copiamos
+  if new.org_id is not null and new.tenant_id is null then
+    new.tenant_id := new.org_id;
+  end if;
+
+  -- Si llega tenant_id pero no org_id, lo copiamos
+  if new.tenant_id is not null and new.org_id is null then
+    new.org_id := new.tenant_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."activities_sync_org_tenant"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."activities_update"("p_id" "uuid", "p_name" "text" DEFAULT NULL::"text", "p_description" "text" DEFAULT NULL::"text", "p_currency_code" "text" DEFAULT NULL::"text", "p_hourly_rate" numeric DEFAULT NULL::numeric) RETURNS TABLE("id" "uuid", "tenant_id" "uuid", "org_id" "uuid", "name" "text", "description" "text", "active" boolean, "currency_code" "text", "hourly_rate" numeric, "created_at" timestamp with time zone, "created_by" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+begin
+  perform set_config('row_security','off', true);
+  v_tenant := public._resolve_tenant_for_current_user();
+
+  update public.activities a
+     set name = coalesce(nullif(btrim(p_name),''), a.name),
+         description = coalesce(p_description, a.description),
+         currency_code = coalesce(p_currency_code, a.currency_code),
+         hourly_rate = coalesce(p_hourly_rate, a.hourly_rate)
+   where a.id = p_id
+     and a.tenant_id = v_tenant
+  returning a.id, a.tenant_id, a.org_id, a.name, a.description, a.active, a.currency_code, a.hourly_rate, a.created_at, a.created_by
+   into id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by;
+
+  if id is null then
+    raise exception 'Not found';
+  end if;
+
+  return next;
+end $$;
+
+
+ALTER FUNCTION "public"."activities_update"("p_id" "uuid", "p_name" "text", "p_description" "text", "p_currency_code" "text", "p_hourly_rate" numeric) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_assign_or_create_org"("p_email" "text", "p_role" "text" DEFAULT 'owner'::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_org uuid;
+begin
+  select id into v_uid
+  from public.profiles
+  where email = p_email
+  limit 1;
+
+  if v_uid is null then
+    raise exception 'No existe profile para el email: %', p_email;
+  end if;
+
+  -- Modelo correcto para FK de org_users: tabla public.orgs
+  select id into v_org
+  from public.orgs
+  where created_by = v_uid
+  order by created_at desc
+  limit 1;
+
+  if v_org is null then
+    insert into public.orgs (id, name, created_at, created_by)
+    values (gen_random_uuid(), 'Org Demo', now(), v_uid)
+    returning id into v_org;
+  end if;
+
+  insert into public.org_users (org_id, user_id, role, created_at)
+  values (v_org, v_uid, p_role, now())
+  on conflict do nothing;
+
+  -- ¡Ojo! No tocamos public.profiles (evita el trigger)
+  return v_org;
+end
+$$;
+
+
+ALTER FUNCTION "public"."admin_assign_or_create_org"("p_email" "text", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_assign_role_org"("p_email" "text", "p_role_slug" "text", "p_org_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_caller_id        uuid := auth.uid();
+  v_caller_role_slug text;
+
+  v_user_id uuid;
+  v_role_id uuid;
+
+  v_now timestamptz := now();
+begin
+  if v_caller_id is null then
+    raise exception 'FORBIDDEN: not authenticated' using errcode = '42501';
+  end if;
+
+  -- owner/admin global (ajusta si tu modelo es por organización)
+  select r.slug
+  into v_caller_role_slug
+  from public.profiles p
+  join public.roles r on r.id = p.role_id
+  where p.id = v_caller_id;
+
+  if v_caller_role_slug is null or v_caller_role_slug not in ('owner','admin') then
+    raise exception 'FORBIDDEN: caller must be owner/admin' using errcode = '42501';
+  end if;
+
+  -- normaliza email
+  p_email := lower(trim(p_email));
+  if p_email is null or p_email = '' then
+    raise exception 'INVALID_EMAIL';
+  end if;
+
+  -- busca usuario en auth.users
+  select u.id
+  into v_user_id
+  from auth.users u
+  where lower(u.email) = p_email
+  limit 1;
+
+  if v_user_id is null then
+    raise exception 'AUTH_NOT_FOUND: user email % not found in auth', p_email;
+  end if;
+
+  -- role_id desde slug
+  select id into v_role_id
+  from public.roles
+  where slug = p_role_slug;
+
+  if v_role_id is null then
+    raise exception 'ROLE_NOT_FOUND: %', p_role_slug;
+  end if;
+
+  -- upsert profile
+  insert into public.profiles (id, email, full_name, role_id, created_at, updated_at)
+  values (v_user_id, p_email, null, v_role_id, v_now, v_now)
+  on conflict (id) do update
+    set role_id    = excluded.role_id,
+        email      = excluded.email,
+        updated_at = v_now;
+
+  -- upsert membresía si se pasa org
+  if p_org_id is not null then
+    insert into public.org_memberships (user_id, org_id, role_id, is_default, created_at, updated_at)
+    values (
+      v_user_id, p_org_id, v_role_id,
+      coalesce(
+        (select case when count(*) = 0 then true else false end
+         from public.org_memberships m
+         where m.user_id = v_user_id),
+        false
+      ),
+      v_now, v_now
+    )
+    on conflict (user_id, org_id) do update
+      set role_id    = excluded.role_id,
+          updated_at = v_now;
+  end if;
+
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_assign_role_org"("p_email" "text", "p_role_slug" "text", "p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_assign_role_org"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text" DEFAULT 'owner'::"text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Crea/actualiza el perfil con el org correspondiente
+  insert into public.profiles (id, org_id)
+  values (p_user_id, p_org_id)
+  on conflict (id) do update
+    set org_id = excluded.org_id
+    where public.profiles.org_id is distinct from excluded.org_id;
+
+  -- Si manejas roles, puedes extender aquí con p_role
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_assign_role_org"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_create_profile"("p_email" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  u    record;
+  rid  uuid;
+begin
+  select id, email, raw_user_meta_data, created_at
+  into u
+  from auth.users
+  where email ilike p_email
+  order by created_at desc
+  limit 1;
+
+  if u is null then
+    raise exception 'AUTH_NOT_FOUND';
+  end if;
+
+  select id into rid from public.roles where slug='tracker' limit 1;
+
+  insert into public.profiles (id, email, full_name, created_at, is_active, role, role_id)
+  values (
+    u.id,
+    u.email,
+    coalesce(u.raw_user_meta_data->>'full_name',''),
+    now(),
+    true,
+    'tracker',
+    rid
+  )
+  on conflict (id) do nothing;
+
+  return (select to_jsonb(p) from public.profiles p where p.id = u.id);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_create_profile"("p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_debug_personal_lookup"("p_org_id" "uuid", "p_tracker_user_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_admin uuid := auth.uid();
+  v_active_count int;
+  v_any_count int;
+  v_row jsonb;
+begin
+  if v_admin is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  if p_org_id is null or p_tracker_user_id is null then
+    return jsonb_build_object('ok', false, 'error', 'missing_params');
+  end if;
+
+  if not public.is_org_admin(p_org_id, v_admin) then
+    return jsonb_build_object('ok', false, 'error', 'not_org_admin');
+  end if;
+
+  select count(*) into v_any_count
+  from public.personal
+  where org_id = p_org_id
+    and user_id = p_tracker_user_id;
+
+  select count(*) into v_active_count
+  from public.personal
+  where org_id = p_org_id
+    and user_id = p_tracker_user_id
+    and coalesce(is_deleted,false) = false;
+
+  select to_jsonb(p) into v_row
+  from public.personal p
+  where p.org_id = p_org_id
+    and p.user_id = p_tracker_user_id
+  order by coalesce(p.updated_at, p.created_at) desc nulls last
+  limit 1;
+
+  return jsonb_build_object(
+    'ok', true,
+    'org_id', p_org_id,
+    'tracker_user_id', p_tracker_user_id,
+    'any_count', v_any_count,
+    'active_count', v_active_count,
+    'row', v_row
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_debug_personal_lookup"("p_org_id" "uuid", "p_tracker_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_delete_person"("p_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  perform 1;
+  delete from public.personal
+  where id = p_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_delete_person"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_enroll_tracker"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_email" "text" DEFAULT NULL::"text", "p_full_name" "text" DEFAULT NULL::"text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_admin uuid := auth.uid();
+  v_personal_id uuid;
+  v_final_org uuid;
+  v_email_norm text;
+begin
+  if v_admin is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  if p_org_id is null or p_tracker_user_id is null then
+    return jsonb_build_object('ok', false, 'error', 'org_id_and_tracker_user_id_required');
+  end if;
+
+  if not public.is_org_admin(p_org_id, v_admin) then
+    return jsonb_build_object('ok', false, 'error', 'not_org_admin');
+  end if;
+
+  v_email_norm := case when p_email is null then null else lower(trim(p_email)) end;
+
+  -- =========================================================
+  -- 1) Buscar por (org_id, user_id) activa
+  -- =========================================================
+  select id into v_personal_id
+  from public.personal
+  where org_id = p_org_id
+    and user_id = p_tracker_user_id
+    and coalesce(is_deleted,false) = false
+  order by coalesce(updated_at, created_at) desc nulls last
+  limit 1;
+
+  -- =========================================================
+  -- 2) Si no existe por user_id, buscar por (org_id, lower(email)) activa
+  --    para respetar uq_personal_org_email
+  -- =========================================================
+  if v_personal_id is null and v_email_norm is not null then
+    select id into v_personal_id
+    from public.personal
+    where org_id = p_org_id
+      and lower(email) = v_email_norm
+      and coalesce(is_deleted,false) = false
+    order by coalesce(updated_at, created_at) desc nulls last
+    limit 1;
+  end if;
+
+  -- =========================================================
+  -- 3) Si no existe activa, buscar borrada por user_id o por email y “revivir”
+  -- =========================================================
+  if v_personal_id is null then
+    select id into v_personal_id
+    from public.personal
+    where org_id = p_org_id
+      and (
+        user_id = p_tracker_user_id
+        or (v_email_norm is not null and lower(email) = v_email_norm)
+      )
+      and coalesce(is_deleted,false) = true
+    order by coalesce(updated_at, created_at) desc nulls last
+    limit 1;
+  end if;
+
+  -- =========================================================
+  -- 4) UPDATE si encontramos fila (por user_id o por email)
+  -- =========================================================
+  if v_personal_id is not null then
+    update public.personal
+    set
+      nombre = coalesce(p_full_name, nombre),
+      email = coalesce(p_email, email),
+      owner_id = p_tracker_user_id,
+      user_id = p_tracker_user_id,
+      activo_bool = true,
+      vigente = true,
+      is_deleted = false
+    where id = v_personal_id;
+
+  else
+    -- =========================================================
+    -- 5) INSERT nuevo (si no hay nada que choque por email/user)
+    -- =========================================================
+    insert into public.personal (
+      org_id, nombre, email, owner_id, user_id,
+      activo_bool, vigente, is_deleted
+    )
+    values (
+      p_org_id,
+      coalesce(p_full_name,'Tracker'),
+      coalesce(p_email,'unknown@example.com'),
+      p_tracker_user_id,
+      p_tracker_user_id,
+      true, true, false
+    )
+    returning id into v_personal_id;
+  end if;
+
+  -- memberships: rol tracker
+  insert into public.memberships (org_id, user_id, role, created_at, is_default, revoked_at)
+  values (p_org_id, p_tracker_user_id, 'tracker', now(), false, null)
+  on conflict (user_id, org_id)
+  where revoked_at is null
+  do update set role='tracker', revoked_at=null;
+
+  -- org_id final (por si triggers lo tocaran)
+  select org_id into v_final_org
+  from public.personal
+  where id = v_personal_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'requested_org_id', p_org_id,
+    'final_org_id', v_final_org,
+    'tracker_user_id', p_tracker_user_id,
+    'personal_id', v_personal_id
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_enroll_tracker"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_email" "text", "p_full_name" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text" DEFAULT 'admin'::"text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_user_id uuid;
+  v_org_id uuid;
+begin
+  -- 1. Ver si el usuario ya existe en auth
+  select id into v_user_id
+  from auth.users
+  where email = p_email;
+
+  -- 2. Si NO existe → pedir Magic Link
+  if v_user_id is null then
+    return jsonb_build_object(
+      'status', 'NEEDS_MAGIC_LINK'
+    );
+  end if;
+
+  -- 3. Crear nueva organización propia
+  insert into public.organizations (name, owner_id, created_at)
+  values (
+    'Org de ' || split_part(p_email, '@', 1),
+    v_user_id,
+    now()
+  )
+  returning id into v_org_id;
+
+  -- 4. Crear membership
+  insert into public.memberships (user_id, org_id, role, created_at)
+  values (v_user_id, v_org_id, p_role, now());
+
+  return jsonb_build_object(
+    'status', 'OK',
+    'org_id', v_org_id
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text" DEFAULT 'admin'::"text", "p_org_name" "text" DEFAULT NULL::"text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+declare
+  v_email text := lower(trim(p_email));
+  v_role  text := lower(trim(coalesce(p_role,'admin')));
+  v_caller_id uuid := auth.uid();
+  v_caller_email text;
+  v_is_root boolean := false;
+
+  v_user_id uuid;
+  v_org_id uuid;
+  v_name text;
+
+  v_has_app_user_roles boolean := false;
+begin
+  -- Validaciones
+  if v_email is null or v_email = '' then
+    return jsonb_build_object('status','ERROR','message','Email requerido');
+  end if;
+
+  if v_caller_id is null then
+    return jsonb_build_object('status','FORBIDDEN','message','No autenticado');
+  end if;
+
+  -- ROOT check (email fijo + optional app_root_users)
+  select email into v_caller_email
+  from auth.users
+  where id = v_caller_id;
+
+  v_is_root := (lower(coalesce(v_caller_email,'')) = 'fenice.ecuador@gmail.com');
+
+  if not v_is_root and to_regclass('public.app_root_users') is not null then
+    v_is_root := exists (
+      select 1 from public.app_root_users aru
+      where lower(aru.email) = lower(v_caller_email)
+    );
+  end if;
+
+  if not v_is_root then
+    return jsonb_build_object('status','FORBIDDEN','message','Solo ROOT puede invitar administradores');
+  end if;
+
+  -- ¿Existe usuario en auth?
+  select id into v_user_id
+  from auth.users
+  where lower(email) = v_email
+  limit 1;
+
+  if v_user_id is null then
+    return jsonb_build_object('status','NEEDS_MAGIC_LINK');
+  end if;
+
+  -- Crear org nueva SIEMPRE (regla canónica)
+  v_name := coalesce(nullif(trim(p_org_name),''), 'Org de ' || split_part(v_email,'@',1));
+
+  insert into public.organizations (name, owner_id, created_at)
+  values (v_name, v_user_id, now())
+  returning id into v_org_id;
+
+  -- Asignación de rol por org (mecanismo canónico: app_user_roles)
+  v_has_app_user_roles := (to_regclass('public.app_user_roles') is not null);
+
+  if not v_has_app_user_roles then
+    return jsonb_build_object(
+      'status','ERROR',
+      'message','Falta public.app_user_roles (mecanismo canónico de roles por org)',
+      'org_id', v_org_id
+    );
+  end if;
+
+  insert into public.app_user_roles (user_id, org_id, role)
+  values (v_user_id, v_org_id, v_role)
+  on conflict on constraint app_user_roles_user_id_org_id_key
+  do update set role = excluded.role;
+
+  -- (Opcional) si profiles tiene default_org_id/current_org_id, setear solo si están null
+  if to_regclass('public.profiles') is not null then
+    if exists (select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='default_org_id')
+    and exists (select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='current_org_id') then
+      update public.profiles
+      set
+        default_org_id = coalesce(default_org_id, v_org_id),
+        current_org_id = coalesce(current_org_id, v_org_id)
+      where id = v_user_id;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'status','OK',
+    'user_id', v_user_id,
+    'org_id', v_org_id,
+    'org_name', v_name,
+    'role', v_role,
+    'assigned_via', 'app_user_roles'
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text", "p_org_name" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_upsert_profile"("p_id" "uuid", "p_org" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  insert into public.profiles (id, org_id)
+  values (p_id, p_org)
+  on conflict (id) do update
+    set org_id = excluded.org_id
+    where public.profiles.org_id is distinct from excluded.org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_upsert_profile"("p_id" "uuid", "p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tracker_assignments" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "tracker_user_id" "uuid" NOT NULL,
+    "geofence_id" "uuid" NOT NULL,
+    "start_date" "date" NOT NULL,
+    "end_date" "date" NOT NULL,
+    "period" "daterange" GENERATED ALWAYS AS ("daterange"("start_date", COALESCE("end_date", 'infinity'::"date"), '[]'::"text")) STORED,
+    "frequency_minutes" integer DEFAULT 5 NOT NULL,
+    "active" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "period_tstz" "tstzrange",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "org_id" "uuid",
+    "activity_id" "uuid",
+    CONSTRAINT "chk_ta_dates" CHECK (("start_date" <= "end_date")),
+    CONSTRAINT "tracker_assignments_frequency_minutes_check" CHECK (("frequency_minutes" >= 5))
+);
+
+
+ALTER TABLE "public"."tracker_assignments" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."tracker_assignments"."period_tstz" IS 'Rango activo por hora exacta (tstzrange). Usar preferentemente sobre period (daterange).';
+
+
+
+COMMENT ON COLUMN "public"."tracker_assignments"."activity_id" IS 'Actividad asignada (FK a public.activities.id). Nullable para compatibilidad histórica.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_upsert_tracker_assignment_v1"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean DEFAULT true) RETURNS "public"."tracker_assignments"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_role text;
+  v_row public.tracker_assignments;
+  v_ok int;
+  v_end date;
+begin
+  if p_org_id is null or p_tracker_user_id is null or p_geofence_id is null then
+    raise exception 'org_id, tracker_user_id, geofence_id are required';
+  end if;
+
+  if p_start_date is null then
+    raise exception 'start_date is required';
+  end if;
+
+  -- end_date NOT NULL en tu esquema
+  v_end := coalesce(p_end_date, p_start_date);
+
+  if v_end < p_start_date then
+    raise exception 'end_date must be >= start_date';
+  end if;
+
+  -- auth: solo owner/admin en esa org
+  select m.role into v_role
+  from public.memberships m
+  where m.org_id = p_org_id
+    and m.user_id = auth.uid()
+    and m.revoked_at is null
+  limit 1;
+
+  if v_role not in ('owner','admin') then
+    raise exception 'not allowed';
+  end if;
+
+  -- tracker debe existir en personal de esa org y tener user_id
+  select count(*) into v_ok
+  from public.personal p
+  where p.org_id = p_org_id
+    and p.user_id = p_tracker_user_id
+    and coalesce(p.is_deleted,false) = false;
+
+  if v_ok = 0 then
+    raise exception 'tracker not found in personal for this org';
+  end if;
+
+  -- geofence debe existir y pertenecer a org
+  select count(*) into v_ok
+  from public.geofences g
+  where g.id = p_geofence_id
+    and g.org_id = p_org_id;
+
+  if v_ok = 0 then
+    raise exception 'geofence does not belong to org';
+  end if;
+
+  -- Si vamos a activar: desactivar otras activas del tracker en la org
+  -- Importante: tu end_date es inclusivo (por el comportamiento del period generado)
+  -- Para que NO incluya hoy: end_date = current_date - 1
+  if p_active is true then
+    update public.tracker_assignments ta
+    set active = false,
+        end_date = least(ta.end_date, current_date - 1)
+    where ta.org_id = p_org_id
+      and ta.tracker_user_id = p_tracker_user_id
+      and ta.active is true
+      and ta.geofence_id <> p_geofence_id;
+  end if;
+
+  -- UPSERT por (tracker_user_id, geofence_id)
+  -- (tú ya tienes uniques por tracker+geofence; esta forma evita inserts que choquen)
+  insert into public.tracker_assignments(
+    org_id, tracker_user_id, geofence_id, start_date, end_date, active
+  )
+  values(
+    p_org_id, p_tracker_user_id, p_geofence_id, p_start_date, v_end, p_active
+  )
+  on conflict (tracker_user_id, geofence_id)
+  do update set
+    org_id     = excluded.org_id,
+    start_date = excluded.start_date,
+    end_date   = excluded.end_date,
+    active     = excluded.active
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_upsert_tracker_assignment_v1"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_upsert_tracker_assignment_v2"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_activity_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean DEFAULT true) RETURNS "public"."tracker_assignments"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_role text;
+  v_row public.tracker_assignments;
+  v_ok int;
+  v_end date;
+begin
+  if p_org_id is null or p_tracker_user_id is null or p_geofence_id is null or p_activity_id is null then
+    raise exception 'org_id, tracker_user_id, geofence_id, activity_id are required';
+  end if;
+
+  if p_start_date is null then
+    raise exception 'start_date is required';
+  end if;
+
+  -- end_date NOT NULL en esquema
+  v_end := coalesce(p_end_date, p_start_date);
+
+  if v_end < p_start_date then
+    raise exception 'end_date must be >= start_date';
+  end if;
+
+  -- auth: solo owner/admin en esa org
+  select m.role into v_role
+  from public.memberships m
+  where m.org_id = p_org_id
+    and m.user_id = auth.uid()
+    and m.revoked_at is null
+  limit 1;
+
+  if v_role not in ('owner','admin') then
+    raise exception 'not allowed';
+  end if;
+
+  -- tracker debe existir en personal de esa org y tener user_id
+  select count(*) into v_ok
+  from public.personal p
+  where p.org_id = p_org_id
+    and p.user_id = p_tracker_user_id
+    and coalesce(p.is_deleted,false) = false;
+
+  if v_ok = 0 then
+    raise exception 'tracker not found in personal for this org';
+  end if;
+
+  -- geofence debe existir y pertenecer a org
+  select count(*) into v_ok
+  from public.geofences g
+  where g.id = p_geofence_id
+    and g.org_id = p_org_id;
+
+  if v_ok = 0 then
+    raise exception 'geofence does not belong to org';
+  end if;
+
+  -- activity debe existir, pertenecer a org y estar active=true
+  select count(*) into v_ok
+  from public.activities a
+  where a.id = p_activity_id
+    and a.org_id = p_org_id
+    and a.active is true;
+
+  if v_ok = 0 then
+    raise exception 'activity does not belong to org or is inactive';
+  end if;
+
+  -- Si vamos a activar: desactivar otras activas del tracker en la org
+  -- end_date es inclusivo; para NO incluir hoy: end_date = current_date - 1
+  if p_active is true then
+    update public.tracker_assignments ta
+    set active = false,
+        end_date = least(ta.end_date, current_date - 1)
+    where ta.org_id = p_org_id
+      and ta.tracker_user_id = p_tracker_user_id
+      and ta.active is true
+      and ta.geofence_id <> p_geofence_id;
+  end if;
+
+  -- UPSERT por (tracker_user_id, geofence_id) (compat con unique existente)
+  insert into public.tracker_assignments(
+    org_id, tracker_user_id, geofence_id, activity_id, start_date, end_date, active
+  )
+  values(
+    p_org_id, p_tracker_user_id, p_geofence_id, p_activity_id, p_start_date, v_end, p_active
+  )
+  on conflict (tracker_user_id, geofence_id)
+  do update set
+    org_id      = excluded.org_id,
+    activity_id = excluded.activity_id,
+    start_date  = excluded.start_date,
+    end_date    = excluded.end_date,
+    active      = excluded.active
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_upsert_tracker_assignment_v2"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_activity_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admins_list"("p_org_id" "uuid") RETURNS TABLE("user_id" "uuid", "email" "text", "role" "text")
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+  select
+    aur.user_id,
+    u.email,
+    aur.role
+  from public.app_user_roles aur
+  join auth.users u on u.id = aur.user_id
+  where aur.org_id = p_org_id
+    and aur.role in ('owner', 'admin')
+  order by
+    case aur.role when 'owner' then 0 else 1 end,
+    u.email asc;
+$$;
+
+
+ALTER FUNCTION "public"."admins_list"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admins_remove"("p_org_id" "uuid", "p_user_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+declare
+  v_is_allowed boolean := false;
+  v_target_role text;
+begin
+  -- Regla de autorización:
+  -- Permitir si el caller es:
+  --  a) root owner (si existe función is_root_owner)
+  --  b) owner de la org (organizations.owner_id = auth.uid())
+  begin
+    -- si existe is_root_owner(), úsala; si no existe, ignora
+    execute 'select public.is_root_owner(auth.uid())' into v_is_allowed;
+  exception when others then
+    v_is_allowed := false;
+  end;
+
+  if not v_is_allowed then
+    select exists(
+      select 1
+      from public.organizations o
+      where o.id = p_org_id
+        and o.owner_id = auth.uid()
+    ) into v_is_allowed;
+  end if;
+
+  if not v_is_allowed then
+    return jsonb_build_object('ok', false, 'error', 'Forbidden');
+  end if;
+
+  -- No permitir borrar owners por seguridad (puedes cambiarlo si quieres)
+  select aur.role
+    into v_target_role
+  from public.app_user_roles aur
+  where aur.org_id = p_org_id
+    and aur.user_id = p_user_id
+  limit 1;
+
+  if v_target_role is null then
+    return jsonb_build_object('ok', false, 'error', 'User not found in org');
+  end if;
+
+  if v_target_role = 'owner' then
+    return jsonb_build_object('ok', false, 'error', 'Cannot remove owner role');
+  end if;
+
+  delete from public.app_user_roles
+  where org_id = p_org_id
+    and user_id = p_user_id;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admins_remove"("p_org_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."api_register_event"("p_user" "uuid", "p_lat" double precision, "p_lng" double precision, "p_ts" timestamp with time zone DEFAULT "now"()) RETURNS TABLE("inserted_id" bigint, "geofence_id" "uuid", "event_kind" "public"."attendance_kind", "ts" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_geofence_id uuid;
+  v_last_kind   attendance_kind;
+  v_event_kind  attendance_kind;
+begin
+  select g.id into v_geofence_id
+  from public.geofences g
+  where g.geom is not null
+    and ST_Contains(g.geom, ST_SetSRID(ST_Point(p_lng, p_lat), 4326))
+  limit 1;
+
+  if v_geofence_id is null then
+    raise exception 'No geofence contains the given point (%, %)', p_lat, p_lng;
+  end if;
+
+  select ae.kind into v_last_kind
+  from public.attendance_events ae
+  where ae.user_id = p_user
+    and ae.geofence_id = v_geofence_id
+  order by ae.ts desc
+  limit 1;
+
+  if v_last_kind is null or v_last_kind = 'check_out' then
+    v_event_kind := 'check_in';
+  else
+    v_event_kind := 'check_out';
+  end if;
+
+  insert into public.attendance_events(user_id, geofence_id, kind, ts)
+  values (p_user, v_geofence_id, v_event_kind, coalesce(p_ts, now()))
+  returning id, geofence_id, kind, ts
+  into inserted_id, geofence_id, event_kind, ts;
+
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."api_register_event"("p_user" "uuid", "p_lat" double precision, "p_lng" double precision, "p_ts" timestamp with time zone) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_admin_mode"() RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select lower(coalesce(current_setting('app.admin_mode', true), 'off')) in ('on','true','1','yes');
+$$;
+
+
+ALTER FUNCTION "public"."app_admin_mode"() OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."asignaciones" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "geocerca_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "start_date" "date",
+    "end_date" "date",
+    "tenant_id" "uuid",
+    "estado" "text" DEFAULT 'activa'::"text",
+    "frecuencia_envio_sec" integer,
+    "personal_id" "uuid",
+    "is_deleted" boolean DEFAULT false,
+    "deleted_at" timestamp with time zone,
+    "activity_id" "uuid" NOT NULL,
+    "period" "daterange" GENERATED ALWAYS AS ("daterange"("start_date", COALESCE("end_date", 'infinity'::"date"), '[]'::"text")) STORED,
+    "owner_id" "uuid",
+    "org_id" "uuid",
+    "start_time" timestamp with time zone,
+    "end_time" timestamp with time zone,
+    "status" "text",
+    "org_people_id" "uuid",
+    "geofence_id" "uuid",
+    "frequency_minutes" integer DEFAULT 5 NOT NULL,
+    CONSTRAINT "asignaciones_fecha_check" CHECK ((("start_date" IS NULL) OR ("end_date" IS NULL) OR ("start_date" <= "end_date"))),
+    CONSTRAINT "asignaciones_freq_chk" CHECK ((("frecuencia_envio_sec" IS NULL) OR ("frecuencia_envio_sec" >= 300))),
+    CONSTRAINT "asignaciones_person_ref_check" CHECK ((("personal_id" IS NOT NULL) OR ("org_people_id" IS NOT NULL)))
+);
+
+ALTER TABLE ONLY "public"."asignaciones" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."asignaciones" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."asignaciones"."org_people_id" IS 'Referencia canónica a org_people (membresía persona↔org).';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."app_asignacion_set_estado"("p_id" "uuid", "p_estado" "text") RETURNS "public"."asignaciones"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_estado text := lower(trim(p_estado));
+  rec public.asignaciones;
+begin
+  if v_estado not in ('activo','inactivo','finalizado') then
+    raise exception 'Estado inválido: %', p_estado using errcode = '22000';
+  end if;
+
+  update public.asignaciones
+     set estado = v_estado
+   where id = p_id
+   returning * into rec;
+
+  if not found then
+    raise exception 'Asignacion % no encontrada', p_id
+      using errcode = 'P0002';
+  end if;
+
+  return rec;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."app_asignacion_set_estado"("p_id" "uuid", "p_estado" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_asignacion_soft_delete"("p_id" "uuid") RETURNS "public"."asignaciones"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  rec public.asignaciones;
+begin
+  update public.asignaciones
+     set estado     = 'inactivo',
+         is_deleted = true,
+         deleted_at = now()
+   where id = p_id
+   returning * into rec;
+
+  if not found then
+    raise exception 'Asignacion % no encontrada', p_id
+      using errcode = 'P0002';
+  end if;
+
+  return rec;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."app_asignacion_soft_delete"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_asignacion_upsert"("_id" "uuid", "_tenant_id" "uuid", "_user_id" "uuid", "_personal_id" "uuid", "_geocerca_id" "uuid", "_start_date" "date", "_end_date" "date", "_estado" "text", "_frecuencia_envio_sec" integer) RETURNS "public"."asignaciones"
+    LANGUAGE "sql"
+    AS $$
+  WITH t AS (
+    SELECT COALESCE(
+      _tenant_id,
+      (SELECT u.tenant_id FROM public.users_public u WHERE u.id = auth.uid())
+    ) AS tenant_id_res
+  )
+  INSERT INTO public.asignaciones AS a (
+    id, tenant_id, user_id, personal_id, geocerca_id,
+    start_date, end_date, estado, frecuencia_envio_sec
+  )
+  SELECT
+    COALESCE(_id, gen_random_uuid()),
+    t.tenant_id_res,
+    _user_id,
+    _personal_id,
+    _geocerca_id,
+    _start_date,
+    _end_date,
+    COALESCE(_estado,'activa'),
+    _frecuencia_envio_sec
+  FROM t
+  ON CONFLICT (id) DO UPDATE SET
+    tenant_id            = EXCLUDED.tenant_id,
+    user_id              = EXCLUDED.user_id,
+    personal_id          = EXCLUDED.personal_id,
+    geocerca_id          = EXCLUDED.geocerca_id,
+    start_date           = EXCLUDED.start_date,
+    end_date             = EXCLUDED.end_date,
+    estado               = EXCLUDED.estado,
+    frecuencia_envio_sec = EXCLUDED.frecuencia_envio_sec
+  RETURNING a.*;
+$$;
+
+
+ALTER FUNCTION "public"."app_asignacion_upsert"("_id" "uuid", "_tenant_id" "uuid", "_user_id" "uuid", "_personal_id" "uuid", "_geocerca_id" "uuid", "_start_date" "date", "_end_date" "date", "_estado" "text", "_frecuencia_envio_sec" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_current_tenant_id"("p_user_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_role text;
+begin
+  perform set_config('row_security','off', true);
+
+  -- Si hay JWT: bootstrap manda
+  begin
+    select b.org_id, b.role
+      into v_org_id, v_role
+    from public.bootstrap_session_context() b
+    limit 1;
+  exception when others then
+    return null;
+  end;
+
+  if v_org_id is null then
+    return null;
+  end if;
+
+  perform set_config('app.tenant_id', v_org_id::text, true);
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."app_current_tenant_id"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_ensure_org_and_membership"("p_org" "uuid", "p_name" "text" DEFAULT NULL::"text", "p_role" "text" DEFAULT 'owner'::"text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'No hay usuario autenticado';
+  end if;
+
+  -- Crea la org si no existe (con owner_id = v_uid)
+  insert into public.organizations (id, name, owner_id)
+  values (p_org, coalesce(nullif(p_name,''), 'Org '||left(p_org::text,8)), v_uid)
+  on conflict (id) do update
+    set owner_id = coalesce(public.organizations.owner_id, excluded.owner_id),
+        name     = coalesce(excluded.name, public.organizations.name);
+
+  -- Asegura membresía del usuario actual
+  insert into public.org_memberships (org_id, user_id, role)
+  values (p_org, v_uid, coalesce(nullif(p_role,''), 'owner'))
+  on conflict (org_id, user_id) do update set role = excluded.role;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."app_ensure_org_and_membership"("p_org" "uuid", "p_name" "text", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_install_rls"("p_table" "regclass", "p_org_col" "text" DEFAULT 'org_id'::"text", "p_owner_col" "text" DEFAULT 'created_by'::"text", "p_require_owner_write" boolean DEFAULT false) RETURNS "void"
+    LANGUAGE "plpgsql"
+    AS $_$
+declare
+  v_schema text;
+  v_table  text;
+  v_sel    text;
+  v_ins    text;
+  v_upd    text;
+  v_del    text;
+  v_check  text;
+begin
+  -- Obtener esquema y nombre de tabla
+  select n.nspname, c.relname
+  into v_schema, v_table
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where c.oid = p_table;
+
+  -- Habilitar RLS
+  execute format('alter table %s enable row level security', p_table);
+
+  -- Borrar políticas previas con estos nombres
+  execute format('drop policy if exists z_select_same_org on %s', p_table);
+  execute format('drop policy if exists z_insert_admin on %s', p_table);
+  execute format('drop policy if exists z_update_admin on %s', p_table);
+  execute format('drop policy if exists z_delete_admin on %s', p_table);
+
+  -- SELECT: cualquier miembro de la misma organización
+  v_sel := format('(%I is not null and public.app_is_member(%1$I))', p_org_col);
+  execute format(
+    'create policy z_select_same_org on %s for select using (%s)',
+    p_table, v_sel
+  );
+
+  -- INSERT: owner/admin de la misma org
+  v_check := format('(public.app_is_admin(%1$I) and %1$I is not null)', p_org_col);
+  execute format(
+    'create policy z_insert_admin on %s for insert with check (%s)',
+    p_table, v_check
+  );
+
+  -- UPDATE/DELETE: owner/admin (+ opcional dueño del registro)
+  if p_require_owner_write then
+    v_upd := format('(public.app_is_admin(%1$I) and %1$I is not null and %2$I = auth.uid())',
+                    p_org_col, p_owner_col);
+  else
+    v_upd := format('(public.app_is_admin(%1$I) and %1$I is not null)', p_org_col);
+  end if;
+  v_del := v_upd;
+
+  execute format(
+    'create policy z_update_admin on %s for update using (%s) with check (%s)',
+    p_table, v_upd, v_upd
+  );
+
+  execute format(
+    'create policy z_delete_admin on %s for delete using (%s)',
+    p_table, v_del
+  );
+end
+$_$;
+
+
+ALTER FUNCTION "public"."app_install_rls"("p_table" "regclass", "p_org_col" "text", "p_owner_col" "text", "p_require_owner_write" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_is_admin"("p_org" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select public.app_is_member(p_org, array['owner','admin']::text[]);
+$$;
+
+
+ALTER FUNCTION "public"."app_is_admin"("p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_is_member"("p_org" "uuid", "p_roles" "text"[] DEFAULT NULL::"text"[]) RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists (
+    select 1
+    from public.org_memberships m
+    where m.org_id = p_org
+      and m.user_id = auth.uid()
+      and (p_roles is null or m.role = any(p_roles))
+  );
+$$;
+
+
+ALTER FUNCTION "public"."app_is_member"("p_org" "uuid", "p_roles" "text"[]) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_jwt_role"() RETURNS "text"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select coalesce(nullif(current_setting('request.jwt.claims', true)::jsonb->>'role',''),'anon');
+$$;
+
+
+ALTER FUNCTION "public"."app_jwt_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_jwt_tenant"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select (
+    coalesce(
+      nullif(current_setting('request.jwt.claims', true), ''),
+      '{}'::text
+    )::jsonb ->> 'org_id'
+  )::uuid;
+$$;
+
+
+ALTER FUNCTION "public"."app_jwt_tenant"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_or_create_default_org_id_for_current_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  col text;
+  has_role boolean;
+  has_active boolean;
+  has_default boolean;
+  active_col text;
+  default_col text;
+
+  parent_tbl text;  -- ej: public.orgs_legacy
+  parent_name text; -- sin schema
+  q text;
+
+  v_org uuid;
+  v_new_org uuid;
+
+  -- columnas del parent
+  has_id boolean;
+  has_name boolean;
+  has_created_at boolean;
+  has_owner_id boolean;
+begin
+  perform set_config('row_security','off', true);
+
+  if auth.uid() is null then
+    return null;
+  end if;
+
+  col := public._org_members_user_col();
+
+  has_role := exists(select 1 from information_schema.columns where table_schema='public' and table_name='org_members' and column_name='role');
+  has_active := exists(select 1 from information_schema.columns where table_schema='public' and table_name='org_members' and column_name in ('active','is_active'));
+  has_default := exists(select 1 from information_schema.columns where table_schema='public' and table_name='org_members' and column_name in ('is_default','default_org'));
+
+  if has_active then
+    if exists(select 1 from information_schema.columns where table_schema='public' and table_name='org_members' and column_name='active') then
+      active_col := 'active';
+    else
+      active_col := 'is_active';
+    end if;
+  end if;
+
+  if has_default then
+    if exists(select 1 from information_schema.columns where table_schema='public' and table_name='org_members' and column_name='is_default') then
+      default_col := 'is_default';
+    else
+      default_col := 'default_org';
+    end if;
+  end if;
+
+  -- 3.1) Buscar org default
+  q := format('select org_id from public.org_members om where om.%I = auth.uid()', col);
+  if has_active then q := q || format(' and om.%I=true', active_col); end if;
+  if has_default then q := q || format(' and om.%I=true', default_col); end if;
+  q := q || ' limit 1';
+  execute q into v_org;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- 3.2) Buscar cualquier org
+  q := format('select org_id from public.org_members om where om.%I = auth.uid()', col);
+  if has_active then q := q || format(' and om.%I=true', active_col); end if;
+  q := q || ' limit 1';
+  execute q into v_org;
+
+  if v_org is not null then
+    if has_default then
+      execute format('update public.org_members set %I=true where %I=auth.uid() and org_id=$1', default_col, col) using v_org;
+    end if;
+    return v_org;
+  end if;
+
+  -- 3.3) No hay membresía -> crear org en la tabla padre REAL del FK
+  parent_tbl := public._org_parent_table_of_org_members();
+  if parent_tbl is null then
+    raise exception 'No se pudo detectar la tabla padre del FK de org_members.org_id';
+  end if;
+
+  parent_name := replace(parent_tbl,'public.','');
+
+  -- Validar que exista columna id en la tabla padre
+  has_id := exists(select 1 from information_schema.columns where table_schema='public' and table_name=parent_name and column_name='id');
+  if not has_id then
+    raise exception 'La tabla padre % no tiene columna id (PK). Ajusta el script a tu PK real.', parent_tbl;
+  end if;
+
+  has_name := exists(select 1 from information_schema.columns where table_schema='public' and table_name=parent_name and column_name='name');
+  has_created_at := exists(select 1 from information_schema.columns where table_schema='public' and table_name=parent_name and column_name='created_at');
+  has_owner_id := exists(select 1 from information_schema.columns where table_schema='public' and table_name=parent_name and column_name='owner_id');
+
+  v_new_org := gen_random_uuid();
+
+  -- Insert mínimo en tabla padre
+  if has_name and has_owner_id then
+    execute format('insert into %s (id, name, owner_id) values ($1, $2, $3)', parent_tbl)
+      using v_new_org, ('Organización ' || left(replace(auth.uid()::text,'-',''),8)), auth.uid();
+  elsif has_name then
+    execute format('insert into %s (id, name) values ($1, $2)', parent_tbl)
+      using v_new_org, ('Organización ' || left(replace(auth.uid()::text,'-',''),8));
+  elsif has_owner_id then
+    execute format('insert into %s (id, owner_id) values ($1, $2)', parent_tbl)
+      using v_new_org, auth.uid();
+  else
+    execute format('insert into %s (id) values ($1)', parent_tbl)
+      using v_new_org;
+  end if;
+
+  -- Insert org_members adaptativo
+  if has_role and has_default and has_active then
+    execute format(
+      'insert into public.org_members (org_id, %I, role, %I, %I) values ($1, auth.uid(), ''owner'', true, true)',
+      col, active_col, default_col
+    ) using v_new_org;
+  elsif has_role and has_default then
+    execute format(
+      'insert into public.org_members (org_id, %I, role, %I) values ($1, auth.uid(), ''owner'', true)',
+      col, default_col
+    ) using v_new_org;
+  elsif has_role and has_active then
+    execute format(
+      'insert into public.org_members (org_id, %I, role, %I) values ($1, auth.uid(), ''owner'', true)',
+      col, active_col
+    ) using v_new_org;
+  elsif has_default and has_active then
+    execute format(
+      'insert into public.org_members (org_id, %I, %I, %I) values ($1, auth.uid(), true, true)',
+      col, active_col, default_col
+    ) using v_new_org;
+  elsif has_role then
+    execute format(
+      'insert into public.org_members (org_id, %I, role) values ($1, auth.uid(), ''owner'')',
+      col
+    ) using v_new_org;
+  elsif has_default then
+    execute format(
+      'insert into public.org_members (org_id, %I, %I) values ($1, auth.uid(), true)',
+      col, default_col
+    ) using v_new_org;
+  elsif has_active then
+    execute format(
+      'insert into public.org_members (org_id, %I, %I) values ($1, auth.uid(), true)',
+      col, active_col
+    ) using v_new_org;
+  else
+    execute format(
+      'insert into public.org_members (org_id, %I) values ($1, auth.uid())',
+      col
+    ) using v_new_org;
+  end if;
+
+  return v_new_org;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."get_or_create_default_org_id_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."normalize_email"("p_email" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select nullif(lower(trim(p_email)), '');
+$$;
+
+
+ALTER FUNCTION "public"."normalize_email"("p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."normalize_phone"("p_phone" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  -- Normalización mínima universal:
+  -- - trim
+  -- - deja null si vacío
+  -- (si luego quieres E.164 estricto, lo endurecemos con CHECK aparte)
+  select nullif(trim(p_phone), '');
+$$;
+
+
+ALTER FUNCTION "public"."normalize_phone"("p_phone" "text") OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."personal" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "nombre" "text" NOT NULL,
+    "email" "text" NOT NULL,
+    "telefono" "text",
+    "documento" "text",
+    "owner_id" "uuid" DEFAULT "auth"."uid"(),
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "apellido" "text",
+    "telefono_raw" "text",
+    "vigente" boolean DEFAULT true NOT NULL,
+    "fecha_inicio" "date",
+    "fecha_fin" "date",
+    "org_id" "uuid" DEFAULT "public"."get_or_create_default_org_id_for_current_user"(),
+    "position_interval_sec" integer DEFAULT 300 NOT NULL,
+    "activo" boolean GENERATED ALWAYS AS ("vigente") STORED,
+    "telefono_norm" "text",
+    "activo_bool" boolean,
+    "fingerprint" "text",
+    "is_deleted" boolean DEFAULT false NOT NULL,
+    "deleted_at" timestamp with time zone,
+    "email_norm" "text" GENERATED ALWAYS AS ("public"."normalize_email"("email")) STORED,
+    "phone_norm" "text" GENERATED ALWAYS AS ("public"."normalize_phone"("telefono")) STORED,
+    "identity_key" "text" GENERATED ALWAYS AS (
+CASE
+    WHEN (NULLIF("lower"(TRIM(BOTH FROM "email")), ''::"text") IS NOT NULL) THEN ('e:'::"text" || "lower"(TRIM(BOTH FROM "email")))
+    WHEN (NULLIF(TRIM(BOTH FROM "telefono"), ''::"text") IS NOT NULL) THEN ('p:'::"text" || TRIM(BOTH FROM "telefono"))
+    ELSE NULL::"text"
+END) STORED,
+    "user_id" "uuid",
+    CONSTRAINT "personal_active_requires_identity" CHECK (((COALESCE("is_deleted", false) = true) OR ("identity_key" IS NOT NULL))),
+    CONSTRAINT "personal_chk_position_interval_min" CHECK (("position_interval_sec" >= 300)),
+    CONSTRAINT "personal_fecha_intervalo_chk" CHECK ((("fecha_inicio" IS NULL) OR ("fecha_fin" IS NULL) OR ("fecha_fin" >= "fecha_inicio"))),
+    CONSTRAINT "personal_phone_e164_chk" CHECK ((("telefono" IS NULL) OR ("telefono" ~ '^\+[1-9]\d{1,14}$'::"text"))),
+    CONSTRAINT "personal_position_interval_sec_check" CHECK ((("position_interval_sec" IS NULL) OR ("position_interval_sec" >= 300)))
+);
+
+ALTER TABLE ONLY "public"."personal" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."personal" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_personal_soft_delete"("p_id" "uuid") RETURNS "public"."personal"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  rec personal;
+BEGIN
+  UPDATE public.personal
+  SET is_deleted = true,
+      deleted_at = now(),
+      vigente = false
+  WHERE id = p_id
+  RETURNING * INTO rec;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Personal % not found', p_id USING ERRCODE = 'P0002';
+  END IF;
+
+  RETURN rec;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."app_personal_soft_delete"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."app_set_tenant"("p_tenant" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  perform set_config('app.tenant_id', p_tenant::text, true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."app_set_tenant"("p_tenant" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."apply_invited_tracker_role"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_role text;
+  v_org_id uuid;
+begin
+  -- Lee metadata que tú ya envías desde invite-user
+  v_role := upper(coalesce(new.raw_user_meta_data->>'invited_role', ''));
+  v_org_id := nullif(new.raw_user_meta_data->>'tracker_org_id', '')::uuid;
+
+  -- Solo para TRACKER con org válida
+  if v_role = 'TRACKER' and v_org_id is not null then
+    insert into public.app_user_roles (user_id, org_id, role)
+    values (new.id, v_org_id, 'tracker')
+    on conflict (user_id, org_id) do update
+      set role = excluded.role;
+  end if;
+
+  return new;
+exception when others then
+  -- No bloquear creación de usuarios por error de app_user_roles
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."apply_invited_tracker_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."apply_pending_invite_on_profile"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_role_id uuid;
+begin
+  select role_id into v_role_id from public.pending_invites where email = new.email;
+  if v_role_id is not null then
+    insert into public.user_roles (user_id, role_id)
+    values (new.id, v_role_id)
+    on conflict (user_id) do update set role_id = excluded.role_id;
+
+    delete from public.pending_invites where email = new.email;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."apply_pending_invite_on_profile"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."asignaciones_auto_estado"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if new.end_date is not null and new.end_date < current_date then
+    new.estado := 'finalizado';
+  end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."asignaciones_auto_estado"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."asignaciones_check_tenant"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if new.tenant_id is null then
+    new.tenant_id := (select g.org_id from public.geocercas g where g.id = new.geocerca_id limit 1);
+  end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."asignaciones_check_tenant"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."asignaciones_enforce_same_org"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  og uuid;
+  op uuid;
+  oa uuid;
+begin
+  -- org de geocerca
+  if new.geocerca_id is not null then
+    select org_id into og from public.geocercas where id = new.geocerca_id;
+    if og is null then
+      raise exception 'Geocerca no existe: %', new.geocerca_id;
+    end if;
+  end if;
+
+  -- org de personal
+  if new.personal_id is not null then
+    select org_id into op from public.personal where id = new.personal_id;
+    if op is null then
+      raise exception 'Personal no existe: %', new.personal_id;
+    end if;
+  end if;
+
+  -- org de activity
+  if new.activity_id is not null then
+    select org_id into oa from public.activities where id = new.activity_id;
+    if oa is null then
+      raise exception 'Activity no existe: %', new.activity_id;
+    end if;
+  end if;
+
+  -- comparar (si existen)
+  if og is not null and new.org_id is not null and og <> new.org_id then
+    raise exception 'Org mismatch: geocerca.org_id (%) != asignaciones.org_id (%)', og, new.org_id;
+  end if;
+
+  if op is not null and new.org_id is not null and op <> new.org_id then
+    raise exception 'Org mismatch: personal.org_id (%) != asignaciones.org_id (%)', op, new.org_id;
+  end if;
+
+  if oa is not null and new.org_id is not null and oa <> new.org_id then
+    raise exception 'Org mismatch: activities.org_id (%) != asignaciones.org_id (%)', oa, new.org_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."asignaciones_enforce_same_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."asignaciones_enforce_tenant"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- En tu modelo actual tenant == org
+  if new.tenant_id is null then
+    new.tenant_id := new.org_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."asignaciones_enforce_tenant"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."asignaciones_org_people_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_ok boolean;
+begin
+  -- ✅ BYPASS UNIVERSAL PARA MIGRACIÓN CONTROLADA
+  if public.app_admin_mode() then
+    return new;
+  end if;
+
+  -- ---- LÓGICA ORIGINAL (canónica) ----
+  -- Reglas:
+  -- - org_people_id debe existir en org_people
+  -- - debe pertenecer a la misma org_id
+  -- - no debe estar eliminado (is_deleted=false si existe esa columna)
+
+  if new.org_people_id is null then
+    return new;
+  end if;
+
+  -- Validación flexible: soporta org_people con o sin is_deleted
+  select exists (
+    select 1
+    from public.org_people op
+    where op.id = new.org_people_id
+      and op.org_id = new.org_id
+      and (coalesce(op.is_deleted, false) = false)
+  )
+  into v_ok;
+
+  if not v_ok then
+    raise exception 'org_people_id inválido: no pertenece a la org o está eliminado';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."asignaciones_org_people_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."asignaciones_set_org_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_org uuid;
+begin
+  -- Si viene geocerca_id, usar su org_id
+  if new.geocerca_id is not null then
+    select g.org_id into v_org
+    from public.geocercas g
+    where g.id = new.geocerca_id;
+  end if;
+
+  -- Si no hay geocerca o no se encontró, caer a personal.org_id
+  if v_org is null and new.personal_id is not null then
+    select p.org_id into v_org
+    from public.personal p
+    where p.id = new.personal_id;
+  end if;
+
+  -- Si igual no hay org, bloquear (evita filas "huérfanas" que luego rompen RLS/joins)
+  if v_org is null then
+    raise exception 'No se pudo determinar org_id para asignación (geocerca_id %, personal_id %)',
+      new.geocerca_id, new.personal_id;
+  end if;
+
+  new.org_id := v_org;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."asignaciones_set_org_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."assign_personal_to_geocerca"("p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date" DEFAULT CURRENT_DATE, "p_end_date" "date" DEFAULT NULL::"date", "p_freq_min" integer DEFAULT NULL::integer) RETURNS "public"."asignaciones"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant_id uuid;
+  v_existing  public.asignaciones;
+  v_freq_sec  integer;
+  v_uid uuid := auth.uid();
+begin
+  v_freq_sec := case when p_freq_min is null then null else greatest(p_freq_min, 5) * 60 end;
+
+  -- tenant/org del PERSONAL seleccionado
+  select org_id into v_tenant_id
+  from public.profiles
+  where id = p_personal_id
+  limit 1;
+
+  if v_tenant_id is null then
+    raise exception 'No se pudo determinar tenant/org desde el personal %', p_personal_id;
+  end if;
+
+  -- ⚠️ si el usuario actual no tiene profile, créalo con ese org
+  if not exists (select 1 from public.profiles where id = v_uid) then
+    insert into public.profiles (id, org_id)
+    values (v_uid, v_tenant_id);
+  end if;
+
+  -- ¿ya hay asignación activa para ese par?
+  select * into v_existing
+  from public.asignaciones a
+  where a.personal_id = p_personal_id
+    and a.geocerca_id = p_geocerca_id
+    and a.end_date is null
+  limit 1;
+
+  if found then
+    update public.asignaciones
+       set start_date           = least(coalesce(p_start_date, v_existing.start_date)),
+           end_date             = case when p_end_date is null then v_existing.end_date else greatest(p_end_date, v_existing.end_date) end,
+           frecuencia_envio_sec = coalesce(v_freq_sec, v_existing.frecuencia_envio_sec)
+     where id = v_existing.id
+     returning * into v_existing;
+    return v_existing;
+  end if;
+
+  insert into public.asignaciones(
+    id, user_id, geocerca_id, created_at,
+    personal_id, start_date, end_date,
+    tenant_id, estado, frecuencia_envio_sec
+  )
+  values(
+    gen_random_uuid(), v_uid, p_geocerca_id, now(),
+    p_personal_id, coalesce(p_start_date, current_date), p_end_date,
+    v_tenant_id, 'activo', v_freq_sec
+  )
+  returning * into v_existing;
+
+  return v_existing;
+end
+$$;
+
+
+ALTER FUNCTION "public"."assign_personal_to_geocerca"("p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq_min" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."assign_personal_to_geocerca"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date" DEFAULT CURRENT_DATE, "p_end_date" "date" DEFAULT NULL::"date", "p_freq" integer DEFAULT NULL::integer) RETURNS "public"."asignaciones"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_existing asignaciones;
+  v_now date := current_date;
+begin
+  -- Buscar asignación existente del mismo par (viva o futura)
+  select *
+    into v_existing
+  from asignaciones a
+  where a.personal_id = p_personal_id
+    and a.geocerca_id = p_geocerca_id
+    and (a.end_date is null or a.end_date >= p_start_date)
+  order by a.start_date asc
+  limit 1;
+
+  -- Actualizar si existe
+  if found then
+    update asignaciones
+       set start_date = least(coalesce(p_start_date, v_existing.start_date, v_now)),
+           end_date   = case
+                          when p_end_date is null then v_existing.end_date
+                          else greatest(p_end_date, v_existing.end_date)
+                        end
+     where id = v_existing.id
+     returning * into v_existing;
+
+    return v_existing;
+  end if;
+
+  -- Crear nueva (NO establecemos columnas generadas; id y created_at usan DEFAULTS)
+  insert into asignaciones (user_id, personal_id, geocerca_id, start_date, end_date)
+  values (auth.uid(), p_personal_id, p_geocerca_id, coalesce(p_start_date, v_now), p_end_date)
+  returning * into v_existing;
+
+  return v_existing;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."assign_personal_to_geocerca"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."audit_memberships"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  if tg_op = 'INSERT' then
+    perform public.log_event('membership_created', 'membership', new.org_id, to_jsonb(new));
+  elsif tg_op = 'UPDATE' then
+    perform public.log_event('membership_updated', 'membership', new.org_id, to_jsonb(new));
+  elsif tg_op = 'DELETE' then
+    perform public.log_event('membership_deleted', 'membership', old.org_id, to_jsonb(old));
+  end if;
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."audit_memberships"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."audit_organizations"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  if tg_op = 'INSERT' then
+    perform public.log_event('org_created', 'organization', new.id, to_jsonb(new));
+  elsif tg_op = 'UPDATE' then
+    perform public.log_event('org_updated', 'organization', new.id, to_jsonb(new));
+  end if;
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."audit_organizations"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."bootstrap_session_context"() RETURNS TABLE("org_id" "uuid", "role" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user uuid;
+  v_org uuid;
+  v_role text;
+begin
+  v_user := auth.uid();
+
+  if v_user is null then
+    -- No hay sesión: no retornamos filas
+    return;
+  end if;
+
+  -- org por defecto
+  select m.org_id, m.role::text
+    into v_org, v_role
+  from public.memberships m
+  where m.user_id = v_user
+    and m.is_default = true
+  order by m.created_at desc
+  limit 1;
+
+  -- fallback: cualquier org
+  if v_org is null then
+    select m.org_id, m.role::text
+      into v_org, v_role
+    from public.memberships m
+    where m.user_id = v_user
+    order by m.created_at desc
+    limit 1;
+  end if;
+
+  if v_org is null then
+    -- Sin memberships: no retornamos filas
+    return;
+  end if;
+
+  -- opcional: set_config para compatibilidad (solo lectura)
+  perform set_config('app.current_org_id', v_org::text, true);
+  perform set_config('app.current_tenant_id', v_org::text, true);
+
+  org_id := v_org;
+  role := coalesce(v_role, 'viewer');
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."bootstrap_session_context"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."bootstrap_tracker_assignment_current_user"("p_frequency_minutes" integer DEFAULT 5, "p_days" integer DEFAULT 30) RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_org_id uuid;
+  v_tenant_id uuid;
+  v_geofence_id uuid;
+
+  v_start_date date := current_date;
+  v_end_date date := current_date + greatest(p_days, 1);
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  -- email desde JWT (Supabase)
+  v_email := nullif(auth.jwt() ->> 'email', '');
+  if v_email is null then
+    v_email := nullif(auth.jwt() -> 'user_metadata' ->> 'email', '');
+  end if;
+  if v_email is null then
+    return jsonb_build_object('ok', false, 'error', 'email_not_found_in_jwt');
+  end if;
+
+  -- org_id desde memberships
+  select m.org_id
+  into v_org_id
+  from public.memberships m
+  where m.user_id = v_uid
+  order by coalesce(m.is_default,false) desc, m.created_at desc
+  limit 1;
+
+  if v_org_id is null then
+    return jsonb_build_object('ok', false, 'error', 'no_membership', 'uid', v_uid);
+  end if;
+
+  -- tenant_id canónico por org
+  v_tenant_id := public.resolve_tenant_id_for_org(v_org_id);
+  if v_tenant_id is null then
+    return jsonb_build_object('ok', false, 'error', 'tenant_unresolved_for_org', 'org_id', v_org_id);
+  end if;
+
+  -- asegurar users_public (evita FK)
+  perform set_config('app.tenant_id', v_tenant_id::text, true);
+  perform public.ensure_users_public_by_uid(v_uid, v_email, 'tracker', v_tenant_id);
+
+  -- geofence para org+tenant
+  select g.id
+  into v_geofence_id
+  from public.geocercas g
+  where g.org_id = v_org_id
+    and g.tenant_id = v_tenant_id
+    and coalesce(g.is_deleted,false) = false
+  order by g.created_at desc nulls last
+  limit 1;
+
+  if v_geofence_id is null then
+    return jsonb_build_object('ok', false, 'error', 'no_geocercas_for_org_tenant', 'org_id', v_org_id, 'tenant_id', v_tenant_id);
+  end if;
+
+  -- evitar duplicado
+  if exists (
+    select 1
+    from public.tracker_assignments ta
+    where ta.tracker_user_id = v_uid
+      and ta.active = true
+      and (
+        (ta.period_tstz is not null and ta.period_tstz @> now())
+        or (ta.start_date <= current_date and ta.end_date >= current_date)
+      )
+  ) then
+    return jsonb_build_object('ok', true, 'note', 'assignment_already_active', 'uid', v_uid, 'tenant_id', v_tenant_id, 'org_id', v_org_id, 'geofence_id', v_geofence_id);
+  end if;
+
+  -- insertar assignment (NO tocar columnas GENERATED como period)
+  insert into public.tracker_assignments(
+    tenant_id, tracker_user_id, geofence_id,
+    start_date, end_date,
+    frequency_minutes, active,
+    period_tstz, updated_at
+  )
+  values (
+    v_tenant_id, v_uid, v_geofence_id,
+    v_start_date, v_end_date,
+    greatest(p_frequency_minutes, 1), true,
+    tstzrange(v_start_date::timestamptz, (v_end_date + 1)::timestamptz, '[)'),
+    now()
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'note', 'assignment_created',
+    'uid', v_uid,
+    'email', v_email,
+    'org_id', v_org_id,
+    'tenant_id', v_tenant_id,
+    'geofence_id', v_geofence_id,
+    'frequency_minutes', greatest(p_frequency_minutes, 1),
+    'start_date', v_start_date,
+    'end_date', v_end_date
+  );
+
+exception
+  when others then
+    return jsonb_build_object('ok', false, 'error', 'exception', 'message', sqlerrm);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."bootstrap_tracker_assignment_current_user"("p_frequency_minutes" integer, "p_days" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."bootstrap_user_after_login"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user_id uuid;
+  v_org_id  uuid;
+begin
+  v_user_id := auth.uid();
+  if v_user_id is null then
+    raise exception 'bootstrap_user_after_login: auth.uid() es NULL';
+  end if;
+
+  -- Usa tu función existente (ya es SECURITY DEFINER)
+  v_org_id := public.ensure_org_for_current_user();
+
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."bootstrap_user_after_login"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."bootstrap_user_membership"() RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_email text;
+  v_org uuid;
+begin
+  if v_user is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  -- Si ya tiene memberships, solo asegurar org activa
+  if exists (select 1 from public.memberships m where m.user_id = v_user) then
+    v_org := public.ensure_active_org_for_user(v_user);
+    return jsonb_build_object('ok', true, 'mode', 'existing', 'org_id', v_org);
+  end if;
+
+  -- Obtener email desde auth.users (permitido con SECURITY DEFINER)
+  select u.email into v_email
+  from auth.users u
+  where u.id = v_user;
+
+  -- Crear org
+  insert into public.organizations (name)
+  values (coalesce(nullif(trim(v_email), ''), 'New Organization'))
+  returning id into v_org;
+
+  -- Crear membership base (admin por defecto)
+  insert into public.memberships (org_id, user_id, role)
+  values (v_org, v_user, 'admin');
+
+  -- Setear current_org_id usando flujo controlado
+  perform public._set_current_org_for_user(v_user, v_org);
+
+  return jsonb_build_object('ok', true, 'mode', 'created', 'org_id', v_org);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."bootstrap_user_membership"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."bootstrap_user_membership_for_user"("p_user_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+  v_email text;
+begin
+  if p_user_id is null then
+    return jsonb_build_object('ok', false, 'error', 'user_id_required');
+  end if;
+
+  if exists (select 1 from public.memberships where user_id = p_user_id) then
+    v_org := public.ensure_active_org_for_user(p_user_id);
+    return jsonb_build_object('ok', true, 'mode', 'existing', 'org_id', v_org);
+  end if;
+
+  select email into v_email
+  from auth.users
+  where id = p_user_id;
+
+  insert into public.organizations (name)
+  values (coalesce(nullif(trim(v_email), ''), 'New Organization'))
+  returning id into v_org;
+
+  insert into public.memberships (org_id, user_id, role)
+  values (v_org, p_user_id, 'admin');
+
+  perform public._set_current_org_for_user(p_user_id, v_org);
+
+  return jsonb_build_object('ok', true, 'mode', 'created', 'org_id', v_org);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."bootstrap_user_membership_for_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."cancel_invitation"("p_invite_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_org uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select org_id into v_org from public.invitations where id = p_invite_id;
+  if v_org is null then
+    raise exception 'Invitation not found';
+  end if;
+
+  if not exists (
+    select 1 from public.memberships
+    where org_id = v_org and user_id = auth.uid() and role in ('owner','admin')
+  ) then
+    raise exception 'Only owner/admin can cancel';
+  end if;
+
+  update public.invitations
+     set status='cancelled'
+   where id = p_invite_id
+     and status='pending';
+
+  perform public.log_event('invite_cancelled', 'invitation', p_invite_id, '{}'::jsonb);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."cancel_invitation"("p_invite_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."claim_pending_invite"("p_claim_code" "text") RETURNS TABLE("ok" boolean, "message" "text", "claimed_invite_id" "uuid", "org_id" "uuid", "role" "text", "is_default" boolean)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_uid uuid := auth.uid();
+  v_email text := lower(auth.email());
+  v_role_text text;
+  v_org_id uuid;
+  v_invite_id uuid;
+  v_role_type text;
+  v_sql text;
+  v_org_name text;
+begin
+  if v_uid is null or v_email is null then
+    return query select false, 'Not authenticated', null::uuid, null::uuid, null::text, false;
+    return;
+  end if;
+
+  if p_claim_code is null or length(trim(p_claim_code)) < 8 then
+    return query select false, 'Invalid claim code', null::uuid, null::uuid, null::text, false;
+    return;
+  end if;
+
+  -- Expirar vencidas (barato)
+  update public.pending_invites
+     set status = 'expired'
+   where status = 'pending'
+     and expires_at is not null
+     and expires_at < now();
+
+  -- Tomar invite por email + code
+  select id, role, target_org_id, personal_org_name
+    into v_invite_id, v_role_text, v_org_id, v_org_name
+  from public.pending_invites
+  where status = 'pending'
+    and claim_code = p_claim_code
+    and email is not null
+    and lower(email) = v_email
+  for update
+  limit 1;
+
+  if v_invite_id is null then
+    return query select false, 'Invite not found / expired / email mismatch', null::uuid, null::uuid, null::text, false;
+    return;
+  end if;
+
+  -- Si es OWNER y aún no hay org, crear org personal ahora (owner_id NOT NULL)
+  if v_role_text = 'owner' and v_org_id is null then
+    v_org_id := public.ensure_personal_org_for_user(v_uid, coalesce(nullif(trim(v_org_name),''), v_email));
+    update public.pending_invites
+       set target_org_id = v_org_id
+     where id = v_invite_id;
+  end if;
+
+  if v_org_id is null then
+    return query select false, 'Invite has no target_org_id (server misconfig)', v_invite_id, null::uuid, v_role_text, false;
+    return;
+  end if;
+
+  -- Marcar claimed
+  update public.pending_invites
+     set status='claimed', claimed_by=v_uid, claimed_at=now()
+   where id=v_invite_id;
+
+  -- Forzar único default
+  update public.memberships
+     set is_default=false
+   where user_id=v_uid and is_default=true;
+
+  -- Upsert membership (role es enum USER-DEFINED)
+  v_role_type := public._memberships_role_type();
+  if v_role_type is null then
+    return query select false, 'Cannot detect memberships.role type', v_invite_id, v_org_id, v_role_text, false;
+    return;
+  end if;
+
+  v_sql := format($f$
+    insert into public.memberships(org_id, user_id, role, is_default)
+    values ($1, $2, $3::%I, true)
+    on conflict (user_id, org_id)
+    do update set role=excluded.role, is_default=true
+  $f$, v_role_type);
+
+  execute v_sql using v_org_id, v_uid, v_role_text;
+
+  return query select true, 'Invite claimed', v_invite_id, v_org_id, v_role_text, true;
+
+exception when others then
+  return query select false, ('Claim failed: '||sqlerrm), v_invite_id, v_org_id, v_role_text, false;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."claim_pending_invite"("p_claim_code" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."compute_effective_app_role"("p_uid" "uuid") RETURNS "public"."app_role"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select
+    case
+      when exists (
+        select 1
+        from public.memberships m
+        where m.user_id = p_uid
+          and m.role::text = 'owner'
+      ) then 'owner'::public.app_role
+
+      when exists (
+        select 1
+        from public.memberships m
+        where m.user_id = p_uid
+          and m.role::text = 'admin'
+      ) then 'admin'::public.app_role
+
+      else 'tracker'::public.app_role
+    end
+$$;
+
+
+ALTER FUNCTION "public"."compute_effective_app_role"("p_uid" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."copy_tracker_log_to_positions"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $_$
+begin
+  if NEW.event = 'location_update'
+     and NEW.org_id is not null
+     and NEW.user_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  then
+    insert into positions (
+        id,
+        org_id,
+        user_id,
+        personal_id,
+        asignacion_id,
+        lat,
+        lng,
+        accuracy,
+        speed,
+        heading,
+        battery,
+        is_mock,
+        source,
+        recorded_at,
+        created_at
+    )
+    values (
+        gen_random_uuid(),
+        NEW.org_id,
+        NEW.user_id::uuid,
+        null,
+        null,
+        NEW.lat,
+        NEW.lng,
+        NEW.accuracy,
+        null,
+        null,
+        null,
+        false,
+        NEW.source,
+        NEW.recorded_at,
+        NEW.ts
+    );
+  end if;
+
+  return NEW;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."copy_tracker_log_to_positions"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."count_active_trackers"("p_org_id" "uuid") RETURNS integer
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select count(*)::int
+  from public.memberships m
+  where m.org_id = p_org_id
+    and m.revoked_at is null
+    and m.role::text = 'tracker';
+$$;
+
+
+ALTER FUNCTION "public"."count_active_trackers"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_frecuencia" integer DEFAULT 300) RETURNS TABLE("id" "uuid", "user_id" "uuid", "personal_id" "uuid", "start_date" "date")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_personal_id uuid;
+begin
+  -- Asegura que exista en personal (tolerante a org_id nulo)
+  perform public.ensure_personal_for_user(p_user_id, null);
+
+  -- Vincula personal_id = user_id cuando exista
+  select id into v_personal_id
+  from public.personal
+  where id = p_user_id
+  limit 1;
+
+  insert into public.asignaciones as a (
+    user_id, personal_id, geocerca_id, start_date, end_date,
+    frecuencia_envio_sec, estado
+  )
+  values (
+    p_user_id, v_personal_id, p_geocerca_id, p_start_date, p_end_date,
+    p_frecuencia, 'activo'
+  )
+  on conflict (user_id, geocerca_id)
+  do update set
+    start_date = excluded.start_date,
+    end_date = excluded.end_date,
+    frecuencia_envio_sec = excluded.frecuencia_envio_sec,
+    estado = excluded.estado,
+    updated_at = now()
+  returning a.id, a.user_id, a.personal_id, a.start_date;
+end
+$$;
+
+
+ALTER FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_frecuencia" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_inicio" timestamp with time zone, "p_fin" timestamp with time zone, "p_frecuencia_min" integer, "p_nombre" "text" DEFAULT NULL::"text", "p_telefono" "text" DEFAULT NULL::"text") RETURNS "public"."asignaciones"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_row public.asignaciones;
+begin
+  -- regla de negocio: frecuencia mínima 5
+  if coalesce(p_frecuencia_min, 0) < 5 then
+    raise exception 'La frecuencia mínima permitida es 5 minutos';
+  end if;
+
+  -- crea/actualiza la fila en personal (si no existe)
+  perform public.ensure_personal_for_geocerca(p_user_id, p_geocerca_id, p_nombre, p_telefono);
+
+  -- inserta la asignación (ya no fallará por FK)
+  insert into public.asignaciones (user_id, geocerca_id, inicio, fin, frecuencia_min, estado)
+  values (p_user_id, p_geocerca_id, p_inicio, p_fin, p_frecuencia_min, 'activo')
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_inicio" timestamp with time zone, "p_fin" timestamp with time zone, "p_frecuencia_min" integer, "p_nombre" "text", "p_telefono" "text") OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."geocercas_tbl" (
+    "id" bigint NOT NULL,
+    "nombre" "text" NOT NULL,
+    "geom" "public"."geometry"(Polygon,4326) NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid" DEFAULT "auth"."uid"() NOT NULL,
+    "geojson" "jsonb",
+    "owner_id" "uuid",
+    "geometria" "jsonb",
+    "updated_at" timestamp with time zone,
+    "vertices" "jsonb",
+    "usuario_id" "uuid",
+    "color" "text" DEFAULT '#3388ff'::"text",
+    "coords" "jsonb"
+);
+
+
+ALTER TABLE "public"."geocercas_tbl" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."create_geocerca"("_nombre" "text", "_geometry" "jsonb") RETURNS "public"."geocercas_tbl"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  _user uuid := auth.uid();
+  _g    geometry;
+  _row  geocercas;
+BEGIN
+  IF _user IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  _g := public._geom_from_geometry(_geometry);
+
+  INSERT INTO public.geocercas (nombre, geom, geojson, created_by)
+  VALUES (
+    _nombre,
+    _g,  -- <<<<<<<<<<<<<< guarda geometry
+    jsonb_build_object('type','Feature','properties', jsonb_build_object(), 'geometry', _geometry),
+    _user
+  )
+  RETURNING * INTO _row;
+
+  RETURN _row;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."create_geocerca"("_nombre" "text", "_geometry" "jsonb") OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."organizations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text",
+    "owner_id" "uuid" NOT NULL,
+    "plan" "public"."plan_code" DEFAULT 'starter'::"public"."plan_code" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "slug" "text",
+    "created_by" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "active" boolean DEFAULT true,
+    "logo_url" "text",
+    "suspended" boolean DEFAULT false NOT NULL,
+    "is_personal" boolean DEFAULT false NOT NULL
+);
+
+
+ALTER TABLE "public"."organizations" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."organizations"."suspended" IS 'Si true, la organización está suspendida (bloqueo de acceso por pruebas/impago/soporte). No borra datos ni usuarios.';
+
+
+
+COMMENT ON COLUMN "public"."organizations"."is_personal" IS 'True only for the single "personal/default" organization per owner_id. Enforced by partial unique index.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."create_organization"("p_name" "text", "p_slug" "text" DEFAULT NULL::"text") RETURNS "public"."organizations"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_org public.organizations;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  -- Insertar con owner_id (no created_by)
+  insert into public.organizations (name, slug, owner_id)
+  values (p_name, p_slug, auth.uid())
+  returning * into v_org;
+
+  -- Añadir membresía de tipo owner
+  insert into public.memberships (org_id, user_id, role)
+  values (v_org.id, auth.uid(), 'owner');
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."create_organization"("p_name" "text", "p_slug" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."create_organization_for_current_user"("p_name" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+begin
+  perform set_config('row_security','off', true);
+
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if p_name is null or btrim(p_name) = '' then
+    raise exception 'Organization name is required';
+  end if;
+
+  -- Crea la org (asumimos organizations(id default uuid, name, created_at default now()))
+  insert into public.organizations (name)
+  values (btrim(p_name))
+  returning id into v_org_id;
+
+  -- Crea membership owner
+  insert into public.org_members (org_id, user_id, role, is_active)
+  values (v_org_id, auth.uid(), 'owner', true)
+  on conflict (org_id, user_id) do update
+    set role = excluded.role,
+        is_active = true;
+
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."create_organization_for_current_user"("p_name" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."create_personal_org_and_assign_owner"() RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_org uuid;
+begin
+  if v_uid is null then
+    raise exception 'No authenticated user';
+  end if;
+
+  -- 1) Crear organización (ajusta el nombre si quieres)
+  insert into public.orgs (name, created_by)
+  values ('Organización personal', v_uid)
+  returning id into v_org;
+
+  -- 2) Asignar rol de owner
+  insert into public.org_users (user_id, org_id, role)
+  values (v_uid, v_org, 'owner')
+  on conflict (user_id, org_id) do nothing;
+
+  -- 3) Asegurar perfil y setear default_org (AQUÍ ESTÁ EL CAMBIO CLAVE)
+  insert into public.profiles (id, user_id, default_org)
+  values (v_uid, v_uid, v_org)
+  on conflict (id) do update
+    set default_org = excluded.default_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."create_personal_org_and_assign_owner"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."current_geocerca_id_for_tracker"("p_uid" "uuid") RETURNS "uuid"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+  select v.geofence_id
+  from public.v_tracker_assignments_valid v
+  where v.tracker_user_id = p_uid
+    and coalesce(v.active, true) = true
+    and (v.start_date is null or v.start_date <= current_date)
+    and (v.end_date   is null or v.end_date   >= current_date)
+  order by v.created_at desc nulls last, v.start_date desc nulls last
+  limit 1
+$$;
+
+
+ALTER FUNCTION "public"."current_geocerca_id_for_tracker"("p_uid" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."current_org_id"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select org_id
+  from public.profiles
+  where id = auth.uid()
+$$;
+
+
+ALTER FUNCTION "public"."current_org_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."current_org_id_from_memberships"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  with pref as (
+    select m.org_id
+    from public.memberships m
+    where m.user_id = auth.uid()
+      and m.is_default = true
+    order by m.created_at desc
+    limit 1
+  ),
+  anym as (
+    select m.org_id
+    from public.memberships m
+    where m.user_id = auth.uid()
+    order by m.created_at desc
+    limit 1
+  )
+  select coalesce((select org_id from pref), (select org_id from anym));
+$$;
+
+
+ALTER FUNCTION "public"."current_org_id_from_memberships"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."current_role"() RETURNS "text"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select role from public.profiles where id = auth.uid()
+$$;
+
+
+ALTER FUNCTION "public"."current_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."current_tenant_id"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select public.current_org_id()
+$$;
+
+
+ALTER FUNCTION "public"."current_tenant_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."current_user_email"() RETURNS "text"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    AS $$
+  select u.email
+  from auth.users u
+  where u.id = auth.uid()
+$$;
+
+
+ALTER FUNCTION "public"."current_user_email"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."current_user_org_ids"() RETURNS SETOF "uuid"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  orgs uuid[] := '{}';
+  tmp uuid[];
+begin
+  if to_regclass('public.user_orgs') is not null then
+    execute 'select array_agg(org_id) from public.user_orgs where user_id = auth.uid()' into tmp;
+    orgs := orgs || coalesce(tmp, '{}');
+  end if;
+
+  if to_regclass('public.org_members') is not null then
+    execute 'select array_agg(org_id) from public.org_members where user_id = auth.uid()' into tmp;
+    orgs := orgs || coalesce(tmp, '{}');
+  end if;
+
+  if to_regclass('public.org_memberships') is not null then
+    execute 'select array_agg(org_id) from public.org_memberships where user_id = auth.uid()' into tmp;
+    orgs := orgs || coalesce(tmp, '{}');
+  end if;
+
+  if to_regclass('public.org_users') is not null then
+    execute 'select array_agg(org_id) from public.org_users where user_id = auth.uid()' into tmp;
+    orgs := orgs || coalesce(tmp, '{}');
+  end if;
+
+  if to_regclass('public.profiles') is not null
+     and exists (select 1 from information_schema.columns
+                 where table_schema='public' and table_name='profiles' and column_name='org_id') then
+    execute 'select array_agg(org_id) from public.profiles where id = auth.uid()' into tmp;
+    orgs := orgs || coalesce(tmp, '{}');
+  end if;
+
+  if to_regclass('public.user_profiles') is not null
+     and exists (select 1 from information_schema.columns
+                 where table_schema='public' and table_name='user_profiles' and column_name='org_id') then
+    execute 'select array_agg(org_id) from public.user_profiles where user_id = auth.uid()' into tmp;
+    orgs := orgs || coalesce(tmp, '{}');
+  end if;
+
+  return query
+    select distinct o
+    from unnest(coalesce(orgs, '{}')) as t(o)
+    where o is not null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."current_user_org_ids"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."delete_all_geocercas_for_user"() RETURNS "void"
+    LANGUAGE "sql"
+    AS $$
+  delete from public.geocercas
+  where owner_id = auth.uid();
+$$;
+
+
+ALTER FUNCTION "public"."delete_all_geocercas_for_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."delete_geofence_hard"("p_geofence_id" "uuid") RETURNS json
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_org uuid;
+  v_uid uuid := auth.uid();
+  v_role text;
+begin
+  if v_uid is null then
+    return json_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  select org_id into v_org
+  from public.geofences
+  where id = p_geofence_id;
+
+  if v_org is null then
+    return json_build_object('ok', false, 'error', 'not_found');
+  end if;
+
+  -- memberships como tabla definitiva:
+  select role::text into v_role
+  from public.memberships
+  where org_id = v_org
+    and user_id = v_uid
+    and revoked_at is null
+  limit 1;
+
+  if v_role is null or v_role not in ('owner','admin') then
+    return json_build_object('ok', false, 'error', 'forbidden');
+  end if;
+
+  -- BORRADO EN ORDEN
+  delete from public.asignaciones where geofence_id = p_geofence_id;
+  delete from public.geocerca_geofence_map where geofence_id = p_geofence_id;
+  delete from public.geofences where id = p_geofence_id;
+
+  return json_build_object('ok', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."delete_geofence_hard"("p_geofence_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."delete_user_full"("p_user_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+begin
+  ----------------------------------------------------------------
+  -- 1) Desasociar organizaciones (owner_id)
+  ----------------------------------------------------------------
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'organizations'
+      and column_name  = 'owner_id'
+  ) then
+    update public.organizations
+      set owner_id = null
+    where owner_id = p_user_id;
+  end if;
+
+  ----------------------------------------------------------------
+  -- 2) Borrar roles globales / memberships / org relations
+  ----------------------------------------------------------------
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'app_user_roles'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.app_user_roles where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'user_roles'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.user_roles where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'org_members'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.org_members where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'org_memberships'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.org_memberships where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'org_users'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.org_users where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'user_organizations'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.user_organizations where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'user_orgs'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.user_orgs where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'memberships'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.memberships where user_id = $1'
+      using p_user_id;
+  end if;
+
+  ----------------------------------------------------------------
+  -- 3) GEO-FENCE RELATIONS (user_id como text)
+  ----------------------------------------------------------------
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'geofence_members'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.geofence_members where user_id = $1::text'
+      using p_user_id::text;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'user_geofence_state'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.user_geofence_state where user_id = $1::text'
+      using p_user_id::text;
+  end if;
+
+  ----------------------------------------------------------------
+  -- 4) Profiles / logs
+  ----------------------------------------------------------------
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'profiles'
+      and column_name  = 'id'
+  ) then
+    execute 'delete from public.profiles where id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'profiles'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.profiles where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'user_profiles'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.user_profiles where user_id = $1'
+      using p_user_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'profiles_block_log'
+      and column_name  = 'user_id'
+  ) then
+    execute 'delete from public.profiles_block_log where user_id = $1'
+      using p_user_id;
+  end if;
+
+  -- IMPORTANTE: ya no llamamos a auth.admin.delete_user aquí.
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."delete_user_full"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."disable_assignments_when_geofence_inactive"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  -- si pasa de active=true a active=false
+  if (old.active is distinct from new.active) and (new.active = false) then
+    update public.tracker_assignments
+      set active = false
+    where geofence_id = new.id
+      and org_id = new.org_id
+      and active = true;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."disable_assignments_when_geofence_inactive"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."effective_tracker_limit"("p_org_id" "uuid") RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_plan text;
+  v_override integer;
+begin
+  -- Si no existe org_billing aún, lo tratamos como starter=1
+  select plan_code, tracker_limit_override
+    into v_plan, v_override
+  from public.org_billing
+  where org_id = p_org_id;
+
+  if v_override is not null then
+    return greatest(v_override, 0);
+  end if;
+
+  v_plan := coalesce(v_plan, 'starter');
+
+  -- Límites por plan (ajústalos a tu estrategia de monetización)
+  if v_plan = 'starter' then
+    return 1;
+  elsif v_plan = 'pro' then
+    return 10;
+  elsif v_plan = 'business' then
+    return 50;
+  else
+    -- plan desconocido: seguro por defecto
+    return 1;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."effective_tracker_limit"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_geocercas_limit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_max int;
+  v_count int;
+  v_sql text;
+  v_has_deleted_at boolean;
+  v_has_is_deleted boolean;
+  v_has_active boolean;
+  v_plan text;
+begin
+  if tg_op <> 'INSERT' then
+    return new;
+  end if;
+
+  -- Conteo sin sesgo de RLS
+  perform set_config('row_security', 'off', true);
+
+  -- plan + límites
+  select o.plan::text into v_plan
+  from public.organizations o
+  where o.id = new.org_id;
+
+  select max_geocercas into v_max
+  from public.get_org_limits(new.org_id);
+
+  if v_max is null then
+    raise exception 'No plan limits found for org_id=% (check organizations.plan value)', new.org_id
+      using errcode = 'P0001';
+  end if;
+
+  v_has_deleted_at := public._col_exists('public.geocercas'::regclass, 'deleted_at');
+  v_has_is_deleted := public._col_exists('public.geocercas'::regclass, 'is_deleted');
+  v_has_active     := public._col_exists('public.geocercas'::regclass, 'active');
+
+  v_sql := 'select count(*) from public.geocercas g where g.org_id = $1';
+
+  if v_has_deleted_at then
+    v_sql := v_sql || ' and g.deleted_at is null';
+  end if;
+
+  if v_has_is_deleted then
+    v_sql := v_sql || ' and coalesce(g.is_deleted,false) = false';
+  end if;
+
+  if v_has_active then
+    v_sql := v_sql || ' and coalesce(g.active,true) = true';
+  end if;
+
+  execute v_sql into v_count using new.org_id;
+
+  if v_count >= v_max then
+    raise exception
+      using errcode='P0001',
+            message = format(
+              'Has alcanzado el límite del plan %s (%s geocerca%s).',
+              initcap(coalesce(v_plan,'(sin plan)')),
+              v_max,
+              case when v_max = 1 then '' else 's' end
+            );
+  end if;
+
+  return new;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."enforce_geocercas_limit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_geocercas_total_limit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- ✅ Bypass SOLO para bridge interno (mirror geofences)
+  if public.is_internal_bridge() then
+    return new;
+  end if;
+
+  -- Delegar a la lógica original
+  return public.enforce_geocercas_total_limit_impl();
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_geocercas_total_limit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_geocercas_total_limit_core"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- ✅ bypass SOLO para bridge interno
+  if public.is_internal_bridge() then
+    return new;
+  end if;
+
+  -- Delegar a la lógica original intacta
+  return public.enforce_geocercas_total_limit_core_orig();
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_geocercas_total_limit_core"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_geocercas_total_limit_core_orig"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_plan_text text;
+  v_max int;
+  v_total int;
+begin
+  v_org_id := new.org_id;
+
+  if v_org_id is null then
+    return new;
+  end if;
+
+  -- Lock transaccional por org para evitar “carreras”
+  perform pg_advisory_xact_lock(hashtext(v_org_id::text));
+
+  -- Resolver plan desde organizations
+  select o.plan::text
+    into v_plan_text
+  from public.organizations o
+  where o.id = v_org_id;
+
+  if v_plan_text is null then
+    return new;
+  end if;
+
+  select pl.max_geocercas
+    into v_max
+  from public.plan_limits pl
+  where pl.plan = v_plan_text;
+
+  if v_max is null then
+    return new;
+  end if;
+
+  -- ✅ Conteo total SOLO en tabla real (geocercas)
+  select count(*)
+    into v_total
+  from public.geocercas g
+  where g.org_id = v_org_id;
+
+  if v_total >= v_max then
+    raise exception
+      using
+        errcode = 'P0001',
+        message = format(
+          'Has alcanzado el límite del plan %s (%s geocerca%s).',
+          initcap(v_plan_text),
+          v_max,
+          case when v_max = 1 then '' else 's' end
+        );
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_geocercas_total_limit_core_orig"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_geocercas_total_limit_impl"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- ✅ bypass SOLO cuando el bridge está activo
+  if public.is_internal_bridge() then
+    return new;
+  end if;
+
+  -- Delegar a tu lógica original intacta
+  return public.enforce_geocercas_total_limit_core();
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_geocercas_total_limit_impl"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_geofence_limit"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_org uuid;
+  v_count int;
+  v_limit int := 100;
+begin
+  v_org := coalesce(NEW.org_id, OLD.org_id);
+  if v_org is null then
+    return coalesce(NEW, OLD);
+  end if;
+
+  select count(*) into v_count
+  from public.geofences
+  where org_id = v_org;
+
+  if v_count > v_limit then
+    raise exception 'Límite de geocercas (% excedido) para la organización %', v_limit, v_org;
+  end if;
+
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_geofence_limit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_org_eq_tenant"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+begin
+  v_org := public.app_current_tenant_id(null);
+
+  if new.org_id is null and new.tenant_id is null then
+    new.org_id := v_org;
+    new.tenant_id := v_org;
+    return new;
+  end if;
+
+  if new.org_id is null then
+    new.org_id := new.tenant_id;
+  end if;
+
+  if new.tenant_id is null then
+    new.tenant_id := new.org_id;
+  end if;
+
+  if new.org_id <> new.tenant_id then
+    raise exception 'Tenancy violation on %.%: org_id (%) != tenant_id (%)',
+      tg_table_schema, tg_table_name, new.org_id, new.tenant_id
+      using errcode = '23514';
+  end if;
+
+  new.tenant_id := new.org_id;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_org_eq_tenant"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_org_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_tenant uuid;
+  v_uid uuid;
+  v_jwt_role text;
+begin
+  v_uid := auth.uid();
+  v_jwt_role := current_setting('request.jwt.claim.role', true);
+
+  -- ✅ ADMIN SAFE: SQL editor / service role
+  -- Si no hay usuario (auth.uid null) o es service_role, NO exijas app.tenant_id
+  if v_uid is null or v_jwt_role in ('service_role','supabase_admin') then
+    -- si org_id viene, ok; si no viene, dejamos pasar (otras reglas podrán fallar si es required)
+    if new.org_id is not null then
+      -- mantener tenant_id alineado si existe
+      if (to_jsonb(new) ? 'tenant_id') then
+        begin
+          if new.tenant_id is null then
+            new.tenant_id := new.org_id; -- tenant==org
+          end if;
+        exception when others then
+          null;
+        end;
+      end if;
+    end if;
+
+    return new;
+  end if;
+
+  -- ✅ 1) Si ya viene org_id explícito, NO intentes inferir tenant
+  if new.org_id is not null then
+    if (to_jsonb(new) ? 'tenant_id') then
+      begin
+        if new.tenant_id is null then
+          new.tenant_id := new.org_id; -- tenant==org
+        end if;
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return new;
+  end if;
+
+  -- ✅ 2) Solo si falta org_id, intenta resolver desde sesión (requests reales)
+  v_tenant := nullif(current_setting('app.tenant_id', true), '')::uuid;
+
+  if v_tenant is null then
+    raise exception 'No hay contexto de tenant. Setea app.tenant_id en la sesión o provee JWT válido.';
+  end if;
+
+  new.org_id := v_tenant;
+
+  -- mantener tenant_id alineado si existe
+  begin
+    if new.tenant_id is null then
+      new.tenant_id := v_tenant;
+    end if;
+  exception when others then
+    null;
+  end;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_org_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_org_people_tracker_limit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_max int;
+  v_count int;
+BEGIN
+  -- BYPASS universal para migraciones controladas
+  IF public.app_admin_mode() THEN
+    RETURN NEW;
+  END IF;
+  -- Determinar org_id objetivo
+  v_org_id := coalesce(new.org_id, old.org_id);
+
+  if v_org_id is null then
+    return new;
+  end if;
+
+  -- Solo contamos "activos" (no borrados)
+  -- y solo aplicamos cuando el nuevo estado queda "activo"
+  if coalesce(new.is_deleted, false) = true then
+    return new; -- si se está borrando, no bloquear
+  end if;
+
+  -- Límite desde plan
+  v_max := public.get_max_trackers_for_org(v_org_id);
+
+  -- Si no hay límite configurado para ese plan, no bloqueamos
+  if v_max is null then
+    return new;
+  end if;
+
+  -- Contar trackers activos actuales en esa org
+  select count(*)
+    into v_count
+  from public.org_people op
+  where op.org_id = v_org_id
+    and coalesce(op.is_deleted, false) = false;
+
+  -- Caso UPDATE: si ya existía activo, no contar doble
+  if tg_op = 'UPDATE' then
+    -- si el registro ya era activo en la misma org, v_count ya lo incluye,
+    -- no queremos bloquear solo por editar.
+    if old.org_id = new.org_id
+       and coalesce(old.is_deleted,false) = false
+       and coalesce(new.is_deleted,false) = false then
+      return new;
+    end if;
+
+    -- si se está "reviviendo" (is_deleted true -> false) o moviendo de org,
+    -- entonces sí aplica como “nuevo activo”.
+  end if;
+
+  if v_count >= v_max then
+    raise exception 'Has alcanzado el límite del plan Starter (% tracker).', v_max
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_org_people_tracker_limit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_owner_role"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_owner uuid;
+begin
+  if new.role is not null then
+    new.role := lower(new.role);
+  end if;
+
+  select o.owner_id into v_owner
+  from public.organizations o
+  where o.id = new.org_id;
+
+  if new.role = 'owner' and (v_owner is null or new.user_id <> v_owner) then
+    raise exception 'Only organizations.owner_id can have role=owner for org_id=%', new.org_id
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_owner_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_personal_tracker_limit_final"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+  v_limit int;
+  v_count int;
+
+  old_counts boolean := false;
+  new_counts boolean := false;
+  is_increasing boolean := false;
+
+  old_is_tracker boolean := false;
+  new_is_tracker boolean := false;
+begin
+  -- Org objetivo
+  v_org := coalesce(new.org_id, old.org_id);
+
+  -- Si no hay org, no aplicamos (dejar que otro trigger la fije)
+  if v_org is null then
+    return new;
+  end if;
+
+  -- Si está borrado o sin user_id, no cuenta jamás
+  if tg_op <> 'INSERT' then
+    if coalesce(old.is_deleted,false) = true or old.user_id is null then
+      old_is_tracker := false;
+    else
+      -- "Es tracker" si:
+      -- 1) Tiene tracker_assignment activo en esta org, o
+      -- 2) users_public.role sugiere TRACKER (si lo usas)
+      old_is_tracker :=
+        exists (
+          select 1
+          from public.tracker_assignments ta
+          where ta.org_id = v_org
+            and ta.tracker_user_id = old.user_id
+            and ta.active = true
+        )
+        or exists (
+          select 1
+          from public.users_public up
+          where up.id = old.user_id
+            and lower(up.role::text) = 'tracker'
+        );
+    end if;
+  end if;
+
+  if coalesce(new.is_deleted,false) = true or new.user_id is null then
+    new_is_tracker := false;
+  else
+    new_is_tracker :=
+      exists (
+        select 1
+        from public.tracker_assignments ta
+        where ta.org_id = v_org
+          and ta.tracker_user_id = new.user_id
+          and ta.active = true
+      )
+      or exists (
+        select 1
+        from public.users_public up
+        where up.id = new.user_id
+          and lower(up.role::text) = 'tracker'
+      );
+  end if;
+
+  -- Define cuándo "cuenta"
+  if tg_op <> 'INSERT' then
+    old_counts := old_is_tracker
+                 and (old.org_id is not null);
+  end if;
+
+  new_counts := new_is_tracker
+                and (new.org_id is not null);
+
+  -- Si NO incrementa trackers, permitir siempre
+  if tg_op = 'INSERT' then
+    is_increasing := new_counts;
+  else
+    if new_counts and (not old_counts) then
+      is_increasing := true;
+    elsif new_counts and old_counts and (new.org_id is distinct from old.org_id) then
+      -- mover tracker a otra org => incremento en org destino
+      is_increasing := true;
+    else
+      is_increasing := false;
+    end if;
+  end if;
+
+  if not is_increasing then
+    return new;
+  end if;
+
+  -- Solo aquí validamos límites (solo para trackers reales)
+  v_limit := public.effective_tracker_limit(v_org);
+  v_count := public.count_active_trackers(v_org);
+
+  -- BEFORE trigger: la operación incrementa en +1
+  if (v_count + 1) > v_limit then
+    raise exception using
+      errcode = 'P0001',
+      message = format(
+        'Has alcanzado el límite del plan %s (%s tracker%s).',
+        coalesce((select plan_code from public.org_billing where org_id=v_org),'starter'),
+        v_limit,
+        case when v_limit = 1 then '' else 's' end
+      );
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_personal_tracker_limit_final"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_single_admin_invites"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_role text;
+  v_is_admin boolean;
+begin
+  v_org_id := new.org_id;
+  v_role := new.role;
+
+  if v_org_id is null then
+    return new;
+  end if;
+
+  v_is_admin := public.is_admin_role(v_role);
+  if not v_is_admin then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(v_org_id::text));
+
+  -- Si ya hay admin en cualquiera de las tablas principales, bloquear la invitación admin
+  if exists (
+    select 1 from public.memberships m
+    where m.org_id = v_org_id and public.is_admin_role(m.role)
+  )
+  or exists (
+    select 1 from public.org_members om
+    where om.org_id = v_org_id and public.is_admin_role(om.role) and coalesce(om.is_active,true)=true
+  )
+  or exists (
+    select 1 from public.org_users ou
+    where ou.org_id = v_org_id and public.is_admin_role(ou.role)
+  )
+  or exists (
+    select 1 from public.user_orgs uo
+    where uo.org_id = v_org_id and public.is_admin_role(uo.role)
+  )
+  or exists (
+    select 1 from public.user_organizations uog
+    where uog.org_id = v_org_id and public.is_admin_role(uog.role)
+  )
+  or exists (
+    select 1 from public.app_user_roles aur
+    where aur.org_id = v_org_id and public.is_admin_role(aur.role)
+  ) then
+    raise exception
+      using
+        errcode = 'P0001',
+        message = 'No puedes invitar otro Administrador: esta organización ya tiene uno.';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_single_admin_invites"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_single_admin_per_org"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_user_id uuid;
+  v_role text;
+
+  v_is_admin boolean;
+  v_exists_other_admin boolean := false;
+
+  -- para excluir el mismo registro cuando aplica
+  v_has_id boolean;
+  v_id uuid;
+begin
+  -- leer columnas estándar (todas tus tablas de roles tienen org_id, user_id, role)
+  v_org_id := new.org_id;
+  v_user_id := new.user_id;
+  v_role := new.role;
+
+  if v_org_id is null then
+    return new;
+  end if;
+
+  v_is_admin := public.is_admin_role(v_role);
+  if not v_is_admin then
+    return new;
+  end if;
+
+  -- Lock por organización (evita carreras)
+  perform pg_advisory_xact_lock(hashtext(v_org_id::text));
+
+  -- Detectar si la tabla tiene columna "id" para exclusión precisa
+  select exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public'
+      and table_name = tg_table_name
+      and column_name = 'id'
+  ) into v_has_id;
+
+  if v_has_id then
+    v_id := new.id;
+  end if;
+
+  /*
+    2.1) Buscar si ya existe OTRO admin/owner en cualquier tabla de roles/membresías.
+    Nota: usamos EXISTS (rápido) y excluimos el mismo usuario cuando sea necesario.
+  */
+
+  -- memberships (tiene org_id, user_id, role)
+  if exists (
+    select 1
+    from public.memberships m
+    where m.org_id = v_org_id
+      and public.is_admin_role(m.role)
+      and m.user_id <> v_user_id
+  ) then
+    v_exists_other_admin := true;
+  end if;
+
+  -- org_members (tiene is_active)
+  if not v_exists_other_admin and exists (
+    select 1
+    from public.org_members om
+    where om.org_id = v_org_id
+      and public.is_admin_role(om.role)
+      and om.user_id <> v_user_id
+      and coalesce(om.is_active,true) = true
+  ) then
+    v_exists_other_admin := true;
+  end if;
+
+  -- org_users
+  if not v_exists_other_admin and exists (
+    select 1
+    from public.org_users ou
+    where ou.org_id = v_org_id
+      and public.is_admin_role(ou.role)
+      and ou.user_id <> v_user_id
+  ) then
+    v_exists_other_admin := true;
+  end if;
+
+  -- user_orgs
+  if not v_exists_other_admin and exists (
+    select 1
+    from public.user_orgs uo
+    where uo.org_id = v_org_id
+      and public.is_admin_role(uo.role)
+      and uo.user_id <> v_user_id
+  ) then
+    v_exists_other_admin := true;
+  end if;
+
+  -- user_organizations (tiene id)
+  if not v_exists_other_admin and exists (
+    select 1
+    from public.user_organizations uog
+    where uog.org_id = v_org_id
+      and public.is_admin_role(uog.role)
+      and uog.user_id <> v_user_id
+  ) then
+    v_exists_other_admin := true;
+  end if;
+
+  -- app_user_roles (tiene id)
+  if not v_exists_other_admin and exists (
+    select 1
+    from public.app_user_roles aur
+    where aur.org_id = v_org_id
+      and public.is_admin_role(aur.role)
+      and aur.user_id <> v_user_id
+  ) then
+    v_exists_other_admin := true;
+  end if;
+
+  if v_exists_other_admin then
+    raise exception
+      using
+        errcode = 'P0001',
+        message = 'Esta organización ya tiene un Administrador. Solo se permite 1 Administrador por organización.';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_single_admin_per_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enforce_tenant_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+begin
+  v_org := public.app_current_tenant_id(null);
+  if new.tenant_id is null then
+    new.tenant_id := v_org;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."enforce_tenant_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_active_org_for_user"("p_user" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+begin
+  if p_user is null then
+    return null;
+  end if;
+
+  /*
+    1) Si profiles.current_org_id es válido y el usuario ES miembro,
+       usarlo (y solo si la org está activa y no suspendida)
+  */
+  select p.current_org_id
+    into v_org
+  from public.profiles p
+  where p.user_id = p_user
+  limit 1;
+
+  if v_org is not null then
+    if exists (
+      select 1
+      from public.memberships m
+      join public.organizations o on o.id = m.org_id
+      where m.user_id = p_user
+        and m.org_id = v_org
+        and coalesce(o.active, true) = true
+        and coalesce(o.suspended, false) = false
+    ) then
+      return v_org;
+    end if;
+  end if;
+
+  /*
+    2) PRIORIDAD: membership marcado como default (tracker debe caer aquí)
+  */
+  select m.org_id
+    into v_org
+  from public.memberships m
+  join public.organizations o on o.id = m.org_id
+  where m.user_id = p_user
+    and m.is_default = true
+    and coalesce(o.active, true) = true
+    and coalesce(o.suspended, false) = false
+  order by m.created_at desc
+  limit 1;
+
+  if v_org is not null then
+    update public.profiles
+       set current_org_id = v_org,
+           default_org_id = coalesce(default_org_id, v_org)
+     where user_id = p_user;
+    return v_org;
+  end if;
+
+  /*
+    3) Fallback: último membership válido
+  */
+  select m.org_id
+    into v_org
+  from public.memberships m
+  join public.organizations o on o.id = m.org_id
+  where m.user_id = p_user
+    and coalesce(o.active, true) = true
+    and coalesce(o.suspended, false) = false
+  order by m.created_at desc
+  limit 1;
+
+  if v_org is not null then
+    update public.profiles
+       set current_org_id = v_org,
+           default_org_id = coalesce(default_org_id, v_org)
+     where user_id = p_user;
+  end if;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_active_org_for_user"("p_user" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_admin_bootstrap"("p_email" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_email text := lower(trim(p_email));
+  v_user_id uuid;
+  i int;
+begin
+  if v_email is null or v_email = '' then
+    -- nada que hacer
+    return;
+  end if;
+
+  -- Reintentos cortos por consistencia eventual / race condition
+  -- (createUser y luego select en auth.users puede no ser inmediato)
+  for i in 1..8 loop
+    select u.id
+      into v_user_id
+    from auth.users u
+    where lower(u.email) = v_email
+    limit 1;
+
+    exit when v_user_id is not null;
+
+    -- 8 * 150ms = ~1.2s máximo
+    perform pg_sleep(0.15);
+  end loop;
+
+  if v_user_id is null then
+    -- CLAVE: no reventar, solo salir
+    -- si quieres auditar, puedes guardar en una tabla de logs (opcional)
+    return;
+  end if;
+
+  -- =========================================================
+  -- AQUÍ va tu bootstrap real, SIEMPRE idempotente
+  -- (Ejemplos - ajusta a tu esquema real)
+  -- =========================================================
+
+  -- EJEMPLO 1: asegurar fila en tabla personal (si existe)
+  -- insert into public.personal (user_id, name, created_at)
+  -- values (v_user_id, v_email, now())
+  -- on conflict (user_id) do nothing;
+
+  -- EJEMPLO 2: asegurar algo en perfiles (si existe)
+  -- insert into public.profiles (id, email, created_at)
+  -- values (v_user_id, v_email, now())
+  -- on conflict (id) do update set email = excluded.email;
+
+  -- Si tu bootstrap actual crea roles u orgs, HAZLO con:
+  -- - upsert / on conflict do nothing
+  -- - sin raises por "ya existe"
+  -- =========================================================
+
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_admin_bootstrap"("p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_current_org_for_user"("p_user" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_profile_org uuid;
+  v_best_org uuid;
+  v_email text;
+  v_role text;
+begin
+  v_email := public.tg_get_profile_email(p_user);
+
+  -- org desde perfil (prioridad: active_tenant_id, current_org_id, org_id, default_org_id)
+  v_profile_org := null;
+
+  if public.tg_col_exists('profiles','active_tenant_id') then
+    execute 'select active_tenant_id from public.profiles where id = $1' into v_profile_org using p_user;
+  elsif public.tg_col_exists('profiles','current_org_id') then
+    execute 'select current_org_id from public.profiles where id = $1' into v_profile_org using p_user;
+  elsif public.tg_col_exists('profiles','org_id') then
+    execute 'select org_id from public.profiles where id = $1' into v_profile_org using p_user;
+  elsif public.tg_col_exists('profiles','default_org_id') then
+    execute 'select default_org_id from public.profiles where id = $1' into v_profile_org using p_user;
+  end if;
+
+  -- Si hay org en perfil, verificar si tiene rol ahí
+  if v_profile_org is not null then
+    v_role := null;
+
+    if public.tg_col_exists('app_user_roles','role') then
+      select aur.role into v_role
+      from public.app_user_roles aur
+      where aur.user_id = p_user and aur.org_id = v_profile_org
+      limit 1;
+    elsif public.tg_col_exists('app_user_roles','role_name') then
+      select aur.role_name into v_role
+      from public.app_user_roles aur
+      where aur.user_id = p_user and aur.org_id = v_profile_org
+      limit 1;
+    end if;
+
+    if v_role is not null and v_role <> '' then
+      v_best_org := v_profile_org;
+    end if;
+  end if;
+
+  -- Buscar la "mejor" org por roles (owner > admin > resto)
+  if v_best_org is null then
+    if public.tg_col_exists('app_user_roles','role') then
+      select aur.org_id into v_best_org
+      from public.app_user_roles aur
+      where aur.user_id = p_user
+      order by case aur.role when 'owner' then 1 when 'admin' then 2 else 9 end
+      limit 1;
+    elsif public.tg_col_exists('app_user_roles','role_name') then
+      select aur.org_id into v_best_org
+      from public.app_user_roles aur
+      where aur.user_id = p_user
+      order by case aur.role_name when 'owner' then 1 when 'admin' then 2 else 9 end
+      limit 1;
+    else
+      select aur.org_id into v_best_org
+      from public.app_user_roles aur
+      where aur.user_id = p_user
+      limit 1;
+    end if;
+  end if;
+
+  -- Fallback memberships
+  if v_best_org is null and to_regclass('public.memberships') is not null then
+    select m.org_id into v_best_org
+    from public.memberships m
+    where m.user_id = p_user
+    limit 1;
+  end if;
+
+  -- MODELO C: si no hay org con rol → crear org + owner
+  if v_best_org is null then
+    v_best_org := public.tg_create_org_for_user(p_user, v_email);
+    perform public.tg_ensure_owner_role(p_user, v_best_org);
+    perform public.tg_ensure_membership(p_user, v_best_org);
+  end if;
+
+  -- Setear columnas de perfil que existan (idempotente)
+  if public.tg_col_exists('profiles','active_tenant_id') then
+    execute 'update public.profiles set active_tenant_id = $2 where id = $1' using p_user, v_best_org;
+  end if;
+
+  if public.tg_col_exists('profiles','current_org_id') then
+    execute 'update public.profiles set current_org_id = $2 where id = $1' using p_user, v_best_org;
+  end if;
+
+  if public.tg_col_exists('profiles','default_org_id') then
+    execute 'update public.profiles set default_org_id = coalesce(default_org_id, $2) where id = $1'
+    using p_user, v_best_org;
+  end if;
+
+  if public.tg_col_exists('profiles','org_id') then
+    execute 'update public.profiles set org_id = coalesce(org_id, $2) where id = $1'
+    using p_user, v_best_org;
+  end if;
+
+  return v_best_org;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."ensure_current_org_for_user"("p_user" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_default_org"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_org uuid;
+  v_name text;
+begin
+  if v_uid is null then
+    raise exception 'ensure_default_org(): requiere usuario autenticado';
+  end if;
+
+  -- 1️⃣ Ver si ya tiene default_org
+  select default_org into v_org from public.profiles where id = v_uid;
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- 2️⃣ Ver si ya es dueño de alguna organización
+  select id into v_org from public.organizations where owner_id = v_uid limit 1;
+
+  -- 3️⃣ Si no, crear una nueva organización
+  if v_org is null then
+    select coalesce(up.full_name, u.email, 'Usuario') into v_name
+    from auth.users u
+    left join public.users_public up on up.id = u.id
+    where u.id = v_uid;
+
+    insert into public.organizations(name, owner_id, plan)
+    values (coalesce('Org de '||v_name, 'Org'), v_uid, 'free')
+    returning id into v_org;
+  end if;
+
+  -- 4️⃣ Crear membership
+  insert into public.memberships(org_id, user_id, role)
+  values (v_org, v_uid, 'owner')
+  on conflict (org_id, user_id) do nothing;
+
+  -- 5️⃣ Asignar como default_org
+  update public.profiles set default_org = v_org where id = v_uid;
+
+  return v_org;
+end $$;
+
+
+ALTER FUNCTION "public"."ensure_default_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_default_org_for_current_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user_id uuid := auth.uid();
+  v_org_id  uuid;
+begin
+  -- Seguridad básica
+  if v_user_id is null then
+    raise exception 'ensure_default_org_for_current_user: auth.uid() es NULL'
+      using hint = 'Llama a esta función solo con un usuario autenticado.';
+  end if;
+
+  -- 1) ¿Ya tiene una organización por defecto?
+  select m.org_id
+    into v_org_id
+  from memberships m
+  where m.user_id = v_user_id
+    and coalesce(m.is_default, false) = true
+  limit 1;
+
+  if v_org_id is not null then
+    return v_org_id;
+  end if;
+
+  -- 2) No hay "default" pero sí tiene alguna membership → usamos la más antigua
+  select m.org_id
+    into v_org_id
+  from memberships m
+  where m.user_id = v_user_id
+  order by m.created_at
+  limit 1;
+
+  if v_org_id is not null then
+    update memberships
+       set is_default = (org_id = v_org_id)
+     where user_id = v_user_id;
+
+    return v_org_id;
+  end if;
+
+  -- 3) No tiene ninguna membership → crear Organización personal
+  --    OJO: el trigger on_organization_created() se encargará
+  --    de crear la membership owner (org_id, user_id).
+  insert into organizations (name, owner_id, created_by)
+  values ('Organización personal', v_user_id, v_user_id)
+  returning id into v_org_id;
+
+  -- YA NO insertamos en memberships aquí. Evitamos el duplicado.
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_default_org_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_default_org_for_user"("p_user_id" "uuid" DEFAULT "auth"."uid"()) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_org_id uuid;
+  v_email text;
+  v_name text;
+begin
+  if p_user_id is null then
+    raise exception 'ensure_default_org_for_user: user_id cannot be null';
+  end if;
+
+  -- Si ya tiene org por roles, toma la más reciente activa
+  select r.org_id
+  into v_org_id
+  from public.app_user_roles r
+  join public.organizations o on o.id = r.org_id
+  where r.user_id = p_user_id
+    and coalesce(o.active, true) = true
+    and coalesce(o.suspended, false) = false
+  order by o.created_at desc nulls last
+  limit 1;
+
+  if v_org_id is not null then
+    return v_org_id;
+  end if;
+
+  -- Crear org nueva
+  select u.email into v_email
+  from auth.users u
+  where u.id = p_user_id;
+
+  v_name := coalesce(nullif(split_part(v_email,'@',1),''), 'Mi Organización');
+  v_name := left(v_name, 60);
+
+  insert into public.organizations (name, owner_id, created_by, active, suspended)
+  values (v_name, p_user_id, p_user_id, true, false)
+  returning id into v_org_id;
+
+  -- owner role
+  perform public.ensure_user_role(p_user_id, v_org_id, 'owner');
+
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_default_org_for_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_geofence_from_geocerca"("p_geocerca_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_prev text;
+
+  v_geojson jsonb;
+  v_type text;
+  v_geom_json jsonb;
+  v_geom geometry;
+
+  v_radius int;
+  v_lat double precision;
+  v_lng double precision;
+
+  v_created_by uuid;
+  v_updated_by uuid;
+  v_user_id uuid;
+
+  v_org_id uuid;
+  v_name text;
+
+  v_created_at timestamptz;
+  v_updated_at timestamptz;
+
+  v_is_default boolean;
+begin
+  -- Activar modo bridge
+  v_prev := current_setting('app.internal_bridge', true);
+  perform set_config('app.internal_bridge', 'on', true);
+
+  -- Cargar desde geocercas (tabla real)
+  select
+    g.geojson,
+    g.radius_m,
+    g.lat,
+    g.lng,
+    g.created_by,
+    g.updated_by,
+    g.org_id,
+    g.name,
+    g.created_at,
+    g.updated_at
+  into
+    v_geojson,
+    v_radius,
+    v_lat,
+    v_lng,
+    v_created_by,
+    v_updated_by,
+    v_org_id,
+    v_name,
+    v_created_at,
+    v_updated_at
+  from public.geocercas g
+  where g.id = p_geocerca_id;
+
+  if v_geojson is null then
+    raise exception
+      'ensure_geofence_from_geocerca: geojson null o geocerca no existe (id=%)',
+      p_geocerca_id
+      using errcode = 'P0001';
+  end if;
+
+  if v_org_id is null then
+    raise exception
+      'ensure_geofence_from_geocerca: org_id es null en geocercas (id=%)',
+      p_geocerca_id
+      using errcode = 'P0001';
+  end if;
+
+  if v_name is null or btrim(v_name) = '' then
+    raise exception
+      'ensure_geofence_from_geocerca: name es null/vacío en geocercas (id=%)',
+      p_geocerca_id
+      using errcode = 'P0001';
+  end if;
+
+  -- Not nulls legacy
+  v_radius := coalesce(v_radius, 0);
+  v_created_at := coalesce(v_created_at, now());
+  v_updated_at := coalesce(v_updated_at, now());
+  v_is_default := false;
+
+  -- Resolver user_id legacy (NOT NULL)
+  v_user_id := coalesce(v_created_by, v_updated_by, auth.uid());
+  if v_user_id is null then
+    raise exception
+      'ensure_geofence_from_geocerca: no se pudo resolver user_id (created_by/updated_by/auth.uid todos null) id=%',
+      p_geocerca_id
+      using errcode = 'P0001';
+  end if;
+
+  -- Extraer geometry GeoJSON
+  v_type := v_geojson->>'type';
+
+  if v_type = 'Feature' then
+    v_geom_json := v_geojson->'geometry';
+  elsif v_type = 'FeatureCollection' then
+    v_geom_json := v_geojson->'features'->0->'geometry';
+  else
+    v_geom_json := v_geojson;
+  end if;
+
+  if v_geom_json is null or (v_geom_json->>'type') is null then
+    raise exception
+      'ensure_geofence_from_geocerca: no se pudo extraer geometry (id=%, geojson.type=%)',
+      p_geocerca_id, v_type
+      using errcode = 'P0001';
+  end if;
+
+  -- Geometry hardened + MULTIPOLYGON + SRID 4326
+  v_geom :=
+    public.st_setsrid(
+      public.st_multi(
+        public.st_makevalid(
+          public.st_force2d(
+            public.st_geomfromgeojson(v_geom_json::text)
+          )
+        )
+      ),
+      4326
+    );
+
+  -- Fallback lat/lng si vienen null
+  if v_lat is null or v_lng is null then
+    v_lat := public.st_y(public.st_centroid(v_geom));
+    v_lng := public.st_x(public.st_centroid(v_geom));
+  end if;
+
+  -- Upsert mirror en geofences con TODOS los NOT NULL cubiertos
+  insert into public.geofences (
+    id,
+    name,
+    created_at,
+    radius_m,
+    user_id,
+    org_id,
+    geojson,
+    updated_at,
+    geom,
+    is_default,
+    active,
+    lat,
+    lng,
+    created_by,
+    updated_by
+  )
+  select
+    g.id,
+    g.name,
+    v_created_at,
+    v_radius,
+    v_user_id,
+    g.org_id,
+    g.geojson,
+    v_updated_at,
+    v_geom,
+    v_is_default,
+    g.active,
+    v_lat,
+    v_lng,
+    g.created_by,
+    g.updated_by
+  from public.geocercas g
+  where g.id = p_geocerca_id
+  on conflict (id) do update set
+    name       = excluded.name,
+    created_at = excluded.created_at,
+    radius_m   = excluded.radius_m,
+    user_id    = excluded.user_id,
+    org_id     = excluded.org_id,
+    geojson    = excluded.geojson,
+    updated_at = excluded.updated_at,
+    geom       = excluded.geom,
+    is_default = excluded.is_default,
+    active     = excluded.active,
+    lat        = excluded.lat,
+    lng        = excluded.lng,
+    created_by = excluded.created_by,
+    updated_by = excluded.updated_by;
+
+  -- Restaurar flag
+  if v_prev is null or v_prev = '' then
+    perform set_config('app.internal_bridge', '', true);
+  else
+    perform set_config('app.internal_bridge', v_prev, true);
+  end if;
+
+exception when others then
+  if v_prev is null or v_prev = '' then
+    perform set_config('app.internal_bridge', '', true);
+  else
+    perform set_config('app.internal_bridge', v_prev, true);
+  end if;
+  raise;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_geofence_from_geocerca"("p_geocerca_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_membership_for_current_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_user uuid := auth.uid();
+  v_org uuid;
+  v_org_tbl text := 'organizations';
+  v_pk_col text;
+  v_name_col text;
+  v_sql text;
+begin
+  -- ✅ Permitir bootstrap sin contexto tenant (bypass RLS dentro de SECURITY DEFINER)
+  perform set_config('row_security','off', true);
+
+  if v_user is null then
+    raise exception 'No auth user';
+  end if;
+
+  -- 1) Si ya existe membership, usar el default (o el más antiguo) y asegurar is_default
+  select m.org_id into v_org
+  from public.memberships m
+  where m.user_id = v_user
+  order by m.is_default desc, m.created_at asc
+  limit 1;
+
+  if v_org is not null then
+    update public.memberships
+      set is_default = (org_id = v_org)
+    where user_id = v_user;
+
+    perform set_config('app.tenant_id', v_org::text, true);
+    return v_org;
+  end if;
+
+  -- 2) Detectar PK de organizations (para RETURNING)
+  select kcu.column_name into v_pk_col
+  from information_schema.table_constraints tc
+  join information_schema.key_column_usage kcu
+    on kcu.constraint_name = tc.constraint_name
+   and kcu.table_schema = tc.table_schema
+   and kcu.table_name = tc.table_name
+  where tc.table_schema = 'public'
+    and tc.table_name = v_org_tbl
+    and tc.constraint_type = 'PRIMARY KEY'
+  order by kcu.ordinal_position
+  limit 1;
+
+  if v_pk_col is null then
+    raise exception 'No se pudo detectar PK de public.%', v_org_tbl;
+  end if;
+
+  -- 3) Detectar columna "nombre" si existe
+  select c.column_name into v_name_col
+  from information_schema.columns c
+  where c.table_schema='public'
+    and c.table_name=v_org_tbl
+    and c.column_name in ('name','nombre','org_name','title')
+  order by case c.column_name
+    when 'name' then 1
+    when 'nombre' then 2
+    when 'org_name' then 3
+    when 'title' then 4
+    else 99
+  end
+  limit 1;
+
+  -- 4) Crear organización nueva (con nombre si existe, si no: default values)
+  if v_name_col is not null then
+    v_sql := format(
+      'insert into public.%I (%I) values ($1) returning %I',
+      v_org_tbl, v_name_col, v_pk_col
+    );
+    execute v_sql using 'Mi Organización' into v_org;
+  else
+    v_sql := format(
+      'insert into public.%I default values returning %I',
+      v_org_tbl, v_pk_col
+    );
+    execute v_sql into v_org;
+  end if;
+
+  if v_org is null then
+    raise exception 'No se pudo crear organización para el usuario %', v_user;
+  end if;
+
+  -- 5) Setear tenant en sesión ya con org creada
+  perform set_config('app.tenant_id', v_org::text, true);
+
+  -- 6) Crear membership owner default
+  insert into public.memberships (org_id, user_id, role, is_default)
+  values (v_org, v_user, 'owner', true);
+
+  -- 7) Asegurar único default
+  update public.memberships
+    set is_default = (org_id = v_org)
+  where user_id = v_user;
+
+  return v_org;
+end $_$;
+
+
+ALTER FUNCTION "public"."ensure_membership_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_membership_for_current_user"("p_org" "uuid", "p_role" "text" DEFAULT 'owner'::"text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  perform set_config('row_security','off', true);
+
+  if p_org is null or auth.uid() is null then
+    return;
+  end if;
+
+  -- Si ya es miembro, no hace nada
+  if public.is_org_member(p_org) then
+    return;
+  end if;
+
+  -- Crea membership (esto solo lo llamas cuando tu lógica de negocio lo permita)
+  perform public.upsert_org_member(p_org, auth.uid(), p_role);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_membership_for_current_user"("p_org" "uuid", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_membership_for_user"("p_user_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_has boolean;
+  v_org uuid;
+  v_org_tbl text;
+  v_sql text;
+  v_has_name boolean;
+  v_has_created_at boolean;
+begin
+  if p_user_id is null then
+    raise exception 'p_user_id requerido';
+  end if;
+
+  -- ¿Ya tiene al menos un membership activo?
+  select exists (
+    select 1
+    from public.org_members m
+    where m.user_id = p_user_id
+      and coalesce(m.is_active, true) = true
+  ) into v_has;
+
+  if v_has then
+    -- devuelve algún org_id activo existente (el primero)
+    select m.org_id into v_org
+    from public.org_members m
+    where m.user_id = p_user_id
+      and coalesce(m.is_active, true) = true
+    limit 1;
+
+    return v_org;
+  end if;
+
+  -- Crear org nueva (tenant==org por diseño tuyo)
+  v_org := gen_random_uuid();
+  v_org_tbl := public._pick_org_table();
+
+  -- Detectar columnas comunes disponibles
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name=v_org_tbl and column_name='name'
+  ) into v_has_name;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name=v_org_tbl and column_name='created_at'
+  ) into v_has_created_at;
+
+  -- Insert dinámico minimalista (id siempre)
+  if v_has_name and v_has_created_at then
+    v_sql := format(
+      'insert into public.%I (id, name, created_at) values ($1, $2, now())',
+      v_org_tbl
+    );
+    execute v_sql using v_org, ('Org ' || left(p_user_id::text, 8));
+
+  elsif v_has_name then
+    v_sql := format(
+      'insert into public.%I (id, name) values ($1, $2)',
+      v_org_tbl
+    );
+    execute v_sql using v_org, ('Org ' || left(p_user_id::text, 8));
+
+  elsif v_has_created_at then
+    v_sql := format(
+      'insert into public.%I (id, created_at) values ($1, now())',
+      v_org_tbl
+    );
+    execute v_sql using v_org;
+
+  else
+    v_sql := format(
+      'insert into public.%I (id) values ($1)',
+      v_org_tbl
+    );
+    execute v_sql using v_org;
+  end if;
+
+  -- Importante: setea tenant en esta transacción por si hay triggers que lo lean
+  perform set_config('app.tenant_id', v_org::text, true);
+
+  -- Insert membership (owner, activo)
+  insert into public.org_members (org_id, user_id, role, is_active, created_at)
+  values (v_org, p_user_id, 'owner', true, now());
+
+  return v_org;
+end $_$;
+
+
+ALTER FUNCTION "public"."ensure_membership_for_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_admin_core"("p_user_id" "uuid", "p_email" "text", "p_role" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_existing_org   uuid;
+  v_new_org_id     uuid;
+  v_plan           organizations.plan%type;
+  v_slug           text;
+  v_email_base     text;
+begin
+  if p_user_id is null then
+    return null;
+  end if;
+
+  -- Solo admins/owners
+  if coalesce(p_role, '') not in ('admin', 'owner') then
+    return null;
+  end if;
+
+  -- 1) ¿Ya tiene membership?
+  select m.org_id
+  into v_existing_org
+  from memberships m
+  where m.user_id = p_user_id
+  limit 1;
+
+  if v_existing_org is not null then
+    return v_existing_org;
+  end if;
+
+  -- 2) No tiene → crear organización propia
+
+  -- Tomar un plan válido existente
+  select o.plan
+  into v_plan
+  from organizations o
+  order by o.created_at
+  limit 1;
+
+  if v_plan is null then
+    raise exception 'No hay ningún valor válido en organizations.plan';
+  end if;
+
+  v_email_base := split_part(coalesce(p_email, 'usuario'), '@', 1);
+  v_slug       := 'org-' || replace(v_email_base, '.', '-');
+
+  insert into organizations (id, name, owner_id, slug, plan)
+  values (
+    gen_random_uuid(),
+    'Org de ' || v_email_base,
+    p_user_id,
+    v_slug,
+    v_plan
+  )
+  returning id into v_new_org_id;
+
+  -- 3) Crear membership
+  insert into memberships (org_id, user_id, role)
+  values (
+    v_new_org_id,
+    p_user_id,
+    case when p_role = 'owner' then 'owner' else 'admin' end
+  )
+  on conflict (org_id, user_id)
+  do update set role = excluded.role;
+
+  return v_new_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_admin_core"("p_user_id" "uuid", "p_email" "text", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_admin_profile"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_existing_org   uuid;
+  v_new_org_id     uuid;
+  v_plan           organizations.plan%type;
+  v_slug           text;
+  v_email_base     text;
+  v_uid            uuid;
+begin
+  -- Solo admin/owner
+  if coalesce(new.role, '') not in ('admin', 'owner') then
+    return new;
+  end if;
+
+  -- ✅ Canonical user id: profiles.id
+  v_uid := coalesce(new.user_id, new.id, auth.uid());
+  if v_uid is null then
+    return new;
+  end if;
+
+  -- (opcional) normalizar user_id para que quede consistente
+  new.user_id := coalesce(new.user_id, v_uid);
+
+  -- 1) ¿ya tiene memberships?
+  select m.org_id into v_existing_org
+  from public.memberships m
+  where m.user_id = v_uid
+  limit 1;
+
+  if v_existing_org is not null then
+    new.org_id           := v_existing_org;
+    new.tenant_id        := coalesce(new.tenant_id, v_existing_org);
+    new.default_org_id   := coalesce(new.default_org_id, v_existing_org);
+    new.current_org_id   := coalesce(new.current_org_id, v_existing_org);
+    new.active_tenant_id := coalesce(new.active_tenant_id, v_existing_org);
+    return new;
+  end if;
+
+  -- 2) crear org
+  select o.plan into v_plan
+  from public.organizations o
+  order by o.created_at
+  limit 1;
+
+  if v_plan is null then
+    raise exception 'No hay valor válido en organizations.plan';
+  end if;
+
+  v_email_base := split_part(coalesce(new.email, 'usuario'), '@', 1);
+  v_slug       := 'org-' || replace(v_email_base, '.', '-');
+
+  insert into public.organizations (id, name, owner_id, slug, plan)
+  values (
+    gen_random_uuid(),
+    'Org de ' || v_email_base || ' (producción)',
+    v_uid,
+    v_slug,
+    v_plan
+  )
+  returning id into v_new_org_id;
+
+  -- 3) membership
+  insert into public.memberships (org_id, user_id, role, is_default)
+  values (
+    v_new_org_id,
+    v_uid,
+    case when new.role = 'owner' then 'owner' else 'admin' end,
+    true
+  )
+  on conflict (org_id, user_id) do update
+    set role = excluded.role;
+
+  -- 4) alinear profile
+  new.org_id           := v_new_org_id;
+  new.tenant_id        := v_new_org_id;
+  new.default_org_id   := v_new_org_id;
+  new.current_org_id   := v_new_org_id;
+  new.active_tenant_id := v_new_org_id;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_admin_profile"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_admin_profiles"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_org uuid;
+  has_default_org boolean;
+  has_current_org boolean;
+begin
+  -- Solo actuar para admin/owner
+  if new.role is null or new.role not in ('admin','owner') then
+    return new;
+  end if;
+
+  -- Si ya trae org_id, no inventamos otro
+  v_org := new.org_id;
+
+  -- Si org_id viene null, lo resolvemos desde app_user_roles o memberships
+  if v_org is null then
+    if to_regclass('public.app_user_roles') is not null then
+      select aur.org_id
+        into v_org
+      from public.app_user_roles aur
+      where aur.user_id = new.id
+      order by case aur.role::text when 'owner' then 1 when 'admin' then 2 else 99 end
+      limit 1;
+    end if;
+
+    if v_org is null and to_regclass('public.memberships') is not null then
+      select m.org_id
+        into v_org
+      from public.memberships m
+      where m.user_id = new.id
+      order by case m.role::text when 'owner' then 1 when 'admin' then 2 else 99 end
+      limit 1;
+    end if;
+
+    -- Si aún no hay org, no forzamos nada
+    if v_org is null then
+      return new;
+    end if;
+
+    new.org_id := v_org;
+  end if;
+
+  -- Setear default_org_id / current_org_id SOLO si existen (y sin tocar generated)
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='profiles' and column_name='default_org_id'
+  ) into has_default_org;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='profiles' and column_name='current_org_id'
+  ) into has_current_org;
+
+  if has_default_org and new.default_org_id is null then
+    new.default_org_id := new.org_id;
+  end if;
+
+  if has_current_org and new.current_org_id is null then
+    new.current_org_id := new.org_id;
+  end if;
+
+  -- IMPORTANTE:
+  -- NO tocar: new.user_id, new.tenant_id, new.active_tenant_id (son GENERATED)
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_admin_profiles"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_admin_user_profile"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_existing_org   uuid;
+  v_new_org_id     uuid;
+  v_plan           organizations.plan%type;
+  v_slug           text;
+  v_email_base     text;
+begin
+  -- Solo admins/owners
+  if coalesce(NEW.role, '') not in ('admin', 'owner') then
+    return NEW;
+  end if;
+
+  if NEW.user_id is null then
+    return NEW;
+  end if;
+
+  -- 1) ¿Ya tiene membership?
+  select m.org_id
+  into v_existing_org
+  from memberships m
+  where m.user_id = NEW.user_id
+  limit 1;
+
+  if v_existing_org is not null then
+    -- Alinear user_profiles
+    NEW.org_id            := v_existing_org;
+    NEW.tenant_id         := v_existing_org;
+    NEW.default_org_id    := v_existing_org;
+    NEW.current_org_id    := v_existing_org;
+    NEW.active_tenant_id  := v_existing_org;
+    return NEW;
+  end if;
+
+  -- 2) Crear organización propia
+  select o.plan
+  into v_plan
+  from organizations o
+  order by o.created_at
+  limit 1;
+
+  if v_plan is null then
+    raise exception 'No se encontró plan válido en organizations.plan';
+  end if;
+
+  v_email_base := split_part(coalesce(NEW.email, 'usuario'), '@', 1);
+  v_slug := 'org-' || replace(v_email_base, '.', '-');
+
+  insert into organizations (id, name, owner_id, slug, plan)
+  values (
+    gen_random_uuid(),
+    'Org de ' || v_email_base || ' (producción)',
+    NEW.user_id,
+    v_slug,
+    v_plan
+  )
+  returning id into v_new_org_id;
+
+  -- 3) Crear membership
+  insert into memberships (org_id, user_id, role)
+  values (
+    v_new_org_id,
+    NEW.user_id,
+    case when NEW.role='owner' then 'owner' else 'admin' end
+  )
+  on conflict (org_id, user_id)
+  do update set role = excluded.role;
+
+  -- 4) Alinear user_profiles
+  NEW.org_id            := v_new_org_id;
+  NEW.tenant_id         := v_new_org_id;
+  NEW.default_org_id    := v_new_org_id;
+  NEW.current_org_id    := v_new_org_id;
+  NEW.active_tenant_id  := v_new_org_id;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_admin_user_profile"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_current_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_user_id uuid;
+  v_org_id  uuid;
+BEGIN
+  -- 1) Usuario actual
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'auth.uid() es NULL — no se puede determinar organización';
+  END IF;
+
+  -- 2) ¿Ya tiene organización como owner?
+  SELECT aur.org_id INTO v_org_id
+  FROM public.app_user_roles aur
+  WHERE aur.user_id = v_user_id
+    AND aur.role    = 'owner'
+  ORDER BY aur.created_at
+  LIMIT 1;
+
+  IF v_org_id IS NOT NULL THEN
+    -- Aseguramos que exista en organizations
+    INSERT INTO public.organizations (id, name, owner_id, created_by)
+    VALUES (
+      v_org_id,
+      'Org ' || left(v_org_id::text, 8),
+      v_user_id,
+      v_user_id
+    )
+    ON CONFLICT (id) DO NOTHING;
+
+    RETURN v_org_id;
+  END IF;
+
+  -- 3) No tiene organización: crear una nueva
+  v_org_id := gen_random_uuid();
+
+  INSERT INTO public.organizations (id, name, owner_id, created_by)
+  VALUES (
+    v_org_id,
+    'Org ' || left(v_user_id::text, 8),
+    v_user_id,
+    v_user_id
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO public.app_user_roles (user_id, org_id, role)
+  VALUES (v_user_id, v_org_id, 'owner')
+  ON CONFLICT DO NOTHING;
+
+  RETURN v_org_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_new_admin"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Si viene sin user_id, intentamos usar auth.uid()
+  if NEW.user_id is null then
+    NEW.user_id := auth.uid();
+  end if;
+
+  -- Si sigue nulo, bloqueamos con un mensaje claro
+  if NEW.user_id is null then
+    raise exception 'ensure_org_for_new_admin: NEW.user_id es NULL'
+      using hint = 'No se puede crear una membership sin usuario. Asegúrate de estar autenticado o de enviar user_id explícito.';
+  end if;
+
+  -- Aquí podrías añadir más validaciones (por ejemplo que org_id no sea null)
+  if NEW.org_id is null then
+    raise exception 'ensure_org_for_new_admin: NEW.org_id es NULL'
+      using hint = 'No se puede crear una membership sin organización.';
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_new_admin"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_owner_role"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_email  text;
+  -- Plan por defecto para nuevas organizaciones
+  v_plan   plan_code := 'starter';  -- <- cambia a 'free' si quieres plan gratuito
+begin
+  if NEW.role = 'owner' and NEW.org_id is null then
+    -- Email desde auth.users
+    select email
+    into v_email
+    from auth.users
+    where id = NEW.user_id;
+
+    -- Crear organización con plan por defecto
+    insert into public.organizations (
+      name,
+      owner_id,
+      created_by,
+      plan,
+      active
+    )
+    values (
+      coalesce(v_email, 'Org ' || NEW.user_id::text),
+      NEW.user_id,
+      NEW.user_id,
+      v_plan,
+      true
+    )
+    returning id into v_org_id;
+
+    NEW.org_id := v_org_id;
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_owner_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_org_for_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user uuid;
+  v_org uuid;
+begin
+  v_user := public.get_request_user_id();
+  if v_user is null then
+    return null;
+  end if;
+
+  -- A) Si ya tiene roles, tomar el mejor org por jerarquía
+  select aur.org_id into v_org
+  from public.app_user_roles aur
+  where aur.user_id = v_user
+  order by
+    case aur.role
+      when 'owner' then 1
+      when 'admin' then 2
+      when 'tracker' then 3
+      when 'viewer' then 4
+      else 9
+    end,
+    aur.created_at desc nulls last
+  limit 1;
+
+  -- B) Si NO tiene roles, intentar org por ownership directo (universal)
+  if v_org is null then
+    select o.id into v_org
+    from public.organizations o
+    where o.owner_id = v_user
+    order by o.created_at desc nulls last
+    limit 1;
+  end if;
+
+  -- C) Si NO existe org, crearla (owner_id es NOT NULL en tu esquema)
+  if v_org is null then
+    insert into public.organizations (name, owner_id, created_by)
+    values ('New Organization', v_user, v_user)
+    returning id into v_org;
+  end if;
+
+  -- D) Garantizar que exista al menos un rol para ese usuario/org
+  if not exists (
+    select 1 from public.app_user_roles r
+    where r.user_id = v_user and r.org_id = v_org
+  ) then
+    insert into public.app_user_roles (user_id, org_id, role)
+    values (v_user, v_org, 'owner');
+  end if;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_org_for_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_owner_org_for_user"("p_user_id" "uuid", "p_email" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id         uuid;
+  v_owner_role_id  uuid;
+  v_name           text;
+  v_slug           text;
+begin
+  if p_user_id is null then
+    raise exception 'ensure_owner_org_for_user: p_user_id no puede ser NULL';
+  end if;
+
+  ---------------------------------------------------------------------------
+  -- 1) ¿YA TIENE ORGANIZACIÓN?
+  ---------------------------------------------------------------------------
+  select uo.org_id
+    into v_org_id
+  from public.user_organizations uo
+  where uo.user_id = p_user_id
+  order by uo.created_at
+  limit 1;
+
+  if v_org_id is not null then
+    return v_org_id;
+  end if;
+
+  ---------------------------------------------------------------------------
+  -- 2) Buscar role_id del rol "owner"
+  ---------------------------------------------------------------------------
+  select r.id
+    into v_owner_role_id
+  from public.roles r
+  where lower(r.name) = 'owner'
+  limit 1;
+
+  if v_owner_role_id is null then
+    raise exception 'ensure_owner_org_for_user: rol "owner" no encontrado en tabla roles';
+  end if;
+
+  ---------------------------------------------------------------------------
+  -- 3) Definir nombre y slug de la nueva organización
+  ---------------------------------------------------------------------------
+  if p_email is not null then
+    v_name := split_part(p_email, '@', 1);          -- parte antes de @
+    v_name := replace(v_name, '.', ' ');            -- puntos → espacios
+    v_name := initcap(v_name);                      -- capitalizar
+  end if;
+
+  if v_name is null or v_name = '' then
+    v_name := 'Nueva organización';
+  end if;
+
+  -- slug tipo "mi-email-123abc"
+  v_slug := lower(regexp_replace(coalesce(v_name, 'org'), '[^a-zA-Z0-9]+', '-', 'g'));
+  if v_slug is null or v_slug = '' then
+    v_slug := 'org-' || substring(replace(cast(gen_random_uuid() as text), '-', '') from 1 for 8);
+  end if;
+
+  ---------------------------------------------------------------------------
+  -- 4) Crear nueva fila en organizations
+  ---------------------------------------------------------------------------
+  insert into public.organizations (id, name, slug)
+  values (
+    gen_random_uuid(),
+    v_name,
+    v_slug
+  )
+  returning id into v_org_id;
+
+  ---------------------------------------------------------------------------
+  -- 5) Crear relación en user_organizations como OWNER
+  ---------------------------------------------------------------------------
+  insert into public.user_organizations (id, user_id, org_id, role, created_at)
+  values (
+    gen_random_uuid(),
+    p_user_id,
+    v_org_id,
+    'owner',
+    now()
+  );
+
+  ---------------------------------------------------------------------------
+  -- 6) Asegurar rol OWNER en user_roles
+  ---------------------------------------------------------------------------
+  if not exists (
+    select 1
+    from public.user_roles ur
+    where ur.user_id = p_user_id
+      and ur.role_id = v_owner_role_id
+  ) then
+    insert into public.user_roles (user_id, role_id, created_at)
+    values (p_user_id, v_owner_role_id, now());
+  end if;
+
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_owner_org_for_user"("p_user_id" "uuid", "p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_personal_for_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_nombre" "text" DEFAULT NULL::"text", "p_telefono" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_exists boolean;
+begin
+  -- tomar el org_id desde la geocerca destino (aseguramos pertenencia)
+  select g.org_id into v_org_id
+  from public.geocercas g
+  where g.id = p_geocerca_id;
+
+  if v_org_id is null then
+    raise exception 'Geocerca % no existe o no tiene org_id', p_geocerca_id;
+  end if;
+
+  -- ¿ya existe en personal?
+  select true
+  into v_exists
+  from public.personal per
+  where per.user_id = p_user_id
+  limit 1;
+
+  if not v_exists then
+    insert into public.personal as per (user_id, org_id, nombre, telefono, activo)
+    values (p_user_id, v_org_id, nullif(p_nombre, ''), nullif(p_telefono, ''), true)
+    on conflict (user_id) do update
+      set org_id   = excluded.org_id,
+          nombre   = coalesce(per.nombre, excluded.nombre),
+          telefono = coalesce(per.telefono, excluded.telefono),
+          activo   = true;
+  else
+    -- si existe, solo nos aseguramos de org y activo
+    update public.personal
+       set org_id = coalesce(org_id, v_org_id),
+           activo = true
+     where user_id = p_user_id;
+  end if;
+
+  return p_user_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_personal_for_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_nombre" "text", "p_telefono" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_personal_for_user"("p_user_id" "uuid", "p_org_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_id     uuid;
+  v_org    uuid;
+  v_nombre text;
+  v_email  text;
+  v_nombre_final text;
+begin
+  if p_user_id is null then
+    raise exception 'p_user_id requerido';
+  end if;
+
+  -- Si ya existe, devolver
+  select id into v_id from public.personal where id = p_user_id;
+  if v_id is not null then
+    return v_id;
+  end if;
+
+  -- Inferir org_id
+  select coalesce(
+           p_org_id,
+           (select pr.org_id from public.profiles pr where pr.id = p_user_id),
+           (select m.org_id from public.memberships m where m.user_id = p_user_id limit 1),
+           (select uo.org_id from public.user_orgs uo where uo.user_id = p_user_id limit 1)
+         )
+  into v_org;
+
+  -- Traer nombre y email si existen
+  select coalesce(full_name, '')::text, email::text
+    into v_nombre, v_email
+  from public.profiles
+  where id = p_user_id
+  limit 1;
+
+  -- Fallbacks: full_name -> parte local del email -> 'Usuario'
+  v_nombre_final := coalesce(nullif(btrim(v_nombre), ''),
+                             nullif(split_part(coalesce(v_email,''), '@', 1), ''),
+                             'Usuario');
+
+  insert into public.personal (id, org_id, owner_id, nombre, apellido, email, vigente, activo_bool, created_at)
+  values (p_user_id, v_org, p_user_id, v_nombre_final, null, v_email, true, true, now())
+  on conflict (id) do nothing;
+
+  return p_user_id;
+end
+$$;
+
+
+ALTER FUNCTION "public"."ensure_personal_for_user"("p_user_id" "uuid", "p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_personal_org"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_org uuid;
+begin
+  if v_uid is null then
+    raise exception 'No authenticated user (auth.uid() is null)';
+  end if;
+
+  v_org := public.ensure_personal_org_for(v_uid);
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_personal_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_personal_org_for"("p_uid" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+begin
+  if p_uid is null then
+    raise exception 'p_uid is null';
+  end if;
+
+  perform public.ensure_profile(p_uid);
+
+  -- Si ya tiene default_org, regresar el existente
+  select default_org into v_org
+  from public.profiles
+  where id = p_uid;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- Crear organización personal
+  insert into public.orgs (name, created_by)
+  values ('Organización personal', p_uid)
+  returning id into v_org;
+
+  -- Asignar rol owner
+  insert into public.org_users (user_id, org_id, role)
+  values (p_uid, v_org, 'owner')
+  on conflict (user_id, org_id) do nothing;
+
+  -- Set default_org
+  update public.profiles
+     set default_org = v_org
+   where id = p_uid;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_personal_org_for"("p_uid" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_personal_org_for_user"("p_user_id" "uuid", "p_org_name" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_org_id uuid;
+  v_plan_type text;
+  v_plan_label text;
+  v_sql text;
+begin
+  if p_user_id is null then
+    raise exception 'p_user_id is null';
+  end if;
+
+  -- 1) Si ya existe org personal, reutilizar
+  select id into v_org_id
+  from public.organizations
+  where owner_id = p_user_id
+    and is_personal = true
+  limit 1;
+
+  if v_org_id is not null then
+    -- opcional: actualizar nombre
+    update public.organizations
+       set name = coalesce(nullif(trim(p_org_name),''), name),
+           updated_at = now()
+     where id = v_org_id;
+    return v_org_id;
+  end if;
+
+  -- 2) Crear org personal
+  v_plan_type := public._organizations_plan_type();
+  v_plan_label := public._organizations_plan_default_label();
+
+  if v_plan_type is null or v_plan_label is null then
+    raise exception 'Cannot detect default organizations.plan enum';
+  end if;
+
+  v_sql := format($f$
+    insert into public.organizations
+      (name, owner_id, plan, created_by, updated_at, active, suspended, is_personal)
+    values
+      ($1,  $2,      $3::%I, $2,        now(),      true,  false,     true)
+    returning id
+  $f$, v_plan_type);
+
+  execute v_sql
+    into v_org_id
+    using coalesce(nullif(trim(p_org_name),''), 'Personal'), p_user_id, v_plan_label;
+
+  return v_org_id;
+
+exception when unique_violation then
+  -- Si tienes índice único parcial por (owner_id) WHERE is_personal=true y hubo carrera:
+  select id into v_org_id
+  from public.organizations
+  where owner_id = p_user_id and is_personal = true
+  limit 1;
+
+  if v_org_id is null then
+    raise;
+  end if;
+
+  return v_org_id;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."ensure_personal_org_for_user"("p_user_id" "uuid", "p_org_name" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_profile"("p_uid" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  has_user_id boolean;
+begin
+  if p_uid is null then
+    raise exception 'p_uid is null';
+  end if;
+
+  select exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public'
+      and table_name='profiles'
+      and column_name='user_id'
+  ) into has_user_id;
+
+  if has_user_id then
+    insert into public.profiles (id, user_id)
+    values (p_uid, p_uid)
+    on conflict (id) do nothing;
+  else
+    insert into public.profiles (id)
+    values (p_uid)
+    on conflict (id) do nothing;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_profile"("p_uid" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_single_default_membership"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.is_default is true then
+    update public.memberships
+       set is_default = false
+     where user_id = new.user_id
+       and org_id <> new.org_id
+       and is_default = true;
+  end if;
+
+  if coalesce(new.is_default,false) = false then
+    if not exists (
+      select 1 from public.memberships m
+      where m.user_id = new.user_id and m.is_default = true
+    ) then
+      new.is_default := true;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_single_default_membership"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_system_user_id"() RETURNS "uuid"
+    LANGUAGE "plpgsql"
+    AS $_$
+declare
+  v_cfg uuid;
+  v_ref_table text;
+  v_exists int;
+  v_any uuid;
+begin
+  -- id configurado (o default)
+  select (value->>'id')::uuid
+    into v_cfg
+  from public.app_settings
+  where key='system_user_id'
+  limit 1;
+
+  if v_cfg is null then
+    v_cfg := '00000000-0000-0000-0000-000000000001'::uuid;
+  end if;
+
+  -- detectar tabla referenciada por la FK de geofences(user_id)
+  -- (si no existe FK, simplemente devolvemos v_cfg)
+  select (confrelid::regclass)::text
+    into v_ref_table
+  from pg_constraint
+  where conrelid = 'public.geofences'::regclass
+    and contype = 'f'
+    and array_length(conkey,1)=1
+    and conkey[1] = (
+      select attnum
+      from pg_attribute
+      where attrelid='public.geofences'::regclass
+        and attname='user_id'
+        and not attisdropped
+      limit 1
+    )
+  limit 1;
+
+  if v_ref_table is null then
+    return v_cfg;
+  end if;
+
+  -- ¿existe v_cfg en la tabla users?
+  execute format('select 1 from %s where id = $1 limit 1', v_ref_table)
+    into v_exists
+    using v_cfg;
+
+  if v_exists = 1 then
+    return v_cfg;
+  end if;
+
+  -- Intentar crear el usuario sistema con solo (id).
+  -- Si la tabla users exige más campos, esto puede fallar y caemos al fallback.
+  begin
+    execute format('insert into %s (id) values ($1) on conflict (id) do nothing', v_ref_table)
+      using v_cfg;
+  exception when others then
+    -- ignore
+    null;
+  end;
+
+  -- recheck
+  execute format('select 1 from %s where id = $1 limit 1', v_ref_table)
+    into v_exists
+    using v_cfg;
+
+  if v_exists = 1 then
+    return v_cfg;
+  end if;
+
+  -- Fallback universal: usar cualquier users.id existente (el primero)
+  execute format('select id from %s order by id limit 1', v_ref_table)
+    into v_any;
+
+  if v_any is null then
+    raise exception 'No hay ningún users.id disponible en %, y no se pudo insertar el system user.', v_ref_table;
+  end if;
+
+  -- Persistir el fallback como nuevo system_user_id (para futuras migraciones)
+  insert into public.app_settings(key, value)
+  values ('system_user_id', jsonb_build_object('id', v_any::text))
+  on conflict (key) do update
+  set value = excluded.value,
+      updated_at = now();
+
+  return v_any;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."ensure_system_user_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_tenant_for_org"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  insert into public.tenants (id, name, owner_user_id)
+  values (
+    new.id,
+    coalesce(nullif(new.name, ''), 'Org ' || left(new.id::text, 8)),
+    auth.uid()
+  )
+  on conflict (id) do update
+  set
+    name = excluded.name,
+    owner_user_id = coalesce(public.tenants.owner_user_id, excluded.owner_user_id);
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_tenant_for_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_tracker_membership"("p_email" "text", "p_org_id" "uuid", "p_role" "text" DEFAULT 'TRACKER'::"text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user_id    uuid;
+  v_profile_id uuid;
+begin
+  -- 1) Buscar usuario en auth.users
+  select id into v_user_id
+  from auth.users
+  where email = p_email;
+
+  if v_user_id is null then
+    raise exception 'No existe usuario en auth.users con email=%', p_email;
+  end if;
+
+  -- 2) Buscar si ya existe un profile ligado a ese user_id
+  select id into v_profile_id
+  from public.profiles
+  where user_id = v_user_id
+  limit 1;
+
+  if v_profile_id is not null then
+    -- 2a) Ya existe profile -> actualizar campos clave
+    update public.profiles
+    set
+      email            = p_email,
+      org_id           = coalesce(org_id, p_org_id),
+      role             = coalesce(role, p_role),
+      active_tenant_id = p_org_id,
+      is_active        = true
+    where id = v_profile_id;
+  else
+    -- 2b) No existe profile -> crear uno nuevo
+    -- id = v_user_id para respetar FK profiles_id_fkey
+    -- NO tocamos user_id ni tenant_id (columnas generadas)
+    insert into public.profiles (
+      id,
+      email,
+      org_id,
+      role,
+      active_tenant_id,
+      is_active
+    )
+    values (
+      v_user_id,
+      p_email,
+      p_org_id,
+      p_role,
+      p_org_id,
+      true
+    );
+  end if;
+
+  -- IMPORTANTE:
+  -- Ya NO tocamos user_organizations aquí.
+  -- Para send_position basta con active_tenant_id correcto.
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_tracker_membership"("p_email" "text", "p_org_id" "uuid", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_tracker_membership"("p_user_id" "uuid", "p_email" "text", "p_org_id" "uuid", "p_role" "text" DEFAULT 'TRACKER'::"text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  ----------------------------------------------------------------------
+  -- 1. Asegurar fila en profiles
+  --    NO tocamos tenant_id ni user_id porque son columnas generadas
+  ----------------------------------------------------------------------
+  insert into public.profiles (id, email, full_name, org_id, role, active_tenant_id)
+  values (
+    p_user_id,
+    p_email,
+    p_email,      -- usamos email como full_name por defecto
+    p_org_id,
+    p_role,
+    p_org_id      -- active_tenant_id = org del tracker
+  )
+  on conflict (id) do update
+    set email            = excluded.email,
+        full_name        = coalesce(excluded.full_name, profiles.full_name),
+        org_id           = excluded.org_id,
+        role             = excluded.role,
+        active_tenant_id = excluded.active_tenant_id;
+
+  ----------------------------------------------------------------------
+  -- 2. Asegurar fila en user_organizations (sin ON CONFLICT)
+  ----------------------------------------------------------------------
+  if exists (
+    select 1
+    from public.user_organizations
+    where user_id = p_user_id
+      and org_id  = p_org_id
+  ) then
+    -- Ya existe: solo actualizamos el rol
+    update public.user_organizations
+       set role = p_role
+     where user_id = p_user_id
+       and org_id  = p_org_id;
+  else
+    -- No existe: insertamos
+    insert into public.user_organizations (user_id, org_id, role)
+    values (p_user_id, p_org_id, p_role);
+  end if;
+
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_tracker_membership"("p_user_id" "uuid", "p_email" "text", "p_org_id" "uuid", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_user_context"() RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_prof public.profiles%rowtype;
+  v_org_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'No authenticated user';
+  end if;
+
+  -- Obtener email desde profiles o auth.users
+  select p.* into v_prof
+  from public.profiles p
+  where p.id = v_uid;
+
+  if v_prof.id is null then
+    -- Crear profile si por algún motivo no existe (backup)
+    select email into v_email from auth.users where id = v_uid;
+    insert into public.profiles (id, email, display_name)
+    values (v_uid, v_email, split_part(coalesce(v_email,''), '@', 1))
+    returning * into v_prof;
+  end if;
+
+  -- Si no tiene default_org, buscar una membresía
+  if v_prof.default_org is null then
+    select om.org_id
+    into v_org_id
+    from public.org_members om
+    where om.user_id = v_uid
+    order by om.created_at asc
+    limit 1;
+
+    -- Si no existe membresía, crear una org personal y asignar owner
+    if v_org_id is null then
+      insert into public.orgs (name) values ('Org de ' || coalesce(v_prof.email, 'usuario')) returning id into v_org_id;
+      insert into public.org_members (org_id, user_id, role) values (v_org_id, v_uid, 'owner');
+    end if;
+
+    -- Fijar default_org
+    update public.profiles
+    set default_org = v_org_id
+    where id = v_uid;
+    v_prof.default_org := v_org_id;
+  end if;
+
+  -- Devolver contexto compacto
+  return jsonb_build_object(
+    'user_id', v_prof.id,
+    'email', v_prof.email,
+    'display_name', v_prof.display_name,
+    'default_org', v_prof.default_org
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_user_context"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_user_membership"("p_user_id" "uuid", "p_email" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+DECLARE
+  v_org_id uuid;
+  v_name text;
+
+  has_created_at boolean;
+  has_active boolean;
+  has_enabled boolean;
+  has_is_active boolean;
+  has_status boolean;
+BEGIN
+  IF p_user_id IS NULL THEN
+    RAISE EXCEPTION 'ensure_user_membership: user_id is null';
+  END IF;
+
+  -- Si ya tiene membership, devolvemos la org existente
+  SELECT m.org_id
+    INTO v_org_id
+  FROM public.memberships m
+  WHERE m.user_id = p_user_id
+  ORDER BY m.created_at NULLS LAST, m.org_id
+  LIMIT 1;
+
+  IF v_org_id IS NOT NULL THEN
+    RETURN v_org_id;
+  END IF;
+
+  -- Crear una org nueva donde ESTE usuario será owner_id (cumple enforce_owner_role)
+  v_name := COALESCE(NULLIF(split_part(COALESCE(p_email,''),'@',1),''), 'Nueva Org');
+
+  INSERT INTO public.organizations (name, owner_id, created_by)
+  VALUES (v_name, p_user_id, p_user_id)
+  RETURNING id INTO v_org_id;
+
+  -- Insert membership owner sin asumir columnas extra
+  has_created_at := public._col_exists('memberships','created_at');
+  has_active     := public._col_exists('memberships','active');
+  has_enabled    := public._col_exists('memberships','enabled');
+  has_is_active  := public._col_exists('memberships','is_active');
+  has_status     := public._col_exists('memberships','status');
+
+  BEGIN
+    IF has_created_at AND has_active THEN
+      EXECUTE '
+        INSERT INTO public.memberships (org_id, user_id, role, created_at, active)
+        VALUES ($1, $2, ''owner'', now(), true)
+      ' USING v_org_id, p_user_id;
+
+    ELSIF has_created_at AND has_enabled THEN
+      EXECUTE '
+        INSERT INTO public.memberships (org_id, user_id, role, created_at, enabled)
+        VALUES ($1, $2, ''owner'', now(), true)
+      ' USING v_org_id, p_user_id;
+
+    ELSIF has_created_at AND has_is_active THEN
+      EXECUTE '
+        INSERT INTO public.memberships (org_id, user_id, role, created_at, is_active)
+        VALUES ($1, $2, ''owner'', now(), true)
+      ' USING v_org_id, p_user_id;
+
+    ELSIF has_created_at AND has_status THEN
+      EXECUTE '
+        INSERT INTO public.memberships (org_id, user_id, role, created_at, status)
+        VALUES ($1, $2, ''owner'', now(), ''active'')
+      ' USING v_org_id, p_user_id;
+
+    ELSIF has_created_at THEN
+      EXECUTE '
+        INSERT INTO public.memberships (org_id, user_id, role, created_at)
+        VALUES ($1, $2, ''owner'', now())
+      ' USING v_org_id, p_user_id;
+
+    ELSE
+      EXECUTE '
+        INSERT INTO public.memberships (org_id, user_id, role)
+        VALUES ($1, $2, ''owner'')
+      ' USING v_org_id, p_user_id;
+    END IF;
+
+  EXCEPTION
+    WHEN unique_violation THEN
+      NULL;
+  END;
+
+  RETURN v_org_id;
+END;
+$_$;
+
+
+ALTER FUNCTION "public"."ensure_user_membership"("p_user_id" "uuid", "p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_user_org_context"("p_user_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := p_user_id;
+  v_email text;
+  v_profile_role text;
+  v_existing_current uuid;
+  v_org_id uuid;
+  v_role_label text;
+  v_role memberships.role%type;
+  v_org_name text;
+  v_slug text;
+begin
+  if v_uid is null then
+    raise exception 'ensure_user_org_context: p_user_id is null';
+  end if;
+
+  -- Perfil (si existe)
+  select p.email, p.role, p.current_org_id
+    into v_email, v_profile_role, v_existing_current
+  from public.profiles p
+  where p.id = v_uid
+  limit 1;
+
+  -- Si ya hay current_org_id válido, retornamos
+  if v_existing_current is not null
+     and exists (select 1 from public.organizations o where o.id = v_existing_current) then
+    return v_existing_current;
+  end if;
+
+  -- Buscar org desde memberships (prioridad is_default)
+  select m.org_id
+    into v_org_id
+  from public.memberships m
+  join public.organizations o on o.id = m.org_id
+  where m.user_id = v_uid
+  order by (case when m.is_default then 0 else 1 end), m.created_at asc
+  limit 1;
+
+  -- Fallback por org_members
+  if v_org_id is null then
+    select om.org_id
+      into v_org_id
+    from public.org_members om
+    join public.organizations o on o.id = om.org_id
+    where om.user_id = v_uid
+      and coalesce(om.is_active,true) = true
+    order by om.created_at asc
+    limit 1;
+  end if;
+
+  -- Si no hay org: crear una
+  if v_org_id is null then
+    v_org_name :=
+      coalesce(nullif(trim(split_part(coalesce(v_email,''), '@', 1)), ''), 'Org')
+      || ' '
+      || to_char(now(), 'YYYYMMDD-HH24MI');
+
+    v_slug := lower(regexp_replace(v_org_name, '[^a-zA-Z0-9]+', '-', 'g'));
+    v_slug := v_slug || '-' || substr(md5(gen_random_uuid()::text), 1, 6);
+
+    insert into public.organizations (name, owner_id, created_by, created_at, updated_at, active, suspended, slug)
+    values (v_org_name, v_uid, v_uid, now(), now(), true, false, v_slug)
+    returning id into v_org_id;
+  end if;
+
+  -- Rol válido (enum)
+  v_role_label := public._pick_membership_role_label(coalesce(v_profile_role,'owner'));
+  if v_role_label is null then
+    v_role_label := public._pick_membership_role_label('admin');
+  end if;
+
+  v_role := v_role_label::memberships.role%type;
+
+  -- memberships upsert
+  insert into public.memberships (org_id, user_id, role, created_at, is_default)
+  values (v_org_id, v_uid, v_role, now(), true)
+  on conflict (org_id, user_id)
+  do update set
+    is_default = true;
+
+  -- org_members upsert
+  insert into public.org_members (org_id, user_id, role, created_at, is_active)
+  values (v_org_id, v_uid, coalesce(v_profile_role, v_role_label, 'admin'), now(), true)
+  on conflict (org_id, user_id)
+  do update set
+    is_active = true;
+
+  -- ✅ BYPASS SOLO PARA ESTE UPDATE
+  perform set_config('app.bypass_profiles_direct_writes', 'on', true);
+
+  update public.profiles
+  set
+    current_org_id = v_org_id,
+    default_org_id = coalesce(default_org_id, v_org_id),
+    org_id         = coalesce(org_id, v_org_id)
+  where id = v_uid;
+
+  -- default único
+  update public.memberships
+  set is_default = (org_id = v_org_id)
+  where user_id = v_uid;
+
+  return v_org_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_user_org_context"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_user_role"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if p_user_id is null or p_org_id is null then
+    raise exception 'ensure_user_role: p_user_id y p_org_id son obligatorios';
+  end if;
+
+  if p_role is null or length(trim(p_role)) = 0 then
+    raise exception 'ensure_user_role: p_role es obligatorio';
+  end if;
+
+  insert into public.memberships (user_id, org_id, role)
+  values (p_user_id, p_org_id, trim(p_role))
+  on conflict (user_id, org_id)
+  do update set role = excluded.role;
+
+  -- ❌ NO tocar app_user_roles (derivada por triggers)
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_user_role"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_user_tenant"("p_user" "uuid", "p_email" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_org uuid;
+  v_name text;
+  has_owner_id boolean;
+  has_created_by boolean;
+  has_name boolean;
+begin
+  if p_user is null then
+    raise exception 'ensure_user_tenant: p_user is null';
+  end if;
+
+  -- Si ya tiene rol, devolvemos su primera org (la de mayor jerarquía si aplica)
+  if exists (select 1 from public.app_user_roles r where r.user_id = p_user) then
+    select r.org_id
+      into v_org
+    from public.app_user_roles r
+    where r.user_id = p_user
+    order by
+      case r.role::text
+        when 'owner' then 1
+        when 'admin' then 2
+        when 'tracker' then 3
+        when 'viewer' then 4
+        else 9
+      end
+    limit 1;
+
+    return v_org;
+  end if;
+
+  -- 1) Si existe organizations.owner_id, intenta encontrar una org ya “propiedad” del usuario
+  has_owner_id := public._col_exists('organizations','owner_id');
+  if has_owner_id then
+    execute 'select id from public.organizations where owner_id = $1 order by created_at nulls last limit 1'
+      into v_org
+      using p_user;
+  end if;
+
+  -- 2) Si no hay org, crear una nueva org (respetando columnas existentes)
+  if v_org is null then
+    has_created_by := public._col_exists('organizations','created_by');
+    has_name       := public._col_exists('organizations','name');
+    v_name := coalesce(nullif(split_part(coalesce(p_email,''),'@',1),''), 'Nueva Org');
+
+    if has_name and has_owner_id and has_created_by then
+      execute 'insert into public.organizations (name, owner_id, created_by) values ($1,$2,$3) returning id'
+        into v_org
+        using v_name, p_user, p_user;
+
+    elsif has_name and has_owner_id and not has_created_by then
+      execute 'insert into public.organizations (name, owner_id) values ($1,$2) returning id'
+        into v_org
+        using v_name, p_user;
+
+    elsif has_name and not has_owner_id and has_created_by then
+      execute 'insert into public.organizations (name, created_by) values ($1,$2) returning id'
+        into v_org
+        using v_name, p_user;
+
+    elsif has_name and not has_owner_id and not has_created_by then
+      execute 'insert into public.organizations (name) values ($1) returning id'
+        into v_org
+        using v_name;
+
+    elsif (not has_name) and has_owner_id and has_created_by then
+      execute 'insert into public.organizations (owner_id, created_by) values ($1,$2) returning id'
+        into v_org
+        using p_user, p_user;
+
+    elsif (not has_name) and has_owner_id and not has_created_by then
+      execute 'insert into public.organizations (owner_id) values ($1) returning id'
+        into v_org
+        using p_user;
+
+    elsif (not has_name) and (not has_owner_id) and has_created_by then
+      execute 'insert into public.organizations (created_by) values ($1) returning id'
+        into v_org
+        using p_user;
+
+    else
+      -- Caso extremo: organizations solo tiene id con default
+      execute 'insert into public.organizations default values returning id'
+        into v_org;
+    end if;
+  end if;
+
+  -- 3) Insertar rol canónico en app_user_roles
+  insert into public.app_user_roles (user_id, org_id, role)
+  values (p_user, v_org, 'owner')
+  on conflict do nothing;
+
+  return v_org;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."ensure_user_tenant"("p_user" "uuid", "p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_users_public_by_uid"("p_uid" "uuid", "p_email" "text", "p_role" "text", "p_tenant_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_role_type text;
+begin
+  if p_uid is null then
+    return jsonb_build_object('ok', false, 'error', 'missing_uid');
+  end if;
+  if p_email is null or length(trim(p_email)) = 0 then
+    return jsonb_build_object('ok', false, 'error', 'missing_email');
+  end if;
+  if p_role is null or length(trim(p_role)) = 0 then
+    return jsonb_build_object('ok', false, 'error', 'missing_role');
+  end if;
+
+  -- set tenant context si se va a escribir tenant_id (para pasar enforce_tenant_id)
+  if p_tenant_id is not null then
+    perform set_config('app.tenant_id', p_tenant_id::text, true);
+  end if;
+
+  select c.udt_name into v_role_type
+  from information_schema.columns c
+  where c.table_schema='public'
+    and c.table_name='users_public'
+    and c.column_name='role';
+
+  execute format($sql$
+    insert into public.users_public (id, email, role, tenant_id)
+    values ($1, $2, $3::%I, $4)
+    on conflict (id) do update
+      set email = excluded.email,
+          role = excluded.role,
+          tenant_id = excluded.tenant_id
+  $sql$, v_role_type)
+  using p_uid, p_email, p_role, p_tenant_id;
+
+  return jsonb_build_object('ok', true, 'uid', p_uid, 'email', p_email, 'role', p_role, 'tenant_id', p_tenant_id);
+exception
+  when others then
+    return jsonb_build_object('ok', false, 'error', 'exception', 'message', sqlerrm);
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."ensure_users_public_by_uid"("p_uid" "uuid", "p_email" "text", "p_role" "text", "p_tenant_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_users_public_for_auth_user"("p_user_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_email text;
+begin
+  if p_user_id is null then
+    return;
+  end if;
+
+  -- Si ya existe, listo
+  if exists (select 1 from public.users_public up where up.id = p_user_id) then
+    return;
+  end if;
+
+  -- Email desde auth.users (si existe)
+  select u.email into v_email
+  from auth.users u
+  where u.id = p_user_id
+  limit 1;
+
+  insert into public.users_public (id, email, role)
+  values (p_user_id, v_email, 'tracker'::public.app_role)
+  on conflict (id) do nothing;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_users_public_for_auth_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."ensure_users_public_for_current_user"("p_role" "text" DEFAULT NULL::"text", "p_full_name" "text" DEFAULT NULL::"text", "p_phone_e164" "text" DEFAULT NULL::"text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_org_id uuid;
+  v_tenant_id uuid;
+  v_role text := coalesce(p_role, 'tracker');
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  -- email desde JWT (Supabase)
+  v_email := nullif(auth.jwt() ->> 'email', '');
+  if v_email is null then
+    -- fallback común en algunos providers
+    v_email := nullif(auth.jwt() -> 'user_metadata' ->> 'email', '');
+  end if;
+
+  if v_email is null then
+    return jsonb_build_object('ok', false, 'error', 'email_not_found_in_jwt');
+  end if;
+
+  -- org_id desde memberships del usuario
+  select m.org_id
+  into v_org_id
+  from public.memberships m
+  where m.user_id = v_uid
+  order by coalesce(m.is_default,false) desc, m.created_at desc
+  limit 1;
+
+  if v_org_id is null then
+    return jsonb_build_object('ok', false, 'error', 'no_membership', 'uid', v_uid, 'email', v_email);
+  end if;
+
+  -- tenant_id operativo desde geocercas (org->tenant real)
+  select g.tenant_id
+  into v_tenant_id
+  from public.geocercas g
+  where g.org_id = v_org_id
+    and coalesce(g.is_deleted,false) = false
+    and g.tenant_id is not null
+  order by g.created_at desc nulls last
+  limit 1;
+
+  if v_tenant_id is null then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'tenant_unresolvable_from_geocercas',
+      'uid', v_uid,
+      'org_id', v_org_id
+    );
+  end if;
+
+  -- set tenant context para que enforce_tenant_id() no bloquee
+  perform set_config('app.tenant_id', v_tenant_id::text, true);
+
+  -- upsert users_public
+  insert into public.users_public (id, email, role, tenant_id, full_name, phone_e164)
+  values (v_uid, v_email, v_role::public.user_role, v_tenant_id, p_full_name, p_phone_e164)
+  on conflict (id) do update
+  set email      = excluded.email,
+      role       = excluded.role,
+      tenant_id  = excluded.tenant_id,
+      full_name  = coalesce(excluded.full_name, public.users_public.full_name),
+      phone_e164 = coalesce(excluded.phone_e164, public.users_public.phone_e164);
+
+  return jsonb_build_object(
+    'ok', true,
+    'uid', v_uid,
+    'email', v_email,
+    'role', v_role,
+    'org_id', v_org_id,
+    'tenant_id', v_tenant_id
+  );
+exception
+  when others then
+    return jsonb_build_object('ok', false, 'error', 'exception', 'message', sqlerrm);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."ensure_users_public_for_current_user"("p_role" "text", "p_full_name" "text", "p_phone_e164" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."f_admin_personal"() RETURNS TABLE("id" "uuid", "email" "text", "telefono" "text", "geocercas" "text"[])
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+  select
+    u.id,
+    u.email,
+    p.telefono,
+    coalesce(array_agg(g.name order by g.name)
+             filter (where g.id is not null), '{}') as geocercas
+  from auth.users u
+  left join public.user_profiles p on p.id = u.id
+  left join public.asignaciones a on a.user_id = u.id
+  left join public.geocercas g on g.id = a.geocerca_id
+  group by u.id, u.email, p.telefono
+  order by u.email;
+$$;
+
+
+ALTER FUNCTION "public"."f_admin_personal"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."finish_asignacion"("p_id" "uuid", "p_end_date" "date" DEFAULT CURRENT_DATE) RETURNS "public"."asignaciones"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_row public.asignaciones;
+begin
+  update public.asignaciones
+     set end_date = coalesce(p_end_date, current_date),
+         estado   = 'finalizado'
+   where id = p_id
+   returning * into v_row;
+
+  if not found then
+    raise exception 'Asignación no encontrada: %', p_id;
+  end if;
+
+  return v_row;
+end
+$$;
+
+
+ALTER FUNCTION "public"."finish_asignacion"("p_id" "uuid", "p_end_date" "date") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."fix_missing_membership_from_profile"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Si no hay org_id, no hacer nada
+  if new.org_id is null then
+    return new;
+  end if;
+
+  -- Si no hay membership, crearla (owner por defecto para admins nuevos)
+  if not exists (
+    select 1 from public.memberships
+    where user_id = new.id
+  ) then
+    insert into public.memberships (user_id, org_id, role, created_at)
+    values (new.id, new.org_id, 'owner', now());
+  end if;
+
+  -- Completar default/current si faltan
+  update public.profiles
+  set
+    default_org_id = coalesce(default_org_id, new.org_id),
+    current_org_id = coalesce(current_org_id, new.org_id)
+  where id = new.id;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."fix_missing_membership_from_profile"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."fn_normalize_phone_e164"("p_raw" "text", "p_default_cc" "text" DEFAULT '+593'::"text") RETURNS "text"
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+DECLARE
+  digits text;
+BEGIN
+  IF p_raw IS NULL OR btrim(p_raw) = '' THEN
+    RETURN NULL;
+  END IF;
+
+  -- deja solo dígitos
+  digits := regexp_replace(p_raw, '\D', '', 'g');
+
+  -- ya viene con código país (ej. 593...)
+  IF left(digits, 3) = '593' THEN
+    RETURN '+' || digits;
+  END IF;
+
+  -- si empieza con 0 y tiene 10 dígitos (móvil EC 09xxxxxxxx)
+  IF length(digits) = 10 AND left(digits,1)='0' THEN
+    RETURN p_default_cc || right(digits,9); -- +5939xxxxxxxx
+  END IF;
+
+  -- si ya parece internacional (11-15 dígitos), anteponer '+'
+  IF length(digits) BETWEEN 11 AND 15 THEN
+    RETURN '+' || digits;
+  END IF;
+
+  -- fallback: prepende default_cc
+  RETURN p_default_cc || digits;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."fn_normalize_phone_e164"("p_raw" "text", "p_default_cc" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."fn_normalize_phone_ec"("t" "text") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $_$
+  SELECT CASE
+    WHEN t IS NULL THEN NULL
+    -- quita espacios, guiones y paréntesis
+    WHEN regexp_replace(t, '[\s\-\(\)]', '', 'g') ~ '^\+[1-9]\d{1,14}$'
+      THEN regexp_replace(t, '[\s\-\(\)]', '', 'g')
+    WHEN regexp_replace(t, '[^0-9]', '', 'g') ~ '^593\d{9}$'
+      THEN '+' || regexp_replace(t, '[^0-9]', '', 'g')
+    WHEN regexp_replace(t, '[^0-9]', '', 'g') ~ '^0\d{9}$'
+      THEN '+593' || substr(regexp_replace(t, '[^0-9]', '', 'g'), 2)
+    ELSE NULL
+  END;
+$_$;
+
+
+ALTER FUNCTION "public"."fn_normalize_phone_ec"("t" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."fn_personal_set_owner"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+begin
+  -- Prefer auth.uid() when request is authenticated with JWT
+  v_uid := auth.uid();
+
+  -- If owner_id already provided (e.g. API/service_role), respect it.
+  -- If missing and we have a JWT user, set it.
+  if NEW.owner_id is null and v_uid is not null then
+    NEW.owner_id := v_uid;
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."fn_personal_set_owner"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocerca_get"("p_id" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" STABLE
+    AS $$
+DECLARE
+  rec RECORD;
+  geom_json jsonb;
+  t text;
+BEGIN
+  -- Buscar la geocerca
+  SELECT *
+  INTO rec
+  FROM public.geocercas
+  WHERE id::text = p_id OR id_text = p_id
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  -- Tipo real de geom
+  t := pg_typeof(rec.geom)::text;
+
+  -- Convertir según tipo detectado
+  IF t LIKE '%geometry%' THEN
+    geom_json := ST_AsGeoJSON(rec.geom)::jsonb;
+
+  ELSIF t LIKE '%geography%' THEN
+    geom_json := ST_AsGeoJSON(geometry(rec.geom))::jsonb;
+
+  ELSIF t IN ('json', 'jsonb') THEN
+    geom_json := rec.geom::jsonb;
+
+  ELSIF t IN ('text','character varying') THEN
+    BEGIN
+      geom_json := rec.geom::jsonb;
+    EXCEPTION WHEN others THEN
+      geom_json := to_jsonb(rec.geom);
+    END;
+
+  ELSE
+    geom_json := NULL;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'id', rec.id::text,
+    'id_text', rec.id_text,
+    'name', rec.name,
+    'descripcion', rec.descripcion,
+    'geom', geom_json
+  );
+END;
+$$;
+
+
+ALTER FUNCTION "public"."geocerca_get"("p_id" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_bi_bu"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if public.app_admin_mode() then
+    return new;
+  end if;
+
+  return public.geocercas_bi_bu__orig();
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_bi_bu"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_bi_bu__orig"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  -- BYPASS universal para migraciones controladas
+  IF public.app_admin_mode() THEN
+    RETURN NEW;
+  END IF;
+  if tg_op = 'INSERT' then
+    if new.org_id is null then
+      new.org_id := app.current_org_id();
+    end if;
+    if new.created_by is null then
+      new.created_by := auth.uid();
+    end if;
+    new.created_at := now();
+    new.updated_at := now();
+  elsif tg_op = 'UPDATE' then
+    -- evita “robar” registros entre orgs
+    if new.org_id <> old.org_id then
+      raise exception 'org_id no se puede cambiar';
+    end if;
+    new.updated_at := now();
+  end if;
+  return new;
+end
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_bi_bu__orig"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_delete"("p_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+  v_org uuid;
+begin
+  if p_id is null then
+    raise exception 'id is required';
+  end if;
+
+  perform public._resolve_tenant_for_current_user();
+  v_tenant := nullif(current_setting('app.tenant_id', true), '')::uuid;
+  if v_tenant is null then
+    raise exception 'No tenant context';
+  end if;
+
+  select b.org_id into v_org
+  from public.bootstrap_session_context() b
+  limit 1;
+
+  update public.geocercas
+  set is_deleted = true,
+      visible = false,
+      updated_at = now()
+  where id = p_id
+    and tenant_id = v_tenant
+    and org_id = v_org;
+
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'not found');
+  end if;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_delete"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_delete_iof"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $_$
+begin
+  if OLD.id ~ '^[0-9]+$' then
+    delete from public.geocercas_tbl where id = (OLD.id)::bigint;
+  end if;
+  return null;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."geocercas_delete_iof"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_enforce_canonical_fields"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- tenant == org
+  if new.tenant_id is null then
+    new.tenant_id := new.org_id;
+  end if;
+
+  -- nombre/name siempre consistentes
+  new.nombre := coalesce(new.nombre, new.name);
+  new.name   := coalesce(new.name, new.nombre);
+
+  -- normalización de flags
+  if new.visible is null then new.visible := true; end if;
+  if new.activo  is null then new.activo  := true; end if;
+  if new.activa  is null then new.activa  := true; end if;
+
+  new.active := (coalesce(new.activo, true) and coalesce(new.activa, true) and coalesce(new.visible, true));
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_enforce_canonical_fields"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_fix_org"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Solo rellenar org_id si viene NULL
+  if NEW.org_id is null then
+    NEW.org_id := ensure_default_org_for_current_user();
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_fix_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_insert_iof"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare new_id bigint;
+declare v_coords jsonb;
+begin
+  v_coords := coalesce(NEW.coords, public.geojson_to_coords(NEW.geojson));
+
+  insert into public.geocercas_tbl (nombre, color, coords, geojson, owner_id)
+  values (NEW.nombre, coalesce(NEW.color,'#3388ff'), v_coords, NEW.geojson, NEW.owner_id)
+  returning id into new_id;
+
+  return row(
+    new_id::text,
+    NEW.nombre,
+    coalesce(NEW.color,'#3388ff'),
+    v_coords,
+    NEW.geojson,
+    NEW.owner_id,
+    now(),
+    now()
+  )::public.geocercas;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_insert_iof"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_list"() RETURNS TABLE("id" "uuid", "nombre" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+begin
+  perform public._resolve_tenant_for_current_user();
+
+  v_tenant := nullif(current_setting('app.tenant_id', true), '')::uuid;
+  if v_tenant is null then
+    raise exception 'No tenant context';
+  end if;
+
+  return query
+  select g.id, g.nombre
+  from public.geocercas g
+  where g.tenant_id = v_tenant
+    and coalesce(g.is_deleted, false) = false
+    and coalesce(g.activo, true) = true
+    and coalesce(g.activa, true) = true
+    and coalesce(g.visible, true) = true
+  order by g.nombre;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_list"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_set_geom"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  pt_first geometry;
+  line geometry;
+begin
+  if new.vertices is null or jsonb_array_length(new.vertices) < 3 then
+    new.geom := null;
+    return new;
+  end if;
+
+  with pts as (
+    select
+      (p->>'lng')::double precision as lng,
+      (p->>'lat')::double precision as lat,
+      ord
+    from jsonb_array_elements(new.vertices) with ordinality as t(p, ord)
+    order by ord
+  )
+  select
+    ST_SetSRID(ST_MakeLine(array_agg(ST_MakePoint(lng, lat))), 4326) as ln,
+    (array_agg(ST_SetSRID(ST_MakePoint(lng, lat), 4326)))[1]        as first_pt
+  into line, pt_first
+  from pts;
+
+  new.geom := ST_MakePolygon(ST_AddPoint(line, pt_first));
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_set_geom"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_sync_nombre_name"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+    begin
+      if tg_op in ('INSERT','UPDATE') then
+        if new.nombre is not null and (new.name is null or new.name <> new.nombre) then
+          new.name := new.nombre;
+        elsif new.name is not null and (new.nombre is null or new.nombre <> new.name) then
+          new.nombre := new.name;
+        end if;
+      end if;
+      return new;
+    end;
+    $$;
+
+
+ALTER FUNCTION "public"."geocercas_sync_nombre_name"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_update_iof"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $_$
+begin
+  if OLD.id ~ '^[0-9]+$' then
+    update public.geocercas_tbl
+    set
+      nombre     = coalesce(NEW.nombre, nombre),
+      color      = coalesce(NEW.color, color),
+      coords     = coalesce(NEW.coords, coords, public.geojson_to_coords(coalesce(NEW.geojson, geojson))),
+      geojson    = coalesce(NEW.geojson, geojson),
+      owner_id   = coalesce(NEW.owner_id, owner_id),
+      updated_at = now()
+    where id = (OLD.id)::bigint;
+  end if;
+
+  return row(
+    OLD.id,
+    coalesce(NEW.nombre, OLD.nombre),
+    coalesce(NEW.color, OLD.color, '#3388ff'),
+    coalesce(NEW.coords, OLD.coords, public.geojson_to_coords(coalesce(NEW.geojson, OLD.geojson))),
+    coalesce(NEW.geojson, OLD.geojson),
+    coalesce(NEW.owner_id, OLD.owner_id),
+    OLD.created_at,
+    now()
+  )::public.geocercas;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."geocercas_update_iof"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_upsert"("p_id" "uuid", "p_nombre" "text", "p_geojson" "jsonb", "p_visible" boolean DEFAULT true, "p_activa" boolean DEFAULT true, "p_color" "text" DEFAULT NULL::"text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+  v_org uuid;
+  v_id uuid;
+  v_nombre text;
+  v_row public.geocercas%rowtype;
+
+  v_geom_json jsonb;  -- geometry pura JSONB
+  v_geom geometry;    -- PostGIS MultiPolygon 4326
+begin
+  perform public._resolve_tenant_for_current_user();
+  v_tenant := nullif(current_setting('app.tenant_id', true), '')::uuid;
+  if v_tenant is null then
+    raise exception 'No tenant context';
+  end if;
+
+  select b.org_id into v_org
+  from public.bootstrap_session_context() b
+  limit 1;
+
+  if v_org is null then
+    raise exception 'No org context';
+  end if;
+
+  v_nombre := nullif(trim(p_nombre), '');
+  if v_nombre is null then
+    raise exception 'nombre is required';
+  end if;
+
+  if p_geojson is null then
+    raise exception 'geojson is required';
+  end if;
+
+  -- ✅ Normalización universal
+  v_geom_json := public._geojson_extract_geometry(p_geojson);
+  v_geom      := public._geojson_to_multipolygon_4326(p_geojson);
+
+  v_id := coalesce(p_id, gen_random_uuid());
+
+  insert into public.geocercas (
+    id, org_id, tenant_id,
+    nombre, name,
+    geojson,
+    geometry,
+    geom,
+    visible, activa, activo, active,
+    updated_at
+  )
+  values (
+    v_id, v_org, v_tenant,
+    v_nombre, v_nombre,
+    p_geojson,
+    v_geom_json,
+    v_geom,
+    coalesce(p_visible, true),
+    coalesce(p_activa, true),
+    coalesce(p_activa, true),
+    (coalesce(p_activa, true) and coalesce(p_visible, true)),
+    now()
+  )
+  on conflict (id) do update
+  set
+    org_id     = excluded.org_id,
+    tenant_id  = excluded.tenant_id,
+    nombre     = excluded.nombre,
+    name       = excluded.name,
+    geojson    = excluded.geojson,
+    geometry   = excluded.geometry,
+    geom       = excluded.geom,
+    visible    = excluded.visible,
+    activa     = excluded.activa,
+    activo     = excluded.activo,
+    active     = excluded.active,
+    updated_at = now()
+  returning * into v_row;
+
+  return jsonb_build_object(
+    'ok', true,
+    'id', v_row.id,
+    'nombre', v_row.nombre
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_upsert"("p_id" "uuid", "p_nombre" "text", "p_geojson" "jsonb", "p_visible" boolean, "p_activa" boolean, "p_color" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_v_delete"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $_$
+begin
+  if OLD.id ~ '^[0-9]+$' then
+    delete from public.geocercas where id = (OLD.id)::bigint;
+  end if;
+  return null;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."geocercas_v_delete"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_v_insert"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare new_id bigint;
+declare v_coords jsonb;
+begin
+  v_coords := coalesce(NEW.coords, public.geojson_to_coords(NEW.geojson));
+
+  insert into public.geocercas (nombre, color, coords, geojson, owner_id)
+  values (NEW.nombre, NEW.color, v_coords, NEW.geojson, NEW.owner_id)
+  returning id into new_id;
+
+  return row(
+    new_id::text,
+    NEW.nombre,
+    coalesce(NEW.color, '#3388ff'),
+    v_coords,
+    NEW.geojson,
+    NEW.owner_id,
+    now(),
+    now()
+  )::public.geocercas_v;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geocercas_v_insert"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geocercas_v_update"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $_$
+begin
+  if OLD.id ~ '^[0-9]+$' then
+    update public.geocercas
+    set
+      nombre     = coalesce(NEW.nombre, nombre),
+      color      = coalesce(NEW.color, color),
+      coords     = coalesce(NEW.coords, coords, public.geojson_to_coords(coalesce(NEW.geojson, geojson))),
+      geojson    = coalesce(NEW.geojson, geojson),
+      owner_id   = coalesce(NEW.owner_id, owner_id),
+      updated_at = now()
+    where id = (OLD.id)::bigint;
+  end if;
+
+  return row(
+    OLD.id,
+    coalesce(NEW.nombre, OLD.nombre),
+    coalesce(NEW.color, OLD.color, '#3388ff'),
+    coalesce(NEW.coords, OLD.coords, public.geojson_to_coords(coalesce(NEW.geojson, OLD.geojson))),
+    coalesce(NEW.geojson, OLD.geojson),
+    coalesce(NEW.owner_id, OLD.owner_id),
+    OLD.created_at,
+    now()
+  )::public.geocercas_v;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."geocercas_v_update"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geofence_upsert"("_id" "uuid", "_org" "uuid", "_name" "text", "_geojson" "jsonb", "_active" boolean DEFAULT true) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  gid uuid;
+  org uuid;
+begin
+  -- si no te pasan _org, intenta obtenerlo del perfil del usuario autenticado
+  org := coalesce(_org, public.get_current_org());
+
+  gid := coalesce(_id, gen_random_uuid());
+
+  insert into public.geofences (id, org_id, name, geom, active)
+  values (
+    gid,
+    org,
+    _name,
+    ST_SetSRID(
+      ST_Multi(
+        ST_GeomFromGeoJSON(_geojson::text)
+      ),
+      4326
+    ),                                -- GEOMETRY(MultiPolygon,4326)
+    coalesce(_active, true)
+  )
+  on conflict (id) do update
+    set org_id = excluded.org_id,
+        name   = excluded.name,
+        geom   = excluded.geom,
+        active = excluded.active;
+
+  return gid;
+end $$;
+
+
+ALTER FUNCTION "public"."geofence_upsert"("_id" "uuid", "_org" "uuid", "_name" "text", "_geojson" "jsonb", "_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geofences_fill_user"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.user_id is null then
+    NEW.user_id := auth.uid();
+  end if;
+  if NEW.created_by is null then
+    NEW.created_by := NEW.user_id;
+  end if;
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geofences_fill_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geofences_set_user_and_audit"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+begin
+  -- ✅ Si es bridge interno (mirror), NO exigir pertenencia ni pisar auditoría
+  if public.is_internal_bridge() then
+    -- Opcional: si quieres asegurar que org_id venga seteado
+    if new.org_id is null then
+      raise exception 'geofences_set_user_and_audit: org_id no puede ser null (bridge)'
+        using errcode = 'P0001';
+    end if;
+
+    -- No tocamos created_by/updated_by: vienen copiados desde geocercas
+    return new;
+  end if;
+
+  -- ---- Modo normal (UI) ----
+  v_uid := auth.uid();
+
+  if v_uid is null then
+    raise exception 'No hay usuario autenticado'
+      using errcode = 'P0001';
+  end if;
+
+  -- Validación de pertenencia a la org (ajusta si tu tabla no es memberships)
+  if new.org_id is not null then
+    if not exists (
+      select 1
+      from public.memberships m
+      where m.user_id = v_uid
+        and m.org_id = new.org_id
+    ) then
+      raise exception 'El usuario actual no pertenece a la organización %', new.org_id
+        using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- Auditoría estándar
+  if tg_op = 'INSERT' then
+    new.created_by := coalesce(new.created_by, v_uid);
+    new.created_at := coalesce(new.created_at, now());
+  end if;
+
+  new.updated_by := coalesce(new.updated_by, v_uid);
+  new.updated_at := coalesce(new.updated_at, now());
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geofences_set_user_and_audit"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geofences_sync_geom_json"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.polygon_geojson is not null and (NEW.geom is null or st_isempty(NEW.geom)) then
+    NEW.geom := st_setsrid(st_geomfromgeojson(NEW.polygon_geojson::text), 4326);
+  end if;
+
+  if NEW.geom is not null and NEW.polygon_geojson is null then
+    NEW.polygon_geojson := to_jsonb(st_asgeojson(NEW.geom)::json);
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geofences_sync_geom_json"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geofences_sync_geometry"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_src jsonb;         -- geojson fuente (puede ser Feature/FC/Geometry)
+  v_geom_json jsonb;   -- geometry pura (Polygon/MultiPolygon/Point)
+  v_g geometry;
+  v_t text;
+
+  v_radius_m integer;
+  v_lat double precision;
+  v_lng double precision;
+begin
+  -- 1) Elegir fuente: preferimos geojson, si no polygon_geojson
+  v_src := coalesce(NEW.geojson, NEW.polygon_geojson);
+
+  -- 2) Si viene algún json, extraer geometry pura (acepta Feature/FC/Geometry)
+  if v_src is not null then
+    v_geom_json := public._geojson_extract_geometry(v_src);
+  else
+    v_geom_json := null;
+  end if;
+
+  -- 3) Si no viene geom pero sí viene json -> construir geom robusto
+  if NEW.geom is null and v_geom_json is not null then
+    v_g := st_setsrid(st_geomfromgeojson(v_geom_json::text), 4326);
+    v_t := upper(GeometryType(v_g));
+
+    if v_t = 'POLYGON' then
+      NEW.geom := st_multi(st_makevalid(st_force2d(v_g)));
+
+    elsif v_t = 'MULTIPOLYGON' then
+      NEW.geom := st_multi(st_makevalid(st_force2d(v_g)));
+
+    elsif v_t = 'POINT' then
+      -- soporte universal de “círculo”:
+      -- radius puede venir por columna radius_m o por properties.radius_m dentro de NEW.geojson
+      v_radius_m := coalesce(
+        NEW.radius_m,
+        public._geojson_extract_radius_m(NEW.geojson)
+      );
+
+      if v_radius_m is null or v_radius_m <= 0 then
+        -- si no hay radio, dejamos geom null (pero el check puede pasar por polygon_geojson)
+        -- si quieres forzar, cambia esto por RAISE EXCEPTION
+        NEW.geom := null;
+      else
+        NEW.geom := st_multi((st_buffer(v_g::geography, v_radius_m)::geometry));
+      end if;
+
+    else
+      raise exception 'geofences_sync_geometry: tipo no soportado: %', v_t;
+    end if;
+  end if;
+
+  -- 4) Normalizar geom a MultiPolygon 4326
+  if NEW.geom is not null then
+    NEW.geom := st_multi(st_setsrid(NEW.geom, 4326));
+  end if;
+
+  -- 5) Mantener polygon_geojson como “geometry pura” (no Feature)
+  if NEW.polygon_geojson is null and v_geom_json is not null then
+    NEW.polygon_geojson := v_geom_json;
+  elsif NEW.polygon_geojson is not null then
+    -- si alguien metió Feature/FC por error, lo normalizamos
+    begin
+      NEW.polygon_geojson := public._geojson_extract_geometry(NEW.polygon_geojson);
+    exception when others then
+      -- si no se puede, no lo tocamos
+      null;
+    end;
+  end if;
+
+  -- 6) Si geojson está nulo y ya tenemos geom -> generar geojson desde geom (Geometry)
+  if NEW.geojson is null and NEW.geom is not null then
+    NEW.geojson := to_jsonb(st_asgeojson(NEW.geom)::json);
+  end if;
+
+  -- 7) (opcional) completar lat/lng desde centroid si vienen null
+  if (NEW.lat is null or NEW.lng is null) and NEW.geom is not null then
+    v_lat := st_y(st_centroid(NEW.geom));
+    v_lng := st_x(st_centroid(NEW.geom));
+    NEW.lat := coalesce(NEW.lat, v_lat);
+    NEW.lng := coalesce(NEW.lng, v_lng);
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."geofences_sync_geometry"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."geojson_to_coords"("g" "jsonb") RETURNS "jsonb"
+    LANGUAGE "sql"
+    AS $$
+  select case
+    when g ? 'coordinates' then (
+      select jsonb_agg(jsonb_build_array((pt->>1)::numeric, (pt->>0)::numeric))
+      from jsonb_array_elements(g->'coordinates'->0) as pt
+    )
+    else null
+  end
+$$;
+
+
+ALTER FUNCTION "public"."geojson_to_coords"("g" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_app_roots"() RETURNS TABLE("user_id" "uuid")
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select user_id from public.app_superadmins order by created_at asc;
+$$;
+
+
+ALTER FUNCTION "public"."get_app_roots"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_app_setting"("p_key" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare v jsonb;
+begin
+  select s.value into v
+  from public.app_settings s
+  where s.key = p_key;
+
+  return coalesce(v, '{}'::jsonb);
+end $$;
+
+
+ALTER FUNCTION "public"."get_app_setting"("p_key" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone) RETURNS TABLE("asignacion_id" "uuid", "personal_id" "uuid", "geocerca_id" "uuid", "activity_id" "uuid", "start_time" timestamp with time zone, "end_time" timestamp with time zone, "horas_trabajadas" numeric, "costo" numeric, "currency_code" "text", "persona_nombre" "text", "geocerca_nombre" "text", "activity_name" "text")
+    LANGUAGE "sql" STABLE
+    AS $$
+  select
+    a.id                           as asignacion_id,
+    a.personal_id,
+    a.geocerca_id,
+    a.activity_id,
+
+    -- Ajuste al rango solicitado
+    greatest(a.start_time, p_from) as start_time,
+    least(a.end_time,   p_to)      as end_time,
+
+    -- Horas trabajadas dentro del rango
+    case
+      when least(a.end_time, p_to) <= greatest(a.start_time, p_from)
+        then 0::numeric
+      else round(
+        extract(
+          epoch from (least(a.end_time, p_to) - greatest(a.start_time, p_from))
+        ) / 3600.0,
+        2
+      )
+    end as horas_trabajadas,
+
+    -- Costo = horas * tarifa
+    case
+      when least(a.end_time, p_to) <= greatest(a.start_time, p_from)
+        then 0::numeric
+      else round(
+        (
+          extract(
+            epoch from (least(a.end_time, p_to) - greatest(a.start_time, p_from))
+          ) / 3600.0
+        ) * coalesce(act.hourly_rate, 0),
+        2
+      )
+    end as costo,
+
+    act.currency_code,
+
+    -- 🔹 Aquí el cambio: usamos solo p.nombre
+    coalesce(p.nombre, 'Sin nombre') as persona_nombre,
+
+    coalesce(g.nombre, g.name, 'Sin nombre') as geocerca_nombre,
+    act.name                                 as activity_name
+  from asignaciones a
+  left join activities act on act.id = a.activity_id
+  left join personal   p   on p.id   = a.personal_id
+  left join geocercas  g   on g.id   = a.geocerca_id
+  where
+    coalesce(a.is_deleted, false) = false
+    and coalesce(a.status, 'activo') = 'activo'
+    and a.start_time < p_to
+    and a.end_time   > p_from;
+$$;
+
+
+ALTER FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone, "p_org_id" "uuid") RETURNS TABLE("asignacion_id" "uuid", "personal_id" "uuid", "geocerca_id" "uuid", "activity_id" "uuid", "persona_nombre" "text", "geocerca_nombre" "text", "activity_name" "text", "start_time" timestamp with time zone, "end_time" timestamp with time zone, "horas_trabajadas" numeric, "hourly_rate" numeric, "costo" numeric, "currency_code" "text")
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+with asignaciones_rango as (
+  select
+    a.id           as asignacion_id,
+    a.personal_id,
+    a.geocerca_id,
+    a.activity_id,
+    greatest(a.start_time, p_from) as start_time,
+    least(a.end_time,   p_to)      as end_time
+  from asignaciones a
+  where
+    a.org_id = p_org_id
+    and coalesce(a.is_deleted, false) = false
+    and a.start_time is not null
+    and a.end_time   is not null
+    and a.start_time <= p_to
+    and a.end_time   >= p_from
+)
+select
+  ar.asignacion_id,
+  ar.personal_id,
+  ar.geocerca_id,
+  ar.activity_id,
+  p.nombre as persona_nombre,
+  g.nombre as geocerca_nombre,
+  act.name as activity_name,
+  ar.start_time,
+  ar.end_time,
+  (extract(epoch from (ar.end_time - ar.start_time)) / 3600.0)::numeric
+      as horas_trabajadas,
+  coalesce(act.hourly_rate, 0)::numeric as hourly_rate,
+  (
+    extract(epoch from (ar.end_time - ar.start_time)) / 3600.0
+  )::numeric * coalesce(act.hourly_rate, 0)::numeric
+      as costo,
+  act.currency_code
+from asignaciones_rango ar
+left join personal   p   on p.id  = ar.personal_id
+left join geocercas  g   on g.id  = ar.geocerca_id
+left join activities act on act.id = ar.activity_id;
+$$;
+
+
+ALTER FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone, "p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_costos_asignaciones"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid" DEFAULT NULL::"uuid", "p_actividad" "uuid" DEFAULT NULL::"uuid", "p_geocerca" "uuid" DEFAULT NULL::"uuid") RETURNS TABLE("asignacion_id" "uuid", "persona" "text", "actividad" "text", "geocerca" "text", "horas" numeric, "costo" numeric, "moneda" "text", "fecha" "date")
+    LANGUAGE "sql" SECURITY DEFINER
+    AS $$
+  select * from public.get_costos_asignaciones_v2(p_desde, p_hasta, p_personal, p_actividad, p_geocerca);
+$$;
+
+
+ALTER FUNCTION "public"."get_costos_asignaciones"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_costos_asignaciones_v2"("p_org_id" "uuid", "p_from" timestamp with time zone DEFAULT NULL::timestamp with time zone, "p_to" timestamp with time zone DEFAULT NULL::timestamp with time zone) RETURNS TABLE("asignacion_id" "uuid", "org_id" "uuid", "personal_id" "uuid", "persona" "text", "geocerca_id" "uuid", "geocerca" "text", "actividad_id" "uuid", "actividad" "text", "start_time" timestamp with time zone, "end_time" timestamp with time zone, "horas" numeric, "tarifa_hora" numeric, "costo" numeric, "currency_code" "text")
+    LANGUAGE "sql" STABLE
+    AS $$
+  select
+    a.id as asignacion_id,
+    a.org_id,
+    a.personal_id,
+    (p.nombre || ' ' || coalesce(p.apellido,''))::text as persona,
+    a.geocerca_id,
+    g.nombre::text as geocerca,
+    a.activity_id as actividad_id,
+    act.name::text as actividad,
+    a.start_time,
+    a.end_time,
+    case
+      when a.start_time is not null and a.end_time is not null
+        then round(extract(epoch from (a.end_time - a.start_time)) / 3600.0, 2)
+      else 0::numeric
+    end as horas,
+    coalesce(act.hourly_rate, 0)::numeric as tarifa_hora,
+    case
+      when a.start_time is not null and a.end_time is not null
+        then round((extract(epoch from (a.end_time - a.start_time)) / 3600.0) * coalesce(act.hourly_rate, 0), 2)
+      else 0::numeric
+    end as costo,
+    coalesce(act.currency_code, 'USD')::text as currency_code
+  from public.asignaciones a
+  join public.personal p on p.id = a.personal_id
+  join public.geocercas g on g.id = a.geocerca_id
+  left join public.activities act on act.id = a.activity_id
+  where coalesce(a.is_deleted, false) = false
+    and a.org_id = p_org_id
+    and public.is_member_of_org(p_org_id) = true
+    and (p_from is null or a.start_time >= p_from)
+    and (p_to   is null or a.start_time <  p_to);
+$$;
+
+
+ALTER FUNCTION "public"."get_costos_asignaciones_v2"("p_org_id" "uuid", "p_from" timestamp with time zone, "p_to" timestamp with time zone) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_costos_asignaciones_v2"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid" DEFAULT NULL::"uuid", "p_actividad" "uuid" DEFAULT NULL::"uuid", "p_geocerca" "uuid" DEFAULT NULL::"uuid") RETURNS TABLE("asignacion_id" "uuid", "persona" "text", "actividad" "text", "geocerca" "text", "horas" numeric, "costo" numeric, "moneda" "text", "fecha" "date")
+    LANGUAGE "sql" SECURITY DEFINER
+    AS $$
+  select
+    d.asignacion_id,
+    d.persona,
+    d.actividad,
+    d.geocerca,
+    d.horas,
+    d.costo,
+    d.moneda,
+    d.fecha
+  from public.v_costos_detalle_v2 d
+  where d.fecha between p_desde and p_hasta
+    and (p_personal  is null or d.personal_id = p_personal)
+    and (p_actividad is null or d.activity_id = p_actividad)
+    and (p_geocerca  is null or d.geocerca_id = p_geocerca);
+$$;
+
+
+ALTER FUNCTION "public"."get_costos_asignaciones_v2"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_costos_detalle_by_org"("p_org_id" "uuid", "p_desde" timestamp with time zone DEFAULT NULL::timestamp with time zone, "p_hasta" timestamp with time zone DEFAULT NULL::timestamp with time zone, "p_personal_id" "uuid" DEFAULT NULL::"uuid", "p_activity_id" "uuid" DEFAULT NULL::"uuid", "p_geocerca_id" "uuid" DEFAULT NULL::"uuid") RETURNS TABLE("id" "uuid", "org_id" "uuid", "tenant_id" "uuid", "personal_id" "uuid", "personal_nombre" "text", "actividad_id" "uuid", "actividad_nombre" "text", "geocerca_id" "uuid", "geocerca_nombre" "text", "start_time" timestamp with time zone, "end_time" timestamp with time zone, "horas" numeric, "hourly_rate" numeric, "costo" numeric, "currency_code" "text")
+    LANGUAGE "sql"
+    AS $$
+  select
+    d.id,
+    d.org_id,
+    d.tenant_id,
+    d.personal_id,
+    d.personal_nombre,
+    d.actividad_id,
+    d.actividad_nombre,
+    d.geocerca_id,
+    d.geocerca_nombre,
+    d.start_time,
+    d.end_time,
+    d.horas,
+    d.hourly_rate,
+    d.costo,
+    d.currency_code
+  from public.v_costos_detalle_ui d
+  where d.org_id = p_org_id
+    and (p_desde is null or d.start_time >= p_desde)
+    and (p_hasta is null or d.end_time <= p_hasta)
+    and (p_personal_id is null or d.personal_id = p_personal_id)
+    and (p_activity_id is null or d.actividad_id = p_activity_id)
+    and (p_geocerca_id is null or d.geocerca_id = p_geocerca_id);
+$$;
+
+
+ALTER FUNCTION "public"."get_costos_detalle_by_org"("p_org_id" "uuid", "p_desde" timestamp with time zone, "p_hasta" timestamp with time zone, "p_personal_id" "uuid", "p_activity_id" "uuid", "p_geocerca_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_current_org"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select p.default_org
+  from public.profiles p
+  where p.user_id = auth.uid()          -- <== corregido: user_id
+  limit 1
+$$;
+
+
+ALTER FUNCTION "public"."get_current_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_current_org_id"() RETURNS "uuid"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_org uuid;
+  v_has_default boolean;
+begin
+  -- Si no hay usuario autenticado en el request, devolver NULL sin romper.
+  v_uid := auth.uid();
+  if v_uid is null then
+    return null;
+  end if;
+
+  -- ¿existe is_default?
+  select exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public' and table_name='memberships' and column_name='is_default'
+  ) into v_has_default;
+
+  if v_has_default then
+    select m.org_id
+      into v_org
+    from public.memberships m
+    where m.user_id = v_uid
+      and coalesce(m.is_default, false) = true
+    limit 1;
+
+    if v_org is not null then
+      return v_org;
+    end if;
+  end if;
+
+  -- fallback: cualquier membership
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public' and table_name='memberships' and column_name='created_at'
+  ) then
+    select m.org_id
+      into v_org
+    from public.memberships m
+    where m.user_id = v_uid
+    order by m.created_at desc
+    limit 1;
+  else
+    select m.org_id
+      into v_org
+    from public.memberships m
+    where m.user_id = v_uid
+    limit 1;
+  end if;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_current_org_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_current_org_id_for_current_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+begin
+  -- 1) Intenta desde profiles.current_org_id (tu app lo mantiene)
+  select p.current_org_id
+    into v_org
+  from public.profiles p
+  where p.id = auth.uid()
+  limit 1;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- 2) fallback: default org
+  begin
+    v_org := public.get_default_org_id_for_current_user();
+  exception when others then
+    v_org := null;
+  end;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_current_org_id_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_current_org_id_for_user"("p_user_id" "uuid") RETURNS "uuid"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select public.get_org_id_for_user(p_user_id);
+$$;
+
+
+ALTER FUNCTION "public"."get_current_org_id_for_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_current_role"("p_org_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+DECLARE
+  v_role text;
+BEGIN
+  -- Buscamos SOLO el rol del usuario actual en esa org
+  SELECT aur.role
+  INTO v_role
+  FROM public.app_user_roles aur
+  WHERE aur.org_id = p_org_id
+    AND aur.user_id = auth.uid()
+  LIMIT 1;
+
+  RETURN v_role;   -- puede ser 'owner' | 'admin' | 'tracker' | NULL
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_current_role"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_current_user_org_and_role"() RETURNS TABLE("org_id" "uuid", "org_name" "text", "role" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user_id uuid;
+begin
+  v_user_id := auth.uid();
+
+  if v_user_id is null then
+    return;
+  end if;
+
+  -- Preferir OWNER
+  return query
+  select aur.org_id,
+         o.name as org_name,
+         aur.role
+  from app_user_roles aur
+  join organizations o on o.id = aur.org_id
+  where aur.user_id = v_user_id
+    and aur.role = 'owner'
+  order by aur.created_at
+  limit 1;
+
+  if found then return; end if;
+
+  -- Luego admin/tracker
+  return query
+  select aur.org_id,
+         o.name as org_name,
+         aur.role
+  from app_user_roles aur
+  join organizations o on o.id = aur.org_id
+  where aur.user_id = v_user_id
+  order by aur.created_at
+  limit 1;
+
+  if found then return; end if;
+
+  -- Si no tiene ninguna, crear una
+  perform public.ensure_org_for_current_user();
+
+  return query
+  select aur.org_id,
+         o.name as org_name,
+         aur.role
+  from app_user_roles aur
+  join organizations o on o.id = aur.org_id
+  where aur.user_id = v_user_id
+  order by aur.created_at
+  limit 1;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_current_user_org_and_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_default_geofence_id"("p_org_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" STABLE
+    AS $$
+declare
+  v_id uuid;
+begin
+  -- Prefer the one explicitly marked as default
+  select g.id into v_id
+  from public.geofences g
+  where g.org_id = p_org_id
+    and g.is_default = true
+  limit 1;
+
+  if v_id is not null then
+    return v_id;
+  end if;
+
+  -- Fallback: latest created geofence for org
+  select g.id into v_id
+  from public.geofences g
+  where g.org_id = p_org_id
+  order by g.created_at desc nulls last
+  limit 1;
+
+  return v_id; -- can be null if org has no geofences
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_default_geofence_id"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_default_org"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    AS $$
+  select default_org from public.profiles where user_id = auth.uid();
+$$;
+
+
+ALTER FUNCTION "public"."get_default_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_default_org_for_uid"("p_uid" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" STABLE
+    AS $$
+declare
+  v_org uuid;
+begin
+  if p_uid is null then
+    return null;
+  end if;
+
+  -- 1) Preferir membership default
+  select m.org_id
+    into v_org
+  from public.memberships m
+  join public.organizations o on o.id = m.org_id
+  where m.user_id = p_uid
+    and coalesce(m.is_default,false) = true
+    and coalesce(o.active,true) = true
+    and coalesce(o.suspended,false) = false
+  order by m.created_at desc
+  limit 1;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- 2) Si no hay default, escoger owner/admin primero
+  select m.org_id
+    into v_org
+  from public.memberships m
+  join public.organizations o on o.id = m.org_id
+  where m.user_id = p_uid
+    and coalesce(o.active,true) = true
+    and coalesce(o.suspended,false) = false
+  order by
+    case when m.role::text in ('owner','admin') then 0 else 1 end,
+    m.created_at desc
+  limit 1;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- 3) Fallback: organización donde el usuario es owner_id
+  select o.id
+    into v_org
+  from public.organizations o
+  where o.owner_id = p_uid
+    and coalesce(o.active,true) = true
+    and coalesce(o.suspended,false) = false
+  order by o.created_at asc
+  limit 1;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_default_org_for_uid"("p_uid" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_default_org_id_for_current_user"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  col text;
+  has_active boolean;
+  has_default boolean;
+  has_role boolean;
+  q text;
+  v_org uuid;
+begin
+  perform set_config('row_security','off', true);
+
+  col := public._org_members_user_col();
+
+  has_active := exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='org_members' and column_name in ('active','is_active')
+  );
+
+  has_default := exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='org_members' and column_name in ('is_default','default_org')
+  );
+
+  -- query base
+  q := format('select org_id from public.org_members where %I = auth.uid()', col);
+
+  if has_active then
+    if exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='org_members' and column_name='active'
+    ) then
+      q := q || ' and active = true';
+    else
+      q := q || ' and is_active = true';
+    end if;
+  end if;
+
+  if has_default then
+    if exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='org_members' and column_name='is_default'
+    ) then
+      q := q || ' order by is_default desc nulls last';
+    else
+      q := q || ' order by default_org desc nulls last';
+    end if;
+  end if;
+
+  q := q || ' limit 1';
+
+  execute q into v_org;
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_default_org_id_for_current_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_geocercas_for_current_org"() RETURNS TABLE("id" "uuid", "nombre" "text")
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select id, nombre
+  from public.geocercas
+  where org_id = (select org_id from public.bootstrap_session_context())
+  order by nombre;
+$$;
+
+
+ALTER FUNCTION "public"."get_geocercas_for_current_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_geofence_context"("p_geofence_id" "uuid") RETURNS TABLE("org_id" "uuid", "tenant_id" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  has_geofences_tenant boolean;
+  has_geocercas_tenant boolean;
+  has_orgs_tenant boolean;
+
+  v_org_id uuid;
+  v_tenant_id uuid;
+begin
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='geofences' and column_name='tenant_id'
+  ) into has_geofences_tenant;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='geocercas' and column_name='tenant_id'
+  ) into has_geocercas_tenant;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='organizations' and column_name='tenant_id'
+  ) into has_orgs_tenant;
+
+  -- org_id siempre desde geofences
+  if has_geofences_tenant then
+    select gf.org_id, gf.tenant_id
+      into v_org_id, v_tenant_id
+    from public.geofences gf
+    where gf.id = p_geofence_id;
+  else
+    select gf.org_id, null::uuid
+      into v_org_id, v_tenant_id
+    from public.geofences gf
+    where gf.id = p_geofence_id;
+  end if;
+
+  if v_org_id is null then
+    raise exception 'get_geofence_context: geofence_id no existe en geofences (%).', p_geofence_id
+      using errcode = 'P0001';
+  end if;
+
+  -- Intento 1: geocercas (mismo id del mirror)
+  if v_tenant_id is null and has_geocercas_tenant then
+    select g.tenant_id
+      into v_tenant_id
+    from public.geocercas g
+    where g.id = p_geofence_id;
+  end if;
+
+  -- Intento 2: organizations
+  if v_tenant_id is null and has_orgs_tenant then
+    select o.tenant_id
+      into v_tenant_id
+    from public.organizations o
+    where o.id = v_org_id;
+  end if;
+
+  -- ✅ Fallback PERMANENTE Y UNIVERSAL:
+  -- Si aún es null, tenant_id = org_id (determinístico)
+  if v_tenant_id is null then
+    v_tenant_id := v_org_id;
+  end if;
+
+  org_id := v_org_id;
+  tenant_id := v_tenant_id;
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_geofence_context"("p_geofence_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_max_trackers_for_org"("p_org_id" "uuid") RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_plan text;
+  v_max int;
+begin
+  -- plan de la org (enum -> text)
+  select o.plan::text
+    into v_plan
+  from public.organizations o
+  where o.id = p_org_id;
+
+  if v_plan is null then
+    -- Si por algún motivo no hay org/plan, no bloqueamos aquí
+    return null;
+  end if;
+
+  -- límite desde plan_limits
+  select pl.max_trackers
+    into v_max
+  from public.plan_limits pl
+  where pl.plan = v_plan;
+
+  return v_max; -- puede ser null si no existe la fila del plan
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_max_trackers_for_org"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_my_context"() RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_org uuid;
+  v_role text;
+  v_org_name text;
+begin
+  if v_user is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  v_org := public.pick_active_org_for_user(v_user);
+
+  if v_org is null then
+    return jsonb_build_object(
+      'ok', true,
+      'user_id', v_user,
+      'org_id', null,
+      'role', null,
+      'org_name', null
+    );
+  end if;
+
+  select m.role::text
+    into v_role
+  from public.memberships m
+  where m.user_id = v_user
+    and m.org_id = v_org
+    and m.revoked_at is null
+  limit 1;
+
+  if v_role is null then
+    if exists (
+      select 1
+      from public.tracker_assignments ta
+      where ta.tracker_user_id = v_user
+        and ta.tenant_id = v_org
+        and coalesce(ta.active, true) = true
+    ) then
+      v_role := 'tracker';
+    end if;
+  end if;
+
+  select o.name
+    into v_org_name
+  from public.organizations o
+  where o.id = v_org;
+
+  return jsonb_build_object(
+    'ok', true,
+    'user_id', v_user,
+    'org_id', v_org,
+    'role', v_role,
+    'org_name', v_org_name
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_my_context"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_my_context_for_user"("p_user_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+  v_role text;
+  v_org_name text;
+begin
+  if p_user_id is null then
+    return jsonb_build_object('ok', false, 'error', 'user_id_required');
+  end if;
+
+  v_org := public.ensure_active_org_for_user(p_user_id);
+
+  if v_org is null then
+    return jsonb_build_object('ok', true, 'user_id', p_user_id, 'org_id', null, 'role', null, 'org_name', null);
+  end if;
+
+  select m.role into v_role
+  from public.memberships m
+  where m.user_id = p_user_id and m.org_id = v_org
+  limit 1;
+
+  select o.name into v_org_name
+  from public.organizations o
+  where o.id = v_org;
+
+  return jsonb_build_object('ok', true, 'user_id', p_user_id, 'org_id', v_org, 'role', v_role, 'org_name', v_org_name);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_my_context_for_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."profiles" (
+    "id" "uuid" NOT NULL,
+    "email" "text",
+    "full_name" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "is_active" boolean DEFAULT true NOT NULL,
+    "role_id" "uuid",
+    "org_id" "uuid",
+    "role" "text",
+    "tenant_id" "uuid" GENERATED ALWAYS AS ("org_id") STORED,
+    "user_id" "uuid" GENERATED ALWAYS AS ("id") STORED,
+    "active_tenant_id" "uuid",
+    "default_org_id" "uuid",
+    "current_org_id" "uuid"
+);
+
+
+ALTER TABLE "public"."profiles" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_my_profile"() RETURNS "public"."profiles"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select p.* from public.profiles p where p.id = auth.uid();
+$$;
+
+
+ALTER FUNCTION "public"."get_my_profile"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_or_create_default_org"() RETURNS TABLE("org_id" "uuid", "org_name" "text", "role" "text", "is_owner" boolean)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid       uuid := auth.uid();
+  v_org_id    uuid;
+  v_org_name  text;
+  v_role      text;
+  v_is_owner  boolean;
+begin
+  if v_uid is null then
+    raise exception 'No hay usuario autenticado';
+  end if;
+
+  --------------------------------------------------------------------
+  -- 1. Buscar una organización existente del usuario
+  --------------------------------------------------------------------
+  select
+    o.id,
+    o.name,
+    m.role,
+    (m.role = 'owner')
+  into
+    v_org_id,
+    v_org_name,
+    v_role,
+    v_is_owner
+  from memberships m
+  join organizations o on o.id = m.org_id
+  where m.user_id = v_uid
+  order by case m.role
+    when 'owner' then 1
+    when 'admin' then 2
+    else 3
+  end
+  limit 1;
+
+  --------------------------------------------------------------------
+  -- 2. Si NO tiene ninguna organización, crear una personal
+  --------------------------------------------------------------------
+  if v_org_id is null then
+    -- Crear organización personal
+    insert into organizations (name)
+    values ('Organización personal')
+    returning id into v_org_id;
+
+    -- Crear membership como owner
+    insert into memberships (org_id, user_id, role)
+    values (v_org_id, v_uid, 'owner');
+
+    v_org_name := 'Organización personal';
+    v_role     := 'owner';
+    v_is_owner := true;
+  end if;
+
+  --------------------------------------------------------------------
+  -- 3. Devolver exactamente 1 fila con las 4 columnas declaradas
+  --------------------------------------------------------------------
+  org_id   := v_org_id;
+  org_name := v_org_name;
+  role     := v_role;
+  is_owner := v_is_owner;
+
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_or_create_default_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_org_id_for_user"("p_user_id" "uuid" DEFAULT NULL::"uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_org uuid;
+begin
+  v_uid := coalesce(p_user_id, public.get_request_user_id());
+
+  if v_uid is null then
+    raise exception 'No se pudo determinar user_id del request (auth.uid() / request.jwt.claim.sub)';
+  end if;
+
+  v_org := public.try_app_jwt_tenant_uuid();
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  select m.org_id
+    into v_org
+  from public.memberships m
+  where m.user_id = v_uid
+    and m.is_default = true
+  limit 1;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  select m.org_id
+    into v_org
+  from public.memberships m
+  where m.user_id = v_uid
+  order by m.created_at desc nulls last
+  limit 1;
+
+  if v_org is null then
+    raise exception 'El usuario % no tiene memberships; no se puede inferir org', v_uid;
+  end if;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_org_id_for_user"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_org_limits"("p_org_id" "uuid") RETURNS TABLE("max_geocercas" integer, "max_trackers" integer)
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select pl.max_geocercas, pl.max_trackers
+  from public.organizations o
+  join public.plan_limits pl
+    on pl.plan = (o.plan::text)
+  where o.id = p_org_id
+  limit 1
+$$;
+
+
+ALTER FUNCTION "public"."get_org_limits"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_owner_org_id"("p_uid" "uuid") RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select o.id
+  from public.organizations o
+  where o.owner_id = p_uid
+    and coalesce(o.active, true) = true
+    and coalesce(o.suspended, false) = false
+  order by o.created_at asc
+  limit 1
+$$;
+
+
+ALTER FUNCTION "public"."get_owner_org_id"("p_uid" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_request_user_id"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select coalesce(
+    auth.uid(),
+    nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+  );
+$$;
+
+
+ALTER FUNCTION "public"."get_request_user_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_system_user_id"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select public.ensure_system_user_id();
+$$;
+
+
+ALTER FUNCTION "public"."get_system_user_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_tracker_invite_claim"("p_invite_id" "uuid") RETURNS "text"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select
+    -- claim copiable y estable
+    'org:' || ti.org_id::text || '|role:tracker|invite:' || ti.id::text
+  from public.tracker_invites ti
+  where ti.id = p_invite_id;
+$$;
+
+
+ALTER FUNCTION "public"."get_tracker_invite_claim"("p_invite_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."guard_profiles_direct_writes"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_allow text;
+begin
+  /*
+    Permitimos escrituras controladas si:
+    - La sesión marcó 'app.allow_profiles_write' = '1'
+      (lo setea una RPC security definer antes del INSERT/UPDATE)
+  */
+  begin
+    v_allow := current_setting('app.allow_profiles_write', true);
+  exception
+    when others then
+      v_allow := null;
+  end;
+
+  if v_allow = '1' then
+    return new;
+  end if;
+
+  -- Si no está marcado, bloqueamos (comportamiento actual)
+  raise exception 'Direct writes to public.profiles are blocked. Use RPC/controlled flows.';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."guard_profiles_direct_writes"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."handle_new_admin_user"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+declare
+  v_org_id uuid;
+  v_has_membership boolean;
+
+  v_msg text;
+  v_detail text;
+  v_hint text;
+  v_context text;
+begin
+  -- bypass para guard
+  perform set_config('app.bypass_profiles_guard', '1', true);
+
+  -- Log inicio (persistirá porque no haremos rollback)
+  insert into public.auth_signup_debug(user_id, email, stage)
+  values (new.id, new.email, 'start');
+
+  -- ¿Ya tiene membership?
+  select exists (
+    select 1 from public.memberships where user_id = new.id
+  ) into v_has_membership;
+
+  if not v_has_membership then
+    insert into public.auth_signup_debug(user_id, email, stage)
+    values (new.id, new.email, 'create_org');
+
+    insert into public.organizations (name, owner_id, created_at)
+    values (coalesce(new.email, 'Nueva organización'), new.id, now())
+    returning id into v_org_id;
+
+    insert into public.auth_signup_debug(user_id, email, stage)
+    values (new.id, new.email, 'create_membership');
+
+    insert into public.memberships (user_id, org_id, role, created_at)
+    values (new.id, v_org_id, 'owner', now());
+  else
+    insert into public.auth_signup_debug(user_id, email, stage)
+    values (new.id, new.email, 'membership_exists');
+
+    select m.org_id
+    into v_org_id
+    from public.memberships m
+    where m.user_id = new.id
+    order by m.created_at asc nulls last
+    limit 1;
+  end if;
+
+  insert into public.auth_signup_debug(user_id, email, stage)
+  values (new.id, new.email, 'upsert_profile');
+
+  insert into public.profiles (
+    id, email, created_at, is_active,
+    org_id, default_org_id, current_org_id
+  )
+  values (
+    new.id, new.email, now(), true,
+    v_org_id, v_org_id, v_org_id
+  )
+  on conflict (id) do update
+  set
+    email = excluded.email,
+    is_active = true,
+    org_id = coalesce(public.profiles.org_id, excluded.org_id),
+    default_org_id = coalesce(public.profiles.default_org_id, excluded.default_org_id),
+    current_org_id = coalesce(public.profiles.current_org_id, excluded.current_org_id);
+
+  insert into public.auth_signup_debug(user_id, email, stage)
+  values (new.id, new.email, 'done');
+
+  return new;
+
+exception when others then
+  get stacked diagnostics
+    v_msg = message_text,
+    v_detail = pg_exception_detail,
+    v_hint = pg_exception_hint,
+    v_context = pg_exception_context;
+
+  insert into public.auth_signup_debug(
+    user_id, email, stage,
+    err_message, err_detail, err_hint, err_context
+  )
+  values (
+    new.id, new.email, 'EXCEPTION',
+    v_msg, v_detail, v_hint, v_context
+  );
+
+  -- CLAVE: NO re-lanzar, para que el log NO se pierda
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."handle_new_admin_user"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."has_role"("p_org" "uuid", "p_min" "public"."role_type") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    AS $$
+  with my as (
+    select role from public.memberships
+    where org_id = p_org and user_id = auth.uid()
+  )
+  select case
+    when p_min = 'tracker' then exists(select 1 from my where role in ('owner','admin','tracker'))
+    when p_min = 'admin'   then exists(select 1 from my where role in ('owner','admin'))
+    when p_min = 'owner'   then exists(select 1 from my where role = 'owner')
+    else false
+  end;
+$$;
+
+
+ALTER FUNCTION "public"."has_role"("p_org" "uuid", "p_min" "public"."role_type") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."init_admin_tenant"() RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_user_id uuid;
+BEGIN
+  -- Puede ser NULL si llamas desde el editor SQL
+  v_user_id := auth.uid();
+
+  -- No hacemos RAISE aunque sea NULL, solo devolvemos info
+  RETURN jsonb_build_object(
+    'ok', true,
+    'user_id', v_user_id
+  );
+END;
+$$;
+
+
+ALTER FUNCTION "public"."init_admin_tenant"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."insert_geocerca"("nombre" "text", "wkt" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  insert into geocercas (nombre, geom)
+  values (nombre, ST_GeomFromText(wkt, 4326));
+end;
+$$;
+
+
+ALTER FUNCTION "public"."insert_geocerca"("nombre" "text", "wkt" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."insert_geocerca_json"("nombre" "text", "coords" "jsonb") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  insert into geocercas (nombre, coordenadas) values (nombre, coords);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."insert_geocerca_json"("nombre" "text", "coords" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision DEFAULT NULL::double precision, "p_recorded_at" timestamp with time zone DEFAULT "now"(), "p_source" "text" DEFAULT 'tracker-gps'::"text") RETURNS TABLE("ok" boolean, "inserted_id" "uuid", "org_id" "uuid", "tenant_id" "uuid", "geofence_id" "uuid", "asignacion_id" "uuid", "details" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_uid uuid;
+  v_tenant uuid;
+  v_geofence uuid;
+  v_asig uuid;
+  v_org uuid;
+  v_inserted uuid;
+  v_has_geofences boolean := false;
+  v_has_geocercas_id_text boolean := false;
+begin
+  v_uid := auth.uid();
+
+  if v_uid is null then
+    return query
+    select false, null::uuid, null::uuid, null::uuid, null::uuid, null::uuid,
+           'No autenticado (auth.uid()=null)';
+    return;
+  end if;
+
+  -- 1) Asignación activa/en rango
+  select ta.tenant_id, ta.geofence_id, ta.id
+    into v_tenant, v_geofence, v_asig
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid
+    and ta.active is true
+    and now() <@ ta.period_tstz
+  order by lower(ta.period_tstz) desc nulls last
+  limit 1;
+
+  if v_tenant is null or v_geofence is null then
+    return query
+    select false, null::uuid, null::uuid, null::uuid, null::uuid, null::uuid,
+           'No assignment context';
+    return;
+  end if;
+
+  -- 2) Detectar si existen tablas/columnas opcionales
+  v_has_geofences := to_regclass('public.geofences') is not null;
+
+  select exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public' and table_name='geocercas' and column_name='id_text'
+  ) into v_has_geocercas_id_text;
+
+  -- 3) Resolver org_id: intento 1 (geocercas.id)
+  select g.org_id
+    into v_org
+  from public.geocercas g
+  where g.id = v_geofence
+  limit 1;
+
+  -- intento 2 (geofences.id) si existe tabla
+  if v_org is null and v_has_geofences then
+    execute
+      'select gf.org_id from public.geofences gf where gf.id = $1 limit 1'
+      into v_org
+      using v_geofence;
+  end if;
+
+  -- intento 3 (geocercas.id_text) si existe columna
+  if v_org is null and v_has_geocercas_id_text then
+    select g.org_id
+      into v_org
+    from public.geocercas g
+    where g.id_text = v_geofence::text
+    limit 1;
+  end if;
+
+  if v_org is null then
+    return query
+    select false, null::uuid, null::uuid, v_tenant, v_geofence, v_asig,
+      'No se pudo resolver org_id. geofence_id='||v_geofence::text||
+      ', tried: geocercas.id, '||
+      case when v_has_geofences then 'geofences.id, ' else '' end ||
+      case when v_has_geocercas_id_text then 'geocercas.id_text' else '' end;
+    return;
+  end if;
+
+  -- 4) Setear tenant context para trigger enforce_org_id()
+  perform set_config('app.tenant_id', v_tenant::text, true);
+
+  -- 5) Insert en positions
+  insert into public.positions (
+    org_id,
+    user_id,
+    asignacion_id,
+    lat,
+    lng,
+    accuracy,
+    source,
+    recorded_at,
+    created_at
+  )
+  values (
+    v_org,
+    v_uid,
+    v_asig,
+    p_lat,
+    p_lng,
+    p_accuracy,
+    nullif(p_source, ''),
+    coalesce(p_recorded_at, now()),
+    now()
+  )
+  returning id into v_inserted;
+
+  return query
+  select true, v_inserted, v_org, v_tenant, v_geofence, v_asig, 'OK';
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_recorded_at" timestamp with time zone, "p_source" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision DEFAULT NULL::double precision, "p_captured_at" timestamp with time zone DEFAULT "now"(), "p_meta" "jsonb" DEFAULT '{}'::"jsonb", "p_geofence_id" "uuid" DEFAULT NULL::"uuid") RETURNS TABLE("ok" boolean, "inserted_id" "uuid", "org_id" "uuid", "used_geofence_id" "uuid", "details" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_org uuid;
+  v_geo uuid;
+begin
+  v_uid := auth.uid();
+
+  if v_uid is null then
+    return query
+    select false, null::uuid, null::uuid, null::uuid, 'No autenticado (auth.uid()=null)';
+    return;
+  end if;
+
+  -- 1) Resolver asignación activa/en rango (DB-driven)
+  select ta.org_id, ta.geofence_id
+    into v_org, v_geo
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid
+    and ta.active is true
+    and now() <@ ta.period_tstz
+  order by lower(ta.period_tstz) desc nulls last
+  limit 1;
+
+  if v_org is null then
+    return query
+    select false, null::uuid, null::uuid, null::uuid, 'Sin asignación activa/en rango';
+    return;
+  end if;
+
+  -- Si viene geofence explícito, lo aceptamos, pero si no viene, usamos el de la asignación
+  v_geo := coalesce(p_geofence_id, v_geo);
+
+  -- 2) Setear tenant context para que enforce_org_id() no falle
+  perform set_config('app.tenant_id', v_org::text, true);
+
+  -- 3) Insert en positions
+  insert into public.positions (
+    org_id,
+    user_id,
+    lat,
+    lng,
+    accuracy,
+    captured_at,
+    geofence_id,
+    meta
+  )
+  values (
+    v_org,
+    v_uid,
+    p_lat,
+    p_lng,
+    p_accuracy,
+    coalesce(p_captured_at, now()),
+    v_geo,
+    coalesce(p_meta, '{}'::jsonb)
+  )
+  returning id into inserted_id;
+
+  return query
+  select true, inserted_id, v_org, v_geo, 'OK';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_captured_at" timestamp with time zone, "p_meta" "jsonb", "p_geofence_id" "uuid") OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."invitations" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "email" "text" NOT NULL,
+    "role" "public"."role_type" DEFAULT 'viewer'::"public"."role_type" NOT NULL,
+    "token" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "status" "public"."invite_status" DEFAULT 'pending'::"public"."invite_status" NOT NULL,
+    "invited_by" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "expires_at" timestamp with time zone DEFAULT ("now"() + '7 days'::interval) NOT NULL
+);
+
+
+ALTER TABLE "public"."invitations" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."invite_member"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type" DEFAULT 'viewer'::"public"."role_type") RETURNS "public"."invitations"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_inv public.invitations;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  -- solo owner/admin del org
+  if not exists (
+    select 1 from public.memberships
+    where org_id = p_org and user_id = auth.uid() and role in ('owner','admin')
+  ) then
+    raise exception 'Only owner/admin can invite';
+  end if;
+
+  -- si ya existe una pendiente, la reusa (refresca token y expiración)
+  select * into v_inv
+  from public.invitations
+  where org_id = p_org and lower(email)=lower(p_email) and status='pending'
+  limit 1;
+
+  if found then
+    update public.invitations
+       set token = uuid_generate_v4(),
+           role = p_role,
+           expires_at = now() + interval '7 days',
+           invited_by = auth.uid()
+     where id = v_inv.id
+     returning * into v_inv;
+  else
+    insert into public.invitations(org_id, email, role, invited_by)
+    values (p_org, lower(p_email), p_role, auth.uid())
+    returning * into v_inv;
+  end if;
+
+  perform public.log_event('invite_created', 'invitation', v_inv.id, to_jsonb(v_inv));
+  return v_inv;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."invite_member"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."invite_member_by_email"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_user uuid;
+begin
+  -- Solo admin+
+  if not public.has_role(p_org, 'admin') then
+    raise exception 'No autorizado';
+  end if;
+
+  -- Usuario debe existir (ya registrado). Si no existe, error claro.
+  select id into v_user from auth.users where email = p_email;
+  if v_user is null then
+    raise exception 'El usuario con email % no existe. Pídale que se registre primero.', p_email;
+  end if;
+
+  insert into public.memberships (org_id, user_id, role)
+  values (p_org, v_user, p_role)
+  on conflict (org_id, user_id) do update set role = excluded.role;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."invite_member_by_email"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_admin_context"() RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select
+    auth.uid() is null
+    or current_setting('request.jwt.claim.role', true) in ('service_role','supabase_admin');
+$$;
+
+
+ALTER FUNCTION "public"."is_admin_context"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_admin_or_owner"("uid" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists (
+    select 1
+    from public.user_roles ur
+    join public.roles r on r.id = ur.role_id
+    where ur.user_id = uid
+      and r.name in ('owner','admin')
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_admin_or_owner"("uid" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_admin_role"("p_role" "text") RETURNS boolean
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  SELECT lower(coalesce(p_role, '')) = 'admin';
+$$;
+
+
+ALTER FUNCTION "public"."is_admin_role"("p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_admin_role"("p_role" "public"."role_type") RETURNS boolean
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  SELECT p_role::text = 'admin';
+$$;
+
+
+ALTER FUNCTION "public"."is_admin_role"("p_role" "public"."role_type") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_app_root"("p_user_id" "uuid" DEFAULT "auth"."uid"()) RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists(
+    select 1
+    from public.app_root_users aru
+    where aru.user_id = p_user_id
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_app_root"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_internal_bridge"() RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select
+    public.is_admin_context()
+    or lower(nullif(current_setting('app.internal_bridge', true), '')) in ('1','true','on','yes');
+$$;
+
+
+ALTER FUNCTION "public"."is_internal_bridge"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_member"("p_org" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    AS $$
+  select exists(
+    select 1
+    from public.memberships m
+    where m.org_id = p_org and m.user_id = auth.uid()
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_member"("p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_member_of_org"("p_org_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select exists (
+    select 1
+    from public.memberships m
+    where m.user_id = auth.uid()
+      and m.org_id = p_org_id
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_member_of_org"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_org_admin"("p_org_id" "uuid") RETURNS boolean
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  has_active boolean;
+  has_is_deleted boolean;
+  sql text;
+  ok boolean;
+begin
+  select exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='memberships' and column_name='active'
+  ) into has_active;
+
+  select exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='memberships' and column_name='is_deleted'
+  ) into has_is_deleted;
+
+  sql :=
+    'select exists(
+       select 1
+       from public.memberships m
+       where m.org_id = $1
+         and m.user_id = auth.uid()
+         and pg_catalog.lower((m.role)::text) in (''owner'',''admin'')';
+
+  if has_active then
+    sql := sql || ' and coalesce(m.active,true) = true';
+  end if;
+
+  if has_is_deleted then
+    sql := sql || ' and coalesce(m.is_deleted,false) = false';
+  end if;
+
+  sql := sql || ')';
+
+  execute sql into ok using p_org_id;
+  return coalesce(ok,false);
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."is_org_admin"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_org_admin"("p_org_id" "uuid", "p_user_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    SET "row_security" TO 'off'
+    AS $$
+  select exists (
+    select 1
+    from public.memberships m
+    where m.org_id = p_org_id
+      and m.user_id = p_user_id
+      and (m.role::text) in ('owner','admin')
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_org_admin"("p_org_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_org_member"("p_org_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists (
+    select 1
+    from public.memberships m
+    where m.org_id = p_org_id
+      and m.user_id = auth.uid()
+      and m.revoked_at is null
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_org_member"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_org_owner"("p_org_id" "uuid", "p_user_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    SET "row_security" TO 'off'
+    AS $$
+  select exists (
+    select 1
+    from public.organizations o
+    where o.id = p_org_id
+      and o.owner_id = p_user_id
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_org_owner"("p_org_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_owner"() RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    WHERE p.user_id = auth.uid()
+      AND COALESCE(p.rol, p.role) = 'OWNER'
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_owner"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_root_owner"() RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    AS $$
+  select exists (
+    select 1
+    from public.app_root_owner r
+    where r.id = auth.uid()
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_root_owner"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_root_owner"("p_user_id" "uuid" DEFAULT NULL::"uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select exists (
+    select 1
+    from public.app_root_owners r
+    where r.active = true
+      and r.user_id = coalesce(p_user_id, auth.uid())
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_root_owner"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."is_tracker_assigned_to_geofence"("p_org_id" "uuid", "p_geofence_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists (
+    select 1
+    from public.tracker_assignments ta
+    where ta.org_id = p_org_id
+      and ta.geofence_id = p_geofence_id
+      and ta.tracker_user_id = auth.uid()
+      and ta.active = true
+      and current_date between ta.start_date and ta.end_date
+  );
+$$;
+
+
+ALTER FUNCTION "public"."is_tracker_assigned_to_geofence"("p_org_id" "uuid", "p_geofence_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."list_asignaciones"("p_tenant_id" "uuid", "p_personal_id" "uuid" DEFAULT NULL::"uuid", "p_geocerca_id" "uuid" DEFAULT NULL::"uuid", "p_estado" "text" DEFAULT NULL::"text") RETURNS SETOF "public"."asignaciones"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select *
+  from public.asignaciones a
+  where (p_tenant_id is null or a.tenant_id = p_tenant_id)
+    and (p_personal_id is null or a.personal_id = p_personal_id)
+    and (p_geocerca_id is null or a.geocerca_id = p_geocerca_id)
+    and (p_estado is null or a.estado = p_estado)
+  order by a.created_at desc
+$$;
+
+
+ALTER FUNCTION "public"."list_asignaciones"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_estado" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."list_geocercas_for_assign"() RETURNS TABLE("id" "uuid", "nombre" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tenant uuid;
+begin
+  -- Resuelve tenant y setea app.tenant_id en ESTA misma transacción
+  perform public._resolve_tenant_for_current_user();
+
+  v_tenant := nullif(current_setting('app.tenant_id', true), '')::uuid;
+
+  if v_tenant is null then
+    raise exception 'No tenant context (app.tenant_id is null)';
+  end if;
+
+  return query
+  select g.id, g.nombre
+  from public.geocercas g
+  where g.tenant_id = v_tenant
+    and coalesce(g.is_deleted, false) = false
+    and coalesce(g.activo, true) = true
+    and coalesce(g.activa, true) = true
+    and coalesce(g.visible, true) = true
+  order by g.nombre asc;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."list_geocercas_for_assign"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."list_members_with_email"("p_org" "uuid") RETURNS TABLE("user_id" "uuid", "email" "text", "role" "public"."role_type", "joined_at" timestamp with time zone)
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    AS $$
+  select m.user_id, u.email, m.role, m.created_at
+  from public.memberships m
+  join auth.users u on u.id = m.user_id
+  where m.org_id = p_org
+    and public.is_member(p_org);
+$$;
+
+
+ALTER FUNCTION "public"."list_members_with_email"("p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."log_event"("p_action" "text", "p_entity" "text", "p_entity_id" "uuid", "p_details" "jsonb" DEFAULT '{}'::"jsonb") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  insert into public.audit_log(actor, action, entity, entity_id, details)
+  values (auth.uid(), p_action, p_entity, p_entity_id, coalesce(p_details, '{}'::jsonb));
+end;
+$$;
+
+
+ALTER FUNCTION "public"."log_event"("p_action" "text", "p_entity" "text", "p_entity_id" "uuid", "p_details" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."log_location_and_attendance"("p_lat" double precision, "p_lng" double precision) RETURNS TABLE("geofence_id" "uuid", "event_kind" "public"."attendance_kind", "ts" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_point geometry(Point, 4326);
+  v_now   timestamptz := now();
+  v_inside_geofence_id      uuid;
+  v_last_inside_geofence_id uuid;
+begin
+  if v_user is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  v_point := st_setsrid(st_makepoint(p_lng, p_lat), 4326);
+
+  insert into public.location_logs(user_id, loc, ts)
+  values (v_user, geography(v_point), v_now);
+
+  select g.id
+  into v_inside_geofence_id
+  from public.geofences g
+  where st_contains(g.geom, v_point)
+  limit 1;
+
+  select geofence_id
+  into v_last_inside_geofence_id
+  from public.attendance_events
+  where user_id = v_user
+  order by ts desc
+  limit 1;
+
+  if v_last_inside_geofence_id is null and v_inside_geofence_id is not null then
+    insert into public.attendance_events(user_id, geofence_id, kind, ts)
+    values (v_user, v_inside_geofence_id, 'check_in', v_now)
+    returning geofence_id, kind, ts into geofence_id, event_kind, ts;
+    return next;
+  end if;
+
+  if v_last_inside_geofence_id is not null and v_inside_geofence_id is null then
+    insert into public.attendance_events(user_id, geofence_id, kind, ts)
+    values (v_user, v_last_inside_geofence_id, 'check_out', v_now)
+    returning geofence_id, kind, ts into geofence_id, event_kind, ts;
+    return next;
+  end if;
+
+  if v_inside_geofence_id is not null
+     and v_last_inside_geofence_id is not null
+     and v_inside_geofence_id <> v_last_inside_geofence_id then
+    insert into public.attendance_events(user_id, geofence_id, kind, ts)
+    values (v_user, v_last_inside_geofence_id, 'check_out', v_now);
+    insert into public.attendance_events(user_id, geofence_id, kind, ts)
+    values (v_user, v_inside_geofence_id, 'check_in', v_now)
+    returning geofence_id, kind, ts into geofence_id, event_kind, ts;
+    return next;
+  end if;
+
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."log_location_and_attendance"("p_lat" double precision, "p_lng" double precision) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."lower"("p_role" "public"."role_type") RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select pg_catalog.lower(p_role::text);
+$$;
+
+
+ALTER FUNCTION "public"."lower"("p_role" "public"."role_type") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."lower"("p_role" "public"."role_type") IS 'Universal fix: allow lower(role_type) by casting enum to text.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."memberships_role_guard"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_role_text text;
+begin
+  -- Convertir enum -> text para validaciones
+  v_role_text := btrim(coalesce(new.role::text, ''));
+
+  if v_role_text = '' then
+    raise exception 'memberships.role no puede ser vacío';
+  end if;
+
+  -- Validar que el valor exista en el enum role_type
+  if not exists (
+    select 1
+    from pg_enum e
+    join pg_type t on t.oid = e.enumtypid
+    where t.typname = 'role_type'
+      and e.enumlabel = v_role_text
+  ) then
+    raise exception 'Rol inválido para memberships.role: %', v_role_text;
+  end if;
+
+  -- Reasignar correctamente como enum
+  new.role := v_role_text::public.role_type;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."memberships_role_guard"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."merge_personal_duplicates"() RETURNS "void"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  r record;
+  keep_id uuid;
+  drop_ids uuid[];
+begin
+  for r in
+    select owner_id, fingerprint
+    from public.personal
+    group by owner_id, fingerprint
+    having count(*) > 1
+  loop
+    select p.id
+      into keep_id
+    from public.personal p
+    where p.owner_id = r.owner_id and p.fingerprint = r.fingerprint
+    order by p.created_at nulls last, p.id
+    limit 1;
+
+    select array_agg(p.id) filter (where p.id <> keep_id)
+      into drop_ids
+    from public.personal p
+    where p.owner_id = r.owner_id and p.fingerprint = r.fingerprint;
+
+    if drop_ids is not null and array_length(drop_ids,1) > 0 then
+      -- Ajusta estas FKs a tus tablas reales
+      update public.asignaciones set personal_id = keep_id where personal_id = any(drop_ids);
+      update public.asistencias set personal_id = keep_id where personal_id = any(drop_ids);
+
+      delete from public.personal where id = any(drop_ids);
+    end if;
+  end loop;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."merge_personal_duplicates"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."merge_to_tenant_by_name"("p_table" "regclass", "p_id_col" "text", "p_tenant_col" "text", "p_name_col" "text", "p_target_tenant" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_tbl text := p_table::text;
+  v_schema text := split_part(v_tbl,'.',1);
+  v_table  text := split_part(v_tbl,'.',2);
+
+  v_has_org boolean;
+  v_has_tenant boolean;
+
+  r_fk record;
+  v_sql text;
+begin
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema=v_schema and table_name=v_table and column_name='org_id'
+  ) into v_has_org;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema=v_schema and table_name=v_table and column_name=p_tenant_col
+  ) into v_has_tenant;
+
+  -- Mapping dup_id -> canon_id por name (sin min(uuid))
+  v_sql := format($SQL$
+    create temporary table if not exists tmp_merge_map (
+      dup_id uuid primary key,
+      canon_id uuid not null
+    ) on commit drop;
+
+    truncate tmp_merge_map;
+
+    with t as (
+      select
+        %1$I::uuid as id,
+        %2$I::uuid as tenant_id,
+        %3$I::text as name
+      from %4$s
+      where %3$I is not null
+    ),
+    canon as (
+      select
+        name,
+        coalesce(
+          (select tt.id from t tt
+            where tt.tenant_id = %5$L::uuid and tt.name = t.name
+            order by tt.id asc limit 1),
+          (select tt.id from t tt
+            where tt.name = t.name
+            order by tt.id asc limit 1)
+        ) as canon_id
+      from t
+      group by name
+    )
+    insert into tmp_merge_map(dup_id, canon_id)
+    select t.id, c.canon_id
+      from t
+      join canon c using(name)
+     where t.id <> c.canon_id;
+  $SQL$, p_id_col, p_tenant_col, p_name_col, v_tbl, p_target_tenant::text);
+
+  execute v_sql;
+
+  -- Reescribir TODAS las FKs hacia canon_id
+  for r_fk in
+    select
+      nsp.nspname as fk_schema,
+      rel.relname as fk_table,
+      att.attname as fk_column
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    join unnest(con.conkey) with ordinality as ck(attnum, ord) on true
+    join pg_attribute att on att.attrelid = con.conrelid and att.attnum = ck.attnum
+    where con.contype='f' and con.confrelid = p_table
+  loop
+    v_sql := format($SQL$
+      update %I.%I fk
+         set %I = m.canon_id
+        from tmp_merge_map m
+       where fk.%I = m.dup_id;
+    $SQL$, r_fk.fk_schema, r_fk.fk_table, r_fk.fk_column, r_fk.fk_column);
+
+    execute v_sql;
+  end loop;
+
+  -- Borrar duplicados
+  v_sql := format($SQL$
+    delete from %s t
+     using tmp_merge_map m
+     where t.%I = m.dup_id;
+  $SQL$, v_tbl, p_id_col);
+  execute v_sql;
+
+  -- ✅ Paso clave universal:
+  -- Si hay org_id y tenant_id -> actualizar ambos EN LA MISMA SENTENCIA (evita 23514)
+  if v_has_org and v_has_tenant then
+    v_sql := format($SQL$
+      update %s
+         set %I = %L::uuid,
+             org_id = %L::uuid
+       where %I is distinct from %L::uuid
+          or org_id is distinct from %L::uuid;
+    $SQL$, v_tbl, p_tenant_col, p_target_tenant::text, p_target_tenant::text,
+         p_tenant_col, p_target_tenant::text, p_target_tenant::text);
+
+  elsif v_has_tenant then
+    v_sql := format($SQL$
+      update %s
+         set %I = %L::uuid
+       where %I is distinct from %L::uuid;
+    $SQL$, v_tbl, p_tenant_col, p_target_tenant::text, p_tenant_col, p_target_tenant::text);
+
+  elsif v_has_org then
+    v_sql := format($SQL$
+      update %s
+         set org_id = %L::uuid
+       where org_id is distinct from %L::uuid;
+    $SQL$, v_tbl, p_target_tenant::text, p_target_tenant::text);
+  else
+    -- nada que mover
+    return;
+  end if;
+
+  execute v_sql;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."merge_to_tenant_by_name"("p_table" "regclass", "p_id_col" "text", "p_tenant_col" "text", "p_name_col" "text", "p_target_tenant" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start" "date", "p_end" "date") RETURNS "public"."asignaciones"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_row public.asignaciones;
+begin
+  update public.asignaciones
+     set start_date = p_start,
+         end_date   = p_end
+   where id = p_asignacion_id
+  returning * into v_row;
+
+  if v_row.id is null then
+    raise exception 'Asignación % no encontrada', p_asignacion_id;
+  end if;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start" "date", "p_end" "date") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start_ts" timestamp with time zone, "p_end_ts" timestamp with time zone) RETURNS "public"."asignaciones"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select * from public.move_asignacion_dates(p_asignacion_id, p_start_ts::date, p_end_ts::date);
+$$;
+
+
+ALTER FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start_ts" timestamp with time zone, "p_end_ts" timestamp with time zone) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."my_org_ids"() RETURNS SETOF "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select m.org_id
+  from public.memberships m
+  where m.user_id = auth.uid();
+$$;
+
+
+ALTER FUNCTION "public"."my_org_ids"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."normalize_phone_for_personal"("p_phone" "text") RETURNS "text"
+    LANGUAGE "sql"
+    AS $$
+  SELECT
+    CASE
+      WHEN p_phone IS NULL THEN NULL
+      ELSE regexp_replace(p_phone, '[^0-9]+', '', 'g')
+    END;
+$$;
+
+
+ALTER FUNCTION "public"."normalize_phone_for_personal"("p_phone" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."on_org_invite_accepted"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.accepted_at is not null
+     and (OLD.accepted_at is null or OLD.accepted_at <> NEW.accepted_at) then
+
+    insert into public.memberships (user_id, org_id, role, is_default)
+    values (NEW.user_id, NEW.org_id, NEW.role, false)
+    on conflict (user_id, org_id) do update
+    set role = excluded.role;
+
+  end if;
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."on_org_invite_accepted"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."on_organization_created"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user_id uuid;
+begin
+  -- 1) Intentar usar created_by de la organización
+  v_user_id := NEW.created_by;
+
+  -- 2) Si está nulo, usamos owner_id
+  if v_user_id is null then
+    v_user_id := NEW.owner_id;
+  end if;
+
+  -- 3) Si sigue nulo, usamos auth.uid()
+  if v_user_id is null then
+    v_user_id := auth.uid();
+  end if;
+
+  -- 4) Si aún así no tenemos user_id, paramos con error legible
+  if v_user_id is null then
+    raise exception 'on_organization_created: user_id es NULL'
+      using hint = 'Crea la organización estando autenticado y/o rellena created_by u owner_id.';
+  end if;
+
+  -- 5) Si owner_id viene vacío, lo rellenamos
+  if NEW.owner_id is null then
+    NEW.owner_id := v_user_id;
+  end if;
+
+  -- 6) Crear membership owner por defecto para ese usuario y esa org
+  insert into memberships (org_id, user_id, role, created_at, is_default)
+  values (NEW.id, v_user_id, 'owner', now(), true);
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."on_organization_created"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_acl_probe"("p_id" "uuid") RETURNS TABLE("row_exists" boolean, "id" "uuid", "nombre" "text", "email" "text", "is_deleted" boolean, "org_id" "uuid", "owner_id" "uuid", "me" "uuid", "i_am_member" boolean, "i_am_owner" boolean, "i_am_org_owner" boolean)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+  v_owner uuid;
+begin
+  me := auth.uid();
+
+  select p.id, p.nombre, p.email, p.is_deleted, p.org_id, p.owner_id
+    into id, nombre, email, is_deleted, org_id, owner_id
+  from public.personal p
+  where p.id = p_id;
+
+  row_exists := id is not null;
+
+  if row_exists then
+    v_org := org_id;
+    v_owner := owner_id;
+
+    i_am_member := exists (
+      select 1
+      from public.my_memberships m
+      where m.user_id = me and m.org_id = v_org
+    );
+
+    i_am_owner := (v_owner = me);
+
+    i_am_org_owner := exists (
+      select 1
+      from public.organizations o
+      where o.id = v_org and o.owner_id = me
+    );
+  else
+    i_am_member := false;
+    i_am_owner := false;
+    i_am_org_owner := false;
+  end if;
+
+  return next;
+end
+$$;
+
+
+ALTER FUNCTION "public"."personal_acl_probe"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_biu_defaults_v1"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+begin
+  v_uid := auth.uid();
+
+  -- org_id: como ahora tu frontend SIEMPRE manda org_id, lo exigimos.
+  if new.org_id is null then
+    raise exception 'org_id es requerido (no se permite inferencia en trigger)' using errcode = 'P0001';
+  end if;
+
+  -- owner_id: setear si viene sesión JWT
+  if new.owner_id is null and v_uid is not null then
+    new.owner_id := v_uid;
+  end if;
+
+  -- created_at / updated_at
+  if tg_op = 'INSERT' then
+    if new.created_at is null then new.created_at := now(); end if;
+
+    -- defaults NOT NULL
+    new.vigente := coalesce(new.vigente, true);
+    new.is_deleted := coalesce(new.is_deleted, false);
+
+    -- activo (si existe)
+    new.activo := coalesce(new.activo, true);
+  end if;
+
+  new.updated_at := now();
+
+  -- position_interval_sec NOT NULL + mínimo 300
+  if new.position_interval_sec is null or new.position_interval_sec < 300 then
+    new.position_interval_sec := 300;
+  end if;
+
+  -- email_norm / phone_norm (si existen)
+  begin
+    new.email_norm := lower(trim(new.email));
+  exception when others then
+    null;
+  end;
+
+  begin
+    -- phone_norm: solo dígitos
+    new.phone_norm := regexp_replace(coalesce(new.telefono,''), '[^0-9]', '', 'g');
+  exception when others then
+    null;
+  end;
+
+  -- telefono_norm / telefono_raw (si existen)
+  begin
+    new.telefono_norm := regexp_replace(coalesce(new.telefono,''), '[^0-9]', '', 'g');
+  exception when others then
+    null;
+  end;
+
+  -- activo_bool (si existe)
+  begin
+    new.activo_bool := coalesce(new.vigente, new.activo, new.activo_bool, true);
+  exception when others then
+    null;
+  end;
+
+  -- deleted_at si marcan is_deleted
+  if coalesce(new.is_deleted,false) = true and new.deleted_at is null then
+    new.deleted_at := now();
+    new.vigente := false;
+  end if;
+
+  -- fingerprint (si existe)
+  begin
+    new.fingerprint :=
+      md5(
+        lower(trim(coalesce(new.nombre,''))) || '|' ||
+        lower(trim(coalesce(new.apellido,''))) || '|' ||
+        lower(trim(coalesce(new.email,''))) || '|' ||
+        coalesce(new.telefono_norm,'') || '|' ||
+        coalesce(new.org_id::text,'')
+      );
+  exception when others then
+    null;
+  end;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."personal_biu_defaults_v1"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_compute_fingerprint"("p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_norm" "text", "p_org_id" "uuid") RETURNS "text"
+    LANGUAGE "sql"
+    AS $$
+  SELECT md5(
+           lower(
+             coalesce(trim(p_nombre), '') || '|' ||
+             coalesce(trim(p_apellido), '') || '|' ||
+             coalesce(trim(p_email), '') || '|' ||
+             coalesce(trim(p_telefono_norm), '') || '|' ||
+             coalesce(p_org_id::text, '')
+           )
+         );
+$$;
+
+
+ALTER FUNCTION "public"."personal_compute_fingerprint"("p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_norm" "text", "p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_delete_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") RETURNS "public"."personal"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_now timestamptz := now();
+  v_row public.personal;
+begin
+  perform set_config('app.tenant_id', p_org_id::text, true);
+  perform set_config('app.user_id', p_user_id::text, true);
+
+  update public.personal
+     set is_deleted = true,
+         deleted_at = v_now,
+         updated_at = v_now
+   where id = p_id
+     and org_id = p_org_id
+   returning * into v_row;
+
+  if not found then
+    raise exception 'Personal no encontrado' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."personal_delete_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_has_active_assignments"("p_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists (
+    select 1
+    from public.asignaciones a
+    where a.personal_id = p_id
+      and coalesce(a.estado, 'activo') <> 'cancelado'
+      and (a.end_date is null or a.end_date >= current_date)
+  );
+$$;
+
+
+ALTER FUNCTION "public"."personal_has_active_assignments"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_list"("_q" "text", "_only_active" boolean) RETURNS SETOF "public"."personal"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'NO_AUTH' using hint = 'Debes estar autenticado.';
+  end if;
+
+  return query
+  select p.*
+    from public.personal p
+   where exists (
+           select 1
+           from public.org_memberships m
+           where m.user_id = v_uid
+             and m.org_id  = p.org_id
+         )
+     and (
+           coalesce(_q, '') = ''
+           or p.nombre   ilike '%' || _q || '%'
+           or p.apellido ilike '%' || _q || '%'
+           or p.email    ilike '%' || _q || '%'
+           or coalesce(p.telefono,'') ilike '%' || _q || '%'
+         )
+     and (
+           -- Si _only_active = TRUE => solo no borrados y vigentes
+           _only_active is true and p.deleted_at is null and coalesce(p.vigente, true) = true
+           -- Si _only_active = FALSE => no se aplica filtro (muestra TODO de tu org, incluso borrados)
+           or _only_active is not true
+         )
+  order by p.apellido nulls last, p.nombre nulls last;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."personal_list"("_q" "text", "_only_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_list"("_q" "text" DEFAULT NULL::"text", "_include_deleted" boolean DEFAULT false, "_limit" integer DEFAULT 500) RETURNS TABLE("id" "uuid", "org_id" "uuid", "nombre" "text", "apellido" "text", "email" "text", "telefono" "text", "vigente" boolean, "deleted_at" timestamp with time zone)
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select
+    p.id, p.org_id, p.nombre, p.apellido, p.email, p.telefono, p.vigente, p.deleted_at
+  from public.personal p
+  where
+    -- debe pertenecer a la misma organización
+    exists (
+      select 1
+      from public.org_memberships m
+      where m.user_id = auth.uid()
+        and m.org_id  = p.org_id
+    )
+    -- si _include_deleted = false => sólo vigentes y no borrados
+    and (
+      _include_deleted is true
+      or (p.deleted_at is null and p.vigente is true)
+    )
+    -- filtro de búsqueda
+    and (
+      coalesce(_q,'') = ''
+      or p.nombre   ilike '%'||_q||'%'
+      or p.apellido ilike '%'||_q||'%'
+      or p.email    ilike '%'||_q||'%'
+      or p.telefono ilike '%'||_q||'%'
+    )
+  order by p.apellido nulls last, p.nombre nulls last
+  limit greatest(1, coalesce(_limit, 500));
+$$;
+
+
+ALTER FUNCTION "public"."personal_list"("_q" "text", "_include_deleted" boolean, "_limit" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_set_derived"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Normaliza teléfono (solo dígitos)
+  new.telefono_norm := regexp_replace(coalesce(new.telefono,''), '[^0-9]', '', 'g');
+
+  -- Activo consolidado (si una no viene, toma la otra; default true)
+  new.activo_bool := coalesce(new.vigente, new.activo, new.activo_bool, true);
+
+  -- Frecuencia mínima 300s
+  if new.position_interval_sec is null or new.position_interval_sec < 300 then
+    new.position_interval_sec := 300;
+  end if;
+
+  -- Huella (todos los campos relevantes normalizados)
+  new.fingerprint :=
+    md5(
+      lower(trim(coalesce(new.nombre,''))) || '|' ||
+      lower(trim(coalesce(new.apellido,''))) || '|' ||
+      lower(trim(coalesce(new.email,''))) || '|' ||
+      coalesce(new.telefono_norm,'') || '|' ||
+      coalesce(new.position_interval_sec::text,'') || '|' ||
+      case when coalesce(new.activo_bool,true) then '1' else '0' end
+    );
+
+  return new;
+end
+$$;
+
+
+ALTER FUNCTION "public"."personal_set_derived"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_set_vigente"("p_id" "uuid", "p_vigente" boolean) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+  v_row_owner uuid;
+begin
+  select p.org_id, p.owner_id
+    into v_org, v_row_owner
+  from public.personal p
+  where p.id = p_id
+    and coalesce(p.is_deleted,false) = false
+  for update;
+
+  if v_org is null then
+    raise exception 'NO_PERM_OR_NOT_FOUND';
+  end if;
+
+  if not (
+      (v_row_owner is not null and v_row_owner = auth.uid())
+      or exists (select 1 from public.my_memberships m where m.user_id = auth.uid() and m.org_id = v_org)
+      or exists (select 1 from public.organizations o where o.id = v_org and o.owner_id = auth.uid())
+  ) then
+    raise exception 'NO_PERM_OR_NOT_FOUND';
+  end if;
+
+  update public.personal
+     set vigente   = p_vigente,
+         updated_at = now()
+   where id = p_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."personal_set_vigente"("p_id" "uuid", "p_vigente" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_soft_delete"("p_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_org uuid;
+  v_row_count int;
+begin
+  if v_uid is null then
+    raise exception 'NO_AUTH' using hint = 'Debes estar autenticado.';
+  end if;
+
+  select p.org_id
+    into v_org
+  from public.personal p
+  where p.id = p_id;
+
+  if v_org is null then
+    raise exception 'NO_PERM_OR_NOT_FOUND'
+      using hint = 'Registro inexistente o fuera de tu alcance.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.org_memberships m
+    where m.user_id = v_uid
+      and m.org_id  = v_org
+      and m.role in ('owner','admin')
+  ) then
+    raise exception 'NO_PERM_OR_NOT_FOUND'
+      using hint = 'No tienes permisos para borrar este registro.';
+  end if;
+
+  update public.personal
+     set deleted_at = now(),
+         vigente    = false
+   where id = p_id
+     and org_id = v_org
+     and deleted_at is null;
+
+  get diagnostics v_row_count = row_count;
+  if v_row_count = 0 then
+    raise exception 'NO_PERM_OR_NOT_FOUND'
+      using hint = 'Ya estaba borrado o no corresponde a tu org.';
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."personal_soft_delete"("p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_toggle_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") RETURNS "public"."personal"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_now timestamptz := now();
+  v_row public.personal;
+begin
+  perform set_config('app.tenant_id', p_org_id::text, true);
+  perform set_config('app.user_id', p_user_id::text, true);
+
+  update public.personal
+     set vigente = not vigente,
+         updated_at = v_now
+   where id = p_id
+     and org_id = p_org_id
+     and is_deleted = false
+   returning * into v_row;
+
+  if not found then
+    raise exception 'Personal no encontrado' using errcode = 'P0001';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."personal_toggle_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."personal_upsert_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_payload" "jsonb") RETURNS "public"."personal"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_email text := lower(trim(coalesce(p_payload->>'email','')));
+  v_nombre text := trim(coalesce(p_payload->>'nombre',''));
+  v_apellido text := nullif(trim(coalesce(p_payload->>'apellido','')), '');
+  v_telefono text := nullif(trim(coalesce(p_payload->>'telefono','')), '');
+  v_vigente boolean := coalesce((p_payload->>'vigente')::boolean, true);
+  v_now timestamptz := now();
+  v_row public.personal;
+begin
+  -- Contexto requerido por blindaje tenancy (GUC)
+  perform set_config('app.tenant_id', p_org_id::text, true);
+  perform set_config('app.user_id', p_user_id::text, true);
+
+  if v_nombre = '' then
+    raise exception 'Nombre es obligatorio' using errcode = 'P0001';
+  end if;
+
+  if v_email = '' then
+    raise exception 'Email es obligatorio' using errcode = 'P0001';
+  end if;
+
+  -- Si ya existe por (org_id,email), actualiza y revive si estaba borrado
+  update public.personal
+     set nombre = v_nombre,
+         apellido = v_apellido,
+         telefono = v_telefono,
+         vigente = v_vigente,
+         is_deleted = false,
+         deleted_at = null,
+         updated_at = v_now
+   where org_id = p_org_id
+     and email = v_email
+   returning * into v_row;
+
+  if found then
+    return v_row;
+  end if;
+
+  -- Insert: NO forzamos org_id si tu blindaje prefiere setearlo,
+  -- pero sí ponemos owner_id para que trg_personal_set_org_owner tenga fallback.
+  insert into public.personal(
+    owner_id, nombre, apellido, email, telefono,
+    vigente, is_deleted, created_at, updated_at
+  )
+  values(
+    p_user_id, v_nombre, v_apellido, v_email, v_telefono,
+    v_vigente, false, v_now, v_now
+  )
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."personal_upsert_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_payload" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."pick_active_org_for_user"("p_user" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+begin
+  if p_user is null then
+    return null;
+  end if;
+
+  -- 1) default explícito
+  select m.org_id into v_org
+  from public.memberships m
+  where m.user_id = p_user
+    and m.revoked_at is null
+    and m.is_default = true
+  order by m.created_at desc nulls last, m.org_id asc
+  limit 1;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- 2) primer membership activo (estable)
+  select m.org_id into v_org
+  from public.memberships m
+  where m.user_id = p_user
+    and m.revoked_at is null
+  order by m.created_at asc nulls last, m.org_id asc
+  limit 1;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- 3) tracker assignment (si no hay memberships)
+  v_org := public.tracker_get_org_for_user(p_user);
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."pick_active_org_for_user"("p_user" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_membership_role_escalation"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- si el caller NO es admin/owner, no puede cambiar role
+  if not public.is_org_admin(old.org_id) then
+    if (new.role::text) is distinct from (old.role::text) then
+      raise exception 'No permitido: solo admin/owner puede cambiar role';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_membership_role_escalation"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_past_asignaciones"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.start_date is not null and NEW.start_date < current_date then
+    raise exception
+      'La fecha de inicio (%) no puede estar en el pasado',
+      NEW.start_date
+      using errcode = 'check_violation';
+  end if;
+
+  if NEW.end_date is not null
+     and NEW.start_date is not null
+     and NEW.end_date < NEW.start_date then
+    raise exception
+      'La fecha de fin (%) no puede ser anterior a la fecha de inicio',
+      NEW.end_date
+      using errcode = 'check_violation';
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_past_asignaciones"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_personal_duplicate_on_undelete"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Solo nos importa cuando intentan dejarlo activo (is_deleted=false)
+  if coalesce(new.is_deleted,false) = false then
+
+    -- check email
+    if new.email_norm is not null then
+      if exists (
+        select 1
+        from public.personal p
+        where p.org_id = new.org_id
+          and p.id <> new.id
+          and coalesce(p.is_deleted,false) = false
+          and p.email_norm = new.email_norm
+      ) then
+        raise exception 'Duplicate active personal by email in org'
+          using errcode = '23505';
+      end if;
+    end if;
+
+    -- check phone
+    if new.phone_norm is not null then
+      if exists (
+        select 1
+        from public.personal p
+        where p.org_id = new.org_id
+          and p.id <> new.id
+          and coalesce(p.is_deleted,false) = false
+          and p.phone_norm = new.phone_norm
+      ) then
+        raise exception 'Duplicate active personal by phone in org'
+          using errcode = '23505';
+      end if;
+    end if;
+
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_personal_duplicate_on_undelete"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_role_change_for_non_admin"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  IF NEW.rol IS DISTINCT FROM OLD.rol THEN
+    -- Solo admin/owner puede cambiar roles
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.profiles p
+      WHERE p.user_id = auth.uid()
+        AND p.rol IN ('admin','owner')
+    ) THEN
+      RAISE EXCEPTION 'Changing rol is not allowed';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_role_change_for_non_admin"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."process_geofence_transitions"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  pt geometry := ST_SetSRID(ST_MakePoint(NEW.lng, NEW.lat), 4326);
+  g record;
+  was_inside boolean;
+begin
+  -- ENTRADAS o permanencias: geocercas activas que contienen el nuevo punto
+  for g in
+    select gf.id
+    from public.geofences gf
+    where gf.active
+      and (gf.org_id is null or gf.org_id = NEW.org_id)
+      and ST_Contains(gf.geom::geometry, pt)
+  loop
+    select u.inside into was_inside
+    from public.user_geofence_state u
+    where u.user_id = NEW.user_id and u.geofence_id = g.id;
+
+    if was_inside is distinct from true then
+      insert into public.geofence_events(user_id, geofence_id, event, ts)
+      values (NEW.user_id, g.id, 'enter', NEW.ts);
+      insert into public.user_geofence_state(user_id, geofence_id, inside, last_ts)
+      values (NEW.user_id, g.id, true, NEW.ts)
+      on conflict (user_id, geofence_id)
+      do update set inside = excluded.inside, last_ts = excluded.last_ts;
+    else
+      update public.user_geofence_state
+      set last_ts = NEW.ts
+      where user_id = NEW.user_id and geofence_id = g.id;
+    end if;
+  end loop;
+
+  -- SALIDAS: donde antes estaba dentro y ahora el punto no cae dentro
+  for g in
+    select u.geofence_id as id
+    from public.user_geofence_state u
+    join public.geofences gf on gf.id = u.geofence_id
+    where u.user_id = NEW.user_id
+      and u.inside = true
+      and gf.active
+      and (gf.org_id is null or gf.org_id = NEW.org_id)
+      and not ST_Contains(gf.geom::geometry, pt)
+  loop
+    insert into public.geofence_events(user_id, geofence_id, event, ts)
+    values (NEW.user_id, g.id, 'exit', NEW.ts);
+
+    update public.user_geofence_state
+    set inside = false, last_ts = NEW.ts
+    where user_id = NEW.user_id and geofence_id = g.id;
+  end loop;
+
+  return null;
+end $$;
+
+
+ALTER FUNCTION "public"."process_geofence_transitions"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."recalc_users_public_role_from_memberships"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_email text;
+begin
+  -- detectar usuario afectado
+  v_uid := coalesce(new.user_id, old.user_id);
+
+  -- tomar email desde auth.users para garantizar NOT NULL en users_public.email
+  select au.email into v_email
+  from auth.users au
+  where au.id = v_uid;
+
+  -- upsert con rol efectivo
+  perform public.upsert_users_public_from_uid(v_uid, v_email);
+
+  return coalesce(new, old);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."recalc_users_public_role_from_memberships"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."remove_member"("p_org" "uuid", "p_user" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  if not public.has_role(p_org, 'admin') then
+    raise exception 'No autorizado';
+  end if;
+
+  delete from public.memberships
+  where org_id = p_org and user_id = p_user;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."remove_member"("p_org" "uuid", "p_user" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."repair_users_without_membership"() RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  r record;
+  n integer := 0;
+BEGIN
+  FOR r IN
+    SELECT u.id, u.email
+    FROM auth.users u
+    WHERE NOT EXISTS (SELECT 1 FROM public.memberships m WHERE m.user_id = u.id)
+  LOOP
+    PERFORM public.ensure_user_membership(r.id, r.email);
+    n := n + 1;
+  END LOOP;
+
+  -- Luego de crear memberships faltantes, backfill/sync a app_user_roles
+  INSERT INTO public.app_user_roles (user_id, org_id, role)
+  SELECT
+    m.user_id,
+    m.org_id,
+    public._normalize_role_for_app_user_roles(m.user_id, m.org_id, m.role::text)
+  FROM public.memberships m
+  ON CONFLICT (user_id, org_id)
+  DO UPDATE SET role = EXCLUDED.role;
+
+  RETURN n;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."repair_users_without_membership"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."repair_users_without_roles"() RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  r record;
+  n integer := 0;
+begin
+  for r in
+    select u.id, u.email
+    from auth.users u
+    left join public.app_user_roles ar on ar.user_id = u.id
+    where ar.user_id is null
+  loop
+    perform public.ensure_user_tenant(r.id, r.email);
+    n := n + 1;
+  end loop;
+
+  return n;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."repair_users_without_roles"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."resolve_auth_user_id_by_email"("p_email" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_id uuid;
+begin
+  if p_email is null or length(trim(p_email)) = 0 then
+    return null;
+  end if;
+
+  select u.id into v_id
+  from auth.users u
+  where lower(u.email) = lower(trim(p_email))
+  limit 1;
+
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."resolve_auth_user_id_by_email"("p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."resolve_geofence_id_from_geocerca"("p_geocerca_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_geofence_id uuid;
+  v_has_col boolean;
+begin
+  if p_geocerca_id is null then
+    return null;
+  end if;
+
+  -- A) Intentar detectar columnas típicas "legacy" en geofences
+  --    (si existe alguna, se usa)
+  -- 1) geofence.geocerca_id
+  select exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='geofences' and column_name='geocerca_id'
+  ) into v_has_col;
+
+  if v_has_col then
+    execute 'select id from public.geofences where geocerca_id = $1 limit 1'
+      into v_geofence_id
+      using p_geocerca_id;
+    if v_geofence_id is not null then return v_geofence_id; end if;
+  end if;
+
+  -- 2) geofence.legacy_geocerca_id
+  select exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='geofences' and column_name='legacy_geocerca_id'
+  ) into v_has_col;
+
+  if v_has_col then
+    execute 'select id from public.geofences where legacy_geocerca_id = $1 limit 1'
+      into v_geofence_id
+      using p_geocerca_id;
+    if v_geofence_id is not null then return v_geofence_id; end if;
+  end if;
+
+  -- 3) geofence.source_geocerca_id
+  select exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='geofences' and column_name='source_geocerca_id'
+  ) into v_has_col;
+
+  if v_has_col then
+    execute 'select id from public.geofences where source_geocerca_id = $1 limit 1'
+      into v_geofence_id
+      using p_geocerca_id;
+    if v_geofence_id is not null then return v_geofence_id; end if;
+  end if;
+
+  -- B) Fallback: tabla puente
+  select m.geofence_id
+  into v_geofence_id
+  from public.geocerca_geofence_map m
+  where m.geocerca_id = p_geocerca_id;
+
+  return v_geofence_id;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."resolve_geofence_id_from_geocerca"("p_geocerca_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."resolve_tenant_id_for_org"("p_org_id" "uuid") RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select tenant_id from public.org_tenant_map where org_id = p_org_id
+$$;
+
+
+ALTER FUNCTION "public"."resolve_tenant_id_for_org"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."resolve_tracker_user_id"("p_org_id" "uuid") RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select m.user_id
+  from public.memberships m
+  where m.org_id = p_org_id
+    and m.role = 'tracker'
+  order by m.created_at desc
+  limit 1;
+$$;
+
+
+ALTER FUNCTION "public"."resolve_tracker_user_id"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."role_id_to_role"("p_role_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    AS $_$
+declare
+  v_role text;
+  has_name boolean;
+  has_role boolean;
+  has_code boolean;
+  has_slug boolean;
+begin
+  if p_role_id is null then
+    return null;
+  end if;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='roles' and column_name='name'
+  ) into has_name;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='roles' and column_name='role'
+  ) into has_role;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='roles' and column_name='code'
+  ) into has_code;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='roles' and column_name='slug'
+  ) into has_slug;
+
+  if has_name then
+    execute 'select name from public.roles where id = $1 limit 1'
+      into v_role using p_role_id;
+  end if;
+
+  if v_role is null and has_role then
+    execute 'select role from public.roles where id = $1 limit 1'
+      into v_role using p_role_id;
+  end if;
+
+  if v_role is null and has_code then
+    execute 'select code from public.roles where id = $1 limit 1'
+      into v_role using p_role_id;
+  end if;
+
+  if v_role is null and has_slug then
+    execute 'select slug from public.roles where id = $1 limit 1'
+      into v_role using p_role_id;
+  end if;
+
+  v_role := lower(coalesce(v_role,''));
+
+  -- Normaliza a tu enum real
+  if v_role in ('owner','admin','tracker') then
+    return v_role;
+  end if;
+
+  -- Aliases comunes (por si roles usa nombres distintos)
+  if v_role in ('administrator','admins','administrador') then return 'admin'; end if;
+  if v_role in ('tracking','gps','field','campo') then return 'tracker'; end if;
+
+  return null;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."role_id_to_role"("p_role_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."role_priority"("p_role" "text") RETURNS integer
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select case lower(coalesce(p_role,''))
+    when 'root_owner' then 500
+    when 'root'       then 500
+    when 'owner'      then 400
+    when 'admin'      then 300
+    when 'tracker'    then 200
+    when 'viewer'     then 100
+    else 0
+  end;
+$$;
+
+
+ALTER FUNCTION "public"."role_priority"("p_role" "text") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."role_priority"("p_role" "text") IS 'Orden canónico de roles para selección determinística en bootstrap_session_context().';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."role_rank"("p_role" "text") RETURNS integer
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select case lower(coalesce(p_role,''))
+    when 'owner'  then 4
+    when 'admin'  then 3
+    when 'tracker' then 2
+    when 'viewer' then 1
+    else 0
+  end;
+$$;
+
+
+ALTER FUNCTION "public"."role_rank"("p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_accept_invite"("p_invite_id" "uuid") RETURNS TABLE("ok" boolean, "message" "text", "org_id" "uuid", "role" "public"."app_role")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_email text;
+  v_org uuid;
+  v_role public.app_role;
+  v_expires timestamptz;
+  v_accepted timestamptz;
+  v_revoked timestamptz;
+begin
+  v_uid := auth.uid();
+  if v_uid is null then
+    return query select false, 'no_auth', null::uuid, null::public.app_role;
+    return;
+  end if;
+
+  -- email desde users_public (tu “espejo”)
+  select public._email_norm(up.email)
+    into v_email
+  from public.users_public up
+  where up.id = v_uid;
+
+  if v_email is null or v_email = '' then
+    return query select false, 'no_email', null::uuid, null::public.app_role;
+    return;
+  end if;
+
+  select oi.org_id, oi.role, oi.expires_at, oi.accepted_at, oi.revoked_at
+    into v_org, v_role, v_expires, v_accepted, v_revoked
+  from public.org_invites oi
+  where oi.id = p_invite_id;
+
+  if v_org is null then
+    return query select false, 'invite_not_found', null::uuid, null::public.app_role;
+    return;
+  end if;
+
+  if v_revoked is not null then
+    return query select false, 'invite_revoked', v_org, v_role;
+    return;
+  end if;
+
+  if v_accepted is not null then
+    -- idempotente
+    return query select true, 'already_accepted', v_org, v_role;
+    return;
+  end if;
+
+  if v_expires is not null and now() > v_expires then
+    return query select false, 'invite_expired', v_org, v_role;
+    return;
+  end if;
+
+  -- Validar que el email del usuario coincide con el invitado
+  if not exists (
+    select 1
+    from public.org_invites oi
+    where oi.id = p_invite_id
+      and public._email_norm(oi.email) = v_email
+  ) then
+    return query select false, 'email_mismatch', v_org, v_role;
+    return;
+  end if;
+
+  -- ✅ Crear/asegurar membership como tracker
+  insert into public.memberships (user_id, org_id, role)
+  values (v_uid, v_org, 'tracker')
+  on conflict (user_id, org_id) do update set
+    role = excluded.role;
+
+  -- Marcar invitación como aceptada
+  update public.org_invites
+  set accepted_at = now(),
+      accepted_by = v_uid
+  where id = p_invite_id;
+
+  return query select true, 'accepted', v_org, 'tracker'::public.app_role;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_accept_invite"("p_invite_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_accept_pending_invites_for_me"() RETURNS TABLE("ok" boolean, "accepted_count" integer)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_email text;
+  v_count int := 0;
+  r record;
+begin
+  v_uid := auth.uid();
+  if v_uid is null then
+    return query select false, 0;
+    return;
+  end if;
+
+  select public._email_norm(up.email)
+    into v_email
+  from public.users_public up
+  where up.id = v_uid;
+
+  if v_email is null or v_email = '' then
+    return query select false, 0;
+    return;
+  end if;
+
+  for r in
+    select oi.id, oi.org_id
+    from public.org_invites oi
+    where public._email_norm(oi.email) = v_email
+      and oi.role = 'tracker'
+      and oi.accepted_at is null
+      and oi.revoked_at is null
+      and (oi.expires_at is null or now() <= oi.expires_at)
+  loop
+    -- membership
+    insert into public.memberships (user_id, org_id, role)
+    values (v_uid, r.org_id, 'tracker')
+    on conflict (user_id, org_id) do update set role = excluded.role;
+
+    update public.org_invites
+    set accepted_at = now(),
+        accepted_by = v_uid
+    where id = r.id;
+
+    v_count := v_count + 1;
+  end loop;
+
+  return query select true, v_count;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_accept_pending_invites_for_me"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_admin_assign_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+begin
+  insert into public.asignaciones (user_id, geocerca_id)
+  values (p_user_id, p_geocerca_id)
+  on conflict (user_id, geocerca_id) do nothing;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_admin_assign_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_admin_upsert_phone"("p_user_id" "uuid", "p_telefono" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'auth'
+    AS $$
+begin
+  insert into public.user_profiles(id, telefono, updated_at)
+  values (p_user_id, p_telefono, now())
+  on conflict (id) do update
+  set telefono = excluded.telefono,
+      updated_at = now();
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_admin_upsert_phone"("p_user_id" "uuid", "p_telefono" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_crear_geocerca"("p_nombre" "text", "p_geom" "jsonb", "p_activa" boolean DEFAULT true) RETURNS TABLE("id" "text", "nombre" "text", "geom" "jsonb", "activa" boolean, "created_at" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_norm text := lower(btrim(p_nombre));
+BEGIN
+  IF v_norm IS NULL OR v_norm = '' THEN
+    RAISE EXCEPTION 'El nombre es obligatorio' USING ERRCODE = '22023';
+  END IF;
+  IF p_geom IS NULL THEN
+    RAISE EXCEPTION 'La geometría (geom) es obligatoria' USING ERRCODE = '22023';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.geocercas g WHERE lower(btrim(g.nombre)) = v_norm) THEN
+    RAISE EXCEPTION 'YA EXISTE UNA GEOCERCA CON ESTE NOMBRE' USING ERRCODE = '23505';
+  END IF;
+
+  RETURN QUERY
+  INSERT INTO public.geocercas (nombre, geom, activa)
+  VALUES (btrim(p_nombre), p_geom, COALESCE(p_activa, true))
+  RETURNING id::text, nombre, geom, activa, created_at;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_crear_geocerca"("p_nombre" "text", "p_geom" "jsonb", "p_activa" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_create_tracker_invite"("p_org_id" "uuid", "p_email" "text", "p_expires_hours" integer DEFAULT 168, "p_note" "text" DEFAULT NULL::"text") RETURNS TABLE("ok" boolean, "invite_id" "uuid", "org_id" "uuid", "email" "text", "role" "public"."app_role", "expires_at" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_email text;
+  v_expires timestamptz;
+begin
+  perform public._require_owner_or_admin(p_org_id);
+
+  v_email := public._email_norm(p_email);
+  if v_email = '' then
+    return query select false, null::uuid, p_org_id, p_email, 'tracker'::public.app_role, null::timestamptz;
+    return;
+  end if;
+
+  v_expires := now() + make_interval(hours => greatest(1, coalesce(p_expires_hours, 168)));
+
+  insert into public.org_invites (org_id, email, role, invited_by, expires_at, note)
+  values (p_org_id, v_email, 'tracker', auth.uid(), v_expires, p_note)
+  on conflict (org_id, email, role)
+  do update set
+    invited_by = excluded.invited_by,
+    expires_at = excluded.expires_at,
+    note = excluded.note,
+    revoked_at = null,
+    revoked_by = null,
+    accepted_at = null,
+    accepted_by = null;
+
+  return query
+  select true, oi.id, oi.org_id, oi.email, oi.role, oi.expires_at
+  from public.org_invites oi
+  where oi.org_id = p_org_id and oi.email = v_email and oi.role = 'tracker';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_create_tracker_invite"("p_org_id" "uuid", "p_email" "text", "p_expires_hours" integer, "p_note" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_personal_list"("p_org" "uuid" DEFAULT NULL::"uuid") RETURNS SETOF "public"."personal"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select *
+  from public.personal p
+  where (p_org is null or p.org_id = p_org)
+  order by
+    case
+      when p.is_deleted = true then 2
+      when (p.vigente = true and p.activo_bool = true) then 0
+      else 1
+    end,
+    lower(coalesce(p.apellido, '')),
+    lower(coalesce(p.nombre, ''));
+$$;
+
+
+ALTER FUNCTION "public"."rpc_personal_list"("p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_plan_tracker_vigente_usage"("org_id" "uuid") RETURNS json
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'app'
+    AS $$
+  select app.rpc_plan_tracker_vigente_usage(org_id);
+$$;
+
+
+ALTER FUNCTION "public"."rpc_plan_tracker_vigente_usage"("org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_provision_tracker_and_assign"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer DEFAULT 5, "p_active" boolean DEFAULT true) RETURNS TABLE("ok" boolean, "message" "text", "tracker_user_id" "uuid", "geofence_id" "uuid", "frequency_minutes" integer, "active" boolean)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_actor uuid;
+  v_actor_role text;
+
+  v_tracker_role text;
+  v_geofence_org uuid;
+  v_geofence_tenant uuid;
+
+  has_org_id boolean;
+  has_tenant_id boolean;
+  sql_text text;
+begin
+  v_actor := auth.uid();
+
+  -- Si no hay actor, solo permitido en modo sistema
+  if v_actor is null and not public.is_internal_bridge() then
+    return query
+    select false, 'no_auth (solo permitido en modo sistema)',
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  if p_frequency_minutes is null or p_frequency_minutes < 5 then
+    return query
+    select false, 'frequency_minutes debe ser >= 5',
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  -- Validar tracker role
+  select up.role
+    into v_tracker_role
+  from public.users_public up
+  where up.id = p_tracker_user_id;
+
+  if v_tracker_role is null then
+    return query
+    select false, 'tracker_user_id no existe en users_public',
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  if v_tracker_role <> 'tracker' then
+    return query
+    select false, format('El usuario %s no tiene role tracker (role=%s)', p_tracker_user_id, v_tracker_role),
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  -- Asegurar mirror geofence si faltara
+  if not exists (select 1 from public.geofences gf where gf.id = p_geofence_id) then
+    if exists (select 1 from public.geocercas g where g.id = p_geofence_id) then
+      perform public.ensure_geofence_from_geocerca(p_geofence_id);
+    end if;
+  end if;
+
+  -- Resolver contexto desde geofence
+  select c.org_id, c.tenant_id
+    into v_geofence_org, v_geofence_tenant
+  from public.get_geofence_context(p_geofence_id) c;
+
+  -- Seguridad: solo en modo app (cuando hay actor)
+  if v_actor is not null then
+    select m.role
+      into v_actor_role
+    from public.memberships m
+    where m.user_id = v_actor
+      and m.org_id = v_geofence_org;
+
+    if v_actor_role is null then
+      return query
+      select false, 'actor_not_member_of_org',
+             p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+      return;
+    end if;
+
+    if v_actor_role not in ('owner','admin') then
+      return query
+      select false, 'actor_not_owner_admin',
+             p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+      return;
+    end if;
+  end if;
+
+  -- Provision membership del tracker en la org de la geofence
+  insert into public.memberships (user_id, org_id, role)
+  values (p_tracker_user_id, v_geofence_org, 'tracker')
+  on conflict (user_id, org_id) do update set
+    role = excluded.role;
+
+  -- Detectar columnas reales en tracker_assignments
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='tracker_assignments' and column_name='org_id'
+  ) into has_org_id;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='tracker_assignments' and column_name='tenant_id'
+  ) into has_tenant_id;
+
+  if not has_tenant_id then
+    -- si algún día cambias el esquema y ya no existe, mejor error explícito
+    raise exception 'rpc_provision_tracker_and_assign: tracker_assignments no tiene tenant_id pero tu esquema lo requiere.'
+      using errcode = 'P0001';
+  end if;
+
+  -- Construir UPSERT adaptativo (sin asumir org_id)
+  if has_org_id then
+    sql_text := '
+      insert into public.tracker_assignments
+        (tracker_user_id, geofence_id, frequency_minutes, active, org_id, tenant_id)
+      values
+        ($1, $2, $3, $4, $5, $6)
+      on conflict on constraint tracker_assignments_tracker_geofence_uniq
+      do update set
+        frequency_minutes = excluded.frequency_minutes,
+        active = excluded.active,
+        org_id = excluded.org_id,
+        tenant_id = excluded.tenant_id
+    ';
+    execute sql_text
+      using p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active, v_geofence_org, v_geofence_tenant;
+  else
+    sql_text := '
+      insert into public.tracker_assignments
+        (tracker_user_id, geofence_id, frequency_minutes, active, tenant_id)
+      values
+        ($1, $2, $3, $4, $5)
+      on conflict on constraint tracker_assignments_tracker_geofence_uniq
+      do update set
+        frequency_minutes = excluded.frequency_minutes,
+        active = excluded.active,
+        tenant_id = excluded.tenant_id
+    ';
+    execute sql_text
+      using p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active, v_geofence_tenant;
+  end if;
+
+  return query
+  select true, 'ok', p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."rpc_provision_tracker_and_assign"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_set_current_org"("p_org_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    SET "row_security" TO 'off'
+    AS $$
+begin
+  -- validar que el usuario pertenece a la org
+  if not exists (
+    select 1
+    from public.app_user_roles
+    where user_id = auth.uid()
+      and org_id  = p_org_id
+  ) then
+    raise exception 'User not member of org %', p_org_id;
+  end if;
+
+  perform set_config('app.bypass_profiles_direct_writes','on', true);
+
+  update public.profiles
+  set
+    current_org_id = p_org_id,
+    default_org_id = coalesce(default_org_id, p_org_id),
+    org_id         = coalesce(org_id, p_org_id),
+    tenant_id      = coalesce(tenant_id, p_org_id),
+    active_tenant_id = coalesce(active_tenant_id, p_org_id)
+  where id = auth.uid();
+
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_set_current_org"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_tracker_can_send"() RETURNS TABLE("ok" boolean, "reason" "text", "tracker_user_id" "uuid", "role" "text", "total" integer, "active" integer)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_role text;
+  v_total int;
+  v_active int;
+begin
+  v_uid := auth.uid();
+
+  if v_uid is null then
+    return query select false, 'no_auth', null::uuid, null::text, 0, 0;
+    return;
+  end if;
+
+  select up.role into v_role
+  from public.users_public up
+  where up.id = v_uid;
+
+  if v_role is null then
+    return query select false, 'no_users_public_row', v_uid, null::text, 0, 0;
+    return;
+  end if;
+
+  if v_role <> 'tracker' then
+    return query select false, 'role_not_tracker', v_uid, v_role, 0, 0;
+    return;
+  end if;
+
+  select count(*)
+    into v_total
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid;
+
+  select count(*)
+    into v_active
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid
+    and ta.active is true;
+
+  if v_total = 0 then
+    return query select false, 'no_assignments', v_uid, v_role, v_total, v_active;
+    return;
+  end if;
+
+  if v_active = 0 then
+    return query select false, 'no_active_assignments', v_uid, v_role, v_total, v_active;
+    return;
+  end if;
+
+  return query select true, 'ok', v_uid, v_role, v_total, v_active;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_tracker_can_send"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."rpc_upsert_tracker_assignment"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer DEFAULT 5, "p_active" boolean DEFAULT true) RETURNS TABLE("ok" boolean, "message" "text", "tracker_user_id" "uuid", "geofence_id" "uuid", "frequency_minutes" integer, "active" boolean)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tracker_role text;
+  v_geofence_org uuid;
+begin
+  -- 1) Validar frecuencia
+  if p_frequency_minutes is null or p_frequency_minutes < 5 then
+    return query
+    select false, 'frequency_minutes debe ser >= 5',
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  -- 2) Validar que el usuario exista y sea tracker
+  select up.role
+    into v_tracker_role
+  from public.users_public up
+  where up.id = p_tracker_user_id;
+
+  if v_tracker_role is null then
+    return query
+    select false, 'tracker_user_id no existe en users_public',
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  if v_tracker_role <> 'tracker' then
+    return query
+    select false,
+           format('El usuario %s no tiene role tracker (role=%s)',
+                  p_tracker_user_id, v_tracker_role),
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  -- 3) Asegurar que la geofence exista (o crear mirror desde geocercas)
+  if not exists (select 1 from public.geofences gf where gf.id = p_geofence_id) then
+    if exists (select 1 from public.geocercas g where g.id = p_geofence_id) then
+      perform public.ensure_geofence_from_geocerca(p_geofence_id);
+    end if;
+  end if;
+
+  -- 4) Obtener org de la geofence
+  select gf.org_id
+    into v_geofence_org
+  from public.geofences gf
+  where gf.id = p_geofence_id;
+
+  if v_geofence_org is null then
+    return query
+    select false,
+           'geofence_id no existe en geofences o no tiene org_id',
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  -- 5) Validar pertenencia del tracker a la misma organización
+  if not exists (
+    select 1
+    from public.memberships m
+    where m.user_id = p_tracker_user_id
+      and m.org_id = v_geofence_org
+  ) then
+    return query
+    select false,
+           'El tracker no pertenece a la organización de la geofence',
+           p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+    return;
+  end if;
+
+  -- 6) Upsert del assignment
+  insert into public.tracker_assignments (
+    tracker_user_id,
+    geofence_id,
+    frequency_minutes,
+    active
+  )
+  values (
+    p_tracker_user_id,
+    p_geofence_id,
+    p_frequency_minutes,
+    p_active
+  )
+  on conflict (tracker_user_id, geofence_id)
+  do update set
+    frequency_minutes = excluded.frequency_minutes,
+    active = excluded.active;
+
+  return query
+  select true, 'ok',
+         p_tracker_user_id, p_geofence_id, p_frequency_minutes, p_active;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."rpc_upsert_tracker_assignment"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."safe_add_to_publication"("p_pubname" "text", "p_schema" "text", "p_tablename" "text") RETURNS "void"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname   = p_pubname
+      AND schemaname= p_schema
+      AND tablename = p_tablename
+  ) THEN
+    EXECUTE format('ALTER PUBLICATION %I ADD TABLE %I.%I', p_pubname, p_schema, p_tablename);
+  END IF;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."safe_add_to_publication"("p_pubname" "text", "p_schema" "text", "p_tablename" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."safe_geom_from_geojson"("js" "jsonb") RETURNS "public"."geometry"
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+declare
+  g geometry;
+begin
+  if js is null then
+    return null;
+  end if;
+
+  begin
+    g := st_setsrid(st_geomfromgeojson(js::text), 4326);
+    return g;
+  exception when others then
+    return null;
+  end;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."safe_geom_from_geojson"("js" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."session_org_id_safe"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select (current_setting('app.tenant_id', true))::uuid;
+$$;
+
+
+ALTER FUNCTION "public"."session_org_id_safe"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_active_org"("p_org_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if not public._user_has_org(v_uid, p_org_id) then
+    raise exception 'Org not allowed for this user';
+  end if;
+
+  insert into public.user_org_settings (user_id, active_org_id, updated_at)
+  values (v_uid, p_org_id, now())
+  on conflict (user_id)
+  do update
+     set active_org_id = excluded.active_org_id,
+         updated_at    = excluded.updated_at;
+
+  return jsonb_build_object(
+    'ok', true,
+    'user_id', v_uid,
+    'active_org_id', p_org_id
+  );
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_active_org"("p_org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_created_by"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.created_by is null then
+    NEW.created_by := auth.uid();
+  end if;
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_created_by"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_created_by_from_auth"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.created_by is null then
+    NEW.created_by := auth.uid();
+  end if;
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_created_by_from_auth"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_current_org"("p_org" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_ok boolean;
+begin
+  if v_user is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  if p_org is null then
+    return jsonb_build_object('ok', false, 'error', 'org_required');
+  end if;
+
+  select exists (
+    select 1
+    from public.memberships m
+    where m.user_id = v_user
+      and m.org_id = p_org
+      and m.revoked_at is null
+  ) into v_ok;
+
+  if not v_ok then
+    return jsonb_build_object('ok', false, 'error', 'not_member_of_org', 'org_id', p_org);
+  end if;
+
+  update public.memberships
+  set is_default = (org_id = p_org)
+  where user_id = v_user
+    and revoked_at is null;
+
+  return jsonb_build_object('ok', true, 'user_id', v_user, 'org_id', p_org);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_current_org"("p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_current_org_on_invite_accept"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.accepted_at is not null
+     and (OLD.accepted_at is null) then
+
+    update public.profiles
+    set current_org_id = NEW.org_id
+    where user_id = NEW.user_id
+      and current_org_id is null;
+
+  end if;
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_current_org_on_invite_accept"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_current_org_on_membership_insert"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Solo si el perfil existe y no tiene current_org_id
+  update public.profiles
+  set current_org_id = NEW.org_id
+  where user_id = NEW.user_id
+    and current_org_id is null;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_current_org_on_membership_insert"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_current_org_on_org_create"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  update public.profiles
+  set current_org_id = NEW.id
+  where user_id = NEW.created_by
+    and (current_org_id is null);
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_current_org_on_org_create"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_default_org"("p_org" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'No authenticated user (auth.uid() is null)';
+  end if;
+
+  if not exists (
+    select 1 from public.org_users
+    where user_id = v_uid and org_id = p_org
+  ) then
+    raise exception 'User % is not a member of org %', v_uid, p_org;
+  end if;
+
+  update public.profiles
+     set default_org = p_org
+   where id = v_uid;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_default_org"("p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_default_role_tracker"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_tracker uuid;
+begin
+  if new.role_id is null then
+    select id into v_tracker from public.roles where slug = 'tracker' limit 1;
+    new.role_id := v_tracker;
+  end if;
+
+  if new.role is null then
+    new.role := 'tracker';
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_default_role_tracker"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_geo_audit_fields_from_auth"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if tg_op = 'INSERT' then
+    if NEW.created_by is null then
+      NEW.created_by := auth.uid();
+    end if;
+    NEW.updated_by := NEW.created_by;
+    if NEW.created_at is null then
+      NEW.created_at := now();
+    end if;
+    NEW.updated_at := now();
+  else
+    NEW.updated_by := auth.uid();
+    NEW.updated_at := now();
+  end if;
+
+  -- org_id obligatorio y el usuario debe pertenecer a esa org
+  if NEW.org_id is null then
+    raise exception 'org_id es obligatorio';
+  end if;
+  if not public.app_is_member(NEW.org_id) then
+    raise exception 'El usuario % no pertenece a la organización %', auth.uid(), NEW.org_id;
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_geo_audit_fields_from_auth"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_geocerca_org_defaults"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Asegurar org_id
+  if NEW.org_id is null then
+    NEW.org_id := public.ensure_org_for_current_user();
+  end if;
+
+  -- Asegurar tenant_id
+  if NEW.tenant_id is null then
+    NEW.tenant_id := NEW.org_id;
+  end if;
+
+  -- Si aún así no hay org_id, abortamos con mensaje claro
+  if NEW.org_id is null then
+    raise exception
+      'No se pudo determinar organizacion para la geocerca (org_id sigue NULL)';
+  end if;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_geocerca_org_defaults"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_geofence_org"() RETURNS "uuid"
+    LANGUAGE "sql" STABLE
+    AS $$
+  select p.default_org
+  from public.profiles p
+  where p.user_id = auth.uid()  -- ✅ corregido
+  limit 1
+$$;
+
+
+ALTER FUNCTION "public"."set_geofence_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_member_role"("p_org" "uuid", "p_user" "uuid", "p_role" "public"."role_type") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  if not public.has_role(p_org, 'admin') then
+    raise exception 'No autorizado';
+  end if;
+
+  update public.memberships
+  set role = p_role
+  where org_id = p_org and user_id = p_user;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_member_role"("p_org" "uuid", "p_user" "uuid", "p_role" "public"."role_type") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_org_defaults"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- 1) created_at
+  if NEW.created_at is null then
+    NEW.created_at := now();
+  end if;
+
+  -- 2) created_by
+  begin
+    if NEW.created_by is null then
+      NEW.created_by := auth.uid();
+    end if;
+  exception
+    when others then
+      null;
+  end;
+
+  -- ✅ NO toca org_id
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_org_defaults"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_org_owner_defaults"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  if new.owner_id is null then
+    new.owner_id := auth.uid();
+  end if;
+
+  if new.created_by is null then
+    new.created_by := auth.uid();
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_org_owner_defaults"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_owner_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.owner_id is null then
+    new.owner_id := auth.uid();
+  end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."set_owner_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_owner_on_insert"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if new.owner_id is null then
+    new.owner_id := auth.uid();
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_owner_on_insert"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_owner_on_insert_tbl"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if new.owner_id is null then
+    new.owner_id := auth.uid();
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_owner_on_insert_tbl"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_personal_defaults"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_org uuid;
+begin
+  -- owner_id automático
+  if new.owner_id is null then
+    new.owner_id := auth.uid();
+  end if;
+
+  -- org_id automático si el frontend no lo envía
+  if new.org_id is null then
+    select m.org_id
+    into v_org
+    from public.memberships m
+    where m.user_id = auth.uid()
+    order by m.is_default desc, created_at
+    limit 1;
+
+    if v_org is null then
+      raise exception 'No organization assigned to this user';
+    end if;
+
+    new.org_id := v_org;
+  end if;
+
+  -- defaults lógicos
+  new.vigente := coalesce(new.vigente, true);
+  new.activo := coalesce(new.activo, true);
+  new.activo_bool := coalesce(new.activo_bool, true);
+  new.is_deleted := coalesce(new.is_deleted, false);
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_personal_defaults"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Solo setea updated_at si el record lo tiene
+  if to_jsonb(new) ? 'updated_at' then
+    new.updated_at = now();
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_user_role"("p_user_id" "uuid", "p_role_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  update public.profiles set role_id = p_role_id where id = p_user_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."set_user_role"("p_user_id" "uuid", "p_role_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."sync_app_user_roles_from_memberships"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if tg_op = 'INSERT' or tg_op = 'UPDATE' then
+    insert into public.app_user_roles (user_id, org_id, role, created_at)
+    values (new.user_id, new.org_id, new.role, now())
+    on conflict (user_id, org_id)
+    do update set
+      role = excluded.role;
+    return new;
+
+  elsif tg_op = 'DELETE' then
+    delete from public.app_user_roles
+    where user_id = old.user_id
+      and org_id  = old.org_id;
+    return old;
+  end if;
+
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."sync_app_user_roles_from_memberships"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."sync_org_members_from_app_user_roles"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  insert into public.org_members (org_id, user_id, role, is_active, created_at)
+  values (new.org_id, new.user_id, new.role, true, coalesce(new.created_at, now()))
+  on conflict (org_id, user_id)
+  do update set
+    role = excluded.role,
+    is_active = true;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."sync_org_members_from_app_user_roles"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."sync_org_tenant_from_geocercas"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if new.org_id is not null and new.tenant_id is not null and coalesce(new.is_deleted,false)=false then
+    insert into public.org_tenant_map (org_id, tenant_id, updated_at, source)
+    values (new.org_id, new.tenant_id, now(), 'geocercas_trigger')
+    on conflict (org_id) do update
+      set tenant_id = excluded.tenant_id,
+          updated_at = excluded.updated_at,
+          source = excluded.source;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."sync_org_tenant_from_geocercas"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."sync_owner_membership_on_org_update"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Solo si cambió el owner
+  if new.owner_id is distinct from old.owner_id then
+
+    -- 2.1) Si había owner anterior: degradarlo a 'admin' (o mantener si prefieres)
+    if old.owner_id is not null then
+      insert into public.memberships (user_id, org_id, role)
+      values (old.owner_id, new.id, 'admin')
+      on conflict (user_id, org_id)
+      do update set role = 'admin';
+    end if;
+
+    -- 2.2) Nuevo owner: asegurar 'owner'
+    if new.owner_id is not null then
+      insert into public.memberships (user_id, org_id, role)
+      values (new.owner_id, new.id, 'owner')
+      on conflict (user_id, org_id)
+      do update set role = 'owner';
+    end if;
+
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."sync_owner_membership_on_org_update"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."sync_tracker_assignments_from_asignaciones"("p_asignacion_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql"
+    AS $_$
+declare
+  v_org_id uuid;
+  v_tenant_id uuid;
+  v_personal_id uuid;
+  v_org_people_id uuid;
+  v_geofence_id uuid;
+
+  v_start_time timestamptz;
+  v_end_time timestamptz;
+
+  v_estado text;
+  v_status text;
+  v_frecuencia_sec int;
+  v_is_deleted boolean;
+
+  v_tracker_user_id uuid;
+  v_frequency_minutes int;
+  v_active boolean;
+
+  v_start_date date;
+  v_end_date date;
+  v_start_ts timestamptz;
+  v_end_ts timestamptz;
+begin
+  select
+    a.org_id,
+    a.tenant_id,
+    a.personal_id,
+    a.org_people_id,
+    a.geofence_id,
+    a.start_time,
+    a.end_time,
+    a.estado::text,
+    a.status::text,
+    a.frecuencia_envio_sec,
+    a.is_deleted
+  into
+    v_org_id,
+    v_tenant_id,
+    v_personal_id,
+    v_org_people_id,
+    v_geofence_id,
+    v_start_time,
+    v_end_time,
+    v_estado,
+    v_status,
+    v_frecuencia_sec,
+    v_is_deleted
+  from public.asignaciones a
+  where a.id = p_asignacion_id;
+
+  if not found then return; end if;
+  if coalesce(v_is_deleted,false) then return; end if;
+
+  -- legacy => no sync
+  if v_geofence_id is null then return; end if;
+
+  -- Validar geofence existe y misma org (si aplica)
+  if not exists (
+    select 1
+    from public.geofences gf
+    where gf.id = v_geofence_id
+      and (v_org_id is null or gf.org_id = v_org_id)
+  ) then
+    return;
+  end if;
+
+  -- tracker_user_id desde personal.user_id
+  v_tracker_user_id := null;
+
+  if v_personal_id is not null then
+    select p.user_id
+    into v_tracker_user_id
+    from public.personal p
+    where p.id = v_personal_id
+    limit 1;
+  end if;
+
+  -- fallback org_people.user_id si existe (sin romper si no existe columna)
+  if v_tracker_user_id is null and v_org_people_id is not null then
+    begin
+      execute 'select user_id from public.org_people where id = $1 limit 1'
+        into v_tracker_user_id
+        using v_org_people_id;
+    exception when others then
+      null;
+    end;
+  end if;
+
+  -- Si no hay user_id, no podemos crear tracker_assignment
+  if v_tracker_user_id is null then
+    return;
+  end if;
+
+  -- Fechas: derivar de start_time/end_time (tu esquema actual)
+  v_start_date := coalesce(v_start_time::date, current_date);
+  v_end_date   := coalesce(v_end_time::date, current_date + 365);
+  if v_end_date < v_start_date then v_end_date := v_start_date; end if;
+
+  -- Frecuencia sec -> min
+  if v_frecuencia_sec is null then
+    v_frequency_minutes := null;
+  else
+    v_frequency_minutes := greatest(1, (v_frecuencia_sec::int / 60));
+  end if;
+
+  -- Activo derivado de estado/status
+  v_active := true;
+  if coalesce(nullif(trim(v_status),''), nullif(trim(v_estado),'')) is not null then
+    if lower(coalesce(nullif(trim(v_status),''), trim(v_estado))) in
+       ('inactiva','inactivo','inactive','disabled','0','false','off') then
+      v_active := false;
+    end if;
+  end if;
+
+  -- Rango timestamptz
+  v_start_ts := (v_start_date::text || ' 08:00:00+00')::timestamptz;
+  v_end_ts   := ((v_end_date + 1)::text || ' 08:00:00+00')::timestamptz;
+
+  -- UPSERT lógico
+  update public.tracker_assignments ta
+  set
+    tenant_id = v_tenant_id,
+    start_date = v_start_date,
+    end_date = v_end_date,
+    period_tstz = tstzrange(v_start_ts, v_end_ts, '[)'),
+    frequency_minutes = v_frequency_minutes,
+    active = v_active,
+    updated_at = now()
+  where ta.tracker_user_id = v_tracker_user_id
+    and ta.geofence_id = v_geofence_id;
+
+  if not found then
+    insert into public.tracker_assignments (
+      tenant_id, tracker_user_id, geofence_id,
+      start_date, end_date, period_tstz,
+      frequency_minutes, active
+    )
+    values (
+      v_tenant_id, v_tracker_user_id, v_geofence_id,
+      v_start_date, v_end_date, tstzrange(v_start_ts, v_end_ts, '[)'),
+      v_frequency_minutes, v_active
+    );
+  end if;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."sync_tracker_assignments_from_asignaciones"("p_asignacion_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."sync_users_public_from_auth_users"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  perform public.upsert_users_public_from_uid(new.id, new.email);
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."sync_users_public_from_auth_users"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_col_exists"("p_table" "text", "p_col" "text") RETURNS boolean
+    LANGUAGE "sql" STABLE
+    AS $$
+  select exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = p_table
+      and column_name = p_col
+  );
+$$;
+
+
+ALTER FUNCTION "public"."tg_col_exists"("p_table" "text", "p_col" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_create_org_for_user"("p_user" "uuid", "p_email" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_org_id uuid := gen_random_uuid();
+  v_slug text := 'org-' || substr(md5(coalesce(p_email, p_user::text)), 1, 10);
+  v_name text := coalesce(nullif(split_part(coalesce(p_email,''),'@',1),''), 'Mi organización');
+  v_cols text := '';
+  v_vals text := '';
+begin
+  v_cols := 'id';
+  v_vals := '$1';
+
+  if public.tg_col_exists('organizations','name') then
+    v_cols := v_cols || ', name';
+    v_vals := v_vals || ', $2';
+  elsif public.tg_col_exists('organizations','org_name') then
+    v_cols := v_cols || ', org_name';
+    v_vals := v_vals || ', $2';
+  elsif public.tg_col_exists('organizations','title') then
+    v_cols := v_cols || ', title';
+    v_vals := v_vals || ', $2';
+  end if;
+
+  if public.tg_col_exists('organizations','slug') then
+    v_cols := v_cols || ', slug';
+    v_vals := v_vals || ', $3';
+  end if;
+
+  if public.tg_col_exists('organizations','created_by') then
+    v_cols := v_cols || ', created_by';
+    v_vals := v_vals || ', $4';
+  elsif public.tg_col_exists('organizations','owner_id') then
+    v_cols := v_cols || ', owner_id';
+    v_vals := v_vals || ', $4';
+  end if;
+
+  if public.tg_col_exists('organizations','created_at') then
+    v_cols := v_cols || ', created_at';
+    v_vals := v_vals || ', now()';
+  end if;
+
+  if public.tg_col_exists('organizations','updated_at') then
+    v_cols := v_cols || ', updated_at';
+    v_vals := v_vals || ', now()';
+  end if;
+
+  if public.tg_col_exists('organizations','suspended') then
+    v_cols := v_cols || ', suspended';
+    v_vals := v_vals || ', false';
+  end if;
+
+  execute format('insert into public.organizations (%s) values (%s)', v_cols, v_vals)
+  using v_org_id, v_name, v_slug, p_user;
+
+  return v_org_id;
+
+exception
+  when unique_violation then
+    v_slug := v_slug || '-' || substr(md5(random()::text),1,4);
+    execute format('insert into public.organizations (%s) values (%s)', v_cols, v_vals)
+    using v_org_id, v_name, v_slug, p_user;
+    return v_org_id;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."tg_create_org_for_user"("p_user" "uuid", "p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_ensure_membership"("p_user" "uuid", "p_org" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_has_role_col boolean := public.tg_col_exists('memberships','role');
+  v_has_role_name_col boolean := public.tg_col_exists('memberships','role_name');
+begin
+  if to_regclass('public.memberships') is null then
+    return;
+  end if;
+
+  if v_has_role_col then
+    insert into public.memberships (org_id, user_id, role)
+    values (p_org, p_user, 'owner')
+    on conflict (org_id, user_id) do update
+      set role = excluded.role;
+  elsif v_has_role_name_col then
+    insert into public.memberships (org_id, user_id, role_name)
+    values (p_org, p_user, 'owner')
+    on conflict (org_id, user_id) do update
+      set role_name = excluded.role_name;
+  else
+    insert into public.memberships (org_id, user_id)
+    values (p_org, p_user)
+    on conflict (org_id, user_id) do nothing;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tg_ensure_membership"("p_user" "uuid", "p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_ensure_owner_role"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- NO-OP: la verdad vive en memberships.
+  -- El sync memberships->app_user_roles se encarga del derivado.
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tg_ensure_owner_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_ensure_owner_role"("p_user" "uuid", "p_org" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_constraint text := public.tg_pick_app_user_roles_conflict_constraint();
+  v_has_role_col boolean := public.tg_col_exists('app_user_roles','role');
+  v_has_role_name_col boolean := public.tg_col_exists('app_user_roles','role_name');
+  v_sql text;
+begin
+  if v_constraint is null then
+    raise exception 'No se encontró UNIQUE constraint para app_user_roles. Necesito un UNIQUE sobre (user_id, org_id).';
+  end if;
+
+  if v_has_role_col then
+    v_sql := format($f$
+      insert into public.app_user_roles (id, user_id, org_id, role)
+      values (gen_random_uuid(), $1, $2, 'owner')
+      on conflict on constraint %I
+      do update set role = excluded.role
+    $f$, v_constraint);
+
+    execute v_sql using p_user, p_org;
+
+  elsif v_has_role_name_col then
+    v_sql := format($f$
+      insert into public.app_user_roles (id, user_id, org_id, role_name)
+      values (gen_random_uuid(), $1, $2, 'owner')
+      on conflict on constraint %I
+      do update set role_name = excluded.role_name
+    $f$, v_constraint);
+
+    execute v_sql using p_user, p_org;
+
+  else
+    v_sql := format($f$
+      insert into public.app_user_roles (id, user_id, org_id)
+      values (gen_random_uuid(), $1, $2)
+      on conflict on constraint %I
+      do nothing
+    $f$, v_constraint);
+
+    execute v_sql using p_user, p_org;
+  end if;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."tg_ensure_owner_role"("p_user" "uuid", "p_org" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_get_profile_email"("p_user" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql" STABLE
+    AS $_$
+declare
+  v_email text;
+begin
+  if public.tg_col_exists('profiles','email') then
+    execute 'select email from public.profiles where id = $1' into v_email using p_user;
+  end if;
+  return v_email;
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."tg_get_profile_email"("p_user" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_org_after_insert_ensure_owner_role"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_owner uuid;
+begin
+  v_owner := coalesce(new.owner_id, new.created_by, auth.uid());
+
+  update public.organizations
+  set owner_id   = coalesce(owner_id, v_owner),
+      created_by = coalesce(created_by, v_owner),
+      active     = coalesce(active, true),
+      suspended  = coalesce(suspended, false),
+      updated_at = now()
+  where id = new.id;
+
+  perform public.ensure_user_role(v_owner, new.id, 'owner');
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tg_org_after_insert_ensure_owner_role"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_org_people_consistency"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- always stamp updated_at on insert/update
+  new.updated_at := now();
+
+  if new.is_deleted then
+    -- borrado => no vigente
+    new.vigente := false;
+
+    -- set deleted_at si está null
+    if new.deleted_at is null then
+      new.deleted_at := now();
+    end if;
+
+  else
+    -- no borrado => deleted_at debe ser null
+    new.deleted_at := null;
+
+    -- vigente por defecto si viene null (por si algún cliente manda null)
+    if new.vigente is null then
+      new.vigente := true;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tg_org_people_consistency"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_org_people_soft_delete_consistency"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- siempre refresca updated_at en insert/update
+  new.updated_at := now();
+
+  if new.is_deleted = true then
+    -- si está borrado, jamás puede estar vigente
+    new.vigente := false;
+
+    -- setea deleted_at si no existe
+    if new.deleted_at is null then
+      new.deleted_at := now();
+    end if;
+
+  else
+    -- si se “restaura”, limpia deleted_at
+    new.deleted_at := null;
+
+    -- opcional: si viene null, déjalo vigente
+    if new.vigente is null then
+      new.vigente := true;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tg_org_people_soft_delete_consistency"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_personal_phone_normalizer"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_norm text;
+BEGIN
+  IF NEW.telefono IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  v_norm := public.fn_normalize_phone_ec(NEW.telefono);
+
+  IF v_norm IS NOT NULL THEN
+    NEW.telefono := v_norm;
+  ELSE
+    -- si no se pudo normalizar, preservar original y limpiar teléfono
+    NEW.telefono_raw := NEW.telefono;
+    NEW.telefono := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."tg_personal_phone_normalizer"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tg_pick_app_user_roles_conflict_constraint"() RETURNS "text"
+    LANGUAGE "plpgsql" STABLE
+    AS $$
+declare
+  v_name text;
+begin
+  -- Preferidos (por nombres comunes)
+  select tc.constraint_name
+    into v_name
+  from information_schema.table_constraints tc
+  where tc.table_schema='public'
+    and tc.table_name='app_user_roles'
+    and tc.constraint_type='UNIQUE'
+    and tc.constraint_name in (
+      'app_user_roles_user_id_org_id_key',
+      'app_user_roles_user_org_uniq',
+      'app_user_roles_user_org_ux'
+    )
+  order by
+    case tc.constraint_name
+      when 'app_user_roles_user_id_org_id_key' then 1
+      when 'app_user_roles_user_org_uniq' then 2
+      when 'app_user_roles_user_org_ux' then 3
+      else 9
+    end
+  limit 1;
+
+  if v_name is not null then
+    return v_name;
+  end if;
+
+  -- Fallback: encontrar cualquier UNIQUE que cubra EXACTAMENTE (user_id, org_id)
+  -- (No perfecto en todas las DBs, pero suficiente como fallback universal)
+  select tc.constraint_name
+    into v_name
+  from information_schema.table_constraints tc
+  join information_schema.constraint_column_usage ccu
+    on ccu.constraint_schema = tc.table_schema
+   and ccu.constraint_name = tc.constraint_name
+  where tc.table_schema='public'
+    and tc.table_name='app_user_roles'
+    and tc.constraint_type='UNIQUE'
+  limit 1;
+
+  return v_name;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tg_pick_app_user_roles_conflict_constraint"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."to_multipolygon_4326"("g" "public"."geometry", "fallback_lng" double precision, "fallback_lat" double precision) RETURNS "public"."geometry"
+    LANGUAGE "plpgsql" IMMUTABLE
+    AS $$
+declare
+  gg geometry;
+  poly geometry;
+begin
+  if fallback_lng is null or fallback_lat is null then
+    fallback_lng := 0;
+    fallback_lat := 0;
+  end if;
+
+  if g is null then
+    gg := st_buffer(st_setsrid(st_makepoint(fallback_lng, fallback_lat),4326)::geography, 10)::geometry;
+    return st_multi(st_collectionextract(gg,3));
+  end if;
+
+  gg := st_setsrid(g, 4326);
+
+  if geometrytype(gg) in ('POLYGON','MULTIPOLYGON') then
+    return st_multi(st_collectionextract(gg,3));
+  end if;
+
+  poly := st_collectionextract(gg,3);
+  if poly is not null and not st_isempty(poly) then
+    return st_multi(poly);
+  end if;
+
+  gg := st_buffer(gg::geography, 10)::geometry;
+  return st_multi(st_collectionextract(gg,3));
+end;
+$$;
+
+
+ALTER FUNCTION "public"."to_multipolygon_4326"("g" "public"."geometry", "fallback_lng" double precision, "fallback_lat" double precision) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."touch_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."touch_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_assignment_create"("p_tenant_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer DEFAULT 1, "p_active" boolean DEFAULT true) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_id uuid;
+  v_range tstzrange;
+  v_start_date date;
+  v_end_date date;
+begin
+  -- ✅ Seguridad universal: esta RPC debe ser llamada por backend/Edge con service_role
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  -- ✅ Validaciones universales
+  if p_tenant_id is null then
+    raise exception 'tenant_id_required' using errcode = '22004';
+  end if;
+
+  if p_tracker_user_id is null then
+    raise exception 'tracker_user_id_required' using errcode = '22004';
+  end if;
+
+  if p_geofence_id is null then
+    raise exception 'geofence_id_required' using errcode = '22004';
+  end if;
+
+  if p_start_at is null or p_end_at is null then
+    raise exception 'start_at_and_end_at_required' using errcode = '22004';
+  end if;
+
+  if p_end_at <= p_start_at then
+    raise exception 'end_at_must_be_after_start_at' using errcode = '22007';
+  end if;
+
+  v_range := tstzrange(p_start_at, p_end_at, '[)');
+
+  -- Legacy day fields (para compatibilidad):
+  -- guardamos el día completo que cubre el rango horario.
+  v_start_date := (p_start_at)::date;
+  v_end_date   := (p_end_at)::date;
+
+  insert into public.tracker_assignments (
+    tenant_id,
+    tracker_user_id,
+    geofence_id,
+    period_tstz,
+    -- legacy (mientras migras / hasta eliminar)
+    period,
+    start_date,
+    end_date,
+    frequency_minutes,
+    active
+  )
+  values (
+    p_tenant_id,
+    p_tracker_user_id,
+    p_geofence_id,
+    v_range,
+    daterange(v_start_date, (v_end_date + 1), '[)'),
+    v_start_date,
+    v_end_date,
+    greatest(1, coalesce(p_frequency_minutes, 1)),
+    coalesce(p_active, true)
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_assignment_create"("p_tenant_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_assignment_set_window"("p_assignment_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer DEFAULT NULL::integer, "p_active" boolean DEFAULT NULL::boolean) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_start_date date;
+  v_end_date date;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  if p_assignment_id is null then
+    raise exception 'assignment_id_required' using errcode = '22004';
+  end if;
+
+  if p_start_at is null or p_end_at is null then
+    raise exception 'start_at_and_end_at_required' using errcode = '22004';
+  end if;
+
+  if p_end_at <= p_start_at then
+    raise exception 'end_at_must_be_after_start_at' using errcode = '22007';
+  end if;
+
+  v_start_date := (p_start_at)::date;
+  v_end_date   := (p_end_at)::date;
+
+  update public.tracker_assignments
+  set
+    period_tstz = tstzrange(p_start_at, p_end_at, '[)'),
+    -- legacy compatibility
+    period      = daterange(v_start_date, (v_end_date + 1), '[)'),
+    start_date  = v_start_date,
+    end_date    = v_end_date,
+    frequency_minutes = coalesce(p_frequency_minutes, frequency_minutes),
+    active      = coalesce(p_active, active)
+  where id = p_assignment_id;
+
+  if not found then
+    raise exception 'assignment_not_found' using errcode = 'P0002';
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_assignment_set_window"("p_assignment_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_assignments_defaults"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_tenant_id uuid;
+
+  has_org_id boolean;
+  has_tenant_id boolean;
+  has_start_date boolean;
+  has_end_date boolean;
+  has_valid_range boolean;
+  v_start date;
+  v_end date;
+begin
+  -- Detectar columnas existentes (adaptativo)
+  select exists (select 1 from information_schema.columns
+                 where table_schema='public' and table_name='tracker_assignments' and column_name='org_id')
+    into has_org_id;
+
+  select exists (select 1 from information_schema.columns
+                 where table_schema='public' and table_name='tracker_assignments' and column_name='tenant_id')
+    into has_tenant_id;
+
+  select exists (select 1 from information_schema.columns
+                 where table_schema='public' and table_name='tracker_assignments' and column_name='start_date')
+    into has_start_date;
+
+  select exists (select 1 from information_schema.columns
+                 where table_schema='public' and table_name='tracker_assignments' and column_name='end_date')
+    into has_end_date;
+
+  -- por si tu rango se llama valid_range / active_range (ajustable)
+  select exists (select 1 from information_schema.columns
+                 where table_schema='public' and table_name='tracker_assignments' and column_name='valid_range')
+    into has_valid_range;
+
+  -- Contexto desde la geofence
+  select c.org_id, c.tenant_id
+    into v_org_id, v_tenant_id
+  from public.get_geofence_context(new.geofence_id) c;
+
+  -- tenant_id (NOT NULL)
+  if has_tenant_id then
+    new.tenant_id := v_tenant_id;
+  end if;
+
+  -- org_id (si existe)
+  if has_org_id then
+    -- solo si la columna existe
+    new.org_id := v_org_id;
+  end if;
+
+  -- Defaults de fechas (start_date NOT NULL)
+  if has_start_date then
+    if new.start_date is null then
+      new.start_date := current_date;
+    end if;
+  end if;
+
+  if has_end_date then
+    -- si end_date es NOT NULL y tu modelo quiere "infinito"
+    if new.end_date is null then
+      new.end_date := 'infinity'::date;
+    end if;
+  end if;
+
+  -- Si tienes rango (daterange) y existe la columna valid_range
+  if has_valid_range then
+    -- Construimos rango coherente. Si end_date existe usamos eso, si no, infinito.
+    v_start := coalesce(new.start_date, current_date);
+    v_end := coalesce(new.end_date, 'infinity'::date);
+    new.valid_range := daterange(v_start, v_end, '(]');
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_assignments_defaults"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_assignments_ensure_dates"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Si faltan fechas pero hay period_tstz, derivarlas
+  if (new.start_date is null or new.end_date is null) and new.period_tstz is not null then
+    if new.start_date is null then
+      new.start_date := (lower(new.period_tstz))::date;
+    end if;
+
+    if new.end_date is null then
+      new.end_date := case
+        when upper(new.period_tstz) is null then null
+        when upper_inc(new.period_tstz) then (upper(new.period_tstz))::date
+        else (upper(new.period_tstz) - interval '1 second')::date
+      end;
+    end if;
+  end if;
+
+  -- Regla universal: nunca permitir asignaciones sin campos clave
+  if new.tracker_user_id is null then
+    raise exception 'tracker_user_id no puede ser NULL';
+  end if;
+
+  if new.geofence_id is null then
+    raise exception 'geofence_id no puede ser NULL';
+  end if;
+
+  if new.start_date is null or new.end_date is null then
+    raise exception 'start_date y end_date no pueden ser NULL (o envía period_tstz para derivarlas)';
+  end if;
+
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."tracker_assignments_ensure_dates"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_assignments_set_context"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org_id uuid;
+  v_tenant_id uuid;
+begin
+  -- Resolver tenant_id desde la geofence (usa la función que ya creamos)
+  select c.org_id, c.tenant_id
+    into v_org_id, v_tenant_id
+  from public.get_geofence_context(new.geofence_id) c;
+
+  -- tenant_id es NOT NULL en tracker_assignments -> lo aseguramos siempre
+  new.tenant_id := v_tenant_id;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_assignments_set_context"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_assignments_sync_dates"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- 1) Si viene period y faltan start/end, derivar con respeto a bounds
+  if new.period is not null then
+    if new.start_date is null then
+      new.start_date := case
+        when lower(new.period) is null then null
+        when lower_inc(new.period) then lower(new.period)
+        else lower(new.period) + 1
+      end;
+    end if;
+
+    if new.end_date is null then
+      new.end_date := case
+        when upper(new.period) is null then null
+        when upper_inc(new.period) then upper(new.period)
+        else upper(new.period) - 1
+      end;
+    end if;
+  end if;
+
+  -- 2) Si vienen start/end y falta period, construir period canónico
+  if new.period is null and new.start_date is not null and new.end_date is not null then
+    -- period canónico: inclusivo en ambos extremos para DATE
+    new.period := daterange(new.start_date, new.end_date, '[]');
+  end if;
+
+  -- 3) Si vienen ambos, normalizar period para que sea consistente con start/end
+  if new.period is not null and new.start_date is not null and new.end_date is not null then
+    new.period := daterange(new.start_date, new.end_date, '[]');
+  end if;
+
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."tracker_assignments_sync_dates"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_assignments_sync_period_tstz"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Si ya viene period_tstz explícito, lo respetamos
+  if new.period_tstz is not null then
+    return new;
+  end if;
+
+  -- Si viene period (daterange), lo convertimos
+  if new.period is not null then
+    new.period_tstz :=
+      tstzrange(
+        (lower(new.period)::date)::timestamptz,
+        ((upper(new.period)::date + 1)::timestamptz),
+        '[)'
+      );
+    return new;
+  end if;
+
+  -- Si vienen start/end date, lo convertimos
+  if new.start_date is not null and new.end_date is not null then
+    new.period_tstz :=
+      tstzrange(
+        (new.start_date)::timestamptz,
+        ((new.end_date + 1)::timestamptz),
+        '[)'
+      );
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_assignments_sync_period_tstz"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_can_send"() RETURNS TABLE("can_send" boolean, "frequency_minutes" integer, "geofence_id" "uuid", "reason" "text")
+    LANGUAGE "plpgsql" STABLE
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_total int := 0;
+  v_active int := 0;
+  v_inrange int := 0;
+begin
+  v_uid := auth.uid();
+
+  if v_uid is null then
+    return query
+    select false, 0, null::uuid,
+      'No autenticado: auth.uid()=null (JWT ausente)';
+    return;
+  end if;
+
+  -- Conteos diagnóstico (lo que el RPC realmente "ve" bajo RLS)
+  select count(*) into v_total
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid;
+
+  select count(*) into v_active
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid
+    and ta.active is true;
+
+  select count(*) into v_inrange
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid
+    and ta.active is true
+    and now() <@ ta.period_tstz;
+
+  -- Caso OK
+  return query
+  select
+    true,
+    coalesce(ta.frequency_minutes, 0),
+    ta.geofence_id,
+    'OK'
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_uid
+    and ta.active is true
+    and now() <@ ta.period_tstz
+  order by lower(ta.period_tstz) desc nulls last
+  limit 1;
+
+  if found then
+    return;
+  end if;
+
+  -- Fallo: devolver diagnóstico completo
+  return query
+  select
+    false,
+    0,
+    null::uuid,
+    'Esperando asignación… diag=' ||
+    json_build_object(
+      'uid', v_uid,
+      'total', v_total,
+      'active', v_active,
+      'in_range', v_inrange
+    )::text;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_can_send"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_can_send_details"() RETURNS TABLE("can_send" boolean, "frequency_minutes" integer, "geofence_id" "uuid", "assignment_id" "uuid", "reason" "text")
+    LANGUAGE "sql" STABLE
+    AS $$
+  /*
+    Wrapper "details" basado en la función existente tracker_can_send().
+
+    - Mantiene compatibilidad: tracker_can_send() NO se toca.
+    - Por ahora assignment_id sale NULL (universal/safe).
+    - Si luego quieres assignment_id real, reemplazas el SELECT por tu lógica real.
+  */
+
+  select
+    t.can_send,
+    t.frequency_minutes,
+    t.geofence_id,
+    null::uuid as assignment_id,
+    t.reason
+  from public.tracker_can_send() as t;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_can_send_details"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_get_my_org"() RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user uuid := auth.uid();
+  v_org uuid;
+begin
+  if v_user is null then
+    return null;
+  end if;
+
+  -- A) Preferido: org desde asignación activa
+  select ta.tenant_id
+    into v_org
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_user
+    and coalesce(ta.active, true) = true
+    and (
+      -- si tienes period (daterange) úsalo
+      (ta.period is not null and ta.period @> current_date)
+      or
+      -- fallback con fechas
+      (ta.period is null and
+        (ta.start_date is null or ta.start_date <= current_date) and
+        (ta.end_date   is null or ta.end_date   >= current_date)
+      )
+    )
+  order by ta.created_at desc
+  limit 1;
+
+  if v_org is not null then
+    return v_org;
+  end if;
+
+  -- B) Fallback: org desde memberships (por si no hay assignment activa todavía)
+  select m.org_id
+    into v_org
+  from public.memberships m
+  where m.user_id = v_user
+  order by coalesce(m.is_default,false) desc, m.created_at desc
+  limit 1;
+
+  return v_org;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_get_my_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_get_org_for_user"("p_user" "uuid") RETURNS "uuid"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select ta.tenant_id
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = p_user
+    and coalesce(ta.active, true) = true
+  order by ta.created_at desc nulls last
+  limit 1
+$$;
+
+
+ALTER FUNCTION "public"."tracker_get_org_for_user"("p_user" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_invites_set_is_active"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Activo = no usado y no expirado
+  new.is_active := (new.used_at is null) and (new.expires_at > now());
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_invites_set_is_active"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_logs_set_geom"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  new.geom := ST_SetSRID(ST_MakePoint(new.lng, new.lat), 4326)::geography;
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."tracker_logs_set_geom"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_logs_upsert_latest"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  insert into public.tracker_latest as tl (user_id, org_id, event, lat, lng, accuracy, ts, geom)
+  values (new.user_id, new.org_id, new.event, new.lat, new.lng, new.accuracy, new.ts, new.geom)
+  on conflict (user_id) do update
+    set org_id   = excluded.org_id,
+        event    = excluded.event,
+        lat      = excluded.lat,
+        lng      = excluded.lng,
+        accuracy = excluded.accuracy,
+        ts       = excluded.ts,
+        geom     = excluded.geom
+    where tl.ts <= excluded.ts;
+  return null;
+end $$;
+
+
+ALTER FUNCTION "public"."tracker_logs_upsert_latest"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_point_in_active_geocercas"("p_tenant_id" "uuid", "p_email" "text", "p_lat" double precision, "p_lng" double precision, "p_now" timestamp with time zone) RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_result jsonb := '[]'::jsonb;
+begin
+  /*
+    Versión simple:
+    - Busca personal por email (ignorando mayúsculas/minúsculas).
+    - Busca asignaciones activas (no borradas, fechas vigentes).
+    - NO hace aún chequeo geométrico ST_Contains (eso lo afinamos luego).
+  */
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'asignacion_id', a.id,
+        'geocerca_id',   a.geocerca_id,
+        'personal_id',   a.personal_id
+      )
+    ),
+    '[]'::jsonb
+  )
+  into v_result
+  from asignaciones a
+  join personal p on p.id = a.personal_id
+  where lower(p.email) = lower(p_email)
+    and coalesce(a.is_deleted, false) = false
+    and (a.estado is null or a.estado <> 'cancelada')
+    and (p_tenant_id is null or a.tenant_id = p_tenant_id)
+    and (a.start_date is null or a.start_date <= p_now)
+    and (a.end_date   is null or a.end_date   >= p_now);
+
+  return v_result;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_point_in_active_geocercas"("p_tenant_id" "uuid", "p_email" "text", "p_lat" double precision, "p_lng" double precision, "p_now" timestamp with time zone) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_positions_bi_set_geocerca"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_user uuid;
+  v_geofence uuid;
+  v_ts timestamptz;
+begin
+  -- created_at por defecto
+  v_ts := coalesce(new.created_at, now());
+  new.created_at := v_ts;
+
+  -- user_id por defecto = auth.uid()
+  v_user := coalesce(new.user_id, auth.uid());
+  new.user_id := v_user;
+
+  -- Si ya viene geocerca_id, no lo pisamos
+  if new.geocerca_id is not null then
+    return new;
+  end if;
+
+  -- Resolver geocerca_id desde asignación vigente
+  -- end_date es INCLUSIVO en tu modelo (por eso BETWEEN)
+  select ta.geofence_id
+    into v_geofence
+  from public.tracker_assignments ta
+  where ta.tracker_user_id = v_user
+    and ta.active is true
+    and (v_ts::date between ta.start_date and ta.end_date)
+  order by ta.start_date desc, ta.created_at desc nulls last, ta.id desc
+  limit 1;
+
+  new.geocerca_id := v_geofence; -- puede quedar null si no hay asignación vigente
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."tracker_positions_bi_set_geocerca"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."tracker_self_provision"("p_frequency_minutes" integer DEFAULT 5, "p_days" integer DEFAULT 30) RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $_$
+declare
+  v_uid uuid := auth.uid();
+  v_email text := nullif(auth.jwt()->>'email','');
+  v_org_id uuid;
+  v_tenant_id uuid;
+  v_geofence_id uuid;
+
+  v_role_type text;
+
+  v_start_date date := current_date;
+  v_end_date date := current_date + greatest(p_days, 1);
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+  end if;
+
+  if v_email is null then
+    v_email := nullif(auth.jwt()->'user_metadata'->>'email','');
+  end if;
+
+  if v_email is null then
+    return jsonb_build_object('ok', false, 'error', 'email_not_in_jwt');
+  end if;
+
+  -- org_id: prioriza is_default=true si existe, sino el más reciente
+  select m.org_id
+  into v_org_id
+  from public.memberships m
+  where m.user_id = v_uid
+  order by coalesce(m.is_default,false) desc, m.created_at desc
+  limit 1;
+
+  if v_org_id is null then
+    return jsonb_build_object('ok', false, 'error', 'no_membership', 'uid', v_uid, 'email', v_email);
+  end if;
+
+  -- tenant_id: canónico via org_tenant_map; fallback geocercas si aún no hay mapa
+  v_tenant_id := public.resolve_tenant_id_for_org(v_org_id);
+
+  if v_tenant_id is null then
+    select g.tenant_id into v_tenant_id
+    from public.geocercas g
+    where g.org_id=v_org_id
+      and g.tenant_id is not null
+      and coalesce(g.is_deleted,false)=false
+    order by g.created_at desc nulls last
+    limit 1;
+  end if;
+
+  if v_tenant_id is null then
+    return jsonb_build_object('ok', false, 'error', 'tenant_unresolved', 'org_id', v_org_id);
+  end if;
+
+  -- set tenant context para pasar enforce_tenant_id() en users_public
+  perform set_config('app.tenant_id', v_tenant_id::text, true);
+
+  -- upsert users_public: satisface FK + setea role tracker + tenant_id correcto
+  select c.udt_name into v_role_type
+  from information_schema.columns c
+  where c.table_schema='public' and c.table_name='users_public' and c.column_name='role';
+
+  execute format($sql$
+    insert into public.users_public (id, email, role, tenant_id)
+    values ($1, $2, $3::%I, $4)
+    on conflict (id) do update
+      set email=excluded.email,
+          role=excluded.role,
+          tenant_id=excluded.tenant_id
+  $sql$, v_role_type)
+  using v_uid, v_email, 'tracker', v_tenant_id;
+
+  -- geofence del org+tenant
+  select g.id into v_geofence_id
+  from public.geocercas g
+  where g.org_id=v_org_id
+    and g.tenant_id=v_tenant_id
+    and coalesce(g.is_deleted,false)=false
+  order by g.created_at desc nulls last
+  limit 1;
+
+  if v_geofence_id is null then
+    return jsonb_build_object('ok', false, 'error', 'no_geocercas', 'org_id', v_org_id, 'tenant_id', v_tenant_id);
+  end if;
+
+  -- crear assignment si falta (NO toca columnas GENERATED como period)
+  if not exists (
+    select 1 from public.tracker_assignments ta
+    where ta.tracker_user_id=v_uid
+      and ta.active=true
+      and ((ta.period_tstz @> now()) or (ta.start_date<=current_date and ta.end_date>=current_date))
+  ) then
+    insert into public.tracker_assignments(
+      tenant_id, tracker_user_id, geofence_id,
+      start_date, end_date,
+      frequency_minutes, active,
+      period_tstz, updated_at
+    ) values (
+      v_tenant_id, v_uid, v_geofence_id,
+      v_start_date, v_end_date,
+      greatest(p_frequency_minutes,1), true,
+      tstzrange(v_start_date::timestamptz, (v_end_date+1)::timestamptz, '[)'),
+      now()
+    );
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'uid', v_uid,
+    'email', v_email,
+    'org_id', v_org_id,
+    'tenant_id', v_tenant_id,
+    'geofence_id', v_geofence_id
+  );
+exception
+  when others then
+    return jsonb_build_object('ok', false, 'error', 'exception', 'message', sqlerrm);
+end;
+$_$;
+
+
+ALTER FUNCTION "public"."tracker_self_provision"("p_frequency_minutes" integer, "p_days" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_asignaciones_ensure_geofence_from_geocerca"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_map_geofence_id uuid;
+  v_geocerca_name text;
+  v_fallback_geofence_id uuid;
+begin
+  if new.geocerca_id is null then
+    return new;
+  end if;
+
+  select m.geofence_id
+  into v_map_geofence_id
+  from public.geocerca_geofence_map m
+  where m.org_id = new.org_id
+    and m.geocerca_id = new.geocerca_id
+  limit 1;
+
+  if v_map_geofence_id is not null then
+    new.geofence_id := v_map_geofence_id;
+    return new;
+  end if;
+
+  if new.geofence_id is not null then
+    insert into public.geocerca_geofence_map (org_id, geocerca_id, geofence_id, updated_at)
+    values (new.org_id, new.geocerca_id, new.geofence_id, now())
+    on conflict (org_id, geocerca_id) do update
+    set geofence_id = excluded.geofence_id,
+        updated_at = now();
+
+    begin
+      update public.geofences
+      set source_geocerca_id = new.geocerca_id
+      where org_id = new.org_id
+        and id = new.geofence_id
+        and source_geocerca_id is null;
+    exception when others then null;
+    end;
+
+    return new;
+  end if;
+
+  select coalesce(nullif(g.name,''), nullif(g.nombre,''), g.id_text, 'Geocerca')
+  into v_geocerca_name
+  from public.geocercas g
+  where g.id = new.geocerca_id
+    and g.org_id = new.org_id
+  limit 1;
+
+  if v_geocerca_name is not null then
+    select gf.id
+    into v_fallback_geofence_id
+    from public.geofences gf
+    where gf.org_id = new.org_id
+      and lower(gf.name) = lower(v_geocerca_name)
+    order by gf.created_at desc nulls last
+    limit 1;
+
+    if v_fallback_geofence_id is not null then
+      new.geofence_id := v_fallback_geofence_id;
+
+      insert into public.geocerca_geofence_map (org_id, geocerca_id, geofence_id, updated_at)
+      values (new.org_id, new.geocerca_id, new.geofence_id, now())
+      on conflict (org_id, geocerca_id) do update
+      set geofence_id = excluded.geofence_id,
+          updated_at = now();
+
+      begin
+        update public.geofences
+        set source_geocerca_id = new.geocerca_id
+        where org_id = new.org_id
+          and id = new.geofence_id
+          and source_geocerca_id is null;
+      exception when others then null;
+      end;
+
+      return new;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_asignaciones_ensure_geofence_from_geocerca"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_asignaciones_sync_tracker_assignments"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- En DELETE hard no tendrás row en tabla; tu app usa soft-delete, igual cubrimos ambos
+  if (tg_op = 'DELETE') then
+    -- Si fue hard delete, intentamos desactivar usando OLD
+    perform public.sync_tracker_assignments_from_asignaciones(old.id);
+    return old;
+  end if;
+
+  -- INSERT / UPDATE
+  perform public.sync_tracker_assignments_from_asignaciones(new.id);
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_asignaciones_sync_tracker_assignments"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_auth_users_ensure_membership"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  perform public.ensure_membership_for_user(new.id);
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."trg_auth_users_ensure_membership"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_auth_users_ensure_tenant"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  begin
+    perform public.ensure_user_tenant(new.id, new.email);
+  exception when others then
+    -- no bloquear signup
+    null;
+  end;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_auth_users_ensure_tenant"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_fill_user_and_created"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  -- Asigna user_id si no viene
+  if NEW.user_id is null then
+    NEW.user_id := auth.uid();
+  end if;
+
+  -- Asigna created_by si existe la columna
+  begin
+    NEW.created_by := coalesce(NEW.created_by, NEW.user_id);
+  exception when undefined_column then
+    null;
+  end;
+
+  -- Maneja timestamps si existen
+  begin
+    if TG_OP = 'INSERT' then
+      NEW.created_at := coalesce(NEW.created_at, now());
+    end if;
+    NEW.updated_at := now();
+  exception when undefined_column then
+    null;
+  end;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_fill_user_and_created"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_fill_user_only"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if NEW.user_id is null then
+    NEW.user_id := auth.uid();
+  end if;
+
+  begin
+    if TG_OP = 'INSERT' then
+      NEW.created_at := coalesce(NEW.created_at, now());
+    end if;
+    NEW.updated_at := now();
+  exception when undefined_column then
+    null;
+  end;
+
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_fill_user_only"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_geocercas_ensure_geofence"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  perform public.ensure_geofence_from_geocerca(new.id);
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_geocercas_ensure_geofence"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_geocercas_force_org_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_uid uuid;
+  v_org uuid;
+begin
+  v_uid := auth.uid();
+
+  -- Solo cuando hay usuario autenticado
+  if v_uid is not null then
+    -- Si org_id viene NULL, lo inferimos por owner
+    if new.org_id is null then
+      v_org := public.get_owner_org_id(v_uid);
+
+      if v_org is null then
+        raise exception 'No se pudo determinar org_id para geocerca (auth.uid=%).', v_uid;
+      end if;
+
+      new.org_id := v_org;
+    end if;
+  end if;
+
+  -- Sincronizar tenant_id <-> org_id para evitar inconsistencias
+  if new.tenant_id is null and new.org_id is not null then
+    new.tenant_id := new.org_id;
+  end if;
+
+  if new.org_id is null and new.tenant_id is not null then
+    new.org_id := new.tenant_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_geocercas_force_org_id"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_geofences_set_org"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- ✅ bypass controlado (solo modo sistema)
+  if public.is_internal_bridge() then
+    return new;
+  end if;
+
+  -- Delegar a la lógica original intacta
+  return public.trg_geofences_set_org_orig();
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_geofences_set_org"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_geofences_set_org_orig"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_uid uuid;
+  v_jwt_role text;
+begin
+  v_uid := auth.uid();
+  v_jwt_role := current_setting('request.jwt.claim.role', true);
+
+  -- ADMIN SAFE
+  if v_uid is null or v_jwt_role in ('service_role','supabase_admin') then
+    return new;
+  end if;
+
+  -- si quieres mantener validación estricta para usuarios normales,
+  -- aquí iría tu lógica original de membership.
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_geofences_set_org_orig"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_org_autojoin_owner"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  perform set_config('row_security','off', true);
+
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  perform public.upsert_org_member(new.id, auth.uid(), 'owner');
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_org_autojoin_owner"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_personal_bi_bu"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  NEW.telefono_norm := public.normalize_phone_for_personal(NEW.telefono);
+
+  IF NEW.position_interval_sec IS NULL OR NEW.position_interval_sec < 300 THEN
+    NEW.position_interval_sec := 300;
+  END IF;
+
+  IF NEW.vigente IS NULL THEN
+    NEW.vigente := true;
+  END IF;
+
+  IF NEW.is_deleted = true AND NEW.deleted_at IS NULL THEN
+    NEW.deleted_at := now();
+    NEW.vigente    := false;
+  END IF;
+
+  NEW.fingerprint := public.personal_compute_fingerprint(
+    NEW.nombre,
+    NEW.apellido,
+    NEW.email,
+    NEW.telefono_norm,
+    NEW.org_id
+  );
+
+  NEW.updated_at := now();
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."trg_personal_bi_bu"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_personal_fill_fields"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.owner_id is null then new.owner_id := auth.uid(); end if;
+  if new.org_id is null then new.org_id := public.get_or_create_default_org_id_for_current_user(); end if;
+  if new.org_id is null then raise exception 'No se pudo crear/determinar org_id para auth.uid=%', auth.uid(); end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_personal_fill_fields"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_personal_set_org_owner"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_uid uuid;
+  v_org_id uuid;
+begin
+  -- Actor: prefer auth.uid() (cuando viene con JWT),
+  -- fallback a NEW.owner_id (cuando viene por service_role).
+  v_uid := auth.uid();
+  if v_uid is null then
+    v_uid := NEW.owner_id;
+  end if;
+
+  -- Si todavía no hay UID, no hay forma segura de inferir org/owner.
+  if v_uid is null then
+    raise exception 'No se pudo determinar current org para el usuario actual (auth.uid=<NULL>).'
+      using errcode = 'P0001';
+  end if;
+
+  -- Asegurar owner_id
+  if NEW.owner_id is null then
+    NEW.owner_id := v_uid;
+  end if;
+
+  -- Si ya viene org_id (ej: desde API), la respetamos.
+  if NEW.org_id is not null then
+    return NEW;
+  end if;
+
+  -- Inferir org desde roles del usuario (prioridad por rol)
+  select aur.org_id
+    into v_org_id
+  from public.app_user_roles aur
+  where aur.user_id = v_uid
+  order by
+    case aur.role
+      when 'owner' then 1
+      when 'admin' then 2
+      when 'tracker' then 3
+      when 'viewer' then 4
+      else 99
+    end
+  limit 1;
+
+  if v_org_id is null then
+    raise exception 'No se pudo determinar current org para el usuario actual (auth.uid=%).', auth.uid()
+      using errcode = 'P0001';
+  end if;
+
+  NEW.org_id := v_org_id;
+  return NEW;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_personal_set_org_owner"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_set_geocerca_id_on_tracker_positions"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_geocerca_id uuid;
+begin
+  -- Si el cliente NO envía geocerca_id, la completamos desde la asignación vigente
+  if new.geocerca_id is null then
+    v_geocerca_id := public.current_geocerca_id_for_tracker(new.user_id);
+
+    if v_geocerca_id is not null then
+      new.geocerca_id := v_geocerca_id;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_set_geocerca_id_on_tracker_positions"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_set_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."trg_set_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_sync_tracker_assignments_from_asignaciones"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if new.geofence_id is null then
+    return new;
+  end if;
+
+  perform public.sync_tracker_assignments_from_asignaciones(new.id);
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_sync_tracker_assignments_from_asignaciones"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_users_public_accept_invites"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  -- Solo intentamos si hay email
+  if new.email is not null and trim(new.email) <> '' then
+    -- No fallar el login si algo raro pasa: swallow errors
+    begin
+      perform public.rpc_accept_pending_invites_for_me();
+    exception when others then
+      null;
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_users_public_accept_invites"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trg_validate_tracker_assignment_geofence"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if new.geofence_id is null then
+    raise exception 'geofence_id es NULL. No se permite tracker_assignment huérfano.';
+  end if;
+
+  if not exists (
+    select 1 from public.geofences gf where gf.id = new.geofence_id
+  ) then
+    raise exception 'Geofence % no existe. No se permite crear tracker_assignment huérfano.', new.geofence_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trg_validate_tracker_assignment_geofence"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."try_app_jwt_tenant_uuid"() RETURNS "uuid"
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v uuid;
+  fn_exists boolean;
+begin
+  select exists(
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'app_jwt_tenant'
+  )
+  into fn_exists;
+
+  if not fn_exists then
+    return null;
+  end if;
+
+  begin
+    execute 'select public.app_jwt_tenant()::uuid' into v;
+    return v;
+  exception when others then
+    return null;
+  end;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."try_app_jwt_tenant_uuid"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_geocerca"("_id" "uuid", "_nombre" "text", "_geometry" "jsonb") RETURNS "public"."geocercas_tbl"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  _user uuid := auth.uid();
+  _g    geometry;
+  _row  geocercas;
+BEGIN
+  IF _user IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  _g := public._geom_from_geometry(_geometry);
+
+  UPDATE public.geocercas
+     SET nombre = _nombre,
+         geom   = _g,  -- <<<<<<<<<<<<<< guarda geometry
+         geojson = jsonb_build_object('type','Feature','properties', jsonb_build_object(), 'geometry', _geometry)
+   WHERE id = _id AND created_by = _user
+  RETURNING * INTO _row;
+
+  IF _row IS NULL THEN
+    RAISE EXCEPTION 'not found or not owner';
+  END IF;
+
+  RETURN _row;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_geocerca"("_id" "uuid", "_nombre" "text", "_geometry" "jsonb") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_org_member"("p_org" "uuid", "p_user" "uuid", "p_role" "text" DEFAULT 'owner'::"text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  perform set_config('row_security','off', true);
+
+  if p_org is null or p_user is null then
+    return;
+  end if;
+
+  insert into public.org_members (org_id, user_id, role, is_active)
+  values (p_org, p_user, p_role, true)
+  on conflict (org_id, user_id)
+  do update
+    set role = excluded.role,
+        is_active = true;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."upsert_org_member"("p_org" "uuid", "p_user" "uuid", "p_role" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_personal"("p_id" "uuid", "p_org_id" "uuid", "p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_raw" "text", "p_documento" "text", "p_vigente" boolean, "p_fecha_inicio" "date", "p_fecha_fin" "date") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  v_my_org uuid;
+  v_my_role text;
+  v_id uuid;
+BEGIN
+  -- Obtener org y rol del usuario autenticado
+  SELECT org_id, role
+    INTO v_my_org, v_my_role
+  FROM public.profiles
+  WHERE id = auth.uid();
+
+  IF v_my_org IS NULL THEN
+    RAISE EXCEPTION 'Perfil sin organización';
+  END IF;
+
+  IF v_my_role IS NULL OR v_my_role NOT IN ('Owner','Admin') THEN
+    RAISE EXCEPTION 'No autorizado: requiere Owner/Admin';
+  END IF;
+
+  IF p_org_id IS NULL OR p_org_id <> v_my_org THEN
+    RAISE EXCEPTION 'org_id inválido o no coincide con la organización del usuario';
+  END IF;
+
+  -- Normalizar teléfono
+  p_telefono_raw := public.fn_normalize_phone_e164(p_telefono_raw, '+593');
+
+  IF p_id IS NULL THEN
+    -- INSERT
+    INSERT INTO public.personal (
+      org_id, nombre, apellido, email, telefono, telefono_raw,
+      documento, vigente, fecha_inicio, fecha_fin
+    ) VALUES (
+      p_org_id, p_nombre, p_apellido, NULLIF(btrim(p_email), ''),
+      p_telefono_raw, NULLIF(btrim(p_telefono_raw), ''),
+      NULLIF(btrim(p_documento), ''), COALESCE(p_vigente, true),
+      p_fecha_inicio, p_fecha_fin
+    )
+    RETURNING id INTO v_id;
+  ELSE
+    -- UPDATE (solo dentro de su org)
+    UPDATE public.personal p
+    SET
+      nombre       = p_nombre,
+      apellido     = p_apellido,
+      email        = NULLIF(btrim(p_email), ''),
+      telefono     = p_telefono_raw,
+      telefono_raw = NULLIF(btrim(p_telefono_raw), ''),
+      documento    = NULLIF(btrim(p_documento), ''),
+      vigente      = COALESCE(p_vigente, true),
+      fecha_inicio = p_fecha_inicio,
+      fecha_fin    = p_fecha_fin
+    WHERE p.id = p_id AND p.org_id = p_org_id
+    RETURNING id INTO v_id;
+
+    IF v_id IS NULL THEN
+      RAISE EXCEPTION 'Registro no encontrado o fuera de su organización';
+    END IF;
+  END IF;
+
+  RETURN v_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."upsert_personal"("p_id" "uuid", "p_org_id" "uuid", "p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_raw" "text", "p_documento" "text", "p_vigente" boolean, "p_fecha_inicio" "date", "p_fecha_fin" "date") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer DEFAULT 5) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_id uuid;
+  v_geofence_id uuid;
+begin
+  -- Si ya existe una asignación activa (y vigente), devolverla
+  select a.id
+  into v_id
+  from public.tracker_assignments a
+  where a.tenant_id = p_tenant_id
+    and a.org_id = p_org_id
+    and a.tracker_user_id = p_tracker_user_id
+    and a.active = true
+    and (a.start_date is null or a.start_date <= now())
+    and (a.end_date   is null or a.end_date   >= now())
+  order by a.created_at desc
+  limit 1;
+
+  if v_id is not null then
+    return v_id;
+  end if;
+
+  -- Buscar geocerca default (tu tabla geocercas sí tiene is_default en tu dump)
+  select g.id
+  into v_geofence_id
+  from public.geocercas g
+  where g.tenant_id = p_tenant_id
+    and g.org_id = p_org_id
+    and coalesce(g.is_deleted,false) = false
+    and coalesce(g.is_default,false) = true
+    and (coalesce(g.activo,true) = true or coalesce(g.active,true) = true)
+  order by g.created_at asc
+  limit 1;
+
+  -- Si no hay default, tomar la primera geocerca activa
+  if v_geofence_id is null then
+    select g.id
+    into v_geofence_id
+    from public.geocercas g
+    where g.tenant_id = p_tenant_id
+      and g.org_id = p_org_id
+      and coalesce(g.is_deleted,false) = false
+      and (coalesce(g.activo,true) = true or coalesce(g.active,true) = true)
+    order by g.created_at asc
+    limit 1;
+  end if;
+
+  insert into public.tracker_assignments (
+    tenant_id, org_id, tracker_user_id, geofence_id, active, frequency_minutes, start_date
+  ) values (
+    p_tenant_id, p_org_id, p_tracker_user_id, v_geofence_id, true, greatest(1, p_frequency_minutes), now()
+  )
+  returning id into v_id;
+
+  return v_id;
+end $$;
+
+
+ALTER FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_frequency_minutes" integer DEFAULT 1, "p_days" integer DEFAULT 30, "p_active" boolean DEFAULT true) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_tracker_user_id uuid;
+  v_geofence_id uuid;
+  v_start date := current_date;
+  v_end date := current_date + p_days;
+  v_id uuid;
+begin
+  -- Resolve tracker user id by email
+  select u.id into v_tracker_user_id
+  from auth.users u
+  where lower(u.email) = lower(p_tracker_email)
+  limit 1;
+
+  if v_tracker_user_id is null then
+    raise exception 'Tracker email not found: %', p_tracker_email;
+  end if;
+
+  -- Resolve geofence id (default or latest)
+  v_geofence_id := public.get_default_geofence_id(p_org_id);
+
+  if v_geofence_id is null then
+    -- No geofences in org -> do not create assignment
+    -- Returning null keeps tracker in "Esperando asignación…"
+    return null;
+  end if;
+
+  -- Upsert assignment
+  insert into public.tracker_assignments (
+    tenant_id,
+    tracker_user_id,
+    geofence_id,
+    start_date,
+    end_date,
+    period,
+    frequency_minutes,
+    active
+  ) values (
+    p_org_id,
+    v_tracker_user_id,
+    v_geofence_id,
+    v_start,
+    v_end,
+    daterange(v_start, v_end, '[]'),
+    greatest(1, p_frequency_minutes),
+    p_active
+  )
+  on conflict (tenant_id, tracker_user_id, geofence_id)
+  do update set
+    start_date = excluded.start_date,
+    end_date = excluded.end_date,
+    period = excluded.period,
+    frequency_minutes = excluded.frequency_minutes,
+    active = excluded.active
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_name" "text" DEFAULT NULL::"text", "p_frequency_minutes" integer DEFAULT 1, "p_days" integer DEFAULT 30, "p_active" boolean DEFAULT true) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_tracker_user_id uuid;
+  v_geofence_id uuid;
+  v_start date := current_date;
+  v_end date := current_date + p_days;
+  v_id uuid;
+begin
+  -- 1) Resolver tracker_user_id por email
+  select u.id
+  into v_tracker_user_id
+  from auth.users u
+  where lower(u.email) = lower(p_tracker_email)
+  limit 1;
+
+  if v_tracker_user_id is null then
+    raise exception 'Tracker email not found: %', p_tracker_email;
+  end if;
+
+  -- 2) Resolver geofence_id
+  if p_geofence_name is not null then
+    select g.id
+    into v_geofence_id
+    from public.geofences g
+    where g.org_id = p_org_id
+      and lower(g.name) = lower(p_geofence_name)
+    order by g.created_at desc
+    limit 1;
+  else
+    -- fallback: última geocerca creada de la org
+    select g.id
+    into v_geofence_id
+    from public.geofences g
+    where g.org_id = p_org_id
+    order by g.created_at desc
+    limit 1;
+  end if;
+
+  if v_geofence_id is null then
+    raise exception 'No geofence found for org %', p_org_id;
+  end if;
+
+  -- 3) Upsert de asignación
+  insert into public.tracker_assignments (
+    tenant_id,
+    tracker_user_id,
+    geofence_id,
+    start_date,
+    end_date,
+    period,
+    frequency_minutes,
+    active
+  ) values (
+    p_org_id,
+    v_tracker_user_id,
+    v_geofence_id,
+    v_start,
+    v_end,
+    daterange(v_start, v_end, '[]'),
+    greatest(1, p_frequency_minutes),
+    p_active
+  )
+  on conflict (tenant_id, tracker_user_id, geofence_id)
+  do update set
+    start_date = excluded.start_date,
+    end_date = excluded.end_date,
+    period = excluded.period,
+    frequency_minutes = excluded.frequency_minutes,
+    active = excluded.active
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_name" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer DEFAULT 5, "p_start_at" timestamp with time zone DEFAULT "now"(), "p_end_at" timestamp with time zone DEFAULT ("now"() + '30 days'::interval)) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_id uuid;
+  v_geofence_id uuid;
+  v_now timestamptz := now();
+  v_range tstzrange;
+  v_start_date date;
+  v_end_date date;
+begin
+  -- ✅ Recomendado: que esto lo llame backend/edge con service_role
+  -- Si hoy lo llamas desde frontend, comenta este bloque temporalmente,
+  -- pero lo correcto (permanente) es service_role.
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  if p_tenant_id is null or p_org_id is null or p_tracker_user_id is null then
+    raise exception 'missing_required_params' using errcode = '22004';
+  end if;
+
+  if p_end_at <= p_start_at then
+    raise exception 'end_at_must_be_after_start_at' using errcode = '22007';
+  end if;
+
+  v_range := tstzrange(p_start_at, p_end_at, '[)');
+  v_start_date := (p_start_at)::date;
+  v_end_date := (p_end_at)::date;
+
+  -- 1) Si ya existe una asignación activa y vigente (por hora exacta), devolverla
+  select a.id
+  into v_id
+  from public.tracker_assignments a
+  where a.tenant_id = p_tenant_id
+    and a.org_id = p_org_id
+    and a.tracker_user_id = p_tracker_user_id
+    and a.active = true
+    and a.period_tstz is not null
+    and a.period_tstz @> v_now
+  order by a.created_at desc
+  limit 1;
+
+  if v_id is not null then
+    return v_id;
+  end if;
+
+  -- 2) Buscar geocerca default
+  select g.id
+  into v_geofence_id
+  from public.geocercas g
+  where g.tenant_id = p_tenant_id
+    and g.org_id = p_org_id
+    and coalesce(g.is_deleted,false) = false
+    and coalesce(g.is_default,false) = true
+    and (coalesce(g.activo,true) = true or coalesce(g.active,true) = true)
+  order by g.created_at asc
+  limit 1;
+
+  -- 3) Si no hay default, tomar la primera geocerca activa
+  if v_geofence_id is null then
+    select g.id
+    into v_geofence_id
+    from public.geocercas g
+    where g.tenant_id = p_tenant_id
+      and g.org_id = p_org_id
+      and coalesce(g.is_deleted,false) = false
+      and (coalesce(g.activo,true) = true or coalesce(g.active,true) = true)
+    order by g.created_at asc
+    limit 1;
+  end if;
+
+  if v_geofence_id is null then
+    raise exception 'no_geofence_available_for_org' using errcode = 'P0001';
+  end if;
+
+  -- 4) Insert nuevo assignment con period_tstz
+  insert into public.tracker_assignments (
+    tenant_id, org_id, tracker_user_id, geofence_id,
+    active, frequency_minutes,
+    period_tstz,
+    -- legacy
+    start_date, end_date, period
+  ) values (
+    p_tenant_id, p_org_id, p_tracker_user_id, v_geofence_id,
+    true, greatest(1, coalesce(p_frequency_minutes, 1)),
+    v_range,
+    v_start_date, v_end_date, daterange(v_start_date, (v_end_date + 1), '[)')
+  )
+  returning id into v_id;
+
+  return v_id;
+end
+$$;
+
+
+ALTER FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer DEFAULT 1, "p_days" integer DEFAULT 30, "p_active" boolean DEFAULT true) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  v_tracker_user_id uuid;
+  v_start date := current_date;
+  v_end date := current_date + p_days;
+  v_id uuid;
+begin
+  -- 1) resolver tracker_user_id por email en auth.users
+  select u.id into v_tracker_user_id
+  from auth.users u
+  where lower(u.email) = lower(p_tracker_email)
+  limit 1;
+
+  if v_tracker_user_id is null then
+    raise exception 'Tracker email not found in auth.users: %', p_tracker_email;
+  end if;
+
+  -- 2) si existe una asignación para ese tracker+org+geofence, actualiza; si no, inserta
+  insert into public.tracker_assignments (
+    tenant_id, tracker_user_id, geofence_id,
+    start_date, end_date, period,
+    frequency_minutes, active
+  ) values (
+    p_org_id, v_tracker_user_id, p_geofence_id,
+    v_start, v_end, daterange(v_start, v_end, '[]'),
+    greatest(1, p_frequency_minutes), p_active
+  )
+  on conflict (tenant_id, tracker_user_id, geofence_id)
+  do update set
+    start_date = excluded.start_date,
+    end_date = excluded.end_date,
+    period = excluded.period,
+    frequency_minutes = excluded.frequency_minutes,
+    active = excluded.active
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer DEFAULT 1, "p_start_at" timestamp with time zone DEFAULT "now"(), "p_end_at" timestamp with time zone DEFAULT ("now"() + '30 days'::interval), "p_active" boolean DEFAULT true) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_tracker_user_id uuid;
+  v_id uuid;
+  v_range tstzrange;
+  v_start_date date;
+  v_end_date date;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  if p_org_id is null or p_geofence_id is null or p_tracker_email is null then
+    raise exception 'missing_required_params' using errcode = '22004';
+  end if;
+
+  if p_end_at <= p_start_at then
+    raise exception 'end_at_must_be_after_start_at' using errcode = '22007';
+  end if;
+
+  -- 1) resolver tracker_user_id por email
+  select u.id into v_tracker_user_id
+  from auth.users u
+  where lower(u.email) = lower(p_tracker_email)
+  limit 1;
+
+  if v_tracker_user_id is null then
+    raise exception 'Tracker email not found in auth.users: %', p_tracker_email;
+  end if;
+
+  v_range := tstzrange(p_start_at, p_end_at, '[)');
+  v_start_date := (p_start_at)::date;
+  v_end_date := (p_end_at)::date;
+
+  -- 2) UPSERT con period_tstz
+  insert into public.tracker_assignments (
+    tenant_id, tracker_user_id, geofence_id,
+    period_tstz,
+    -- legacy
+    start_date, end_date, period,
+    frequency_minutes, active
+  ) values (
+    p_org_id, v_tracker_user_id, p_geofence_id,
+    v_range,
+    v_start_date, v_end_date, daterange(v_start_date, (v_end_date + 1), '[)'),
+    greatest(1, p_frequency_minutes), p_active
+  )
+  on conflict (tenant_id, tracker_user_id, geofence_id)
+  do update set
+    period_tstz = excluded.period_tstz,
+    start_date = excluded.start_date,
+    end_date = excluded.end_date,
+    period = excluded.period,
+    frequency_minutes = excluded.frequency_minutes,
+    active = excluded.active
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_active" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."upsert_users_public_from_uid"("p_uid" "uuid", "p_email" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_role public.app_role;
+begin
+  if p_uid is null then
+    raise exception 'p_uid is null';
+  end if;
+
+  if p_email is null or length(trim(p_email)) = 0 then
+    -- email puede ser null en algunos proveedores; no insertamos en ese caso
+    return;
+  end if;
+
+  v_role := public.compute_effective_app_role(p_uid);
+
+  insert into public.users_public (id, email, role, tenant_id)
+  values (p_uid, p_email, v_role, null)
+  on conflict (id) do update
+    set email = excluded.email,
+        role  = excluded.role;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."upsert_users_public_from_uid"("p_uid" "uuid", "p_email" "text") OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."_backup_geocercas_clone" (
+    "backed_up_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "reason" "text" DEFAULT 'clone_geocercas_and_remap_fks'::"text" NOT NULL,
+    "row_data" "jsonb" NOT NULL
+);
+
+
+ALTER TABLE "public"."_backup_geocercas_clone" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."activities" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "name" "text" NOT NULL,
+    "active" boolean DEFAULT true NOT NULL,
+    "description" "text",
+    "hourly_rate" numeric(12,2),
+    "currency_code" "text",
+    "created_at" timestamp with time zone DEFAULT "timezone"('utc'::"text", "now"()) NOT NULL,
+    "created_by" "uuid",
+    "org_id" "uuid"
+);
+
+ALTER TABLE ONLY "public"."activities" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."activities" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."activities"."hourly_rate" IS 'Tarifa por hora de la actividad (módulo de costos).';
+
+
+
+COMMENT ON COLUMN "public"."activities"."currency_code" IS 'Código de moneda ISO 4217 (ej: USD, EUR, PEN) para la tarifa horaria.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."activity_assignments" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "tracker_user_id" "uuid" NOT NULL,
+    "activity_id" "uuid" NOT NULL,
+    "start_date" "date" NOT NULL,
+    "end_date" "date" NOT NULL,
+    CONSTRAINT "chk_aa_dates" CHECK (("start_date" <= "end_date"))
+);
+
+
+ALTER TABLE "public"."activity_assignments" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."activity_rates" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "activity_id" "uuid" NOT NULL,
+    "usd_per_day" numeric(10,2) NOT NULL,
+    "start_date" "date" NOT NULL,
+    "end_date" "date",
+    CONSTRAINT "chk_ar_dates" CHECK ((("end_date" IS NULL) OR ("start_date" <= "end_date")))
+);
+
+
+ALTER TABLE "public"."activity_rates" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."admins" (
+    "email" "text" NOT NULL,
+    "name" "text",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+ALTER TABLE ONLY "public"."admins" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."admins" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."app_root_owner" (
+    "id" "uuid" NOT NULL,
+    "email" "text" NOT NULL
+);
+
+
+ALTER TABLE "public"."app_root_owner" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."app_root_owners" (
+    "user_id" "uuid" NOT NULL,
+    "active" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."app_root_owners" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."app_root_owners" IS 'Lista canónica de usuarios ROOT (superadmin) que pueden invitar admins/owners.';
+
+
+
+COMMENT ON COLUMN "public"."app_root_owners"."user_id" IS 'auth.users.id del ROOT';
+
+
+
+COMMENT ON COLUMN "public"."app_root_owners"."active" IS 'Si false, ese ROOT queda revocado';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."app_root_users" (
+    "user_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."app_root_users" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."app_settings" (
+    "key" "text" NOT NULL,
+    "value" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_by" "uuid"
+);
+
+
+ALTER TABLE "public"."app_settings" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."app_settings" IS 'Configuraciones globales de la app (no por org).';
+
+
+
+COMMENT ON COLUMN "public"."app_settings"."key" IS 'Clave única (ej: app_root_emails).';
+
+
+
+COMMENT ON COLUMN "public"."app_settings"."value" IS 'JSONB: valor de configuración.';
+
+
+
+COMMENT ON COLUMN "public"."app_settings"."updated_by" IS 'auth.uid() que actualizó.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."app_superadmins" (
+    "user_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."app_superadmins" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."app_superadmins" IS 'Usuarios root (superadmin) a nivel APP, global. Fuente universal de acceso a /admins.';
+
+
+
+COMMENT ON COLUMN "public"."app_superadmins"."user_id" IS 'auth.users.id del root.';
+
+
+
+COMMENT ON COLUMN "public"."app_superadmins"."created_by" IS 'auth.uid() que lo creó (si aplica).';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."app_user_roles" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "role" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "app_user_roles_role_check" CHECK (("role" = ANY (ARRAY['owner'::"text", 'admin'::"text", 'tracker'::"text"])))
+);
+
+
+ALTER TABLE "public"."app_user_roles" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."asistencias" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "fecha" "date" DEFAULT (CURRENT_DATE AT TIME ZONE 'UTC'::"text") NOT NULL,
+    "check_in" timestamp with time zone,
+    "check_out" timestamp with time zone,
+    "geocerca_id" "uuid",
+    "lat_in" double precision,
+    "lng_in" double precision,
+    "lat_out" double precision,
+    "lng_out" double precision,
+    "status" "text" GENERATED ALWAYS AS (
+CASE
+    WHEN (("check_in" IS NOT NULL) AND ("check_out" IS NOT NULL)) THEN 'COMPLETADO'::"text"
+    WHEN (("check_in" IS NOT NULL) AND ("check_out" IS NULL)) THEN 'EN_PROGRESO'::"text"
+    ELSE 'PENDIENTE'::"text"
+END) STORED,
+    "notas" "text",
+    "inserted_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."asistencias" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."attendance_events" (
+    "id" bigint NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "geofence_id" "uuid" NOT NULL,
+    "kind" "public"."attendance_kind" NOT NULL,
+    "ts" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."attendance_events" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."attendance_events_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."attendance_events_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."attendance_events_id_seq" OWNED BY "public"."attendance_events"."id";
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."attendances" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "email" "text" NOT NULL,
+    "role" "text" NOT NULL,
+    "type" "text" NOT NULL,
+    "lat" double precision NOT NULL,
+    "lng" double precision NOT NULL,
+    "accuracy_m" double precision,
+    "inside_geofence" boolean NOT NULL,
+    "distance_m" integer,
+    "geofence_name" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    CONSTRAINT "attendances_type_check" CHECK (("type" = ANY (ARRAY['check_in'::"text", 'check_out'::"text"])))
+);
+
+ALTER TABLE ONLY "public"."attendances" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."attendances" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."audit_log" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "actor" "uuid",
+    "action" "text" NOT NULL,
+    "entity" "text",
+    "entity_id" "uuid",
+    "details" "jsonb"
+);
+
+
+ALTER TABLE "public"."audit_log" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."auth_signup_debug" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "user_id" "uuid",
+    "email" "text",
+    "stage" "text",
+    "err_message" "text",
+    "err_detail" "text",
+    "err_hint" "text",
+    "err_context" "text"
+);
+
+
+ALTER TABLE "public"."auth_signup_debug" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."auth_signup_debug_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."auth_signup_debug_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."auth_signup_debug_id_seq" OWNED BY "public"."auth_signup_debug"."id";
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."geocerca_geofence_map" (
+    "org_id" "uuid" NOT NULL,
+    "geocerca_id" "uuid" NOT NULL,
+    "geofence_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."geocerca_geofence_map" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."geocercas" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "descripcion" "text",
+    "polygon" "jsonb",
+    "usuario_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "active" boolean DEFAULT true,
+    "nombre" "text",
+    "geom" "jsonb",
+    "created_by" "uuid",
+    "id_text" "text" GENERATED ALWAYS AS (("id")::"text") STORED,
+    "org_id" "uuid" NOT NULL,
+    "geojson" "jsonb",
+    "lat" double precision,
+    "lng" double precision,
+    "radius_m" integer,
+    "visible" boolean DEFAULT true,
+    "updated_by" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "bbox" "jsonb",
+    "personal_ids" "uuid"[] DEFAULT '{}'::"uuid"[],
+    "asignacion_ids" "uuid"[] DEFAULT '{}'::"uuid"[],
+    "activa" boolean DEFAULT true NOT NULL,
+    "geometry" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "activo" boolean DEFAULT true NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "nombre_ci" "text" GENERATED ALWAYS AS ("lower"("nombre")) STORED,
+    "is_deleted" boolean DEFAULT false NOT NULL
+);
+
+ALTER TABLE ONLY "public"."geocercas" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."geocercas" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."geocercas_backup_legacy" (
+    "id" "uuid",
+    "name" "text",
+    "descripcion" "text",
+    "polygon" "jsonb",
+    "usuario_id" "uuid",
+    "created_at" timestamp with time zone,
+    "active" boolean,
+    "nombre" "text",
+    "geom" "jsonb",
+    "created_by" "uuid",
+    "id_text" "text",
+    "org_id" "uuid",
+    "geojson" "jsonb",
+    "lat" double precision,
+    "lng" double precision,
+    "radius_m" integer,
+    "visible" boolean,
+    "updated_by" "uuid",
+    "updated_at" timestamp with time zone,
+    "bbox" "jsonb",
+    "personal_ids" "uuid"[],
+    "asignacion_ids" "uuid"[],
+    "activa" boolean,
+    "geometry" "jsonb",
+    "activo" boolean
+);
+
+
+ALTER TABLE "public"."geocercas_backup_legacy" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."geocercas_feature" AS
+ SELECT "id",
+    "id_text",
+    COALESCE("nombre", "name") AS "nombre",
+    "descripcion",
+    "jsonb_build_object"('type', 'Feature', 'properties', "jsonb_build_object"('id', ("id")::"text", 'id_text', "id_text", 'nombre', COALESCE("nombre", "name"), 'descripcion', "descripcion"), 'geometry', "geom") AS "feature"
+   FROM "public"."geocercas" "g";
+
+
+ALTER VIEW "public"."geocercas_feature" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."geocercas_geojson" AS
+ SELECT "id",
+    "id_text",
+    COALESCE("nombre", "name") AS "nombre",
+    "descripcion",
+    "geom" AS "geojson"
+   FROM "public"."geocercas" "g";
+
+
+ALTER VIEW "public"."geocercas_geojson" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."geocercas_tbl" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."geocercas_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE OR REPLACE VIEW "public"."geocercas_org" AS
+ SELECT "id",
+    "name",
+    "descripcion",
+    "polygon",
+    "usuario_id",
+    "created_at",
+    "active",
+    "nombre",
+    "geom",
+    "created_by",
+    "id_text",
+    "org_id"
+   FROM "public"."geocercas"
+  WHERE ("org_id" = "app"."current_org_id"());
+
+
+ALTER VIEW "public"."geocercas_org" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."geocercas_v" AS
+ SELECT ("id")::"text" AS "id",
+    "nombre",
+    COALESCE("color", '#3388ff'::"text") AS "color",
+    COALESCE("coords", "public"."geojson_to_coords"("geojson")) AS "coords",
+    "geojson",
+    "owner_id",
+    "created_at",
+    "updated_at"
+   FROM "public"."geocercas_tbl";
+
+
+ALTER VIEW "public"."geocercas_v" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."geofence_assignments" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tracker_email" "text" NOT NULL,
+    "geofence_id" "uuid" NOT NULL,
+    "active" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."geofence_assignments" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."geofence_bridge_errors" (
+    "id" bigint NOT NULL,
+    "geocerca_id" "uuid" NOT NULL,
+    "error_message" "text" NOT NULL,
+    "geojson_type" "text",
+    "geojson_head" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."geofence_bridge_errors" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."geofence_bridge_errors_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."geofence_bridge_errors_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."geofence_bridge_errors_id_seq" OWNED BY "public"."geofence_bridge_errors"."id";
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."geofence_events" (
+    "id" bigint NOT NULL,
+    "user_id" "text" NOT NULL,
+    "geofence_id" "uuid" NOT NULL,
+    "event" "text" NOT NULL,
+    "ts" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "geofence_events_event_check" CHECK (("event" = ANY (ARRAY['enter'::"text", 'exit'::"text"])))
+);
+
+
+ALTER TABLE "public"."geofence_events" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."geofence_events" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."geofence_events_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."geofence_members" (
+    "geofence_id" "uuid" NOT NULL,
+    "user_id" "text" NOT NULL
+);
+
+
+ALTER TABLE "public"."geofence_members" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."geofences" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "polygon_geojson" "jsonb",
+    "active" boolean DEFAULT true,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid",
+    "lat" double precision,
+    "lng" double precision,
+    "radius_m" integer DEFAULT 100 NOT NULL,
+    "description" "text",
+    "user_id" "uuid" DEFAULT "auth"."uid"() NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "geojson" "jsonb" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "geom" "public"."geometry"(MultiPolygon,4326) NOT NULL,
+    "updated_by" "uuid",
+    "bbox" double precision[] GENERATED ALWAYS AS (
+CASE
+    WHEN ("geom" IS NULL) THEN NULL::double precision[]
+    ELSE ARRAY["public"."st_xmin"(("geom")::"public"."box3d"), "public"."st_ymin"(("geom")::"public"."box3d"), "public"."st_xmax"(("geom")::"public"."box3d"), "public"."st_ymax"(("geom")::"public"."box3d")]
+END) STORED,
+    "is_default" boolean DEFAULT false NOT NULL,
+    "source_geocerca_id" "uuid",
+    CONSTRAINT "geofences_shape_ck" CHECK ((("polygon_geojson" IS NOT NULL) OR (("lat" IS NOT NULL) AND ("lng" IS NOT NULL) AND ("radius_m" IS NOT NULL))))
+);
+
+ALTER TABLE ONLY "public"."geofences" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."geofences" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."geofences_compat" AS
+ SELECT "id",
+    "org_id",
+    "name",
+    "descripcion" AS "description",
+    "active",
+    "created_at",
+    "updated_at",
+    "geojson",
+    "lat",
+    "lng",
+    "radius_m",
+    "bbox"
+   FROM "public"."geocercas" "g";
+
+
+ALTER VIEW "public"."geofences_compat" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."geofences_geojson" AS
+ SELECT "id",
+    "name",
+    "org_id",
+    "created_at",
+    "updated_at",
+    "to_jsonb"(("public"."st_asgeojson"("geom"))::json) AS "geojson",
+    "jsonb_build_array"("public"."st_xmin"(("geom")::"public"."box3d"), "public"."st_ymin"(("geom")::"public"."box3d"), "public"."st_xmax"(("geom")::"public"."box3d"), "public"."st_ymax"(("geom")::"public"."box3d")) AS "bbox"
+   FROM "public"."geofences" "g";
+
+
+ALTER VIEW "public"."geofences_geojson" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."positions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "personal_id" "uuid",
+    "asignacion_id" "uuid",
+    "lat" double precision NOT NULL,
+    "lng" double precision NOT NULL,
+    "accuracy" double precision,
+    "speed" double precision,
+    "heading" double precision,
+    "battery" integer,
+    "is_mock" boolean DEFAULT false,
+    "source" "text" DEFAULT 'tracker_app'::"text",
+    "recorded_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE ONLY "public"."positions" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."positions" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."latest_positions_by_user" AS
+ WITH "ranked" AS (
+         SELECT "p"."id",
+            "p"."org_id",
+            "p"."user_id",
+            "p"."personal_id",
+            "p"."asignacion_id",
+            "p"."lat",
+            "p"."lng",
+            "p"."accuracy",
+            "p"."speed",
+            "p"."heading",
+            "p"."battery",
+            "p"."is_mock",
+            "p"."source",
+            "p"."recorded_at",
+            "p"."created_at",
+            "row_number"() OVER (PARTITION BY "p"."user_id" ORDER BY "p"."recorded_at" DESC) AS "rn"
+           FROM "public"."positions" "p"
+        )
+ SELECT "id",
+    "org_id",
+    "user_id",
+    "personal_id",
+    "asignacion_id",
+    "lat",
+    "lng",
+    "accuracy",
+    "speed",
+    "heading",
+    "battery",
+    "is_mock",
+    "source",
+    "recorded_at",
+    "created_at",
+    (EXTRACT(epoch FROM ("now"() - "recorded_at")) / 60.0) AS "age_minutes"
+   FROM "ranked"
+  WHERE ("rn" = 1);
+
+
+ALTER VIEW "public"."latest_positions_by_user" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tracker_locations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "tracker_id" "uuid" NOT NULL,
+    "org_id" "uuid",
+    "lat" numeric(10,7) NOT NULL,
+    "lng" numeric(10,7) NOT NULL,
+    "accuracy" numeric(8,2),
+    "speed" numeric(8,2),
+    "heading" numeric(6,2),
+    "battery" integer,
+    "provider" "text",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."tracker_locations" OWNER TO "postgres";
+
+
+CREATE MATERIALIZED VIEW "public"."latest_tracker_position" AS
+ SELECT DISTINCT ON ("tracker_id") "tracker_id",
+    "org_id",
+    "lat",
+    "lng",
+    "accuracy",
+    "speed",
+    "heading",
+    "battery",
+    "provider",
+    "created_at"
+   FROM "public"."tracker_locations"
+  ORDER BY "tracker_id", "created_at" DESC
+  WITH NO DATA;
+
+
+ALTER MATERIALIZED VIEW "public"."latest_tracker_position" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."my_memberships_app" AS
+ SELECT "id" AS "org_id",
+    "name" AS "org_name",
+    NULL::"text" AS "org_code",
+    "owner_id" AS "user_id"
+   FROM "public"."organizations" "o";
+
+
+ALTER VIEW "public"."my_memberships_app" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."my_org_ids" AS
+ SELECT DISTINCT "org_id"
+   FROM "public"."memberships" "m"
+  WHERE (("user_id" = "auth"."uid"()) AND ("revoked_at" IS NULL));
+
+
+ALTER VIEW "public"."my_org_ids" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."my_org_ids_admin" AS
+ SELECT DISTINCT "m"."user_id",
+    "m"."org_id",
+    "o"."name" AS "org_name",
+    "m"."role",
+    "m"."revoked_at",
+    "m"."created_at"
+   FROM ("public"."memberships" "m"
+     JOIN "public"."organizations" "o" ON (("o"."id" = "m"."org_id")));
+
+
+ALTER VIEW "public"."my_org_ids_admin" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_billing" (
+    "org_id" "uuid" NOT NULL,
+    "plan_code" "text" DEFAULT 'starter'::"text" NOT NULL,
+    "tracker_limit_override" integer,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."org_billing" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_invites" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "email" "text" NOT NULL,
+    "role" "text" NOT NULL,
+    "invited_by" "uuid" NOT NULL,
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "timezone"('utc'::"text", "now"()) NOT NULL,
+    "accepted_at" timestamp with time zone,
+    "revoked_at" timestamp with time zone,
+    CONSTRAINT "org_invites_role_check" CHECK (("role" = ANY (ARRAY['owner'::"text", 'admin'::"text", 'tracker'::"text"]))),
+    CONSTRAINT "org_invites_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'accepted'::"text", 'revoked'::"text"])))
+);
+
+ALTER TABLE ONLY "public"."org_invites" FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."org_invites" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_members" (
+    "org_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "role" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL,
+    CONSTRAINT "org_members_role_check" CHECK (("role" = ANY (ARRAY['admin'::"text", 'owner'::"text", 'tracker'::"text"])))
+);
+
+
+ALTER TABLE "public"."org_members" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."org_memberships" AS
+ SELECT "org_id",
+    "user_id",
+    "role"
+   FROM "public"."app_user_roles";
+
+
+ALTER VIEW "public"."org_memberships" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_people" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "person_id" "uuid" NOT NULL,
+    "vigente" boolean DEFAULT true NOT NULL,
+    "is_deleted" boolean DEFAULT false NOT NULL,
+    "deleted_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone,
+    CONSTRAINT "org_people_vigente_is_deleted_chk" CHECK ((NOT (("vigente" = true) AND ("is_deleted" = true))))
+);
+
+
+ALTER TABLE "public"."org_people" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_tenant_map" (
+    "org_id" "uuid" NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "source" "text" DEFAULT 'geocercas'::"text" NOT NULL
+);
+
+
+ALTER TABLE "public"."org_tenant_map" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."org_users" (
+    "user_id" "uuid" NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "role" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "org_users_role_check" CHECK (("role" = ANY (ARRAY['owner'::"text", 'admin'::"text", 'tracker'::"text"])))
+);
+
+
+ALTER TABLE "public"."org_users" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."organizations_backup_1" (
+    "id" "uuid",
+    "name" "text",
+    "owner_id" "uuid",
+    "plan" "public"."plan_code",
+    "created_at" timestamp with time zone,
+    "slug" "text",
+    "created_by" "uuid",
+    "updated_at" timestamp with time zone,
+    "active" boolean,
+    "logo_url" "text"
+);
+
+
+ALTER TABLE "public"."organizations_backup_1" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."organizations_readable" AS
+ SELECT "id",
+    "name",
+    "owner_id",
+    "plan",
+    "created_at",
+    "slug",
+    "created_by",
+    "updated_at",
+    "active"
+   FROM "public"."organizations" "o"
+  WHERE (("owner_id" = "auth"."uid"()) OR "public"."is_member_of_org"("id"));
+
+
+ALTER VIEW "public"."organizations_readable" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."orgs" AS
+ SELECT "id",
+    "name"
+   FROM "public"."organizations"
+  WHERE ((COALESCE("active", true) = true) AND (COALESCE("suspended", false) = false));
+
+
+ALTER VIEW "public"."orgs" OWNER TO "postgres";
+
+
+COMMENT ON VIEW "public"."orgs" IS 'Vista canónica para consumo frontend. Alias estable hacia public.organizations.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."orgs_backup_1" (
+    "id" "uuid",
+    "name" "text",
+    "created_at" timestamp with time zone,
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."orgs_backup_1" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."orgs_legacy" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."orgs_legacy" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."pending_invites" (
+    "email" "text" NOT NULL,
+    "role_id" "uuid" NOT NULL,
+    "created_by" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "role" "text",
+    "target_org_id" "uuid",
+    "personal_org_name" "text",
+    "claim_code" "text",
+    "status" "text",
+    "expires_at" timestamp with time zone,
+    "claimed_by" "uuid",
+    "claimed_at" timestamp with time zone,
+    CONSTRAINT "pending_invites_pending_requires_fields" CHECK ((("status" <> 'pending'::"text") OR (("email" IS NOT NULL) AND ("role" IS NOT NULL) AND ("claim_code" IS NOT NULL) AND ("expires_at" IS NOT NULL)))),
+    CONSTRAINT "pending_invites_role_check" CHECK ((("role" IS NULL) OR ("role" = ANY (ARRAY['owner'::"text", 'admin'::"text", 'tracker'::"text", 'viewer'::"text"])))),
+    CONSTRAINT "pending_invites_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'claimed'::"text", 'revoked'::"text", 'expired'::"text"])))
+);
+
+
+ALTER TABLE "public"."pending_invites" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."people" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "email" "text",
+    "email_norm" "text" GENERATED ALWAYS AS (NULLIF("lower"(TRIM(BOTH FROM "email")), ''::"text")) STORED,
+    "telefono" "text",
+    "phone_norm" "text" GENERATED ALWAYS AS (NULLIF(TRIM(BOTH FROM "telefono"), ''::"text")) STORED,
+    "documento" "text",
+    "documento_norm" "text" GENERATED ALWAYS AS (NULLIF("upper"(TRIM(BOTH FROM "documento")), ''::"text")) STORED,
+    "nombre" "text",
+    "apellido" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone
+);
+
+
+ALTER TABLE "public"."people" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."personas" (
+    "id" bigint NOT NULL,
+    "nombre" "text" NOT NULL,
+    "apellido" "text",
+    "email" "text"
+);
+
+
+ALTER TABLE "public"."personas" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."personas_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."personas_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."personas_id_seq" OWNED BY "public"."personas"."id";
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."plan_limits" (
+    "plan" "text" NOT NULL,
+    "max_geocercas" integer NOT NULL,
+    "max_trackers" integer NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."plan_limits" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."plans" (
+    "code" "public"."plan_code" NOT NULL,
+    "name" "text" NOT NULL,
+    "geofence_limit" integer NOT NULL,
+    "tracker_limit" integer NOT NULL,
+    "price_month_usd" numeric NOT NULL
+);
+
+
+ALTER TABLE "public"."plans" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."posiciones" (
+    "id" bigint NOT NULL,
+    "tracker_id" "uuid" NOT NULL,
+    "geocerca_id" "uuid",
+    "lat" double precision NOT NULL,
+    "lng" double precision NOT NULL,
+    "timestamp" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."posiciones" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."posiciones" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."posiciones_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."position_events" (
+    "id" bigint NOT NULL,
+    "tenant_id" "uuid" NOT NULL,
+    "tracker_user_id" "uuid" NOT NULL,
+    "geofence_id" "uuid" NOT NULL,
+    "ts" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "lat" double precision NOT NULL,
+    "lng" double precision NOT NULL,
+    "inside" boolean NOT NULL,
+    "source" "text" DEFAULT 'web'::"text",
+    "meta" "jsonb" DEFAULT '{}'::"jsonb"
+);
+
+
+ALTER TABLE "public"."position_events" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."position_events_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."position_events_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."position_events_id_seq" OWNED BY "public"."position_events"."id";
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."profiles_backup_1" (
+    "id" "uuid",
+    "email" "text",
+    "full_name" "text",
+    "created_at" timestamp with time zone,
+    "is_active" boolean,
+    "role_id" "uuid",
+    "org_id" "uuid",
+    "role" "text",
+    "tenant_id" "uuid",
+    "user_id" "uuid",
+    "active_tenant_id" "uuid",
+    "default_org_id" "uuid",
+    "current_org_id" "uuid"
+);
+
+
+ALTER TABLE "public"."profiles_backup_1" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."profiles_block_log" (
+    "id" bigint NOT NULL,
+    "happened_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "op" "text" NOT NULL,
+    "new_id" "uuid",
+    "new_email" "text",
+    "new_role_id" "uuid",
+    "new_org_id" "uuid",
+    "jwt_sub" "text",
+    "jwt_email" "text",
+    "db_user" "text",
+    "query_text" "text"
+);
+
+
+ALTER TABLE "public"."profiles_block_log" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."profiles_block_log_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."profiles_block_log_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."profiles_block_log_id_seq" OWNED BY "public"."profiles_block_log"."id";
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."role_map_membership_to_app" (
+    "membership_role" "text" NOT NULL,
+    "app_role" "text" NOT NULL
+);
+
+
+ALTER TABLE "public"."role_map_membership_to_app" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."roles" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "slug" "text",
+    CONSTRAINT "roles_name_check" CHECK (("char_length"("name") > 0))
+);
+
+
+ALTER TABLE "public"."roles" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."sync_errors" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "asignacion_id" "uuid",
+    "error_text" "text"
+);
+
+
+ALTER TABLE "public"."sync_errors" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."sync_errors_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE "public"."sync_errors_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."sync_errors_id_seq" OWNED BY "public"."sync_errors"."id";
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."tenants" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "name" "text" NOT NULL,
+    "owner_user_id" "uuid" NOT NULL,
+    "plan" "text" DEFAULT 'free'::"text",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."tenants" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tracker_assignments_orphan_archive" (
+    "archived_at" timestamp with time zone,
+    "archived_by" "uuid",
+    "reason" "text",
+    "id" "uuid",
+    "tenant_id" "uuid",
+    "tracker_user_id" "uuid",
+    "geofence_id" "uuid",
+    "start_date" "date",
+    "end_date" "date",
+    "period" "daterange",
+    "frequency_minutes" integer,
+    "active" boolean,
+    "created_at" timestamp with time zone,
+    "period_tstz" "tstzrange",
+    "updated_at" timestamp with time zone,
+    "org_id" "uuid"
+);
+
+
+ALTER TABLE "public"."tracker_assignments_orphan_archive" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tracker_invites" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "email_norm" "text" NOT NULL,
+    "created_by_user_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "expires_at" timestamp with time zone NOT NULL,
+    "used_at" timestamp with time zone,
+    "used_by_user_id" "uuid",
+    "is_active" boolean DEFAULT false NOT NULL
+);
+
+
+ALTER TABLE "public"."tracker_invites" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tracker_latest" (
+    "user_id" "text" NOT NULL,
+    "org_id" "uuid",
+    "event" "text" DEFAULT 'location_update'::"text" NOT NULL,
+    "lat" double precision NOT NULL,
+    "lng" double precision NOT NULL,
+    "accuracy" double precision,
+    "ts" timestamp with time zone NOT NULL,
+    "geom" "public"."geography"(Point,4326) NOT NULL
+);
+
+
+ALTER TABLE "public"."tracker_latest" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."tracker_logs" (
+    "id" bigint NOT NULL,
+    "org_id" "uuid",
+    "user_id" "text" NOT NULL,
+    "event" "text" DEFAULT 'location_update'::"text" NOT NULL,
+    "lat" double precision NOT NULL,
+    "lng" double precision NOT NULL,
+    "accuracy" double precision,
+    "ts" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "geom" "public"."geography"(Point,4326),
+    "recorded_at" timestamp with time zone,
+    "tenant_id" "uuid",
+    "source" "text",
+    "received_at" timestamp with time zone DEFAULT "now"(),
+    "meta" "jsonb"
+);
+
+
+ALTER TABLE "public"."tracker_logs" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."tracker_logs" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."tracker_logs_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."tracker_positions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid",
+    "geocerca_id" "uuid",
+    "latitude" double precision NOT NULL,
+    "longitude" double precision NOT NULL,
+    "accuracy" double precision,
+    "speed" double precision,
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."tracker_positions" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."user_geofence_state" (
+    "user_id" "text" NOT NULL,
+    "geofence_id" "uuid" NOT NULL,
+    "inside" boolean NOT NULL,
+    "last_ts" timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE "public"."user_geofence_state" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."user_org_settings" (
+    "user_id" "uuid" NOT NULL,
+    "active_org_id" "uuid",
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."user_org_settings" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."user_organizations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid",
+    "org_id" "uuid",
+    "role" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "user_organizations_role_check" CHECK (("role" = ANY (ARRAY['OWNER'::"text", 'ADMIN'::"text", 'TRACKER'::"text"])))
+);
+
+
+ALTER TABLE "public"."user_organizations" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."user_orgs" (
+    "user_id" "uuid" NOT NULL,
+    "org_id" "uuid" NOT NULL,
+    "role" "text" DEFAULT 'member'::"text" NOT NULL
+);
+
+
+ALTER TABLE "public"."user_orgs" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."user_profiles" (
+    "id" "uuid" NOT NULL,
+    "telefono" "text"
+);
+
+
+ALTER TABLE "public"."user_profiles" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."user_roles" (
+    "user_id" "uuid" NOT NULL,
+    "role_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."user_roles" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."user_roles_view" AS
+ SELECT "uo"."user_id",
+    "uo"."role" AS "role_name",
+    "uo"."org_id" AS "tenant_id",
+    "o"."name" AS "org_name"
+   FROM ("public"."user_organizations" "uo"
+     JOIN "public"."organizations" "o" ON (("o"."id" = "uo"."org_id")));
+
+
+ALTER VIEW "public"."user_roles_view" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."users_public" (
+    "id" "uuid" NOT NULL,
+    "email" "text" NOT NULL,
+    "full_name" "text",
+    "phone_e164" "text",
+    "role" "public"."app_role" NOT NULL,
+    "tenant_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."users_public" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."users_sin_organizacion" AS
+ SELECT "u"."id" AS "user_id",
+    "u"."email",
+    "p"."active_tenant_id",
+    ( SELECT "count"(*) AS "count"
+           FROM "public"."user_organizations" "m"
+          WHERE ("m"."user_id" = "u"."id")) AS "num_memberships"
+   FROM ("auth"."users" "u"
+     LEFT JOIN "public"."profiles" "p" ON (("p"."user_id" = "u"."id")))
+  WHERE (("p"."active_tenant_id" IS NULL) OR (( SELECT "count"(*) AS "count"
+           FROM "public"."user_organizations" "m"
+          WHERE ("m"."user_id" = "u"."id")) = 0));
+
+
+ALTER VIEW "public"."users_sin_organizacion" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."usuarios" (
+    "id" "uuid" NOT NULL,
+    "email" "text",
+    "rol" "text" DEFAULT 'tracker'::"text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "nombre" "text",
+    "phone_e164" "text",
+    CONSTRAINT "usuarios_phone_e164_ck" CHECK ((("phone_e164" IS NULL) OR ("phone_e164" ~ '^\+[1-9][0-9]{7,14}$'::"text")))
+);
+
+
+ALTER TABLE "public"."usuarios" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_app_profiles" AS
+ WITH "user_org_roles" AS (
+         SELECT "aur"."user_id",
+            "aur"."org_id",
+            "aur"."role" AS "org_role"
+           FROM "public"."app_user_roles" "aur"
+        )
+ SELECT "p"."id",
+    "p"."user_id",
+    "p"."email",
+    "p"."full_name",
+    "p"."created_at",
+    "p"."org_id",
+    "p"."current_org_id",
+    "p"."default_org_id",
+    "p"."active_tenant_id",
+    COALESCE("uor"."org_role", "p"."role") AS "rol",
+    COALESCE("p"."is_active", true) AS "is_active"
+   FROM ("public"."profiles" "p"
+     LEFT JOIN "user_org_roles" "uor" ON ((("uor"."user_id" = "p"."user_id") AND ("uor"."org_id" = "p"."org_id"))));
+
+
+ALTER VIEW "public"."v_app_profiles" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_asignaciones_ui" AS
+ SELECT "a"."id",
+    "a"."org_id",
+    "a"."tenant_id",
+    "a"."personal_id",
+    "a"."org_people_id",
+    "a"."activity_id",
+    "a"."geocerca_id",
+    "a"."geofence_id",
+    "a"."start_time",
+    "a"."end_time",
+    "a"."frecuencia_envio_sec",
+    "a"."estado",
+    "a"."status",
+    "a"."is_deleted",
+    "a"."created_at",
+    "p"."nombre" AS "personal_nombre",
+    "p"."apellido" AS "personal_apellido",
+    "p"."email" AS "personal_email",
+    "p"."user_id" AS "personal_user_id",
+    "act"."name" AS "activity_name",
+    "gf"."id" AS "geofence_id_ok",
+    "gf"."name" AS "geofence_name",
+    "g"."id" AS "geocerca_id_ok",
+    COALESCE("g"."name", "g"."nombre") AS "geocerca_name",
+    COALESCE("gf"."name", COALESCE("g"."name", "g"."nombre"), '—'::"text") AS "geocerca_label_ui"
+   FROM (((("public"."asignaciones" "a"
+     LEFT JOIN "public"."personal" "p" ON ((("p"."id" = "a"."personal_id") AND ("p"."org_id" = "a"."org_id"))))
+     LEFT JOIN "public"."activities" "act" ON (("act"."id" = "a"."activity_id")))
+     LEFT JOIN "public"."geofences" "gf" ON ((("gf"."id" = "a"."geofence_id") AND ("gf"."org_id" = "a"."org_id"))))
+     LEFT JOIN "public"."geocercas" "g" ON ((("a"."geofence_id" IS NULL) AND ("g"."id" = "a"."geocerca_id") AND ("g"."org_id" = "a"."org_id"))))
+  WHERE (COALESCE("a"."is_deleted", false) = false);
+
+
+ALTER VIEW "public"."v_asignaciones_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_attendance_daily" AS
+ SELECT "org_id",
+    "email",
+    "geofence_name",
+    "date_trunc"('day'::"text", "created_at") AS "work_day",
+    "min"("created_at") AS "first_check_in",
+    "max"("created_at") AS "last_check_out",
+    "count"(*) AS "total_marks",
+    "sum"(
+        CASE
+            WHEN "inside_geofence" THEN 1
+            ELSE 0
+        END) AS "inside_count",
+    "round"("avg"(COALESCE("distance_m", 0))) AS "avg_distance_m"
+   FROM "public"."attendances" "a"
+  WHERE ("org_id" = "public"."get_current_org_id"())
+  GROUP BY "org_id", "email", "geofence_name", ("date_trunc"('day'::"text", "created_at"))
+  ORDER BY ("date_trunc"('day'::"text", "created_at")) DESC;
+
+
+ALTER VIEW "public"."v_attendance_daily" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_attendance_last" AS
+ WITH "last_events" AS (
+         SELECT DISTINCT ON ("ae"."user_id", "ae"."geofence_id") "ae"."user_id",
+            "ae"."geofence_id",
+            "ae"."kind",
+            "ae"."ts"
+           FROM "public"."attendance_events" "ae"
+          ORDER BY "ae"."user_id", "ae"."geofence_id", "ae"."ts" DESC
+        )
+ SELECT "u"."email" AS "user_email",
+    "g"."name" AS "geofence_name",
+    "l"."kind" AS "event_kind",
+    "l"."ts" AS "last_timestamp"
+   FROM (("last_events" "l"
+     JOIN "auth"."users" "u" ON (("u"."id" = "l"."user_id")))
+     JOIN "public"."geofences" "g" ON (("g"."id" = "l"."geofence_id")))
+  ORDER BY "l"."ts" DESC;
+
+
+ALTER VIEW "public"."v_attendance_last" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_attendance_last_event" AS
+ WITH "latest" AS (
+         SELECT "a"."email",
+            "a"."geofence_name",
+            "a"."created_at",
+            "a"."lat",
+            "a"."lng",
+            "a"."accuracy_m",
+            "a"."distance_m",
+            "a"."inside_geofence",
+            "row_number"() OVER (PARTITION BY "a"."email", "a"."geofence_name" ORDER BY "a"."created_at" DESC) AS "rn"
+           FROM "public"."attendances" "a"
+        )
+ SELECT "email",
+    "geofence_name",
+    "created_at" AS "last_event_at",
+    "lat",
+    "lng",
+    "accuracy_m",
+    "distance_m",
+    "inside_geofence"
+   FROM "latest"
+  WHERE ("rn" = 1)
+  ORDER BY "created_at" DESC;
+
+
+ALTER VIEW "public"."v_attendance_last_event" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_costos_detalle_v2" AS
+ SELECT "a"."id" AS "asignacion_id",
+    "a"."org_id",
+    "a"."personal_id",
+    TRIM(BOTH FROM ((COALESCE("p"."nombre", ''::"text") || ' '::"text") || COALESCE("p"."apellido", ''::"text"))) AS "persona",
+    "a"."activity_id",
+    "act"."name" AS "actividad",
+    "a"."geocerca_id",
+    "g"."nombre" AS "geocerca",
+    "a"."start_date" AS "fecha",
+    "a"."start_time",
+    "a"."end_time",
+        CASE
+            WHEN (("a"."start_time" IS NULL) OR ("a"."end_time" IS NULL)) THEN (0)::numeric
+            WHEN ("a"."end_time" < "a"."start_time") THEN (0)::numeric
+            ELSE "round"((EXTRACT(epoch FROM ("a"."end_time" - "a"."start_time")) / 3600.0), 2)
+        END AS "horas",
+    "act"."hourly_rate" AS "tarifa_hora",
+    "act"."currency_code" AS "moneda",
+        CASE
+            WHEN ("act"."hourly_rate" IS NULL) THEN (0)::numeric
+            ELSE "round"((
+            CASE
+                WHEN (("a"."start_time" IS NULL) OR ("a"."end_time" IS NULL)) THEN (0)::numeric
+                WHEN ("a"."end_time" < "a"."start_time") THEN (0)::numeric
+                ELSE (EXTRACT(epoch FROM ("a"."end_time" - "a"."start_time")) / 3600.0)
+            END * "act"."hourly_rate"), 2)
+        END AS "costo"
+   FROM ((("public"."asignaciones" "a"
+     JOIN "public"."personal" "p" ON (("p"."id" = "a"."personal_id")))
+     LEFT JOIN "public"."activities" "act" ON (("act"."id" = "a"."activity_id")))
+     JOIN "public"."geocercas" "g" ON (("g"."id" = "a"."geocerca_id")))
+  WHERE ((COALESCE("a"."is_deleted", false) = false) AND (COALESCE("p"."is_deleted", false) = false));
+
+
+ALTER VIEW "public"."v_costos_detalle_v2" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_costos_detalle" AS
+ SELECT "asignacion_id" AS "id",
+    "public"."get_current_org_id"() AS "org_id",
+    NULL::"uuid" AS "tenant_id",
+    "personal_id",
+    "persona" AS "personal_nombre",
+    "activity_id" AS "actividad_id",
+    "actividad" AS "actividad_nombre",
+    "geocerca_id",
+    "geocerca" AS "geocerca_nombre",
+    "start_time",
+    "end_time",
+    "horas",
+    "tarifa_hora" AS "hourly_rate",
+    "costo",
+    "moneda" AS "currency_code"
+   FROM "public"."v_costos_detalle_v2" "d"
+  WHERE ("org_id" = "public"."get_current_org_id"());
+
+
+ALTER VIEW "public"."v_costos_detalle" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_costos_detalle_internal" AS
+ SELECT "asignacion_id",
+    "org_id",
+    "personal_id",
+    "persona",
+    "activity_id",
+    "actividad",
+    "geocerca_id",
+    "geocerca",
+    "fecha",
+    "start_time",
+    "end_time",
+    "horas",
+    "tarifa_hora",
+    "moneda",
+    "costo"
+   FROM "public"."v_costos_detalle_v2" "d"
+  WHERE ("org_id" IN ( SELECT "app_user_roles"."org_id"
+           FROM "public"."app_user_roles"
+          WHERE ("app_user_roles"."user_id" = "auth"."uid"())));
+
+
+ALTER VIEW "public"."v_costos_detalle_internal" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_costos_detalle_ui" AS
+ SELECT "asignacion_id",
+    "org_id",
+    "personal_id",
+    "persona",
+    "activity_id",
+    "actividad",
+    "geocerca_id",
+    "geocerca",
+    "fecha",
+    "start_time",
+    "end_time",
+    "horas",
+    "tarifa_hora",
+    "moneda",
+    "costo"
+   FROM "public"."v_costos_detalle_v2";
+
+
+ALTER VIEW "public"."v_costos_detalle_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_costos_rangos_por_org" AS
+ SELECT "org_id",
+    "moneda",
+    "min"("fecha") AS "desde",
+    "max"("fecha") AS "hasta",
+    "count"(*) AS "registros",
+    "sum"("horas") AS "horas_totales",
+    "sum"("costo") AS "costo_total"
+   FROM "public"."v_costos_detalle_ui"
+  GROUP BY "org_id", "moneda";
+
+
+ALTER VIEW "public"."v_costos_rangos_por_org" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_current_membership" AS
+ SELECT "m"."user_id",
+    "m"."org_id",
+    "m"."role"
+   FROM ("public"."memberships" "m"
+     JOIN "public"."profiles" "p" ON ((("p"."user_id" = "m"."user_id") AND ("p"."current_org_id" = "m"."org_id"))))
+  WHERE ("m"."user_id" = "auth"."uid"());
+
+
+ALTER VIEW "public"."v_current_membership" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_geocercas_asignadas" AS
+ SELECT "g"."id" AS "geocerca_id",
+    "g"."nombre" AS "geocerca_nombre",
+    "a"."id" AS "asignacion_id",
+    "a"."personal_id",
+    "p"."nombre" AS "personal_nombre",
+    "p"."email" AS "personal_email",
+    "a"."start_date",
+    "a"."end_date",
+    "a"."estado",
+    "a"."frecuencia_envio_sec"
+   FROM (("public"."geocercas" "g"
+     LEFT JOIN "public"."asignaciones" "a" ON ((("a"."geocerca_id" = "g"."id") AND (COALESCE("a"."is_deleted", false) = false))))
+     LEFT JOIN "public"."personal" "p" ON (("p"."id" = "a"."personal_id")));
+
+
+ALTER VIEW "public"."v_geocercas_asignadas" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_geocercas_resumen" AS
+ SELECT "id",
+    "org_id",
+    COALESCE("name", "nombre") AS "name",
+    COALESCE("active", "activo", true) AS "active",
+    COALESCE("visible", true) AS "visible",
+    "created_at",
+    0 AS "n_personal",
+    0 AS "n_asignaciones_local",
+    0 AS "n_asignaciones"
+   FROM "public"."geocercas" "g";
+
+
+ALTER VIEW "public"."v_geocercas_resumen" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_geocercas_resumen_ui" AS
+ SELECT "id",
+    "org_id",
+    "nombre" AS "name",
+    COALESCE("active", true) AS "active",
+    COALESCE("visible", true) AS "visible",
+    "created_at",
+    NULL::integer AS "n_personal",
+    NULL::integer AS "n_asignaciones_local",
+    NULL::integer AS "n_asignaciones"
+   FROM "public"."geocercas" "g";
+
+
+ALTER VIEW "public"."v_geocercas_resumen_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_geocercas_tracker_ui" AS
+ SELECT "id",
+    "org_id",
+    "tenant_id",
+    COALESCE("name", "nombre", "id_text") AS "name",
+    "descripcion",
+    "active",
+    "activa",
+    "activo",
+    "visible",
+    "created_at",
+    "updated_at",
+    "created_by",
+    "updated_by",
+    "lat",
+    "lng",
+    "radius_m",
+    "polygon",
+    "geom",
+    "geojson",
+    "geometry",
+    "bbox",
+    "personal_ids",
+    "asignacion_ids"
+   FROM "public"."geocercas" "g"
+  WHERE ((COALESCE("activo", "activa", "active", true) = true) AND (COALESCE("visible", true) = true));
+
+
+ALTER VIEW "public"."v_geocercas_tracker_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_geofences_active_ui" AS
+ SELECT "id",
+    "org_id",
+    "name"
+   FROM "public"."geofences"
+  WHERE ("active" = true);
+
+
+ALTER VIEW "public"."v_geofences_active_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_geofences_ui" AS
+ SELECT "id",
+    "org_id",
+    "name",
+    "active",
+    "created_at",
+    "updated_at",
+        CASE
+            WHEN ("geom" IS NULL) THEN NULL::"jsonb"
+            WHEN ("public"."geometrytype"("geom") = ANY (ARRAY['POLYGON'::"text", 'MULTIPOLYGON'::"text"])) THEN ("public"."st_asgeojson"("public"."st_transform"("geom", 4326)))::"jsonb"
+            ELSE NULL::"jsonb"
+        END AS "geojson",
+        CASE
+            WHEN ("geom" IS NULL) THEN NULL::"text"
+            ELSE "public"."geometrytype"("geom")
+        END AS "geom_type"
+   FROM "public"."geofences" "g"
+  WHERE (COALESCE("active", true) = true);
+
+
+ALTER VIEW "public"."v_geofences_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_invites_claims" AS
+ SELECT 'invitations'::"text" AS "source_table",
+    "i"."id" AS "invite_id",
+    "lower"("i"."email") AS "email_norm",
+    "i"."org_id",
+    ("i"."role")::"text" AS "role",
+    ('token:'::"text" || ("i"."token")::"text") AS "claim_code",
+    ("i"."status")::"text" AS "status",
+    "i"."invited_by",
+    "i"."created_at",
+    "i"."expires_at",
+    NULL::timestamp with time zone AS "accepted_at",
+    NULL::timestamp with time zone AS "revoked_at",
+    NULL::timestamp with time zone AS "used_at",
+    NULL::"uuid" AS "claimed_by",
+    NULL::timestamp with time zone AS "claimed_at",
+    NULL::boolean AS "is_active"
+   FROM "public"."invitations" "i"
+UNION ALL
+ SELECT 'org_invites'::"text" AS "source_table",
+    "oi"."id" AS "invite_id",
+    "lower"("oi"."email") AS "email_norm",
+    "oi"."org_id",
+    "oi"."role",
+    ((('org:'::"text" || ("oi"."org_id")::"text") || '|role:'::"text") || "oi"."role") AS "claim_code",
+    "oi"."status",
+    "oi"."invited_by",
+    "oi"."created_at",
+    NULL::timestamp with time zone AS "expires_at",
+    "oi"."accepted_at",
+    "oi"."revoked_at",
+    NULL::timestamp with time zone AS "used_at",
+    NULL::"uuid" AS "claimed_by",
+    NULL::timestamp with time zone AS "claimed_at",
+    NULL::boolean AS "is_active"
+   FROM "public"."org_invites" "oi"
+UNION ALL
+ SELECT 'pending_invites'::"text" AS "source_table",
+    NULL::"uuid" AS "invite_id",
+    "lower"("pi"."email") AS "email_norm",
+    "pi"."target_org_id" AS "org_id",
+    COALESCE("pi"."role", 'unknown'::"text") AS "role",
+    COALESCE("pi"."claim_code",
+        CASE
+            WHEN ("pi"."target_org_id" IS NOT NULL) THEN ((('org:'::"text" || ("pi"."target_org_id")::"text") || '|role:'::"text") || COALESCE("pi"."role", 'unknown'::"text"))
+            ELSE ('role:'::"text" || COALESCE("pi"."role", 'unknown'::"text"))
+        END) AS "claim_code",
+    COALESCE("pi"."status", 'pending'::"text") AS "status",
+    "pi"."created_by" AS "invited_by",
+    COALESCE("pi"."created_at", "now"()) AS "created_at",
+    "pi"."expires_at",
+    NULL::timestamp with time zone AS "accepted_at",
+    NULL::timestamp with time zone AS "revoked_at",
+    NULL::timestamp with time zone AS "used_at",
+    "pi"."claimed_by",
+    "pi"."claimed_at",
+    NULL::boolean AS "is_active"
+   FROM "public"."pending_invites" "pi"
+UNION ALL
+ SELECT 'tracker_invites'::"text" AS "source_table",
+    "ti"."id" AS "invite_id",
+    "lower"("ti"."email_norm") AS "email_norm",
+    "ti"."org_id",
+    'tracker'::"text" AS "role",
+    (('org:'::"text" || ("ti"."org_id")::"text") || '|role:tracker'::"text") AS "claim_code",
+        CASE
+            WHEN ("ti"."used_at" IS NOT NULL) THEN 'used'::"text"
+            WHEN (("ti"."is_active" = true) AND ("ti"."expires_at" > "now"())) THEN 'active'::"text"
+            WHEN ("ti"."is_active" = false) THEN 'inactive'::"text"
+            ELSE 'expired'::"text"
+        END AS "status",
+    "ti"."created_by_user_id" AS "invited_by",
+    "ti"."created_at",
+    "ti"."expires_at",
+    NULL::timestamp with time zone AS "accepted_at",
+    NULL::timestamp with time zone AS "revoked_at",
+    "ti"."used_at",
+    "ti"."used_by_user_id" AS "claimed_by",
+    "ti"."used_at" AS "claimed_at",
+    "ti"."is_active"
+   FROM "public"."tracker_invites" "ti";
+
+
+ALTER VIEW "public"."v_invites_claims" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_latest_attendance" AS
+ SELECT DISTINCT ON ("email") "email",
+    "role",
+    "type",
+    "geofence_name",
+    "lat",
+    "lng",
+    "accuracy_m",
+    "inside_geofence",
+    "distance_m",
+    "created_at"
+   FROM "public"."attendances"
+  ORDER BY "email", "created_at" DESC;
+
+
+ALTER VIEW "public"."v_latest_attendance" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_org_people_ui" AS
+ SELECT "op"."org_id",
+    "op"."id" AS "org_people_id",
+    "op"."person_id",
+    "op"."vigente",
+    "op"."is_deleted",
+    "op"."deleted_at",
+    "op"."created_at" AS "org_people_created_at",
+    "op"."updated_at" AS "org_people_updated_at",
+    "p"."nombre",
+    "p"."apellido",
+    ((COALESCE("p"."nombre", ''::"text") || ' '::"text") || COALESCE("p"."apellido", ''::"text")) AS "nombre_completo",
+    "p"."email",
+    "p"."telefono",
+    "p"."email_norm",
+    "p"."phone_norm",
+    "p"."documento",
+    "p"."documento_norm",
+    "p"."created_at" AS "person_created_at",
+    "p"."updated_at" AS "person_updated_at"
+   FROM ("public"."org_people" "op"
+     JOIN "public"."people" "p" ON (("p"."id" = "op"."person_id")));
+
+
+ALTER VIEW "public"."v_org_people_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_orphan_tracker_assignments" AS
+ SELECT "ta"."id" AS "assignment_id",
+    "ta"."org_id",
+    "ta"."tracker_user_id",
+    "ta"."geofence_id",
+    "ta"."active",
+    "ta"."start_date",
+    "ta"."end_date",
+    "ta"."created_at",
+    "ta"."updated_at"
+   FROM ("public"."tracker_assignments" "ta"
+     LEFT JOIN "public"."geocercas" "g" ON (("g"."id" = "ta"."geofence_id")))
+  WHERE ("g"."id" IS NULL);
+
+
+ALTER VIEW "public"."v_orphan_tracker_assignments" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_personal_activo" AS
+ SELECT "id",
+    "org_id",
+    "nombre",
+    "apellido",
+    ((COALESCE("nombre", ''::"text") || ' '::"text") || COALESCE("apellido", ''::"text")) AS "nombre_completo",
+    "email",
+    "telefono",
+    "telefono_norm",
+    "vigente",
+    "fecha_inicio",
+    "fecha_fin",
+    "position_interval_sec",
+    "created_at",
+    "updated_at",
+    "fingerprint"
+   FROM "public"."personal" "p"
+  WHERE ("is_deleted" = false);
+
+
+ALTER VIEW "public"."v_personal_activo" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_personal_all" AS
+ SELECT "id",
+    "org_id",
+    "nombre",
+    "apellido",
+    "email",
+    "telefono",
+    "vigente",
+    "is_deleted",
+    "deleted_at",
+    "created_at"
+   FROM "public"."personal";
+
+
+ALTER VIEW "public"."v_personal_all" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_positions_last_per_user" AS
+ SELECT DISTINCT ON ("user_id") "id",
+    "org_id",
+    "user_id",
+    "personal_id",
+    "asignacion_id",
+    "lat",
+    "lng",
+    "accuracy",
+    "speed",
+    "heading",
+    "battery",
+    "is_mock",
+    "source",
+    "recorded_at",
+    "created_at"
+   FROM "public"."positions"
+  ORDER BY "user_id", "recorded_at" DESC;
+
+
+ALTER VIEW "public"."v_positions_last_per_user" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_positions_with_activity" AS
+ SELECT "id",
+    "org_id",
+    "tenant_id",
+    "user_id",
+    "event",
+    "lat",
+    "lng",
+    "accuracy",
+    "ts",
+    "geom",
+    "recorded_at",
+    "received_at",
+    "source",
+    "meta"
+   FROM "public"."tracker_logs" "tl";
+
+
+ALTER VIEW "public"."v_positions_with_activity" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_reportes_base" AS
+ SELECT "a"."org_id",
+    "a"."id" AS "attendance_id",
+    "a"."created_at",
+    "date_trunc"('day'::"text", "a"."created_at") AS "work_day",
+    "a"."email",
+    "lower"(TRIM(BOTH FROM "a"."email")) AS "email_norm",
+    "p"."id" AS "personal_id",
+    (("p"."nombre" || ' '::"text") || COALESCE("p"."apellido", ''::"text")) AS "personal_nombre",
+    "a"."geofence_name",
+    "g"."id" AS "geocerca_id",
+    "a"."type",
+    "a"."role",
+    "a"."inside_geofence",
+    "a"."distance_m",
+    "a"."lat",
+    "a"."lng",
+    "a"."accuracy_m"
+   FROM (("public"."attendances" "a"
+     LEFT JOIN "public"."personal" "p" ON ((("p"."org_id" = "a"."org_id") AND ("p"."email_norm" = "lower"(TRIM(BOTH FROM "a"."email"))))))
+     LEFT JOIN "public"."geocercas" "g" ON ((("g"."org_id" = "a"."org_id") AND ("g"."nombre" = "a"."geofence_name"))))
+  WHERE ("a"."org_id" = "public"."get_current_org_id"());
+
+
+ALTER VIEW "public"."v_reportes_base" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_reportes_diario" AS
+ SELECT "org_id",
+    "personal_id",
+    "personal_nombre",
+    "email",
+    "geofence_name",
+    "geocerca_id",
+    ("date_trunc"('day'::"text", "created_at"))::"date" AS "work_day",
+    "min"("created_at") AS "first_check_in",
+    "max"("created_at") AS "last_check_out",
+    "count"(*) AS "total_marks",
+    "sum"(
+        CASE
+            WHEN "inside_geofence" THEN 1
+            ELSE 0
+        END) AS "inside_count",
+    "round"("avg"(COALESCE("distance_m", 0))) AS "avg_distance_m"
+   FROM "public"."v_reportes_base"
+  GROUP BY "org_id", "personal_id", "personal_nombre", "email", "geofence_name", "geocerca_id", (("date_trunc"('day'::"text", "created_at"))::"date")
+  ORDER BY (("date_trunc"('day'::"text", "created_at"))::"date") DESC;
+
+
+ALTER VIEW "public"."v_reportes_diario" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_reportes_diario_con_asignacion" AS
+ SELECT "r"."org_id",
+    "r"."personal_id",
+    "r"."personal_nombre",
+    "r"."email",
+    "r"."geofence_name",
+    "r"."geocerca_id",
+    "r"."work_day",
+    "r"."first_check_in",
+    "r"."last_check_out",
+    "r"."total_marks",
+    "r"."inside_count",
+    "r"."avg_distance_m",
+    "asg"."id" AS "asignacion_id",
+    "asg"."status" AS "asignacion_status",
+    "asg"."period",
+    "asg"."start_time",
+    "asg"."end_time",
+    "asg"."activity_id",
+    "act"."name" AS "activity_name",
+    "act"."hourly_rate",
+    "act"."currency_code"
+   FROM (("public"."v_reportes_diario" "r"
+     LEFT JOIN "public"."asignaciones" "asg" ON ((("asg"."org_id" = "r"."org_id") AND ("asg"."personal_id" IS NOT NULL) AND ("r"."personal_id" = "asg"."personal_id") AND (("r"."geocerca_id" IS NULL) OR ("r"."geocerca_id" = "asg"."geocerca_id")) AND ("r"."work_day" <@ "asg"."period"))))
+     LEFT JOIN "public"."activities" "act" ON ((("act"."id" = "asg"."activity_id") AND ("act"."org_id" = "r"."org_id"))))
+  WHERE ("r"."org_id" = "public"."get_current_org_id"());
+
+
+ALTER VIEW "public"."v_reportes_diario_con_asignacion" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_tracker_assignments_ui" AS
+ SELECT "ta"."id",
+    "ta"."org_id",
+    "ta"."tracker_user_id",
+    "ta"."geofence_id",
+    COALESCE("ta"."start_date", "lower"("ta"."period"), ("lower"("ta"."period_tstz"))::"date") AS "start_date",
+    COALESCE("ta"."end_date", "upper"("ta"."period"),
+        CASE
+            WHEN ("ta"."period_tstz" IS NULL) THEN NULL::"date"
+            WHEN ("upper"("ta"."period_tstz") IS NULL) THEN NULL::"date"
+            WHEN "upper_inc"("ta"."period_tstz") THEN ("upper"("ta"."period_tstz"))::"date"
+            ELSE (("upper"("ta"."period_tstz") - '00:00:01'::interval))::"date"
+        END) AS "end_date",
+    "ta"."active",
+    "ta"."frequency_minutes",
+    "ta"."created_at",
+    "ta"."updated_at",
+    "gf"."name" AS "geofence_name",
+    "p"."email" AS "tracker_email",
+    NULLIF(TRIM(BOTH FROM ((COALESCE("p"."nombre", ''::"text") || ' '::"text") || COALESCE("p"."apellido", ''::"text"))), ''::"text") AS "tracker_name",
+    COALESCE(NULLIF(TRIM(BOTH FROM ((COALESCE("p"."nombre", ''::"text") || ' '::"text") || COALESCE("p"."apellido", ''::"text"))), ''::"text"), NULLIF("p"."email", ''::"text")) AS "tracker_label",
+    "ta"."activity_id",
+    "a"."name" AS "activity_name"
+   FROM ((("public"."tracker_assignments" "ta"
+     LEFT JOIN "public"."geofences" "gf" ON ((("gf"."id" = "ta"."geofence_id") AND ("gf"."org_id" = "ta"."org_id"))))
+     LEFT JOIN "public"."personal" "p" ON ((("p"."user_id" = "ta"."tracker_user_id") AND ("p"."org_id" = "ta"."org_id") AND (COALESCE("p"."is_deleted", false) = false))))
+     LEFT JOIN "public"."activities" "a" ON ((("a"."id" = "ta"."activity_id") AND ("a"."org_id" = "ta"."org_id"))));
+
+
+ALTER VIEW "public"."v_tracker_assignments_ui" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_tracker_assignments_valid" AS
+ SELECT "ta"."id",
+    "ta"."tenant_id",
+    "ta"."tracker_user_id",
+    "ta"."geofence_id",
+    "ta"."start_date",
+    "ta"."end_date",
+    "ta"."period",
+    "ta"."frequency_minutes",
+    "ta"."active",
+    "ta"."created_at",
+    "ta"."period_tstz",
+    "ta"."updated_at",
+    "ta"."org_id",
+    "ta"."activity_id"
+   FROM ("public"."tracker_assignments" "ta"
+     JOIN "public"."geofences" "g" ON ((("g"."id" = "ta"."geofence_id") AND ("g"."org_id" = "ta"."org_id"))))
+  WHERE (("ta"."active" = true) AND ("g"."active" = true));
+
+
+ALTER VIEW "public"."v_tracker_assignments_valid" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_tracker_last24h" AS
+ SELECT "id",
+    "org_id",
+    "user_id",
+    "event",
+    "lat",
+    "lng",
+    "accuracy",
+    "ts",
+    "geom"
+   FROM "public"."tracker_logs"
+  WHERE ("ts" >= ("now"() - '24:00:00'::interval));
+
+
+ALTER VIEW "public"."v_tracker_last24h" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_tracker_last30min" AS
+ SELECT "id",
+    "org_id",
+    "user_id",
+    "event",
+    "lat",
+    "lng",
+    "accuracy",
+    "ts",
+    "geom"
+   FROM "public"."tracker_logs"
+  WHERE ("ts" >= ("now"() - '00:30:00'::interval));
+
+
+ALTER VIEW "public"."v_tracker_last30min" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."v_tracker_profiles" AS
+ SELECT "owner_id" AS "id",
+    COALESCE("nombre", "email", 'Tracker sin nombre'::"text") AS "full_name",
+    "email",
+    "org_id",
+    "org_id" AS "tenant_id"
+   FROM "public"."personal" "p"
+  WHERE (("owner_id" IS NOT NULL) AND ("vigente" IS TRUE) AND ("activo_bool" IS TRUE) AND (COALESCE("is_deleted", false) = false));
+
+
+ALTER VIEW "public"."v_tracker_profiles" OWNER TO "postgres";
+
+
+ALTER TABLE ONLY "public"."attendance_events" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."attendance_events_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."auth_signup_debug" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."auth_signup_debug_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."geofence_bridge_errors" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."geofence_bridge_errors_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."personas" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."personas_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."position_events" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."position_events_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."profiles_block_log" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."profiles_block_log_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."sync_errors" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."sync_errors_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."activities"
+    ADD CONSTRAINT "activities_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."activities"
+    ADD CONSTRAINT "activities_tenant_name_uniq" UNIQUE ("tenant_id", "name");
+
+
+
+ALTER TABLE ONLY "public"."activity_assignments"
+    ADD CONSTRAINT "activity_assignments_no_overlap" EXCLUDE USING "gist" ("tenant_id" WITH =, "tracker_user_id" WITH =, "daterange"("start_date", COALESCE("end_date", 'infinity'::"date"), '[]'::"text") WITH &&);
+
+
+
+ALTER TABLE ONLY "public"."activity_assignments"
+    ADD CONSTRAINT "activity_assignments_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."activity_rates"
+    ADD CONSTRAINT "activity_rates_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."admins"
+    ADD CONSTRAINT "admins_pkey" PRIMARY KEY ("email");
+
+
+
+ALTER TABLE ONLY "public"."app_root_owner"
+    ADD CONSTRAINT "app_root_owner_email_key" UNIQUE ("email");
+
+
+
+ALTER TABLE ONLY "public"."app_root_owner"
+    ADD CONSTRAINT "app_root_owner_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."app_root_owners"
+    ADD CONSTRAINT "app_root_owners_pkey" PRIMARY KEY ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."app_root_users"
+    ADD CONSTRAINT "app_root_users_pkey" PRIMARY KEY ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."app_settings"
+    ADD CONSTRAINT "app_settings_pkey" PRIMARY KEY ("key");
+
+
+
+ALTER TABLE ONLY "public"."app_superadmins"
+    ADD CONSTRAINT "app_superadmins_pkey" PRIMARY KEY ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."app_user_roles"
+    ADD CONSTRAINT "app_user_roles_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."app_user_roles"
+    ADD CONSTRAINT "app_user_roles_user_id_org_id_key" UNIQUE ("user_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_personal_no_overlap" EXCLUDE USING "gist" ("org_id" WITH =, "personal_id" WITH =, "tstzrange"("start_time", "end_time", '[]'::"text") WITH &&) WHERE (("is_deleted" = false));
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_pkey1" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."asistencias"
+    ADD CONSTRAINT "asistencias_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."attendance_events"
+    ADD CONSTRAINT "attendance_events_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."attendances"
+    ADD CONSTRAINT "attendances_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."audit_log"
+    ADD CONSTRAINT "audit_log_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."auth_signup_debug"
+    ADD CONSTRAINT "auth_signup_debug_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "ex_asig_no_overlap" EXCLUDE USING "gist" ("tracker_user_id" WITH =, "geofence_id" WITH =, "period" WITH &&);
+
+
+
+ALTER TABLE ONLY "public"."geocerca_geofence_map"
+    ADD CONSTRAINT "geocerca_geofence_map_pkey" PRIMARY KEY ("org_id", "geocerca_id");
+
+
+
+ALTER TABLE "public"."geocercas"
+    ADD CONSTRAINT "geocercas_geom_presence_chk" CHECK ((("geojson" IS NOT NULL) OR (("lat" IS NOT NULL) AND ("lng" IS NOT NULL) AND ("radius_m" IS NOT NULL)))) NOT VALID;
+
+
+
+ALTER TABLE ONLY "public"."geocercas"
+    ADD CONSTRAINT "geocercas_org_id_nombre_ci_key" UNIQUE ("org_id", "nombre_ci");
+
+
+
+ALTER TABLE ONLY "public"."geocercas_tbl"
+    ADD CONSTRAINT "geocercas_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."geocercas"
+    ADD CONSTRAINT "geocercas_pkey1" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE "public"."geocercas"
+    ADD CONSTRAINT "geocercas_radius_positive_chk" CHECK ((("radius_m" IS NULL) OR ("radius_m" > 0))) NOT VALID;
+
+
+
+ALTER TABLE ONLY "public"."geofence_assignments"
+    ADD CONSTRAINT "geofence_assignments_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."geofence_bridge_errors"
+    ADD CONSTRAINT "geofence_bridge_errors_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."geofence_events"
+    ADD CONSTRAINT "geofence_events_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."geofence_members"
+    ADD CONSTRAINT "geofence_members_pkey" PRIMARY KEY ("geofence_id", "user_id");
+
+
+
+ALTER TABLE ONLY "public"."geofences"
+    ADD CONSTRAINT "geofences_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."invitations"
+    ADD CONSTRAINT "invitations_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."memberships"
+    ADD CONSTRAINT "memberships_pkey" PRIMARY KEY ("org_id", "user_id");
+
+
+
+ALTER TABLE ONLY "public"."org_billing"
+    ADD CONSTRAINT "org_billing_pkey" PRIMARY KEY ("org_id");
+
+
+
+ALTER TABLE ONLY "public"."org_invites"
+    ADD CONSTRAINT "org_invites_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."org_invites"
+    ADD CONSTRAINT "org_invites_unique_active" UNIQUE ("org_id", "email", "role");
+
+
+
+ALTER TABLE ONLY "public"."org_members"
+    ADD CONSTRAINT "org_members_pkey" PRIMARY KEY ("org_id", "user_id");
+
+
+
+ALTER TABLE ONLY "public"."org_people"
+    ADD CONSTRAINT "org_people_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."org_tenant_map"
+    ADD CONSTRAINT "org_tenant_map_pkey" PRIMARY KEY ("org_id");
+
+
+
+ALTER TABLE ONLY "public"."org_users"
+    ADD CONSTRAINT "org_users_pkey" PRIMARY KEY ("user_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."organizations"
+    ADD CONSTRAINT "organizations_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."orgs_legacy"
+    ADD CONSTRAINT "orgs_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."pending_invites"
+    ADD CONSTRAINT "pending_invites_pkey" PRIMARY KEY ("email");
+
+
+
+ALTER TABLE ONLY "public"."people"
+    ADD CONSTRAINT "people_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."personal"
+    ADD CONSTRAINT "personal_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."personas"
+    ADD CONSTRAINT "personas_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."plan_limits"
+    ADD CONSTRAINT "plan_limits_pkey" PRIMARY KEY ("plan");
+
+
+
+ALTER TABLE ONLY "public"."plans"
+    ADD CONSTRAINT "plans_pkey" PRIMARY KEY ("code");
+
+
+
+ALTER TABLE ONLY "public"."posiciones"
+    ADD CONSTRAINT "posiciones_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."position_events"
+    ADD CONSTRAINT "position_events_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."positions"
+    ADD CONSTRAINT "positions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."profiles_block_log"
+    ADD CONSTRAINT "profiles_block_log_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."role_map_membership_to_app"
+    ADD CONSTRAINT "role_map_membership_to_app_pkey" PRIMARY KEY ("membership_role");
+
+
+
+ALTER TABLE ONLY "public"."roles"
+    ADD CONSTRAINT "roles_name_key" UNIQUE ("name");
+
+
+
+ALTER TABLE ONLY "public"."roles"
+    ADD CONSTRAINT "roles_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."roles"
+    ADD CONSTRAINT "roles_slug_key" UNIQUE ("slug");
+
+
+
+ALTER TABLE ONLY "public"."sync_errors"
+    ADD CONSTRAINT "sync_errors_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tenants"
+    ADD CONSTRAINT "tenants_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "tracker_assignments_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "tracker_assignments_tracker_geofence_uniq" UNIQUE ("tracker_user_id", "geofence_id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_invites"
+    ADD CONSTRAINT "tracker_invites_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_latest"
+    ADD CONSTRAINT "tracker_latest_pkey" PRIMARY KEY ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_locations"
+    ADD CONSTRAINT "tracker_locations_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_logs"
+    ADD CONSTRAINT "tracker_logs_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."tracker_positions"
+    ADD CONSTRAINT "tracker_positions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."user_geofence_state"
+    ADD CONSTRAINT "user_geofence_state_pkey" PRIMARY KEY ("user_id", "geofence_id");
+
+
+
+ALTER TABLE ONLY "public"."user_org_settings"
+    ADD CONSTRAINT "user_org_settings_pkey" PRIMARY KEY ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."user_organizations"
+    ADD CONSTRAINT "user_organizations_org_user_unique" UNIQUE ("org_id", "user_id");
+
+
+
+ALTER TABLE ONLY "public"."user_organizations"
+    ADD CONSTRAINT "user_organizations_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."user_orgs"
+    ADD CONSTRAINT "user_orgs_pkey" PRIMARY KEY ("user_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."user_orgs"
+    ADD CONSTRAINT "user_orgs_user_org_unique" UNIQUE ("user_id", "org_id");
+
+
+
+ALTER TABLE ONLY "public"."user_profiles"
+    ADD CONSTRAINT "user_profiles_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."user_roles"
+    ADD CONSTRAINT "user_roles_pkey" PRIMARY KEY ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."users_public"
+    ADD CONSTRAINT "users_public_email_key" UNIQUE ("email");
+
+
+
+ALTER TABLE ONLY "public"."users_public"
+    ADD CONSTRAINT "users_public_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."usuarios"
+    ADD CONSTRAINT "usuarios_email_key" UNIQUE ("email");
+
+
+
+ALTER TABLE ONLY "public"."usuarios"
+    ADD CONSTRAINT "usuarios_pkey" PRIMARY KEY ("id");
+
+
+
+CREATE INDEX "activities_org_id_idx" ON "public"."activities" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "activities_tenant_id_idx" ON "public"."activities" USING "btree" ("tenant_id");
+
+
+
+CREATE UNIQUE INDEX "app_user_roles_user_org_ux" ON "public"."app_user_roles" USING "btree" ("user_id", "org_id");
+
+
+
+CREATE INDEX "asignaciones_geocerca_idx" ON "public"."asignaciones" USING "btree" ("geocerca_id");
+
+
+
+CREATE INDEX "asignaciones_personal_idx" ON "public"."asignaciones" USING "btree" ("personal_id");
+
+
+
+CREATE INDEX "asignaciones_rango_idx" ON "public"."asignaciones" USING "btree" ("start_date", "end_date");
+
+
+
+CREATE UNIQUE INDEX "asistencias_user_fecha_uniq" ON "public"."asistencias" USING "btree" ("user_id", "fecha");
+
+
+
+CREATE INDEX "attendances_email_created_idx" ON "public"."attendances" USING "btree" ("email", "created_at" DESC);
+
+
+
+CREATE INDEX "attendances_geofence_created_idx" ON "public"."attendances" USING "btree" ("geofence_name", "created_at" DESC);
+
+
+
+CREATE INDEX "attendances_inside_created_idx" ON "public"."attendances" USING "btree" ("inside_geofence", "created_at" DESC);
+
+
+
+CREATE INDEX "geocercas_active_idx" ON "public"."geocercas" USING "btree" ("active");
+
+
+
+CREATE INDEX "geocercas_activo_idx" ON "public"."geocercas" USING "btree" ("activo");
+
+
+
+CREATE INDEX "geocercas_created_at_idx" ON "public"."geocercas_tbl" USING "btree" ("created_at");
+
+
+
+CREATE INDEX "geocercas_created_by_idx" ON "public"."geocercas_tbl" USING "btree" ("created_by");
+
+
+
+CREATE INDEX "geocercas_created_idx" ON "public"."geocercas" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "geocercas_geojson_gin" ON "public"."geocercas_tbl" USING "gin" ("geojson");
+
+
+
+CREATE INDEX "geocercas_geom_gin" ON "public"."geocercas" USING "gin" ("geom");
+
+
+
+CREATE INDEX "geocercas_geom_gix" ON "public"."geocercas_tbl" USING "gist" ("geom");
+
+
+
+CREATE INDEX "geocercas_geom_idx" ON "public"."geocercas_tbl" USING "gist" ((("geom")::"public"."geometry"));
+
+
+
+CREATE INDEX "geocercas_gin_bbox_idx" ON "public"."geocercas" USING "gin" ("bbox");
+
+
+
+CREATE INDEX "geocercas_gin_geojson" ON "public"."geocercas" USING "gin" ("geojson");
+
+
+
+CREATE INDEX "geocercas_gin_geojson_idx" ON "public"."geocercas" USING "gin" ("geojson");
+
+
+
+CREATE INDEX "geocercas_id_text_idx" ON "public"."geocercas" USING "btree" ("id_text");
+
+
+
+CREATE UNIQUE INDEX "geocercas_id_text_key" ON "public"."geocercas" USING "btree" ("id_text") WHERE ("id_text" IS NOT NULL);
+
+
+
+CREATE INDEX "geocercas_org_id_idx" ON "public"."geocercas" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "geocercas_org_idx" ON "public"."geocercas" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "geocercas_org_is_deleted_idx" ON "public"."geocercas" USING "btree" ("org_id", "is_deleted");
+
+
+
+CREATE INDEX "geocercas_owner_id_idx" ON "public"."geocercas_tbl" USING "btree" ("owner_id");
+
+
+
+CREATE INDEX "geocercas_owner_idx" ON "public"."geocercas_tbl" USING "btree" ("owner_id");
+
+
+
+CREATE INDEX "geocercas_updated_idx" ON "public"."geocercas" USING "btree" ("updated_at" DESC);
+
+
+
+CREATE UNIQUE INDEX "geocercas_user_nombre_unique" ON "public"."geocercas" USING "btree" ("usuario_id", "lower"("name"));
+
+
+
+CREATE UNIQUE INDEX "geocercas_usuario_nombre_unique" ON "public"."geocercas_tbl" USING "btree" ("usuario_id", "nombre");
+
+
+
+CREATE UNIQUE INDEX "geocercas_usuario_nombre_unique_idx" ON "public"."geocercas_tbl" USING "btree" ("usuario_id", "nombre");
+
+
+
+CREATE INDEX "geocercas_visible_idx" ON "public"."geocercas" USING "btree" ("visible");
+
+
+
+CREATE INDEX "geofences_geom_gix" ON "public"."geofences" USING "gist" ("geom");
+
+
+
+CREATE INDEX "geofences_org_id_idx" ON "public"."geofences" USING "btree" ("org_id");
+
+
+
+CREATE UNIQUE INDEX "geofences_org_name_ci_uq" ON "public"."geofences" USING "btree" ("org_id", "lower"("name"));
+
+
+
+CREATE INDEX "idx_aa_tracker_range" ON "public"."activity_assignments" USING "btree" ("tracker_user_id", "start_date", "end_date");
+
+
+
+CREATE INDEX "idx_activities_tenant_active" ON "public"."activities" USING "btree" ("tenant_id", "active");
+
+
+
+CREATE INDEX "idx_app_user_roles_org" ON "public"."app_user_roles" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_app_user_roles_user" ON "public"."app_user_roles" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_app_user_roles_user_id" ON "public"."app_user_roles" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_app_user_roles_user_org" ON "public"."app_user_roles" USING "btree" ("user_id", "org_id");
+
+
+
+CREATE INDEX "idx_ar_activity_range" ON "public"."activity_rates" USING "btree" ("activity_id", "start_date", "end_date");
+
+
+
+CREATE INDEX "idx_asig_estado" ON "public"."asignaciones" USING "btree" ("estado");
+
+
+
+CREATE INDEX "idx_asig_geocerca" ON "public"."asignaciones" USING "btree" ("geocerca_id");
+
+
+
+CREATE INDEX "idx_asig_tenant" ON "public"."asignaciones" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_asignaciones_geocerca_id" ON "public"."asignaciones" USING "btree" ("geocerca_id");
+
+
+
+CREATE INDEX "idx_asignaciones_not_deleted" ON "public"."asignaciones" USING "btree" ("is_deleted");
+
+
+
+CREATE INDEX "idx_asignaciones_org_id" ON "public"."asignaciones" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_asignaciones_owner_org" ON "public"."asignaciones" USING "btree" ("owner_id", "org_id");
+
+
+
+CREATE INDEX "idx_asignaciones_personal_id" ON "public"."asignaciones" USING "btree" ("personal_id");
+
+
+
+CREATE INDEX "idx_asignaciones_tenant_id" ON "public"."asignaciones" USING "btree" ("tenant_id");
+
+
+
+CREATE INDEX "idx_assignments_geofence" ON "public"."geofence_assignments" USING "btree" ("geofence_id");
+
+
+
+CREATE INDEX "idx_assignments_tracker" ON "public"."geofence_assignments" USING "btree" ("tracker_email");
+
+
+
+CREATE INDEX "idx_att_created_at" ON "public"."attendances" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "idx_att_email" ON "public"."attendances" USING "btree" ("email");
+
+
+
+CREATE INDEX "idx_attendance_events_user_ts" ON "public"."attendance_events" USING "btree" ("user_id", "ts" DESC);
+
+
+
+CREATE INDEX "idx_attendances_org_created" ON "public"."attendances" USING "btree" ("org_id", "created_at" DESC);
+
+
+
+CREATE INDEX "idx_attendances_org_created_at" ON "public"."attendances" USING "btree" ("org_id", "created_at" DESC);
+
+
+
+CREATE INDEX "idx_attendances_org_email" ON "public"."attendances" USING "btree" ("org_id", "email");
+
+
+
+CREATE INDEX "idx_geocerca_geofence_map_geocerca" ON "public"."geocerca_geofence_map" USING "btree" ("org_id", "geocerca_id");
+
+
+
+CREATE INDEX "idx_geocerca_geofence_map_geofence" ON "public"."geocerca_geofence_map" USING "btree" ("org_id", "geofence_id");
+
+
+
+CREATE INDEX "idx_geofence_events_user_ts" ON "public"."geofence_events" USING "btree" ("user_id", "ts" DESC);
+
+
+
+CREATE INDEX "idx_geofences_active" ON "public"."geofences" USING "btree" ("active");
+
+
+
+CREATE INDEX "idx_geofences_geom" ON "public"."geofences" USING "gist" ("geom");
+
+
+
+CREATE INDEX "idx_geofences_org" ON "public"."geofences" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_latest_tracker_position_tracker" ON "public"."latest_tracker_position" USING "btree" ("tracker_id");
+
+
+
+CREATE INDEX "idx_members_with_profiles_org" ON "public"."memberships" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_memberships_tracker_vigente" ON "public"."memberships" USING "btree" ("org_id") WHERE (("role" = 'tracker'::"public"."role_type") AND ("revoked_at" IS NULL));
+
+
+
+CREATE INDEX "idx_memberships_user_org" ON "public"."memberships" USING "btree" ("user_id", "org_id");
+
+
+
+CREATE INDEX "idx_org_billing_plan" ON "public"."org_billing" USING "btree" ("plan_code");
+
+
+
+CREATE INDEX "idx_org_invites_email" ON "public"."org_invites" USING "btree" ("email");
+
+
+
+CREATE INDEX "idx_org_invites_org" ON "public"."org_invites" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_org_members_user_org" ON "public"."org_members" USING "btree" ("user_id", "org_id");
+
+
+
+CREATE INDEX "idx_org_users_org" ON "public"."org_users" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_org_users_user" ON "public"."org_users" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_pe_tenant_ts" ON "public"."position_events" USING "btree" ("tenant_id", "ts" DESC);
+
+
+
+CREATE INDEX "idx_personal_fechas" ON "public"."personal" USING "btree" ("fecha_inicio", "fecha_fin");
+
+
+
+CREATE INDEX "idx_personal_org" ON "public"."personal" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_personal_org_emailnorm" ON "public"."personal" USING "btree" ("org_id", "email_norm");
+
+
+
+CREATE INDEX "idx_personal_org_id" ON "public"."personal" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_personal_user_id" ON "public"."personal" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_personal_vigente" ON "public"."personal" USING "btree" ("vigente");
+
+
+
+CREATE INDEX "idx_pos_geocerca_time" ON "public"."posiciones" USING "btree" ("geocerca_id", "timestamp");
+
+
+
+CREATE INDEX "idx_pos_lltoearth" ON "public"."posiciones" USING "gist" ("public"."ll_to_earth"("lat", "lng"));
+
+
+
+CREATE INDEX "idx_pos_tracker_time" ON "public"."posiciones" USING "btree" ("tracker_id", "timestamp");
+
+
+
+CREATE INDEX "idx_positions_asignacion_time" ON "public"."positions" USING "btree" ("asignacion_id", "recorded_at" DESC);
+
+
+
+CREATE INDEX "idx_positions_org_recorded_at" ON "public"."positions" USING "btree" ("org_id", "recorded_at" DESC);
+
+
+
+CREATE INDEX "idx_positions_org_time" ON "public"."positions" USING "btree" ("org_id", "recorded_at" DESC);
+
+
+
+CREATE INDEX "idx_positions_user_recorded_at" ON "public"."positions" USING "btree" ("user_id", "recorded_at" DESC);
+
+
+
+CREATE INDEX "idx_positions_user_time" ON "public"."positions" USING "btree" ("user_id", "recorded_at" DESC);
+
+
+
+CREATE INDEX "idx_profiles_active_tenant_id" ON "public"."profiles" USING "btree" ("active_tenant_id");
+
+
+
+CREATE INDEX "idx_ta_org" ON "public"."tracker_assignments" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_ta_org_tracker_active" ON "public"."tracker_assignments" USING "btree" ("org_id", "tracker_user_id", "active");
+
+
+
+CREATE INDEX "idx_ta_tracker_range" ON "public"."tracker_assignments" USING "btree" ("tracker_user_id", "start_date", "end_date");
+
+
+
+CREATE INDEX "idx_tracker_assignments_activity_id" ON "public"."tracker_assignments" USING "btree" ("activity_id");
+
+
+
+CREATE INDEX "idx_tracker_assignments_geofence" ON "public"."tracker_assignments" USING "btree" ("geofence_id");
+
+
+
+CREATE INDEX "idx_tracker_assignments_tenant_active" ON "public"."tracker_assignments" USING "btree" ("tenant_id", "active");
+
+
+
+CREATE INDEX "idx_tracker_assignments_tenant_tracker_active" ON "public"."tracker_assignments" USING "btree" ("tenant_id", "tracker_user_id", "active");
+
+
+
+CREATE INDEX "idx_tracker_locations_org_created_at" ON "public"."tracker_locations" USING "btree" ("org_id", "created_at" DESC);
+
+
+
+CREATE INDEX "idx_tracker_locations_tracker_created_at" ON "public"."tracker_locations" USING "btree" ("tracker_id", "created_at" DESC);
+
+
+
+CREATE INDEX "idx_tracker_logs_geom" ON "public"."tracker_logs" USING "gist" ("geom");
+
+
+
+CREATE INDEX "idx_tracker_logs_org" ON "public"."tracker_logs" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_tracker_logs_ts_desc" ON "public"."tracker_logs" USING "btree" ("ts" DESC);
+
+
+
+CREATE INDEX "idx_tracker_logs_user" ON "public"."tracker_logs" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_tracker_logs_user_ts" ON "public"."tracker_logs" USING "btree" ("user_id", "ts" DESC);
+
+
+
+CREATE INDEX "idx_tracker_positions_user_id" ON "public"."tracker_positions" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_user_organizations_org_id" ON "public"."user_organizations" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_user_organizations_user_id" ON "public"."user_organizations" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_user_orgs_org" ON "public"."user_orgs" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "idx_user_orgs_user" ON "public"."user_orgs" USING "btree" ("user_id");
+
+
+
+CREATE UNIQUE INDEX "idx_usuarios_phone_e164_unique" ON "public"."usuarios" USING "btree" ("phone_e164") WHERE ("phone_e164" IS NOT NULL);
+
+
+
+CREATE INDEX "invitations_org_idx" ON "public"."invitations" USING "btree" ("org_id");
+
+
+
+CREATE UNIQUE INDEX "invitations_pending_unique" ON "public"."invitations" USING "btree" ("org_id", "email") WHERE ("status" = 'pending'::"public"."invite_status");
+
+
+
+CREATE UNIQUE INDEX "invitations_token_key" ON "public"."invitations" USING "btree" ("token");
+
+
+
+CREATE INDEX "ix_pending_invites_email_lower" ON "public"."pending_invites" USING "btree" ("lower"("email"));
+
+
+
+CREATE UNIQUE INDEX "memberships_one_default_per_user" ON "public"."memberships" USING "btree" ("user_id") WHERE ("is_default" = true);
+
+
+
+CREATE UNIQUE INDEX "memberships_one_default_per_user_uk" ON "public"."memberships" USING "btree" ("user_id") WHERE ("is_default" = true);
+
+
+
+CREATE UNIQUE INDEX "memberships_org_user_role_uk" ON "public"."memberships" USING "btree" ("org_id", "user_id", "role");
+
+
+
+CREATE UNIQUE INDEX "memberships_user_org_uniq" ON "public"."memberships" USING "btree" ("user_id", "org_id");
+
+
+
+CREATE INDEX "org_invites_email_idx" ON "public"."org_invites" USING "btree" ("lower"("email"));
+
+
+
+CREATE INDEX "org_invites_org_id_idx" ON "public"."org_invites" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "org_invites_pending_idx" ON "public"."org_invites" USING "btree" ("org_id", "lower"("email")) WHERE (("accepted_at" IS NULL) AND ("revoked_at" IS NULL));
+
+
+
+CREATE INDEX "org_invites_status_idx" ON "public"."org_invites" USING "btree" ("status");
+
+
+
+CREATE UNIQUE INDEX "org_members_org_user_uniq" ON "public"."org_members" USING "btree" ("org_id", "user_id");
+
+
+
+CREATE UNIQUE INDEX "org_people_org_person_uniq" ON "public"."org_people" USING "btree" ("org_id", "person_id");
+
+
+
+CREATE UNIQUE INDEX "org_people_unique_active" ON "public"."org_people" USING "btree" ("org_id", "person_id") WHERE ("is_deleted" = false);
+
+
+
+CREATE INDEX "org_tenant_map_tenant_idx" ON "public"."org_tenant_map" USING "btree" ("tenant_id");
+
+
+
+CREATE UNIQUE INDEX "organizations_slug_key" ON "public"."organizations" USING "btree" ("slug") WHERE ("slug" IS NOT NULL);
+
+
+
+CREATE INDEX "organizations_suspended_true_idx" ON "public"."organizations" USING "btree" ("id") WHERE ("suspended" = true);
+
+
+
+CREATE UNIQUE INDEX "people_unique_documento" ON "public"."people" USING "btree" ("documento_norm") WHERE ("documento_norm" IS NOT NULL);
+
+
+
+CREATE UNIQUE INDEX "people_unique_email" ON "public"."people" USING "btree" ("email_norm") WHERE ("email_norm" IS NOT NULL);
+
+
+
+CREATE UNIQUE INDEX "people_unique_phone" ON "public"."people" USING "btree" ("phone_norm") WHERE ("phone_norm" IS NOT NULL);
+
+
+
+CREATE INDEX "personal_created_at_idx" ON "public"."personal" USING "btree" ("created_at");
+
+
+
+CREATE INDEX "personal_email_idx" ON "public"."personal" USING "btree" ("email");
+
+
+
+CREATE INDEX "personal_fingerprint_idx" ON "public"."personal" USING "btree" ("fingerprint");
+
+
+
+CREATE INDEX "personal_org_email_idx" ON "public"."personal" USING "btree" ("org_id", "lower"("email"));
+
+
+
+CREATE INDEX "personal_org_owner_tracker_idx" ON "public"."personal" USING "btree" ("org_id") WHERE (("owner_id" IS NOT NULL) AND (COALESCE("is_deleted", false) = false));
+
+
+
+CREATE INDEX "personal_org_tracker_idx" ON "public"."personal" USING "btree" ("org_id") WHERE (("position_interval_sec" IS NOT NULL) AND ("position_interval_sec" > 0) AND (COALESCE("is_deleted", false) = false));
+
+
+
+CREATE INDEX "personal_org_vigente_idx" ON "public"."personal" USING "btree" ("org_id", "is_deleted", "vigente");
+
+
+
+CREATE INDEX "personal_owner_id_idx" ON "public"."personal" USING "btree" ("owner_id");
+
+
+
+CREATE UNIQUE INDEX "personal_unique_active_email" ON "public"."personal" USING "btree" ("org_id", "email_norm") WHERE ((COALESCE("is_deleted", false) = false) AND ("email_norm" IS NOT NULL));
+
+
+
+CREATE UNIQUE INDEX "personal_unique_active_identity" ON "public"."personal" USING "btree" ("org_id", "identity_key") WHERE ((COALESCE("is_deleted", false) = false) AND ("identity_key" IS NOT NULL));
+
+
+
+CREATE UNIQUE INDEX "personal_unique_active_per_org" ON "public"."personal" USING "btree" ("org_id", "lower"("email"), "telefono_norm") WHERE ("is_deleted" = false);
+
+
+
+CREATE UNIQUE INDEX "personal_unique_active_phone" ON "public"."personal" USING "btree" ("org_id", "phone_norm") WHERE ((COALESCE("is_deleted", false) = false) AND ("phone_norm" IS NOT NULL));
+
+
+
+CREATE UNIQUE INDEX "personal_unique_fingerprint_active" ON "public"."personal" USING "btree" ("org_id", "fingerprint") WHERE (("is_deleted" = false) AND ("vigente" = true));
+
+
+
+CREATE INDEX "profiles_created_at_desc_idx" ON "public"."profiles" USING "btree" ("created_at" DESC);
+
+
+
+CREATE UNIQUE INDEX "profiles_email_unique" ON "public"."profiles" USING "btree" ("lower"("email")) WHERE ("email" IS NOT NULL);
+
+
+
+CREATE INDEX "profiles_role_idx" ON "public"."profiles" USING "btree" ("role_id");
+
+
+
+CREATE INDEX "tracker_assignments_active_idx" ON "public"."tracker_assignments" USING "btree" ("tracker_user_id", "tenant_id", "active", "created_at" DESC);
+
+
+
+CREATE UNIQUE INDEX "tracker_assignments_orphan_archive_id_ux" ON "public"."tracker_assignments_orphan_archive" USING "btree" ("id");
+
+
+
+CREATE INDEX "tracker_assignments_period_tstz_gist" ON "public"."tracker_assignments" USING "gist" ("period_tstz");
+
+
+
+CREATE INDEX "tracker_invites_email_norm_idx" ON "public"."tracker_invites" USING "btree" ("email_norm");
+
+
+
+CREATE INDEX "tracker_invites_expires_at_idx" ON "public"."tracker_invites" USING "btree" ("expires_at");
+
+
+
+CREATE INDEX "tracker_invites_lookup_active_idx" ON "public"."tracker_invites" USING "btree" ("org_id", "email_norm", "is_active", "created_at" DESC);
+
+
+
+CREATE UNIQUE INDEX "tracker_invites_one_active_per_org_email_ux" ON "public"."tracker_invites" USING "btree" ("org_id", "email_norm") WHERE ("is_active" = true);
+
+
+
+CREATE UNIQUE INDEX "tracker_invites_one_pending_per_org_email_ux" ON "public"."tracker_invites" USING "btree" ("org_id", "email_norm") WHERE ("used_at" IS NULL);
+
+
+
+CREATE INDEX "tracker_invites_org_id_idx" ON "public"."tracker_invites" USING "btree" ("org_id");
+
+
+
+CREATE INDEX "tracker_logs_tenant_received_idx" ON "public"."tracker_logs" USING "btree" ("tenant_id", "received_at" DESC);
+
+
+
+CREATE INDEX "tracker_logs_user_received_idx" ON "public"."tracker_logs" USING "btree" ("user_id", "received_at" DESC);
+
+
+
+CREATE INDEX "tracker_positions_user_created_at_idx" ON "public"."tracker_positions" USING "btree" ("user_id", "created_at" DESC);
+
+
+
+CREATE UNIQUE INDEX "uniq_asig_person_geofence" ON "public"."tracker_assignments" USING "btree" ("tracker_user_id", "geofence_id") WHERE ("end_date" IS NULL);
+
+
+
+CREATE UNIQUE INDEX "uq_geofences_one_default_per_org" ON "public"."geofences" USING "btree" ("org_id") WHERE ("is_default" = true);
+
+
+
+CREATE UNIQUE INDEX "uq_personal_org_documento" ON "public"."personal" USING "btree" ("org_id", "lower"("documento")) WHERE (("documento" IS NOT NULL) AND ("documento" <> ''::"text"));
+
+
+
+CREATE UNIQUE INDEX "uq_personal_org_email_active" ON "public"."personal" USING "btree" ("org_id", "lower"("email")) WHERE ((COALESCE("is_deleted", false) = false) AND ("email" IS NOT NULL) AND ("email" <> ''::"text"));
+
+
+
+CREATE UNIQUE INDEX "uq_tracker_assignments_unique" ON "public"."tracker_assignments" USING "btree" ("tenant_id", "tracker_user_id", "geofence_id");
+
+
+
+CREATE UNIQUE INDEX "ux_geofences_org_source_geocerca" ON "public"."geofences" USING "btree" ("org_id", "source_geocerca_id") WHERE ("source_geocerca_id" IS NOT NULL);
+
+
+
+CREATE UNIQUE INDEX "ux_memberships_one_default_per_user" ON "public"."memberships" USING "btree" ("user_id") WHERE ("is_default" = true);
+
+
+
+CREATE UNIQUE INDEX "ux_memberships_user_org_active" ON "public"."memberships" USING "btree" ("user_id", "org_id") WHERE ("revoked_at" IS NULL);
+
+
+
+CREATE UNIQUE INDEX "ux_organizations_one_personal_per_owner" ON "public"."organizations" USING "btree" ("owner_id") WHERE ("is_personal" = true);
+
+
+
+CREATE UNIQUE INDEX "ux_pending_invites_active" ON "public"."pending_invites" USING "btree" ("lower"("email"), "role", COALESCE("target_org_id", '00000000-0000-0000-0000-000000000000'::"uuid")) WHERE (("status" = 'pending'::"text") AND ("email" IS NOT NULL) AND ("role" IS NOT NULL));
+
+
+
+CREATE UNIQUE INDEX "ux_pending_invites_claim_code_active" ON "public"."pending_invites" USING "btree" ("claim_code") WHERE ("status" = 'pending'::"text");
+
+
+
+CREATE UNIQUE INDEX "ux_personal_org_user_active" ON "public"."personal" USING "btree" ("org_id", "user_id") WHERE ((COALESCE("is_deleted", false) = false) AND ("user_id" IS NOT NULL));
+
+
+
+CREATE UNIQUE INDEX "ux_ta_one_active_per_tracker_org" ON "public"."tracker_assignments" USING "btree" ("org_id", "tracker_user_id") WHERE ("active" IS TRUE);
+
+
+
+CREATE UNIQUE INDEX "ux_tracker_assignments_active" ON "public"."tracker_assignments" USING "btree" ("tracker_user_id", "geofence_id") WHERE ("active" IS TRUE);
+
+
+
+CREATE UNIQUE INDEX "ux_tracker_latest_user" ON "public"."tracker_latest" USING "btree" ("user_id");
+
+
+
+CREATE RULE "block_physical_delete_personal" AS
+    ON DELETE TO "public"."personal" DO INSTEAD NOTHING;
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_bi_bu" BEFORE INSERT OR UPDATE ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_bi_bu__orig"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_ensure_geofence_mirror" AFTER INSERT OR UPDATE OF "geojson", "name", "active", "lat", "lng", "radius_m", "org_id" ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."trg_geocercas_ensure_geofence"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_fix_org_trg" BEFORE INSERT ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_fix_org"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_geom_trg" BEFORE INSERT OR UPDATE ON "public"."geocercas_tbl" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_set_geom"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_set_owner" BEFORE INSERT ON "public"."geocercas_tbl" FOR EACH ROW EXECUTE FUNCTION "public"."set_owner_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_sync_nombre_name" BEFORE INSERT OR UPDATE ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_sync_nombre_name"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_total_limit" BEFORE INSERT ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_geocercas_total_limit"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_v_delete" INSTEAD OF DELETE ON "public"."geocercas_v" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_v_delete"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_v_insert" INSTEAD OF INSERT ON "public"."geocercas_v" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_v_insert"();
+
+
+
+CREATE OR REPLACE TRIGGER "geocercas_v_update" INSTEAD OF UPDATE ON "public"."geocercas_v" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_v_update"();
+
+
+
+CREATE OR REPLACE TRIGGER "geofences_fill_user" BEFORE INSERT OR UPDATE ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."geofences_fill_user"();
+
+
+
+CREATE OR REPLACE TRIGGER "geofences_set_org" BEFORE INSERT OR UPDATE ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."trg_geofences_set_org_orig"();
+
+
+
+CREATE OR REPLACE TRIGGER "geofences_sync_geometry" BEFORE INSERT OR UPDATE ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."geofences_sync_geometry"();
+
+
+
+CREATE OR REPLACE TRIGGER "org_after_insert_ensure_owner_role" AFTER INSERT ON "public"."organizations" FOR EACH ROW EXECUTE FUNCTION "public"."tg_org_after_insert_ensure_owner_role"();
+
+
+
+CREATE OR REPLACE TRIGGER "set_created_by_before_insert" BEFORE INSERT ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."set_created_by"();
+
+
+
+CREATE OR REPLACE TRIGGER "set_geocerca_id_before_insert" BEFORE INSERT ON "public"."tracker_positions" FOR EACH ROW EXECUTE FUNCTION "public"."trg_set_geocerca_id_on_tracker_positions"();
+
+
+
+CREATE OR REPLACE TRIGGER "tr_block_profiles_direct_writes" BEFORE INSERT OR UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."guard_profiles_direct_writes"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_activities_set_org" BEFORE INSERT ON "public"."activities" FOR EACH ROW EXECUTE FUNCTION "public"."set_org_defaults"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_activities_sync_org_tenant" BEFORE INSERT OR UPDATE ON "public"."activities" FOR EACH ROW EXECUTE FUNCTION "public"."activities_sync_org_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_app_settings_updated_at" BEFORE UPDATE ON "public"."app_settings" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_apply_pending_invite_on_profile" AFTER INSERT ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."apply_pending_invite_on_profile"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asignaciones_enforce_tenant" BEFORE INSERT OR UPDATE ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."asignaciones_enforce_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asignaciones_ensure_geofence_from_geocerca" BEFORE INSERT OR UPDATE ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."trg_asignaciones_ensure_geofence_from_geocerca"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asignaciones_org_people_guard" BEFORE INSERT OR UPDATE ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."asignaciones_org_people_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asignaciones_same_org" BEFORE INSERT OR UPDATE OF "geocerca_id", "personal_id", "activity_id", "org_id" ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."asignaciones_enforce_same_org"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asignaciones_set_org" BEFORE INSERT ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."set_org_defaults"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asignaciones_set_org_id" BEFORE INSERT OR UPDATE OF "geocerca_id", "personal_id" ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."asignaciones_set_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asignaciones_sync_tracker_assignments" AFTER INSERT OR UPDATE OF "personal_id", "geocerca_id", "start_time", "end_time", "frecuencia_envio_sec", "status", "estado", "is_deleted" ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."trg_asignaciones_sync_tracker_assignments"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_asistencias_updated_at" BEFORE UPDATE ON "public"."asistencias" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_copy_tracker_to_positions" AFTER INSERT ON "public"."tracker_logs" FOR EACH ROW EXECUTE FUNCTION "public"."copy_tracker_log_to_positions"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_enforce_geocercas_limit" BEFORE INSERT ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_geocercas_limit"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_enforce_geocercas_total_limit" BEFORE INSERT ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_geocercas_total_limit_core_orig"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_enforce_org_people_tracker_limit_ins" BEFORE INSERT ON "public"."org_people" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_people_tracker_limit"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_enforce_org_people_tracker_limit_upd" BEFORE UPDATE ON "public"."org_people" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_people_tracker_limit"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_enforce_tracker_plan_limit" BEFORE INSERT OR UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "app"."enforce_tracker_plan_limit"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_ensure_org_for_admin_profile" BEFORE INSERT OR UPDATE ON "public"."profiles" FOR EACH ROW WHEN ((COALESCE("new"."role", ''::"text") = ANY (ARRAY['admin'::"text", 'owner'::"text"]))) EXECUTE FUNCTION "public"."ensure_org_for_admin_profile"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_ensure_org_for_admin_user_profile" BEFORE INSERT OR UPDATE ON "public"."user_profiles" FOR EACH ROW EXECUTE FUNCTION "public"."ensure_org_for_admin_user_profile"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_ensure_org_for_new_admin" BEFORE INSERT ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."ensure_org_for_new_admin"();
+
+ALTER TABLE "public"."memberships" DISABLE TRIGGER "trg_ensure_org_for_new_admin";
+
+
+
+CREATE OR REPLACE TRIGGER "trg_ensure_tenant_for_org" AFTER INSERT ON "public"."organizations" FOR EACH ROW EXECUTE FUNCTION "public"."ensure_tenant_for_org"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_fix_missing_membership_from_profile" AFTER INSERT OR UPDATE OF "org_id" ON "public"."profiles" FOR EACH ROW WHEN (("new"."org_id" IS NOT NULL)) EXECUTE FUNCTION "public"."fix_missing_membership_from_profile"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geocercas_enforce_canonical_fields" BEFORE INSERT OR UPDATE ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."geocercas_enforce_canonical_fields"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geocercas_force_org_id" BEFORE INSERT OR UPDATE ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."trg_geocercas_force_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geocercas_set_org" BEFORE INSERT ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."set_org_defaults"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geocercas_tbl_updated_at" BEFORE UPDATE ON "public"."geocercas_tbl" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geocercas_updated_at" BEFORE UPDATE ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geofence_disable_assignments" AFTER UPDATE OF "active" ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."disable_assignments_when_geofence_inactive"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geofence_limit" AFTER INSERT OR DELETE ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_geofence_limit"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_geofence_transitions" AFTER INSERT ON "public"."tracker_logs" FOR EACH ROW EXECUTE FUNCTION "public"."process_geofence_transitions"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_membership_audit" AFTER INSERT OR DELETE OR UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."audit_memberships"();
+
+ALTER TABLE "public"."memberships" DISABLE TRIGGER "trg_membership_audit";
+
+
+
+CREATE OR REPLACE TRIGGER "trg_memberships_one_default" BEFORE INSERT OR UPDATE OF "is_default", "user_id", "org_id" ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."ensure_single_default_membership"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_memberships_recalc_users_public_role" AFTER INSERT OR DELETE OR UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."recalc_users_public_role_from_memberships"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_memberships_role_guard" BEFORE INSERT OR UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."memberships_role_guard"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_memberships_sync_app_user_roles_del" AFTER DELETE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."sync_app_user_roles_from_memberships"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_memberships_sync_app_user_roles_ins" AFTER INSERT ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."sync_app_user_roles_from_memberships"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_memberships_sync_app_user_roles_upd" AFTER UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."sync_app_user_roles_from_memberships"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_org_billing_touch" BEFORE UPDATE ON "public"."org_billing" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_org_created_membership" AFTER INSERT ON "public"."organizations" FOR EACH ROW EXECUTE FUNCTION "public"."on_organization_created"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_org_invites_accepted" AFTER UPDATE ON "public"."org_invites" FOR EACH ROW EXECUTE FUNCTION "public"."on_org_invite_accepted"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_org_members_enforce_is_active_for_admins" BEFORE INSERT OR UPDATE OF "role", "is_active" ON "public"."org_members" FOR EACH ROW EXECUTE FUNCTION "public"."_org_members_enforce_is_active_for_admins"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_org_people_consistency" BEFORE INSERT OR UPDATE ON "public"."org_people" FOR EACH ROW EXECUTE FUNCTION "public"."tg_org_people_consistency"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_org_people_soft_delete_consistency" BEFORE INSERT OR UPDATE ON "public"."org_people" FOR EACH ROW EXECUTE FUNCTION "public"."tg_org_people_soft_delete_consistency"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_prevent_membership_role_escalation" BEFORE UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_membership_role_escalation"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_prevent_personal_duplicate_on_undelete" BEFORE INSERT OR UPDATE OF "is_deleted", "email", "telefono", "org_id" ON "public"."personal" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_personal_duplicate_on_undelete"();
+
+ALTER TABLE "public"."personal" DISABLE TRIGGER "trg_prevent_personal_duplicate_on_undelete";
+
+
+
+CREATE OR REPLACE TRIGGER "trg_profiles_default_role" BEFORE INSERT ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."set_default_role_tracker"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_set_created_by_geofences" BEFORE INSERT ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."set_created_by_from_auth"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_set_current_org_on_invite" AFTER UPDATE ON "public"."org_invites" FOR EACH ROW EXECUTE FUNCTION "public"."set_current_org_on_invite_accept"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_set_geo_audit_fields" BEFORE INSERT OR UPDATE ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."geofences_set_user_and_audit"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_set_geom" BEFORE INSERT OR UPDATE ON "public"."tracker_logs" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_logs_set_geom"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_set_org_owner_defaults" BEFORE INSERT ON "public"."organizations" FOR EACH ROW EXECUTE FUNCTION "public"."set_org_owner_defaults"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_set_owner_on_insert" BEFORE INSERT ON "public"."geocercas_tbl" FOR EACH ROW EXECUTE FUNCTION "public"."set_owner_on_insert"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_set_owner_on_insert_tbl" BEFORE INSERT ON "public"."geocercas_tbl" FOR EACH ROW EXECUTE FUNCTION "public"."set_owner_on_insert_tbl"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_sync_org_tenant_from_geocercas" AFTER INSERT OR UPDATE OF "org_id", "tenant_id", "is_deleted" ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."sync_org_tenant_from_geocercas"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_sync_owner_membership_on_org_update" AFTER UPDATE OF "owner_id" ON "public"."organizations" FOR EACH ROW EXECUTE FUNCTION "public"."sync_owner_membership_on_org_update"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_sync_tracker_assignments" AFTER INSERT OR UPDATE ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."trg_sync_tracker_assignments_from_asignaciones"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_sync_tracker_assignments_from_asignaciones" AFTER INSERT OR UPDATE ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."trg_sync_tracker_assignments_from_asignaciones"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__activities" BEFORE INSERT OR UPDATE OF "org_id", "tenant_id" ON "public"."activities" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_eq_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__activity_assignments" BEFORE INSERT OR UPDATE OF "tenant_id" ON "public"."activity_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_tenant_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__activity_rates" BEFORE INSERT OR UPDATE OF "tenant_id" ON "public"."activity_rates" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_tenant_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__asignaciones" BEFORE INSERT OR UPDATE OF "org_id", "tenant_id" ON "public"."asignaciones" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_eq_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__attendances" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."attendances" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__geocercas" BEFORE INSERT OR UPDATE OF "org_id", "tenant_id" ON "public"."geocercas" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_eq_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__geocercas_backup_legacy" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."geocercas_backup_legacy" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__geofences" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__invitations" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."invitations" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__org_invites" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."org_invites" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__org_members" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."org_members" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__org_people" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."org_people" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__org_users" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."org_users" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__personal" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."personal" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__position_events" BEFORE INSERT OR UPDATE OF "tenant_id" ON "public"."position_events" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_tenant_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__positions" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."positions" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__profiles" BEFORE INSERT OR UPDATE OF "org_id", "tenant_id" ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_eq_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__profiles_backup_1" BEFORE INSERT OR UPDATE OF "org_id", "tenant_id" ON "public"."profiles_backup_1" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_eq_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__tracker_assignments" BEFORE INSERT OR UPDATE OF "tenant_id" ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_tenant_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__tracker_latest" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."tracker_latest" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__tracker_locations" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."tracker_locations" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__tracker_logs" BEFORE INSERT OR UPDATE OF "org_id", "tenant_id" ON "public"."tracker_logs" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_eq_tenant"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__user_organizations" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."user_organizations" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__user_orgs" BEFORE INSERT OR UPDATE OF "org_id" ON "public"."user_orgs" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_org_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tenancy_blindaje__users_public" BEFORE INSERT OR UPDATE OF "tenant_id" ON "public"."users_public" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_tenant_id"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_touch_updated_at" BEFORE UPDATE ON "public"."geofences" FOR EACH ROW EXECUTE FUNCTION "public"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_assignments_defaults" BEFORE INSERT OR UPDATE OF "geofence_id" ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_assignments_defaults"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_assignments_ensure_dates" BEFORE INSERT OR UPDATE ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_assignments_ensure_dates"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_assignments_set_context" BEFORE INSERT OR UPDATE OF "geofence_id" ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_assignments_set_context"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_assignments_sync_dates" BEFORE INSERT OR UPDATE ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_assignments_sync_dates"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_assignments_sync_period_tstz" BEFORE INSERT OR UPDATE OF "period", "start_date", "end_date", "period_tstz" ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_assignments_sync_period_tstz"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_assignments_updated_at" BEFORE UPDATE ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_invites_set_is_active" BEFORE INSERT OR UPDATE OF "used_at", "expires_at" ON "public"."tracker_invites" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_invites_set_is_active"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_logs_upsert_latest" AFTER INSERT ON "public"."tracker_logs" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_logs_upsert_latest"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_tracker_positions_bi_set_geocerca" BEFORE INSERT ON "public"."tracker_positions" FOR EACH ROW EXECUTE FUNCTION "public"."tracker_positions_bi_set_geocerca"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_users_public_accept_invites" AFTER INSERT OR UPDATE OF "email" ON "public"."users_public" FOR EACH ROW EXECUTE FUNCTION "public"."trg_users_public_accept_invites"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_validate_tracker_assignment_geofence" BEFORE INSERT OR UPDATE ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."trg_validate_tracker_assignment_geofence"();
+
+
+
+CREATE OR REPLACE TRIGGER "validate_tracker_assignment_geofence" BEFORE INSERT OR UPDATE OF "geofence_id", "org_id" ON "public"."tracker_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."trg_validate_tracker_assignment_geofence"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_enforce_personal_tracker_limit" BEFORE INSERT OR UPDATE ON "public"."personal" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_personal_tracker_limit_final"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_one_admin_invitations" BEFORE INSERT OR UPDATE OF "role", "org_id" ON "public"."invitations" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_single_admin_invites"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_one_admin_memberships" BEFORE INSERT OR UPDATE OF "role", "org_id", "user_id" ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_single_admin_per_org"();
+
+ALTER TABLE "public"."memberships" DISABLE TRIGGER "zzz_one_admin_memberships";
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_one_admin_org_invites" BEFORE INSERT OR UPDATE OF "role", "org_id" ON "public"."org_invites" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_single_admin_invites"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_one_admin_org_members" BEFORE INSERT OR UPDATE OF "role", "org_id", "user_id", "is_active" ON "public"."org_members" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_single_admin_per_org"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_one_admin_org_users" BEFORE INSERT OR UPDATE OF "role", "org_id", "user_id" ON "public"."org_users" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_single_admin_per_org"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_one_admin_user_organizations" BEFORE INSERT OR UPDATE OF "role", "org_id", "user_id" ON "public"."user_organizations" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_single_admin_per_org"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_one_admin_user_orgs" BEFORE INSERT OR UPDATE OF "role", "org_id", "user_id" ON "public"."user_orgs" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_single_admin_per_org"();
+
+
+
+CREATE OR REPLACE TRIGGER "zzz_personal_biu_defaults" BEFORE INSERT OR UPDATE ON "public"."personal" FOR EACH ROW EXECUTE FUNCTION "public"."personal_biu_defaults_v1"();
+
+ALTER TABLE "public"."personal" DISABLE TRIGGER "zzz_personal_biu_defaults";
+
+
+
+ALTER TABLE ONLY "public"."activity_assignments"
+    ADD CONSTRAINT "activity_assignments_activity_id_fkey" FOREIGN KEY ("activity_id") REFERENCES "public"."activities"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."activity_assignments"
+    ADD CONSTRAINT "activity_assignments_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."activity_assignments"
+    ADD CONSTRAINT "activity_assignments_tracker_user_id_fkey" FOREIGN KEY ("tracker_user_id") REFERENCES "public"."users_public"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."activity_rates"
+    ADD CONSTRAINT "activity_rates_activity_id_fkey" FOREIGN KEY ("activity_id") REFERENCES "public"."activities"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."activity_rates"
+    ADD CONSTRAINT "activity_rates_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."app_root_users"
+    ADD CONSTRAINT "app_root_users_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."app_user_roles"
+    ADD CONSTRAINT "app_user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_activity_id_fkey" FOREIGN KEY ("activity_id") REFERENCES "public"."activities"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_geocerca_fk" FOREIGN KEY ("geocerca_id") REFERENCES "public"."geocercas"("id") ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_org_people_fk" FOREIGN KEY ("org_people_id") REFERENCES "public"."org_people"("id") ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_personal_fk" FOREIGN KEY ("personal_id") REFERENCES "public"."personal"("id") ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."asignaciones"
+    ADD CONSTRAINT "asignaciones_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."asistencias"
+    ADD CONSTRAINT "asistencias_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."attendance_events"
+    ADD CONSTRAINT "attendance_events_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."attendance_events"
+    ADD CONSTRAINT "attendance_events_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."audit_log"
+    ADD CONSTRAINT "audit_log_actor_fkey" FOREIGN KEY ("actor") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."user_organizations"
+    ADD CONSTRAINT "fk_user_org_organization" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."geocercas"
+    ADD CONSTRAINT "geocercas_org_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."geocercas_tbl"
+    ADD CONSTRAINT "geocercas_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."geofence_assignments"
+    ADD CONSTRAINT "geofence_assignments_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."geofence_events"
+    ADD CONSTRAINT "geofence_events_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."geofence_members"
+    ADD CONSTRAINT "geofence_members_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."geofences"
+    ADD CONSTRAINT "geofences_org_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."geofences"
+    ADD CONSTRAINT "geofences_user_fk" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."invitations"
+    ADD CONSTRAINT "invitations_invited_by_fkey" FOREIGN KEY ("invited_by") REFERENCES "auth"."users"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."invitations"
+    ADD CONSTRAINT "invitations_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."memberships"
+    ADD CONSTRAINT "memberships_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."memberships"
+    ADD CONSTRAINT "memberships_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_billing"
+    ADD CONSTRAINT "org_billing_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_members"
+    ADD CONSTRAINT "org_members_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_members"
+    ADD CONSTRAINT "org_members_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_people"
+    ADD CONSTRAINT "org_people_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_people"
+    ADD CONSTRAINT "org_people_person_id_fkey" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."org_users"
+    ADD CONSTRAINT "org_users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."orgs_legacy"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."org_users"
+    ADD CONSTRAINT "org_users_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."organizations"
+    ADD CONSTRAINT "organizations_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."organizations"
+    ADD CONSTRAINT "organizations_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "auth"."users"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."orgs_legacy"
+    ADD CONSTRAINT "orgs_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."pending_invites"
+    ADD CONSTRAINT "pending_invites_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."personal"
+    ADD CONSTRAINT "personal_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."personal"
+    ADD CONSTRAINT "personal_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."posiciones"
+    ADD CONSTRAINT "posiciones_geocerca_fk" FOREIGN KEY ("geocerca_id") REFERENCES "public"."geocercas"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."posiciones"
+    ADD CONSTRAINT "posiciones_tracker_fk" FOREIGN KEY ("tracker_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."position_events"
+    ADD CONSTRAINT "position_events_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."position_events"
+    ADD CONSTRAINT "position_events_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."position_events"
+    ADD CONSTRAINT "position_events_tracker_user_id_fkey" FOREIGN KEY ("tracker_user_id") REFERENCES "public"."users_public"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_current_org_id_fkey" FOREIGN KEY ("current_org_id") REFERENCES "public"."organizations"("id");
+
+
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_default_org_id_fkey" FOREIGN KEY ("default_org_id") REFERENCES "public"."organizations"("id");
+
+
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_org_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON UPDATE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "tracker_assignments_activity_id_fkey" FOREIGN KEY ("activity_id") REFERENCES "public"."activities"("id") ON UPDATE RESTRICT ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "tracker_assignments_geofence_fk" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "tracker_assignments_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "tracker_assignments_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."tracker_assignments"
+    ADD CONSTRAINT "tracker_assignments_tracker_user_id_fkey" FOREIGN KEY ("tracker_user_id") REFERENCES "public"."users_public"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."tracker_invites"
+    ADD CONSTRAINT "tracker_invites_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."tracker_positions"
+    ADD CONSTRAINT "tracker_positions_geocerca_id_fkey" FOREIGN KEY ("geocerca_id") REFERENCES "public"."geofences"("id") ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."tracker_positions"
+    ADD CONSTRAINT "tracker_positions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_geofence_state"
+    ADD CONSTRAINT "user_geofence_state_geofence_id_fkey" FOREIGN KEY ("geofence_id") REFERENCES "public"."geofences"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_organizations"
+    ADD CONSTRAINT "user_organizations_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_organizations"
+    ADD CONSTRAINT "user_organizations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_orgs"
+    ADD CONSTRAINT "user_orgs_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."orgs_legacy"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_orgs"
+    ADD CONSTRAINT "user_orgs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_profiles"
+    ADD CONSTRAINT "user_profiles_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_roles"
+    ADD CONSTRAINT "user_roles_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."user_roles"
+    ADD CONSTRAINT "user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."users_public"
+    ADD CONSTRAINT "users_public_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id");
+
+
+
+ALTER TABLE ONLY "public"."usuarios"
+    ADD CONSTRAINT "usuarios_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+CREATE POLICY "Usuarios autenticados pueden insertar" ON "public"."geocercas_tbl" FOR INSERT TO "authenticated" WITH CHECK (true);
+
+
+
+CREATE POLICY "Usuarios autenticados pueden leer" ON "public"."geocercas_tbl" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "aa_mod" ON "public"."activity_assignments" TO "authenticated" USING (("tenant_id" = "public"."app_jwt_tenant"())) WITH CHECK (("tenant_id" = "public"."app_jwt_tenant"()));
+
+
+
+CREATE POLICY "aa_sel" ON "public"."activity_assignments" FOR SELECT USING ((("public"."app_jwt_role"() = 'owner'::"text") OR ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+ALTER TABLE "public"."activities" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "activities_delete_none" ON "public"."activities" FOR DELETE USING (false);
+
+
+
+CREATE POLICY "activities_insert_owner_admin" ON "public"."activities" FOR INSERT WITH CHECK (("org_id" IN ( SELECT "app_user_roles"."org_id"
+   FROM "public"."app_user_roles"
+  WHERE (("app_user_roles"."user_id" = "auth"."uid"()) AND ("app_user_roles"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))));
+
+
+
+CREATE POLICY "activities_select_by_is_member" ON "public"."activities" FOR SELECT TO "authenticated" USING ("public"."is_member_of_org"("org_id"));
+
+
+
+CREATE POLICY "activities_select_by_membership" ON "public"."activities" FOR SELECT USING (("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "activities_select_by_org" ON "public"."activities" FOR SELECT USING (("org_id" IN ( SELECT "app_user_roles"."org_id"
+   FROM "public"."app_user_roles"
+  WHERE ("app_user_roles"."user_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "activities_update_owner_admin" ON "public"."activities" FOR UPDATE USING (("org_id" IN ( SELECT "app_user_roles"."org_id"
+   FROM "public"."app_user_roles"
+  WHERE (("app_user_roles"."user_id" = "auth"."uid"()) AND ("app_user_roles"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"])))))) WITH CHECK (("org_id" IN ( SELECT "app_user_roles"."org_id"
+   FROM "public"."app_user_roles"
+  WHERE (("app_user_roles"."user_id" = "auth"."uid"()) AND ("app_user_roles"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))));
+
+
+
+CREATE POLICY "activities_write_by_membership" ON "public"."activities" USING (("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"())))) WITH CHECK (("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."activity_assignments" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."activity_rates" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."admins" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "admins_full_access" ON "public"."geofence_assignments" USING ((EXISTS ( SELECT 1
+   FROM "public"."admins" "a"
+  WHERE ("a"."email" = ("auth"."jwt"() ->> 'email'::"text"))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."admins" "a"
+  WHERE ("a"."email" = ("auth"."jwt"() ->> 'email'::"text")))));
+
+
+
+CREATE POLICY "admins_root_only_delete" ON "public"."admins" FOR DELETE TO "authenticated" USING ("public"."is_root_owner"());
+
+
+
+CREATE POLICY "admins_root_only_select" ON "public"."admins" FOR SELECT TO "authenticated" USING ("public"."is_root_owner"());
+
+
+
+CREATE POLICY "admins_root_only_update" ON "public"."admins" FOR UPDATE TO "authenticated" USING ("public"."is_root_owner"()) WITH CHECK ("public"."is_root_owner"());
+
+
+
+CREATE POLICY "admins_root_only_write" ON "public"."admins" FOR INSERT TO "authenticated" WITH CHECK ("public"."is_root_owner"());
+
+
+
+CREATE POLICY "allow anon insert" ON "public"."geocercas_tbl" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "allow anon read" ON "public"."geocercas_tbl" FOR SELECT USING (true);
+
+
+
+ALTER TABLE "public"."app_root_users" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "app_root_users_read_own" ON "public"."app_root_users" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."app_settings" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "app_settings_read_authenticated" ON "public"."app_settings" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "app_settings_write_service_role" ON "public"."app_settings" TO "service_role" USING (true) WITH CHECK (true);
+
+
+
+ALTER TABLE "public"."app_superadmins" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "app_superadmins_read_authenticated" ON "public"."app_superadmins" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "app_superadmins_write_service_role" ON "public"."app_superadmins" TO "service_role" USING (true) WITH CHECK (true);
+
+
+
+ALTER TABLE "public"."app_user_roles" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "app_user_roles_select_by_org_admin" ON "public"."app_user_roles" FOR SELECT TO "authenticated" USING ("public"."is_org_admin"("org_id"));
+
+
+
+CREATE POLICY "app_user_roles_select_own" ON "public"."app_user_roles" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "app_user_roles_write_by_org_admin" ON "public"."app_user_roles" TO "authenticated" USING ("public"."is_org_admin"(COALESCE("org_id", "public"."current_org_id_from_memberships"()))) WITH CHECK ("public"."is_org_admin"(COALESCE("org_id", "public"."current_org_id_from_memberships"())));
+
+
+
+CREATE POLICY "ar_mod" ON "public"."activity_rates" TO "authenticated" USING (("tenant_id" = "public"."app_jwt_tenant"())) WITH CHECK (("tenant_id" = "public"."app_jwt_tenant"()));
+
+
+
+CREATE POLICY "ar_sel" ON "public"."activity_rates" FOR SELECT USING ((("public"."app_jwt_role"() = 'owner'::"text") OR ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+ALTER TABLE "public"."asignaciones" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "asignaciones delete" ON "public"."asignaciones" FOR DELETE TO "authenticated" USING ("public"."is_member_of_org"("org_id"));
+
+
+
+CREATE POLICY "asignaciones insert" ON "public"."asignaciones" FOR INSERT TO "authenticated" WITH CHECK ("public"."is_member_of_org"("org_id"));
+
+
+
+CREATE POLICY "asignaciones select" ON "public"."asignaciones" FOR SELECT TO "authenticated" USING ("public"."is_member_of_org"("org_id"));
+
+
+
+CREATE POLICY "asignaciones update" ON "public"."asignaciones" FOR UPDATE TO "authenticated" USING ("public"."is_member_of_org"("org_id")) WITH CHECK ("public"."is_member_of_org"("org_id"));
+
+
+
+CREATE POLICY "asignaciones_delete_owner_admin" ON "public"."asignaciones" FOR DELETE USING ((EXISTS ( SELECT 1
+   FROM "public"."org_members" "om"
+  WHERE (("om"."org_id" = "asignaciones"."org_id") AND ("om"."user_id" = "auth"."uid"()) AND ("om"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))));
+
+
+
+CREATE POLICY "asignaciones_insert_owner_admin" ON "public"."asignaciones" FOR INSERT WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."org_members" "om"
+  WHERE (("om"."org_id" = "asignaciones"."org_id") AND ("om"."user_id" = "auth"."uid"()) AND ("om"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))));
+
+
+
+CREATE POLICY "asignaciones_select_by_role" ON "public"."asignaciones" FOR SELECT USING (((EXISTS ( SELECT 1
+   FROM "public"."org_members" "om"
+  WHERE (("om"."org_id" = "asignaciones"."org_id") AND ("om"."user_id" = "auth"."uid"()) AND ("om"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))) OR (EXISTS ( SELECT 1
+   FROM "public"."org_members" "om2"
+  WHERE (("om2"."org_id" = "asignaciones"."org_id") AND ("om2"."user_id" = "auth"."uid"()) AND ("om2"."role" = 'tracker'::"text"))))));
+
+
+
+CREATE POLICY "asignaciones_update_owner_admin" ON "public"."asignaciones" FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM "public"."org_members" "om"
+  WHERE (("om"."org_id" = "asignaciones"."org_id") AND ("om"."user_id" = "auth"."uid"()) AND ("om"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"])))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."org_members" "om"
+  WHERE (("om"."org_id" = "asignaciones"."org_id") AND ("om"."user_id" = "auth"."uid"()) AND ("om"."role" = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))));
+
+
+
+ALTER TABLE "public"."asistencias" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "asistencias_insert_self" ON "public"."asistencias" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "asistencias_select_self" ON "public"."asistencias" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "asistencias_update_self" ON "public"."asistencias" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."attendances" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "attendances_insert_auth" ON "public"."attendances" FOR INSERT TO "authenticated" WITH CHECK (true);
+
+
+
+CREATE POLICY "attendances_read_auth" ON "public"."attendances" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "auth can delete" ON "public"."geocercas_tbl" FOR DELETE TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "auth can insert" ON "public"."geocercas_tbl" FOR INSERT TO "authenticated" WITH CHECK (true);
+
+
+
+CREATE POLICY "auth can select" ON "public"."geocercas_tbl" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "auth can update" ON "public"."geocercas_tbl" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "delete own geocercas" ON "public"."geocercas_tbl" FOR DELETE USING (("owner_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "dev_all_assignments" ON "public"."geofence_assignments" USING (true) WITH CHECK (true);
+
+
+
+ALTER TABLE "public"."geocercas" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "geocercas_crud_auth" ON "public"."geocercas_tbl" USING (("auth"."uid"() = "created_by")) WITH CHECK (("auth"."uid"() = COALESCE("created_by", "auth"."uid"())));
+
+
+
+CREATE POLICY "geocercas_delete" ON "public"."geocercas" FOR DELETE USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."user_id" = "auth"."uid"()) AND ("m"."org_id" = "geocercas"."org_id")))));
+
+
+
+CREATE POLICY "geocercas_delete_own" ON "public"."geocercas_tbl" FOR DELETE USING (("created_by" = "auth"."uid"()));
+
+
+
+CREATE POLICY "geocercas_delete_owner" ON "public"."geocercas_tbl" FOR DELETE TO "authenticated" USING (("owner_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "geocercas_insert_by_org" ON "public"."geocercas" FOR INSERT TO "authenticated" WITH CHECK (("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "geocercas_insert_own" ON "public"."geocercas_tbl" FOR INSERT WITH CHECK (("created_by" = "auth"."uid"()));
+
+
+
+CREATE POLICY "geocercas_insert_self" ON "public"."geocercas_tbl" FOR INSERT TO "authenticated" WITH CHECK ((COALESCE("owner_id", "auth"."uid"()) = "auth"."uid"()));
+
+
+
+CREATE POLICY "geocercas_mod" ON "public"."geocercas" USING ((("org_id" IS NOT NULL) AND ("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"()))))) WITH CHECK ((("org_id" IS NOT NULL) AND ("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "geocercas_select" ON "public"."geocercas" FOR SELECT USING ((("org_id" IS NOT NULL) AND ("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "geocercas_select_assigned_trackers" ON "public"."geocercas" FOR SELECT TO "authenticated" USING ("public"."is_tracker_assigned_to_geofence"("org_id", "id"));
+
+
+
+CREATE POLICY "geocercas_select_auth" ON "public"."geocercas_tbl" FOR SELECT USING (("auth"."uid"() = "created_by"));
+
+
+
+CREATE POLICY "geocercas_select_by_is_member" ON "public"."geocercas" FOR SELECT TO "authenticated" USING ("public"."is_member_of_org"("org_id"));
+
+
+
+CREATE POLICY "geocercas_select_by_org" ON "public"."geocercas" FOR SELECT TO "authenticated" USING (("org_id" IN ( SELECT "m"."org_id"
+   FROM "public"."memberships" "m"
+  WHERE ("m"."user_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "geocercas_select_org_members" ON "public"."geocercas" FOR SELECT TO "authenticated" USING ("public"."is_org_member"("org_id"));
+
+
+
+CREATE POLICY "geocercas_select_own" ON "public"."geocercas_tbl" FOR SELECT USING (("created_by" = "auth"."uid"()));
+
+
+
+CREATE POLICY "geocercas_select_owner" ON "public"."geocercas_tbl" FOR SELECT TO "authenticated" USING (("owner_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."geocercas_tbl" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "geocercas_update" ON "public"."geocercas" FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."user_id" = "auth"."uid"()) AND ("m"."org_id" = "geocercas"."org_id"))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."user_id" = "auth"."uid"()) AND ("m"."org_id" = "geocercas"."org_id")))));
+
+
+
+CREATE POLICY "geocercas_update_own" ON "public"."geocercas_tbl" FOR UPDATE USING (("created_by" = "auth"."uid"()));
+
+
+
+CREATE POLICY "geocercas_update_owner" ON "public"."geocercas_tbl" FOR UPDATE TO "authenticated" USING (("owner_id" = "auth"."uid"())) WITH CHECK (("owner_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."geofence_assignments" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."geofence_events" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."geofence_members" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."geofences" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "geofences_delete" ON "public"."geofences" FOR DELETE USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."user_id" = "auth"."uid"()) AND ("m"."org_id" = "geofences"."org_id") AND ("m"."revoked_at" IS NULL)))));
+
+
+
+CREATE POLICY "geofences_delete_admin" ON "public"."geofences" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "geofences"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("lower"(("m"."role")::"text") = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))));
+
+
+
+CREATE POLICY "geofences_insert" ON "public"."geofences" FOR INSERT WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."user_id" = "auth"."uid"()) AND ("m"."org_id" = "geofences"."org_id") AND ("m"."revoked_at" IS NULL)))));
+
+
+
+CREATE POLICY "geofences_insert_admin" ON "public"."geofences" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "geofences"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("lower"(("m"."role")::"text") = ANY (ARRAY['owner'::"text", 'admin'::"text"])))))));
+
+
+
+CREATE POLICY "geofences_insert_in_org" ON "public"."geofences" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."app_user_roles" "r"
+  WHERE (("r"."org_id" = "geofences"."org_id") AND ("r"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "geofences_select" ON "public"."geofences" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."user_id" = "auth"."uid"()) AND ("m"."org_id" = "geofences"."org_id") AND ("m"."revoked_at" IS NULL)))));
+
+
+
+CREATE POLICY "geofences_select_admin" ON "public"."geofences" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "geofences"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("lower"(("m"."role")::"text") = ANY (ARRAY['owner'::"text", 'admin'::"text"]))))));
+
+
+
+CREATE POLICY "geofences_select_in_org" ON "public"."geofences" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."app_user_roles" "r"
+  WHERE (("r"."org_id" = "geofences"."org_id") AND ("r"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "geofences_select_tracker_assigned" ON "public"."geofences" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."tracker_assignments" "ta"
+  WHERE (("ta"."org_id" = "geofences"."org_id") AND ("ta"."geofence_id" = "geofences"."id") AND ("ta"."tracker_user_id" = "auth"."uid"()) AND (COALESCE("ta"."active", true) = true) AND ((CURRENT_DATE >= "ta"."start_date") AND (CURRENT_DATE <= "ta"."end_date"))))));
+
+
+
+CREATE POLICY "geofences_update" ON "public"."geofences" FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."user_id" = "auth"."uid"()) AND ("m"."org_id" = "geofences"."org_id") AND ("m"."revoked_at" IS NULL)))));
+
+
+
+CREATE POLICY "geofences_update_admin" ON "public"."geofences" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "geofences"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("lower"(("m"."role")::"text") = ANY (ARRAY['owner'::"text", 'admin'::"text"])))))) WITH CHECK ((("org_id" IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "geofences"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("lower"(("m"."role")::"text") = ANY (ARRAY['owner'::"text", 'admin'::"text"])))))));
+
+
+
+CREATE POLICY "insert own geocercas" ON "public"."geocercas_tbl" FOR INSERT WITH CHECK (("owner_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "insert_anyone" ON "public"."attendances" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "insert_anyone_dev" ON "public"."attendances" FOR INSERT TO "anon" WITH CHECK (true);
+
+
+
+CREATE POLICY "insert_authenticated" ON "public"."attendances" FOR INSERT TO "authenticated" WITH CHECK (true);
+
+
+
+CREATE POLICY "insert_own_location" ON "public"."tracker_locations" FOR INSERT TO "authenticated" WITH CHECK (("tracker_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "inv: managers modify" ON "public"."invitations" USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "invitations"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("m"."role" = ANY (ARRAY['owner'::"public"."role_type", 'admin'::"public"."role_type"])))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "invitations"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("m"."role" = ANY (ARRAY['owner'::"public"."role_type", 'admin'::"public"."role_type"]))))));
+
+
+
+CREATE POLICY "inv: managers select" ON "public"."invitations" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "invitations"."org_id") AND ("m"."user_id" = "auth"."uid"()) AND ("m"."role" = ANY (ARRAY['owner'::"public"."role_type", 'admin'::"public"."role_type"]))))));
+
+
+
+ALTER TABLE "public"."invitations" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "me update my phone" ON "public"."user_profiles" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "id"));
+
+
+
+CREATE POLICY "me update my phone - upd" ON "public"."user_profiles" FOR UPDATE TO "authenticated" USING (("auth"."uid"() = "id")) WITH CHECK (("auth"."uid"() = "id"));
+
+
+
+ALTER TABLE "public"."memberships" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "memberships_delete_admin" ON "public"."memberships" FOR DELETE TO "authenticated" USING ("public"."is_org_admin"("org_id"));
+
+
+
+CREATE POLICY "memberships_insert_admin" ON "public"."memberships" FOR INSERT TO "authenticated" WITH CHECK ((("org_id" IS NOT NULL) AND "public"."is_org_admin"("org_id")));
+
+
+
+CREATE POLICY "memberships_insert_self" ON "public"."memberships" FOR INSERT TO "authenticated" WITH CHECK ((("user_id" = "auth"."uid"()) AND ("org_id" IS NOT NULL)));
+
+
+
+CREATE POLICY "memberships_select_admin" ON "public"."memberships" FOR SELECT TO "authenticated" USING ("public"."is_org_admin"("org_id"));
+
+
+
+CREATE POLICY "memberships_select_own" ON "public"."memberships" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "memberships_update_admin" ON "public"."memberships" FOR UPDATE TO "authenticated" USING ("public"."is_org_admin"("org_id")) WITH CHECK ("public"."is_org_admin"("org_id"));
+
+
+
+CREATE POLICY "memberships_update_own" ON "public"."memberships" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "org admins can read org tracker positions" ON "public"."tracker_positions" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."personal" "p"
+  WHERE (("p"."user_id" = "tracker_positions"."user_id") AND (COALESCE("p"."is_deleted", false) = false) AND (COALESCE("p"."activo_bool", true) = true) AND (COALESCE("p"."vigente", true) = true) AND "public"."is_org_admin"("p"."org_id", "auth"."uid"())))));
+
+
+
+CREATE POLICY "org_delete_owner_only" ON "public"."organizations" FOR DELETE TO "authenticated" USING (("public"."_is_root_claim"() OR ("owner_id" = "auth"."uid"())));
+
+
+
+CREATE POLICY "org_insert_owner_self" ON "public"."organizations" FOR INSERT TO "authenticated" WITH CHECK (("public"."_is_root_claim"() OR ("owner_id" = "auth"."uid"())));
+
+
+
+ALTER TABLE "public"."org_invites" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "org_invites_root_only_delete" ON "public"."org_invites" FOR DELETE TO "authenticated" USING ("public"."is_root_owner"());
+
+
+
+CREATE POLICY "org_invites_root_only_select" ON "public"."org_invites" FOR SELECT TO "authenticated" USING ("public"."is_root_owner"());
+
+
+
+CREATE POLICY "org_invites_root_only_update" ON "public"."org_invites" FOR UPDATE TO "authenticated" USING ("public"."is_root_owner"()) WITH CHECK ("public"."is_root_owner"());
+
+
+
+CREATE POLICY "org_invites_root_only_write" ON "public"."org_invites" FOR INSERT TO "authenticated" WITH CHECK ("public"."is_root_owner"());
+
+
+
+ALTER TABLE "public"."org_members" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "org_members_select_self" ON "public"."org_members" FOR SELECT USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "org_select_owner_or_member" ON "public"."organizations" FOR SELECT TO "authenticated" USING (("public"."_is_root_claim"() OR ("owner_id" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "organizations"."id") AND ("m"."user_id" = "auth"."uid"()))))));
+
+
+
+CREATE POLICY "org_update_owner_only" ON "public"."organizations" FOR UPDATE TO "authenticated" USING (("public"."_is_root_claim"() OR ("owner_id" = "auth"."uid"()))) WITH CHECK (("public"."_is_root_claim"() OR ("owner_id" = "auth"."uid"())));
+
+
+
+ALTER TABLE "public"."org_users" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."organizations" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "orgs_insert" ON "public"."orgs_legacy" FOR INSERT WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+ALTER TABLE "public"."orgs_legacy" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "orgs_select" ON "public"."orgs_legacy" FOR SELECT USING (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "orgs_select_if_member" ON "public"."orgs_legacy" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."org_members" "m"
+  WHERE (("m"."org_id" = "orgs_legacy"."id") AND ("m"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "pe_insert" ON "public"."position_events" FOR INSERT TO "authenticated" WITH CHECK ((("tracker_user_id" = "auth"."uid"()) AND ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+CREATE POLICY "pe_select" ON "public"."position_events" FOR SELECT USING ((("public"."app_jwt_role"() = ANY (ARRAY['owner'::"text", 'admin'::"text"])) AND ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+ALTER TABLE "public"."pending_invites" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "pending_invites read" ON "public"."pending_invites" FOR SELECT TO "authenticated" USING ("public"."is_admin_or_owner"("auth"."uid"()));
+
+
+
+CREATE POLICY "pending_invites write" ON "public"."pending_invites" TO "authenticated" USING ("public"."is_admin_or_owner"("auth"."uid"())) WITH CHECK ("public"."is_admin_or_owner"("auth"."uid"()));
+
+
+
+CREATE POLICY "pending_invites_insert_root" ON "public"."pending_invites" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."app_root_owners" "r"
+  WHERE (("r"."user_id" = "auth"."uid"()) AND ("r"."active" = true)))));
+
+
+
+CREATE POLICY "pending_invites_select_own_email" ON "public"."pending_invites" FOR SELECT TO "authenticated" USING ((("email" IS NOT NULL) AND ("lower"("email") = "lower"("auth"."email"()))));
+
+
+
+CREATE POLICY "pending_invites_select_root" ON "public"."pending_invites" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."app_root_owners" "r"
+  WHERE (("r"."user_id" = "auth"."uid"()) AND ("r"."active" = true)))));
+
+
+
+ALTER TABLE "public"."personal" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "personal_delete_admin" ON "public"."personal" FOR DELETE TO "authenticated" USING ("public"."is_org_admin"("org_id", "auth"."uid"()));
+
+
+
+CREATE POLICY "personal_insert_admin" ON "public"."personal" FOR INSERT TO "authenticated" WITH CHECK ("public"."is_org_admin"("org_id", "auth"."uid"()));
+
+
+
+CREATE POLICY "personal_select_admins" ON "public"."personal" FOR SELECT TO "authenticated" USING ("public"."is_org_admin"("org_id", "auth"."uid"()));
+
+
+
+CREATE POLICY "personal_select_by_is_member" ON "public"."personal" FOR SELECT TO "authenticated" USING ("public"."is_member_of_org"("org_id"));
+
+
+
+CREATE POLICY "personal_select_members" ON "public"."personal" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."org_id" = "personal"."org_id") AND ("m"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "personal_update_admin" ON "public"."personal" FOR UPDATE TO "authenticated" USING ("public"."is_org_admin"("org_id", "auth"."uid"())) WITH CHECK ("public"."is_org_admin"("org_id", "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."personas" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "personas_select_auth" ON "public"."personas" FOR SELECT USING (("auth"."uid"() IS NOT NULL));
+
+
+
+CREATE POLICY "pos_insert_self" ON "public"."posiciones" FOR INSERT TO "authenticated" WITH CHECK (("tracker_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "pos_select_self" ON "public"."posiciones" FOR SELECT TO "authenticated" USING (("tracker_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."posiciones" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."position_events" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."positions" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "positions_delete_admin_org" ON "public"."positions" FOR DELETE USING ((EXISTS ( SELECT 1
+   FROM "public"."user_organizations" "uo"
+  WHERE (("uo"."user_id" = "auth"."uid"()) AND ("uo"."org_id" = "positions"."org_id") AND ("uo"."role" = ANY (ARRAY['admin'::"text", 'owner'::"text"]))))));
+
+
+
+CREATE POLICY "positions_insert_self" ON "public"."positions" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "positions_insert_tracker" ON "public"."positions" FOR INSERT WITH CHECK (((EXISTS ( SELECT 1
+   FROM "public"."user_organizations" "uo"
+  WHERE (("uo"."user_id" = "auth"."uid"()) AND ("uo"."org_id" = "positions"."org_id") AND ("uo"."role" = ANY (ARRAY['tracker'::"text", 'admin'::"text", 'owner'::"text"]))))) AND ("user_id" = "auth"."uid"())));
+
+
+
+CREATE POLICY "positions_select_admin_org" ON "public"."positions" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."user_organizations" "uo"
+  WHERE (("uo"."user_id" = "auth"."uid"()) AND ("uo"."org_id" = "positions"."org_id") AND ("uo"."role" = ANY (ARRAY['admin'::"text", 'owner'::"text"]))))));
+
+
+
+CREATE POLICY "positions_select_authenticated" ON "public"."positions" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "positions_select_tracker_self" ON "public"."positions" FOR SELECT USING ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."user_organizations" "uo"
+  WHERE (("uo"."user_id" = "auth"."uid"()) AND ("uo"."org_id" = "positions"."org_id") AND ("uo"."role" = 'tracker'::"text"))))));
+
+
+
+CREATE POLICY "positions_update_admin_org" ON "public"."positions" FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM "public"."user_organizations" "uo"
+  WHERE (("uo"."user_id" = "auth"."uid"()) AND ("uo"."org_id" = "positions"."org_id") AND ("uo"."role" = ANY (ARRAY['admin'::"text", 'owner'::"text"])))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."user_organizations" "uo"
+  WHERE (("uo"."user_id" = "auth"."uid"()) AND ("uo"."org_id" = "positions"."org_id") AND ("uo"."role" = ANY (ARRAY['admin'::"text", 'owner'::"text"]))))));
+
+
+
+ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "profiles_insert_self" ON "public"."profiles" FOR INSERT WITH CHECK (("id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "profiles_select_authenticated" ON "public"."profiles" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "profiles_select_same_org" ON "public"."profiles" FOR SELECT TO "authenticated" USING ((("id" = "auth"."uid"()) OR ("org_id" IN ( SELECT "user_orgs"."org_id"
+   FROM "public"."user_orgs"
+  WHERE ("user_orgs"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "profiles_select_self" ON "public"."profiles" FOR SELECT USING (("id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "profiles_self_read" ON "public"."profiles" FOR SELECT USING (("id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "profiles_update_self" ON "public"."profiles" FOR UPDATE USING (("id" = "auth"."uid"())) WITH CHECK (("id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "read all logs" ON "public"."tracker_logs" FOR SELECT TO "authenticated", "anon" USING (true);
+
+
+
+CREATE POLICY "read geofence events all" ON "public"."geofence_events" FOR SELECT TO "authenticated", "anon" USING (true);
+
+
+
+CREATE POLICY "read latest by org" ON "public"."tracker_latest" FOR SELECT TO "authenticated" USING ((("org_id")::"text" = COALESCE((("current_setting"('request.jwt.claims'::"text", true))::"jsonb" ->> 'org_id'::"text"), ''::"text")));
+
+
+
+CREATE POLICY "read latest positions" ON "public"."tracker_latest" FOR SELECT TO "authenticated", "anon" USING (true);
+
+
+
+CREATE POLICY "read own positions" ON "public"."tracker_positions" FOR SELECT TO "authenticated" USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "read state all" ON "public"."user_geofence_state" FOR SELECT TO "authenticated", "anon" USING (true);
+
+
+
+CREATE POLICY "read_all_attendances" ON "public"."attendances" FOR SELECT USING (true);
+
+
+
+ALTER TABLE "public"."roles" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "roles_select_all" ON "public"."roles" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "select own geocercas" ON "public"."geocercas_tbl" FOR SELECT USING (("owner_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "select_anyone_dev" ON "public"."attendances" FOR SELECT TO "anon" USING (true);
+
+
+
+CREATE POLICY "select_own_locations" ON "public"."tracker_locations" FOR SELECT TO "authenticated" USING (("tracker_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "ta_mod" ON "public"."tracker_assignments" TO "authenticated" USING (("tenant_id" = "public"."app_jwt_tenant"())) WITH CHECK (("tenant_id" = "public"."app_jwt_tenant"()));
+
+
+
+CREATE POLICY "ta_sel" ON "public"."tracker_assignments" FOR SELECT USING ((("public"."app_jwt_role"() = 'owner'::"text") OR ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+ALTER TABLE "public"."tenants" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "tenants_owner_all" ON "public"."tenants" USING (("public"."app_jwt_role"() = 'owner'::"text"));
+
+
+
+ALTER TABLE "public"."tracker_assignments" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "tracker_assignments_delete_org" ON "public"."tracker_assignments" FOR DELETE USING (true);
+
+
+
+CREATE POLICY "tracker_assignments_insert_org" ON "public"."tracker_assignments" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "tracker_assignments_select_org" ON "public"."tracker_assignments" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "tracker_assignments_update_org" ON "public"."tracker_assignments" FOR UPDATE USING (true) WITH CHECK (true);
+
+
+
+ALTER TABLE "public"."tracker_latest" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."tracker_locations" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."tracker_logs" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."tracker_positions" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "trackers insert their own position" ON "public"."tracker_positions" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "uo_delete_owner_only" ON "public"."user_orgs" FOR DELETE TO "authenticated" USING (("org_id" IN ( SELECT "organizations"."id"
+   FROM "public"."organizations"
+  WHERE ("organizations"."owner_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "uo_insert_owner_only" ON "public"."user_orgs" FOR INSERT TO "authenticated" WITH CHECK (("org_id" IN ( SELECT "organizations"."id"
+   FROM "public"."organizations"
+  WHERE ("organizations"."owner_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "uo_select_self_or_owned" ON "public"."user_orgs" FOR SELECT TO "authenticated" USING ((("user_id" = "auth"."uid"()) OR ("org_id" IN ( SELECT "organizations"."id"
+   FROM "public"."organizations"
+  WHERE ("organizations"."owner_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "uo_update_owner_only" ON "public"."user_orgs" FOR UPDATE TO "authenticated" USING (("org_id" IN ( SELECT "organizations"."id"
+   FROM "public"."organizations"
+  WHERE ("organizations"."owner_id" = "auth"."uid"())))) WITH CHECK (("org_id" IN ( SELECT "organizations"."id"
+   FROM "public"."organizations"
+  WHERE ("organizations"."owner_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "up_ins_admin" ON "public"."users_public" FOR INSERT WITH CHECK ((("public"."app_jwt_role"() = 'admin'::"text") AND ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+CREATE POLICY "up_ins_owner" ON "public"."users_public" FOR INSERT WITH CHECK (("public"."app_jwt_role"() = 'owner'::"text"));
+
+
+
+CREATE POLICY "up_sel_admin" ON "public"."users_public" FOR SELECT USING ((("public"."app_jwt_role"() = 'admin'::"text") AND ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+CREATE POLICY "up_sel_owner" ON "public"."users_public" FOR SELECT USING (("public"."app_jwt_role"() = 'owner'::"text"));
+
+
+
+CREATE POLICY "up_sel_self" ON "public"."users_public" FOR SELECT USING (("id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "up_upd_admin" ON "public"."users_public" FOR UPDATE USING ((("public"."app_jwt_role"() = 'admin'::"text") AND ("tenant_id" = "public"."app_jwt_tenant"()))) WITH CHECK ((("public"."app_jwt_role"() = 'admin'::"text") AND ("tenant_id" = "public"."app_jwt_tenant"())));
+
+
+
+CREATE POLICY "up_upd_owner" ON "public"."users_public" FOR UPDATE USING (("public"."app_jwt_role"() = 'owner'::"text"));
+
+
+
+CREATE POLICY "update own geocercas" ON "public"."geocercas_tbl" FOR UPDATE USING (("owner_id" = "auth"."uid"())) WITH CHECK (("owner_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "update_own_locations" ON "public"."tracker_locations" FOR UPDATE TO "authenticated" USING (("tracker_id" = "auth"."uid"())) WITH CHECK (("tracker_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "user can insert own positions" ON "public"."tracker_positions" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "user can read own org settings" ON "public"."user_org_settings" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "user can see own positions" ON "public"."tracker_positions" FOR SELECT USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "user can update own org settings" ON "public"."user_org_settings" FOR UPDATE TO "authenticated" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "user can upsert own org settings" ON "public"."user_org_settings" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."user_geofence_state" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "user_org_select_self" ON "public"."user_organizations" FOR SELECT USING (("auth"."uid"() = "user_id"));
+
+
+
+ALTER TABLE "public"."user_org_settings" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."user_organizations" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."user_orgs" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "user_orgs_insert_self" ON "public"."user_organizations" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+ALTER TABLE "public"."user_profiles" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "user_roles write only admin/owner" ON "public"."user_roles" TO "authenticated" USING ("public"."is_admin_or_owner"("auth"."uid"())) WITH CHECK ("public"."is_admin_or_owner"("auth"."uid"()));
+
+
+
+ALTER TABLE "public"."users_public" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."usuarios" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "usuarios_insert_self" ON "public"."usuarios" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "id"));
+
+
+
+CREATE POLICY "usuarios_select_self" ON "public"."usuarios" FOR SELECT TO "authenticated" USING (("auth"."uid"() = "id"));
+
+
+
+CREATE POLICY "usuarios_update_self" ON "public"."usuarios" FOR UPDATE TO "authenticated" USING (("auth"."uid"() = "id")) WITH CHECK (("auth"."uid"() = "id"));
+
+
+
+GRANT USAGE ON SCHEMA "public" TO "postgres";
+GRANT USAGE ON SCHEMA "public" TO "anon";
+GRANT USAGE ON SCHEMA "public" TO "authenticated";
+GRANT USAGE ON SCHEMA "public" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."memberships" TO "anon";
+GRANT ALL ON TABLE "public"."memberships" TO "authenticated";
+GRANT ALL ON TABLE "public"."memberships" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_col_exists"("p_table" "regclass", "p_col" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."_col_exists"("p_table" "regclass", "p_col" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_col_exists"("p_table" "regclass", "p_col" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_col_exists"("p_table" "text", "p_col" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."_col_exists"("p_table" "text", "p_col" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_col_exists"("p_table" "text", "p_col" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_email_norm"("p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."_email_norm"("p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_email_norm"("p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_geojson_extract_geometry"("p_geojson" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."_geojson_extract_geometry"("p_geojson" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_geojson_extract_geometry"("p_geojson" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_geojson_extract_radius_m"("p_geojson" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."_geojson_extract_radius_m"("p_geojson" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_geojson_extract_radius_m"("p_geojson" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_geojson_to_multipolygon_4326"("p_geojson" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."_geojson_to_multipolygon_4326"("p_geojson" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_geojson_to_multipolygon_4326"("p_geojson" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_geom_from_geometry"("_geom_json" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."_geom_from_geometry"("_geom_json" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_geom_from_geometry"("_geom_json" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_is_root_claim"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_is_root_claim"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_is_root_claim"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."_memberships_role_type"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_memberships_role_type"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_memberships_role_type"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_memberships_role_type"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_normalize_role_for_app_user_roles"("p_user" "uuid", "p_org" "uuid", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."_normalize_role_for_app_user_roles"("p_user" "uuid", "p_org" "uuid", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_normalize_role_for_app_user_roles"("p_user" "uuid", "p_org" "uuid", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_org_members_enforce_is_active_for_admins"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_org_members_enforce_is_active_for_admins"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_org_members_enforce_is_active_for_admins"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_org_members_user_col"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_org_members_user_col"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_org_members_user_col"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_org_parent_table_of_org_members"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_org_parent_table_of_org_members"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_org_parent_table_of_org_members"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."_organizations_plan_default_label"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_organizations_plan_default_label"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_organizations_plan_default_label"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_organizations_plan_default_label"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."_organizations_plan_type"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_organizations_plan_type"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_organizations_plan_type"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_organizations_plan_type"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."_pick_membership_role_label"("p_desired" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_pick_membership_role_label"("p_desired" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."_pick_membership_role_label"("p_desired" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_pick_membership_role_label"("p_desired" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_pick_org_table"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_pick_org_table"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_pick_org_table"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_require_owner_or_admin"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."_require_owner_or_admin"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_require_owner_or_admin"("p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."_resolve_tenant_for_current_user"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."_resolve_tenant_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."_resolve_tenant_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_resolve_tenant_for_current_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_set_current_org_for_user"("p_user_id" "uuid", "p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."_set_current_org_for_user"("p_user_id" "uuid", "p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_set_current_org_for_user"("p_user_id" "uuid", "p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."_user_has_org"("p_user" "uuid", "p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."_user_has_org"("p_user" "uuid", "p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."_user_has_org"("p_user" "uuid", "p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."accept_invitation"("p_token" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."accept_invitation"("p_token" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."accept_invitation"("p_token" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."accept_invite_on_login"() TO "anon";
+GRANT ALL ON FUNCTION "public"."accept_invite_on_login"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."accept_invite_on_login"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."accept_org_invites_for_current_user"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."accept_org_invites_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."accept_org_invites_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."accept_org_invites_for_current_user"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."accept_pending_invite_for_current_user"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."accept_pending_invite_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."accept_pending_invite_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."accept_pending_invite_for_current_user"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."activities_create"("p_name" "text", "p_description" "text", "p_active" boolean, "p_currency_code" "text", "p_hourly_rate" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."activities_create"("p_name" "text", "p_description" "text", "p_active" boolean, "p_currency_code" "text", "p_hourly_rate" numeric) TO "anon";
+GRANT ALL ON FUNCTION "public"."activities_create"("p_name" "text", "p_description" "text", "p_active" boolean, "p_currency_code" "text", "p_hourly_rate" numeric) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activities_create"("p_name" "text", "p_description" "text", "p_active" boolean, "p_currency_code" "text", "p_hourly_rate" numeric) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."activities_delete"("p_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."activities_delete"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."activities_delete"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activities_delete"("p_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."activities_list"("p_include_inactive" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."activities_list"("p_include_inactive" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."activities_list"("p_include_inactive" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activities_list"("p_include_inactive" boolean) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."activities_set_active"("p_id" "uuid", "p_active" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."activities_set_active"("p_id" "uuid", "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."activities_set_active"("p_id" "uuid", "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activities_set_active"("p_id" "uuid", "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."activities_sync_org_tenant"() TO "anon";
+GRANT ALL ON FUNCTION "public"."activities_sync_org_tenant"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activities_sync_org_tenant"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."activities_update"("p_id" "uuid", "p_name" "text", "p_description" "text", "p_currency_code" "text", "p_hourly_rate" numeric) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."activities_update"("p_id" "uuid", "p_name" "text", "p_description" "text", "p_currency_code" "text", "p_hourly_rate" numeric) TO "anon";
+GRANT ALL ON FUNCTION "public"."activities_update"("p_id" "uuid", "p_name" "text", "p_description" "text", "p_currency_code" "text", "p_hourly_rate" numeric) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activities_update"("p_id" "uuid", "p_name" "text", "p_description" "text", "p_currency_code" "text", "p_hourly_rate" numeric) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_assign_or_create_org"("p_email" "text", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_assign_or_create_org"("p_email" "text", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_assign_or_create_org"("p_email" "text", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_assign_role_org"("p_email" "text", "p_role_slug" "text", "p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_assign_role_org"("p_email" "text", "p_role_slug" "text", "p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_assign_role_org"("p_email" "text", "p_role_slug" "text", "p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_assign_role_org"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_assign_role_org"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_assign_role_org"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."admin_create_profile"("p_email" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_create_profile"("p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_create_profile"("p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_create_profile"("p_email" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."admin_debug_personal_lookup"("p_org_id" "uuid", "p_tracker_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_debug_personal_lookup"("p_org_id" "uuid", "p_tracker_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_debug_personal_lookup"("p_org_id" "uuid", "p_tracker_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_debug_personal_lookup"("p_org_id" "uuid", "p_tracker_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_delete_person"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_delete_person"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_delete_person"("p_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."admin_enroll_tracker"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_email" "text", "p_full_name" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_enroll_tracker"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_email" "text", "p_full_name" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_enroll_tracker"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_email" "text", "p_full_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_enroll_tracker"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_email" "text", "p_full_name" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text", "p_org_name" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text", "p_org_name" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text", "p_org_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_invite_new_admin"("p_email" "text", "p_role" "text", "p_org_name" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_upsert_profile"("p_id" "uuid", "p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_upsert_profile"("p_id" "uuid", "p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_upsert_profile"("p_id" "uuid", "p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tracker_assignments" TO "anon";
+GRANT ALL ON TABLE "public"."tracker_assignments" TO "authenticated";
+GRANT ALL ON TABLE "public"."tracker_assignments" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_upsert_tracker_assignment_v1"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_upsert_tracker_assignment_v1"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_upsert_tracker_assignment_v1"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_upsert_tracker_assignment_v2"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_activity_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_upsert_tracker_assignment_v2"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_activity_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_upsert_tracker_assignment_v2"("p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_activity_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_active" boolean) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."admins_list"("p_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admins_list"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."admins_list"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admins_list"("p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."admins_remove"("p_org_id" "uuid", "p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."admins_remove"("p_org_id" "uuid", "p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."admins_remove"("p_org_id" "uuid", "p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admins_remove"("p_org_id" "uuid", "p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."api_register_event"("p_user" "uuid", "p_lat" double precision, "p_lng" double precision, "p_ts" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."api_register_event"("p_user" "uuid", "p_lat" double precision, "p_lng" double precision, "p_ts" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."api_register_event"("p_user" "uuid", "p_lat" double precision, "p_lng" double precision, "p_ts" timestamp with time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_admin_mode"() TO "anon";
+GRANT ALL ON FUNCTION "public"."app_admin_mode"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_admin_mode"() TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."asignaciones" TO "anon";
+GRANT ALL ON TABLE "public"."asignaciones" TO "authenticated";
+GRANT ALL ON TABLE "public"."asignaciones" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_asignacion_set_estado"("p_id" "uuid", "p_estado" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_asignacion_set_estado"("p_id" "uuid", "p_estado" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_asignacion_set_estado"("p_id" "uuid", "p_estado" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_asignacion_soft_delete"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_asignacion_soft_delete"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_asignacion_soft_delete"("p_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_asignacion_upsert"("_id" "uuid", "_tenant_id" "uuid", "_user_id" "uuid", "_personal_id" "uuid", "_geocerca_id" "uuid", "_start_date" "date", "_end_date" "date", "_estado" "text", "_frecuencia_envio_sec" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."app_asignacion_upsert"("_id" "uuid", "_tenant_id" "uuid", "_user_id" "uuid", "_personal_id" "uuid", "_geocerca_id" "uuid", "_start_date" "date", "_end_date" "date", "_estado" "text", "_frecuencia_envio_sec" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_asignacion_upsert"("_id" "uuid", "_tenant_id" "uuid", "_user_id" "uuid", "_personal_id" "uuid", "_geocerca_id" "uuid", "_start_date" "date", "_end_date" "date", "_estado" "text", "_frecuencia_envio_sec" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_current_tenant_id"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_current_tenant_id"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_current_tenant_id"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_ensure_org_and_membership"("p_org" "uuid", "p_name" "text", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_ensure_org_and_membership"("p_org" "uuid", "p_name" "text", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_ensure_org_and_membership"("p_org" "uuid", "p_name" "text", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_install_rls"("p_table" "regclass", "p_org_col" "text", "p_owner_col" "text", "p_require_owner_write" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."app_install_rls"("p_table" "regclass", "p_org_col" "text", "p_owner_col" "text", "p_require_owner_write" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_install_rls"("p_table" "regclass", "p_org_col" "text", "p_owner_col" "text", "p_require_owner_write" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_is_admin"("p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_is_admin"("p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_is_admin"("p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_is_member"("p_org" "uuid", "p_roles" "text"[]) TO "anon";
+GRANT ALL ON FUNCTION "public"."app_is_member"("p_org" "uuid", "p_roles" "text"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_is_member"("p_org" "uuid", "p_roles" "text"[]) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_jwt_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."app_jwt_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_jwt_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_jwt_tenant"() TO "anon";
+GRANT ALL ON FUNCTION "public"."app_jwt_tenant"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_jwt_tenant"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_or_create_default_org_id_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_or_create_default_org_id_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_or_create_default_org_id_for_current_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."normalize_email"("p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."normalize_email"("p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."normalize_email"("p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."normalize_phone"("p_phone" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."normalize_phone"("p_phone" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."normalize_phone"("p_phone" "text") TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."personal" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."personal" TO "authenticated";
+GRANT ALL ON TABLE "public"."personal" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_personal_soft_delete"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_personal_soft_delete"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_personal_soft_delete"("p_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."app_set_tenant"("p_tenant" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."app_set_tenant"("p_tenant" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."app_set_tenant"("p_tenant" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."apply_invited_tracker_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."apply_invited_tracker_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."apply_invited_tracker_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."apply_pending_invite_on_profile"() TO "anon";
+GRANT ALL ON FUNCTION "public"."apply_pending_invite_on_profile"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."apply_pending_invite_on_profile"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."asignaciones_auto_estado"() TO "anon";
+GRANT ALL ON FUNCTION "public"."asignaciones_auto_estado"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."asignaciones_auto_estado"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."asignaciones_check_tenant"() TO "anon";
+GRANT ALL ON FUNCTION "public"."asignaciones_check_tenant"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."asignaciones_check_tenant"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."asignaciones_enforce_same_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."asignaciones_enforce_same_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."asignaciones_enforce_same_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."asignaciones_enforce_tenant"() TO "anon";
+GRANT ALL ON FUNCTION "public"."asignaciones_enforce_tenant"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."asignaciones_enforce_tenant"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."asignaciones_org_people_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."asignaciones_org_people_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."asignaciones_org_people_guard"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."asignaciones_set_org_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."asignaciones_set_org_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."asignaciones_set_org_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."assign_personal_to_geocerca"("p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq_min" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."assign_personal_to_geocerca"("p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq_min" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."assign_personal_to_geocerca"("p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq_min" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."assign_personal_to_geocerca"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."assign_personal_to_geocerca"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."assign_personal_to_geocerca"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_freq" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."audit_memberships"() TO "anon";
+GRANT ALL ON FUNCTION "public"."audit_memberships"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."audit_memberships"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."audit_organizations"() TO "anon";
+GRANT ALL ON FUNCTION "public"."audit_organizations"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."audit_organizations"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."bootstrap_session_context"() TO "anon";
+GRANT ALL ON FUNCTION "public"."bootstrap_session_context"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."bootstrap_session_context"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."bootstrap_tracker_assignment_current_user"("p_frequency_minutes" integer, "p_days" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."bootstrap_tracker_assignment_current_user"("p_frequency_minutes" integer, "p_days" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."bootstrap_tracker_assignment_current_user"("p_frequency_minutes" integer, "p_days" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."bootstrap_user_after_login"() TO "anon";
+GRANT ALL ON FUNCTION "public"."bootstrap_user_after_login"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."bootstrap_user_after_login"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."bootstrap_user_membership"() TO "anon";
+GRANT ALL ON FUNCTION "public"."bootstrap_user_membership"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."bootstrap_user_membership"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."bootstrap_user_membership_for_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."bootstrap_user_membership_for_user"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."bootstrap_user_membership_for_user"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."cancel_invitation"("p_invite_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."cancel_invitation"("p_invite_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."cancel_invitation"("p_invite_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."claim_pending_invite"("p_claim_code" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."claim_pending_invite"("p_claim_code" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."claim_pending_invite"("p_claim_code" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."claim_pending_invite"("p_claim_code" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."compute_effective_app_role"("p_uid" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."compute_effective_app_role"("p_uid" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."compute_effective_app_role"("p_uid" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."copy_tracker_log_to_positions"() TO "anon";
+GRANT ALL ON FUNCTION "public"."copy_tracker_log_to_positions"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."copy_tracker_log_to_positions"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."count_active_trackers"("p_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."count_active_trackers"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."count_active_trackers"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."count_active_trackers"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_frecuencia" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_frecuencia" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_start_date" "date", "p_end_date" "date", "p_frecuencia" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_inicio" timestamp with time zone, "p_fin" timestamp with time zone, "p_frecuencia_min" integer, "p_nombre" "text", "p_telefono" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_inicio" timestamp with time zone, "p_fin" timestamp with time zone, "p_frecuencia_min" integer, "p_nombre" "text", "p_telefono" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_asignacion"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_inicio" timestamp with time zone, "p_fin" timestamp with time zone, "p_frecuencia_min" integer, "p_nombre" "text", "p_telefono" "text") TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocercas_tbl" TO "anon";
+GRANT ALL ON TABLE "public"."geocercas_tbl" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocercas_tbl" TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."create_geocerca"("_nombre" "text", "_geometry" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."create_geocerca"("_nombre" "text", "_geometry" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."create_geocerca"("_nombre" "text", "_geometry" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_geocerca"("_nombre" "text", "_geometry" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."organizations" TO "anon";
+GRANT ALL ON TABLE "public"."organizations" TO "authenticated";
+GRANT ALL ON TABLE "public"."organizations" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."create_organization"("p_name" "text", "p_slug" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."create_organization"("p_name" "text", "p_slug" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_organization"("p_name" "text", "p_slug" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."create_organization_for_current_user"("p_name" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."create_organization_for_current_user"("p_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_organization_for_current_user"("p_name" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."create_personal_org_and_assign_owner"() TO "anon";
+GRANT ALL ON FUNCTION "public"."create_personal_org_and_assign_owner"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_personal_org_and_assign_owner"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."current_geocerca_id_for_tracker"("p_uid" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."current_geocerca_id_for_tracker"("p_uid" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."current_geocerca_id_for_tracker"("p_uid" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."current_org_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."current_org_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."current_org_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."current_org_id_from_memberships"() TO "anon";
+GRANT ALL ON FUNCTION "public"."current_org_id_from_memberships"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."current_org_id_from_memberships"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."current_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."current_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."current_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."current_tenant_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."current_tenant_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."current_tenant_id"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."current_user_email"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."current_user_email"() TO "anon";
+GRANT ALL ON FUNCTION "public"."current_user_email"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."current_user_email"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."current_user_org_ids"() TO "anon";
+GRANT ALL ON FUNCTION "public"."current_user_org_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."current_user_org_ids"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."delete_all_geocercas_for_user"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."delete_all_geocercas_for_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."delete_all_geocercas_for_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."delete_all_geocercas_for_user"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."delete_geofence_hard"("p_geofence_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."delete_geofence_hard"("p_geofence_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."delete_geofence_hard"("p_geofence_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."delete_geofence_hard"("p_geofence_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."delete_user_full"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."delete_user_full"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."delete_user_full"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."disable_assignments_when_geofence_inactive"() TO "anon";
+GRANT ALL ON FUNCTION "public"."disable_assignments_when_geofence_inactive"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."disable_assignments_when_geofence_inactive"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."effective_tracker_limit"("p_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."effective_tracker_limit"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."effective_tracker_limit"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."effective_tracker_limit"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_limit"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_limit"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_limit"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_core"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_core"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_core"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_core_orig"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_core_orig"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_core_orig"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_impl"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_impl"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_geocercas_total_limit_impl"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_geofence_limit"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_geofence_limit"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_geofence_limit"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_org_eq_tenant"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_org_eq_tenant"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_org_eq_tenant"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_org_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_org_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_org_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_org_people_tracker_limit"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_org_people_tracker_limit"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_org_people_tracker_limit"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_owner_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_owner_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_owner_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_personal_tracker_limit_final"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_personal_tracker_limit_final"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_personal_tracker_limit_final"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_single_admin_invites"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_single_admin_invites"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_single_admin_invites"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_single_admin_per_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_single_admin_per_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_single_admin_per_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enforce_tenant_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_tenant_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_tenant_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_active_org_for_user"("p_user" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_active_org_for_user"("p_user" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_active_org_for_user"("p_user" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_admin_bootstrap"("p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_admin_bootstrap"("p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_admin_bootstrap"("p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_current_org_for_user"("p_user" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_current_org_for_user"("p_user" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_current_org_for_user"("p_user" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."ensure_default_org"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."ensure_default_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_default_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_default_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_default_org_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_default_org_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_default_org_for_current_user"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."ensure_default_org_for_user"("p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."ensure_default_org_for_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_default_org_for_user"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_default_org_for_user"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_geofence_from_geocerca"("p_geocerca_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_geofence_from_geocerca"("p_geocerca_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_geofence_from_geocerca"("p_geocerca_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."ensure_membership_for_current_user"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_current_user"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."ensure_membership_for_current_user"("p_org" "uuid", "p_role" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_current_user"("p_org" "uuid", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_current_user"("p_org" "uuid", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_current_user"("p_org" "uuid", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_user"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_membership_for_user"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_core"("p_user_id" "uuid", "p_email" "text", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_core"("p_user_id" "uuid", "p_email" "text", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_core"("p_user_id" "uuid", "p_email" "text", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_profile"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_profile"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_profile"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_profiles"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_profiles"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_profiles"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_user_profile"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_user_profile"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_admin_user_profile"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_current_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_new_admin"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_new_admin"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_new_admin"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_owner_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_owner_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_owner_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_org_for_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_org_for_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_owner_org_for_user"("p_user_id" "uuid", "p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_owner_org_for_user"("p_user_id" "uuid", "p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_owner_org_for_user"("p_user_id" "uuid", "p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_personal_for_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_nombre" "text", "p_telefono" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_personal_for_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_nombre" "text", "p_telefono" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_personal_for_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid", "p_nombre" "text", "p_telefono" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_personal_for_user"("p_user_id" "uuid", "p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_personal_for_user"("p_user_id" "uuid", "p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_personal_for_user"("p_user_id" "uuid", "p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_personal_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_personal_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_personal_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_personal_org_for"("p_uid" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_personal_org_for"("p_uid" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_personal_org_for"("p_uid" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."ensure_personal_org_for_user"("p_user_id" "uuid", "p_org_name" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."ensure_personal_org_for_user"("p_user_id" "uuid", "p_org_name" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_personal_org_for_user"("p_user_id" "uuid", "p_org_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_personal_org_for_user"("p_user_id" "uuid", "p_org_name" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_profile"("p_uid" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_profile"("p_uid" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_profile"("p_uid" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_single_default_membership"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_single_default_membership"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_single_default_membership"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_system_user_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_system_user_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_system_user_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_tenant_for_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_tenant_for_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_tenant_for_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_tracker_membership"("p_email" "text", "p_org_id" "uuid", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_tracker_membership"("p_email" "text", "p_org_id" "uuid", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_tracker_membership"("p_email" "text", "p_org_id" "uuid", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_tracker_membership"("p_user_id" "uuid", "p_email" "text", "p_org_id" "uuid", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_tracker_membership"("p_user_id" "uuid", "p_email" "text", "p_org_id" "uuid", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_tracker_membership"("p_user_id" "uuid", "p_email" "text", "p_org_id" "uuid", "p_role" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."ensure_user_context"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."ensure_user_context"() TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_user_context"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_user_context"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_user_membership"("p_user_id" "uuid", "p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_user_membership"("p_user_id" "uuid", "p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_user_membership"("p_user_id" "uuid", "p_email" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."ensure_user_org_context"("p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."ensure_user_org_context"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_user_org_context"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_user_org_context"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_user_role"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_user_role"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_user_role"("p_user_id" "uuid", "p_org_id" "uuid", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_user_tenant"("p_user" "uuid", "p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_user_tenant"("p_user" "uuid", "p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_user_tenant"("p_user" "uuid", "p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_users_public_by_uid"("p_uid" "uuid", "p_email" "text", "p_role" "text", "p_tenant_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_users_public_by_uid"("p_uid" "uuid", "p_email" "text", "p_role" "text", "p_tenant_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_users_public_by_uid"("p_uid" "uuid", "p_email" "text", "p_role" "text", "p_tenant_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_users_public_for_auth_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_users_public_for_auth_user"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_users_public_for_auth_user"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."ensure_users_public_for_current_user"("p_role" "text", "p_full_name" "text", "p_phone_e164" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."ensure_users_public_for_current_user"("p_role" "text", "p_full_name" "text", "p_phone_e164" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."ensure_users_public_for_current_user"("p_role" "text", "p_full_name" "text", "p_phone_e164" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."f_admin_personal"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."f_admin_personal"() TO "anon";
+GRANT ALL ON FUNCTION "public"."f_admin_personal"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."f_admin_personal"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."finish_asignacion"("p_id" "uuid", "p_end_date" "date") TO "anon";
+GRANT ALL ON FUNCTION "public"."finish_asignacion"("p_id" "uuid", "p_end_date" "date") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."finish_asignacion"("p_id" "uuid", "p_end_date" "date") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."fix_missing_membership_from_profile"() TO "anon";
+GRANT ALL ON FUNCTION "public"."fix_missing_membership_from_profile"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."fix_missing_membership_from_profile"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."fn_normalize_phone_e164"("p_raw" "text", "p_default_cc" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."fn_normalize_phone_e164"("p_raw" "text", "p_default_cc" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."fn_normalize_phone_e164"("p_raw" "text", "p_default_cc" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."fn_normalize_phone_ec"("t" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."fn_normalize_phone_ec"("t" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."fn_normalize_phone_ec"("t" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."fn_personal_set_owner"() TO "anon";
+GRANT ALL ON FUNCTION "public"."fn_personal_set_owner"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."fn_personal_set_owner"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."geocerca_get"("p_id" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."geocerca_get"("p_id" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."geocerca_get"("p_id" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocerca_get"("p_id" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_bi_bu"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_bi_bu"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_bi_bu"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_bi_bu__orig"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_bi_bu__orig"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_bi_bu__orig"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_delete"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_delete"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_delete"("p_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_delete_iof"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_delete_iof"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_delete_iof"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_enforce_canonical_fields"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_enforce_canonical_fields"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_enforce_canonical_fields"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_fix_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_fix_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_fix_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_insert_iof"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_insert_iof"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_insert_iof"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_list"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_list"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_list"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_set_geom"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_set_geom"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_set_geom"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_sync_nombre_name"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_sync_nombre_name"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_sync_nombre_name"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_update_iof"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_update_iof"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_update_iof"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_upsert"("p_id" "uuid", "p_nombre" "text", "p_geojson" "jsonb", "p_visible" boolean, "p_activa" boolean, "p_color" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_upsert"("p_id" "uuid", "p_nombre" "text", "p_geojson" "jsonb", "p_visible" boolean, "p_activa" boolean, "p_color" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_upsert"("p_id" "uuid", "p_nombre" "text", "p_geojson" "jsonb", "p_visible" boolean, "p_activa" boolean, "p_color" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_v_delete"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_v_delete"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_v_delete"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_v_insert"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_v_insert"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_v_insert"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geocercas_v_update"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geocercas_v_update"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geocercas_v_update"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geofence_upsert"("_id" "uuid", "_org" "uuid", "_name" "text", "_geojson" "jsonb", "_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."geofence_upsert"("_id" "uuid", "_org" "uuid", "_name" "text", "_geojson" "jsonb", "_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geofence_upsert"("_id" "uuid", "_org" "uuid", "_name" "text", "_geojson" "jsonb", "_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geofences_fill_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geofences_fill_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geofences_fill_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geofences_set_user_and_audit"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geofences_set_user_and_audit"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geofences_set_user_and_audit"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geofences_sync_geom_json"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geofences_sync_geom_json"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geofences_sync_geom_json"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geofences_sync_geometry"() TO "anon";
+GRANT ALL ON FUNCTION "public"."geofences_sync_geometry"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geofences_sync_geometry"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."geojson_to_coords"("g" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."geojson_to_coords"("g" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."geojson_to_coords"("g" "jsonb") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."get_app_roots"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."get_app_roots"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_app_roots"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_app_roots"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."get_app_setting"("p_key" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."get_app_setting"("p_key" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_app_setting"("p_key" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_app_setting"("p_key" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone, "p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone, "p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_from" timestamp with time zone, "p_to" timestamp with time zone, "p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones_v2"("p_org_id" "uuid", "p_from" timestamp with time zone, "p_to" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones_v2"("p_org_id" "uuid", "p_from" timestamp with time zone, "p_to" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones_v2"("p_org_id" "uuid", "p_from" timestamp with time zone, "p_to" timestamp with time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones_v2"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones_v2"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_costos_asignaciones_v2"("p_desde" "date", "p_hasta" "date", "p_personal" "uuid", "p_actividad" "uuid", "p_geocerca" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_costos_detalle_by_org"("p_org_id" "uuid", "p_desde" timestamp with time zone, "p_hasta" timestamp with time zone, "p_personal_id" "uuid", "p_activity_id" "uuid", "p_geocerca_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_costos_detalle_by_org"("p_org_id" "uuid", "p_desde" timestamp with time zone, "p_hasta" timestamp with time zone, "p_personal_id" "uuid", "p_activity_id" "uuid", "p_geocerca_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_costos_detalle_by_org"("p_org_id" "uuid", "p_desde" timestamp with time zone, "p_hasta" timestamp with time zone, "p_personal_id" "uuid", "p_activity_id" "uuid", "p_geocerca_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_current_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_current_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_current_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_current_org_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_current_org_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_current_org_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_current_org_id_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_current_org_id_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_current_org_id_for_current_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_current_org_id_for_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_current_org_id_for_user"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_current_org_id_for_user"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_current_role"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_current_role"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_current_role"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_current_user_org_and_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_current_user_org_and_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_current_user_org_and_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_default_geofence_id"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_default_geofence_id"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_default_geofence_id"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_default_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_default_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_default_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_default_org_for_uid"("p_uid" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_default_org_for_uid"("p_uid" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_default_org_for_uid"("p_uid" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_default_org_id_for_current_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_default_org_id_for_current_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_default_org_id_for_current_user"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."get_geocercas_for_current_org"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."get_geocercas_for_current_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_geocercas_for_current_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_geocercas_for_current_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_geofence_context"("p_geofence_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_geofence_context"("p_geofence_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_geofence_context"("p_geofence_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_max_trackers_for_org"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_max_trackers_for_org"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_max_trackers_for_org"("p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."get_my_context"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."get_my_context"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_my_context"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_my_context"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_my_context_for_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_my_context_for_user"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_my_context_for_user"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."profiles" TO "anon";
+GRANT ALL ON TABLE "public"."profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."profiles" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_my_profile"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_my_profile"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_my_profile"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_or_create_default_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_or_create_default_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_or_create_default_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_org_id_for_user"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_org_id_for_user"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_org_id_for_user"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_org_limits"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_org_limits"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_org_limits"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_owner_org_id"("p_uid" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_owner_org_id"("p_uid" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_owner_org_id"("p_uid" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_request_user_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_request_user_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_request_user_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_system_user_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_system_user_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_system_user_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_tracker_invite_claim"("p_invite_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_tracker_invite_claim"("p_invite_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_tracker_invite_claim"("p_invite_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."guard_profiles_direct_writes"() TO "anon";
+GRANT ALL ON FUNCTION "public"."guard_profiles_direct_writes"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."guard_profiles_direct_writes"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."handle_new_admin_user"() TO "anon";
+GRANT ALL ON FUNCTION "public"."handle_new_admin_user"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."handle_new_admin_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."has_role"("p_org" "uuid", "p_min" "public"."role_type") TO "anon";
+GRANT ALL ON FUNCTION "public"."has_role"("p_org" "uuid", "p_min" "public"."role_type") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."has_role"("p_org" "uuid", "p_min" "public"."role_type") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."init_admin_tenant"() TO "anon";
+GRANT ALL ON FUNCTION "public"."init_admin_tenant"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."init_admin_tenant"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."insert_geocerca"("nombre" "text", "wkt" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."insert_geocerca"("nombre" "text", "wkt" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."insert_geocerca"("nombre" "text", "wkt" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."insert_geocerca_json"("nombre" "text", "coords" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."insert_geocerca_json"("nombre" "text", "coords" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."insert_geocerca_json"("nombre" "text", "coords" "jsonb") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_recorded_at" timestamp with time zone, "p_source" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_recorded_at" timestamp with time zone, "p_source" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_recorded_at" timestamp with time zone, "p_source" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_recorded_at" timestamp with time zone, "p_source" "text") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_captured_at" timestamp with time zone, "p_meta" "jsonb", "p_geofence_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_captured_at" timestamp with time zone, "p_meta" "jsonb", "p_geofence_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_captured_at" timestamp with time zone, "p_meta" "jsonb", "p_geofence_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."insert_tracker_position"("p_lat" double precision, "p_lng" double precision, "p_accuracy" double precision, "p_captured_at" timestamp with time zone, "p_meta" "jsonb", "p_geofence_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."invitations" TO "anon";
+GRANT ALL ON TABLE "public"."invitations" TO "authenticated";
+GRANT ALL ON TABLE "public"."invitations" TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."invite_member"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") TO "anon";
+GRANT ALL ON FUNCTION "public"."invite_member"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."invite_member"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."invite_member_by_email"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") TO "anon";
+GRANT ALL ON FUNCTION "public"."invite_member_by_email"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."invite_member_by_email"("p_org" "uuid", "p_email" "text", "p_role" "public"."role_type") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_admin_context"() TO "anon";
+GRANT ALL ON FUNCTION "public"."is_admin_context"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_admin_context"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_admin_or_owner"("uid" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_admin_or_owner"("uid" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_admin_or_owner"("uid" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_admin_role"("p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_admin_role"("p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_admin_role"("p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_admin_role"("p_role" "public"."role_type") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_admin_role"("p_role" "public"."role_type") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_admin_role"("p_role" "public"."role_type") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_app_root"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_app_root"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_app_root"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_internal_bridge"() TO "anon";
+GRANT ALL ON FUNCTION "public"."is_internal_bridge"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_internal_bridge"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_member"("p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_member"("p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_member"("p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_member_of_org"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_member_of_org"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_member_of_org"("p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid", "p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid", "p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid", "p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_org_admin"("p_org_id" "uuid", "p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_org_member"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_org_member"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_org_member"("p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_org_owner"("p_org_id" "uuid", "p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_org_owner"("p_org_id" "uuid", "p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_org_owner"("p_org_id" "uuid", "p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_org_owner"("p_org_id" "uuid", "p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_owner"() TO "anon";
+GRANT ALL ON FUNCTION "public"."is_owner"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_owner"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_root_owner"() TO "anon";
+GRANT ALL ON FUNCTION "public"."is_root_owner"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_root_owner"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."is_root_owner"("p_user_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."is_root_owner"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_root_owner"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_root_owner"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."is_tracker_assigned_to_geofence"("p_org_id" "uuid", "p_geofence_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_tracker_assigned_to_geofence"("p_org_id" "uuid", "p_geofence_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_tracker_assigned_to_geofence"("p_org_id" "uuid", "p_geofence_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."list_asignaciones"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_estado" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."list_asignaciones"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_estado" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."list_asignaciones"("p_tenant_id" "uuid", "p_personal_id" "uuid", "p_geocerca_id" "uuid", "p_estado" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."list_geocercas_for_assign"() TO "anon";
+GRANT ALL ON FUNCTION "public"."list_geocercas_for_assign"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."list_geocercas_for_assign"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."list_members_with_email"("p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."list_members_with_email"("p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."list_members_with_email"("p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."log_event"("p_action" "text", "p_entity" "text", "p_entity_id" "uuid", "p_details" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."log_event"("p_action" "text", "p_entity" "text", "p_entity_id" "uuid", "p_details" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."log_event"("p_action" "text", "p_entity" "text", "p_entity_id" "uuid", "p_details" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."log_location_and_attendance"("p_lat" double precision, "p_lng" double precision) TO "anon";
+GRANT ALL ON FUNCTION "public"."log_location_and_attendance"("p_lat" double precision, "p_lng" double precision) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."log_location_and_attendance"("p_lat" double precision, "p_lng" double precision) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."lower"("p_role" "public"."role_type") TO "anon";
+GRANT ALL ON FUNCTION "public"."lower"("p_role" "public"."role_type") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."lower"("p_role" "public"."role_type") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."memberships_role_guard"() TO "anon";
+GRANT ALL ON FUNCTION "public"."memberships_role_guard"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."memberships_role_guard"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."merge_personal_duplicates"() TO "anon";
+GRANT ALL ON FUNCTION "public"."merge_personal_duplicates"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."merge_personal_duplicates"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."merge_to_tenant_by_name"("p_table" "regclass", "p_id_col" "text", "p_tenant_col" "text", "p_name_col" "text", "p_target_tenant" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."merge_to_tenant_by_name"("p_table" "regclass", "p_id_col" "text", "p_tenant_col" "text", "p_name_col" "text", "p_target_tenant" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."merge_to_tenant_by_name"("p_table" "regclass", "p_id_col" "text", "p_tenant_col" "text", "p_name_col" "text", "p_target_tenant" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start" "date", "p_end" "date") TO "anon";
+GRANT ALL ON FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start" "date", "p_end" "date") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start" "date", "p_end" "date") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start_ts" timestamp with time zone, "p_end_ts" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start_ts" timestamp with time zone, "p_end_ts" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."move_asignacion_dates"("p_asignacion_id" "uuid", "p_start_ts" timestamp with time zone, "p_end_ts" timestamp with time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."my_org_ids"() TO "anon";
+GRANT ALL ON FUNCTION "public"."my_org_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."my_org_ids"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."normalize_phone_for_personal"("p_phone" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."normalize_phone_for_personal"("p_phone" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."normalize_phone_for_personal"("p_phone" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."on_org_invite_accepted"() TO "anon";
+GRANT ALL ON FUNCTION "public"."on_org_invite_accepted"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."on_org_invite_accepted"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."on_organization_created"() TO "anon";
+GRANT ALL ON FUNCTION "public"."on_organization_created"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."on_organization_created"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."personal_acl_probe"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_acl_probe"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_acl_probe"("p_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."personal_biu_defaults_v1"() TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_biu_defaults_v1"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_biu_defaults_v1"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."personal_compute_fingerprint"("p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_norm" "text", "p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_compute_fingerprint"("p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_norm" "text", "p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_compute_fingerprint"("p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_norm" "text", "p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."personal_delete_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."personal_delete_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_delete_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_delete_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."personal_has_active_assignments"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_has_active_assignments"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_has_active_assignments"("p_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."personal_list"("_q" "text", "_only_active" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."personal_list"("_q" "text", "_only_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_list"("_q" "text", "_only_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_list"("_q" "text", "_only_active" boolean) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."personal_list"("_q" "text", "_include_deleted" boolean, "_limit" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."personal_list"("_q" "text", "_include_deleted" boolean, "_limit" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_list"("_q" "text", "_include_deleted" boolean, "_limit" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_list"("_q" "text", "_include_deleted" boolean, "_limit" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."personal_set_derived"() TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_set_derived"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_set_derived"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."personal_set_vigente"("p_id" "uuid", "p_vigente" boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."personal_set_vigente"("p_id" "uuid", "p_vigente" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_set_vigente"("p_id" "uuid", "p_vigente" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_set_vigente"("p_id" "uuid", "p_vigente" boolean) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."personal_soft_delete"("p_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."personal_soft_delete"("p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_soft_delete"("p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_soft_delete"("p_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."personal_toggle_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."personal_toggle_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_toggle_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_toggle_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."personal_upsert_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_payload" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."personal_upsert_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_payload" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."personal_upsert_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_payload" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."personal_upsert_admin"("p_org_id" "uuid", "p_user_id" "uuid", "p_payload" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."pick_active_org_for_user"("p_user" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."pick_active_org_for_user"("p_user" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."pick_active_org_for_user"("p_user" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."prevent_membership_role_escalation"() TO "anon";
+GRANT ALL ON FUNCTION "public"."prevent_membership_role_escalation"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."prevent_membership_role_escalation"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."prevent_past_asignaciones"() TO "anon";
+GRANT ALL ON FUNCTION "public"."prevent_past_asignaciones"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."prevent_past_asignaciones"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."prevent_personal_duplicate_on_undelete"() TO "anon";
+GRANT ALL ON FUNCTION "public"."prevent_personal_duplicate_on_undelete"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."prevent_personal_duplicate_on_undelete"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."prevent_role_change_for_non_admin"() TO "anon";
+GRANT ALL ON FUNCTION "public"."prevent_role_change_for_non_admin"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."prevent_role_change_for_non_admin"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."process_geofence_transitions"() TO "anon";
+GRANT ALL ON FUNCTION "public"."process_geofence_transitions"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."process_geofence_transitions"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."recalc_users_public_role_from_memberships"() TO "anon";
+GRANT ALL ON FUNCTION "public"."recalc_users_public_role_from_memberships"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."recalc_users_public_role_from_memberships"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."remove_member"("p_org" "uuid", "p_user" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."remove_member"("p_org" "uuid", "p_user" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."remove_member"("p_org" "uuid", "p_user" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."repair_users_without_membership"() TO "anon";
+GRANT ALL ON FUNCTION "public"."repair_users_without_membership"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."repair_users_without_membership"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."repair_users_without_roles"() TO "anon";
+GRANT ALL ON FUNCTION "public"."repair_users_without_roles"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."repair_users_without_roles"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."resolve_auth_user_id_by_email"("p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."resolve_auth_user_id_by_email"("p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."resolve_auth_user_id_by_email"("p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."resolve_geofence_id_from_geocerca"("p_geocerca_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."resolve_geofence_id_from_geocerca"("p_geocerca_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."resolve_geofence_id_from_geocerca"("p_geocerca_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."resolve_tenant_id_for_org"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."resolve_tenant_id_for_org"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."resolve_tenant_id_for_org"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."resolve_tracker_user_id"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."resolve_tracker_user_id"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."resolve_tracker_user_id"("p_org_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."role_id_to_role"("p_role_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."role_id_to_role"("p_role_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."role_id_to_role"("p_role_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."role_id_to_role"("p_role_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."role_priority"("p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."role_priority"("p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."role_priority"("p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."role_rank"("p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."role_rank"("p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."role_rank"("p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_accept_invite"("p_invite_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_accept_invite"("p_invite_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_accept_invite"("p_invite_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_accept_pending_invites_for_me"() TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_accept_pending_invites_for_me"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_accept_pending_invites_for_me"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."rpc_admin_assign_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."rpc_admin_assign_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_admin_assign_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_admin_assign_geocerca"("p_user_id" "uuid", "p_geocerca_id" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."rpc_admin_upsert_phone"("p_user_id" "uuid", "p_telefono" "text") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."rpc_admin_upsert_phone"("p_user_id" "uuid", "p_telefono" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_admin_upsert_phone"("p_user_id" "uuid", "p_telefono" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_admin_upsert_phone"("p_user_id" "uuid", "p_telefono" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_crear_geocerca"("p_nombre" "text", "p_geom" "jsonb", "p_activa" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_crear_geocerca"("p_nombre" "text", "p_geom" "jsonb", "p_activa" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_crear_geocerca"("p_nombre" "text", "p_geom" "jsonb", "p_activa" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_create_tracker_invite"("p_org_id" "uuid", "p_email" "text", "p_expires_hours" integer, "p_note" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_create_tracker_invite"("p_org_id" "uuid", "p_email" "text", "p_expires_hours" integer, "p_note" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_create_tracker_invite"("p_org_id" "uuid", "p_email" "text", "p_expires_hours" integer, "p_note" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_personal_list"("p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_personal_list"("p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_personal_list"("p_org" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."rpc_plan_tracker_vigente_usage"("org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."rpc_plan_tracker_vigente_usage"("org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_plan_tracker_vigente_usage"("org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_plan_tracker_vigente_usage"("org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_provision_tracker_and_assign"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_provision_tracker_and_assign"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_provision_tracker_and_assign"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."rpc_set_current_org"("p_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."rpc_set_current_org"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_set_current_org"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_set_current_org"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_tracker_can_send"() TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_tracker_can_send"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_tracker_can_send"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."rpc_upsert_tracker_assignment"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."rpc_upsert_tracker_assignment"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."rpc_upsert_tracker_assignment"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."safe_add_to_publication"("p_pubname" "text", "p_schema" "text", "p_tablename" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."safe_add_to_publication"("p_pubname" "text", "p_schema" "text", "p_tablename" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."safe_add_to_publication"("p_pubname" "text", "p_schema" "text", "p_tablename" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."safe_geom_from_geojson"("js" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."safe_geom_from_geojson"("js" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."safe_geom_from_geojson"("js" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."session_org_id_safe"() TO "anon";
+GRANT ALL ON FUNCTION "public"."session_org_id_safe"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."session_org_id_safe"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."set_active_org"("p_org_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."set_active_org"("p_org_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."set_active_org"("p_org_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_active_org"("p_org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_created_by"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_created_by"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_created_by"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_created_by_from_auth"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_created_by_from_auth"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_created_by_from_auth"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_current_org"("p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."set_current_org"("p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_current_org"("p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_current_org_on_invite_accept"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_current_org_on_invite_accept"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_current_org_on_invite_accept"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_current_org_on_membership_insert"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_current_org_on_membership_insert"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_current_org_on_membership_insert"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_current_org_on_org_create"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_current_org_on_org_create"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_current_org_on_org_create"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_default_org"("p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."set_default_org"("p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_default_org"("p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_default_role_tracker"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_default_role_tracker"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_default_role_tracker"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_geo_audit_fields_from_auth"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_geo_audit_fields_from_auth"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_geo_audit_fields_from_auth"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_geocerca_org_defaults"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_geocerca_org_defaults"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_geocerca_org_defaults"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_geofence_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_geofence_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_geofence_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_member_role"("p_org" "uuid", "p_user" "uuid", "p_role" "public"."role_type") TO "anon";
+GRANT ALL ON FUNCTION "public"."set_member_role"("p_org" "uuid", "p_user" "uuid", "p_role" "public"."role_type") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_member_role"("p_org" "uuid", "p_user" "uuid", "p_role" "public"."role_type") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_org_defaults"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_org_defaults"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_org_defaults"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_org_owner_defaults"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_org_owner_defaults"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_org_owner_defaults"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_owner_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_owner_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_owner_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_owner_on_insert"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_owner_on_insert"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_owner_on_insert"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_owner_on_insert_tbl"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_owner_on_insert_tbl"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_owner_on_insert_tbl"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_personal_defaults"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_personal_defaults"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_personal_defaults"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_user_role"("p_user_id" "uuid", "p_role_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."set_user_role"("p_user_id" "uuid", "p_role_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_user_role"("p_user_id" "uuid", "p_role_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."sync_app_user_roles_from_memberships"() TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_app_user_roles_from_memberships"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_app_user_roles_from_memberships"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."sync_org_members_from_app_user_roles"() TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_org_members_from_app_user_roles"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_org_members_from_app_user_roles"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."sync_org_tenant_from_geocercas"() TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_org_tenant_from_geocercas"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_org_tenant_from_geocercas"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."sync_owner_membership_on_org_update"() TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_owner_membership_on_org_update"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_owner_membership_on_org_update"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."sync_tracker_assignments_from_asignaciones"("p_asignacion_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_tracker_assignments_from_asignaciones"("p_asignacion_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_tracker_assignments_from_asignaciones"("p_asignacion_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."sync_users_public_from_auth_users"() TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_users_public_from_auth_users"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_users_public_from_auth_users"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_col_exists"("p_table" "text", "p_col" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_col_exists"("p_table" "text", "p_col" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_col_exists"("p_table" "text", "p_col" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_create_org_for_user"("p_user" "uuid", "p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_create_org_for_user"("p_user" "uuid", "p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_create_org_for_user"("p_user" "uuid", "p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_ensure_membership"("p_user" "uuid", "p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_ensure_membership"("p_user" "uuid", "p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_ensure_membership"("p_user" "uuid", "p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_ensure_owner_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_ensure_owner_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_ensure_owner_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_ensure_owner_role"("p_user" "uuid", "p_org" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_ensure_owner_role"("p_user" "uuid", "p_org" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_ensure_owner_role"("p_user" "uuid", "p_org" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_get_profile_email"("p_user" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_get_profile_email"("p_user" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_get_profile_email"("p_user" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_org_after_insert_ensure_owner_role"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_org_after_insert_ensure_owner_role"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_org_after_insert_ensure_owner_role"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_org_people_consistency"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_org_people_consistency"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_org_people_consistency"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_org_people_soft_delete_consistency"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_org_people_soft_delete_consistency"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_org_people_soft_delete_consistency"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_personal_phone_normalizer"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_personal_phone_normalizer"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_personal_phone_normalizer"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tg_pick_app_user_roles_conflict_constraint"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tg_pick_app_user_roles_conflict_constraint"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tg_pick_app_user_roles_conflict_constraint"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."to_multipolygon_4326"("g" "public"."geometry", "fallback_lng" double precision, "fallback_lat" double precision) TO "anon";
+GRANT ALL ON FUNCTION "public"."to_multipolygon_4326"("g" "public"."geometry", "fallback_lng" double precision, "fallback_lat" double precision) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."to_multipolygon_4326"("g" "public"."geometry", "fallback_lng" double precision, "fallback_lat" double precision) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."touch_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_assignment_create"("p_tenant_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_assignment_create"("p_tenant_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_assignment_create"("p_tenant_id" "uuid", "p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_assignment_set_window"("p_assignment_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_assignment_set_window"("p_assignment_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_assignment_set_window"("p_assignment_id" "uuid", "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_frequency_minutes" integer, "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_assignments_defaults"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_defaults"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_defaults"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_assignments_ensure_dates"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_ensure_dates"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_ensure_dates"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_assignments_set_context"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_set_context"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_set_context"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_assignments_sync_dates"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_sync_dates"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_sync_dates"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_assignments_sync_period_tstz"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_sync_period_tstz"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_assignments_sync_period_tstz"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_can_send"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_can_send"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_can_send"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_can_send_details"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_can_send_details"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_can_send_details"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_get_my_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_get_my_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_get_my_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_get_org_for_user"("p_user" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_get_org_for_user"("p_user" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_get_org_for_user"("p_user" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_invites_set_is_active"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_invites_set_is_active"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_invites_set_is_active"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_logs_set_geom"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_logs_set_geom"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_logs_set_geom"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_logs_upsert_latest"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_logs_upsert_latest"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_logs_upsert_latest"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_point_in_active_geocercas"("p_tenant_id" "uuid", "p_email" "text", "p_lat" double precision, "p_lng" double precision, "p_now" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_point_in_active_geocercas"("p_tenant_id" "uuid", "p_email" "text", "p_lat" double precision, "p_lng" double precision, "p_now" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_point_in_active_geocercas"("p_tenant_id" "uuid", "p_email" "text", "p_lat" double precision, "p_lng" double precision, "p_now" timestamp with time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_positions_bi_set_geocerca"() TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_positions_bi_set_geocerca"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_positions_bi_set_geocerca"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."tracker_self_provision"("p_frequency_minutes" integer, "p_days" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."tracker_self_provision"("p_frequency_minutes" integer, "p_days" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."tracker_self_provision"("p_frequency_minutes" integer, "p_days" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_asignaciones_ensure_geofence_from_geocerca"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_asignaciones_ensure_geofence_from_geocerca"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_asignaciones_ensure_geofence_from_geocerca"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_asignaciones_sync_tracker_assignments"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_asignaciones_sync_tracker_assignments"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_asignaciones_sync_tracker_assignments"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_auth_users_ensure_membership"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_auth_users_ensure_membership"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_auth_users_ensure_membership"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_auth_users_ensure_tenant"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_auth_users_ensure_tenant"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_auth_users_ensure_tenant"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_fill_user_and_created"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_fill_user_and_created"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_fill_user_and_created"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_fill_user_only"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_fill_user_only"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_fill_user_only"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_geocercas_ensure_geofence"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_geocercas_ensure_geofence"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_geocercas_ensure_geofence"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_geocercas_force_org_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_geocercas_force_org_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_geocercas_force_org_id"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_geofences_set_org"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_geofences_set_org"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_geofences_set_org"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_geofences_set_org_orig"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_geofences_set_org_orig"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_geofences_set_org_orig"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_org_autojoin_owner"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_org_autojoin_owner"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_org_autojoin_owner"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_personal_bi_bu"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_personal_bi_bu"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_personal_bi_bu"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_personal_fill_fields"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_personal_fill_fields"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_personal_fill_fields"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_personal_set_org_owner"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_personal_set_org_owner"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_personal_set_org_owner"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_set_geocerca_id_on_tracker_positions"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_set_geocerca_id_on_tracker_positions"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_set_geocerca_id_on_tracker_positions"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_set_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_set_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_set_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_sync_tracker_assignments_from_asignaciones"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_sync_tracker_assignments_from_asignaciones"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_sync_tracker_assignments_from_asignaciones"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_users_public_accept_invites"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_users_public_accept_invites"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_users_public_accept_invites"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trg_validate_tracker_assignment_geofence"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trg_validate_tracker_assignment_geofence"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trg_validate_tracker_assignment_geofence"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."try_app_jwt_tenant_uuid"() TO "anon";
+GRANT ALL ON FUNCTION "public"."try_app_jwt_tenant_uuid"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."try_app_jwt_tenant_uuid"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."update_geocerca"("_id" "uuid", "_nombre" "text", "_geometry" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."update_geocerca"("_id" "uuid", "_nombre" "text", "_geometry" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."update_geocerca"("_id" "uuid", "_nombre" "text", "_geometry" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_geocerca"("_id" "uuid", "_nombre" "text", "_geometry" "jsonb") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_org_member"("p_org" "uuid", "p_user" "uuid", "p_role" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_org_member"("p_org" "uuid", "p_user" "uuid", "p_role" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_org_member"("p_org" "uuid", "p_user" "uuid", "p_role" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_personal"("p_id" "uuid", "p_org_id" "uuid", "p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_raw" "text", "p_documento" "text", "p_vigente" boolean, "p_fecha_inicio" "date", "p_fecha_fin" "date") TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_personal"("p_id" "uuid", "p_org_id" "uuid", "p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_raw" "text", "p_documento" "text", "p_vigente" boolean, "p_fecha_inicio" "date", "p_fecha_fin" "date") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_personal"("p_id" "uuid", "p_org_id" "uuid", "p_nombre" "text", "p_apellido" "text", "p_email" "text", "p_telefono_raw" "text", "p_documento" "text", "p_vigente" boolean, "p_fecha_inicio" "date", "p_fecha_fin" "date") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_name" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_name" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_name" "text", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_auto"("p_tenant_id" "uuid", "p_org_id" "uuid", "p_tracker_user_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_days" integer, "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_active" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_active" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_tracker_assignment_by_email"("p_org_id" "uuid", "p_tracker_email" "text", "p_geofence_id" "uuid", "p_frequency_minutes" integer, "p_start_at" timestamp with time zone, "p_end_at" timestamp with time zone, "p_active" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."upsert_users_public_from_uid"("p_uid" "uuid", "p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."upsert_users_public_from_uid"("p_uid" "uuid", "p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."upsert_users_public_from_uid"("p_uid" "uuid", "p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."_backup_geocercas_clone" TO "anon";
+GRANT ALL ON TABLE "public"."_backup_geocercas_clone" TO "authenticated";
+GRANT ALL ON TABLE "public"."_backup_geocercas_clone" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."activities" TO "anon";
+GRANT ALL ON TABLE "public"."activities" TO "authenticated";
+GRANT ALL ON TABLE "public"."activities" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."activity_assignments" TO "anon";
+GRANT ALL ON TABLE "public"."activity_assignments" TO "authenticated";
+GRANT ALL ON TABLE "public"."activity_assignments" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."activity_rates" TO "anon";
+GRANT ALL ON TABLE "public"."activity_rates" TO "authenticated";
+GRANT ALL ON TABLE "public"."activity_rates" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."admins" TO "anon";
+GRANT ALL ON TABLE "public"."admins" TO "authenticated";
+GRANT ALL ON TABLE "public"."admins" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."app_root_owner" TO "anon";
+GRANT ALL ON TABLE "public"."app_root_owner" TO "authenticated";
+GRANT ALL ON TABLE "public"."app_root_owner" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."app_root_owners" TO "anon";
+GRANT ALL ON TABLE "public"."app_root_owners" TO "authenticated";
+GRANT ALL ON TABLE "public"."app_root_owners" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."app_root_users" TO "anon";
+GRANT ALL ON TABLE "public"."app_root_users" TO "authenticated";
+GRANT ALL ON TABLE "public"."app_root_users" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."app_settings" TO "anon";
+GRANT ALL ON TABLE "public"."app_settings" TO "authenticated";
+GRANT ALL ON TABLE "public"."app_settings" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."app_superadmins" TO "anon";
+GRANT ALL ON TABLE "public"."app_superadmins" TO "authenticated";
+GRANT ALL ON TABLE "public"."app_superadmins" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."app_user_roles" TO "anon";
+GRANT ALL ON TABLE "public"."app_user_roles" TO "authenticated";
+GRANT ALL ON TABLE "public"."app_user_roles" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."asistencias" TO "anon";
+GRANT ALL ON TABLE "public"."asistencias" TO "authenticated";
+GRANT ALL ON TABLE "public"."asistencias" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."attendance_events" TO "anon";
+GRANT ALL ON TABLE "public"."attendance_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."attendance_events" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."attendance_events_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."attendance_events_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."attendance_events_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."attendances" TO "anon";
+GRANT ALL ON TABLE "public"."attendances" TO "authenticated";
+GRANT ALL ON TABLE "public"."attendances" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."audit_log" TO "anon";
+GRANT ALL ON TABLE "public"."audit_log" TO "authenticated";
+GRANT ALL ON TABLE "public"."audit_log" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."auth_signup_debug" TO "anon";
+GRANT ALL ON TABLE "public"."auth_signup_debug" TO "authenticated";
+GRANT ALL ON TABLE "public"."auth_signup_debug" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."auth_signup_debug_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."auth_signup_debug_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."auth_signup_debug_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocerca_geofence_map" TO "anon";
+GRANT ALL ON TABLE "public"."geocerca_geofence_map" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocerca_geofence_map" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocercas" TO "anon";
+GRANT ALL ON TABLE "public"."geocercas" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocercas" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocercas_backup_legacy" TO "anon";
+GRANT ALL ON TABLE "public"."geocercas_backup_legacy" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocercas_backup_legacy" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocercas_feature" TO "anon";
+GRANT ALL ON TABLE "public"."geocercas_feature" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocercas_feature" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocercas_geojson" TO "anon";
+GRANT ALL ON TABLE "public"."geocercas_geojson" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocercas_geojson" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."geocercas_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."geocercas_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."geocercas_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocercas_org" TO "anon";
+GRANT ALL ON TABLE "public"."geocercas_org" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocercas_org" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geocercas_v" TO "anon";
+GRANT ALL ON TABLE "public"."geocercas_v" TO "authenticated";
+GRANT ALL ON TABLE "public"."geocercas_v" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geofence_assignments" TO "anon";
+GRANT ALL ON TABLE "public"."geofence_assignments" TO "authenticated";
+GRANT ALL ON TABLE "public"."geofence_assignments" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geofence_bridge_errors" TO "anon";
+GRANT ALL ON TABLE "public"."geofence_bridge_errors" TO "authenticated";
+GRANT ALL ON TABLE "public"."geofence_bridge_errors" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."geofence_bridge_errors_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."geofence_bridge_errors_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."geofence_bridge_errors_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geofence_events" TO "anon";
+GRANT ALL ON TABLE "public"."geofence_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."geofence_events" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."geofence_events_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."geofence_events_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."geofence_events_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geofence_members" TO "anon";
+GRANT ALL ON TABLE "public"."geofence_members" TO "authenticated";
+GRANT ALL ON TABLE "public"."geofence_members" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geofences" TO "anon";
+GRANT ALL ON TABLE "public"."geofences" TO "authenticated";
+GRANT ALL ON TABLE "public"."geofences" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geofences_compat" TO "anon";
+GRANT ALL ON TABLE "public"."geofences_compat" TO "authenticated";
+GRANT ALL ON TABLE "public"."geofences_compat" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."geofences_geojson" TO "anon";
+GRANT ALL ON TABLE "public"."geofences_geojson" TO "authenticated";
+GRANT ALL ON TABLE "public"."geofences_geojson" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."positions" TO "anon";
+GRANT ALL ON TABLE "public"."positions" TO "authenticated";
+GRANT ALL ON TABLE "public"."positions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."latest_positions_by_user" TO "anon";
+GRANT ALL ON TABLE "public"."latest_positions_by_user" TO "authenticated";
+GRANT ALL ON TABLE "public"."latest_positions_by_user" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tracker_locations" TO "anon";
+GRANT ALL ON TABLE "public"."tracker_locations" TO "authenticated";
+GRANT ALL ON TABLE "public"."tracker_locations" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."latest_tracker_position" TO "anon";
+GRANT ALL ON TABLE "public"."latest_tracker_position" TO "authenticated";
+GRANT ALL ON TABLE "public"."latest_tracker_position" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."my_memberships_app" TO "anon";
+GRANT ALL ON TABLE "public"."my_memberships_app" TO "authenticated";
+GRANT ALL ON TABLE "public"."my_memberships_app" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."my_org_ids" TO "anon";
+GRANT ALL ON TABLE "public"."my_org_ids" TO "authenticated";
+GRANT ALL ON TABLE "public"."my_org_ids" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."my_org_ids_admin" TO "anon";
+GRANT ALL ON TABLE "public"."my_org_ids_admin" TO "authenticated";
+GRANT ALL ON TABLE "public"."my_org_ids_admin" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_billing" TO "anon";
+GRANT ALL ON TABLE "public"."org_billing" TO "authenticated";
+GRANT ALL ON TABLE "public"."org_billing" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_invites" TO "anon";
+GRANT ALL ON TABLE "public"."org_invites" TO "authenticated";
+GRANT ALL ON TABLE "public"."org_invites" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_members" TO "anon";
+GRANT ALL ON TABLE "public"."org_members" TO "authenticated";
+GRANT ALL ON TABLE "public"."org_members" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_memberships" TO "anon";
+GRANT ALL ON TABLE "public"."org_memberships" TO "authenticated";
+GRANT ALL ON TABLE "public"."org_memberships" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_people" TO "anon";
+GRANT ALL ON TABLE "public"."org_people" TO "authenticated";
+GRANT ALL ON TABLE "public"."org_people" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_tenant_map" TO "anon";
+GRANT ALL ON TABLE "public"."org_tenant_map" TO "authenticated";
+GRANT ALL ON TABLE "public"."org_tenant_map" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."org_users" TO "anon";
+GRANT ALL ON TABLE "public"."org_users" TO "authenticated";
+GRANT ALL ON TABLE "public"."org_users" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."organizations_backup_1" TO "anon";
+GRANT ALL ON TABLE "public"."organizations_backup_1" TO "authenticated";
+GRANT ALL ON TABLE "public"."organizations_backup_1" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."organizations_readable" TO "anon";
+GRANT ALL ON TABLE "public"."organizations_readable" TO "authenticated";
+GRANT ALL ON TABLE "public"."organizations_readable" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."orgs" TO "anon";
+GRANT ALL ON TABLE "public"."orgs" TO "authenticated";
+GRANT ALL ON TABLE "public"."orgs" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."orgs_backup_1" TO "anon";
+GRANT ALL ON TABLE "public"."orgs_backup_1" TO "authenticated";
+GRANT ALL ON TABLE "public"."orgs_backup_1" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."orgs_legacy" TO "anon";
+GRANT ALL ON TABLE "public"."orgs_legacy" TO "authenticated";
+GRANT ALL ON TABLE "public"."orgs_legacy" TO "service_role";
+
+
+
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."pending_invites" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."pending_invites" TO "authenticated";
+GRANT ALL ON TABLE "public"."pending_invites" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."people" TO "anon";
+GRANT ALL ON TABLE "public"."people" TO "authenticated";
+GRANT ALL ON TABLE "public"."people" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."personas" TO "anon";
+GRANT ALL ON TABLE "public"."personas" TO "authenticated";
+GRANT ALL ON TABLE "public"."personas" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."personas_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."personas_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."personas_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."plan_limits" TO "anon";
+GRANT ALL ON TABLE "public"."plan_limits" TO "authenticated";
+GRANT ALL ON TABLE "public"."plan_limits" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."plans" TO "anon";
+GRANT ALL ON TABLE "public"."plans" TO "authenticated";
+GRANT ALL ON TABLE "public"."plans" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."posiciones" TO "anon";
+GRANT ALL ON TABLE "public"."posiciones" TO "authenticated";
+GRANT ALL ON TABLE "public"."posiciones" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."posiciones_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."posiciones_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."posiciones_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."position_events" TO "anon";
+GRANT ALL ON TABLE "public"."position_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."position_events" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."position_events_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."position_events_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."position_events_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."profiles_backup_1" TO "anon";
+GRANT ALL ON TABLE "public"."profiles_backup_1" TO "authenticated";
+GRANT ALL ON TABLE "public"."profiles_backup_1" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."profiles_block_log" TO "anon";
+GRANT ALL ON TABLE "public"."profiles_block_log" TO "authenticated";
+GRANT ALL ON TABLE "public"."profiles_block_log" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."profiles_block_log_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."profiles_block_log_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."profiles_block_log_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."role_map_membership_to_app" TO "anon";
+GRANT ALL ON TABLE "public"."role_map_membership_to_app" TO "authenticated";
+GRANT ALL ON TABLE "public"."role_map_membership_to_app" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."roles" TO "anon";
+GRANT ALL ON TABLE "public"."roles" TO "authenticated";
+GRANT ALL ON TABLE "public"."roles" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."sync_errors" TO "anon";
+GRANT ALL ON TABLE "public"."sync_errors" TO "authenticated";
+GRANT ALL ON TABLE "public"."sync_errors" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."sync_errors_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."sync_errors_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."sync_errors_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tenants" TO "anon";
+GRANT ALL ON TABLE "public"."tenants" TO "authenticated";
+GRANT ALL ON TABLE "public"."tenants" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tracker_assignments_orphan_archive" TO "anon";
+GRANT ALL ON TABLE "public"."tracker_assignments_orphan_archive" TO "authenticated";
+GRANT ALL ON TABLE "public"."tracker_assignments_orphan_archive" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tracker_invites" TO "anon";
+GRANT ALL ON TABLE "public"."tracker_invites" TO "authenticated";
+GRANT ALL ON TABLE "public"."tracker_invites" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tracker_latest" TO "anon";
+GRANT ALL ON TABLE "public"."tracker_latest" TO "authenticated";
+GRANT ALL ON TABLE "public"."tracker_latest" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tracker_logs" TO "anon";
+GRANT ALL ON TABLE "public"."tracker_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."tracker_logs" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."tracker_logs_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."tracker_logs_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."tracker_logs_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tracker_positions" TO "anon";
+GRANT ALL ON TABLE "public"."tracker_positions" TO "authenticated";
+GRANT ALL ON TABLE "public"."tracker_positions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_geofence_state" TO "anon";
+GRANT ALL ON TABLE "public"."user_geofence_state" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_geofence_state" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_org_settings" TO "anon";
+GRANT ALL ON TABLE "public"."user_org_settings" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_org_settings" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_organizations" TO "anon";
+GRANT ALL ON TABLE "public"."user_organizations" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_organizations" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_orgs" TO "anon";
+GRANT ALL ON TABLE "public"."user_orgs" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_orgs" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_profiles" TO "anon";
+GRANT ALL ON TABLE "public"."user_profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_profiles" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_roles" TO "anon";
+GRANT ALL ON TABLE "public"."user_roles" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_roles" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_roles_view" TO "anon";
+GRANT ALL ON TABLE "public"."user_roles_view" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_roles_view" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."users_public" TO "anon";
+GRANT ALL ON TABLE "public"."users_public" TO "authenticated";
+GRANT ALL ON TABLE "public"."users_public" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."users_sin_organizacion" TO "anon";
+GRANT ALL ON TABLE "public"."users_sin_organizacion" TO "authenticated";
+GRANT ALL ON TABLE "public"."users_sin_organizacion" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."usuarios" TO "anon";
+GRANT ALL ON TABLE "public"."usuarios" TO "authenticated";
+GRANT ALL ON TABLE "public"."usuarios" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_app_profiles" TO "anon";
+GRANT ALL ON TABLE "public"."v_app_profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_app_profiles" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_asignaciones_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_asignaciones_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_asignaciones_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_attendance_daily" TO "anon";
+GRANT ALL ON TABLE "public"."v_attendance_daily" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_attendance_daily" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_attendance_last" TO "anon";
+GRANT ALL ON TABLE "public"."v_attendance_last" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_attendance_last" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_attendance_last_event" TO "anon";
+GRANT ALL ON TABLE "public"."v_attendance_last_event" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_attendance_last_event" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_costos_detalle_v2" TO "anon";
+GRANT ALL ON TABLE "public"."v_costos_detalle_v2" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_costos_detalle_v2" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_costos_detalle" TO "anon";
+GRANT ALL ON TABLE "public"."v_costos_detalle" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_costos_detalle" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_costos_detalle_internal" TO "anon";
+GRANT ALL ON TABLE "public"."v_costos_detalle_internal" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_costos_detalle_internal" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_costos_detalle_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_costos_detalle_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_costos_detalle_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_costos_rangos_por_org" TO "anon";
+GRANT ALL ON TABLE "public"."v_costos_rangos_por_org" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_costos_rangos_por_org" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_current_membership" TO "anon";
+GRANT ALL ON TABLE "public"."v_current_membership" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_current_membership" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_geocercas_asignadas" TO "anon";
+GRANT ALL ON TABLE "public"."v_geocercas_asignadas" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_geocercas_asignadas" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_geocercas_resumen" TO "anon";
+GRANT ALL ON TABLE "public"."v_geocercas_resumen" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_geocercas_resumen" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_geocercas_resumen_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_geocercas_resumen_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_geocercas_resumen_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_geocercas_tracker_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_geocercas_tracker_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_geocercas_tracker_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_geofences_active_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_geofences_active_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_geofences_active_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_geofences_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_geofences_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_geofences_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_invites_claims" TO "anon";
+GRANT ALL ON TABLE "public"."v_invites_claims" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_invites_claims" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_latest_attendance" TO "anon";
+GRANT ALL ON TABLE "public"."v_latest_attendance" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_latest_attendance" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_org_people_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_org_people_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_org_people_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_orphan_tracker_assignments" TO "anon";
+GRANT ALL ON TABLE "public"."v_orphan_tracker_assignments" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_orphan_tracker_assignments" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_personal_activo" TO "anon";
+GRANT ALL ON TABLE "public"."v_personal_activo" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_personal_activo" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_personal_all" TO "anon";
+GRANT ALL ON TABLE "public"."v_personal_all" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_personal_all" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_positions_last_per_user" TO "anon";
+GRANT ALL ON TABLE "public"."v_positions_last_per_user" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_positions_last_per_user" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_positions_with_activity" TO "anon";
+GRANT ALL ON TABLE "public"."v_positions_with_activity" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_positions_with_activity" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_reportes_base" TO "anon";
+GRANT ALL ON TABLE "public"."v_reportes_base" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_reportes_base" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_reportes_diario" TO "anon";
+GRANT ALL ON TABLE "public"."v_reportes_diario" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_reportes_diario" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_reportes_diario_con_asignacion" TO "anon";
+GRANT ALL ON TABLE "public"."v_reportes_diario_con_asignacion" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_reportes_diario_con_asignacion" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_tracker_assignments_ui" TO "anon";
+GRANT ALL ON TABLE "public"."v_tracker_assignments_ui" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_tracker_assignments_ui" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_tracker_assignments_valid" TO "anon";
+GRANT ALL ON TABLE "public"."v_tracker_assignments_valid" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_tracker_assignments_valid" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_tracker_last24h" TO "anon";
+GRANT ALL ON TABLE "public"."v_tracker_last24h" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_tracker_last24h" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_tracker_last30min" TO "anon";
+GRANT ALL ON TABLE "public"."v_tracker_last30min" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_tracker_last30min" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."v_tracker_profiles" TO "anon";
+GRANT ALL ON TABLE "public"."v_tracker_profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."v_tracker_profiles" TO "service_role";
+
+
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "postgres";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "authenticated";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "service_role";
+
+
+
+
+
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "postgres";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "authenticated";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "service_role";
+
+
+
+
+
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "postgres";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
+
+
+
+
+
+
+

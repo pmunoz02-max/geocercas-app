@@ -1,0 +1,39 @@
+create schema if not exists public;
+
+-- Guarantee helpers exist before 00400 grants reference them.
+
+create or replace function public._col_exists(p_table regclass, p_col text)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = p_table
+      and a.attname  = p_col
+      and a.attnum > 0
+      and not a.attisdropped
+  );
+$$;
+
+create or replace function public._col_exists(p_table text, p_col text)
+returns boolean
+language plpgsql
+stable
+as $$
+declare
+  v_reg regclass;
+begin
+  begin
+    v_reg := p_table::regclass;
+  exception when others then
+    return false;
+  end;
+
+  return public._col_exists(v_reg, p_col);
+end;
+$$;
+
+grant execute on function public._col_exists(regclass, text) to anon, authenticated, service_role;
+grant execute on function public._col_exists(text, text)     to anon, authenticated, service_role;

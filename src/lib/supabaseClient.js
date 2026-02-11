@@ -96,13 +96,16 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 if (typeof window !== "undefined") {
-  console.info("[ENV CHECK]", {
+  const info = {
     MODE: import.meta.env.MODE,
     ORIGIN: window.location.origin,
     SUPABASE_URL,
     PROJECT_REF: currentRef,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-  });
+  };
+
+  console.info("[ENV CHECK v3 - PREVIEW]", info);
 
   window.__supabase__ = supabase;
 }
+
