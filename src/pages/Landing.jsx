@@ -1,6 +1,6 @@
 // src/pages/Landing.jsx
 import React, { useMemo, useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import LanguageSwitcher from "../components/LanguageSwitcher";
@@ -9,6 +9,7 @@ import LanguageSwitcher from "../components/LanguageSwitcher";
  * Landing UNIVERSAL:
  * - Público: NO consulta sesión, NO usa useAuth, NO hace getSession.
  * - Anti-spam OTP: cooldown + lock persistente por email (localStorage)
+ * - ✅ PKCE catcher: si cae /?code=... lo envía a /auth/callback?code=...
  */
 
 function safeT(value, fallback = "") {
@@ -57,6 +58,22 @@ function setEmailLockSeconds(email, seconds) {
 
 export default function Landing() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+
+  // ✅ PKCE catcher: si Supabase manda al Site URL con ?code=..., reenviar a /auth/callback
+  useEffect(() => {
+    const code = searchParams.get("code");
+    if (!code) return;
+
+    const next = searchParams.get("next") || "/inicio";
+    const out = new URLSearchParams(searchParams);
+    out.set("next", next);
+
+    // evita loops: si por alguna razón ya estuviéramos en callback, no hacer nada
+    // (aunque Landing no se monta en /auth/callback, igual lo dejamos blindado)
+    const target = `/auth/callback?${out.toString()}`;
+    window.location.replace(target);
+  }, [searchParams]);
 
   const tt = useMemo(() => {
     return (key, fallback) => {
@@ -79,7 +96,6 @@ export default function Landing() {
     if (!em) return;
     const locked = getEmailLockSeconds(em);
     if (locked > 0) setCooldownSec((s) => Math.max(s, locked));
-    // no dependas de cooldownSec aquí (evita loops)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
@@ -116,7 +132,8 @@ export default function Landing() {
 
     setLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      // ✅ usa SIEMPRE el alias estable (evita deploy URLs viejos)
+      const redirectTo = `https://geocercas-app-v3-preview.vercel.app/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email: em,
@@ -127,7 +144,6 @@ export default function Landing() {
 
       setStatusMsg(tt("landing.magicLinkSent", "Te enviamos un enlace de acceso. Revisa tu correo."));
 
-      // Cooldown normal (persistente también)
       setCooldownSec(75);
       setEmailLockSeconds(em, 75);
     } catch (err) {
@@ -142,7 +158,6 @@ export default function Landing() {
         msg.includes("over_email_send_rate_limit");
 
       if (isRate) {
-        // Cuando Supabase bloquea, alarga lock persistente
         setCooldownSec(120);
         setEmailLockSeconds(em, 120);
         setErrorMsg(
@@ -174,7 +189,10 @@ export default function Landing() {
                 {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}
               </div>
               <div className="text-xs text-white/60">
-                {safeT(tt("landing.brandTagline", "Control de personal por geocercas"), "Control de personal por geocercas")}
+                {safeT(
+                  tt("landing.brandTagline", "Control de personal por geocercas"),
+                  "Control de personal por geocercas"
+                )}
               </div>
             </div>
           </div>
@@ -265,7 +283,10 @@ export default function Landing() {
               {errorMsg && <div className="mt-4 text-sm text-red-300">{errorMsg}</div>}
 
               <p className="mt-4 text-xs text-white/50">
-                {safeT(tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."), "Importante: el acceso funciona solo con el Magic Link real.")}
+                {safeT(
+                  tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."),
+                  "Importante: el acceso funciona solo con el Magic Link real."
+                )}
               </p>
 
               <Link className="mt-2 inline-block text-xs text-white/60 underline" to="/help/support">
