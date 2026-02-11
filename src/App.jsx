@@ -48,6 +48,35 @@ function HashTokenCatcher() {
   return null;
 }
 
+/**
+ * ✅ PKCE Code catcher:
+ * Si Supabase trae ?code=... al root (/), lo re-enrutamos a /auth/callback
+ * para que AuthCallback.tsx haga exchangeCodeForSession() y luego mande al panel.
+ */
+function PkceCodeCatcher() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+
+    const sp = new URLSearchParams(location.search || "");
+    const code = sp.get("code");
+    if (!code) return;
+
+    // Conserva next si ya viene, si no manda al panel
+    const next = sp.get("next") || "/inicio";
+
+    // Re-armamos query con code + next (y preservamos otros params si existieran)
+    const out = new URLSearchParams(location.search || "");
+    out.set("next", next);
+
+    const target = `/auth/callback?${out.toString()}`;
+    window.location.replace(target);
+  }, [location.pathname, location.search]);
+
+  return null;
+}
+
 function AdminRoute({ children }) {
   const { loading, user, isAppRoot } = useAuth();
   const location = useLocation();
@@ -64,6 +93,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <HashTokenCatcher />
+      <PkceCodeCatcher />
 
       <Routes>
         {/* 🌐 Public */}
