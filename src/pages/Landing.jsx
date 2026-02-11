@@ -1,16 +1,16 @@
 // src/pages/Landing.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient"; // ✅ cliente canónico (evita 2 clientes)
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
 /**
  * Landing UNIVERSAL:
  * - Público: NO consulta sesión, NO usa useAuth, NO hace getSession.
- * - ES/EN/FR siempre visible (LanguageSwitcher)
+ * - ES/EN/FR visible (LanguageSwitcher)
  * - Navegación SPA con <Link>
- * - i18n robusto: fallback si falta traducción
+ * - Anti-spam OTP: cooldown para evitar 429 (rate limit)
  */
 
 function safeT(value, fallback = "") {
@@ -42,6 +42,14 @@ export default function Landing() {
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // ✅ Cooldown anti-spam (segundos)
+  const [cooldownSec, setCooldownSec] = useState(0);
+  useEffect(() => {
+    if (cooldownSec <= 0) return;
+    const id = setInterval(() => setCooldownSec((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [cooldownSec]);
+
   const normEmail = (v) => String(v || "").trim().toLowerCase();
   const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
@@ -49,6 +57,12 @@ export default function Landing() {
     e.preventDefault();
     setStatusMsg("");
     setErrorMsg("");
+
+    // evita spam por UX
+    if (cooldownSec > 0) {
+      setErrorMsg(tt("landing.cooldown", `Espera ${cooldownSec}s antes de volver a intentar.`));
+      return;
+    }
 
     const em = normEmail(email);
     if (!em || !isValidEmail(em)) {
@@ -68,13 +82,37 @@ export default function Landing() {
       if (error) throw error;
 
       setStatusMsg(tt("landing.magicLinkSent", "Te enviamos un enlace de acceso. Revisa tu correo."));
+
+      // ✅ cooldown normal (evita 429 por clicks repetidos)
+      setCooldownSec(75);
     } catch (err) {
       console.error("[Landing] signInWithOtp error", err);
-      setErrorMsg(tt("landing.magicLinkError", "No se pudo enviar el enlace. Intenta nuevamente."));
+
+      const msg = String(err?.message || "").toLowerCase();
+      const isRate =
+        err?.status === 429 ||
+        msg.includes("rate limit") ||
+        msg.includes("too many") ||
+        msg.includes("exceeded");
+
+      if (isRate) {
+        // ✅ cuando Supabase bloquea, evita seguir pegándole
+        setCooldownSec(90);
+        setErrorMsg(
+          tt(
+            "landing.rateLimit",
+            "Límite de envíos alcanzado. Espera 1–2 minutos y vuelve a intentar (o usa otro correo)."
+          )
+        );
+      } else {
+        setErrorMsg(tt("landing.magicLinkError", "No se pudo enviar el enlace. Intenta nuevamente."));
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const btnDisabled = loading || cooldownSec > 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -85,14 +123,18 @@ export default function Landing() {
               AG
             </div>
             <div className="leading-tight">
-              <div className="font-semibold">{safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}</div>
+              <div className="font-semibold">
+                {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}
+              </div>
               <div className="text-xs text-white/60">
-                {safeT(tt("landing.brandTagline", "Control de personal por geocercas"), "Control de personal por geocercas")}
+                {safeT(
+                  tt("landing.brandTagline", "Control de personal por geocercas"),
+                  "Control de personal por geocercas"
+                )}
               </div>
             </div>
           </div>
 
-          {/* ✅ ES/EN/FR + Entrar */}
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
             <Link
@@ -110,7 +152,10 @@ export default function Landing() {
           <div>
             <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
               {safeT(
-                tt("landing.heroTitle", "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo"),
+                tt(
+                  "landing.heroTitle",
+                  "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo"
+                ),
                 "Controla a tu personal con geocercas inteligentes en cualquier parte del mundo"
               )}
             </h1>
@@ -143,7 +188,9 @@ export default function Landing() {
           </div>
 
           <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
-            <h2 className="text-xl font-bold">{safeT(tt("landing.quickAccessTitle", "Acceso rápido"), "Acceso rápido")}</h2>
+            <h2 className="text-xl font-bold">
+              {safeT(tt("landing.quickAccessTitle", "Acceso rápido"), "Acceso rápido")}
+            </h2>
 
             <p className="mt-2 text-sm text-white/70">
               {safeT(
@@ -167,17 +214,24 @@ export default function Landing() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={btnDisabled}
                 className="mt-4 w-full px-4 py-2.5 rounded-xl font-semibold bg-white text-slate-900 hover:bg-white/90 disabled:opacity-60 transition"
               >
-                {loading ? safeT(tt("landing.sending", "Enviando..."), "Enviando...") : safeT(tt("landing.sendMagic", "Enviar Magic Link"), "Enviar Magic Link")}
+                {loading
+                  ? safeT(tt("landing.sending", "Enviando..."), "Enviando...")
+                  : cooldownSec > 0
+                  ? `Espera ${cooldownSec}s`
+                  : safeT(tt("landing.sendMagic", "Enviar Magic Link"), "Enviar Magic Link")}
               </button>
 
               {statusMsg && <div className="mt-4 text-sm text-emerald-300">{statusMsg}</div>}
               {errorMsg && <div className="mt-4 text-sm text-red-300">{errorMsg}</div>}
 
               <p className="mt-4 text-xs text-white/50">
-                {safeT(tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."), "Importante: el acceso funciona solo con el Magic Link real.")}
+                {safeT(
+                  tt("landing.magicNote", "Importante: el acceso funciona solo con el Magic Link real."),
+                  "Importante: el acceso funciona solo con el Magic Link real."
+                )}
               </p>
 
               <Link className="mt-2 inline-block text-xs text-white/60 underline" to="/help/support">
@@ -188,7 +242,9 @@ export default function Landing() {
         </div>
 
         <footer className="mt-14 pt-6 border-t border-white/10 text-xs text-white/50 flex items-center justify-between">
-          <span>© {new Date().getFullYear()} {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}</span>
+          <span>
+            © {new Date().getFullYear()} {safeT(tt("landing.brandName", "App Geocercas"), "App Geocercas")}
+          </span>
           <span>Fenice Ecuador S.A.S.</span>
         </footer>
       </main>
