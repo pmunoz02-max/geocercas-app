@@ -8,6 +8,7 @@ import React, {
   useState,
   useRef,
 } from "react";
+import { getMemoryAccessToken } from "../lib/supabaseClient";
 
 /**
  * AuthContext UNIVERSAL (TWA/WebView safe)
@@ -23,9 +24,19 @@ const AuthContext = createContext(null);
 const LS_ORG_KEY = "tg_current_org_id";
 
 async function fetchSession() {
+  const headers = {
+    "cache-control": "no-cache",
+    pragma: "no-cache",
+  };
+
+  // ✅ Si venimos de PKCE exchange y guardamos token en memoria,
+  // lo enviamos al backend para que pueda setear/renovar la cookie tg_at.
+  const mem = getMemoryAccessToken?.();
+  if (mem) headers["Authorization"] = `Bearer ${mem}`;
+
   const res = await fetch("/api/auth/session", {
     credentials: "include",
-    headers: { "cache-control": "no-cache", pragma: "no-cache" },
+    headers,
   });
 
   const raw = await res.text();
@@ -50,13 +61,13 @@ export function AuthProvider({ children }) {
   const [currentOrg, setCurrentOrg] = useState(null);
 
   // Legacy aliases (computed)
-  const role = currentRole; // legacy alias
-  const currentOrgId = currentOrg?.id || null; // legacy alias
-  const orgId = currentOrgId; // another alias
+  const role = currentRole;
+  const currentOrgId = currentOrg?.id || null;
+  const orgId = currentOrgId;
 
   // Legacy fields expected by páginas antiguas
-  const authenticated = Boolean(user); // legacy alias
-  const [ready, setReady] = useState(false); // legacy: "AuthContext ya hidrató al menos una vez"
+  const authenticated = Boolean(user);
+  const [ready, setReady] = useState(false);
   const didBootstrapOnceRef = useRef(false);
 
   const selectOrg = useCallback(
@@ -67,7 +78,6 @@ export function AuthProvider({ children }) {
         localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
       } catch {}
 
-      // si ya tenemos el objeto en organizations lo usamos
       setCurrentOrg((prev) => {
         if (prev?.id === orgIdToSelect) return prev;
         const found = Array.isArray(organizations)
@@ -76,7 +86,6 @@ export function AuthProvider({ children }) {
         return found || { id: orgIdToSelect };
       });
 
-      // asegurar que organizations contenga al menos ese id
       setOrganizations((prev) => {
         const arr = Array.isArray(prev) ? prev : [];
         if (arr.some((o) => o?.id === orgIdToSelect)) return arr;
@@ -103,7 +112,6 @@ export function AuthProvider({ children }) {
 
       setUser(data.user ?? null);
 
-      // role (tolerante a múltiples llaves)
       const resolvedRole =
         data.currentRole ??
         data.current_role ??
@@ -112,11 +120,8 @@ export function AuthProvider({ children }) {
         null;
 
       setCurrentRole(resolvedRole ? String(resolvedRole).toLowerCase() : null);
-
-      // isAppRoot si algún día lo envías desde backend
       setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
 
-      // org id (tolerante)
       const serverOrgId =
         data.current_org_id ??
         data.currentOrgId ??
@@ -124,7 +129,6 @@ export function AuthProvider({ children }) {
         data.orgId ??
         null;
 
-      // respetar org seleccionada anteriormente si existe, si no usar la del server
       let preferredOrgId = null;
       try {
         preferredOrgId = localStorage.getItem(LS_ORG_KEY);
@@ -132,7 +136,6 @@ export function AuthProvider({ children }) {
 
       const finalOrgId = preferredOrgId || serverOrgId || null;
 
-      // Si backend manda lista de orgs, úsala; si no, crea mínimo con id
       const orgsFromServer = Array.isArray(data.organizations)
         ? data.organizations
         : null;
@@ -171,7 +174,6 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
 
-      // ✅ Marca "ready" una vez que el primer bootstrap terminó (ok o no)
       if (!didBootstrapOnceRef.current) {
         didBootstrapOnceRef.current = true;
         setReady(true);
@@ -203,26 +205,22 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      // base
       loading,
-      ready, // ✅ legacy
-      authenticated, // ✅ legacy
+      ready,
+      authenticated,
       user,
       isLoggedIn: Boolean(user),
 
-      // NEW
       currentRole,
       isAppRoot,
       organizations,
       currentOrg,
       selectOrg,
 
-      // LEGACY (para páginas viejas)
       role,
       currentOrgId,
       orgId,
 
-      // helpers
       refreshSession: bootstrap,
       logout,
     }),

@@ -1,13 +1,10 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V32 – soporta PKCE (?code=) + hash tokens (#access_token=)
-// TWA/WebView safe: NO setSession manual. Usa exchangeCodeForSession cuando hay code.
+// CALLBACK-V33 – PKCE (?code=) + hash fallback
+// TWA/WebView safe: NO setSession manual. Intercambia code y sincroniza cookie tg_at vía /api/auth/session.
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-
-// Si mantienes token en memoria para tu cliente custom, lo usamos si existe.
-// Si NO lo tienes, comenta estas 2 líneas y listo.
-import { setMemoryAccessToken } from "../supabaseClient";
+import { setMemoryAccessToken } from "../lib/supabaseClient";
 
 type Diag = {
   step: string;
@@ -15,6 +12,7 @@ type Diag = {
   mode?: "pkce" | "hash" | "unknown";
   hasCode?: boolean;
   hasAccessToken?: boolean;
+  cookieSyncOk?: boolean;
   error?: string;
 };
 
@@ -30,12 +28,28 @@ function parseHashParams(hash: string) {
 }
 
 function safeReplaceUrlWithoutSecrets() {
-  // Limpia query/hash para evitar reprocesos y no dejar tokens/codes en URL
   try {
     window.history.replaceState({}, document.title, window.location.pathname);
-  } catch {
-    // ignore
-  }
+  } catch {}
+}
+
+async function syncBackendCookie(accessToken: string) {
+  // Intentamos que el backend vea el Bearer y setee/renueve tg_at (HttpOnly).
+  // Si el backend no soporta Authorization, igual no rompe: solo devolverá no-auth.
+  const headers: Record<string, string> = {
+    "cache-control": "no-cache",
+    pragma: "no-cache",
+  };
+  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+
+  const res = await fetch("/api/auth/session", {
+    method: "GET",
+    credentials: "include",
+    headers,
+  });
+
+  // No forzamos parse; solo necesitamos saber si el backend ya quedó ok.
+  return res.ok;
 }
 
 export default function AuthCallback() {
@@ -48,18 +62,18 @@ export default function AuthCallback() {
     fired.current = true;
 
     const run = async () => {
-      // next default: manda al panel. Cambia aquí si tu panel es otra ruta.
       const next = searchParams.get("next") || "/inicio";
       const code = searchParams.get("code") || "";
 
       try {
         setDiag({ step: "parse_url", next });
 
-        // 1) Si viene PKCE code (?code=...), hacer exchange
+        // 1) PKCE code
         if (code) {
           setDiag({ step: "pkce_exchange_start", next, mode: "pkce", hasCode: true });
 
-          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          // ✅ CORRECTO: pasar solo el code
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
           if (error) {
             setDiag({ step: "pkce_exchange_error", next, mode: "pkce", hasCode: true, error: error.message });
@@ -77,22 +91,27 @@ export default function AuthCallback() {
             hasAccessToken: !!accessToken,
           });
 
-          // Si tu app usa token en memoria además de cookies, lo seteamos.
+          // Token en memoria (tu arquitectura)
           if (accessToken) {
             try {
               setMemoryAccessToken(accessToken);
-            } catch {
-              // ignore si no aplica
-            }
+            } catch {}
           }
 
+          // ✅ PASO CRÍTICO: sincronizar cookie HttpOnly tg_at en backend
+          setDiag((d) => ({ ...d, step: "cookie_sync_start" }));
+          const cookieOk = await syncBackendCookie(accessToken);
+          setDiag((d) => ({ ...d, step: "cookie_sync_done", cookieSyncOk: cookieOk }));
+
           safeReplaceUrlWithoutSecrets();
-          setDiag({ step: "redirect", next, mode: "pkce", hasCode: true, hasAccessToken: !!accessToken });
+
+          // Si cookie aún no ok, igual redirigimos: AuthContext intentará con Bearer mem-token.
+          setDiag({ step: "redirect", next, mode: "pkce", hasCode: true, hasAccessToken: !!accessToken, cookieSyncOk: cookieOk });
           window.location.replace(next);
           return;
         }
 
-        // 2) Si no hay code, intentar modo hash (#access_token=...)
+        // 2) Hash fallback
         const { access_token, error } = parseHashParams(window.location.hash || "");
         setDiag({
           step: "hash_parsed",
@@ -104,31 +123,27 @@ export default function AuthCallback() {
 
         if (error) {
           safeReplaceUrlWithoutSecrets();
-          window.location.replace(
-            `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`
-          );
+          window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`);
           return;
         }
 
         if (!access_token) {
-          // No hay ni code ni hash tokens
           setDiag({ step: "missing_code_and_token", next, mode: "unknown", hasAccessToken: false });
           safeReplaceUrlWithoutSecrets();
-          window.location.replace(
-            `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_code_or_token")}`
-          );
+          window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_code_or_token")}`);
           return;
         }
 
-        // Token hash: guardarlo en memoria (si tu app lo usa)
         try {
           setMemoryAccessToken(access_token);
-        } catch {
-          // ignore
-        }
+        } catch {}
+
+        setDiag((d) => ({ ...d, step: "cookie_sync_start" }));
+        const cookieOk = await syncBackendCookie(access_token);
+        setDiag((d) => ({ ...d, step: "cookie_sync_done", cookieSyncOk: cookieOk }));
 
         safeReplaceUrlWithoutSecrets();
-        setDiag({ step: "redirect", next, mode: "hash", hasAccessToken: true });
+        setDiag({ step: "redirect", next, mode: "hash", hasAccessToken: true, cookieSyncOk: cookieOk });
         window.location.replace(next);
       } catch (e: any) {
         const msg = String(e?.message || e || "callback_error");
@@ -154,6 +169,7 @@ export default function AuthCallback() {
             <div>next: {diag.next || "-"}</div>
             <div>hasCode: {String(diag.hasCode ?? "-")}</div>
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
+            <div>cookieSyncOk: {String(diag.cookieSyncOk ?? "-")}</div>
             <div>error: {diag.error || "-"}</div>
           </div>
         </div>

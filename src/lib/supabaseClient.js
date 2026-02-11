@@ -7,7 +7,9 @@ import { createClient } from "@supabase/supabase-js";
  *   - VITE_SUPABASE_URL
  *   - VITE_SUPABASE_ANON_KEY
  *
- * No se permiten fallbacks para evitar apuntar a proyectos incorrectos.
+ * Mantiene soporte de token en memoria (TWA/WebView safe),
+ * pero CENTRALIZA el PKCE exchange en /auth/callback:
+ *   detectSessionInUrl: false
  */
 
 function normUrl(u) {
@@ -31,32 +33,25 @@ function projectRefFromUrl(u) {
   }
 }
 
-// ✅ SOLO VITE_
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
 
-// Fail fast
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    "[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build."
-  );
+  throw new Error("[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build.");
 }
 
 if (!isSupabaseUrl(SUPABASE_URL)) {
   throw new Error(`[supabaseClient] Supabase URL inválida: ${SUPABASE_URL}`);
 }
 
-// 🔒 Blindaje opcional: fija tu project ref esperado
 const EXPECTED_PROJECT_REF = "mujwsfhkocsuuahlrssn";
 const currentRef = projectRefFromUrl(SUPABASE_URL);
 
 if (currentRef !== EXPECTED_PROJECT_REF) {
-  throw new Error(
-    `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
-  );
+  throw new Error(`[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`);
 }
 
 let __memoryAccessToken = null;
@@ -87,7 +82,11 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     flowType: "pkce",
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+
+    // ✅ CLAVE: NO procesar code automáticamente en cualquier página.
+    // Solo /auth/callback hará exchange.
+    detectSessionInUrl: false,
+
     storage,
   },
   global: {
@@ -103,9 +102,6 @@ if (typeof window !== "undefined") {
     PROJECT_REF: currentRef,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
   };
-
   console.info("[ENV CHECK v3 - PREVIEW]", info);
-
   window.__supabase__ = supabase;
 }
-
