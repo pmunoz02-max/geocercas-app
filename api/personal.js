@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v16-actions-toggle-delete";
+const VERSION = "personal-api-v17-bootstrap_user_context";
 
 /* =========================
    Utils
@@ -77,7 +77,7 @@ function toE164(rawPhone) {
 }
 
 /* =========================
-   Context Resolver
+   Context Resolver (FINAL)
 ========================= */
 
 async function resolveContext(req) {
@@ -115,9 +115,15 @@ async function resolveContext(req) {
 
   const jwt = getCookie(req, "tg_at");
   if (!jwt) {
-    return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
+    return {
+      ok: false,
+      status: 401,
+      error: "No autenticado",
+      details: "Falta cookie tg_at",
+    };
   }
 
+  // Cliente “usuario” (valida JWT + permite RPCs que dependan de auth.uid())
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -125,31 +131,51 @@ async function resolveContext(req) {
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
   if (userErr || !userData?.user) {
-    return { ok: false, status: 401, error: "Sesión inválida", details: userErr?.message || "No user" };
+    return {
+      ok: false,
+      status: 401,
+      error: "Sesión inválida",
+      details: userErr?.message || "No user",
+    };
   }
 
+  // Cliente service role para queries/updates (sin RLS)
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
+  // ✅ Arquitectura FINAL: función vigente
   let ctx = null;
-  try {
-    const { data, error } = await supaUser.rpc("bootstrap_session_context");
-    if (!error) ctx = normalizeCtx(data);
-  } catch {}
 
+  // 1) Intento canónico: bootstrap_user_context()
+  try {
+    const { data, error } = await supaUser.rpc("bootstrap_user_context");
+    if (!error) ctx = normalizeCtx(data);
+  } catch {
+    // no-op
+  }
+
+  // 2) Fallback opcional (si existiera en tu DB) para admins
+  //    NOTA: no rompe si la función no existe
   if (!ctx?.org_id || !ctx?.role) {
-    const { data, error } = await supaSrv.rpc("bootstrap_session_context_admin", {
-      p_user_id: userData.user.id,
-    });
-    if (error) {
-      return { ok: false, status: 403, error: "Contexto no inicializado (org/rol)", details: error.message };
+    try {
+      const { data, error } = await supaSrv.rpc("bootstrap_user_context_admin", {
+        p_user_id: userData.user.id,
+      });
+      if (!error) ctx = normalizeCtx(data);
+    } catch {
+      // no-op
     }
-    ctx = normalizeCtx(data);
   }
 
   if (!ctx?.org_id || !ctx?.role) {
-    return { ok: false, status: 403, error: "Contexto incompleto", details: "Falta org_id o role" };
+    return {
+      ok: false,
+      status: 403,
+      error: "Contexto no inicializado (org/rol)",
+      details:
+        "No se pudo resolver org_id/role desde bootstrap_user_context (o fallback admin)",
+    };
   }
 
   return { ok: true, user: userData.user, ctx, supaSrv };
@@ -161,7 +187,11 @@ async function resolveContext(req) {
 
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok)
+    return json(res, ctxRes.status, {
+      error: ctxRes.error,
+      details: ctxRes.details,
+    });
 
   const { ctx, supaSrv } = ctxRes;
 
@@ -194,14 +224,19 @@ async function handleList(req, res) {
   }
 
   const { data, error } = await query;
-  if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
+  if (error)
+    return json(res, 500, { error: "No se pudo listar personal", details: error.message });
 
   return json(res, 200, { items: data || [] });
 }
 
 async function handlePost(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok)
+    return json(res, ctxRes.status, {
+      error: ctxRes.error,
+      details: ctxRes.details,
+    });
 
   const { ctx, user, supaSrv } = ctxRes;
 
@@ -263,7 +298,6 @@ async function handlePost(req, res) {
   }
 
   // ===== UPSERT CREATE/REVIVE =====
-
   const nombre = (payload.nombre || "").trim();
   const apellido = (payload.apellido || "").trim();
   const email = (payload.email || "").trim().toLowerCase();
@@ -277,7 +311,6 @@ async function handlePost(req, res) {
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
-  // IMPORTANT: no escribir columnas GENERATED ALWAYS
   const baseRow = {
     nombre,
     apellido: apellido || null,
