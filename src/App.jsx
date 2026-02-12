@@ -8,7 +8,7 @@ import {
   useLocation,
 } from "react-router-dom";
 
-import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
+import { useAuthSafe } from "./context/AuthContext.jsx";
 
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
@@ -63,14 +63,36 @@ function RootEntry() {
 }
 
 function AdminRoute({ children }) {
-  const { loading, user, isAppRoot } = useAuth();
+  const auth = useAuthSafe();
   const location = useLocation();
 
-  if (loading) return null;
-  if (!user) {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+  // ✅ Si por alguna razón no hay provider, no crasheamos
+  if (!auth) {
+    return (
+      <Navigate
+        to={`/login?next=${encodeURIComponent(
+          location.pathname || "/inicio"
+        )}&err=${encodeURIComponent("auth_provider_missing")}`}
+        replace
+      />
+    );
   }
+
+  const { loading, user, isAppRoot } = auth;
+
+  if (loading) return null;
+
+  if (!user) {
+    return (
+      <Navigate
+        to={`/login?next=${encodeURIComponent(location.pathname)}`}
+        replace
+      />
+    );
+  }
+
   if (!isAppRoot) return <Navigate to="/inicio" replace />;
+
   return children;
 }
 
@@ -137,12 +159,9 @@ function AppRoutes() {
 }
 
 export default function App() {
-  // ✅ AUTO-WRAP: aunque main.jsx no tenga AuthProvider, aquí queda garantizado
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AuthProvider>
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }
