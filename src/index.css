@@ -8,9 +8,8 @@
 /* ---------- Base / Variables ---------- */
 @layer base {
   :root {
-    --app-bg: #020617;      /* slate-950 (dark base) */
-    --app-fg: #e5e7eb;      /* slate-200 */
-    --card-bg: #ffffff;
+    --app-bg: #020617; /* slate-950 */
+    --app-fg: #e5e7eb; /* slate-200 */
     --muted-fg: #94a3b8;
   }
 
@@ -20,12 +19,11 @@
     height: 100%;
   }
 
-  /* ✅ Fondo base oscuro UNIVERSAL
-     ⚠️ NO forzamos color de texto */
   html,
   body {
     margin: 0;
     background-color: var(--app-bg);
+    color: var(--app-fg); /* ✅ CLAVE: evita texto negro sobre fondo oscuro */
   }
 
   body {
@@ -33,7 +31,7 @@
       Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   }
 
-  /* ===== Normalización universal de links ===== */
+  /* ===== Links: por defecto heredan color y NO decoran ===== */
   a {
     color: inherit;
     text-decoration: none;
@@ -41,60 +39,29 @@
   a:visited {
     color: inherit;
   }
-  /* Nota: el hover global subraya SOLO links de texto.
-     Los tabs/nav se controlan más abajo para NO subrayar. */
-  a:hover {
+
+  /* ✅ Subrayado SOLO si el link es texto (opt-in con clase) */
+  .text-link:hover {
     text-decoration: underline;
   }
-  a:focus-visible {
+
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
     outline: 2px solid rgba(16, 185, 129, 0.8); /* emerald-500 */
     outline-offset: 2px;
     border-radius: 0.25rem;
   }
 
-  /* Header legacy (no estorba) */
-  header a {
-    text-decoration: none;
-  }
-  header a:visited {
-    color: inherit;
-  }
-
-  /* Inputs por defecto (solo si una vista no usa Tailwind) */
+  /* ✅ NO “retemamos” inputs/buttons globalmente.
+     Eso debe hacerlo Tailwind en cada componente/vista. */
   input,
   select,
   textarea,
   button {
     font: inherit;
-  }
-
-  input,
-  select,
-  textarea {
-    background: #ffffff;
-    color: #0f172a;
-    border: 1px solid #cbd5e1;
-    border-radius: 0.5rem;
-    padding: 0.5rem 0.75rem;
-  }
-
-  button {
-    background: #10b981; /* emerald-500 */
-    color: #020617;
-    border: none;
-    border-radius: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-    font-weight: 600;
-  }
-
-  button:hover {
-    filter: brightness(1.05);
-  }
-
-  button:disabled {
-    background: #475569;
-    cursor: default;
   }
 
   table {
@@ -146,17 +113,16 @@
 
 /* ---------- Utilities ---------- */
 @layer utilities {
-  /* Oculta scrollbar horizontal (Windows/Chrome/Safari/Firefox) */
   .scrollbar-hide {
-    -ms-overflow-style: none; /* IE/Edge legacy */
-    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
   .scrollbar-hide::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+    display: none;
   }
 }
 
-/* 🔒 FIX: en navegación (tabs/menús) NO subrayar en hover */
+/* 🔒 En navegación NO subrayar en hover (si usas .text-link en contenido, ahí sí) */
 nav a:hover {
   text-decoration: none;
 }
