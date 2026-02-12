@@ -6,13 +6,8 @@ import { createClient } from "@supabase/supabase-js";
  * Arquitectura FINAL:
  * - Implicit flow (hash token) ✅
  * - Token opcional en memoria (para bootstrap)
- * - NO localStorage (ni PKCE verifier, ni sesión persistente)
+ * - NO localStorage
  * - Backend cookie tg_at es la fuente de verdad real
- *
- * Meta:
- * - Fuente única del client para toda la app
- * - Logs con BUILD_MARKER para validar el deployment correcto
- * - Evita logs duplicados aunque existan shims legacy
  */
 
 const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260212_A";
@@ -20,7 +15,7 @@ const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260212_A";
 function normUrl(u) {
   return String(u || "")
     .trim()
-    .replace(/\s+/g, "") // ✅ elimina \n y espacios dentro (Vercel env a veces trae '\n')
+    .replace(/\s+/g, "")
     .replace(/\/+$/, "");
 }
 
@@ -66,7 +61,7 @@ if (currentRef !== EXPECTED_PROJECT_REF) {
   );
 }
 
-// ✅ Token solo en memoria (para enviar Bearer al backend bootstrap si hace falta)
+// ✅ Token solo en memoria (para enviar Bearer al backend si hace falta)
 let __memoryAccessToken = null;
 
 export function setMemoryAccessToken(token) {
@@ -77,7 +72,7 @@ export function getMemoryAccessToken() {
   return __memoryAccessToken;
 }
 
-// ✅ Storage no persistente (evita PKCE/verifier y sesión en localStorage)
+// ✅ Storage NO persistente
 const memoryStorage = {
   getItem: () => null,
   setItem: () => {},
@@ -89,10 +84,9 @@ const memoryStorage = {
 };
 
 function toHeaders(h) {
-  // Convierte headers "raros" a Headers
   if (!h) return new Headers();
   if (h instanceof Headers) return new Headers(h);
-  return new Headers(h); // objeto plano o array de pares
+  return new Headers(h);
 }
 
 const wrappedFetch = async (url, options = {}) => {
@@ -109,21 +103,19 @@ const wrappedFetch = async (url, options = {}) => {
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     flowType: "implicit",
-    detectSessionInUrl: false,
 
-    // ✅ cookie-backed => sin persistencia / refresh
+    // ✅ CLAVE: permitir capturar access_token desde URL hash del Magic Link
+    // (No persiste sesión; solo “lee” el hash una vez)
+    detectSessionInUrl: true,
+
     persistSession: false,
     autoRefreshToken: false,
-
     storage: memoryStorage,
   },
-  global: {
-    fetch: wrappedFetch,
-  },
+  global: { fetch: wrappedFetch },
 });
 
 if (typeof window !== "undefined") {
-  // ✅ Anti-duplicado: evita imprimir 2 veces aunque haya imports repetidos
   window.__TG_SUPABASE_ENV_LOGGED__ = window.__TG_SUPABASE_ENV_LOGGED__ || false;
 
   const info = {
@@ -139,7 +131,6 @@ if (typeof window !== "undefined") {
     SOURCE: "src/lib/supabaseClient.js",
   };
 
-  // ✅ Lista para verificar doble import real
   window.__TG_BUILD_MARKERS__ = window.__TG_BUILD_MARKERS__ || [];
   window.__TG_BUILD_MARKERS__.push({
     marker: BUILD_MARKER,
@@ -153,6 +144,5 @@ if (typeof window !== "undefined") {
     console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
-  // Debug handle (ok)
   window.__supabase__ = supabase;
 }
