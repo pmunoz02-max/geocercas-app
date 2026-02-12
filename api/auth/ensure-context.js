@@ -12,8 +12,11 @@ function getCookie(req, name) {
 
 export default async function handler(req, res) {
   try {
-    const tg_at = getCookie(req, "tg_at");
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, error: "method_not_allowed" });
+    }
 
+    const tg_at = getCookie(req, "tg_at");
     if (!tg_at) {
       return res.status(401).json({ ok: false, error: "missing tg_at cookie" });
     }
@@ -22,10 +25,14 @@ export default async function handler(req, res) {
     const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
     if (!url || !anon) {
-      return res.status(500).json({ ok: false, error: "missing SUPABASE_URL/ANON_KEY" });
+      return res.status(500).json({
+        ok: false,
+        error: "missing SUPABASE_URL/ANON_KEY",
+        hasUrl: Boolean(url),
+        hasAnon: Boolean(anon),
+      });
     }
 
-    // Cliente supabase con Authorization del usuario (tg_at)
     const sb = createClient(url, anon, {
       global: { headers: { Authorization: `Bearer ${tg_at}` } },
       auth: { persistSession: false, autoRefreshToken: false },
@@ -34,7 +41,13 @@ export default async function handler(req, res) {
     const { data, error } = await sb.rpc("bootstrap_user_context");
 
     if (error) {
-      return res.status(400).json({ ok: false, error: error.message, details: error });
+      return res.status(400).json({
+        ok: false,
+        error: error.message,
+        code: error.code,
+        details: error.details ?? null,
+        hint: error.hint ?? null,
+      });
     }
 
     return res.status(200).json({ ok: true, data });
