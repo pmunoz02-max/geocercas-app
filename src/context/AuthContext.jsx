@@ -225,7 +225,7 @@ export function AuthProvider({ children }) {
         // ✅ autocura del lado server usando cookie tg_at
         const e1 = await ensureContextServerSide();
         if (!e1.ok) {
-          console.warn("[AuthContext] ensure-context failed:", e1);
+         console.warn("[AuthContext] ensure-context failed:", e1);
 
 try {
   const r = await fetch("/api/auth/ensure-context", {
