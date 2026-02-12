@@ -12,6 +12,8 @@ import React, {
 /**
  * AuthContext UNIVERSAL (TWA/WebView safe)
  * Fuente: /api/auth/session (cookie HttpOnly tg_at)
+ * Auto-cura contexto multi-tenant llamando /api/auth/ensure-context (server-side),
+ * y luego re-lee /api/auth/session
  */
 
 const AuthContext = createContext(null);
@@ -34,9 +36,66 @@ async function fetchSession() {
   return { ok: res.ok, data };
 }
 
+async function ensureContextServerSide() {
+  const res = await fetch("/api/auth/ensure-context", {
+    method: "POST",
+    credentials: "include",
+    headers: { "cache-control": "no-cache", pragma: "no-cache" },
+  });
+
+  const raw = await res.text();
+  let data = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+  return { ok: res.ok, data };
+}
+
 function normalizeRole(v) {
   if (!v) return null;
   return String(v).trim().toLowerCase();
+}
+
+function extractServerOrgId(data) {
+  return (
+    data?.current_org_id ??
+    data?.currentOrgId ??
+    data?.current_orgId ??
+    data?.org_id ??
+    data?.orgId ??
+    null
+  );
+}
+
+function extractServerRole(data) {
+  return normalizeRole(
+    data?.currentRole ?? data?.current_role ?? data?.role ?? data?.app_role ?? null
+  );
+}
+
+function extractOrganizations(data) {
+  const arr = Array.isArray(data?.organizations)
+    ? data.organizations
+    : Array.isArray(data?.orgs)
+    ? data.orgs
+    : null;
+
+  if (!arr || arr.length === 0) return [];
+
+  return arr
+    .map((o) => {
+      const id = o?.id ?? o?.org_id ?? null;
+      if (!id) return null;
+      return {
+        ...o,
+        id,
+        name: o?.name ?? o?.org_name ?? o?.title ?? "",
+        role: normalizeRole(o?.role ?? o?.currentRole ?? o?.app_role),
+      };
+    })
+    .filter(Boolean);
 }
 
 export function AuthProvider({ children }) {
@@ -55,7 +114,9 @@ export function AuthProvider({ children }) {
 
   const authenticated = Boolean(user);
   const [ready, setReady] = useState(false);
+
   const didBootstrapOnceRef = useRef(false);
+  const didEnsureContextThisRunRef = useRef(false);
 
   const selectOrg = useCallback(
     (orgIdToSelect) => {
@@ -82,13 +143,65 @@ export function AuthProvider({ children }) {
     [organizations]
   );
 
+  const applySessionData = useCallback((data) => {
+    setUser(data?.user ?? null);
+    setIsAppRoot(Boolean(data?.is_app_root ?? data?.isAppRoot ?? false));
+
+    const serverOrgId = extractServerOrgId(data);
+    const orgs = extractOrganizations(data);
+
+    let preferredOrgId = null;
+    try {
+      preferredOrgId = localStorage.getItem(LS_ORG_KEY);
+    } catch {}
+
+    const finalOrgId = preferredOrgId || serverOrgId || null;
+
+    if (orgs.length > 0) {
+      setOrganizations(orgs);
+
+      const pickedId =
+        (finalOrgId && orgs.find((o) => o?.id === finalOrgId)?.id) ||
+        orgs.find((o) => o?.id)?.id ||
+        null;
+
+      const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
+      setCurrentOrg(orgObj || null);
+
+      if (pickedId) {
+        try {
+          localStorage.setItem(LS_ORG_KEY, pickedId);
+        } catch {}
+      }
+
+      const resolvedRole = extractServerRole(data) || normalizeRole(orgObj?.role);
+      setCurrentRole(resolvedRole);
+      return;
+    }
+
+    // Sin org list del server
+    if (finalOrgId) {
+      setOrganizations([{ id: finalOrgId }]);
+      setCurrentOrg({ id: finalOrgId });
+      try {
+        localStorage.setItem(LS_ORG_KEY, finalOrgId);
+      } catch {}
+    } else {
+      setOrganizations([]);
+      setCurrentOrg(null);
+    }
+
+    setCurrentRole(extractServerRole(data));
+  }, []);
+
   const bootstrap = useCallback(async () => {
     setLoading(true);
+    didEnsureContextThisRunRef.current = false;
 
     try {
-      const { ok, data } = await fetchSession();
+      const s1 = await fetchSession();
 
-      if (!ok || !data || data.authenticated !== true) {
+      if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
         setUser(null);
         setCurrentRole(null);
         setIsAppRoot(false);
@@ -97,86 +210,29 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      setUser(data.user ?? null);
-      setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
+      applySessionData(s1.data);
 
-      const serverOrgId =
-        data.current_org_id ??
-        data.currentOrgId ??
-        data.current_orgId ??
-        data.org_id ??
-        data.orgId ??
-        null;
+      const orgId1 = extractServerOrgId(s1.data);
+      const role1 = extractServerRole(s1.data);
+      const orgs1 = extractOrganizations(s1.data);
 
-      const orgsFromServer = Array.isArray(data.organizations)
-        ? data.organizations
-        : Array.isArray(data.orgs)
-        ? data.orgs
-        : null;
+      const missingOrg = !orgId1 && (!orgs1 || orgs1.length === 0);
+      const missingRole = !role1;
 
-      let preferredOrgId = null;
-      try {
-        preferredOrgId = localStorage.getItem(LS_ORG_KEY);
-      } catch {}
+      if ((missingOrg || missingRole) && !didEnsureContextThisRunRef.current) {
+        didEnsureContextThisRunRef.current = true;
 
-      const finalOrgId = preferredOrgId || serverOrgId || null;
-
-      if (orgsFromServer && orgsFromServer.length > 0) {
-        const normalized = orgsFromServer
-          .map((o) => {
-            const id = o?.id ?? o?.org_id ?? null;
-            if (!id) return null;
-            return {
-              ...o,
-              id,
-              name: o?.name ?? o?.org_name ?? o?.title ?? "",
-              role: normalizeRole(o?.role ?? o?.currentRole ?? o?.app_role),
-            };
-          })
-          .filter(Boolean);
-
-        setOrganizations(normalized);
-
-        const pickedId =
-          (finalOrgId && normalized.find((o) => o?.id === finalOrgId)?.id) ||
-          normalized.find((o) => o?.id)?.id ||
-          null;
-
-        const orgObj = pickedId ? normalized.find((o) => o?.id === pickedId) : null;
-        setCurrentOrg(orgObj || null);
-
-        if (pickedId) {
-          try {
-            localStorage.setItem(LS_ORG_KEY, pickedId);
-          } catch {}
+        // ✅ autocura del lado server usando cookie tg_at
+        const e1 = await ensureContextServerSide();
+        if (!e1.ok) {
+          console.warn("[AuthContext] ensure-context failed:", e1.data);
         }
 
-        const resolvedRole =
-          normalizeRole(
-            data.currentRole ??
-              data.current_role ??
-              data.role ??
-              data.app_role ??
-              null
-          ) || normalizeRole(orgObj?.role);
-
-        setCurrentRole(resolvedRole);
-      } else {
-        if (finalOrgId) {
-          setOrganizations([{ id: finalOrgId }]);
-          setCurrentOrg({ id: finalOrgId });
-          try {
-            localStorage.setItem(LS_ORG_KEY, finalOrgId);
-          } catch {}
-        } else {
-          setOrganizations([]);
-          setCurrentOrg(null);
+        // re-leer sesión ya con org+role resueltos
+        const s2 = await fetchSession();
+        if (s2.ok && s2.data && s2.data.authenticated === true) {
+          applySessionData(s2.data);
         }
-
-        const resolvedRole = normalizeRole(
-          data.currentRole ?? data.current_role ?? data.role ?? data.app_role ?? null
-        );
-        setCurrentRole(resolvedRole);
       }
     } finally {
       setLoading(false);
@@ -185,7 +241,7 @@ export function AuthProvider({ children }) {
         setReady(true);
       }
     }
-  }, []);
+  }, [applySessionData]);
 
   useEffect(() => {
     bootstrap();
@@ -251,14 +307,12 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-/** ✅ Hook estricto (para detectar bugs en dev) */
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
 
-/** ✅ Hook seguro (NO tumba la app si el Provider no está montado) */
 export function useAuthSafe() {
   return useContext(AuthContext);
 }

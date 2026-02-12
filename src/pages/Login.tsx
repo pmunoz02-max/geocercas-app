@@ -16,7 +16,6 @@ function safeNextPath(next: string) {
 const inputClass =
   "w-full rounded-xl border px-3 py-2 outline-none focus:ring " +
   "bg-white !text-gray-900 caret-black !placeholder:text-gray-400 " +
-  // Chrome autofill fix:
   "autofill:shadow-[inset_0_0_0px_1000px_rgb(255,255,255)] " +
   "autofill:[-webkit-text-fill-color:rgb(17,24,39)] " +
   "autofill:caret-black";
@@ -75,9 +74,7 @@ export default function Login() {
 
       const { error } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
+        options: { emailRedirectTo: redirectTo },
       });
 
       if (error) throw error;
@@ -91,9 +88,9 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-6 bg-slate-50 text-gray-900">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm text-gray-900">
-        <h1 className="text-xl font-semibold text-gray-900">Ingresar</h1>
+    <div className="min-h-[70vh] flex items-center justify-center p-6 bg-slate-50 !text-gray-900">
+      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm !text-gray-900">
+        <h1 className="text-xl font-semibold !text-gray-900">Ingresar</h1>
 
         {err && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -108,7 +105,7 @@ export default function Login() {
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-900">Email</label>
+            <label className="block text-sm font-medium !text-gray-900">Email</label>
             <input
               className={inputClass}
               type="email"
@@ -121,7 +118,7 @@ export default function Login() {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-900">Ir a (next)</label>
+            <label className="block text-sm font-medium !text-gray-900">Ir a (next)</label>
             <input
               className={inputClass}
               type="text"
@@ -132,7 +129,7 @@ export default function Login() {
           </div>
 
           <button
-            className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-60"
+            className="w-full rounded-xl !bg-black px-4 py-2 !text-white disabled:opacity-60"
             disabled={sending}
             type="submit"
           >
@@ -141,7 +138,7 @@ export default function Login() {
 
           <button
             type="button"
-            className="w-full rounded-xl border px-4 py-2 text-gray-900 bg-white"
+            className="w-full rounded-xl border px-4 py-2 !text-gray-900 bg-white"
             onClick={() => navigate("/")}
           >
             Volver
