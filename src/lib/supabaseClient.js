@@ -8,7 +8,14 @@ import { createClient } from "@supabase/supabase-js";
  * - Token opcional en memoria (para bootstrap)
  * - NO localStorage (ni PKCE verifier, ni sesión persistente)
  * - Backend cookie tg_at es la fuente de verdad real
+ *
+ * Meta:
+ * - Fuente única del client para toda la app
+ * - Logs con BUILD_MARKER para validar el deployment correcto
+ * - Evita logs duplicados aunque existan shims legacy
  */
+
+const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260212_A";
 
 function normUrl(u) {
   return String(u || "")
@@ -116,7 +123,11 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 if (typeof window !== "undefined") {
+  // ✅ Anti-duplicado: evita imprimir 2 veces aunque haya imports repetidos
+  window.__TG_SUPABASE_ENV_LOGGED__ = window.__TG_SUPABASE_ENV_LOGGED__ || false;
+
   const info = {
+    BUILD_MARKER,
     MODE: import.meta.env.MODE,
     ORIGIN: window.location.origin,
     SUPABASE_URL,
@@ -125,7 +136,23 @@ if (typeof window !== "undefined") {
     FLOW: "implicit",
     PERSIST_SESSION: false,
     AUTO_REFRESH: false,
+    SOURCE: "src/lib/supabaseClient.js",
   };
-  console.info("[ENV CHECK v3 - AUTH FINAL]", info);
+
+  // ✅ Lista para verificar doble import real
+  window.__TG_BUILD_MARKERS__ = window.__TG_BUILD_MARKERS__ || [];
+  window.__TG_BUILD_MARKERS__.push({
+    marker: BUILD_MARKER,
+    at: Date.now(),
+    from: "src/lib/supabaseClient.js",
+  });
+
+  if (!window.__TG_SUPABASE_ENV_LOGGED__) {
+    window.__TG_SUPABASE_ENV_LOGGED__ = true;
+    console.info(`[${BUILD_MARKER}] [ENV CHECK v3 - AUTH FINAL]`, info);
+    console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
+  }
+
+  // Debug handle (ok)
   window.__supabase__ = supabase;
 }
