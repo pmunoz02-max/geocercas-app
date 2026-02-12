@@ -3,29 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- ✅ PKCE EARLY CATCHER (antes de React) -->
-    <script>
-      (function () {
-        try {
-          var u = new URL(window.location.href);
-          var hasCode = u.searchParams.has("code");
-          var isCallback = u.pathname === "/auth/callback";
-          if (hasCode && !isCallback) {
-            if (!u.searchParams.get("next")) u.searchParams.set("next", "/inicio");
-            u.pathname = "/auth/callback";
-            window.location.replace(u.toString());
-          }
-        } catch (e) {}
-      })();
-    </script>
-
     <title>App Geocercas</title>
   </head>
   <body>
     <div id="root"></div>
-
-    <!-- ✅ ENTRY REAL -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
