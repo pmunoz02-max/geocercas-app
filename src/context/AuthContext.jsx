@@ -13,19 +13,19 @@ import React, {
  * AuthContext UNIVERSAL (TWA/WebView safe)
  * Fuente: /api/auth/session (cookie HttpOnly tg_at)
  * Auto-cura contexto multi-tenant llamando /api/auth/ensure-context (server-side),
- * y luego re-lee /api/auth/session
+ * y aplica el resultado inmediatamente.
  */
 
 const AuthContext = createContext(null);
 
 const LS_ORG_KEY = "tg_current_org_id";
 
-async function fetchSession() {
-  const res = await fetch("/api/auth/session", {
+async function fetchJson(url, opts = {}) {
+  const res = await fetch(url, {
     credentials: "include",
     headers: { "cache-control": "no-cache", pragma: "no-cache" },
+    ...opts,
   });
-
   const raw = await res.text();
   let data = null;
   try {
@@ -33,24 +33,15 @@ async function fetchSession() {
   } catch {
     data = null;
   }
-  return { ok: res.ok, data };
+  return { ok: res.ok, status: res.status, data, raw };
+}
+
+async function fetchSession() {
+  return fetchJson("/api/auth/session");
 }
 
 async function ensureContextServerSide() {
-  const res = await fetch("/api/auth/ensure-context", {
-    method: "POST",
-    credentials: "include",
-    headers: { "cache-control": "no-cache", pragma: "no-cache" },
-  });
-
-  const raw = await res.text();
-  let data = null;
-  try {
-    data = raw ? JSON.parse(raw) : null;
-  } catch {
-    data = null;
-  }
-  return { ok: res.ok, data };
+  return fetchJson("/api/auth/ensure-context", { method: "POST" });
 }
 
 function normalizeRole(v) {
@@ -194,6 +185,27 @@ export function AuthProvider({ children }) {
     setCurrentRole(extractServerRole(data));
   }, []);
 
+  // ✅ Aplica el resultado del ensure-context aunque session no lo devuelva todavía
+  const applyEnsureContext = useCallback((payload) => {
+    const org_id = payload?.data?.org_id ?? payload?.org_id ?? null;
+    const roleRaw = payload?.data?.role ?? payload?.role ?? null;
+    const roleNorm = normalizeRole(roleRaw);
+
+    if (org_id) {
+      setCurrentOrg({ id: org_id });
+      setOrganizations((prev) => {
+        const arr = Array.isArray(prev) ? prev : [];
+        if (arr.some((o) => o?.id === org_id)) return arr;
+        return [{ id: org_id }, ...arr];
+      });
+      try {
+        localStorage.setItem(LS_ORG_KEY, org_id);
+      } catch {}
+    }
+
+    if (roleNorm) setCurrentRole(roleNorm);
+  }, []);
+
   const bootstrap = useCallback(async () => {
     setLoading(true);
     didEnsureContextThisRunRef.current = false;
@@ -222,27 +234,16 @@ export function AuthProvider({ children }) {
       if ((missingOrg || missingRole) && !didEnsureContextThisRunRef.current) {
         didEnsureContextThisRunRef.current = true;
 
-        // ✅ autocura del lado server usando cookie tg_at
         const e1 = await ensureContextServerSide();
+
         if (!e1.ok) {
-         console.warn("[AuthContext] ensure-context failed:", e1);
-
-try {
-  const r = await fetch("/api/auth/ensure-context", {
-    method: "POST",
-    credentials: "include",
-    headers: { "cache-control": "no-cache", pragma: "no-cache" },
-  });
-  const txt = await r.text();
-  console.warn("[AuthContext] ensure-context raw status:", r.status);
-  console.warn("[AuthContext] ensure-context raw body:", txt);
-} catch (x) {
-  console.warn("[AuthContext] ensure-context debug fetch failed:", x);
-}
-
+          console.warn("[AuthContext] ensure-context failed:", e1.data || e1.raw);
+        } else {
+          // ✅ llena contexto inmediatamente
+          applyEnsureContext(e1.data);
         }
 
-        // re-leer sesión ya con org+role resueltos
+        // re-leer session para quedar consistente si el server ya sabe devolver orgs/role
         const s2 = await fetchSession();
         if (s2.ok && s2.data && s2.data.authenticated === true) {
           applySessionData(s2.data);
@@ -255,7 +256,7 @@ try {
         setReady(true);
       }
     }
-  }, [applySessionData]);
+  }, [applySessionData, applyEnsureContext]);
 
   useEffect(() => {
     bootstrap();
