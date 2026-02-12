@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- ✅ PKCE EARLY CATCHER: corre antes de React -->
+    <!-- ✅ PKCE EARLY CATCHER (antes de React) -->
     <script>
       (function () {
         try {
@@ -12,7 +12,7 @@
           var hasCode = u.searchParams.has("code");
           var isCallback = u.pathname === "/auth/callback";
           if (hasCode && !isCallback) {
-            // conserva TODO el query (code, next, etc.)
+            if (!u.searchParams.get("next")) u.searchParams.set("next", "/inicio");
             u.pathname = "/auth/callback";
             window.location.replace(u.toString());
           }
@@ -25,10 +25,7 @@
   <body>
     <div id="root"></div>
 
-    <!-- OJO: este src debe coincidir con tu entry real -->
-    <script type="module" src="/src/main.tsx"></script>
-    <!-- si tu proyecto usa main.jsx, cambia a:
+    <!-- ✅ ENTRY REAL -->
     <script type="module" src="/src/main.jsx"></script>
-    -->
   </body>
 </html>
