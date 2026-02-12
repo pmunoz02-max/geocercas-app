@@ -225,7 +225,21 @@ export function AuthProvider({ children }) {
         // ✅ autocura del lado server usando cookie tg_at
         const e1 = await ensureContextServerSide();
         if (!e1.ok) {
-          console.warn("[AuthContext] ensure-context failed:", e1.data);
+          console.warn("[AuthContext] ensure-context failed:", e1);
+
+try {
+  const r = await fetch("/api/auth/ensure-context", {
+    method: "POST",
+    credentials: "include",
+    headers: { "cache-control": "no-cache", pragma: "no-cache" },
+  });
+  const txt = await r.text();
+  console.warn("[AuthContext] ensure-context raw status:", r.status);
+  console.warn("[AuthContext] ensure-context raw body:", txt);
+} catch (x) {
+  console.warn("[AuthContext] ensure-context debug fetch failed:", x);
+}
+
         }
 
         // re-leer sesión ya con org+role resueltos
