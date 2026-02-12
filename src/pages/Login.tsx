@@ -1,32 +1,44 @@
 // src/pages/Login.tsx
-// LOGIN-IMPLICIT-V1 — Magic Link vía supabase-js (implicit hash)
-// Mantiene UI similar a tu pantalla actual (oscura, V31-like)
+// LOGIN-IMPLICIT-V2 — Magic Link + Reset Password (Recovery) robusto
+// - Magic Link: signInWithOtp -> /auth/callback?next=...
+// - Reset Password: resetPasswordForEmail -> /reset-password (hash implicit)
+// Importante: usar un SITE URL estable para que no cambie el dominio.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
 function getSiteUrl() {
-  const v = (import.meta as any).env?.PUBLIC_SITE_URL || "";
+  // ✅ En Vite normalmente es VITE_*
+  const v =
+    (import.meta as any).env?.VITE_SITE_URL ||
+    (import.meta as any).env?.PUBLIC_SITE_URL ||
+    "";
   const s = String(v).trim().replace(/\/+$/, "");
   return s || window.location.origin;
 }
 
 export default function Login() {
   const location = useLocation();
-  const qp = useMemo(() => new URLSearchParams(location.search || ""), [location.search]);
+  const qp = useMemo(
+    () => new URLSearchParams(location.search || ""),
+    [location.search]
+  );
+
   const next = qp.get("next") || "/inicio";
   const err = qp.get("err") || "";
 
   const [email, setEmail] = useState(qp.get("email") || "");
   const [sending, setSending] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
   const [status, setStatus] = useState("");
 
-  // Si por alguna razón caes aquí con ?code=, lo reportamos (PKCE ya no se usa)
   useEffect(() => {
     const code = qp.get("code");
     if (code) {
-      setStatus("Este link llegó con ?code= (PKCE). En modo B usamos hash token. Pide un link nuevo desde este login.");
+      setStatus(
+        "Este link llegó con ?code= (PKCE). En este proyecto usamos implicit (hash). Solicita un link nuevo desde este login."
+      );
     }
   }, [qp]);
 
@@ -42,13 +54,13 @@ export default function Login() {
 
     try {
       const site = getSiteUrl();
-      const emailRedirectTo = `${site}/auth/callback?next=${encodeURIComponent(next)}`;
+      const emailRedirectTo = `${site}/auth/callback?next=${encodeURIComponent(
+        next
+      )}`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email: e,
-        options: {
-          emailRedirectTo,
-        },
+        options: { emailRedirectTo },
       });
 
       if (error) {
@@ -56,11 +68,49 @@ export default function Login() {
         return;
       }
 
-      setStatus("Listo. Revisa tu correo y abre el link. (Puede abrirse en WebView sin romperse)");
+      setStatus(
+        "Listo. Revisa tu correo y abre el Magic Link. (WebView/TWA compatible)"
+      );
     } catch (ex: any) {
       setStatus(`Error inesperado: ${ex?.message ?? String(ex)}`);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendResetPassword() {
+    const e = String(email || "").trim().toLowerCase();
+    if (!e.includes("@")) {
+      setStatus("Correo inválido.");
+      return;
+    }
+
+    setSendingReset(true);
+    setStatus("Enviando link de recuperación...");
+
+    try {
+      const site = getSiteUrl();
+
+      // ✅ Recovery debe ir directo a /reset-password
+      // Supabase debe generar link tipo: /reset-password#access_token=...&type=recovery
+      const redirectTo = `${site}/reset-password`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(e, {
+        redirectTo,
+      });
+
+      if (error) {
+        setStatus(`Error: ${error.message}`);
+        return;
+      }
+
+      setStatus(
+        "Listo. Revisa tu correo y abre el link de recuperación (reset password)."
+      );
+    } catch (ex: any) {
+      setStatus(`Error inesperado: ${ex?.message ?? String(ex)}`);
+    } finally {
+      setSendingReset(false);
     }
   }
 
@@ -70,17 +120,27 @@ export default function Login() {
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-semibold">
-              Iniciar sesión <span className="text-xs opacity-60">(LOGIN-IMPLICIT)</span>
+              Iniciar sesión{" "}
+              <span className="text-xs opacity-60">(IMPLICIT)</span>
             </h1>
             <div className="flex gap-2">
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-xs">ES</span>
-              <span className="px-3 py-1 rounded-full bg-sky-500/20 border border-sky-500/30 text-xs">EN</span>
-              <span className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-xs">FR</span>
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-xs">
+                ES
+              </span>
+              <span className="px-3 py-1 rounded-full bg-sky-500/20 border border-sky-500/30 text-xs">
+                EN
+              </span>
+              <span className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-xs">
+                FR
+              </span>
             </div>
           </div>
 
           <div className="mt-4 bg-emerald-900/30 border border-emerald-700/40 rounded-2xl p-4 text-sm">
-            Magic Link estable para WebView/TWA: flujo <b>implicit</b> + cookie HttpOnly <b>tg_at</b>.
+            Magic Link estable (implicit) + cookie HttpOnly <b>tg_at</b>.
+            <div className="text-xs opacity-70 mt-2">
+              SITE: <b>{getSiteUrl()}</b>
+            </div>
           </div>
 
           {err ? (
@@ -100,13 +160,23 @@ export default function Login() {
             />
           </div>
 
-          <button
-            onClick={sendMagicLink}
-            disabled={sending}
-            className="mt-6 w-full rounded-2xl bg-white text-slate-900 py-3 font-semibold disabled:opacity-60"
-          >
-            {sending ? "Enviando..." : "Enviar Magic Link"}
-          </button>
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={sendMagicLink}
+              disabled={sending || sendingReset}
+              className="w-full rounded-2xl bg-white text-slate-900 py-3 font-semibold disabled:opacity-60"
+            >
+              {sending ? "Enviando..." : "Enviar Magic Link"}
+            </button>
+
+            <button
+              onClick={sendResetPassword}
+              disabled={sending || sendingReset}
+              className="w-full rounded-2xl bg-slate-800 text-slate-100 py-3 font-semibold border border-slate-700 disabled:opacity-60"
+            >
+              {sendingReset ? "Enviando..." : "Olvidé mi contraseña"}
+            </button>
+          </div>
 
           {status ? (
             <div className="mt-4 text-sm bg-black/30 border border-white/10 rounded-2xl p-4">
@@ -115,7 +185,8 @@ export default function Login() {
             </div>
           ) : (
             <div className="mt-4 text-xs opacity-60">
-              next: {next} • redirect: {getSiteUrl()}/auth/callback
+              next: {next} • callback: {getSiteUrl()}/auth/callback • reset:{" "}
+              {getSiteUrl()}/reset-password
             </div>
           )}
         </div>

@@ -1,12 +1,27 @@
 // src/pages/ResetPassword.jsx
+// RESET-PASSWORD-IMPLICIT-V2
+// Soporta 2 entradas:
+// A) Implicit recovery: /reset-password#access_token=...&refresh_token=...&type=recovery
+// B) Legacy token_hash: /reset-password?token_hash=...&type=recovery  (verifyOtp)
+
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 function isStrongEnough(pw) {
   const s = String(pw || "");
-  // mínimo 8; al menos 1 letra y 1 número (ajústalo si quieres)
   return s.length >= 8 && /[A-Za-z]/.test(s) && /\d/.test(s);
+}
+
+function parseHashParams(hash) {
+  const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
+  const sp = new URLSearchParams(h);
+  return {
+    access_token: sp.get("access_token") || "",
+    refresh_token: sp.get("refresh_token") || "",
+    type: (sp.get("type") || "").toLowerCase(),
+    error: sp.get("error") || sp.get("error_description") || "",
+  };
 }
 
 export default function ResetPassword() {
@@ -14,7 +29,7 @@ export default function ResetPassword() {
   const [searchParams] = useSearchParams();
 
   const token_hash = searchParams.get("token_hash") || "";
-  const type = (searchParams.get("type") || "").toLowerCase(); // "recovery" esperado
+  const type_q = (searchParams.get("type") || "").toLowerCase();
 
   const [checking, setChecking] = useState(true);
   const [ready, setReady] = useState(false);
@@ -23,7 +38,7 @@ export default function ResetPassword() {
   const [password2, setPassword2] = useState("");
 
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null); // { type: "error"|"success"|"warn", text }
+  const [msg, setMsg] = useState(null); // { type, text }
 
   const canSubmit = useMemo(() => {
     if (!password || !password2) return false;
@@ -31,7 +46,6 @@ export default function ResetPassword() {
     return isStrongEnough(password);
   }, [password, password2]);
 
-  // ✅ UNIVERSAL: si llegamos aquí con token_hash&type y NO hay sesión, verificamos OTP aquí mismo.
   useEffect(() => {
     let cancelled = false;
 
@@ -41,7 +55,45 @@ export default function ResetPassword() {
       setMsg(null);
 
       try {
-        // 1) ¿ya hay sesión?
+        // 1) Caso A: hash implicit recovery
+        const h = parseHashParams(window.location.hash || "");
+        if (h.error) {
+          setMsg({
+            type: "error",
+            text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
+          });
+          setReady(false);
+          return;
+        }
+
+        if (h.access_token && (h.type === "recovery" || h.type === "magiclink")) {
+          // Creamos sesión en memoria para permitir updateUser
+          const { error } = await supabase.auth.setSession({
+            access_token: h.access_token,
+            refresh_token: h.refresh_token || "",
+          });
+
+          if (cancelled) return;
+
+          if (error) {
+            setMsg({
+              type: "error",
+              text: "No se pudo iniciar sesión de recuperación. Genera un link nuevo e inténtalo en incógnito.",
+            });
+            setReady(false);
+            return;
+          }
+
+          // limpiamos hash (opcional) para no dejar tokens visibles
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch {}
+
+          setReady(true);
+          return;
+        }
+
+        // 2) Caso B: legacy token_hash
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -53,38 +105,30 @@ export default function ResetPassword() {
           return;
         }
 
-        // 2) Si no hay sesión, intentamos verificar OTP si viene token_hash.
-        // Esto hace el flujo robusto incluso si /auth/callback no se ejecutó.
-        if (token_hash && type) {
+        if (token_hash && (type_q || "recovery")) {
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
-            type, // debe ser "recovery" normalmente
+            type: type_q || "recovery",
           });
 
           if (cancelled) return;
 
-          if (error) {
+          if (error || !data?.session?.user?.id) {
             setMsg({
               type: "error",
-              text:
-                "El link de recuperación es inválido o expiró. Genera uno nuevo e inténtalo en incógnito.",
+              text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
             });
             setReady(false);
             return;
           }
 
-          // verifyOtp crea sesión
-          if (data?.session?.user?.id) {
-            setReady(true);
-            return;
-          }
+          setReady(true);
+          return;
         }
 
-        // 3) Si no hay sesión y no hay token válido:
         setMsg({
           type: "error",
-          text:
-            "Faltan parámetros de recuperación o no hay sesión. Solicita un nuevo link de recuperación.",
+          text: "No hay sesión de recuperación. Solicita un nuevo link de recuperación.",
         });
         setReady(false);
       } catch (e) {
@@ -97,11 +141,10 @@ export default function ResetPassword() {
     }
 
     bootstrap();
-
     return () => {
       cancelled = true;
     };
-  }, [token_hash, type]);
+  }, [token_hash, type_q]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -110,8 +153,7 @@ export default function ResetPassword() {
     if (!canSubmit) {
       setMsg({
         type: "warn",
-        text:
-          "Revisa tu contraseña: mínimo 8 caracteres, incluye letras y números, y ambas entradas deben coincidir.",
+        text: "Revisa tu contraseña: mínimo 8 caracteres, incluye letras y números, y ambas entradas deben coincidir.",
       });
       return;
     }
@@ -119,7 +161,6 @@ export default function ResetPassword() {
     try {
       setBusy(true);
 
-      // Asegura sesión antes de updateUser
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -127,8 +168,7 @@ export default function ResetPassword() {
       if (!session?.user?.id) {
         setMsg({
           type: "error",
-          text:
-            "No hay sesión activa para cambiar la contraseña. Abre el link de recuperación nuevamente o genera uno nuevo.",
+          text: "No hay sesión activa para cambiar la contraseña. Abre el link de recuperación nuevamente o genera uno nuevo.",
         });
         return;
       }
@@ -142,9 +182,8 @@ export default function ResetPassword() {
 
       setMsg({ type: "success", text: "✅ Contraseña actualizada. Ya puedes iniciar sesión." });
 
-      // opcional: cerrar sesión para forzar login con la nueva contraseña
       await supabase.auth.signOut().catch(() => {});
-      setTimeout(() => navigate("/login", { replace: true }), 800);
+      setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (e2) {
       setMsg({ type: "error", text: e2?.message || "Error inesperado." });
     } finally {
