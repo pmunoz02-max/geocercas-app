@@ -1,5 +1,5 @@
 // src/lib/inviteApi.js
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
 // Obtiene la org actual del usuario autenticado desde la RPC
 async function getCurrentOrgId() {

@@ -1,6 +1,23 @@
 // src/context/AuthContext.jsx
+<<<<<<< HEAD
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+=======
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useCallback,
+  useState,
+  useRef,
+} from "react";
+
+/**
+ * AuthContext UNIVERSAL (TWA/WebView safe)
+ * Fuente: /api/auth/session (cookie HttpOnly tg_at)
+ */
+>>>>>>> preview
 
 const AuthContext = createContext(null);
 
@@ -48,6 +65,11 @@ function clearActiveOrgFromStorage() {
   }
 }
 
+function normalizeRole(v) {
+  if (!v) return null;
+  return String(v).trim().toLowerCase();
+}
+
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [contextLoading, setContextLoading] = useState(false);
@@ -55,14 +77,19 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
 
+<<<<<<< HEAD
   const [ctx, setCtx] = useState(null);
   const [currentOrg, setCurrentOrg] = useState(null);
   const [role, setRole] = useState(null);
 
+=======
+  const [currentRole, setCurrentRole] = useState(null);
+>>>>>>> preview
   const [isAppRoot, setIsAppRoot] = useState(false);
 
   const mountedRef = useRef(true);
 
+<<<<<<< HEAD
   // -----------------------------
   // Single-flight + cache (universal)
   // -----------------------------
@@ -71,11 +98,21 @@ export function AuthProvider({ children }) {
 
   const rootInFlightRef = useRef(null);
   const rootLastRef = useRef({ userId: null, at: 0, ok: false });
+=======
+  const role = currentRole;
+  const currentOrgId = currentOrg?.id || null;
+  const orgId = currentOrgId;
+
+  const authenticated = Boolean(user);
+  const [ready, setReady] = useState(false);
+  const didBootstrapOnceRef = useRef(false);
+>>>>>>> preview
 
   // TTLs
   const CTX_TTL_MS = 10_000;
   const ROOT_TTL_MS = 60_000;
 
+<<<<<<< HEAD
   // --------------------------------------------------
   // ROOT OWNER CHECK
   // --------------------------------------------------
@@ -84,6 +121,131 @@ export function AuthProvider({ children }) {
     if (!uid || !mountedRef.current) {
       setIsAppRoot(false);
       return false;
+=======
+      try {
+        localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
+      } catch {}
+
+      setCurrentOrg((prev) => {
+        if (prev?.id === orgIdToSelect) return prev;
+        const found = Array.isArray(organizations)
+          ? organizations.find((o) => o?.id === orgIdToSelect)
+          : null;
+        return found || { id: orgIdToSelect };
+      });
+
+      setOrganizations((prev) => {
+        const arr = Array.isArray(prev) ? prev : [];
+        if (arr.some((o) => o?.id === orgIdToSelect)) return arr;
+        return [{ id: orgIdToSelect }, ...arr];
+      });
+    },
+    [organizations]
+  );
+
+  const bootstrap = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { ok, data } = await fetchSession();
+
+      if (!ok || !data || data.authenticated !== true) {
+        setUser(null);
+        setCurrentRole(null);
+        setIsAppRoot(false);
+        setOrganizations([]);
+        setCurrentOrg(null);
+        return;
+      }
+
+      setUser(data.user ?? null);
+      setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
+
+      const serverOrgId =
+        data.current_org_id ??
+        data.currentOrgId ??
+        data.current_orgId ??
+        data.org_id ??
+        data.orgId ??
+        null;
+
+      const orgsFromServer = Array.isArray(data.organizations)
+        ? data.organizations
+        : Array.isArray(data.orgs)
+        ? data.orgs
+        : null;
+
+      let preferredOrgId = null;
+      try {
+        preferredOrgId = localStorage.getItem(LS_ORG_KEY);
+      } catch {}
+
+      const finalOrgId = preferredOrgId || serverOrgId || null;
+
+      if (orgsFromServer && orgsFromServer.length > 0) {
+        const normalized = orgsFromServer
+          .map((o) => {
+            const id = o?.id ?? o?.org_id ?? null;
+            if (!id) return null;
+            return {
+              ...o,
+              id,
+              name: o?.name ?? o?.org_name ?? o?.title ?? "",
+              role: normalizeRole(o?.role ?? o?.currentRole ?? o?.app_role),
+            };
+          })
+          .filter(Boolean);
+
+        setOrganizations(normalized);
+
+        const pickedId =
+          (finalOrgId && normalized.find((o) => o?.id === finalOrgId)?.id) ||
+          normalized.find((o) => o?.id)?.id ||
+          null;
+
+        const orgObj = pickedId ? normalized.find((o) => o?.id === pickedId) : null;
+        setCurrentOrg(orgObj || null);
+
+        if (pickedId) {
+          try {
+            localStorage.setItem(LS_ORG_KEY, pickedId);
+          } catch {}
+        }
+
+        const resolvedRole =
+          normalizeRole(
+            data.currentRole ??
+              data.current_role ??
+              data.role ??
+              data.app_role ??
+              null
+          ) || normalizeRole(orgObj?.role);
+
+        setCurrentRole(resolvedRole);
+      } else {
+        if (finalOrgId) {
+          setOrganizations([{ id: finalOrgId }]);
+          setCurrentOrg({ id: finalOrgId });
+          try {
+            localStorage.setItem(LS_ORG_KEY, finalOrgId);
+          } catch {}
+        } else {
+          setOrganizations([]);
+          setCurrentOrg(null);
+        }
+
+        const resolvedRole = normalizeRole(
+          data.currentRole ?? data.current_role ?? data.role ?? data.app_role ?? null
+        );
+        setCurrentRole(resolvedRole);
+      }
+    } finally {
+      setLoading(false);
+      if (!didBootstrapOnceRef.current) {
+        didBootstrapOnceRef.current = true;
+        setReady(true);
+      }
+>>>>>>> preview
     }
 
     const now = Date.now();
@@ -295,11 +457,25 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       loading,
+<<<<<<< HEAD
       contextLoading,
       session,
       user,
       ctx,
       currentOrg,
+=======
+      ready,
+      authenticated,
+      user,
+      isLoggedIn: Boolean(user),
+
+      currentRole,
+      isAppRoot,
+      organizations,
+      currentOrg,
+      selectOrg,
+
+>>>>>>> preview
       role,
       currentRole: role,
       isAppRoot,
@@ -314,6 +490,7 @@ export function AuthProvider({ children }) {
         setRole(null);
         setIsAppRoot(false);
 
+<<<<<<< HEAD
         clearActiveOrgFromStorage();
 
         // limpia cache local
@@ -323,6 +500,10 @@ export function AuthProvider({ children }) {
         rootLastRef.current = { userId: null, at: Date.now(), ok: false };
       },
       isAuthenticated: !!session,
+=======
+      refreshSession: bootstrap,
+      logout,
+>>>>>>> preview
     }),
     [loading, contextLoading, session, user, ctx, currentOrg, role, isAppRoot]
   );
@@ -330,8 +511,14 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/** ✅ Hook estricto (para detectar bugs en dev) */
 export function useAuth() {
   const v = useContext(AuthContext);
   if (!v) throw new Error("useAuth debe usarse dentro de <AuthProvider />");
   return v;
+}
+
+/** ✅ Hook seguro (NO tumba la app si el Provider no está montado) */
+export function useAuthSafe() {
+  return useContext(AuthContext);
 }

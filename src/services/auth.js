@@ -1,11 +1,31 @@
-// /src/services/auth.js
+// src/services/auth.js
 import { supabase } from "../supabaseClient";
 
-export async function sendMagicLink(email, redirectTo) {
+/**
+ * Magic Link UNIVERSAL:
+ * - SIEMPRE usa /auth/callback
+ * - Ignora redirectTo externo
+ * - Evita redirect_to=/ raíz
+ */
+
+function getCallbackUrl() {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return "/auth/callback";
+}
+
+export async function sendMagicLink(email) {
+  const emailRedirectTo = getCallbackUrl();
+
   const { data, error } = await supabase.auth.signInWithOtp({
     email,
-    options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+    options: {
+      emailRedirectTo,
+      shouldCreateUser: true,
+    },
   });
+
   if (error) throw error;
   return data;
 }
@@ -23,7 +43,6 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback) {
-  // Devuelve la suscripción para que puedas .unsubscribe() en cleanup
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
     callback(session);
   });

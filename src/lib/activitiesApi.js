@@ -1,4 +1,5 @@
 ﻿// src/lib/activitiesApi.js
+<<<<<<< HEAD
 // ============================================================
 // ACTIVITIES API (CANÓNICO) — Supabase + Multi-org real
 // Feb 2026 — App Geocercas
@@ -11,6 +12,9 @@
 // ============================================================
 
 import { supabase } from "./supabaseClient";
+=======
+import { supabase } from "../lib/supabaseClient";
+>>>>>>> preview
 
 const TABLE = "activities";
 
@@ -23,6 +27,7 @@ function getActiveOrgId() {
   }
 }
 
+<<<<<<< HEAD
 function wrap(data, error) {
   return { data: data ?? null, error: error ?? null };
 }
@@ -110,6 +115,31 @@ export async function updateActivity(id, patch) {
 /**
  * Soft delete: active=false (tenant-safe).
  */
+=======
+export async function createActivity(payload) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateActivity(id, payload) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+>>>>>>> preview
 export async function deleteActivity(id) {
   const orgId = getActiveOrgId();
   if (!orgId) return wrap(null, errMsg("No hay org activa (tg_current_org_id es null)"));

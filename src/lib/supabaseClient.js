@@ -3,15 +3,18 @@ import { createClient } from "@supabase/supabase-js";
 
 /**
  * Supabase client — FRONTEND (Vite)
- * Fuente única de verdad:
- *   - VITE_SUPABASE_URL
- *   - VITE_SUPABASE_ANON_KEY
- *
- * No se permiten fallbacks para evitar apuntar a proyectos incorrectos.
+ * Arquitectura FINAL:
+ * - Implicit flow (hash token) ✅
+ * - Token opcional en memoria (para bootstrap)
+ * - NO localStorage (ni PKCE verifier, ni sesión persistente)
+ * - Backend cookie tg_at es la fuente de verdad real
  */
 
 function normUrl(u) {
-  return String(u || "").trim().replace(/\/+$/, "");
+  return String(u || "")
+    .trim()
+    .replace(/\s+/g, "") // ✅ elimina \n y espacios
+    .replace(/\/+$/, "");
 }
 
 function isSupabaseUrl(u) {
@@ -31,14 +34,12 @@ function projectRefFromUrl(u) {
   }
 }
 
-// ✅ SOLO VITE_
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
 
-// Fail fast
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
     "[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build."
@@ -49,7 +50,6 @@ if (!isSupabaseUrl(SUPABASE_URL)) {
   throw new Error(`[supabaseClient] Supabase URL inválida: ${SUPABASE_URL}`);
 }
 
-// 🔒 Blindaje opcional: fija tu project ref esperado
 const EXPECTED_PROJECT_REF = "mujwsfhkocsuuahlrssn";
 const currentRef = projectRefFromUrl(SUPABASE_URL);
 
@@ -59,6 +59,7 @@ if (currentRef !== EXPECTED_PROJECT_REF) {
   );
 }
 
+// ✅ Token solo en memoria (para enviar Bearer al backend bootstrap si hace falta)
 let __memoryAccessToken = null;
 
 export function setMemoryAccessToken(token) {
@@ -69,26 +70,43 @@ export function getMemoryAccessToken() {
   return __memoryAccessToken;
 }
 
-const storage =
-  typeof window !== "undefined" && window.localStorage
-    ? window.localStorage
-    : undefined;
+// ✅ Storage no persistente (evita PKCE/verifier y sesión en localStorage)
+const memoryStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+  key: () => null,
+  get length() {
+    return 0;
+  },
+};
+
+function toHeaders(h) {
+  if (!h) return new Headers();
+  if (h instanceof Headers) return new Headers(h);
+  return new Headers(h);
+}
 
 const wrappedFetch = async (url, options = {}) => {
-  const headers = new Headers(options.headers || {});
+  const headers = toHeaders(options.headers);
+
   if (__memoryAccessToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${__memoryAccessToken}`);
   }
+
   return fetch(url, { ...options, headers });
 };
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    flowType: "pkce",
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage,
+    flowType: "implicit",
+    detectSessionInUrl: false,
+
+    // ✅ cookie-backed => sin persistencia / refresh
+    persistSession: false,
+    autoRefreshToken: false,
+
+    storage: memoryStorage,
   },
   global: {
     fetch: wrappedFetch,
@@ -96,13 +114,19 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 if (typeof window !== "undefined") {
-  console.info("[ENV CHECK]", {
+  const info = {
     MODE: import.meta.env.MODE,
     ORIGIN: window.location.origin,
     SUPABASE_URL,
     PROJECT_REF: currentRef,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-  });
+    FLOW: "implicit",
+    PERSIST_SESSION: false,
+    AUTO_REFRESH: false,
+  };
+
+  // ✅ ÚNICO log permitido
+  console.info("[ENV CHECK v3 - AUTH FINAL]", info);
 
   window.__supabase__ = supabase;
 }

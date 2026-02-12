@@ -1,4 +1,5 @@
 // src/supabaseClient.js
+<<<<<<< HEAD
 // Wrapper de compatibilidad:
 // - Re-exporta TODO lo que ya exporta ./lib/supabaseClient
 // - Añade un default export aquí (sin exigir default en ./lib/supabaseClient)
@@ -15,3 +16,11 @@ export default supabaseApp;
 if (typeof window !== "undefined") {
   window.__supabase = supabaseApp;
 }
+=======
+// SHIM ÚNICO (compatibilidad)
+// ✅ Fuente de verdad: ./lib/supabaseClient.js
+// ❌ No crear client aquí. No logs aquí.
+
+export * from "./lib/supabaseClient.js";
+export { supabase as default, supabase } from "./lib/supabaseClient.js";
+>>>>>>> preview

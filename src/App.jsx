@@ -1,7 +1,20 @@
 // src/App.jsx
+<<<<<<< HEAD
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+=======
+import React from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
+
+import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
+>>>>>>> preview
 
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
@@ -45,6 +58,7 @@ import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
+<<<<<<< HEAD
 function CallbackCatcher() {
   const location = useLocation();
 
@@ -71,8 +85,28 @@ function CallbackCatcher() {
       window.location.replace(target);
     }
   }, [location.pathname, location.search, location.hash]);
+=======
+function RootEntry() {
+  const location = useLocation();
 
-  return null;
+  const hash = typeof location.hash === "string" ? location.hash : "";
+  const hasAccessToken = hash.includes("access_token=");
+  if (hasAccessToken) {
+    const target = `/auth/callback${location.search || ""}${hash || ""}`;
+    return <Navigate to={target} replace />;
+  }
+>>>>>>> preview
+
+  const sp = new URLSearchParams(location.search || "");
+  const code = sp.get("code");
+  if (code) {
+    const next = sp.get("next") || "/inicio";
+    sp.set("next", next);
+    const target = `/auth/callback?${sp.toString()}`;
+    return <Navigate to={target} replace />;
+  }
+
+  return <Landing />;
 }
 
 function AdminRoute({ children }) {
@@ -85,17 +119,24 @@ function AdminRoute({ children }) {
   return children;
 }
 
-export default function App() {
+function AppRoutes() {
   return (
+<<<<<<< HEAD
     <>
       <CallbackCatcher />
+=======
+    <Routes>
+      {/* 🌐 Public */}
+      <Route path="/" element={<RootEntry />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
+>>>>>>> preview
 
-      <Routes>
-        {/* 🌐 Public */}
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
+      {/* 🔐 Password flows */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<UpdatePassword />} />
 
+<<<<<<< HEAD
         {/* ✅ Privacy Policy (public) */}
         <Route path="/privacy" element={<PrivacyPolicy />} />
 
@@ -119,12 +160,50 @@ export default function App() {
         <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
         {/* 🔒 Protected app */}
+=======
+      {/* Legacy redirects */}
+      <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
+      <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
+      <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
+      <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
+      <Route path="/admin" element={<Navigate to="/admins" replace />} />
+      <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
+
+      {/* 🔒 Protected */}
+      <Route
+        element={
+          <AuthGuard>
+            <ProtectedShell />
+          </AuthGuard>
+        }
+      >
+        <Route path="/inicio" element={<Inicio />} />
+        <Route path="/geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
+        <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
+        <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
+        <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
+        <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
+        <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
+        <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
+        <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
+        <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+
+        {/* Help */}
+        <Route path="/help/instructions" element={<InstructionsPage />} />
+        <Route path="/help/faq" element={<FaqPage />} />
+        <Route path="/help/support" element={<SupportPage />} />
+        <Route path="/help/changelog" element={<ChangelogPage />} />
+
+>>>>>>> preview
         <Route
+          path="/admins"
           element={
-            <AuthGuard>
-              <ProtectedShell />
-            </AuthGuard>
+            <AdminRoute>
+              <InvitarAdmin />
+            </AdminRoute>
           }
+<<<<<<< HEAD
         >
           <Route path="/inicio" element={<Inicio />} />
           <Route path="/geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
@@ -159,5 +238,24 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
+=======
+        />
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  // ✅ AUTO-WRAP: aunque main.jsx no tenga AuthProvider, aquí queda garantizado
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
+>>>>>>> preview
   );
 }
