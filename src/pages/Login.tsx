@@ -13,6 +13,14 @@ function safeNextPath(next: string) {
   return "/inicio";
 }
 
+const inputClass =
+  "w-full rounded-xl border px-3 py-2 outline-none focus:ring " +
+  "bg-white text-gray-900 caret-black placeholder:text-gray-400 " +
+  // Chrome autofill fix:
+  "autofill:shadow-[inset_0_0_0px_1000px_rgb(255,255,255)] " +
+  "autofill:[-webkit-text-fill-color:rgb(17,24,39)] " +
+  "autofill:caret-black";
+
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -39,7 +47,6 @@ export default function Login() {
   }, [inboundErr]);
 
   useEffect(() => {
-    // Si llega next por query, lo mostramos en el input
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
@@ -75,9 +82,7 @@ export default function Login() {
 
       if (error) throw error;
 
-      setMsg(
-        "Listo. Te enviamos un Magic Link. Abre el enlace en el mismo navegador donde estás usando la app."
-      );
+      setMsg("Listo. Te enviamos un Magic Link. Ábrelo en el mismo navegador.");
     } catch (e: any) {
       setErr(e?.message || "No se pudo enviar el Magic Link.");
     } finally {
@@ -88,7 +93,7 @@ export default function Login() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Ingresar</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Ingresar</h1>
 
         {err && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -103,9 +108,9 @@ export default function Login() {
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div className="space-y-2">
-            <label className="block text-sm font-medium">Email</label>
+            <label className="block text-sm font-medium text-gray-900">Email</label>
             <input
-              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring text-gray-900 placeholder:text-gray-400 bg-white autofill:text-gray-900"
+              className={inputClass}
               type="email"
               autoComplete="email"
               inputMode="email"
@@ -116,18 +121,14 @@ export default function Login() {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium">Ir a (next)</label>
+            <label className="block text-sm font-medium text-gray-900">Ir a (next)</label>
             <input
-              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring text-gray-900 placeholder:text-gray-400 bg-white"
+              className={inputClass}
               type="text"
               value={nextInput}
               onChange={(e) => setNextInput(e.target.value)}
               placeholder="/inicio"
             />
-            <p className="text-xs text-gray-500">
-              Tip: usa rutas internas como <code className="px-1">/inicio</code>,{" "}
-              <code className="px-1">/geocercas</code>, etc.
-            </p>
           </div>
 
           <button
@@ -140,7 +141,7 @@ export default function Login() {
 
           <button
             type="button"
-            className="w-full rounded-xl border px-4 py-2"
+            className="w-full rounded-xl border px-4 py-2 text-gray-900"
             onClick={() => navigate("/")}
           >
             Volver
