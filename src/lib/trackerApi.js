@@ -5,7 +5,7 @@
 // - upsertPositionCompat: envía posición al Edge Function send_position
 // - suscribirsePosiciones: snapshot + realtime + polling sobre la tabla positions
 
-import { supabase } from '../supabaseClient';
+import { supabase, getMemoryAccessToken } from "../lib/supabaseClient";
 
 const EDGE_URL = import.meta.env.VITE_EDGE_SEND_POSITION;
 
@@ -14,19 +14,24 @@ const EDGE_URL = import.meta.env.VITE_EDGE_SEND_POSITION;
 export async function getSessionUser() {
   const { data, error } = await supabase.auth.getUser();
   if (error) {
-    console.error('[trackerApi] getSessionUser error:', error);
+    console.error("[trackerApi] getSessionUser error:", error);
     throw error;
   }
   return data?.user || null;
 }
 
 async function getSessionAccessToken() {
+  // ✅ Arquitectura final: primero token en memoria (AuthCallback lo setea)
+  const mem = getMemoryAccessToken?.();
+  if (mem) return mem;
+
+  // fallback (por si en algún flujo hay sesión interna)
   const { data, error } = await supabase.auth.getSession();
   if (error) {
-    console.error('[trackerApi] getSessionAccessToken error:', error);
-    throw error;
+    console.error("[trackerApi] getSessionAccessToken error:", error);
+    return "";
   }
-  return data?.session?.access_token || '';
+  return data?.session?.access_token || "";
 }
 
 // ===================== Envío de posiciones =====================
@@ -45,7 +50,7 @@ async function getSessionAccessToken() {
 export async function upsertPositionCompat(payload) {
   if (!EDGE_URL) {
     throw new Error(
-      'EDGE_URL no configurado (VITE_EDGE_SEND_POSITION). Revisa tu .env.local'
+      "EDGE_URL no configurado (VITE_EDGE_SEND_POSITION). Revisa tu .env.local"
     );
   }
 
@@ -62,11 +67,11 @@ export async function upsertPositionCompat(payload) {
     at = new Date(),
   } = payload || {};
 
-  if (typeof lat !== 'number' || typeof lng !== 'number') {
-    throw new Error('Lat/Lng inválidos en upsertPositionCompat');
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    throw new Error("Lat/Lng inválidos en upsertPositionCompat");
   }
   if (!orgId) {
-    console.warn('[trackerApi] upsertPositionCompat sin orgId');
+    console.warn("[trackerApi] upsertPositionCompat sin orgId");
   }
 
   const token = await getSessionAccessToken();
@@ -85,16 +90,16 @@ export async function upsertPositionCompat(payload) {
   };
 
   const res = await fetch(EDGE_URL, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      Authorization: token ? `Bearer ${token}` : '',
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     const err = new Error(
       `send_position failed: ${res.status} ${text || res.statusText}`
     );
@@ -102,11 +107,11 @@ export async function upsertPositionCompat(payload) {
     err.status = res.status;
     try {
       // @ts-ignore
-      err.details = JSON.parse(text);
+      err.details = text ? JSON.parse(text) : null;
     } catch {
       // ignore
     }
-    console.error('[trackerApi] upsertPositionCompat error:', err);
+    console.error("[trackerApi] upsertPositionCompat error:", err);
     throw err;
   }
 
@@ -125,13 +130,13 @@ export async function upsertPositionCompat(payload) {
  */
 export async function listTrackers() {
   const { data, error } = await supabase
-    .from('v_app_profiles')
-    .select('id, email, full_name, role, tenant_id, is_active')
-    .eq('is_active', true)
-    .order('full_name', { ascending: true });
+    .from("v_app_profiles")
+    .select("id, email, full_name, role, tenant_id, is_active")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
 
   if (error) {
-    console.error('[trackerApi] listTrackers error:', error);
+    console.error("[trackerApi] listTrackers error:", error);
     throw error;
   }
 
@@ -160,7 +165,7 @@ export function suscribirsePosiciones(callback, options = {}) {
     filtros = {},
     intervalMs = 15000,
     enablePollingBackup = true,
-    events = ['INSERT', 'UPDATE'],
+    events = ["INSERT", "UPDATE"],
   } = options;
 
   let stopped = false;
@@ -169,12 +174,13 @@ export function suscribirsePosiciones(callback, options = {}) {
 
   const applyFilters = (query) => {
     const f = filtros || {};
-    if (f.personal_id) {
-      query = query.eq('personal_id', f.personal_id);
-    }
+    if (f.personal_id) query = query.eq("personal_id", f.personal_id);
+
     if (f.sinceMinutes && Number.isFinite(f.sinceMinutes)) {
-      const since = new Date(Date.now() - f.sinceMinutes * 60 * 1000).toISOString();
-      query = query.gte('ts', since);
+      const since = new Date(
+        Date.now() - f.sinceMinutes * 60 * 1000
+      ).toISOString();
+      query = query.gte("ts", since);
     }
     return query;
   };
@@ -182,38 +188,29 @@ export function suscribirsePosiciones(callback, options = {}) {
   async function loadSnapshot(isPoll = false) {
     try {
       let query = supabase
-        .from('positions')
+        .from("positions")
         .select(
-          'id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, ts, created_at'
+          "id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, ts, created_at"
         )
-        .order('ts', { ascending: false })
-        .limit(200); // límite razonable
+        .order("ts", { ascending: false })
+        .limit(200);
 
       query = applyFilters(query);
-      const { data, error } = await query;
 
+      const { data, error } = await query;
       if (error) throw error;
 
-      // Reducimos a "última posición por personal_id"
+      // Última posición por personal_id
       const map = new Map();
       for (const row of data || []) {
         const key = row.personal_id || row.user_id || row.id;
-        if (!map.has(key)) {
-          map.set(key, row);
-        }
+        if (!map.has(key)) map.set(key, row);
       }
 
-      const rows = Array.from(map.values());
-      callback({
-        type: isPoll ? 'poll' : 'snapshot',
-        rows,
-      });
+      callback({ type: isPoll ? "poll" : "snapshot", rows: Array.from(map.values()) });
     } catch (e) {
-      console.error('[trackerApi] loadSnapshot error:', e);
-      callback({
-        type: isPoll ? 'poll_error' : 'snapshot_error',
-        error: e,
-      });
+      console.error("[trackerApi] loadSnapshot error:", e);
+      callback({ type: isPoll ? "poll_error" : "snapshot_error", error: e });
     }
   }
 
@@ -227,56 +224,61 @@ export function suscribirsePosiciones(callback, options = {}) {
     }, intervalMs);
   }
 
-  // 3) Realtime via supabase.channel (si está disponible)
-  if (typeof supabase.channel === 'function') {
+  // 3) Realtime
+  if (typeof supabase.channel === "function") {
     try {
       channel = supabase
-        .channel('positions_tracker')
+        .channel("positions_tracker")
         .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'positions' },
+          "postgres_changes",
+          { event: "*", schema: "public", table: "positions" },
           (payload) => {
             if (stopped) return;
+
+            // Filtra por evento (INSERT/UPDATE/DELETE)
+            if (payload?.eventType && !events.includes(payload.eventType)) return;
+
             const newRow = payload.new || payload.record || null;
             if (!newRow) return;
 
             const f = filtros || {};
             if (f.personal_id && newRow.personal_id !== f.personal_id) return;
 
-            if (!events.includes(payload.eventType)) return;
-
-            callback({
-              type: 'realtime',
-              row: newRow,
-            });
+            callback({ type: "realtime", row: newRow });
           }
         )
         .subscribe((status) => {
-          if (status === 'CHANNEL_ERROR') {
+          if (status === "CHANNEL_ERROR") {
             callback({
-              type: 'realtime_error',
-              error: new Error('Error en canal realtime positions_tracker'),
+              type: "realtime_error",
+              error: new Error("Error en canal realtime positions_tracker"),
             });
           }
         });
     } catch (e) {
-      console.error('[trackerApi] error configurando realtime:', e);
-      callback({ type: 'realtime_error', error: e });
+      console.error("[trackerApi] error configurando realtime:", e);
+      callback({ type: "realtime_error", error: e });
     }
   }
 
   return {
     stop() {
       stopped = true;
+
       if (timerId) {
         clearInterval(timerId);
         timerId = null;
       }
+
       if (channel) {
         try {
-          supabase.removeChannel(channel);
+          if (typeof supabase.removeChannel === "function") {
+            supabase.removeChannel(channel);
+          } else if (typeof channel.unsubscribe === "function") {
+            channel.unsubscribe();
+          }
         } catch (e) {
-          console.warn('[trackerApi] error removeChannel:', e);
+          console.warn("[trackerApi] error cerrando canal:", e);
         }
         channel = null;
       }
