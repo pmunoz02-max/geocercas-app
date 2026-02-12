@@ -1,32 +1,34 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#10b981" />
-    <title>App Geocercas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Leaflet / Geoman -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.css" />
-
-    <style>
-      html, body, #root { height: 100%; margin: 0; background: #0b1220; }
-    </style>
-
-    <!-- Shim crítico ANTES del bundle -->
+    <!-- ✅ PKCE EARLY CATCHER: corre antes de React -->
     <script>
       (function () {
-        if (!window.process) window.process = {};
-        if (!window.process.env) window.process.env = {};
+        try {
+          var u = new URL(window.location.href);
+          var hasCode = u.searchParams.has("code");
+          var isCallback = u.pathname === "/auth/callback";
+          if (hasCode && !isCallback) {
+            // conserva TODO el query (code, next, etc.)
+            u.pathname = "/auth/callback";
+            window.location.replace(u.toString());
+          }
+        } catch (e) {}
       })();
     </script>
+
+    <title>App Geocercas</title>
   </head>
   <body>
     <div id="root"></div>
 
-    <!-- ✅ Entry correcto -->
+    <!-- OJO: este src debe coincidir con tu entry real -->
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- si tu proyecto usa main.jsx, cambia a:
     <script type="module" src="/src/main.jsx"></script>
+    -->
   </body>
 </html>
