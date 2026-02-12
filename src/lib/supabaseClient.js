@@ -11,7 +11,10 @@ import { createClient } from "@supabase/supabase-js";
  */
 
 function normUrl(u) {
-  return String(u || "").trim().replace(/\/+$/, "");
+  return String(u || "")
+    .trim()
+    .replace(/\s+/g, "") // ✅ elimina \n y espacios dentro (Vercel env a veces trae '\n')
+    .replace(/\/+$/, "");
 }
 
 function isSupabaseUrl(u) {
@@ -67,18 +70,32 @@ export function getMemoryAccessToken() {
   return __memoryAccessToken;
 }
 
-// ✅ Sin storage persistente (evita PKCE/verifier y sesión en localStorage)
+// ✅ Storage no persistente (evita PKCE/verifier y sesión en localStorage)
 const memoryStorage = {
   getItem: () => null,
   setItem: () => {},
   removeItem: () => {},
+  key: () => null,
+  get length() {
+    return 0;
+  },
 };
 
+function toHeaders(h) {
+  // Convierte headers "raros" a Headers
+  if (!h) return new Headers();
+  if (h instanceof Headers) return new Headers(h);
+  return new Headers(h); // objeto plano o array de pares
+}
+
 const wrappedFetch = async (url, options = {}) => {
-  const headers = new Headers(options.headers || {});
+  const headers = toHeaders(options.headers);
+
+  // ✅ Adjunta Bearer desde memoria si no existe Authorization
   if (__memoryAccessToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${__memoryAccessToken}`);
   }
+
   return fetch(url, { ...options, headers });
 };
 
@@ -87,7 +104,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     flowType: "implicit",
     detectSessionInUrl: false,
 
-    // ✅ Tu arquitectura cookie-backed no necesita persistencia ni refresh
+    // ✅ cookie-backed => sin persistencia / refresh
     persistSession: false,
     autoRefreshToken: false,
 
