@@ -4,9 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import GeoMap from "@/components/GeoMap";
-import { listGeocercas } from "@/services/geocercas";
-import { supabase } from "../supabaseClient.js";
 import OrgSelector from "@/components/OrgSelector";
+
+// ✅ CANÓNICO: siempre via /api/geocercas
+import { listGeocercas } from "@/lib/geocercasApi";
 
 export default function GeocercasPage() {
   const { user, role, currentOrg, orgs, loading } = useAuth();
@@ -24,12 +25,13 @@ export default function GeocercasPage() {
   const [loadingGeocercas, setLoadingGeocercas] = useState(false);
 
   const [selectedGeocercaIdsUI, setSelectedGeocercaIdsUI] = useState([]);
-  const [selectedGeocercaIdsApplied, setSelectedGeocercaIdsApplied] =
-    useState([]);
+  const [selectedGeocercaIdsApplied, setSelectedGeocercaIdsApplied] = useState([]);
 
   const [newGeocercaName, setNewGeocercaName] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     const load = async () => {
       if (!orgId) {
         setGeocercas([]);
@@ -39,18 +41,26 @@ export default function GeocercasPage() {
       }
       try {
         setLoadingGeocercas(true);
-        const rows = await listGeocercas(orgId);
-        setGeocercas(rows);
+
+        // ✅ firma correcta: listGeocercas({ orgId, onlyActive })
+        const rows = await listGeocercas({ orgId, onlyActive: true });
+
+        if (cancelled) return;
+        setGeocercas(Array.isArray(rows) ? rows : []);
         setSelectedGeocercaIdsUI([]);
         setSelectedGeocercaIdsApplied([]);
       } catch (err) {
-        console.error(err);
-        alert("No se pudieron cargar las geocercas.");
+        console.error("[GeocercasPage] load error:", err);
+        if (!cancelled) alert("No se pudieron cargar las geocercas.");
       } finally {
-        setLoadingGeocercas(false);
+        if (!cancelled) setLoadingGeocercas(false);
       }
     };
+
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [orgId]);
 
   const handleSelectChange = (e) => {
@@ -62,26 +72,11 @@ export default function GeocercasPage() {
     setSelectedGeocercaIdsApplied(selectedGeocercaIdsUI.map(String));
   };
 
+  // 🔒 Eliminación de organización:
+  // NO se permite desde el browser con supabase-js directo.
+  // Si lo necesitas, lo hacemos como endpoint server-side (preview) con doble confirmación.
   const handleEliminarOrg = async () => {
-    if (!orgId || !currentOrg) return;
-    if (!window.confirm("¿Eliminar organización y todos sus datos?")) return;
-
-    try {
-      const geocercaIds = geocercas.map((g) => g.id);
-
-      if (geocercaIds.length > 0) {
-        await supabase.from("asignaciones").delete().in("geocerca_id", geocercaIds);
-      }
-
-      await supabase.from("geocercas").delete().eq("org_id", orgId);
-      await supabase.from("organizations").delete().eq("id", orgId);
-
-      alert("Organización eliminada.");
-      window.location.reload();
-    } catch (err) {
-      console.error(err);
-      alert("Error eliminando organización.");
-    }
+    alert("Esta acción fue deshabilitada por seguridad multi-tenant. Si la necesitas, la implementamos vía endpoint server-side.");
   };
 
   if (loading || !user) return null;
@@ -112,15 +107,13 @@ export default function GeocercasPage() {
   const currentOrgName =
     currentOrg?.name ||
     currentOrg?.org_name ||
-    orgs.find((o) => o.id === orgId)?.name ||
+    orgs?.find((o) => o.id === orgId)?.name ||
     "Sin nombre";
 
   const geocercasForMap =
     selectedGeocercaIdsApplied.length === 0
       ? geocercas
-      : geocercas.filter((g) =>
-          selectedGeocercaIdsApplied.includes(String(g.id))
-        );
+      : geocercas.filter((g) => selectedGeocercaIdsApplied.includes(String(g.id)));
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
@@ -134,7 +127,7 @@ export default function GeocercasPage() {
         <OrgSelector />
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 items-center">
         <input
           type="text"
           className="flex-1 rounded-lg border px-3 py-2"
@@ -148,21 +141,27 @@ export default function GeocercasPage() {
         <button
           onClick={handleMostrar}
           className="rounded-lg bg-blue-600 px-4 py-2 text-white"
+          disabled={loadingGeocercas}
+          type="button"
         >
-          {t("geocercas.manage.showButton", { defaultValue: "Mostrar" })}
+          {loadingGeocercas
+            ? t("common.loading", { defaultValue: "Cargando…" })
+            : t("geocercas.manage.showButton", { defaultValue: "Mostrar" })}
         </button>
 
         {canEdit && (
           <button
             onClick={handleEliminarOrg}
             className="rounded-lg bg-red-600 px-4 py-2 text-white"
+            type="button"
           >
-            {t("geocercas.manage.deleteOrgButton", {
-              defaultValue: "Eliminar Org",
-            })}
+            {t("geocercas.manage.deleteOrgButton", { defaultValue: "Eliminar Org" })}
           </button>
         )}
       </div>
+
+      {/* Selector múltiple (si lo tienes en UI; aquí solo conservamos handler) */}
+      {/* Si tu UI tiene el <select multiple> asegúrate de conectarlo a handleSelectChange */}
 
       <GeoMap
         canEdit={canEdit}
