@@ -8,7 +8,6 @@ import React, {
   useState,
   useRef,
 } from "react";
-import { getMemoryAccessToken } from "../lib/supabaseClient";
 
 /**
  * AuthContext UNIVERSAL (TWA/WebView safe)
@@ -16,7 +15,7 @@ import { getMemoryAccessToken } from "../lib/supabaseClient";
  *
  * EXPONE:
  * - Nuevo: currentRole, currentOrg, organizations, selectOrg, isAppRoot
- * - Legacy: role, currentOrgId, orgId, authenticated, ready (para páginas viejas)
+ * - Legacy: role, currentOrgId, orgId, authenticated, ready
  */
 
 const AuthContext = createContext(null);
@@ -24,19 +23,9 @@ const AuthContext = createContext(null);
 const LS_ORG_KEY = "tg_current_org_id";
 
 async function fetchSession() {
-  const headers = {
-    "cache-control": "no-cache",
-    pragma: "no-cache",
-  };
-
-  // ✅ Si venimos de PKCE exchange y guardamos token en memoria,
-  // lo enviamos al backend para que pueda setear/renovar la cookie tg_at.
-  const mem = getMemoryAccessToken?.();
-  if (mem) headers["Authorization"] = `Bearer ${mem}`;
-
   const res = await fetch("/api/auth/session", {
     credentials: "include",
-    headers,
+    headers: { "cache-control": "no-cache", pragma: "no-cache" },
   });
 
   const raw = await res.text();
@@ -47,6 +36,11 @@ async function fetchSession() {
     data = null;
   }
   return { ok: res.ok, data };
+}
+
+function normalizeRole(v) {
+  if (!v) return null;
+  return String(v).trim().toLowerCase();
 }
 
 export function AuthProvider({ children }) {
@@ -65,7 +59,6 @@ export function AuthProvider({ children }) {
   const currentOrgId = currentOrg?.id || null;
   const orgId = currentOrgId;
 
-  // Legacy fields expected by páginas antiguas
   const authenticated = Boolean(user);
   const [ready, setReady] = useState(false);
   const didBootstrapOnceRef = useRef(false);
@@ -112,23 +105,26 @@ export function AuthProvider({ children }) {
 
       setUser(data.user ?? null);
 
-      const resolvedRole =
-        data.currentRole ??
-        data.current_role ??
-        data.role ??
-        data.app_role ??
-        null;
-
-      setCurrentRole(resolvedRole ? String(resolvedRole).toLowerCase() : null);
+      // isAppRoot (si backend lo manda)
       setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
 
+      // org id (tolerante)
       const serverOrgId =
         data.current_org_id ??
         data.currentOrgId ??
+        data.current_orgId ??
         data.org_id ??
         data.orgId ??
         null;
 
+      // lista de orgs (tolerante: organizations u orgs)
+      const orgsFromServer = Array.isArray(data.organizations)
+        ? data.organizations
+        : Array.isArray(data.orgs)
+        ? data.orgs
+        : null;
+
+      // respetar org seleccionada anteriormente si existe
       let preferredOrgId = null;
       try {
         preferredOrgId = localStorage.getItem(LS_ORG_KEY);
@@ -136,30 +132,50 @@ export function AuthProvider({ children }) {
 
       const finalOrgId = preferredOrgId || serverOrgId || null;
 
-      const orgsFromServer = Array.isArray(data.organizations)
-        ? data.organizations
-        : null;
-
       if (orgsFromServer && orgsFromServer.length > 0) {
-        setOrganizations(orgsFromServer);
+        // normaliza mínimo: {id,name,role}
+        const normalized = orgsFromServer
+          .map((o) => {
+            const id = o?.id ?? o?.org_id ?? null;
+            if (!id) return null;
+            return {
+              ...o,
+              id,
+              name: o?.name ?? o?.org_name ?? o?.title ?? "",
+              role: normalizeRole(o?.role ?? o?.currentRole ?? o?.app_role),
+            };
+          })
+          .filter(Boolean);
 
-        const picked =
-          (finalOrgId &&
-            orgsFromServer.find((o) => o?.id === finalOrgId)?.id) ||
-          orgsFromServer.find((o) => o?.id)?.id ||
+        setOrganizations(normalized);
+
+        const pickedId =
+          (finalOrgId && normalized.find((o) => o?.id === finalOrgId)?.id) ||
+          normalized.find((o) => o?.id)?.id ||
           null;
 
-        const orgObj = picked
-          ? orgsFromServer.find((o) => o?.id === picked)
-          : null;
+        const orgObj = pickedId ? normalized.find((o) => o?.id === pickedId) : null;
         setCurrentOrg(orgObj || null);
 
-        if (picked) {
+        if (pickedId) {
           try {
-            localStorage.setItem(LS_ORG_KEY, picked);
+            localStorage.setItem(LS_ORG_KEY, pickedId);
           } catch {}
         }
+
+        // role: prefer backend currentRole keys; si no, usar role de la org seleccionada
+        const resolvedRole =
+          normalizeRole(
+            data.currentRole ??
+              data.current_role ??
+              data.role ??
+              data.app_role ??
+              null
+          ) || normalizeRole(orgObj?.role);
+
+        setCurrentRole(resolvedRole);
       } else {
+        // sin lista de orgs: fallback mínimo con org id
         if (finalOrgId) {
           setOrganizations([{ id: finalOrgId }]);
           setCurrentOrg({ id: finalOrgId });
@@ -170,10 +186,15 @@ export function AuthProvider({ children }) {
           setOrganizations([]);
           setCurrentOrg(null);
         }
+
+        // role si lo manda backend
+        const resolvedRole = normalizeRole(
+          data.currentRole ?? data.current_role ?? data.role ?? data.app_role ?? null
+        );
+        setCurrentRole(resolvedRole);
       }
     } finally {
       setLoading(false);
-
       if (!didBootstrapOnceRef.current) {
         didBootstrapOnceRef.current = true;
         setReady(true);
@@ -205,22 +226,26 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      // base
       loading,
       ready,
       authenticated,
       user,
       isLoggedIn: Boolean(user),
 
+      // NEW
       currentRole,
       isAppRoot,
       organizations,
       currentOrg,
       selectOrg,
 
+      // LEGACY
       role,
       currentOrgId,
       orgId,
 
+      // helpers
       refreshSession: bootstrap,
       logout,
     }),
