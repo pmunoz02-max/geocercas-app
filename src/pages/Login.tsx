@@ -10,7 +10,6 @@ import { supabase } from "../lib/supabaseClient";
 function getStableSiteUrl(): string {
   const v = (import.meta as any).env?.VITE_SITE_URL || "";
   const s = String(v).trim().replace(/\/+$/, "");
-  // ✅ Sin fallback: si no está, se rompe (para no generar links con previews random)
   if (!s) return "";
   return s;
 }
@@ -42,13 +41,14 @@ export default function Login() {
   const origin =
     typeof window !== "undefined" ? window.location.origin : "unknown";
 
-  // Mensaje si llegas con ?code= (PKCE viejo)
+  // Mensaje si llegas con ?code= (PKCE)
   useEffect(() => {
     const code = qp.get("code");
     if (code) {
       setStatus(
-        "Este link llegó con ?code= (PKCE). Esto se rompe si el link se abre en un dominio distinto al que generó el code_verifier (previews). " +
-          "Solución: generar links SIEMPRE con VITE_SITE_URL (alias estable) y pedir un link nuevo desde ese dominio."
+        "Este link llegó con ?code= (PKCE). En esta arquitectura (implicit sin storage persistente), " +
+          "ese link no puede completarse si el navegador no conserva el verifier. " +
+          "Pide un link nuevo desde el dominio estable."
       );
     }
   }, [qp]);
@@ -56,8 +56,8 @@ export default function Login() {
   function requireStableSiteOrExplain(): string | null {
     if (!stableSite) {
       setStatus(
-        "Falta VITE_SITE_URL en Vercel. Debe ser el alias estable (ej: https://geocercas-app-v3-preview.vercel.app). " +
-          "Sin esto, Vercel previews generan links con dominios aleatorios y PKCE se rompe."
+        "Falta VITE_SITE_URL en Vercel (Preview). Debe ser el alias estable (ej: https://preview.tugeocercas.com). " +
+          "Sin esto, los links pueden caer en previews aleatorios."
       );
       return null;
     }
@@ -118,7 +118,6 @@ export default function Login() {
     setStatus("Enviando link de recuperación...");
 
     try {
-      // ✅ Recovery debe ir directo a /reset-password (idealmente con hash implicit type=recovery)
       const redirectTo = `${site}/reset-password`;
 
       const { error } = await supabase.auth.resetPasswordForEmail(e, {
@@ -170,13 +169,19 @@ export default function Login() {
 
           <div className="mt-8">
             <label className="text-sm opacity-80">Correo</label>
+
+            {/* ✅ VISIBILIDAD ARREGLADA */}
             <input
-              className="mt-2 w-full rounded-2xl bg-slate-950/40 border border-slate-700 px-4 py-3 outline-none"
+              className="mt-2 w-full rounded-2xl bg-slate-950/60 border border-slate-700
+                         px-4 py-3 outline-none
+                         text-slate-100 placeholder:text-slate-400 caret-emerald-300
+                         focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50"
               value={email}
               onChange={(ev) => setEmail(ev.target.value)}
               placeholder="tucorreo@dominio.com"
               autoComplete="email"
               inputMode="email"
+              spellCheck={false}
             />
           </div>
 

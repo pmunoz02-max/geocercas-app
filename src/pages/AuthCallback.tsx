@@ -1,7 +1,8 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-IMPLICIT-V2 — hash token (#access_token)
-// - login normal: bootstrap cookie y redirige a next (limpia hash)
+// CALLBACK-IMPLICIT-V3 — soporta token en hash (#access_token) y fallback en query (?access_token=...)
+// - login normal: bootstrap cookie y redirige a next (limpia hash/query)
 // - recovery: reenvía el hash completo hacia /reset-password (NO limpiar antes)
+// - si llega ?code= (PKCE): redirige a login con error explícito
 
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -14,6 +15,8 @@ type Diag = {
   hasAccessToken?: boolean;
   bootstrapOk?: boolean;
   error?: string;
+  seenCode?: boolean;
+  url?: string;
 };
 
 function parseHashParams(hash: string) {
@@ -21,9 +24,24 @@ function parseHashParams(hash: string) {
   const sp = new URLSearchParams(h);
   const access_token = sp.get("access_token") || "";
   const refresh_token = sp.get("refresh_token") || "";
-  const type = (sp.get("type") || "").toLowerCase(); // recovery / magiclink / etc
+  const type = (sp.get("type") || "").toLowerCase();
   const error = sp.get("error") || sp.get("error_description") || "";
   return { access_token, refresh_token, type, error };
+}
+
+function parseQueryToken(searchParams: URLSearchParams) {
+  // Fallback (algunos providers mandan token en query)
+  const access_token =
+    searchParams.get("access_token") ||
+    searchParams.get("token") ||
+    searchParams.get("accessToken") ||
+    "";
+  const type = (searchParams.get("type") || "").toLowerCase();
+  const error =
+    searchParams.get("error") ||
+    searchParams.get("error_description") ||
+    "";
+  return { access_token, type, error };
 }
 
 function safeReplaceUrlWithoutSecrets() {
@@ -63,25 +81,59 @@ export default function AuthCallback() {
 
     const run = async () => {
       const next = searchParams.get("next") || "/inicio";
-      setDiag({ step: "parse_url", next });
 
-      // Si llega ?code= es PKCE viejo
+      setDiag({
+        step: "parse_url",
+        next,
+        url:
+          typeof window !== "undefined"
+            ? window.location.href
+            : "unknown_url",
+      });
+
+      // Si llega ?code= (PKCE)
       const code = searchParams.get("code");
       if (code) {
         safeReplaceUrlWithoutSecrets();
         window.location.replace(
           `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(
-            "pkce_disabled_use_magic_link_implicit"
+            "pkce_link_received_but_pkce_disabled"
           )}`
         );
         return;
       }
 
-      const { access_token, refresh_token, type, error } = parseHashParams(
-        window.location.hash || ""
-      );
+      // 1) Intento: HASH (ideal)
+      const hashParsed = parseHashParams(window.location.hash || "");
+      let accessToken = hashParsed.access_token;
+      let type = hashParsed.type;
+      let error = hashParsed.error;
 
-      setDiag({ step: "hash_parsed", next, type });
+      setDiag((d) => ({
+        ...d,
+        step: "hash_parsed",
+        next,
+        type,
+        hasAccessToken: Boolean(accessToken),
+        error: error || "",
+      }));
+
+      // 2) Fallback: query token (por si el proveedor lo manda así)
+      if (!accessToken) {
+        const q = parseQueryToken(searchParams);
+        accessToken = q.access_token || "";
+        type = type || q.type || "";
+        error = error || q.error || "";
+
+        setDiag((d) => ({
+          ...d,
+          step: "query_fallback_parsed",
+          next,
+          type,
+          hasAccessToken: Boolean(accessToken),
+          error: error || "",
+        }));
+      }
 
       if (error) {
         safeReplaceUrlWithoutSecrets();
@@ -93,49 +145,55 @@ export default function AuthCallback() {
         return;
       }
 
-      if (!access_token) {
+      if (!accessToken) {
+        // Esto nos dice que el link NO trajo token (ni hash ni query)
         safeReplaceUrlWithoutSecrets();
         window.location.replace(
           `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(
-            "missing_access_token_in_hash"
+            "missing_access_token_in_hash_or_query"
           )}`
         );
         return;
       }
 
       // ✅ CASO RECOVERY: reenviar el hash COMPLETO a /reset-password
-      // (no limpies hash antes, o se pierde access_token/refresh_token)
+      // (si vino por hash; si vino por query, igual mandamos query al reset-password)
       if (type === "recovery") {
-        // Si next ya apunta a reset-password, respétalo, sino fuerza /reset-password
         const target =
           next && next.startsWith("/reset-password")
             ? next
             : "/reset-password";
 
         setDiag({
-          step: "recovery_forward_hash",
+          step: "recovery_forward",
           next: target,
           type,
           hasAccessToken: true,
         });
 
-        // Reenviamos hash tal cual llegó
-        window.location.replace(`${target}${window.location.hash}`);
+        if (window.location.hash) {
+          window.location.replace(`${target}${window.location.hash}`);
+        } else {
+          const qs = new URLSearchParams();
+          qs.set("access_token", accessToken);
+          qs.set("type", "recovery");
+          window.location.replace(`${target}?${qs.toString()}`);
+        }
         return;
       }
 
       // ✅ LOGIN NORMAL: set token en memoria + bootstrap cookie
-      setDiag({ step: "hash_ok", next, type, hasAccessToken: true });
+      setDiag({ step: "token_ok", next, type, hasAccessToken: true });
 
       try {
-        setMemoryAccessToken(access_token);
+        setMemoryAccessToken(accessToken);
       } catch {}
 
       setDiag((d) => ({ ...d, step: "bootstrap_start" }));
-      const boot = await bootstrapBackendCookie(access_token);
+      const boot = await bootstrapBackendCookie(accessToken);
       setDiag((d) => ({ ...d, step: "bootstrap_done", bootstrapOk: boot.ok }));
 
-      // ✅ ahora sí limpiamos hash (ya no lo necesitamos)
+      // ✅ limpia URL
       safeReplaceUrlWithoutSecrets();
 
       setDiag({
@@ -145,6 +203,7 @@ export default function AuthCallback() {
         hasAccessToken: true,
         bootstrapOk: boot.ok,
       });
+
       window.location.replace(next);
     };
 
@@ -167,6 +226,7 @@ export default function AuthCallback() {
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
             <div>bootstrapOk: {String(diag.bootstrapOk ?? "-")}</div>
             <div>error: {diag.error || "-"}</div>
+            <div className="opacity-60 break-all">url: {diag.url || "-"}</div>
           </div>
         </div>
       </div>
