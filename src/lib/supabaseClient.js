@@ -7,9 +7,13 @@ import { createClient } from "@supabase/supabase-js";
  *   - VITE_SUPABASE_URL
  *   - VITE_SUPABASE_ANON_KEY
  *
- * Mantiene soporte de token en memoria (TWA/WebView safe),
- * pero CENTRALIZA el PKCE exchange en /auth/callback:
- *   detectSessionInUrl: false
+ * Arquitectura:
+ * - Tokens en memoria opcional (TWA/WebView safe)
+ * - Cookie HttpOnly tg_at es la fuente de verdad backend
+ *
+ * Cambio CLAVE:
+ * - flowType: "implicit"  ✅ evita depender de code_verifier (PKCE) en storage
+ * - detectSessionInUrl: false (seguimos centralizando en /auth/callback)
  */
 
 function normUrl(u) {
@@ -79,12 +83,15 @@ const wrappedFetch = async (url, options = {}) => {
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    flowType: "pkce",
+    // ✅ UNIVERSAL: no depende de code_verifier
+    flowType: "implicit",
+
+    // Para tu arquitectura cookie-backed, esto puede estar ON u OFF.
+    // Lo dejamos ON por compatibilidad, pero la verdad la tendrá tg_at (backend).
     persistSession: true,
     autoRefreshToken: true,
 
-    // ✅ CLAVE: NO procesar code automáticamente en cualquier página.
-    // Solo /auth/callback hará exchange.
+    // ✅ seguimos centralizando parsing en /auth/callback (tu código)
     detectSessionInUrl: false,
 
     storage,
@@ -101,6 +108,7 @@ if (typeof window !== "undefined") {
     SUPABASE_URL,
     PROJECT_REF: currentRef,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+    FLOW: "implicit",
   };
   console.info("[ENV CHECK v3 - PREVIEW]", info);
   window.__supabase__ = supabase;
