@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect } from "react";
+import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 
@@ -33,48 +33,29 @@ import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
-function HashTokenCatcher() {
+function RootEntry() {
   const location = useLocation();
 
-  useEffect(() => {
-    const hash = typeof location.hash === "string" ? location.hash : "";
-    const hasAccessToken = hash.includes("access_token=");
-    if (hasAccessToken && location.pathname !== "/auth/callback") {
-      const target = `/auth/callback${location.search || ""}${hash || ""}`;
-      window.location.replace(target);
-    }
-  }, [location.pathname, location.search, location.hash]);
+  // 1) Hash fallback (legacy implicit flow / some WebViews)
+  const hash = typeof location.hash === "string" ? location.hash : "";
+  const hasAccessToken = hash.includes("access_token=");
+  if (hasAccessToken) {
+    const target = `/auth/callback${location.search || ""}${hash || ""}`;
+    return <Navigate to={target} replace />;
+  }
 
-  return null;
-}
-
-/**
- * ✅ PKCE Code catcher:
- * Si Supabase trae ?code=... al root (/), lo re-enrutamos a /auth/callback
- * para que AuthCallback.tsx haga exchangeCodeForSession() y luego mande al panel.
- */
-function PkceCodeCatcher() {
-  const location = useLocation();
-
-  useEffect(() => {
-    if (location.pathname !== "/") return;
-
-    const sp = new URLSearchParams(location.search || "");
-    const code = sp.get("code");
-    if (!code) return;
-
-    // Conserva next si ya viene, si no manda al panel
+  // 2) PKCE (?code=...) – si llega al root (/), lo mandamos a /auth/callback
+  const sp = new URLSearchParams(location.search || "");
+  const code = sp.get("code");
+  if (code) {
     const next = sp.get("next") || "/inicio";
+    sp.set("next", next);
+    const target = `/auth/callback?${sp.toString()}`;
+    return <Navigate to={target} replace />;
+  }
 
-    // Re-armamos query con code + next (y preservamos otros params si existieran)
-    const out = new URLSearchParams(location.search || "");
-    out.set("next", next);
-
-    const target = `/auth/callback?${out.toString()}`;
-    window.location.replace(target);
-  }, [location.pathname, location.search]);
-
-  return null;
+  // 3) Normal landing
+  return <Landing />;
 }
 
 function AdminRoute({ children }) {
@@ -92,12 +73,9 @@ function AdminRoute({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <HashTokenCatcher />
-      <PkceCodeCatcher />
-
       <Routes>
         {/* 🌐 Public */}
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<RootEntry />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
