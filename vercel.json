@@ -10,19 +10,27 @@
       ],
       "destination": "https://tugeocercas.com/$1",
       "permanent": true
-    }
-  ],
-  "rewrites": [
+    },
+
     {
       "source": "/",
       "has": [
-        {
-          "type": "query",
-          "key": "code"
-        }
+        { "type": "query", "key": "code", "value": "(.*)" },
+        { "type": "query", "key": "next", "value": "(.*)" }
       ],
-      "destination": "/auth/callback"
+      "destination": "/auth/callback?code=$1&next=$2",
+      "permanent": false
     },
+    {
+      "source": "/",
+      "has": [
+        { "type": "query", "key": "code", "value": "(.*)" }
+      ],
+      "destination": "/auth/callback?code=$1",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
