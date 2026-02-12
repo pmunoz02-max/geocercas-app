@@ -5,9 +5,9 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import GeoMap from "@/components/GeoMap";
 import OrgSelector from "@/components/OrgSelector";
-
-// ✅ CANÓNICO: siempre via /api/geocercas
 import { listGeocercas } from "@/lib/geocercasApi";
+
+const DBG = "[GEOCERCAS_PAGE_DBG_v2]";
 
 export default function GeocercasPage() {
   const { user, role, currentOrg, orgs, loading } = useAuth();
@@ -33,50 +33,53 @@ export default function GeocercasPage() {
     let cancelled = false;
 
     const load = async () => {
-      if (!orgId) {
-        setGeocercas([]);
-        setSelectedGeocercaIdsUI([]);
-        setSelectedGeocercaIdsApplied([]);
-        return;
-      }
+      console.info(DBG, "load()", { orgId, user: user?.email, role });
+
+      // ✅ reset duro cada cambio de org
+      setGeocercas([]);
+      setSelectedGeocercaIdsUI([]);
+      setSelectedGeocercaIdsApplied([]);
+
+      if (!orgId) return;
+
       try {
         setLoadingGeocercas(true);
 
-        // ✅ firma correcta: listGeocercas({ orgId, onlyActive })
-        const rows = await listGeocercas({ orgId, onlyActive: true });
+        const rows = await listGeocercas({ onlyActive: true, limit: 2000 });
 
         if (cancelled) return;
-        setGeocercas(Array.isArray(rows) ? rows : []);
-        setSelectedGeocercaIdsUI([]);
-        setSelectedGeocercaIdsApplied([]);
+
+        const safeRows = Array.isArray(rows) ? rows : [];
+        console.info(DBG, "API rows", {
+          orgId,
+          count: safeRows.length,
+          sample: safeRows.slice(0, 5).map((x) => ({
+            id: x.id,
+            nombre: x.nombre,
+            nombre_ci: x.nombre_ci,
+            org_id: x.org_id,
+          })),
+        });
+
+        setGeocercas(safeRows);
       } catch (err) {
-        console.error("[GeocercasPage] load error:", err);
+        console.error(DBG, "load error:", err);
         if (!cancelled) alert("No se pudieron cargar las geocercas.");
       } finally {
         if (!cancelled) setLoadingGeocercas(false);
       }
     };
 
-    load();
+    if (!loading && user) load();
+
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
-
-  const handleSelectChange = (e) => {
-    const options = Array.from(e.target.selectedOptions);
-    setSelectedGeocercaIdsUI(options.map((opt) => String(opt.value)));
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, user?.id, loading]);
 
   const handleMostrar = () => {
     setSelectedGeocercaIdsApplied(selectedGeocercaIdsUI.map(String));
-  };
-
-  // 🔒 Eliminación de organización:
-  // NO se permite desde el browser con supabase-js directo.
-  // Si lo necesitas, lo hacemos como endpoint server-side (preview) con doble confirmación.
-  const handleEliminarOrg = async () => {
-    alert("Esta acción fue deshabilitada por seguridad multi-tenant. Si la necesitas, la implementamos vía endpoint server-side.");
   };
 
   if (loading || !user) return null;
@@ -115,6 +118,9 @@ export default function GeocercasPage() {
       ? geocercas
       : geocercas.filter((g) => selectedGeocercaIdsApplied.includes(String(g.id)));
 
+  // ✅ Si API devuelve vacío, el mapa debe recibir vacío SIEMPRE
+  const geocercasForMapSafe = Array.isArray(geocercasForMap) ? geocercasForMap : [];
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -144,34 +150,22 @@ export default function GeocercasPage() {
           disabled={loadingGeocercas}
           type="button"
         >
-          {loadingGeocercas
-            ? t("common.loading", { defaultValue: "Cargando…" })
-            : t("geocercas.manage.showButton", { defaultValue: "Mostrar" })}
+          {loadingGeocercas ? "Cargando…" : "Mostrar"}
         </button>
-
-        {canEdit && (
-          <button
-            onClick={handleEliminarOrg}
-            className="rounded-lg bg-red-600 px-4 py-2 text-white"
-            type="button"
-          >
-            {t("geocercas.manage.deleteOrgButton", { defaultValue: "Eliminar Org" })}
-          </button>
-        )}
       </div>
 
-      {/* Selector múltiple (si lo tienes en UI; aquí solo conservamos handler) */}
-      {/* Si tu UI tiene el <select multiple> asegúrate de conectarlo a handleSelectChange */}
+      <div className="text-xs text-slate-500">
+        {DBG} orgId=<span className="font-mono">{orgId}</span> · items=<span className="font-mono">{String(geocercas.length)}</span>
+      </div>
 
       <GeoMap
         canEdit={canEdit}
         orgId={orgId}
-        geocercas={geocercasForMap}
+        geocercas={geocercasForMapSafe}
         getNewFeatureMeta={() => ({
           nombre: newGeocercaName.trim(),
           org_id: orgId,
-          owner_id: user?.id ?? null,
-          vigente: true,
+          created_by: user?.id ?? null,
           is_deleted: false,
         })}
       />
