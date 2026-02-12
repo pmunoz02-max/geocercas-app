@@ -19,8 +19,21 @@ function safeError(err) {
   };
 }
 
+function normalizeDefault(orgs) {
+  if (!Array.isArray(orgs) || orgs.length === 0) return { orgs: [], defaultOrg: null };
+
+  // Si hay exactamente uno marcado default → ok
+  const defaults = orgs.filter((o) => !!o.is_default);
+  if (defaults.length === 1) return { orgs, defaultOrg: defaults[0] };
+
+  // Si hay varios defaults (o ninguno), elegimos el primero y forzamos uno solo en respuesta
+  const chosen = orgs[0];
+  const fixed = orgs.map((o) => ({ ...o, is_default: o.id === chosen.id }));
+  return { orgs: fixed, defaultOrg: chosen };
+}
+
 export default async function handler(req, res) {
-  const build_tag = "session-v13-memberships-canonical";
+  const build_tag = "session-v14-memberships-user-filter";
 
   try {
     const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -46,11 +59,11 @@ export default async function handler(req, res) {
     }
 
     const sbUser = createClient(url, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       global: { headers: { Authorization: `Bearer ${access_token}` } },
     });
 
-    // 1️⃣ Validar usuario
+    // 1) Validar usuario
     const { data: u1, error: uerr } = await sbUser.auth.getUser();
     const user = u1?.user ? { id: u1.user.id, email: u1.user.email } : null;
 
@@ -64,33 +77,43 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2️⃣ Bootstrap universal (la función correcta)
-    const { data: boot, error: berr } =
-      await sbUser.rpc("bootstrap_user_context");
-
-    if (berr) {
-      console.warn("[session] bootstrap_user_context error:", berr);
+    // 2) Bootstrap universal (mejor esfuerzo; no bloquea sesión)
+    try {
+      const { error: berr } = await sbUser.rpc("bootstrap_user_context");
+      if (berr) console.warn("[session] bootstrap_user_context error:", berr);
+    } catch (e) {
+      console.warn("[session] bootstrap_user_context threw:", e?.message || String(e));
     }
 
-    // 3️⃣ Leer memberships canónica
+    // 3) Leer memberships CANÓNICA, PERO SOLO DEL USUARIO AUTENTICADO ✅
     const { data: memberships, error: merr } = await sbUser
       .from("memberships")
       .select("org_id, role, is_default, organizations(name)")
+      .eq("user_id", user.id)
       .is("revoked_at", null);
 
     if (merr) {
       console.error("[session] memberships read error:", merr);
+      return res.status(200).json({
+        build_tag,
+        authenticated: true,
+        ok: true,
+        user,
+        organizations: [],
+        current_org_id: null,
+        role: null,
+        memberships_error: safeError(merr),
+      });
     }
 
-    const orgs = (memberships || []).map((m) => ({
+    const orgsRaw = (memberships || []).map((m) => ({
       id: m.org_id,
       name: m.organizations?.name || "",
       role: m.role,
-      is_default: m.is_default,
+      is_default: !!m.is_default,
     }));
 
-    const defaultOrg =
-      orgs.find((o) => o.is_default) || orgs[0] || null;
+    const { orgs, defaultOrg } = normalizeDefault(orgsRaw);
 
     return res.status(200).json({
       build_tag,
@@ -104,7 +127,7 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error("[/api/auth/session] fatal:", e);
     return res.status(500).json({
-      build_tag: "session-v13-memberships-canonical",
+      build_tag,
       authenticated: false,
       ok: false,
       error: e?.message || String(e),
