@@ -1,11 +1,11 @@
 // api/geocercas.js
-// v8: API-first + UX-safe + anti-cache REAL (CDN + Vary) + soft delete DB-first
-// - GET action=list: SIEMPRE 200 con {ok:true|false, items:[]}
-// - GET action=get
-// - POST action=upsert
-// - POST action=delete (soft delete: activo=false) UX-safe (nunca 400 por targets vacios)
-// - Headers anti-cache fuertes + Vary: Cookie (evita cache entre sesiones/orgs)
-// - Header X-Api-Version para verificar en Network que Vercel sirve ESTE archivo
+import { createClient } from "@supabase/supabase-js";
+
+const VERSION = "geocercas-api-v9-ctx-org-server-owned";
+
+/* =========================
+   Cookies + Headers
+========================= */
 
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
@@ -17,40 +17,43 @@ function getCookie(req, name) {
 }
 
 function setHeaders(res) {
-  // 🔒 Anti-cache fuerte (browser + CDN/proxy)
   res.setHeader("Content-Type", "application/json; charset=utf-8");
 
-  // Evita cache en browser
+  // Anti-cache fuerte (browser + CDN/proxy)
   res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-
-  // Evita cache en CDNs (Vercel / proxies)
   res.setHeader("CDN-Cache-Control", "no-store");
   res.setHeader("Surrogate-Control", "no-store");
 
-  // MUY IMPORTANTE: cache key debe variar por cookie (tg_at)
-  // Sin esto, es común ver “lista vieja” hasta recargar.
+  // Cache key debe variar por cookie (tg_at)
   res.setHeader("Vary", "Cookie");
 
   // Debug version
-  res.setHeader("X-Api-Version", "geocercas-api-v8-anti-cache-vary-cookie");
+  res.setHeader("X-Api-Version", VERSION);
 }
 
 function send(res, status, body) {
   setHeaders(res);
   res.statusCode = status;
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify({ ...body, version: VERSION }));
 }
 
 function ok(res, body) {
   return send(res, 200, body);
 }
 
-function pick(obj, keys) {
-  const out = {};
-  for (const k of keys) if (obj?.[k] !== undefined) out[k] = obj[k];
-  return out;
+function getEnv(nameList) {
+  for (const n of nameList) {
+    const v = process.env[n];
+    if (v && String(v).trim()) return String(v).trim();
+  }
+  return null;
+}
+
+function requireWriteRole(role) {
+  const r = String(role || "").toLowerCase();
+  return r === "owner" || r === "admin";
 }
 
 function getQuery(req) {
@@ -64,33 +67,6 @@ function getQuery(req) {
   }
 }
 
-async function sbFetch({ url, anonKey, accessToken, method = "GET", body }) {
-  const headers = {
-    apikey: anonKey,
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-    Prefer: "return=representation",
-  };
-
-  const r = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    // 🔒 Evita caché del runtime (por si acaso)
-    cache: "no-store",
-  });
-
-  const text = await r.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
-  }
-
-  return { ok: r.ok, status: r.status, data };
-}
-
 function normalizeBoolFlag(v, defaultValue) {
   if (v === undefined || v === null || v === "") return defaultValue;
   const s = String(v).toLowerCase();
@@ -98,6 +74,91 @@ function normalizeBoolFlag(v, defaultValue) {
   if (["0", "false", "no", "n", "off"].includes(s)) return false;
   return defaultValue;
 }
+
+async function readBody(req) {
+  // Vercel/Next suele llenar req.body; pero para ser universal leemos stream si hace falta
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
+  }
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+/* =========================
+   Context Resolver (CANÓNICO)
+========================= */
+
+async function resolveContext(req) {
+  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
+  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      ok: false,
+      status: 500,
+      error: "Server misconfigured",
+      details: {
+        has: {
+          SUPABASE_URL: Boolean(SUPABASE_URL),
+          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+          SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+        },
+      },
+    };
+  }
+
+  const accessToken = getCookie(req, "tg_at");
+  if (!accessToken) {
+    return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
+  }
+
+  const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+
+  const { data: u1, error: uerr } = await sbUser.auth.getUser();
+  const user = u1?.user ? { id: u1.user.id, email: u1.user.email } : null;
+  if (!user || uerr) {
+    return { ok: false, status: 401, error: "Invalid session", details: uerr?.message || "No user" };
+  }
+
+  // ctx org/role (fuente canónica)
+  let ctx = null;
+  try {
+    const { data, error } = await sbUser.rpc("bootstrap_user_context");
+    if (!error) ctx = Array.isArray(data) ? (data[0] || null) : data;
+  } catch {
+    // no-op
+  }
+
+  if (!ctx?.org_id || !ctx?.role) {
+    return { ok: false, status: 403, error: "Missing org/role context", details: "bootstrap_user_context did not return org_id/role" };
+  }
+
+  const sbSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+
+  return { ok: true, user, ctx, sbSrv };
+}
+
+/* =========================
+   Handler
+========================= */
 
 export default async function handler(req, res) {
   try {
@@ -112,213 +173,137 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY =
-      process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return send(res, 500, {
-        ok: false,
-        error: "Server misconfigured",
-        details: "Missing SUPABASE env vars (URL / ANON KEY)",
-      });
+    // Resolver contexto SIEMPRE (y así evitamos org_id del cliente)
+    const ctxRes = await resolveContext(req);
+    if (!ctxRes.ok) {
+      return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
     }
 
-    const accessToken = getCookie(req, "tg_at");
-    if (!accessToken) {
-      return send(res, 401, { ok: false, error: "Not authenticated (missing tg_at cookie)" });
-    }
+    const { ctx, user, sbSrv } = ctxRes;
+    const org_id = String(ctx.org_id);
 
     // GET
     if (req.method === "GET") {
       const q = getQuery(req);
       const action = String(q.action || "list");
 
+      // LISTA (no requiere org_id del query)
       if (action === "list") {
-        const org_id = q.org_id ? String(q.org_id) : null;
         const onlyActive = normalizeBoolFlag(q.onlyActive, true);
+        const limit = Math.min(Number(q.limit || 2000), 2000);
 
-        if (!org_id) return ok(res, { ok: true, items: [] });
+        let query = sbSrv
+          .from("geocercas")
+          .select("id,nombre,nombre_ci,org_id,activo,updated_at")
+          .eq("org_id", org_id)
+          .order("nombre", { ascending: true })
+          .limit(limit);
 
-        const activoFilter = onlyActive ? `&activo=eq.true` : ``;
+        if (onlyActive) query = query.eq("activo", true);
 
-        // OJO: aquí NO uses caches. Ya estamos con Vary + CDN no-store.
-        const url =
-          `${SUPABASE_URL}/rest/v1/geocercas` +
-          `?org_id=eq.${encodeURIComponent(org_id)}` +
-          activoFilter +
-          `&select=id,nombre,nombre_ci,org_id,activo,updated_at` +
-          `&order=nombre.asc`;
-
-        const r = await sbFetch({
-          url,
-          anonKey: SUPABASE_ANON_KEY,
-          accessToken,
-          method: "GET",
-        });
-
-        // UX-safe: nunca 400 en list, siempre 200 con ok false
-        if (!r.ok) {
-          return ok(res, {
-            ok: false,
-            items: [],
-            supabase_status: r.status,
-            details: r.data,
-          });
+        const { data, error } = await query;
+        if (error) {
+          // UX-safe
+          return ok(res, { ok: false, items: [], supabase_error: error.message });
         }
 
-        return ok(res, { ok: true, items: Array.isArray(r.data) ? r.data : [] });
+        return ok(res, { ok: true, items: Array.isArray(data) ? data : [] });
       }
 
+      // GET por id (no acepta org_id del query)
       if (action === "get") {
-        const org_id = q.org_id ? String(q.org_id) : null;
         const id = q.id ? String(q.id) : null;
-        if (!org_id) return send(res, 400, { ok: false, error: "org_id is required" });
         if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
-        const url =
-          `${SUPABASE_URL}/rest/v1/geocercas` +
-          `?id=eq.${encodeURIComponent(id)}` +
-          `&org_id=eq.${encodeURIComponent(org_id)}` +
-          `&select=*` +
-          `&limit=1`;
+        const { data, error } = await sbSrv
+          .from("geocercas")
+          .select("*")
+          .eq("org_id", org_id)
+          .eq("id", id)
+          .maybeSingle();
 
-        const r = await sbFetch({
-          url,
-          anonKey: SUPABASE_ANON_KEY,
-          accessToken,
-          method: "GET",
-        });
+        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-        if (!r.ok) {
-          return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
-        }
-
-        const row = Array.isArray(r.data) ? r.data[0] : r.data;
-        return ok(res, { ok: true, geocerca: row || null });
+        return ok(res, { ok: true, geocerca: data || null });
       }
 
       return send(res, 400, { ok: false, error: "Unsupported action", action });
     }
 
-    // POST (upsert / delete)
+    // POST
     if (req.method === "POST") {
-      const payload = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-      const action = String(payload?.action || "upsert");
+      const payload = await readBody(req);
+      const action = String(payload?.action || "upsert").toLowerCase();
+
+      if (!requireWriteRole(ctx.role)) {
+        return send(res, 403, { ok: false, error: "Forbidden", details: "Requires owner/admin" });
+      }
 
       // UPSERT
       if (action === "upsert") {
-        const allowed = [
-          "id",
-          "org_id",
-          "nombre",
-          "nombre_ci",
-          "descripcion",
-          "geojson",
-          "geometry",
-          "polygon",
-          "geom",
-          "lat",
-          "lng",
-          "radius_m",
-          "visible",
-          "activo",
-          "activa",
-          "bbox",
-          "personal_ids",
-          "asignacion_ids",
-        ];
+        const nombre = (payload?.nombre || "").trim();
+        const nombre_ci = (payload?.nombre_ci || "").trim().toLowerCase();
 
-        const row = pick(payload, allowed);
-
-        if (!row.org_id) return send(res, 400, { ok: false, error: "org_id is required" });
-        if (!row.nombre && !row.nombre_ci) {
+        if (!nombre && !nombre_ci) {
           return send(res, 400, { ok: false, error: "nombre (or nombre_ci) is required" });
         }
 
-        const upsertUrl =
-          `${SUPABASE_URL}/rest/v1/geocercas` +
-          `?on_conflict=org_id,nombre_ci` +
-          `&select=*`;
+        // ✅ org_id SIEMPRE desde ctx, no del cliente
+        const row = {
+          id: payload?.id || undefined,
+          org_id,
+          nombre: nombre || undefined,
+          nombre_ci: nombre_ci || (nombre ? nombre.toLowerCase() : undefined),
+          descripcion: payload?.descripcion ?? undefined,
+          geojson: payload?.geojson ?? undefined,
+          geometry: payload?.geometry ?? undefined,
+          polygon: payload?.polygon ?? undefined,
+          geom: payload?.geom ?? undefined,
+          lat: payload?.lat ?? undefined,
+          lng: payload?.lng ?? undefined,
+          radius_m: payload?.radius_m ?? undefined,
+          visible: payload?.visible ?? undefined,
+          activo: payload?.activo ?? undefined,
+          bbox: payload?.bbox ?? undefined,
+          personal_ids: payload?.personal_ids ?? undefined,
+          asignacion_ids: payload?.asignacion_ids ?? undefined,
+          updated_at: new Date().toISOString(),
+        };
 
-        const r = await sbFetch({
-          url: upsertUrl,
-          anonKey: SUPABASE_ANON_KEY,
-          accessToken,
-          method: "POST",
-          body: row,
-        });
+        const { data, error } = await sbSrv
+          .from("geocercas")
+          .upsert(row, { onConflict: "org_id,nombre_ci" })
+          .select("*")
+          .maybeSingle();
 
-        if (!r.ok) {
-          return send(res, r.status, { ok: false, error: "Supabase error", details: r.data });
-        }
+        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-        const saved = Array.isArray(r.data) ? r.data[0] : r.data;
-        return ok(res, { ok: true, geocerca: saved });
+        return ok(res, { ok: true, geocerca: data });
       }
 
-      // DELETE (soft) — UX-safe
+      // DELETE (soft)
       if (action === "delete") {
-        const org_id = payload?.org_id ? String(payload.org_id) : null;
         const id = payload?.id ? String(payload.id) : null;
-        const nombre_ci = payload?.nombre_ci ? String(payload.nombre_ci) : null;
-        const nombre = payload?.nombre ? String(payload.nombre) : null;
-        const nombres_ci = Array.isArray(payload?.nombres_ci) ? payload.nombres_ci : null;
-        const ids = Array.isArray(payload?.ids) ? payload.ids : null;
+        const nombre_ci = payload?.nombre_ci ? String(payload.nombre_ci).toLowerCase() : null;
 
-        if (!org_id) return send(res, 400, { ok: false, error: "org_id is required" });
-
-        const targets = [];
-        if (id) targets.push({ type: "id", value: id });
-        if (nombre_ci) targets.push({ type: "nombre_ci", value: nombre_ci });
-        if (nombre) targets.push({ type: "nombre_ci", value: nombre.toLowerCase() });
-        if (Array.isArray(ids)) for (const x of ids) if (x) targets.push({ type: "id", value: String(x) });
-        if (Array.isArray(nombres_ci))
-          for (const x of nombres_ci) if (x) targets.push({ type: "nombre_ci", value: String(x).toLowerCase() });
-
-        if (!targets.length) {
-          return ok(res, {
-            ok: true,
-            deleted: 0,
-            skipped: true,
-            details: [{ ok: true, reason: "delete called without targets" }],
-          });
+        if (!id && !nombre_ci) {
+          return ok(res, { ok: true, deleted: 0, skipped: true, reason: "delete called without targets" });
         }
 
-        let deleted = 0;
-        const details = [];
+        let q = sbSrv
+          .from("geocercas")
+          .update({ activo: false, updated_at: new Date().toISOString() })
+          .eq("org_id", org_id)
+          .select("id,nombre,nombre_ci,org_id,activo,updated_at");
 
-        for (const t of targets) {
-          const filter =
-            t.type === "id"
-              ? `id=eq.${encodeURIComponent(t.value)}`
-              : `nombre_ci=eq.${encodeURIComponent(t.value)}`;
+        if (id) q = q.eq("id", id);
+        if (!id && nombre_ci) q = q.eq("nombre_ci", nombre_ci);
 
-          const patchUrl =
-            `${SUPABASE_URL}/rest/v1/geocercas` +
-            `?org_id=eq.${encodeURIComponent(org_id)}` +
-            `&${filter}` +
-            `&select=id,nombre,nombre_ci,org_id,activo,updated_at`;
+        const { data, error } = await q;
+        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-          const r = await sbFetch({
-            url: patchUrl,
-            anonKey: SUPABASE_ANON_KEY,
-            accessToken,
-            method: "PATCH",
-            body: { activo: false, updated_at: new Date().toISOString() },
-          });
-
-          if (!r.ok) {
-            details.push({ target: t, ok: false, status: r.status, data: r.data });
-            continue;
-          }
-
-          const arr = Array.isArray(r.data) ? r.data : r.data ? [r.data] : [];
-          deleted += arr.length;
-          details.push({ target: t, ok: true, count: arr.length });
-        }
-
-        return ok(res, { ok: true, deleted, details });
+        const arr = Array.isArray(data) ? data : data ? [data] : [];
+        return ok(res, { ok: true, deleted: arr.length, items: arr });
       }
 
       return send(res, 400, { ok: false, error: "Unsupported action", action });
