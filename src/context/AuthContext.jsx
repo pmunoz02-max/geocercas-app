@@ -12,10 +12,6 @@ import React, {
 /**
  * AuthContext UNIVERSAL (TWA/WebView safe)
  * Fuente: /api/auth/session (cookie HttpOnly tg_at)
- *
- * EXPONE:
- * - Nuevo: currentRole, currentOrg, organizations, selectOrg, isAppRoot
- * - Legacy: role, currentOrgId, orgId, authenticated, ready
  */
 
 const AuthContext = createContext(null);
@@ -47,14 +43,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
-  // NEW API
   const [currentRole, setCurrentRole] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
 
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
 
-  // Legacy aliases (computed)
   const role = currentRole;
   const currentOrgId = currentOrg?.id || null;
   const orgId = currentOrgId;
@@ -104,11 +98,8 @@ export function AuthProvider({ children }) {
       }
 
       setUser(data.user ?? null);
-
-      // isAppRoot (si backend lo manda)
       setIsAppRoot(Boolean(data.is_app_root ?? data.isAppRoot ?? false));
 
-      // org id (tolerante)
       const serverOrgId =
         data.current_org_id ??
         data.currentOrgId ??
@@ -117,14 +108,12 @@ export function AuthProvider({ children }) {
         data.orgId ??
         null;
 
-      // lista de orgs (tolerante: organizations u orgs)
       const orgsFromServer = Array.isArray(data.organizations)
         ? data.organizations
         : Array.isArray(data.orgs)
         ? data.orgs
         : null;
 
-      // respetar org seleccionada anteriormente si existe
       let preferredOrgId = null;
       try {
         preferredOrgId = localStorage.getItem(LS_ORG_KEY);
@@ -133,7 +122,6 @@ export function AuthProvider({ children }) {
       const finalOrgId = preferredOrgId || serverOrgId || null;
 
       if (orgsFromServer && orgsFromServer.length > 0) {
-        // normaliza mínimo: {id,name,role}
         const normalized = orgsFromServer
           .map((o) => {
             const id = o?.id ?? o?.org_id ?? null;
@@ -163,7 +151,6 @@ export function AuthProvider({ children }) {
           } catch {}
         }
 
-        // role: prefer backend currentRole keys; si no, usar role de la org seleccionada
         const resolvedRole =
           normalizeRole(
             data.currentRole ??
@@ -175,7 +162,6 @@ export function AuthProvider({ children }) {
 
         setCurrentRole(resolvedRole);
       } else {
-        // sin lista de orgs: fallback mínimo con org id
         if (finalOrgId) {
           setOrganizations([{ id: finalOrgId }]);
           setCurrentOrg({ id: finalOrgId });
@@ -187,7 +173,6 @@ export function AuthProvider({ children }) {
           setCurrentOrg(null);
         }
 
-        // role si lo manda backend
         const resolvedRole = normalizeRole(
           data.currentRole ?? data.current_role ?? data.role ?? data.app_role ?? null
         );
@@ -226,26 +211,22 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      // base
       loading,
       ready,
       authenticated,
       user,
       isLoggedIn: Boolean(user),
 
-      // NEW
       currentRole,
       isAppRoot,
       organizations,
       currentOrg,
       selectOrg,
 
-      // LEGACY
       role,
       currentOrgId,
       orgId,
 
-      // helpers
       refreshSession: bootstrap,
       logout,
     }),
@@ -270,8 +251,14 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/** ✅ Hook estricto (para detectar bugs en dev) */
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
+}
+
+/** ✅ Hook seguro (NO tumba la app si el Provider no está montado) */
+export function useAuthSafe() {
+  return useContext(AuthContext);
 }

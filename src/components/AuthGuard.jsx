@@ -1,33 +1,39 @@
 // src/components/AuthGuard.jsx
-import React from "react";
+import React, { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuthSafe } from "../context/AuthContext.jsx";
 
-function FullScreenLoader({ text = "Cargando…" }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
-      <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70">
-        {text}
-      </div>
-    </div>
-  );
-}
-
-/**
- * AuthGuard estable:
- * - espera loading
- * - valida por user (NO session)
- * - redirige a /login con next
- */
 export default function AuthGuard({ children }) {
-  const { loading, user } = useAuth();
+  const auth = useAuthSafe();
   const location = useLocation();
 
-  if (loading) return <FullScreenLoader text="Cargando sesión…" />;
+  // Si NO hay provider, no crasheamos: mostramos fallback y mandamos a login
+  if (!auth) {
+    // Guard-rail: evita loop si ya estás en login/callback
+    const p = location.pathname || "/";
+    if (p.startsWith("/login") || p.startsWith("/auth/callback")) return children;
+
+    return (
+      <Navigate
+        to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}&err=${encodeURIComponent(
+          "auth_provider_missing"
+        )}`}
+        replace
+      />
+    );
+  }
+
+  const { loading, user } = auth;
+
+  if (loading) return null;
 
   if (!user) {
-    const next = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/login?next=${next}`} replace />;
+    return (
+      <Navigate
+        to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}`}
+        replace
+      />
+    );
   }
 
   return children;
