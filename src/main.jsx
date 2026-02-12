@@ -1,30 +1,35 @@
 // src/main.jsx
-import "./index.css";
-
 import React from "react";
 import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./index.css";
 
-import App from "./App.jsx";
-import { AuthProvider } from "./context/AuthContext.jsx";
+/**
+ * PKCE GLOBAL CATCHER (antes de React Router)
+ * Si Supabase redirige a Site URL con ?code=..., forzamos /auth/callback.
+ */
+(function pkceGlobalCatcher() {
+  try {
+    const url = new URL(window.location.href);
+    const hasCode = url.searchParams.has("code");
+    const isCallback = url.pathname === "/auth/callback";
 
-// i18n
-import i18n from "./i18n/i18n.js";
-import { I18nextProvider } from "react-i18next";
+    if (hasCode && !isCallback) {
+      if (!url.searchParams.get("next")) url.searchParams.set("next", "/inicio");
 
-// ✅ Política universal de Service Worker:
-// - En Tracker: permite SW
-// - En cualquier otra ruta (login incluido): desregistra y libera control
-import { applyServiceWorkerPolicy } from "./tracker/registerServiceWorker.js";
+      const target = new URL(window.location.origin);
+      target.pathname = "/auth/callback";
+      target.search = url.searchParams.toString();
 
-// ⚠️ CRÍTICO: ejecutar ANTES de montar React
-applyServiceWorkerPolicy();
+      window.location.replace(target.toString());
+    }
+  } catch {
+    // ignore
+  }
+})();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <I18nextProvider i18n={i18n}>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </I18nextProvider>
+    <App />
   </React.StrictMode>
 );
