@@ -1,9 +1,12 @@
 // src/main.jsx
 import React from "react";
 import ReactDOM from "react-dom/client";
+
+import "./i18n/i18n";            // ✅ Inicializa i18next ANTES de usar la app
+import "./index.css";
+
 import { AuthProvider } from "./context/AuthContext.jsx";
 import App from "./App.jsx";
-import "./index.css";
 
 // ✅ Guard-rail: si por alguna razón llega /?code=..., lo empujamos a /auth/callback
 (function () {
