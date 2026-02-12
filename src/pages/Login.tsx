@@ -1,14 +1,12 @@
 // src/pages/Login.tsx
+// LOGIN-IMPLICIT-V1 — Magic Link vía supabase-js (implicit hash)
+// Mantiene UI similar a tu pantalla actual (oscura, V31-like)
+
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-function hasHashAccessToken(hash: string) {
-  return typeof hash === "string" && hash.includes("access_token=");
-}
-
-function getCanonicalSiteUrl() {
-  // usa tu env (Vercel Preview ya lo bajas con vercel pull)
+function getSiteUrl() {
   const v = (import.meta as any).env?.PUBLIC_SITE_URL || "";
   const s = String(v).trim().replace(/\/+$/, "");
   return s || window.location.origin;
@@ -16,38 +14,21 @@ function getCanonicalSiteUrl() {
 
 export default function Login() {
   const location = useLocation();
-  const navigate = useNavigate();
-
   const qp = useMemo(() => new URLSearchParams(location.search || ""), [location.search]);
   const next = qp.get("next") || "/inicio";
   const err = qp.get("err") || "";
-  const [email, setEmail] = useState(qp.get("email") || "");
-  const [status, setStatus] = useState<string>("");
-  const [sending, setSending] = useState(false);
 
-  // ✅ Blindaje: si llega auth code/hash a /login, enviamos a /auth/callback
+  const [email, setEmail] = useState(qp.get("email") || "");
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState("");
+
+  // Si por alguna razón caes aquí con ?code=, lo reportamos (PKCE ya no se usa)
   useEffect(() => {
     const code = qp.get("code");
     if (code) {
-      qp.set("next", next);
-      navigate(`/auth/callback?${qp.toString()}`, { replace: true });
-      return;
+      setStatus("Este link llegó con ?code= (PKCE). En modo B usamos hash token. Pide un link nuevo desde este login.");
     }
-    if (hasHashAccessToken(location.hash || "")) {
-      navigate(`/auth/callback${location.search || ""}${location.hash || ""}`, { replace: true });
-      return;
-    }
-  }, [location.hash, location.search, navigate, next, qp]);
-
-  // ✅ Canonical host (opcional pero recomendado para evitar mismatches)
-  useEffect(() => {
-    const canonical = getCanonicalSiteUrl();
-    const here = window.location.origin.replace(/\/+$/, "");
-    if (canonical && canonical !== here) {
-      const target = canonical + location.pathname + (location.search || "") + (location.hash || "");
-      window.location.replace(target);
-    }
-  }, [location.pathname, location.search, location.hash]);
+  }, [qp]);
 
   async function sendMagicLink() {
     const e = String(email || "").trim().toLowerCase();
@@ -60,14 +41,13 @@ export default function Login() {
     setStatus("Enviando Magic Link...");
 
     try {
-      const site = getCanonicalSiteUrl(); // IMPORTANTÍSIMO: el mismo origen
+      const site = getSiteUrl();
       const emailRedirectTo = `${site}/auth/callback?next=${encodeURIComponent(next)}`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email: e,
         options: {
           emailRedirectTo,
-          // shouldCreateUser: false, // opcional si quieres bloquear auto-signup
         },
       });
 
@@ -76,7 +56,7 @@ export default function Login() {
         return;
       }
 
-      setStatus("Listo. Revisa tu correo y abre el link en ESTE mismo navegador.");
+      setStatus("Listo. Revisa tu correo y abre el link. (Puede abrirse en WebView sin romperse)");
     } catch (ex: any) {
       setStatus(`Error inesperado: ${ex?.message ?? String(ex)}`);
     } finally {
@@ -86,11 +66,21 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-2xl">
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
-          <div className="text-2xl font-semibold">Iniciar sesión</div>
-          <div className="text-sm opacity-70 mt-2">
-            Magic Link (recomendado para TWA/WebView). next: <span className="opacity-90">{next}</span>
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-semibold">
+              Iniciar sesión <span className="text-xs opacity-60">(LOGIN-IMPLICIT)</span>
+            </h1>
+            <div className="flex gap-2">
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-xs">ES</span>
+              <span className="px-3 py-1 rounded-full bg-sky-500/20 border border-sky-500/30 text-xs">EN</span>
+              <span className="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-xs">FR</span>
+            </div>
+          </div>
+
+          <div className="mt-4 bg-emerald-900/30 border border-emerald-700/40 rounded-2xl p-4 text-sm">
+            Magic Link estable para WebView/TWA: flujo <b>implicit</b> + cookie HttpOnly <b>tg_at</b>.
           </div>
 
           {err ? (
@@ -99,13 +89,13 @@ export default function Login() {
             </div>
           ) : null}
 
-          <div className="mt-6">
+          <div className="mt-8">
             <label className="text-sm opacity-80">Correo</label>
             <input
               className="mt-2 w-full rounded-2xl bg-slate-950/40 border border-slate-700 px-4 py-3 outline-none"
               value={email}
               onChange={(ev) => setEmail(ev.target.value)}
-              placeholder="tuemail@dominio.com"
+              placeholder="tucorreo@dominio.com"
               autoComplete="email"
             />
           </div>
@@ -121,12 +111,13 @@ export default function Login() {
           {status ? (
             <div className="mt-4 text-sm bg-black/30 border border-white/10 rounded-2xl p-4">
               {status}
+              <div className="mt-2 text-xs opacity-60">next: {next}</div>
             </div>
-          ) : null}
-
-          <div className="mt-6 text-xs opacity-60">
-            Nota: si abres el link en otro navegador/app, PKCE puede fallar (code_verifier). Abre el link en este mismo navegador.
-          </div>
+          ) : (
+            <div className="mt-4 text-xs opacity-60">
+              next: {next} • redirect: {getSiteUrl()}/auth/callback
+            </div>
+          )}
         </div>
       </div>
     </div>
