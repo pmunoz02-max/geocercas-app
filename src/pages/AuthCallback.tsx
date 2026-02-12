@@ -1,6 +1,6 @@
 // src/pages/AuthCallback.tsx
-// CALLBACK-V33 – PKCE (?code=) + hash fallback
-// TWA/WebView safe: NO setSession manual. Intercambia code y sincroniza cookie tg_at vía /api/auth/session.
+// CALLBACK-V34 – PKCE (?code=) + hash fallback
+// TWA/WebView safe: NO setSession manual. Intercambia code y crea cookie tg_at vía /api/auth/bootstrap.
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -12,7 +12,8 @@ type Diag = {
   mode?: "pkce" | "hash" | "unknown";
   hasCode?: boolean;
   hasAccessToken?: boolean;
-  cookieSyncOk?: boolean;
+  bootstrapOk?: boolean;
+  sessionOk?: boolean;
   error?: string;
 };
 
@@ -33,23 +34,42 @@ function safeReplaceUrlWithoutSecrets() {
   } catch {}
 }
 
-async function syncBackendCookie(accessToken: string) {
-  // Intentamos que el backend vea el Bearer y setee/renueve tg_at (HttpOnly).
-  // Si el backend no soporta Authorization, igual no rompe: solo devolverá no-auth.
+async function bootstrapBackendCookie(accessToken: string) {
   const headers: Record<string, string> = {
+    "content-type": "application/json",
     "cache-control": "no-cache",
     pragma: "no-cache",
   };
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
 
+  const res = await fetch("/api/auth/bootstrap", {
+    method: "POST",
+    credentials: "include", // necesario para aceptar Set-Cookie
+    headers,
+    body: JSON.stringify({}),
+  });
+
+  let j: any = null;
+  try {
+    j = await res.json();
+  } catch {}
+
+  return { ok: res.ok && !!j?.ok, status: res.status, json: j };
+}
+
+async function checkSession() {
   const res = await fetch("/api/auth/session", {
     method: "GET",
     credentials: "include",
-    headers,
+    headers: { "cache-control": "no-cache", pragma: "no-cache" },
   });
 
-  // No forzamos parse; solo necesitamos saber si el backend ya quedó ok.
-  return res.ok;
+  let j: any = null;
+  try {
+    j = await res.json();
+  } catch {}
+
+  return { ok: res.ok && !!j?.ok && !!j?.authenticated, status: res.status, json: j };
 }
 
 export default function AuthCallback() {
@@ -72,11 +92,16 @@ export default function AuthCallback() {
         if (code) {
           setDiag({ step: "pkce_exchange_start", next, mode: "pkce", hasCode: true });
 
-          // ✅ CORRECTO: pasar solo el code
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
           if (error) {
-            setDiag({ step: "pkce_exchange_error", next, mode: "pkce", hasCode: true, error: error.message });
+            setDiag({
+              step: "pkce_exchange_error",
+              next,
+              mode: "pkce",
+              hasCode: true,
+              error: error.message,
+            });
             safeReplaceUrlWithoutSecrets();
             window.location.replace(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error.message)}`);
             return;
@@ -98,15 +123,28 @@ export default function AuthCallback() {
             } catch {}
           }
 
-          // ✅ PASO CRÍTICO: sincronizar cookie HttpOnly tg_at en backend
-          setDiag((d) => ({ ...d, step: "cookie_sync_start" }));
-          const cookieOk = await syncBackendCookie(accessToken);
-          setDiag((d) => ({ ...d, step: "cookie_sync_done", cookieSyncOk: cookieOk }));
+          // ✅ PASO CRÍTICO: crear cookie HttpOnly tg_at en backend
+          setDiag((d) => ({ ...d, step: "bootstrap_start" }));
+          const boot = await bootstrapBackendCookie(accessToken);
+          setDiag((d) => ({ ...d, step: "bootstrap_done", bootstrapOk: boot.ok }));
+
+          // (Opcional) comprobar sesión por cookie
+          setDiag((d) => ({ ...d, step: "session_check_start" }));
+          const sess = await checkSession();
+          setDiag((d) => ({ ...d, step: "session_check_done", sessionOk: sess.ok }));
 
           safeReplaceUrlWithoutSecrets();
 
-          // Si cookie aún no ok, igual redirigimos: AuthContext intentará con Bearer mem-token.
-          setDiag({ step: "redirect", next, mode: "pkce", hasCode: true, hasAccessToken: !!accessToken, cookieSyncOk: cookieOk });
+          setDiag({
+            step: "redirect",
+            next,
+            mode: "pkce",
+            hasCode: true,
+            hasAccessToken: !!accessToken,
+            bootstrapOk: boot.ok,
+            sessionOk: sess.ok,
+          });
+
           window.location.replace(next);
           return;
         }
@@ -138,12 +176,23 @@ export default function AuthCallback() {
           setMemoryAccessToken(access_token);
         } catch {}
 
-        setDiag((d) => ({ ...d, step: "cookie_sync_start" }));
-        const cookieOk = await syncBackendCookie(access_token);
-        setDiag((d) => ({ ...d, step: "cookie_sync_done", cookieSyncOk: cookieOk }));
+        setDiag((d) => ({ ...d, step: "bootstrap_start" }));
+        const boot = await bootstrapBackendCookie(access_token);
+        setDiag((d) => ({ ...d, step: "bootstrap_done", bootstrapOk: boot.ok }));
+
+        setDiag((d) => ({ ...d, step: "session_check_start" }));
+        const sess = await checkSession();
+        setDiag((d) => ({ ...d, step: "session_check_done", sessionOk: sess.ok }));
 
         safeReplaceUrlWithoutSecrets();
-        setDiag({ step: "redirect", next, mode: "hash", hasAccessToken: true, cookieSyncOk: cookieOk });
+        setDiag({
+          step: "redirect",
+          next,
+          mode: "hash",
+          hasAccessToken: true,
+          bootstrapOk: boot.ok,
+          sessionOk: sess.ok,
+        });
         window.location.replace(next);
       } catch (e: any) {
         const msg = String(e?.message || e || "callback_error");
@@ -169,7 +218,8 @@ export default function AuthCallback() {
             <div>next: {diag.next || "-"}</div>
             <div>hasCode: {String(diag.hasCode ?? "-")}</div>
             <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
-            <div>cookieSyncOk: {String(diag.cookieSyncOk ?? "-")}</div>
+            <div>bootstrapOk: {String(diag.bootstrapOk ?? "-")}</div>
+            <div>sessionOk: {String(diag.sessionOk ?? "-")}</div>
             <div>error: {diag.error || "-"}</div>
           </div>
         </div>
