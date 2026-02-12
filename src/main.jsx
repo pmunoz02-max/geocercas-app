@@ -1,9 +1,11 @@
+// src/main.jsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import { AuthProvider } from "./context/AuthContext.jsx";
+import App from "./App.jsx";
 import "./index.css";
 
-// ✅ PKCE catcher correcto para Vite producción
+// ✅ Guard-rail: si por alguna razón llega /?code=..., lo empujamos a /auth/callback
 (function () {
   try {
     const url = new URL(window.location.href);
@@ -17,6 +19,8 @@ import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );
