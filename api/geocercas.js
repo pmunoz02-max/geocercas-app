@@ -135,7 +135,6 @@ async function resolveContext(req) {
     return { ok: false, status: 401, error: "Invalid session", details: uerr?.message || "No user" };
   }
 
-  // ctx org/role (fuente canónica)
   let ctx = null;
   try {
     const { data, error } = await sbUser.rpc("bootstrap_user_context");
@@ -177,7 +176,7 @@ function stripServerOwned(payload) {
 
   // multi-tenant / ownership (siempre desde ctx)
   delete out.org_id;
-  delete out.tenant_id; // ✅ siempre server-owned
+  delete out.tenant_id;
   delete out.user_id;
   delete out.owner_id;
   delete out.usuario_id;
@@ -210,8 +209,6 @@ export default async function handler(req, res) {
     const { ctx, sbSrv } = ctxRes;
 
     const org_id = String(ctx.org_id);
-
-    // ✅ tenant_id: si bootstrap_user_context lo trae, úsalo; si no, fallback estable a org_id
     const tenant_id = String(ctx.tenant_id || ctx.org_id);
 
     // GET
@@ -225,7 +222,7 @@ export default async function handler(req, res) {
 
         let query = sbSrv
           .from("geocercas")
-          .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,activa,updated_at")
+          .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,updated_at")
           .eq("org_id", org_id)
           .order("nombre", { ascending: true })
           .limit(limit);
@@ -278,12 +275,24 @@ export default async function handler(req, res) {
           return send(res, 400, { ok: false, error: "nombre (or name) is required" });
         }
 
+        // ✅ Reactivación permanente:
+        // si existía la fila y estaba activo=false por delete soft,
+        // al guardar de nuevo debe volver a activo=true.
+        const finalActivo =
+          payload?.activo !== undefined
+            ? Boolean(payload.activo)
+            : payload?.active !== undefined
+            ? Boolean(payload.active)
+            : payload?.activa !== undefined
+            ? Boolean(payload.activa)
+            : true; // 🔥 default: true
+
         const row = {
           id: payload?.id || undefined,
           org_id,
-          tenant_id, // ✅ NOT NULL en tu tabla
+          tenant_id,
           nombre: finalName,
-          name: finalName, // ✅ NOT NULL en tu tabla
+          name: finalName,
           descripcion: payload?.descripcion ?? undefined,
           geojson: payload?.geojson ?? undefined,
           geometry: payload?.geometry ?? undefined,
@@ -296,13 +305,13 @@ export default async function handler(req, res) {
           bbox: payload?.bbox ?? undefined,
           personal_ids: payload?.personal_ids ?? undefined,
           asignacion_ids: payload?.asignacion_ids ?? undefined,
-          activo: payload?.activo ?? payload?.active ?? payload?.activa ?? undefined,
+          activo: finalActivo,
           updated_at: new Date().toISOString(),
         };
 
         const { data, error } = await sbSrv
           .from("geocercas")
-          .upsert(row, { onConflict: "org_id,nombre_ci" }) // UNIQUE existe
+          .upsert(row, { onConflict: "org_id,nombre_ci" })
           .select("*")
           .maybeSingle();
 
