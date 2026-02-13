@@ -34,6 +34,16 @@ function getRowId(r) {
   return r?.id ?? r?.personal_id ?? r?.user_id ?? r?.usuario_id ?? null;
 }
 
+function upsertIntoList(list, item) {
+  const id = getRowId(item);
+  if (!id) return list;
+  const next = Array.isArray(list) ? [...list] : [];
+  const idx = next.findIndex((x) => getRowId(x) === id);
+  if (idx >= 0) next[idx] = { ...next[idx], ...item };
+  else next.unshift(item);
+  return next;
+}
+
 export default function Personal() {
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, currentOrg, currentRole } = useAuth();
@@ -57,7 +67,6 @@ export default function Personal() {
     vigente: true,
   });
 
-  // ✅ load con overrides (para evitar quedar “pegado” con q/onlyActive y ver 0 resultados)
   async function load({ qOverride, onlyActiveOverride } = {}) {
     if (!isLoggedIn || !currentOrg?.id) return;
     setBusy(true);
@@ -67,16 +76,8 @@ export default function Personal() {
       const onlyActiveToUse =
         typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
 
-      const res = await listPersonal({ q: qToUse, onlyActive: onlyActiveToUse, limit: 500 });
-
-      // soporta array o {items:[...]}
-      const rows = Array.isArray(res)
-        ? res
-        : Array.isArray(res?.items)
-        ? res.items
-        : [];
-
-      setItems(rows);
+      const rows = await listPersonal({ q: qToUse, onlyActive: onlyActiveToUse, limit: 500 });
+      setItems(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setItems([]);
       setMsg(
@@ -118,13 +119,18 @@ export default function Personal() {
     setMsg("");
 
     try {
-      const res = await upsertPersonal({ ...form, vigente: !!form.vigente });
+      const item = await upsertPersonal({ ...form, vigente: !!form.vigente });
 
-      // si el API retorna {ok:false} sin tirar error, lo convertimos en error real
-      if (res && res.ok === false) {
-        throw new Error(res.error || "Could not save personnel.");
+      // ✅ Si el backend no devolvió item, tratamos como error real
+      const newId = getRowId(item);
+      if (!item || !newId) {
+        throw new Error("Save succeeded but server did not return item.");
       }
 
+      // ✅ UI inmediata (NO dependemos del GET)
+      setItems((curr) => upsertIntoList(curr, item));
+
+      // cerrar modal + reset
       setOpenNew(false);
       setForm({
         nombre: "",
@@ -134,9 +140,12 @@ export default function Personal() {
         vigente: true,
       });
 
-      // ✅ MUY IMPORTANTE: limpiar búsqueda y recargar sin filtro
+      // limpiar búsqueda para que no te oculte lo recién creado
       setQ("");
-      await load({ qOverride: "" });
+
+      // opcional: refrescar lista real (pero no bloquea la UI)
+      // Si el backend tarda en reflejar, igual ya lo ves por UI.
+      load({ qOverride: "" });
 
       setMsg(
         t("personal.bannerCreated", {
@@ -178,11 +187,13 @@ export default function Personal() {
 
     try {
       setBusy(true);
-      const res = await toggleVigente(id);
-      if (res && res.ok === false) throw new Error(res.error || "Could not toggle");
-
-      // refresco normal
-      await load();
+      const item = await toggleVigente(id);
+      if (item && getRowId(item)) {
+        setItems((curr) => upsertIntoList(curr, item));
+      } else {
+        // fallback: recarga
+        await load();
+      }
     } catch (e) {
       setItems(prevItems);
       setMsg(
@@ -223,10 +234,8 @@ export default function Personal() {
 
     try {
       setBusy(true);
-      const res = await deletePersonal(id);
-      if (res && res.ok === false) throw new Error(res.error || "Delete failed");
-
-      // no hacemos load() aquí para que no reaparezca si el backend es soft-delete
+      await deletePersonal(id);
+      // NO hacemos load() aquí para evitar que reaparezca si el backend es soft-delete + list cache.
       setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
       setItems(prevItems);
