@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v17-bootstrap_user_context";
+const VERSION = "personal-api-v18-memberships-canonical";
 
 /* =========================
    Utils
@@ -46,12 +46,6 @@ async function readBody(req) {
   }
 }
 
-function normalizeCtx(data) {
-  if (!data) return null;
-  if (Array.isArray(data)) return data[0] || null;
-  return data;
-}
-
 function onlyDigits(s) {
   return String(s || "").replace(/[^\d]/g, "");
 }
@@ -77,7 +71,8 @@ function toE164(rawPhone) {
 }
 
 /* =========================
-   Context Resolver (FINAL)
+   Context Resolver (CANONICAL)
+   memberships es fuente única
 ========================= */
 
 async function resolveContext(req) {
@@ -123,7 +118,7 @@ async function resolveContext(req) {
     };
   }
 
-  // Cliente “usuario” (valida JWT + permite RPCs que dependan de auth.uid())
+  // Cliente “usuario” solo para validar JWT (getUser)
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -139,33 +134,52 @@ async function resolveContext(req) {
     };
   }
 
-  // Cliente service role para queries/updates (sin RLS)
+  // Cliente service role (sin RLS) para queries canónicas
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // ✅ Arquitectura FINAL: función vigente
-  let ctx = null;
+  const user = userData.user;
 
-  // 1) Intento canónico: bootstrap_user_context()
-  try {
-    const { data, error } = await supaUser.rpc("bootstrap_user_context");
-    if (!error) ctx = normalizeCtx(data);
-  } catch {
-    // no-op
+  // ✅ memberships canonical:
+  // 1) is_default = true
+  // 2) fallback: primer membership
+  const { data: mDefault, error: mErr } = await supaSrv
+    .from("memberships")
+    .select("org_id, role, is_default")
+    .eq("user_id", user.id)
+    .eq("is_default", true)
+    .maybeSingle();
+
+  if (mErr) {
+    return {
+      ok: false,
+      status: 500,
+      error: "No se pudo leer memberships (default)",
+      details: mErr.message,
+    };
   }
 
-  // 2) Fallback opcional (si existiera en tu DB) para admins
-  //    NOTA: no rompe si la función no existe
+  let ctx = mDefault;
+
   if (!ctx?.org_id || !ctx?.role) {
-    try {
-      const { data, error } = await supaSrv.rpc("bootstrap_user_context_admin", {
-        p_user_id: userData.user.id,
-      });
-      if (!error) ctx = normalizeCtx(data);
-    } catch {
-      // no-op
+    const { data: mAny, error: anyErr } = await supaSrv
+      .from("memberships")
+      .select("org_id, role, is_default")
+      .eq("user_id", user.id)
+      .order("is_default", { ascending: false })
+      .limit(1);
+
+    if (anyErr) {
+      return {
+        ok: false,
+        status: 500,
+        error: "No se pudo leer memberships",
+        details: anyErr.message,
+      };
     }
+
+    ctx = Array.isArray(mAny) ? mAny[0] : null;
   }
 
   if (!ctx?.org_id || !ctx?.role) {
@@ -174,11 +188,11 @@ async function resolveContext(req) {
       status: 403,
       error: "Contexto no inicializado (org/rol)",
       details:
-        "No se pudo resolver org_id/role desde bootstrap_user_context (o fallback admin)",
+        "No hay memberships para este usuario (o no existe is_default). Verifica tabla memberships.",
     };
   }
 
-  return { ok: true, user: userData.user, ctx, supaSrv };
+  return { ok: true, user, ctx: { org_id: ctx.org_id, role: ctx.role }, supaSrv };
 }
 
 /* =========================
