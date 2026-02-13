@@ -3,19 +3,18 @@ import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
 export default function ForgotPassword() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // si vienes desde /login?next=...
   const next = useMemo(() => searchParams.get("next") || "/inicio", [searchParams]);
 
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null); // { type: "success"|"error"|"info", text }
+  const [msg, setMsg] = useState(null); // { type, text }
 
   const inputClass =
     "w-full px-4 py-3 rounded-2xl bg-slate-800/70 border border-slate-700 " +
@@ -43,19 +42,25 @@ export default function ForgotPassword() {
     try {
       setBusy(true);
 
-      // Importante: usar el origen actual para que funcione en prod y staging
-      // Debes permitir este redirect en Supabase Auth → URL Configuration (Redirect URLs)
-      const redirectTo = `${window.location.origin}/reset-password?next=${encodeURIComponent(next)}`;
+      // ✅ IMPORTANTE en tu arquitectura:
+      // El correo debe volver a /auth/callback (para setSession + bootstrap cookie),
+      // y el callback enviará a /reset-password.
+      const redirectTo =
+        `${window.location.origin}/auth/callback?` +
+        `next=${encodeURIComponent("/reset-password")}` +
+        `&rp_next=${encodeURIComponent(next)}`;
 
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo,
       });
 
-      // Por seguridad Supabase puede responder éxito aunque el email no exista.
+      // Por seguridad Supabase puede responder "ok" aunque el email no exista.
       if (error) {
         setMsg({
           type: "error",
-          text: error.message || t("forgot.errorGeneric", { defaultValue: "No se pudo enviar el correo." }),
+          text:
+            error.message ||
+            t("forgot.errorGeneric", { defaultValue: "No se pudo enviar el correo." }),
         });
         return;
       }
@@ -64,12 +69,11 @@ export default function ForgotPassword() {
         type: "success",
         text: t("forgot.success", {
           defaultValue:
-            "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en incógnito si falla.",
+            "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador.",
         }),
       });
 
-      // opcional: volver a login luego de unos segundos
-      setTimeout(() => navigate("/login", { replace: true }), 2500);
+      setTimeout(() => navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true }), 2500);
     } catch (e2) {
       setMsg({
         type: "error",
@@ -91,7 +95,7 @@ export default function ForgotPassword() {
     <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
       <div className="w-full max-w-xl">
         <div className="flex items-center justify-between mb-4 px-1">
-          <Link to="/login" className={linkClass}>
+          <Link to={`/login?next=${encodeURIComponent(next)}`} className={linkClass}>
             {t("forgot.back", { defaultValue: "Volver a Login" })}
           </Link>
           <LanguageSwitcher />
@@ -141,13 +145,11 @@ export default function ForgotPassword() {
           </form>
 
           <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4">
-            <div className="opacity-90">
-              {t("forgot.noteTitle", { defaultValue: "Nota" })}
-            </div>
+            <div className="opacity-90">{t("forgot.noteTitle", { defaultValue: "Nota" })}</div>
             <div className="opacity-80">
               {t("forgot.noteDesc", {
                 defaultValue:
-                  "El enlace abrirá /reset-password y ahí podrás crear una nueva contraseña.",
+                  "El enlace entrará por /auth/callback y te enviará a /reset-password para crear la nueva contraseña.",
               })}
             </div>
           </div>

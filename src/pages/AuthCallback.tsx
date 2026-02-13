@@ -1,6 +1,7 @@
+// src/pages/AuthCallback.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
+import { supabase, setMemoryAccessToken } from "../lib/supabaseClient";
 
 function safeNextPath(next: string) {
   if (!next) return "/inicio";
@@ -29,7 +30,7 @@ export default function AuthCallback() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [status, setStatus] = useState("Procesando Magic Link...");
+  const [status, setStatus] = useState("Procesando autenticación...");
 
   const next = useMemo(() => {
     const n = new URLSearchParams(location.search).get("next") || "/inicio";
@@ -47,6 +48,9 @@ export default function AuthCallback() {
 
         const access_token = hashParams.get("access_token") || "";
         const refresh_token = hashParams.get("refresh_token") || "";
+
+        // 👇 Supabase recovery/invite puede venir como type en hash
+        const hashType = (hashParams.get("type") || "").toLowerCase().trim();
 
         // 2) Si ya hay sesión, úsala
         const { data: existing } = await supabase.auth.getSession();
@@ -69,6 +73,9 @@ export default function AuthCallback() {
           if (!accessToken) throw new Error("no_access_token_after_setSession");
         }
 
+        // ✅ Guardar token en memoria para fetch wrapper (si algo lo usa)
+        setMemoryAccessToken(accessToken);
+
         // 4) Bootstrap cookie tg_at para tu backend
         setStatus("Inicializando cookie de sesión (bootstrap)...");
         await apiBootstrap(accessToken);
@@ -80,12 +87,21 @@ export default function AuthCallback() {
           window.history.replaceState({}, "", clean.toString());
         }
 
-        // 6) Ir al panel
+        // 6) Redirección final:
+        //    - Si es recovery => forzar /reset-password (UpdatePassword)
+        //    - Caso normal => next
+        const target = hashType === "recovery" ? "/reset-password" : next;
+
         setStatus("Listo. Entrando...");
-        if (!cancelled) navigate(next, { replace: true });
+        if (!cancelled) navigate(target, { replace: true });
       } catch (e: any) {
         const msg = e?.message || "auth_failed";
-        if (!cancelled) navigate(`/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`, { replace: true });
+        if (!cancelled) {
+          navigate(
+            `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`,
+            { replace: true }
+          );
+        }
       }
     }
 
