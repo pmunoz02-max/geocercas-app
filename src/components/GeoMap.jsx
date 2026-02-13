@@ -9,16 +9,14 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAuth } from "../context/AuthContext.jsx";
 
 /**
- * GeoMap (API-first friendly):
- * - NO guarda / NO edita / NO elimina en DB.
- * - Solo dibuja (según `geocercas`) y emite eventos:
+ * GeoMap (API-first / multi-tenant safe):
+ * - Renderiza SOLO lo que llega por props.geocercas.
+ * - NO persiste geocercas en localStorage (nunca).
+ * - Limpia caches legacy "geocerca_*" que venían de versiones antiguas.
+ * - Dibuja (según `geocercas`) y emite eventos:
  *    - onCreateFeature({ orgId, nombre, color, geojson, polygon, layer })
  *    - onEditFeature({ orgId, id, geojson, polygon, nombre, color, layer })
  *    - onDeleteFeature({ orgId, id, layer })
- *
- * El orquestador (ej: NuevaGeocerca.jsx) decide:
- *  - llamar a /api/geocercas (upsert/delete)
- *  - refrescar listado (GET list)
  */
 
 // --- safeParseJSON "blindado" (se conserva) ---
@@ -122,7 +120,7 @@ function latLngsFromPolygonField(rawPolygon) {
 }
 
 function getLatLngsFromRow(row) {
-  const geomField = row.geojson ?? row.geom;
+  const geomField = row.geojson ?? row.geom ?? row.geometry;
   const fromGeom = latLngsFromGeomField(geomField);
   if (fromGeom && fromGeom.length >= 3) {
     return { type: "polygon", latlngs: fromGeom, source: "geojson/geom" };
@@ -196,6 +194,21 @@ function polygonLegacyFromFeature(gj) {
   return null;
 }
 
+function cleanupLegacyGeocercaCache() {
+  try {
+    if (typeof window === "undefined") return;
+    const keys = Object.keys(window.localStorage || {});
+    for (const k of keys) {
+      // ✅ legacy: geocerca_<Nombre>
+      if (String(k).toLowerCase().startsWith("geocerca_")) {
+        window.localStorage.removeItem(k);
+      }
+    }
+  } catch (e) {
+    console.warn("[GeoMap] cleanupLegacyGeocercaCache failed:", e);
+  }
+}
+
 export default function GeoMap({
   canEdit = false,
   orgId: orgIdProp,
@@ -215,12 +228,16 @@ export default function GeoMap({
   const center = useMemo(() => [-1.8312, -78.1834], []); // Ecuador
   const zoom = 6;
 
+  // ✅ Limpia cache legacy UNA vez al montar
+  useEffect(() => {
+    cleanupLegacyGeocercaCache();
+  }, []);
+
   // Debug útil
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.__debug_orgId = orgId || null;
       window.__debug_canEdit = !!canEdit;
-      // eslint-disable-next-line no-console
       console.log("[GeoMap] orgId/canEdit:", orgId, canEdit);
     }
   }, [orgId, canEdit]);
@@ -260,16 +277,15 @@ export default function GeoMap({
       map.pm.disableGlobalDragMode?.();
       map.pm.disableGlobalRemovalMode?.();
       map.pm.disableDraw?.();
-      if (canEdit && orgId) {
-        // No forzamos enableDraw automáticamente (solo habilita botones)
-        // La creación se valida en pm:create
-      }
     } catch {}
 
+    // ✅ SOLO lo que viene por props.geocercas
     fg.clearLayers();
 
+    const safeRows = Array.isArray(geocercas) ? geocercas : [];
     let anyLayer = false;
-    geocercas.forEach((row) => {
+
+    safeRows.forEach((row) => {
       const ok = drawGeocercaOnGroup(fg, row, canEdit);
       if (ok) anyLayer = true;
     });
@@ -315,12 +331,10 @@ export default function GeoMap({
       const nombre =
         nombreMeta || window.prompt("Nombre de la geocerca:") || "Geocerca";
 
-      // Estilo/tooltip local inmediato (visual)
       if (layer.setStyle) layer.setStyle({ color });
       layer.bindTooltip(`${nombre}`, { sticky: true });
 
       try {
-        // ✅ NO DB aquí. Emitimos evento.
         if (typeof onCreateFeature === "function") {
           const result = await onCreateFeature({
             orgId,
@@ -330,11 +344,8 @@ export default function GeoMap({
             polygon,
             layer,
           });
-
-          // Si el orquestador devuelve id, lo guardamos en el layer para ediciones/borrado.
           if (result?.id) layer._dbId = result.id;
         } else {
-          // Sin handler: dejamos la capa como "draft" visual.
           layer._draft = true;
         }
 
@@ -354,7 +365,7 @@ export default function GeoMap({
       layers.eachLayer(async (layer) => {
         try {
           const id = layer._dbId;
-          if (!id) return; // si no tiene id, es draft o capa vieja
+          if (!id) return;
 
           const gj = layer.toGeoJSON();
           const polygon = polygonLegacyFromFeature(gj);
@@ -397,6 +408,40 @@ export default function GeoMap({
         } catch (err) {
           console.error("[GeoMap] onDeleteFeature error:", err);
           alert("No se pudo eliminar la geocerca.");
+        }
+      });
+    };
+
+    // ✅ register events
+    map.on("pm:create", onCreate);
+    map.on("pm:edit", onEdit);
+    map.on("pm:remove", onRemove);
+
+    return () => {
+      map.off("pm:create", onCreate);
+      map.off("pm:edit", onEdit);
+      map.off("pm:remove", onRemove);
+    };
+  }, [canEdit, orgId, getNewFeatureMeta, onCreateFeature, onEditFeature, onDeleteFeature]);
+
+  return (
+    <div className="w-full">
+      <MapContainer
+        center={center}
+        zoom={zoom}
+        style={{ height: "70vh", width: "100%" }}
+        whenCreated={(map) => {
+          mapRef.current = map;
+        }}
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+      </MapContainer>
+    </div>
+  );
+}
         }
       });
     };
