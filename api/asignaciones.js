@@ -1,9 +1,9 @@
 // api/asignaciones.js
-// DEFINITIVO: Asignaciones usa catalogo "personal" y guarda personal_id
+// CANONICO (memberships):
 // - cookie HttpOnly tg_at
-// - contexto via public.bootstrap_session_context()
-// - normaliza array vs objeto
-// - filtra por org_id (fallback tenant_id)
+// - valida JWT (supabase.auth.getUser())
+// - resuelve org_id desde memberships (is_default desc)
+// - NO usa bootstrap_session_context / bootstrap_user_context
 // - devuelve: asignaciones + catalogs { personal, geocercas, activities, people(alias) }
 
 import { createClient } from "@supabase/supabase-js";
@@ -23,31 +23,6 @@ function json(res, status, body) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
-}
-
-function normalizeCtx(ctxRaw) {
-  const ctxObj = Array.isArray(ctxRaw) ? ctxRaw[0] : ctxRaw;
-  return ctxObj && typeof ctxObj === "object" ? ctxObj : null;
-}
-
-function pickTenantId(ctx) {
-  return (
-    ctx?.tenant_id ??
-    ctx?.tenantId ??
-    ctx?.org_tenant_id ??
-    ctx?.orgTenantId ??
-    null
-  );
-}
-
-function pickOrgId(ctx) {
-  return (
-    ctx?.current_org_id ??
-    ctx?.currentOrgId ??
-    ctx?.org_id ??
-    ctx?.orgId ??
-    null
-  );
 }
 
 function supabaseForToken(accessToken) {
@@ -76,79 +51,79 @@ async function readJson(req) {
   });
 }
 
-async function getContextOr401(req) {
+/**
+ * Resuelve usuario + org canónico desde memberships:
+ * select org_id, role from memberships where user_id=? order by is_default desc limit 1
+ */
+async function getCanonicalContextOr401(req) {
   const cookies = parseCookies(req);
   const token = cookies.tg_at || null;
   if (!token) return { ok: false, status: 401, error: "missing tg_at cookie" };
 
   const supabase = supabaseForToken(token);
 
-  const { data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
-  if (ctxErr) return { ok: false, status: 401, error: ctxErr.message || "ctx rpc error" };
+  // 1) Validar token y obtener user_id
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userData?.user?.id) {
+    return { ok: false, status: 401, error: userErr?.message || "invalid session" };
+  }
+  const userId = userData.user.id;
 
-  const ctx = normalizeCtx(ctxRaw);
-  if (!ctx) return { ok: false, status: 401, error: "invalid ctx" };
+  // 2) Resolver org desde memberships (canónico)
+  const { data: mRows, error: mErr } = await supabase
+    .from("memberships")
+    .select("org_id, role, is_default, created_at")
+    .eq("user_id", userId)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
 
-  const tenantId = pickTenantId(ctx);
-  const orgId = pickOrgId(ctx);
+  if (mErr) return { ok: false, status: 401, error: mErr.message || "memberships query error" };
 
-  if (!orgId && !tenantId) return { ok: false, status: 401, error: "ctx missing org/tenant" };
+  const m = Array.isArray(mRows) ? mRows[0] : null;
+  const orgId = m?.org_id || null;
 
-  return { ok: true, supabase, tenantId, orgId };
+  if (!orgId) return { ok: false, status: 401, error: "no org in memberships" };
+
+  return { ok: true, supabase, userId, orgId, role: m?.role || null };
 }
 
-async function loadCatalogs(supabase, { orgId, tenantId }) {
+async function loadCatalogs(supabase, { orgId }) {
   // ✅ Personal (mismo catálogo que PersonalPage)
   let personal = [];
   {
-    let q = supabase
+    const r = await supabase
       .from("personal")
       .select("id,nombre,apellido,email,org_id,is_deleted")
+      .eq("org_id", orgId)
       .eq("is_deleted", false)
       .order("nombre", { ascending: true });
 
-    if (orgId) q = q.eq("org_id", orgId);
-    else q = q.eq("tenant_id", tenantId); // legacy por si existiera
-
-    const r = await q;
     if (!r.error) personal = r.data || [];
   }
 
-  // Geocercas
+  // ✅ Geocercas
   let geocercas = [];
   {
-    let q = supabase
+    const r = await supabase
       .from("geocercas")
       .select("id,nombre,org_id")
+      .eq("org_id", orgId)
       .order("nombre", { ascending: true });
 
-    if (orgId) q = q.eq("org_id", orgId);
-    else q = q.eq("tenant_id", tenantId);
-
-    const r = await q;
     if (!r.error) geocercas = r.data || [];
   }
 
-  // Activities (org_id -> fallback legacy)
+  // ✅ Activities
   let activities = [];
   {
-    let r1 = await supabase
+    const r = await supabase
       .from("activities")
       .select("id,name,org_id")
       .eq("org_id", orgId)
       .order("name", { ascending: true });
 
-    if (!r1.error && Array.isArray(r1.data) && r1.data.length > 0) {
-      activities = r1.data;
-    } else {
-      let r2 = await supabase
-        .from("activities")
-        .select("id,name,tenant_id")
-        .eq("tenant_id", orgId) // legacy posible
-        .order("name", { ascending: true });
-
-      if (!r2.error) activities = r2.data || [];
-    }
+    if (!r.error) activities = r.data || [];
   }
 
   // Alias de compatibilidad para UIs viejas
@@ -164,10 +139,10 @@ async function loadCatalogs(supabase, { orgId, tenantId }) {
 
 export default async function handler(req, res) {
   try {
-    const ctxRes = await getContextOr401(req);
+    const ctxRes = await getCanonicalContextOr401(req);
     if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error });
 
-    const { supabase, orgId, tenantId } = ctxRes;
+    const { supabase, orgId } = ctxRes;
 
     if (req.method === "GET") {
       let q = supabase
@@ -176,9 +151,7 @@ export default async function handler(req, res) {
           `
           id,
           org_id,
-          tenant_id,
           personal_id,
-          org_people_id,
           geocerca_id,
           activity_id,
           start_time,
@@ -193,16 +166,14 @@ export default async function handler(req, res) {
           activity:activity_id ( id, name )
         `
         )
+        .eq("org_id", orgId)
         .eq("is_deleted", false)
         .order("start_time", { ascending: true });
-
-      if (orgId) q = q.eq("org_id", orgId);
-      else q = q.eq("tenant_id", tenantId);
 
       const { data: asignaciones, error } = await q;
       if (error) return json(res, 500, { ok: false, error: error.message });
 
-      const catalogs = await loadCatalogs(supabase, { orgId, tenantId });
+      const catalogs = await loadCatalogs(supabase, { orgId });
 
       return json(res, 200, { ok: true, data: { asignaciones: asignaciones || [], catalogs } });
     }
@@ -210,11 +181,9 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = (await readJson(req)) || {};
 
-      // Forzar contexto
       const payload = {
         ...body,
-        org_id: orgId ?? null,
-        tenant_id: tenantId ?? body.tenant_id ?? null,
+        org_id: orgId, // ✅ siempre desde contexto
       };
 
       // ✅ Canon: personal_id obligatorio
@@ -222,7 +191,8 @@ export default async function handler(req, res) {
         return json(res, 400, { ok: false, error: "personal_id is required" });
       }
 
-      // Nunca confiar en org_people_id desde cliente
+      // Nunca confiar en legacy/cliente
+      delete payload.tenant_id;
       delete payload.org_people_id;
 
       const { data, error } = await supabase.from("asignaciones").insert(payload).select("*").single();
@@ -240,13 +210,9 @@ export default async function handler(req, res) {
       const safe = { ...patch };
       delete safe.org_id;
       delete safe.tenant_id;
-
-      // Si estás migrando: permitimos actualizar personal_id
       delete safe.org_people_id;
 
-      let q = supabase.from("asignaciones").update(safe).eq("id", id);
-      if (orgId) q = q.eq("org_id", orgId);
-      else q = q.eq("tenant_id", tenantId);
+      let q = supabase.from("asignaciones").update(safe).eq("id", id).eq("org_id", orgId);
 
       const { data, error } = await q.select("*").single();
       if (error) return json(res, 400, { ok: false, error: error.message });
@@ -258,15 +224,12 @@ export default async function handler(req, res) {
       const id = body.id;
       if (!id) return json(res, 400, { ok: false, error: "missing id" });
 
-      let q = supabase
+      const { error } = await supabase
         .from("asignaciones")
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("org_id", orgId);
 
-      if (orgId) q = q.eq("org_id", orgId);
-      else q = q.eq("tenant_id", tenantId);
-
-      const { error } = await q;
       if (error) return json(res, 400, { ok: false, error: error.message });
       return json(res, 200, { ok: true });
     }
