@@ -167,10 +167,21 @@ function normalizeGeojson(geo) {
   return geo;
 }
 
+function ensureFeatureCollection(geo) {
+  if (!geo) return null;
+  if (geo.type === "FeatureCollection") return geo;
+  if (geo.type === "Feature") return { type: "FeatureCollection", features: [geo] };
+  // geometry suelta (Polygon/Point/etc)
+  if (geo.type && geo.coordinates) {
+    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: geo }] };
+  }
+  return null;
+}
+
 function centroidFeatureFromGeojson(geo) {
   try {
-    const gj =
-      geo?.type === "FeatureCollection" ? geo : { type: "FeatureCollection", features: [geo] };
+    const gj = ensureFeatureCollection(geo);
+    if (!gj) return null;
     const bounds = L.geoJSON(gj).getBounds();
     if (!bounds?.isValid?.()) return null;
     const c = bounds.getCenter();
@@ -182,6 +193,16 @@ function centroidFeatureFromGeojson(geo) {
   } catch {
     return null;
   }
+}
+
+function combineFeatureCollections(list) {
+  const features = [];
+  for (const g of list || []) {
+    const fc = ensureFeatureCollection(g);
+    if (!fc?.features?.length) continue;
+    for (const f of fc.features) features.push(f);
+  }
+  return features.length ? { type: "FeatureCollection", features } : null;
 }
 
 /* ----------------------------- Map cursor live ---------------------------- */
@@ -384,7 +405,9 @@ export default function NuevaGeocerca() {
 
     const run = () => {
       try {
-        const bounds = L.geoJSON(geo).getBounds();
+        const fc = ensureFeatureCollection(geo);
+        if (!fc) return;
+        const bounds = L.geoJSON(fc).getBounds();
         if (bounds?.isValid?.()) map.fitBounds(bounds, { padding: [40, 40] });
       } catch {}
     };
@@ -399,7 +422,6 @@ export default function NuevaGeocerca() {
         });
       });
     } catch {
-      // fallback viejo
       setTimeout(() => {
         try {
           map.invalidateSize?.();
@@ -409,7 +431,6 @@ export default function NuevaGeocerca() {
     }
   }, []);
 
-  // ✅ Cuando viewFeature cambia (por Mostrar / Guardar), el mapa hace fit una sola vez, siempre.
   useEffect(() => {
     if (!viewFeature) return;
     scheduleFitToGeo(viewFeature);
@@ -434,9 +455,6 @@ export default function NuevaGeocerca() {
     setViewCentroid(null);
 
     clearCanvas();
-
-    // aquí sí podemos hacer fit directo porque draft GeoJSON está local y simple,
-    // pero igual lo hacemos estable
     scheduleFitToGeo(feature);
 
     setCoordModalOpen(false);
@@ -444,7 +462,6 @@ export default function NuevaGeocerca() {
     showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
   }, [coordText, clearCanvas, t, showErr, showOk, scheduleFitToGeo]);
 
-  // ✅ Save API-first (NO enviar nombre_ci)
   const handleSave = useCallback(async () => {
     try {
       const nm = String(geofenceName || "").trim();
@@ -480,7 +497,6 @@ export default function NuevaGeocerca() {
         geo = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
       }
 
-      // Optimistic
       setGeofenceList((prev) => {
         const optimistic = { id: `optim-${Date.now()}`, nombre: nm, source: "api", _optimistic: true };
         const next = [optimistic, ...(prev || [])];
@@ -504,7 +520,6 @@ export default function NuevaGeocerca() {
         geometry: geo,
       });
 
-      // Limpia capas Geoman para evitar “mezcla” con viewPane
       clearCanvas();
       setDraftFeature(null);
 
@@ -515,11 +530,9 @@ export default function NuevaGeocerca() {
       await refreshGeofenceList();
 
       setGeofenceName("");
-
       showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
     } catch (e) {
       showErr(t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca. Intenta nuevamente." }), e);
-      // evita que la lista se quede “optimistic” si algo falla
       try {
         await refreshGeofenceList();
       } catch {}
@@ -565,49 +578,67 @@ export default function NuevaGeocerca() {
     }
   }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
 
+  // ✅ Mostrar en mapa AHORA soporta múltiples seleccionadas
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
     try {
       const orgId = currentOrg?.id || null;
 
-      let nameToShow = lastSelectedName || Array.from(selectedNames)[0] || null;
-      if (!nameToShow && geofenceList.length > 0) nameToShow = geofenceList[0].nombre;
+      // si hay seleccionadas -> mostrar todas
+      const selected = Array.from(selectedNames || [])
+        .map((x) => String(x || "").trim())
+        .filter(Boolean);
 
-      if (!nameToShow) {
-        showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
-        return;
+      // fallback: si no hay seleccionadas, muestra la última o la primera de la lista
+      let namesToShow = selected;
+      if (namesToShow.length === 0) {
+        let one = lastSelectedName || geofenceList?.[0]?.nombre || null;
+        if (!one) {
+          showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+          return;
+        }
+        namesToShow = [one];
       }
 
-      const item = geofenceList.find((g) => g.nombre === nameToShow) || null;
-      if (!item) return;
+      // map nombre -> item
+      const items = namesToShow
+        .map((nm) => geofenceList.find((g) => g.nombre === nm))
+        .filter(Boolean);
 
-      let geo = null;
+      if (!items.length) return;
 
-      // siempre usar API (evita estados intermedios)
-      if (orgId && item.id && !String(item.id).startsWith("optim-")) {
+      // fetch cada geojson por API
+      const geos = [];
+      for (const item of items) {
+        if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
         const row = await getGeocerca({ id: item.id, orgId });
-        geo = normalizeGeojson(row?.geojson || row?.geometry);
+        const geo = normalizeGeojson(row?.geojson || row?.geometry);
+        if (geo) geos.push(geo);
       }
 
-      if (!geo) {
+      const combined = combineFeatureCollections(geos);
+      if (!combined) {
         showErr(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON." }));
         return;
       }
 
-      // limpieza primero para no mezclar capas
       clearCanvas();
       setDraftFeature(null);
 
-      // solo setState; el fitBounds lo hace el effect (estable)
-      setViewFeature(geo);
-      setViewCentroid(centroidFeatureFromGeojson(geo));
+      setViewFeature(combined);
+      setViewCentroid(centroidFeatureFromGeojson(combined)); // centroid del conjunto
       setViewId((x) => x + 1);
+
+      // opcional UX: mensaje si son múltiples
+      if (items.length > 1) {
+        showOk(t("geocercas.showManyOk", { defaultValue: `Mostrando ${items.length} geocercas.` }));
+      }
     } catch (e) {
       showErr(t("geocercas.errorLoad", { defaultValue: "No se pudo cargar la geocerca." }), e);
     } finally {
       setShowLoading(false);
     }
-  }, [selectedNames, lastSelectedName, geofenceList, currentOrg?.id, t, showErr, clearCanvas]);
+  }, [selectedNames, lastSelectedName, geofenceList, currentOrg?.id, t, showErr, showOk, clearCanvas]);
 
   const pointStyle = useMemo(
     () => ({
@@ -626,7 +657,6 @@ export default function NuevaGeocerca() {
     }
   }, [draftFeature]);
 
-  // ✅ Limpiar mapa: hard reset + invalidate en RAF
   const handleClearMap = useCallback(() => {
     clearCanvas();
     setDraftFeature(null);
