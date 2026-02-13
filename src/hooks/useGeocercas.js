@@ -2,15 +2,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listGeocercas, upsertGeocerca, deleteGeocerca, getGeocerca } from "../lib/geocercasApi.js";
 
-/**
- * Hook canónico (API-first):
- * - NO usa supabase directo
- * - NO usa localStorage cache
- * - Fuente única: /api/geocercas (server-owned, ctx org)
- *
- * Nota: algunas pantallas pueden seguir esperando shape {id,nombre,...}
- * Ajusta si necesitas campos extra.
- */
 export function useGeocercas({ onlyActive = true } = {}) {
   const [geocercas, setGeocercas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -23,6 +14,7 @@ export function useGeocercas({ onlyActive = true } = {}) {
     try {
       const items = await listGeocercas({ orgId: null, onlyActive });
       if (!isMounted.current) return;
+
       const normalized = (items || [])
         .map((r) => ({
           id: r.id,
@@ -45,46 +37,52 @@ export function useGeocercas({ onlyActive = true } = {}) {
     }
   }, [onlyActive]);
 
-  const createGeocerca = useCallback(async ({ orgId, nombre, color, geojson, geometry }) => {
-    // API server-owned. orgId normalmente viene de currentOrg.id, pero no obligamos aquí.
-    const payload = {
-      org_id: orgId || null,
-      nombre,
-      nombre_ci: String(nombre || "").trim().toLowerCase(),
-      color: color || "#3388ff",
-      geojson: geojson || null,
-      geometry: geometry || geojson || null,
-    };
+  const createGeocerca = useCallback(
+    async ({ orgId, nombre, color, geojson, geometry }) => {
+      const payload = {
+        org_id: orgId || null,
+        nombre,
+        color: color || "#3388ff",
+        geojson: geojson || null,
+        geometry: geometry || geojson || null,
+      };
 
-    await upsertGeocerca(payload);
-    await refetch();
-    // Devolvemos el registro recargado (mejor esfuerzo)
-    const after = await listGeocercas({ orgId: orgId || null, onlyActive: false });
-    return (after || []).find((g) => g.nombre === nombre) || null;
-  }, [refetch]);
+      await upsertGeocerca(payload);
+      await refetch();
 
-  const updateGeocerca = useCallback(async (id, { orgId, nombre, color, geojson, geometry }) => {
-    const payload = {
-      id,
-      org_id: orgId || null,
-      ...(nombre ? { nombre, nombre_ci: String(nombre).trim().toLowerCase() } : {}),
-      ...(color ? { color } : {}),
-      ...(geojson ? { geojson } : {}),
-      ...(geometry ? { geometry } : {}),
-    };
+      const after = await listGeocercas({ orgId: orgId || null, onlyActive: false });
+      return (after || []).find((g) => g.nombre === nombre) || null;
+    },
+    [refetch]
+  );
 
-    await upsertGeocerca(payload);
-    await refetch();
-    return await getGeocerca({ id, orgId: orgId || null });
-  }, [refetch]);
+  const updateGeocerca = useCallback(
+    async (id, { orgId, nombre, color, geojson, geometry }) => {
+      const payload = {
+        id,
+        org_id: orgId || null,
+        ...(nombre ? { nombre } : {}),
+        ...(color ? { color } : {}),
+        ...(geojson ? { geojson } : {}),
+        ...(geometry ? { geometry } : {}),
+      };
 
-  const removeGeocerca = useCallback(async ({ orgId, nombre }) => {
-    // En tu API ya manejas delete por nombres_ci
-    const nm = String(nombre || "").trim();
-    if (!nm) throw new Error("nombre requerido para eliminar");
-    await deleteGeocerca({ orgId: orgId || null, nombres_ci: [nm.toLowerCase()] });
-    await refetch();
-  }, [refetch]);
+      await upsertGeocerca(payload);
+      await refetch();
+      return await getGeocerca({ id, orgId: orgId || null });
+    },
+    [refetch]
+  );
+
+  const removeGeocerca = useCallback(
+    async ({ orgId, nombre }) => {
+      const nm = String(nombre || "").trim();
+      if (!nm) throw new Error("nombre requerido para eliminar");
+      await deleteGeocerca({ orgId: orgId || null, nombres_ci: [nm.toLowerCase()] });
+      await refetch();
+    },
+    [refetch]
+  );
 
   useEffect(() => {
     isMounted.current = true;
