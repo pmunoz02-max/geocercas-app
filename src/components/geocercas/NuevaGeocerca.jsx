@@ -377,6 +377,44 @@ export default function NuevaGeocerca() {
     };
   }, []);
 
+  // ✅ FitBounds estable: espera render de React-Leaflet (doble RAF)
+  const scheduleFitToGeo = useCallback((geo) => {
+    const map = mapRef.current;
+    if (!map || !geo) return;
+
+    const run = () => {
+      try {
+        const bounds = L.geoJSON(geo).getBounds();
+        if (bounds?.isValid?.()) map.fitBounds(bounds, { padding: [40, 40] });
+      } catch {}
+    };
+
+    try {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            map.invalidateSize?.();
+          } catch {}
+          run();
+        });
+      });
+    } catch {
+      // fallback viejo
+      setTimeout(() => {
+        try {
+          map.invalidateSize?.();
+        } catch {}
+        run();
+      }, 0);
+    }
+  }, []);
+
+  // ✅ Cuando viewFeature cambia (por Mostrar / Guardar), el mapa hace fit una sola vez, siempre.
+  useEffect(() => {
+    if (!viewFeature) return;
+    scheduleFitToGeo(viewFeature);
+  }, [viewId, viewFeature, scheduleFitToGeo]);
+
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
     if (!pairs.length) {
@@ -397,17 +435,14 @@ export default function NuevaGeocerca() {
 
     clearCanvas();
 
-    if (mapRef.current) {
-      try {
-        const bounds = L.geoJSON(feature).getBounds();
-        if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
-      } catch {}
-    }
+    // aquí sí podemos hacer fit directo porque draft GeoJSON está local y simple,
+    // pero igual lo hacemos estable
+    scheduleFitToGeo(feature);
 
     setCoordModalOpen(false);
     setCoordText("");
     showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
-  }, [coordText, clearCanvas, t, showErr, showOk]);
+  }, [coordText, clearCanvas, t, showErr, showOk, scheduleFitToGeo]);
 
   // ✅ Save API-first (NO enviar nombre_ci)
   const handleSave = useCallback(async () => {
@@ -462,13 +497,16 @@ export default function NuevaGeocerca() {
         return unique;
       });
 
-      // ✅ Upsert real (NO nombre_ci)
       await upsertGeocerca({
         org_id: orgId,
         nombre: nm,
         geojson: geo,
         geometry: geo,
       });
+
+      // Limpia capas Geoman para evitar “mezcla” con viewPane
+      clearCanvas();
+      setDraftFeature(null);
 
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
@@ -477,13 +515,16 @@ export default function NuevaGeocerca() {
       await refreshGeofenceList();
 
       setGeofenceName("");
-      setDraftFeature(null);
 
       showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
     } catch (e) {
       showErr(t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca. Intenta nuevamente." }), e);
+      // evita que la lista se quede “optimistic” si algo falla
+      try {
+        await refreshGeofenceList();
+      } catch {}
     }
-  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr, showOk]);
+  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr, showOk, clearCanvas]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
@@ -542,6 +583,7 @@ export default function NuevaGeocerca() {
 
       let geo = null;
 
+      // siempre usar API (evita estados intermedios)
       if (orgId && item.id && !String(item.id).startsWith("optim-")) {
         const row = await getGeocerca({ id: item.id, orgId });
         geo = normalizeGeojson(row?.geojson || row?.geometry);
@@ -552,23 +594,20 @@ export default function NuevaGeocerca() {
         return;
       }
 
+      // limpieza primero para no mezclar capas
+      clearCanvas();
+      setDraftFeature(null);
+
+      // solo setState; el fitBounds lo hace el effect (estable)
       setViewFeature(geo);
       setViewCentroid(centroidFeatureFromGeojson(geo));
       setViewId((x) => x + 1);
-
-      if (mapRef.current) {
-        try {
-          mapRef.current.invalidateSize?.();
-          const bounds = L.geoJSON(geo).getBounds();
-          if (bounds?.isValid?.()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
-        } catch {}
-      }
     } catch (e) {
       showErr(t("geocercas.errorLoad", { defaultValue: "No se pudo cargar la geocerca." }), e);
     } finally {
       setShowLoading(false);
     }
-  }, [selectedNames, lastSelectedName, geofenceList, currentOrg?.id, t, showErr]);
+  }, [selectedNames, lastSelectedName, geofenceList, currentOrg?.id, t, showErr, clearCanvas]);
 
   const pointStyle = useMemo(
     () => ({
@@ -586,6 +625,34 @@ export default function NuevaGeocerca() {
       return 0;
     }
   }, [draftFeature]);
+
+  // ✅ Limpiar mapa: hard reset + invalidate en RAF
+  const handleClearMap = useCallback(() => {
+    clearCanvas();
+    setDraftFeature(null);
+    setViewFeature(null);
+    setViewCentroid(null);
+    setBanner(null);
+    setViewId((x) => x + 1);
+
+    const map = mapRef.current;
+    if (!map) return;
+    try {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            map.invalidateSize?.();
+          } catch {}
+        });
+      });
+    } catch {
+      setTimeout(() => {
+        try {
+          map.invalidateSize?.();
+        } catch {}
+      }, 0);
+    }
+  }, [clearCanvas]);
 
   return (
     <div className="flex flex-col gap-2 sm:gap-3 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
@@ -673,13 +740,7 @@ export default function NuevaGeocerca() {
             </button>
 
             <button
-              onClick={() => {
-                clearCanvas();
-                setDraftFeature(null);
-                setViewFeature(null);
-                setViewCentroid(null);
-                setBanner(null);
-              }}
+              onClick={handleClearMap}
               className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-200 md:px-3 md:py-1.5 md:text-xs"
               type="button"
             >
