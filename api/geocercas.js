@@ -19,17 +19,13 @@ function getCookie(req, name) {
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
 
-  // Anti-cache fuerte (browser + CDN/proxy)
   res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   res.setHeader("CDN-Cache-Control", "no-store");
   res.setHeader("Surrogate-Control", "no-store");
 
-  // Cache key debe variar por cookie (tg_at)
   res.setHeader("Vary", "Cookie");
-
-  // Debug version
   res.setHeader("X-Api-Version", VERSION);
 }
 
@@ -181,9 +177,10 @@ function stripServerOwned(payload) {
 
   // multi-tenant / ownership (siempre desde ctx)
   delete out.org_id;
+  delete out.tenant_id; // ✅ siempre server-owned
   delete out.user_id;
   delete out.owner_id;
-  delete out.usuario_id; // legacy
+  delete out.usuario_id;
 
   return out;
 }
@@ -211,7 +208,11 @@ export default async function handler(req, res) {
     }
 
     const { ctx, sbSrv } = ctxRes;
+
     const org_id = String(ctx.org_id);
+
+    // ✅ tenant_id: si bootstrap_user_context lo trae, úsalo; si no, fallback estable a org_id
+    const tenant_id = String(ctx.tenant_id || ctx.org_id);
 
     // GET
     if (req.method === "GET") {
@@ -224,7 +225,7 @@ export default async function handler(req, res) {
 
         let query = sbSrv
           .from("geocercas")
-          .select("id,nombre,name,nombre_ci,org_id,activo,activa,updated_at")
+          .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,activa,updated_at")
           .eq("org_id", org_id)
           .order("nombre", { ascending: true })
           .limit(limit);
@@ -269,7 +270,6 @@ export default async function handler(req, res) {
       }
 
       if (action === "upsert") {
-        // Acepta nombre o name, pero exige un nombre final
         const nombreIn = String(payload?.nombre || "").trim();
         const nameIn = String(payload?.name || "").trim();
         const finalName = nombreIn || nameIn;
@@ -278,13 +278,12 @@ export default async function handler(req, res) {
           return send(res, 400, { ok: false, error: "nombre (or name) is required" });
         }
 
-        // ✅ DB genera nombre_ci (lower(nombre)) porque nombre_ci es GENERATED ALWAYS
-        // ✅ Mantener compat: guardamos ambos campos (nombre y name) con el mismo valor
         const row = {
           id: payload?.id || undefined,
           org_id,
+          tenant_id, // ✅ NOT NULL en tu tabla
           nombre: finalName,
-          name: finalName, // NOT NULL en tu tabla
+          name: finalName, // ✅ NOT NULL en tu tabla
           descripcion: payload?.descripcion ?? undefined,
           geojson: payload?.geojson ?? undefined,
           geometry: payload?.geometry ?? undefined,
@@ -297,18 +296,13 @@ export default async function handler(req, res) {
           bbox: payload?.bbox ?? undefined,
           personal_ids: payload?.personal_ids ?? undefined,
           asignacion_ids: payload?.asignacion_ids ?? undefined,
-
-          // flags: tienes active/activo/activa; mantenemos el principal "activo"
           activo: payload?.activo ?? payload?.active ?? payload?.activa ?? undefined,
-
           updated_at: new Date().toISOString(),
         };
 
-        // Conflicto canónico: UNIQUE (org_id, nombre_ci)
-        // nombre_ci se calcula a partir de nombre (server-owned)
         const { data, error } = await sbSrv
           .from("geocercas")
-          .upsert(row, { onConflict: "org_id,nombre_ci" })
+          .upsert(row, { onConflict: "org_id,nombre_ci" }) // UNIQUE existe
           .select("*")
           .maybeSingle();
 
@@ -324,7 +318,6 @@ export default async function handler(req, res) {
           ? payload.nombres_ci.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
           : [];
 
-        // compat legacy
         const nombre_ci_single = payload?.nombre_ci ? String(payload.nombre_ci).trim().toLowerCase() : null;
 
         if (!id && !nombres_ci.length && !nombre_ci_single) {
@@ -335,7 +328,7 @@ export default async function handler(req, res) {
           .from("geocercas")
           .update({ activo: false, updated_at: new Date().toISOString() })
           .eq("org_id", org_id)
-          .select("id,nombre,name,nombre_ci,org_id,activo,updated_at");
+          .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,updated_at");
 
         if (id) q = q.eq("id", id);
         else if (nombres_ci.length) q = q.in("nombre_ci", nombres_ci);
