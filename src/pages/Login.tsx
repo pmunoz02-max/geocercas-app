@@ -56,7 +56,12 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
-  const siteUrl = (import.meta.env.VITE_SITE_URL || "").trim();
+  // IMPORTANTE: fallback robusto (si VITE_SITE_URL está vacío en preview)
+  const siteUrl = useMemo(() => {
+    const envUrl = (import.meta.env.VITE_SITE_URL || "").trim();
+    if (envUrl) return envUrl;
+    return window.location.origin;
+  }, []);
 
   // Magic Link / Callback
   const redirectTo = useMemo(() => {
@@ -73,6 +78,26 @@ export default function Login() {
     url.searchParams.set("rp_next", safeNextPath(nextInput));
     return url.toString();
   }, [siteUrl, nextInput]);
+
+  async function bootstrapCookie(accessToken: string) {
+    // Crea cookie tg_at en backend (sesión real API-first)
+    const res = await fetch("/api/auth/bootstrap", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({}),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(
+        `No se pudo completar bootstrap de sesión (HTTP ${res.status}). ${txt || ""}`.trim()
+      );
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,18 +124,29 @@ export default function Login() {
         return;
       }
 
-      // 2) PASSWORD
+      // 2) PASSWORD  ✅ AHORA CON BOOTSTRAP (cookie tg_at)
       if (mode === "password") {
         if (!password || password.length < 6) {
           setErr("Ingresa tu contraseña (mínimo 6 caracteres).");
           return;
         }
 
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password,
         });
         if (error) throw error;
+
+        const accessToken =
+          data?.session?.access_token ||
+          (await supabase.auth.getSession()).data.session?.access_token;
+
+        if (!accessToken) {
+          throw new Error("No se pudo obtener access_token de sesión.");
+        }
+
+        // ✅ crea cookie tg_at en backend
+        await bootstrapCookie(accessToken);
 
         setMsg("✅ Sesión iniciada. Entrando...");
         navigate(safeNextPath(nextInput), { replace: true });
@@ -217,7 +253,9 @@ export default function Login() {
 
           {mode === "password" && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium !text-gray-900">Contraseña</label>
+              <label className="block text-sm font-medium !text-gray-900">
+                Contraseña
+              </label>
               <input
                 className={inputClass}
                 type="password"
