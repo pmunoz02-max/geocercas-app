@@ -21,7 +21,7 @@ const inputClass =
   "autofill:[-webkit-text-fill-color:rgb(17,24,39)] " +
   "autofill:caret-black";
 
-type Mode = "magic" | "password";
+type Mode = "magic" | "password" | "reset";
 
 export default function Login() {
   const location = useLocation();
@@ -58,11 +58,19 @@ export default function Login() {
 
   const siteUrl = (import.meta.env.VITE_SITE_URL || "").trim();
 
-  // Siempre redirigimos a /auth/callback (tu arquitectura FINAL)
+  // Magic Link / Callback
   const redirectTo = useMemo(() => {
     const next = safeNextPath(nextInput);
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", next);
+    return url.toString();
+  }, [siteUrl, nextInput]);
+
+  // Reset Password debe entrar por /auth/callback para setSession + bootstrap cookie
+  const resetRedirectTo = useMemo(() => {
+    const url = new URL("/auth/callback", siteUrl);
+    url.searchParams.set("next", "/reset-password");
+    url.searchParams.set("rp_next", safeNextPath(nextInput));
     return url.toString();
   }, [siteUrl, nextInput]);
 
@@ -80,34 +88,49 @@ export default function Login() {
     try {
       setBusy(true);
 
+      // 1) MAGIC LINK
       if (mode === "magic") {
         const { error } = await supabase.auth.signInWithOtp({
           email: cleanEmail,
           options: { emailRedirectTo: redirectTo },
         });
         if (error) throw error;
-
         setMsg("Listo. Te enviamos un Magic Link. Ábrelo en el mismo navegador.");
         return;
       }
 
-      // mode === "password"
-      if (!password || password.length < 6) {
-        setErr("Ingresa tu contraseña (mínimo 6 caracteres).");
+      // 2) PASSWORD
+      if (mode === "password") {
+        if (!password || password.length < 6) {
+          setErr("Ingresa tu contraseña (mínimo 6 caracteres).");
+          return;
+        }
+
+        const { error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+        if (error) throw error;
+
+        setMsg("✅ Sesión iniciada. Entrando...");
+        navigate(safeNextPath(nextInput), { replace: true });
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
-      });
-      if (error) throw error;
+      // 3) RESET PASSWORD (ENVIAR EMAIL)
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: resetRedirectTo,
+        });
+        if (error) throw error;
 
-      // Con tu arquitectura (cookie tg_at por bootstrap), el AuthContext suele resolver luego.
-      setMsg("✅ Sesión iniciada. Entrando...");
-      navigate(safeNextPath(nextInput), { replace: true });
+        setMsg(
+          "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM."
+        );
+        return;
+      }
     } catch (e2: any) {
-      setErr(e2?.message || "No se pudo iniciar sesión.");
+      setErr(e2?.message || "No se pudo procesar la solicitud.");
     } finally {
       setBusy(false);
     }
@@ -117,6 +140,13 @@ export default function Login() {
     "flex-1 rounded-xl px-3 py-2 text-sm font-medium border transition";
   const tabOn = "bg-slate-900 text-white border-slate-900";
   const tabOff = "bg-white text-slate-900 border-slate-300 hover:bg-slate-50";
+
+  const primaryText =
+    mode === "magic"
+      ? "Enviar Magic Link"
+      : mode === "password"
+      ? "Entrar"
+      : "Enviar enlace de reset";
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 bg-slate-50 !text-gray-900">
@@ -145,7 +175,18 @@ export default function Login() {
               setMsg(null);
             }}
           >
-            Contraseña
+            Password
+          </button>
+          <button
+            type="button"
+            className={`${tabBase} ${mode === "reset" ? tabOn : tabOff}`}
+            onClick={() => {
+              setMode("reset");
+              setErr(null);
+              setMsg(null);
+            }}
+          >
+            Reset
           </button>
         </div>
 
@@ -185,17 +226,6 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
               />
-              <div className="text-xs text-slate-600 flex items-center justify-between">
-                <button
-                  type="button"
-                  className="underline hover:no-underline"
-                  onClick={() =>
-                    navigate(`/forgot-password?next=${encodeURIComponent(safeNextPath(nextInput))}`)
-                  }
-                >
-                  ¿Olvidaste tu contraseña?
-                </button>
-              </div>
             </div>
           )}
 
@@ -215,11 +245,7 @@ export default function Login() {
             disabled={busy}
             type="submit"
           >
-            {busy
-              ? "Procesando..."
-              : mode === "magic"
-              ? "Enviar Magic Link"
-              : "Entrar"}
+            {busy ? "Procesando..." : primaryText}
           </button>
 
           <button
@@ -231,9 +257,15 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="mt-4 text-xs text-gray-500">
-          Redirect configurado (Magic Link): <span className="break-all">{redirectTo}</span>
-        </p>
+        {/* Debug / info */}
+        <div className="mt-4 text-xs text-gray-500 space-y-2">
+          <div>
+            Redirect Magic Link: <span className="break-all">{redirectTo}</span>
+          </div>
+          <div>
+            Redirect Reset: <span className="break-all">{resetRedirectTo}</span>
+          </div>
+        </div>
       </div>
     </div>
   );
