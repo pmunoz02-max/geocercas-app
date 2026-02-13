@@ -57,36 +57,36 @@ export default function Personal() {
     vigente: true,
   });
 
-  async function load() {
-  if (!isLoggedIn || !currentOrg?.id) return;
-  setBusy(true);
-  setMsg("");
-  try {
-    const res = await listPersonal({ q, onlyActive, limit: 500 });
+  // ✅ load con overrides (para evitar quedar “pegado” con q/onlyActive y ver 0 resultados)
+  async function load({ qOverride, onlyActiveOverride } = {}) {
+    if (!isLoggedIn || !currentOrg?.id) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const qToUse = typeof qOverride === "string" ? qOverride : q;
+      const onlyActiveToUse =
+        typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
 
-    // 🔥 SOPORTA ambos formatos:
-    // 1) Array directo
-    // 2) { items: [...] }
-    const rows = Array.isArray(res)
-      ? res
-      : Array.isArray(res?.items)
-      ? res.items
-      : [];
+      const res = await listPersonal({ q: qToUse, onlyActive: onlyActiveToUse, limit: 500 });
 
-    setItems(rows);
-  } catch (e) {
-    setItems([]);
-    setMsg(
-      e?.message ||
-        t("personal.errorLoad", {
-          defaultValue: "Error loading personnel.",
-        })
-    );
-  } finally {
-    setBusy(false);
+      // soporta array o {items:[...]}
+      const rows = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.items)
+        ? res.items
+        : [];
+
+      setItems(rows);
+    } catch (e) {
+      setItems([]);
+      setMsg(
+        e?.message ||
+          t("personal.errorLoad", { defaultValue: "Error loading personnel." })
+      );
+    } finally {
+      setBusy(false);
+    }
   }
-}
-
 
   useEffect(() => {
     if (!loading && ready && isLoggedIn && currentOrg?.id) load();
@@ -113,11 +113,17 @@ export default function Personal() {
       );
       return;
     }
+
     setSaving(true);
     setMsg("");
+
     try {
       const res = await upsertPersonal({ ...form, vigente: !!form.vigente });
-      if (res && res.ok === false) throw new Error(res.error || "Could not save");
+
+      // si el API retorna {ok:false} sin tirar error, lo convertimos en error real
+      if (res && res.ok === false) {
+        throw new Error(res.error || "Could not save personnel.");
+      }
 
       setOpenNew(false);
       setForm({
@@ -127,7 +133,11 @@ export default function Personal() {
         telefono: "",
         vigente: true,
       });
-      await load();
+
+      // ✅ MUY IMPORTANTE: limpiar búsqueda y recargar sin filtro
+      setQ("");
+      await load({ qOverride: "" });
+
       setMsg(
         t("personal.bannerCreated", {
           defaultValue: "Personnel created successfully.",
@@ -170,6 +180,8 @@ export default function Personal() {
       setBusy(true);
       const res = await toggleVigente(id);
       if (res && res.ok === false) throw new Error(res.error || "Could not toggle");
+
+      // refresco normal
       await load();
     } catch (e) {
       setItems(prevItems);
@@ -212,19 +224,11 @@ export default function Personal() {
     try {
       setBusy(true);
       const res = await deletePersonal(id);
+      if (res && res.ok === false) throw new Error(res.error || "Delete failed");
 
-      // ✅ Si el API devuelve {ok:false} pero no lanza error, aquí lo convertimos a error real
-      if (res && res.ok === false) {
-        throw new Error(res.error || "Delete failed");
-      }
-
-      // ⚠️ CLAVE: NO hacemos load() aquí.
-      // Si el backend todavía no borra/soft-deletea bien, load() lo trae de vuelta y parece “no borró”.
-      setMsg(
-        t("personal.bannerDeleted", { defaultValue: "Deleted." })
-      );
+      // no hacemos load() aquí para que no reaparezca si el backend es soft-delete
+      setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
-      // rollback
       setItems(prevItems);
       setMsg(
         e?.message ||
@@ -304,7 +308,7 @@ export default function Personal() {
 
         <button
           className="rounded-xl border px-4 py-2"
-          onClick={load}
+          onClick={() => load()}
           disabled={busy}
           type="button"
         >
