@@ -127,17 +127,28 @@ export default function Personal() {
   }
 
   async function onToggle(row) {
-    if (!canEdit)
-      return setMsg(
+    if (!canEdit) {
+      setMsg(
         t("personal.errorNoPermissionEdit", {
           defaultValue: "You don’t have permission.",
         })
       );
+      return;
+    }
+
+    // Optimistic toggle (UI inmediato) + rollback si falla
+    const prevItems = items;
+    setItems((curr) =>
+      curr.map((r) => (r.id === row.id ? { ...r, vigente: !r.vigente } : r))
+    );
+
     try {
       setBusy(true);
       await toggleVigente(row.id);
+      // opcional: refrescar para asegurar estado real del backend
       await load();
     } catch (e) {
+      setItems(prevItems); // rollback
       setMsg(
         e?.message ||
           t("personal.errorToggle", {
@@ -150,25 +161,31 @@ export default function Personal() {
   }
 
   async function onDelete(row) {
-    if (!canEdit)
-      return setMsg(
+    if (!canEdit) {
+      setMsg(
         t("personal.errorNoPermissionDelete", {
           defaultValue: "You don’t have permission.",
         })
       );
-    if (
-      !window.confirm(
-        t("personal.confirmDelete", {
-          defaultValue: "Delete this record?",
-        })
-      )
-    )
       return;
+    }
+
+    const ok = window.confirm(
+      t("personal.confirmDelete", { defaultValue: "Delete this record?" })
+    );
+    if (!ok) return;
+
+    // ✅ Optimistic delete (UI inmediato) + rollback si falla
+    const prevItems = items;
+    setItems((curr) => curr.filter((r) => r.id !== row.id));
+
     try {
       setBusy(true);
       await deletePersonal(row.id);
+      // opcional: refrescar para evitar “fantasmas” si el backend aplicó soft-delete, etc.
       await load();
     } catch (e) {
+      setItems(prevItems); // rollback
       setMsg(
         e?.message ||
           t("personal.errorDelete", {
@@ -235,7 +252,9 @@ export default function Personal() {
       <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
         <input
           className="w-full md:w-96 rounded-xl border px-3 py-2"
-          placeholder={t("personal.searchPlaceholder")}
+          placeholder={t("personal.searchPlaceholder", {
+            defaultValue: "Search by name, email or phone…",
+          })}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -246,7 +265,7 @@ export default function Personal() {
             checked={onlyActive}
             onChange={(e) => setOnlyActive(e.target.checked)}
           />
-          {t("personal.onlyActive")}
+          {t("personal.onlyActive", { defaultValue: "Only active" })}
         </label>
 
         <button
@@ -255,7 +274,9 @@ export default function Personal() {
           disabled={busy}
           type="button"
         >
-          {busy ? t("personal.processing") : t("personal.buttonRefresh")}
+          {busy
+            ? t("personal.processing", { defaultValue: "Processing…" })
+            : t("personal.buttonRefresh", { defaultValue: "Refresh" })}
         </button>
       </div>
 
@@ -263,19 +284,25 @@ export default function Personal() {
 
       <div className="mt-4 rounded-2xl border bg-white text-slate-900 overflow-hidden">
         {busy && filtered.length === 0 ? (
-          <div className="p-4 text-gray-600">{t("personal.loading")}</div>
+          <div className="p-4 text-gray-600">
+            {t("personal.loading", { defaultValue: "Loading…" })}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="p-4 text-gray-600">{t("personal.tableNoResults")}</div>
+          <div className="p-4 text-gray-600">
+            {t("personal.tableNoResults", { defaultValue: "No results." })}
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <th className="p-3">{t("personal.tableName")}</th>
-                <th className="p-3">{t("personal.tableLastName")}</th>
-                <th className="p-3">{t("personal.tableEmail")}</th>
-                <th className="p-3">{t("personal.tablePhone")}</th>
-                <th className="p-3">{t("personal.tableActive")}</th>
-                <th className="p-3">{t("personal.actions")}</th>
+                <th className="p-3">{t("personal.tableName", { defaultValue: "Name" })}</th>
+                <th className="p-3">
+                  {t("personal.tableLastName", { defaultValue: "Last name" })}
+                </th>
+                <th className="p-3">{t("personal.tableEmail", { defaultValue: "Email" })}</th>
+                <th className="p-3">{t("personal.tablePhone", { defaultValue: "Phone" })}</th>
+                <th className="p-3">{t("personal.tableActive", { defaultValue: "Active" })}</th>
+                <th className="p-3">{t("personal.actions", { defaultValue: "Actions" })}</th>
               </tr>
             </thead>
             <tbody>
@@ -286,24 +313,29 @@ export default function Personal() {
                   <td className="p-3">{r?.email ?? "-"}</td>
                   <td className="p-3">{r?.telefono ?? "-"}</td>
                   <td className="p-3">
-                    {r?.vigente ? t("personal.yes") : t("personal.no")}
+                    {r?.vigente
+                      ? t("personal.yes", { defaultValue: "Yes" })
+                      : t("personal.no", { defaultValue: "No" })}
                   </td>
                   <td className="p-3 flex gap-2">
                     <button
                       onClick={() => onToggle(r)}
                       disabled={!canEdit || busy}
                       className="rounded-lg border px-3 py-1"
+                      type="button"
                     >
                       {r?.vigente
-                        ? t("personal.actionDeactivate")
-                        : t("personal.actionActivate")}
+                        ? t("personal.actionDeactivate", { defaultValue: "Deactivate" })
+                        : t("personal.actionActivate", { defaultValue: "Activate" })}
                     </button>
+
                     <button
                       onClick={() => onDelete(r)}
                       disabled={!canEdit || busy}
                       className="rounded-lg border border-red-200 text-red-700 px-3 py-1"
+                      type="button"
                     >
-                      {t("personal.actionDelete")}
+                      {t("personal.actionDelete", { defaultValue: "Delete" })}
                     </button>
                   </td>
                 </tr>
@@ -321,36 +353,42 @@ export default function Personal() {
         <form className="space-y-3" onSubmit={onSaveNew}>
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldName")}
+            placeholder={t("personal.fieldName", { defaultValue: "Name" })}
             value={form.nombre}
             onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldLastName")}
+            placeholder={t("personal.fieldLastName", { defaultValue: "Last name" })}
             value={form.apellido}
-            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, apellido: e.target.value }))
+            }
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldEmail")}
+            placeholder={t("personal.fieldEmail", { defaultValue: "Email" })}
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldPhonePlaceholder")}
+            placeholder={t("personal.fieldPhonePlaceholder", { defaultValue: "Phone" })}
             value={form.telefono}
-            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, telefono: e.target.value }))
+            }
           />
 
           <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, vigente: e.target.checked }))
+              }
             />
-            {t("personal.fieldActive")}
+            {t("personal.fieldActive", { defaultValue: "Active" })}
           </label>
 
           <div className="pt-2 flex justify-end gap-2">
@@ -360,14 +398,16 @@ export default function Personal() {
               onClick={() => setOpenNew(false)}
               disabled={saving}
             >
-              {t("common.actions.cancel")}
+              {t("common.actions.cancel", { defaultValue: "Cancel" })}
             </button>
             <button
               type="submit"
               className="rounded-xl bg-slate-900 text-white px-4 py-2"
               disabled={saving}
             >
-              {saving ? t("personal.processing") : t("common.actions.save")}
+              {saving
+                ? t("personal.processing", { defaultValue: "Processing…" })
+                : t("common.actions.save", { defaultValue: "Save" })}
             </button>
           </div>
         </form>
