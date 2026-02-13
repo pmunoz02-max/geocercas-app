@@ -30,17 +30,8 @@ function Modal({ open, title, children, onClose }) {
   );
 }
 
-// ✅ Canonical: soporta diferentes formas de id que puede devolver el API
 function getRowId(r) {
-  return (
-    r?.id ??
-    r?.personal_id ??
-    r?.personalId ??
-    r?.usuario_id ??
-    r?.user_id ??
-    r?.uid ??
-    null
-  );
+  return r?.id ?? r?.personal_id ?? r?.user_id ?? r?.usuario_id ?? null;
 }
 
 export default function Personal() {
@@ -71,9 +62,11 @@ export default function Personal() {
     setBusy(true);
     setMsg("");
     try {
-      const rows = await listPersonal({ q, onlyActive, limit: 500 });
-      const arr = Array.isArray(rows) ? rows : [];
-      setItems(arr);
+      const res = await listPersonal({ q, onlyActive, limit: 500 });
+
+      // soporta ambos formatos: array directo o {items:[...]}
+      const rows = Array.isArray(res) ? res : Array.isArray(res?.items) ? res.items : [];
+      setItems(rows);
     } catch (e) {
       setItems([]);
       setMsg(
@@ -113,7 +106,9 @@ export default function Personal() {
     setSaving(true);
     setMsg("");
     try {
-      await upsertPersonal({ ...form, vigente: !!form.vigente });
+      const res = await upsertPersonal({ ...form, vigente: !!form.vigente });
+      if (res && res.ok === false) throw new Error(res.error || "Could not save");
+
       setOpenNew(false);
       setForm({
         nombre: "",
@@ -152,25 +147,22 @@ export default function Personal() {
 
     const id = getRowId(row);
     if (!id) {
-      setMsg("Missing row id (toggle). Check listPersonal response shape.");
+      setMsg("Missing row id (toggle).");
       return;
     }
 
-    // optimistic
     const prevItems = items;
     setItems((curr) =>
-      curr.map((r) => {
-        const rid = getRowId(r);
-        return rid === id ? { ...r, vigente: !r.vigente } : r;
-      })
+      curr.map((r) => (getRowId(r) === id ? { ...r, vigente: !r.vigente } : r))
     );
 
     try {
       setBusy(true);
-      await toggleVigente(id);
+      const res = await toggleVigente(id);
+      if (res && res.ok === false) throw new Error(res.error || "Could not toggle");
       await load();
     } catch (e) {
-      setItems(prevItems); // rollback
+      setItems(prevItems);
       setMsg(
         e?.message ||
           t("personal.errorToggle", {
@@ -194,7 +186,7 @@ export default function Personal() {
 
     const id = getRowId(row);
     if (!id) {
-      setMsg("Missing row id (delete). Check listPersonal response shape.");
+      setMsg("Missing row id (delete).");
       return;
     }
 
@@ -203,16 +195,27 @@ export default function Personal() {
     );
     if (!ok) return;
 
-    // ✅ optimistic delete
+    // ✅ UI inmediato
     const prevItems = items;
     setItems((curr) => curr.filter((r) => getRowId(r) !== id));
 
     try {
       setBusy(true);
-      await deletePersonal(id);
-      await load();
+      const res = await deletePersonal(id);
+
+      // ✅ Si el API devuelve {ok:false} pero no lanza error, aquí lo convertimos a error real
+      if (res && res.ok === false) {
+        throw new Error(res.error || "Delete failed");
+      }
+
+      // ⚠️ CLAVE: NO hacemos load() aquí.
+      // Si el backend todavía no borra/soft-deletea bien, load() lo trae de vuelta y parece “no borró”.
+      setMsg(
+        t("personal.bannerDeleted", { defaultValue: "Deleted." })
+      );
     } catch (e) {
-      setItems(prevItems); // rollback
+      // rollback
+      setItems(prevItems);
       setMsg(
         e?.message ||
           t("personal.errorDelete", {
