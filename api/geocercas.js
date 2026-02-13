@@ -102,7 +102,11 @@ async function readBody(req) {
 
 async function resolveContext(req) {
   const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
-  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]);
+  const SUPABASE_ANON_KEY = getEnv([
+    "SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  ]);
   const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -140,13 +144,18 @@ async function resolveContext(req) {
   let ctx = null;
   try {
     const { data, error } = await sbUser.rpc("bootstrap_user_context");
-    if (!error) ctx = Array.isArray(data) ? (data[0] || null) : data;
+    if (!error) ctx = Array.isArray(data) ? data[0] || null : data;
   } catch {
     // no-op
   }
 
   if (!ctx?.org_id || !ctx?.role) {
-    return { ok: false, status: 403, error: "Missing org/role context", details: "bootstrap_user_context did not return org_id/role" };
+    return {
+      ok: false,
+      status: 403,
+      error: "Missing org/role context",
+      details: "bootstrap_user_context did not return org_id/role",
+    };
   }
 
   const sbSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -154,6 +163,32 @@ async function resolveContext(req) {
   });
 
   return { ok: true, user, ctx, sbSrv };
+}
+
+/* =========================
+   Sanitizers (server-owned)
+========================= */
+
+// Nunca aceptar columnas server-owned aunque vengan del cliente
+function stripServerOwned(payload) {
+  const p = payload && typeof payload === "object" ? payload : {};
+  const out = { ...p };
+
+  // server-owned / generated / audit
+  delete out.nombre_ci;
+  delete out.created_at;
+  delete out.updated_at;
+  delete out.deleted_at;
+  delete out.revoked_at;
+  delete out.created_by;
+  delete out.updated_by;
+
+  // multi-tenant / ownership (siempre desde ctx)
+  delete out.org_id;
+  delete out.user_id;
+  delete out.owner_id;
+
+  return out;
 }
 
 /* =========================
@@ -173,13 +208,13 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    // Resolver contexto SIEMPRE (y así evitamos org_id del cliente)
+    // Resolver contexto SIEMPRE (evita org_id del cliente)
     const ctxRes = await resolveContext(req);
     if (!ctxRes.ok) {
       return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
     }
 
-    const { ctx, user, sbSrv } = ctxRes;
+    const { ctx, sbSrv } = ctxRes;
     const org_id = String(ctx.org_id);
 
     // GET
@@ -187,7 +222,7 @@ export default async function handler(req, res) {
       const q = getQuery(req);
       const action = String(q.action || "list");
 
-      // LISTA (no requiere org_id del query)
+      // LIST
       if (action === "list") {
         const onlyActive = normalizeBoolFlag(q.onlyActive, true);
         const limit = Math.min(Number(q.limit || 2000), 2000);
@@ -203,14 +238,14 @@ export default async function handler(req, res) {
 
         const { data, error } = await query;
         if (error) {
-          // UX-safe
-          return ok(res, { ok: false, items: [], supabase_error: error.message });
+          // UX-safe: no romper UI, pero indicar ok:false
+          return ok(res, { ok: false, items: [], error: "Supabase error", details: error.message });
         }
 
         return ok(res, { ok: true, items: Array.isArray(data) ? data : [] });
       }
 
-      // GET por id (no acepta org_id del query)
+      // GET por id
       if (action === "get") {
         const id = q.id ? String(q.id) : null;
         if (!id) return send(res, 400, { ok: false, error: "id is required" });
@@ -224,7 +259,8 @@ export default async function handler(req, res) {
 
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-        return ok(res, { ok: true, geocerca: data || null });
+        // ✅ Forma canónica para el cliente: item
+        return ok(res, { ok: true, item: data || null });
       }
 
       return send(res, 400, { ok: false, error: "Unsupported action", action });
@@ -232,7 +268,8 @@ export default async function handler(req, res) {
 
     // POST
     if (req.method === "POST") {
-      const payload = await readBody(req);
+      const rawPayload = await readBody(req);
+      const payload = stripServerOwned(rawPayload);
       const action = String(payload?.action || "upsert").toLowerCase();
 
       if (!requireWriteRole(ctx.role)) {
@@ -241,19 +278,17 @@ export default async function handler(req, res) {
 
       // UPSERT
       if (action === "upsert") {
-        const nombre = (payload?.nombre || "").trim();
-        const nombre_ci = (payload?.nombre_ci || "").trim().toLowerCase();
-
-        if (!nombre && !nombre_ci) {
-          return send(res, 400, { ok: false, error: "nombre (or nombre_ci) is required" });
+        const nombre = String(payload?.nombre || "").trim();
+        if (!nombre) {
+          return send(res, 400, { ok: false, error: "nombre is required" });
         }
 
-        // ✅ org_id SIEMPRE desde ctx, no del cliente
+        // ✅ org_id SIEMPRE desde ctx
+        // ✅ nombre_ci NO SE ENVÍA (DB lo genera por DEFAULT/trigger/generated)
         const row = {
           id: payload?.id || undefined,
           org_id,
-          nombre: nombre || undefined,
-          nombre_ci: nombre_ci || (nombre ? nombre.toLowerCase() : undefined),
+          nombre,
           descripcion: payload?.descripcion ?? undefined,
           geojson: payload?.geojson ?? undefined,
           geometry: payload?.geometry ?? undefined,
@@ -267,9 +302,12 @@ export default async function handler(req, res) {
           bbox: payload?.bbox ?? undefined,
           personal_ids: payload?.personal_ids ?? undefined,
           asignacion_ids: payload?.asignacion_ids ?? undefined,
+          // opcional: si tu DB maneja updated_at sola, puedes quitarlo
           updated_at: new Date().toISOString(),
         };
 
+        // 🔒 Conflicto por clave única canónica (org_id,nombre_ci)
+        // La DB calculará nombre_ci antes de validar unicidad.
         const { data, error } = await sbSrv
           .from("geocercas")
           .upsert(row, { onConflict: "org_id,nombre_ci" })
@@ -278,15 +316,23 @@ export default async function handler(req, res) {
 
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-        return ok(res, { ok: true, geocerca: data });
+        // ✅ Forma canónica para el cliente: item
+        return ok(res, { ok: true, item: data || null });
       }
 
       // DELETE (soft)
       if (action === "delete") {
         const id = payload?.id ? String(payload.id) : null;
-        const nombre_ci = payload?.nombre_ci ? String(payload.nombre_ci).toLowerCase() : null;
 
-        if (!id && !nombre_ci) {
+        // Soporte canónico: nombres_ci (bulk)
+        const nombres_ci = Array.isArray(payload?.nombres_ci)
+          ? payload.nombres_ci.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
+          : [];
+
+        // Compat legacy: nombre_ci singular (si llega)
+        const nombre_ci_single = payload?.nombre_ci ? String(payload.nombre_ci).trim().toLowerCase() : null;
+
+        if (!id && !nombres_ci.length && !nombre_ci_single) {
           return ok(res, { ok: true, deleted: 0, skipped: true, reason: "delete called without targets" });
         }
 
@@ -296,8 +342,13 @@ export default async function handler(req, res) {
           .eq("org_id", org_id)
           .select("id,nombre,nombre_ci,org_id,activo,updated_at");
 
-        if (id) q = q.eq("id", id);
-        if (!id && nombre_ci) q = q.eq("nombre_ci", nombre_ci);
+        if (id) {
+          q = q.eq("id", id);
+        } else if (nombres_ci.length) {
+          q = q.in("nombre_ci", nombres_ci);
+        } else if (nombre_ci_single) {
+          q = q.eq("nombre_ci", nombre_ci_single);
+        }
 
         const { data, error } = await q;
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
