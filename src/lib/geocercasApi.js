@@ -1,125 +1,145 @@
 // src/lib/geocercasApi.js
-// Canonical Geocercas API (cookie HttpOnly tg_at):
-// SIEMPRE via /api/geocercas y server resuelve org por ctx.
+// API-first (server-owned) - Geocercas v9 ctx-org
+// Blindaje: NUNCA enviar columnas computadas / generated (ej: nombre_ci)
 
-async function readJsonSafe(r) {
-  const text = await r.text();
+function getJsonHeaders(extra = {}) {
+  return {
+    "Content-Type": "application/json",
+    "X-Api-Version": "geocercas-api-v9-ctx-org-server-owned",
+    ...extra,
+  };
+}
+
+function safeJsonParse(text) {
   try {
-    return text ? JSON.parse(text) : null;
+    return JSON.parse(text);
   } catch {
-    return { raw: text };
+    return null;
   }
 }
 
-function toError(data, status) {
-  const msg =
-    data?.error ||
-    data?.message ||
-    data?.details?.message ||
-    (typeof data === "string" ? data : null) ||
-    `HTTP ${status}`;
-  const e = new Error(msg);
-  e.status = status;
-  e.payload = data;
-  return e;
-}
-
-// Cache-buster universal
-function withTs(url) {
-  const ts = Date.now();
-  return url.includes("?") ? `${url}&_ts=${ts}` : `${url}?_ts=${ts}`;
-}
-
-export async function listGeocercas({ onlyActive = true, limit = 2000 } = {}) {
-  let url =
-    `/api/geocercas?action=list` +
-    (onlyActive ? "&onlyActive=1" : "&onlyActive=0") +
-    `&limit=${encodeURIComponent(String(limit))}`;
-
-  url = withTs(url);
-
-  const r = await fetch(url, {
-    method: "GET",
+async function requestJson(url, { method = "GET", body = null, headers = {} } = {}) {
+  const res = await fetch(url, {
+    method,
+    headers: getJsonHeaders(headers),
     credentials: "include",
-    cache: "no-store",
-    headers: {
-      "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
-      Pragma: "no-cache",
-    },
+    body: body ? JSON.stringify(body) : null,
   });
 
-  const data = await readJsonSafe(r);
-  if (!r.ok) throw toError(data, r.status);
-  if (data?.ok === false) return [];
+  const txt = await res.text();
+  const data = txt ? safeJsonParse(txt) : null;
 
-  return Array.isArray(data?.items) ? data.items : [];
+  if (!res.ok || (data && data.ok === false)) {
+    const err = new Error(data?.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.payload = data || { ok: false, error: `HTTP ${res.status}`, details: txt };
+    throw err;
+  }
+
+  return data;
 }
 
-export async function getGeocerca({ id } = {}) {
-  if (!id) return null;
+/**
+ * Columnas que NO se deben enviar nunca porque son server-owned / generated
+ * (evita 500 por "cannot insert a non-DEFAULT value into column nombre_ci")
+ */
+const STRIP_FIELDS = new Set([
+  "nombre_ci",
+  "created_at",
+  "updated_at",
+  "deleted_at",
+  "revoked_at",
+  "created_by",
+  "updated_by",
+]);
 
-  let url = `/api/geocercas?action=get&id=${encodeURIComponent(String(id))}`;
-  url = withTs(url);
+function stripComputedFields(obj) {
+  if (!obj || typeof obj !== "object") return obj;
 
-  const r = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    cache: "no-store",
-    headers: {
-      "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
-      Pragma: "no-cache",
-    },
-  });
+  // shallow clone
+  const out = Array.isArray(obj) ? [...obj] : { ...obj };
 
-  const data = await readJsonSafe(r);
-  if (!r.ok) throw toError(data, r.status);
+  for (const k of Object.keys(out)) {
+    if (STRIP_FIELDS.has(k)) delete out[k];
+  }
 
-  return data?.geocerca ?? null;
+  return out;
 }
 
-export async function upsertGeocerca(payload) {
-  // org_id ya no lo valida el cliente; el server lo toma de ctx
-  const r = await fetch("/api/geocercas", {
+/**
+ * Lista geocercas (API server-owned). orgId es opcional (ctx org manda),
+ * pero lo dejamos para compatibilidad.
+ */
+export async function listGeocercas({ orgId = null, onlyActive = true, limit = 200 } = {}) {
+  const params = new URLSearchParams();
+  params.set("action", "list");
+  params.set("onlyActive", String(!!onlyActive));
+  params.set("limit", String(limit));
+
+  // compat: si tu API acepta orgId por query (aunque ctx manda)
+  if (orgId) params.set("orgId", String(orgId));
+
+  const data = await requestJson(`/api/geocercas?${params.toString()}`, { method: "GET" });
+  return data?.items || [];
+}
+
+export async function getGeocerca({ id, orgId = null } = {}) {
+  if (!id) throw new Error("id requerido");
+  const params = new URLSearchParams();
+  params.set("action", "get");
+  params.set("id", String(id));
+  if (orgId) params.set("orgId", String(orgId));
+
+  const data = await requestJson(`/api/geocercas?${params.toString()}`, { method: "GET" });
+  return data?.item || null;
+}
+
+/**
+ * Upsert geocerca:
+ * - NO enviar nombre_ci (DB lo calcula)
+ * - Si viene, se elimina aquí (guard rail universal)
+ */
+export async function upsertGeocerca(payload = {}) {
+  const clean = stripComputedFields(payload);
+
+  // Extra hardening: si alguien nos manda nombre_ci igual lo borramos
+  if (payload && payload.nombre_ci !== undefined) {
+    // Log útil en preview (sin romper)
+    try {
+      console.warn("[geocercasApi] nombre_ci stripped (server-owned).");
+    } catch {}
+  }
+
+  const data = await requestJson(`/api/geocercas`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      Pragma: "no-cache",
-    },
-    credentials: "include",
-    cache: "no-store",
-    body: JSON.stringify({ action: "upsert", ...(payload || {}) }),
+    body: { action: "upsert", ...clean },
   });
 
-  const data = await readJsonSafe(r);
-  if (!r.ok) throw toError(data, r.status);
-
-  return data?.geocerca ?? null;
+  return data?.item || null;
 }
 
-export async function deleteGeocerca({ id, nombre_ci } = {}) {
-  if (!id && !nombre_ci) {
-    return { ok: true, deleted: 0, skipped: true, reason: "no targets" };
-  }
-
+/**
+ * Delete geocerca:
+ * - recomendado: por nombres_ci (server-owned)
+ * - NO aceptar nombre_ci singular (legacy), pero mantenemos compat
+ */
+export async function deleteGeocerca({ orgId = null, id = null, nombres_ci = null, nombre_ci = null } = {}) {
   const payload = { action: "delete" };
-  if (id) payload.id = String(id);
-  if (nombre_ci) payload.nombre_ci = String(nombre_ci).toLowerCase();
 
-  const r = await fetch("/api/geocercas", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      Pragma: "no-cache",
-    },
-    credentials: "include",
-    cache: "no-store",
-    body: JSON.stringify(payload),
-  });
+  if (orgId) payload.orgId = String(orgId);
 
-  const data = await readJsonSafe(r);
-  if (!r.ok) throw toError(data, r.status);
+  // preferimos nombres_ci (bulk)
+  if (Array.isArray(nombres_ci) && nombres_ci.length) {
+    payload.nombres_ci = nombres_ci.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean);
+  } else if (nombre_ci) {
+    // compat legacy: convertir a nombres_ci
+    payload.nombres_ci = [String(nombre_ci).trim().toLowerCase()].filter(Boolean);
+  } else if (id) {
+    payload.id = String(id);
+  } else {
+    throw new Error("deleteGeocerca: requiere id o nombres_ci");
+  }
 
-  return { ok: data?.ok === true, deleted: Number(data?.deleted || 0), skipped: false, details: data };
+  const data = await requestJson(`/api/geocercas`, { method: "POST", body: payload });
+  return data?.ok === true;
 }
