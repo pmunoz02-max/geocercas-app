@@ -76,7 +76,6 @@ function normalizeBoolFlag(v, defaultValue) {
 }
 
 async function readBody(req) {
-  // Vercel/Next suele llenar req.body; pero para ser universal leemos stream si hace falta
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") {
     try {
@@ -145,9 +144,7 @@ async function resolveContext(req) {
   try {
     const { data, error } = await sbUser.rpc("bootstrap_user_context");
     if (!error) ctx = Array.isArray(data) ? data[0] || null : data;
-  } catch {
-    // no-op
-  }
+  } catch {}
 
   if (!ctx?.org_id || !ctx?.role) {
     return {
@@ -169,13 +166,12 @@ async function resolveContext(req) {
    Sanitizers (server-owned)
 ========================= */
 
-// Nunca aceptar columnas server-owned aunque vengan del cliente
 function stripServerOwned(payload) {
   const p = payload && typeof payload === "object" ? payload : {};
   const out = { ...p };
 
   // server-owned / generated / audit
-  delete out.nombre_ci;
+  delete out.nombre_ci; // GENERATED ALWAYS lower(nombre)
   delete out.created_at;
   delete out.updated_at;
   delete out.deleted_at;
@@ -187,6 +183,7 @@ function stripServerOwned(payload) {
   delete out.org_id;
   delete out.user_id;
   delete out.owner_id;
+  delete out.usuario_id; // legacy
 
   return out;
 }
@@ -208,7 +205,6 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    // Resolver contexto SIEMPRE (evita org_id del cliente)
     const ctxRes = await resolveContext(req);
     if (!ctxRes.ok) {
       return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
@@ -222,14 +218,13 @@ export default async function handler(req, res) {
       const q = getQuery(req);
       const action = String(q.action || "list");
 
-      // LIST
       if (action === "list") {
         const onlyActive = normalizeBoolFlag(q.onlyActive, true);
         const limit = Math.min(Number(q.limit || 2000), 2000);
 
         let query = sbSrv
           .from("geocercas")
-          .select("id,nombre,nombre_ci,org_id,activo,updated_at")
+          .select("id,nombre,name,nombre_ci,org_id,activo,activa,updated_at")
           .eq("org_id", org_id)
           .order("nombre", { ascending: true })
           .limit(limit);
@@ -238,14 +233,12 @@ export default async function handler(req, res) {
 
         const { data, error } = await query;
         if (error) {
-          // UX-safe: no romper UI, pero indicar ok:false
           return ok(res, { ok: false, items: [], error: "Supabase error", details: error.message });
         }
 
         return ok(res, { ok: true, items: Array.isArray(data) ? data : [] });
       }
 
-      // GET por id
       if (action === "get") {
         const id = q.id ? String(q.id) : null;
         if (!id) return send(res, 400, { ok: false, error: "id is required" });
@@ -259,7 +252,6 @@ export default async function handler(req, res) {
 
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-        // ✅ Forma canónica para el cliente: item
         return ok(res, { ok: true, item: data || null });
       }
 
@@ -276,19 +268,23 @@ export default async function handler(req, res) {
         return send(res, 403, { ok: false, error: "Forbidden", details: "Requires owner/admin" });
       }
 
-      // UPSERT
       if (action === "upsert") {
-        const nombre = String(payload?.nombre || "").trim();
-        if (!nombre) {
-          return send(res, 400, { ok: false, error: "nombre is required" });
+        // Acepta nombre o name, pero exige un nombre final
+        const nombreIn = String(payload?.nombre || "").trim();
+        const nameIn = String(payload?.name || "").trim();
+        const finalName = nombreIn || nameIn;
+
+        if (!finalName) {
+          return send(res, 400, { ok: false, error: "nombre (or name) is required" });
         }
 
-        // ✅ org_id SIEMPRE desde ctx
-        // ✅ nombre_ci NO SE ENVÍA (DB lo genera por DEFAULT/trigger/generated)
+        // ✅ DB genera nombre_ci (lower(nombre)) porque nombre_ci es GENERATED ALWAYS
+        // ✅ Mantener compat: guardamos ambos campos (nombre y name) con el mismo valor
         const row = {
           id: payload?.id || undefined,
           org_id,
-          nombre,
+          nombre: finalName,
+          name: finalName, // NOT NULL en tu tabla
           descripcion: payload?.descripcion ?? undefined,
           geojson: payload?.geojson ?? undefined,
           geometry: payload?.geometry ?? undefined,
@@ -298,16 +294,18 @@ export default async function handler(req, res) {
           lng: payload?.lng ?? undefined,
           radius_m: payload?.radius_m ?? undefined,
           visible: payload?.visible ?? undefined,
-          activo: payload?.activo ?? undefined,
           bbox: payload?.bbox ?? undefined,
           personal_ids: payload?.personal_ids ?? undefined,
           asignacion_ids: payload?.asignacion_ids ?? undefined,
-          // opcional: si tu DB maneja updated_at sola, puedes quitarlo
+
+          // flags: tienes active/activo/activa; mantenemos el principal "activo"
+          activo: payload?.activo ?? payload?.active ?? payload?.activa ?? undefined,
+
           updated_at: new Date().toISOString(),
         };
 
-        // 🔒 Conflicto por clave única canónica (org_id,nombre_ci)
-        // La DB calculará nombre_ci antes de validar unicidad.
+        // Conflicto canónico: UNIQUE (org_id, nombre_ci)
+        // nombre_ci se calcula a partir de nombre (server-owned)
         const { data, error } = await sbSrv
           .from("geocercas")
           .upsert(row, { onConflict: "org_id,nombre_ci" })
@@ -316,20 +314,17 @@ export default async function handler(req, res) {
 
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-        // ✅ Forma canónica para el cliente: item
         return ok(res, { ok: true, item: data || null });
       }
 
-      // DELETE (soft)
       if (action === "delete") {
         const id = payload?.id ? String(payload.id) : null;
 
-        // Soporte canónico: nombres_ci (bulk)
         const nombres_ci = Array.isArray(payload?.nombres_ci)
           ? payload.nombres_ci.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
           : [];
 
-        // Compat legacy: nombre_ci singular (si llega)
+        // compat legacy
         const nombre_ci_single = payload?.nombre_ci ? String(payload.nombre_ci).trim().toLowerCase() : null;
 
         if (!id && !nombres_ci.length && !nombre_ci_single) {
@@ -340,15 +335,11 @@ export default async function handler(req, res) {
           .from("geocercas")
           .update({ activo: false, updated_at: new Date().toISOString() })
           .eq("org_id", org_id)
-          .select("id,nombre,nombre_ci,org_id,activo,updated_at");
+          .select("id,nombre,name,nombre_ci,org_id,activo,updated_at");
 
-        if (id) {
-          q = q.eq("id", id);
-        } else if (nombres_ci.length) {
-          q = q.in("nombre_ci", nombres_ci);
-        } else if (nombre_ci_single) {
-          q = q.eq("nombre_ci", nombre_ci_single);
-        }
+        if (id) q = q.eq("id", id);
+        else if (nombres_ci.length) q = q.in("nombre_ci", nombres_ci);
+        else if (nombre_ci_single) q = q.eq("nombre_ci", nombre_ci_single);
 
         const { data, error } = await q;
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
