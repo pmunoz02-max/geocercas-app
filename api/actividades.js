@@ -1,9 +1,8 @@
 // api/actividades.js
 //
-// Actividades API (multi-tenant)
+// Actividades API (multi-tenant) - MEMBERSHIPS CANONICAL
 // Auth por cookie HttpOnly: tg_at
-// Contexto por RPC: public.bootstrap_session_context()
-// NO org_id desde frontend.
+// Contexto: SELECT memberships (NO RPC bootstrap)
 //
 // NOTA DE ESQUEMA (según tu DB):
 // - activities.tenant_id: uuid NOT NULL  -> lo llenamos con orgId resuelto
@@ -47,39 +46,9 @@ function buildSupabaseForUser(accessToken) {
   });
 }
 
-function normalizeCtx(ctx) {
-  if (Array.isArray(ctx)) return ctx[0] ?? null;
-  return ctx ?? null;
-}
-
-function asUuidOrNull(v) {
-  if (typeof v !== "string") return null;
-  const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
-  return ok ? v : null;
-}
-
-function extractOrgId(ctxObj) {
-  const candidate =
-    ctxObj?.org_id ??
-    ctxObj?.current_org_id ??
-    ctxObj?.currentOrgId ??
-    ctxObj?.current_org?.id ??
-    ctxObj?.org?.id ??
-    (Array.isArray(ctxObj?.orgs) && ctxObj.orgs[0]?.id) ??
-    null;
-
-  return asUuidOrNull(candidate);
-}
-
-function extractRole(ctxObj) {
-  const r =
-    ctxObj?.role ??
-    ctxObj?.current_role ??
-    ctxObj?.currentRole ??
-    ctxObj?.membership?.role ??
-    null;
-
-  return typeof r === "string" ? r : null;
+function normalizeRole(v) {
+  if (!v) return null;
+  return String(v).trim().toLowerCase();
 }
 
 async function resolveContext(req) {
@@ -88,17 +57,30 @@ async function resolveContext(req) {
 
   const supabase = buildSupabaseForUser(accessToken);
 
+  // 1) Validar sesión (JWT)
   const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
   if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
-  const { data: ctxRaw, error: ctxErr } = await supabase.rpc("bootstrap_session_context");
-  if (ctxErr) return { ok: false, status: 500, error: ctxErr.message || "bootstrap_session_context failed" };
+  const user = userData.user;
 
-  const ctxObj = normalizeCtx(ctxRaw);
-  const orgId = extractOrgId(ctxObj);
-  const role = extractRole(ctxObj);
+  // 2) Resolver org/role desde memberships (CANÓNICO)
+  //    Tomamos la default si existe, si no la primera.
+  const { data: mRow, error: mErr } = await supabase
+    .from("memberships")
+    .select("org_id, role, is_default")
+    .eq("user_id", user.id)
+    .order("is_default", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  return { ok: true, status: 200, supabase, user: userData.user, orgId, role };
+  if (mErr) {
+    return { ok: false, status: 500, error: mErr.message || "memberships lookup failed" };
+  }
+
+  const orgId = mRow?.org_id || null;
+  const role = normalizeRole(mRow?.role);
+
+  return { ok: true, status: 200, supabase, user, orgId, role };
 }
 
 export default async function handler(req, res) {
@@ -112,8 +94,7 @@ export default async function handler(req, res) {
       return json(res, 403, { ok: false, error: "No org resolved for current user" });
     }
 
-    // En tu esquema, el "tenant real" es tenant_id (NOT NULL).
-    // Usamos orgId resuelto como tenant_id.
+    // tenant real = tenant_id (NOT NULL)
     const tenantId = orgId;
 
     const id = typeof req.query?.id === "string" ? req.query.id : null;
@@ -144,13 +125,12 @@ export default async function handler(req, res) {
 
       const payload = {
         tenant_id: tenantId, // ✅ NOT NULL
-        org_id: tenantId,    // ✅ compatibilidad (si aún lo usas en otras partes)
+        org_id: tenantId,    // ✅ compatibilidad
         name,
         description: body?.description ?? null,
         active: body?.active ?? true,
         currency_code: body?.currency_code ?? "USD",
         hourly_rate: body?.hourly_rate ?? null,
-        // created_by: opcional (si tu DB lo setea con trigger, no lo toques)
       };
 
       const { data, error } = await supabase
