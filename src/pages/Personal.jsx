@@ -58,25 +58,35 @@ export default function Personal() {
   });
 
   async function load() {
-    if (!isLoggedIn || !currentOrg?.id) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      const res = await listPersonal({ q, onlyActive, limit: 500 });
+  if (!isLoggedIn || !currentOrg?.id) return;
+  setBusy(true);
+  setMsg("");
+  try {
+    const res = await listPersonal({ q, onlyActive, limit: 500 });
 
-      // soporta ambos formatos: array directo o {items:[...]}
-      const rows = Array.isArray(res) ? res : Array.isArray(res?.items) ? res.items : [];
-      setItems(rows);
-    } catch (e) {
-      setItems([]);
-      setMsg(
-        e?.message ||
-          t("personal.errorLoad", { defaultValue: "Error loading personnel." })
-      );
-    } finally {
-      setBusy(false);
-    }
+    // 🔥 SOPORTA ambos formatos:
+    // 1) Array directo
+    // 2) { items: [...] }
+    const rows = Array.isArray(res)
+      ? res
+      : Array.isArray(res?.items)
+      ? res.items
+      : [];
+
+    setItems(rows);
+  } catch (e) {
+    setItems([]);
+    setMsg(
+      e?.message ||
+        t("personal.errorLoad", {
+          defaultValue: "Error loading personnel.",
+        })
+    );
+  } finally {
+    setBusy(false);
   }
+}
+
 
   useEffect(() => {
     if (!loading && ready && isLoggedIn && currentOrg?.id) load();
