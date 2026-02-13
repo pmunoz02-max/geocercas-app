@@ -30,6 +30,19 @@ function Modal({ open, title, children, onClose }) {
   );
 }
 
+// ✅ Canonical: soporta diferentes formas de id que puede devolver el API
+function getRowId(r) {
+  return (
+    r?.id ??
+    r?.personal_id ??
+    r?.personalId ??
+    r?.usuario_id ??
+    r?.user_id ??
+    r?.uid ??
+    null
+  );
+}
+
 export default function Personal() {
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, currentOrg, currentRole } = useAuth();
@@ -59,7 +72,8 @@ export default function Personal() {
     setMsg("");
     try {
       const rows = await listPersonal({ q, onlyActive, limit: 500 });
-      setItems(Array.isArray(rows) ? rows : []);
+      const arr = Array.isArray(rows) ? rows : [];
+      setItems(arr);
     } catch (e) {
       setItems([]);
       setMsg(
@@ -136,16 +150,24 @@ export default function Personal() {
       return;
     }
 
-    // Optimistic toggle (UI inmediato) + rollback si falla
+    const id = getRowId(row);
+    if (!id) {
+      setMsg("Missing row id (toggle). Check listPersonal response shape.");
+      return;
+    }
+
+    // optimistic
     const prevItems = items;
     setItems((curr) =>
-      curr.map((r) => (r.id === row.id ? { ...r, vigente: !r.vigente } : r))
+      curr.map((r) => {
+        const rid = getRowId(r);
+        return rid === id ? { ...r, vigente: !r.vigente } : r;
+      })
     );
 
     try {
       setBusy(true);
-      await toggleVigente(row.id);
-      // opcional: refrescar para asegurar estado real del backend
+      await toggleVigente(id);
       await load();
     } catch (e) {
       setItems(prevItems); // rollback
@@ -170,19 +192,24 @@ export default function Personal() {
       return;
     }
 
+    const id = getRowId(row);
+    if (!id) {
+      setMsg("Missing row id (delete). Check listPersonal response shape.");
+      return;
+    }
+
     const ok = window.confirm(
       t("personal.confirmDelete", { defaultValue: "Delete this record?" })
     );
     if (!ok) return;
 
-    // ✅ Optimistic delete (UI inmediato) + rollback si falla
+    // ✅ optimistic delete
     const prevItems = items;
-    setItems((curr) => curr.filter((r) => r.id !== row.id));
+    setItems((curr) => curr.filter((r) => getRowId(r) !== id));
 
     try {
       setBusy(true);
-      await deletePersonal(row.id);
-      // opcional: refrescar para evitar “fantasmas” si el backend aplicó soft-delete, etc.
+      await deletePersonal(id);
       await load();
     } catch (e) {
       setItems(prevItems); // rollback
@@ -200,27 +227,21 @@ export default function Personal() {
   if (loading || !ready)
     return (
       <div className="p-6 text-gray-300">
-        {t("personal.bannerLoadingSession", {
-          defaultValue: "Loading session…",
-        })}
+        {t("personal.bannerLoadingSession", { defaultValue: "Loading session…" })}
       </div>
     );
 
   if (!isLoggedIn)
     return (
       <div className="p-6 text-red-400">
-        {t("personal.bannerLoginRequired", {
-          defaultValue: "You must log in.",
-        })}
+        {t("personal.bannerLoginRequired", { defaultValue: "You must log in." })}
       </div>
     );
 
   if (!currentOrg?.id)
     return (
       <div className="p-6 text-red-400">
-        {t("personal.errorMissingTenant", {
-          defaultValue: "No organization selected.",
-        })}
+        {t("personal.errorMissingTenant", { defaultValue: "No organization selected." })}
       </div>
     );
 
@@ -253,7 +274,7 @@ export default function Personal() {
         <input
           className="w-full md:w-96 rounded-xl border px-3 py-2"
           placeholder={t("personal.searchPlaceholder", {
-            defaultValue: "Search by name, email or phone…",
+            defaultValue: "Search by name, last name, email or phone…",
           })}
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -296,9 +317,7 @@ export default function Personal() {
             <thead className="bg-gray-50 text-gray-600">
               <tr>
                 <th className="p-3">{t("personal.tableName", { defaultValue: "Name" })}</th>
-                <th className="p-3">
-                  {t("personal.tableLastName", { defaultValue: "Last name" })}
-                </th>
+                <th className="p-3">{t("personal.tableLastName", { defaultValue: "Last name" })}</th>
                 <th className="p-3">{t("personal.tableEmail", { defaultValue: "Email" })}</th>
                 <th className="p-3">{t("personal.tablePhone", { defaultValue: "Phone" })}</th>
                 <th className="p-3">{t("personal.tableActive", { defaultValue: "Active" })}</th>
@@ -306,40 +325,43 @@ export default function Personal() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="p-3">{r?.nombre ?? "-"}</td>
-                  <td className="p-3">{r?.apellido ?? "-"}</td>
-                  <td className="p-3">{r?.email ?? "-"}</td>
-                  <td className="p-3">{r?.telefono ?? "-"}</td>
-                  <td className="p-3">
-                    {r?.vigente
-                      ? t("personal.yes", { defaultValue: "Yes" })
-                      : t("personal.no", { defaultValue: "No" })}
-                  </td>
-                  <td className="p-3 flex gap-2">
-                    <button
-                      onClick={() => onToggle(r)}
-                      disabled={!canEdit || busy}
-                      className="rounded-lg border px-3 py-1"
-                      type="button"
-                    >
+              {filtered.map((r) => {
+                const rid = getRowId(r) ?? `${r?.email ?? ""}-${r?.nombre ?? ""}`;
+                return (
+                  <tr key={rid} className="border-t">
+                    <td className="p-3">{r?.nombre ?? "-"}</td>
+                    <td className="p-3">{r?.apellido ?? "-"}</td>
+                    <td className="p-3">{r?.email ?? "-"}</td>
+                    <td className="p-3">{r?.telefono ?? "-"}</td>
+                    <td className="p-3">
                       {r?.vigente
-                        ? t("personal.actionDeactivate", { defaultValue: "Deactivate" })
-                        : t("personal.actionActivate", { defaultValue: "Activate" })}
-                    </button>
+                        ? t("personal.yes", { defaultValue: "Yes" })
+                        : t("personal.no", { defaultValue: "No" })}
+                    </td>
+                    <td className="p-3 flex gap-2">
+                      <button
+                        onClick={() => onToggle(r)}
+                        disabled={!canEdit || busy}
+                        className="rounded-lg border px-3 py-1"
+                        type="button"
+                      >
+                        {r?.vigente
+                          ? t("personal.actionDeactivate", { defaultValue: "Deactivate" })
+                          : t("personal.actionActivate", { defaultValue: "Activate" })}
+                      </button>
 
-                    <button
-                      onClick={() => onDelete(r)}
-                      disabled={!canEdit || busy}
-                      className="rounded-lg border border-red-200 text-red-700 px-3 py-1"
-                      type="button"
-                    >
-                      {t("personal.actionDelete", { defaultValue: "Delete" })}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      <button
+                        onClick={() => onDelete(r)}
+                        disabled={!canEdit || busy}
+                        className="rounded-lg border border-red-200 text-red-700 px-3 py-1"
+                        type="button"
+                      >
+                        {t("personal.actionDelete", { defaultValue: "Delete" })}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -361,9 +383,7 @@ export default function Personal() {
             className="w-full rounded-xl border px-3 py-2"
             placeholder={t("personal.fieldLastName", { defaultValue: "Last name" })}
             value={form.apellido}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, apellido: e.target.value }))
-            }
+            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
@@ -375,18 +395,14 @@ export default function Personal() {
             className="w-full rounded-xl border px-3 py-2"
             placeholder={t("personal.fieldPhonePlaceholder", { defaultValue: "Phone" })}
             value={form.telefono}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, telefono: e.target.value }))
-            }
+            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
           />
 
           <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, vigente: e.target.checked }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
             />
             {t("personal.fieldActive", { defaultValue: "Active" })}
           </label>
