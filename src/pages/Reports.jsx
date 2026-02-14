@@ -59,6 +59,27 @@ export default function Reports() {
     [ready, authenticated, currentOrg]
   );
 
+  // ===== UI classnames (canónicas) =====
+  const inputBase =
+    "block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
+    "placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 " +
+    "disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed";
+
+  const selectBase =
+    "block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
+    "shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 " +
+    "disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed";
+
+  const buttonPrimary =
+    "inline-flex items-center justify-center rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-sm " +
+    "hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 " +
+    "disabled:opacity-60 disabled:cursor-not-allowed";
+
+  const buttonSecondary =
+    "inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 shadow-sm " +
+    "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 " +
+    "disabled:opacity-50 disabled:cursor-not-allowed";
+
   async function apiGet(url) {
     const resp = await fetch(url, {
       method: "GET",
@@ -149,11 +170,18 @@ export default function Reports() {
     };
   }
 
+  function clearSelections() {
+    setSelectedGeocercaIds([]);
+    setSelectedPersonalIds([]);
+    setSelectedActivityIds([]);
+    setSelectedAsignacionIds([]);
+  }
+
   // ===== estados globales =====
   if (!ready) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
           Cargando tu sesión…
         </div>
       </div>
@@ -180,13 +208,16 @@ export default function Reports() {
     );
   }
 
+  const filtersDisabled = loadingFilters || loadingReport;
+
   // ===== render =====
   return (
-    <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6">
+    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+      {/* Header */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">Reportes</h1>
-        <p className="text-xs text-gray-500">
-          Org actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
+        <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
+        <p className="text-xs text-gray-600">
+          Org actual: <span className="font-medium text-gray-900">{currentOrg?.name || currentOrg?.id}</span>
         </p>
       </div>
 
@@ -196,202 +227,257 @@ export default function Reports() {
         </div>
       )}
 
-      {/* ===== Filtros ===== */}
-      <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="text-sm font-medium text-slate-700">Desde</label>
-            <input
-              type="date"
-              value={start}
-              onChange={(e) => setStart(e.target.value)}
-              className="block border rounded-lg px-2 py-1 mt-1"
-            />
-          </div>
+      {/* Layout: Filtros + Resultados */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* ===== Filtros ===== */}
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-100 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Filtros</h2>
+                <p className="text-xs text-gray-600">
+                  Selecciona rangos y listas. Luego presiona <span className="font-medium text-gray-900">Generar</span>.
+                </p>
+              </div>
 
-          <div>
-            <label className="text-sm font-medium text-slate-700">Hasta</label>
-            <input
-              type="date"
-              value={end}
-              onChange={(e) => setEnd(e.target.value)}
-              className="block border rounded-lg px-2 py-1 mt-1"
-            />
-          </div>
-
-          <button
-            onClick={loadReport}
-            disabled={loadingReport}
-            className="px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-60"
-          >
-            {loadingReport ? "Generando…" : "Generar"}
-          </button>
-
-          <button
-            onClick={() => exportRowsToCSV(rows, "reportes")}
-            disabled={!rows.length}
-            className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
-          >
-            Exportar CSV
-          </button>
-
-          <button
-            onClick={loadFilters}
-            disabled={loadingFilters}
-            className="px-4 py-2 rounded-lg border hover:bg-slate-100 disabled:opacity-60"
-            title="Recargar listas"
-          >
-            {loadingFilters ? "Cargando…" : "Recargar filtros"}
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Geocercas */}
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Geocercas (multi)
-            </label>
-            <select
-              multiple
-              value={selectedGeocercaIds}
-              onChange={onMultiSelectChange(setSelectedGeocercaIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.geocercas.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nombre}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Tip: Ctrl/Command para seleccionar múltiples.
-            </p>
-          </div>
-
-          {/* Personas */}
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Personas (multi)
-            </label>
-            <select
-              multiple
-              value={selectedPersonalIds}
-              onChange={onMultiSelectChange(setSelectedPersonalIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.personas.map((p) => {
-                const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
-                return (
-                  <option key={p.id} value={p.id}>
-                    {label}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          {/* Actividades */}
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Actividades (multi)
-            </label>
-            <select
-              multiple
-              value={selectedActivityIds}
-              onChange={onMultiSelectChange(setSelectedActivityIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.activities.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                  {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Asignaciones */}
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Asignaciones (multi)
-            </label>
-            <select
-              multiple
-              value={selectedAsignacionIds}
-              onChange={onMultiSelectChange(setSelectedAsignacionIds)}
-              className="block w-full border rounded-lg px-2 py-2 mt-1 min-h-[140px]"
-              disabled={loadingFilters}
-            >
-              {filters.asignaciones.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.status || a.estado || "asignación"} — {a.id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Nota: si tus asignaciones no tienen personal_id, el cruce con marcajes puede salir vacío.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ===== Tabla ===== */}
-      <section className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-        {loadingReport ? (
-          <p className="p-4 text-sm text-slate-500">Cargando…</p>
-        ) : rows.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">
-            No hay datos con los filtros seleccionados.
-          </p>
-        ) : (
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-100 text-slate-700">
-              <tr>
-                <th className="p-2 text-left">Día</th>
-                <th className="p-2 text-left">Persona</th>
-                <th className="p-2 text-left">Email</th>
-                <th className="p-2 text-left">Geocerca</th>
-                <th className="p-2 text-left">Actividad</th>
-                <th className="p-2 text-left">Asignación</th>
-                <th className="p-2 text-left">Entrada</th>
-                <th className="p-2 text-left">Salida</th>
-                <th className="p-2 text-center">Marcajes</th>
-                <th className="p-2 text-center">Dentro</th>
-                <th className="p-2 text-center">Dist (m)</th>
-                <th className="p-2 text-left">Tarifa</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr
-                  key={r.attendance_id ? `${r.attendance_id}-${i}` : i}
-                  className={`border-t hover:bg-slate-50 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadFilters}
+                  disabled={loadingFilters}
+                  className={buttonSecondary}
+                  title="Recargar listas"
                 >
-                  <td className="p-2">{r.work_day || "—"}</td>
-                  <td className="p-2">{r.personal_nombre || "—"}</td>
-                  <td className="p-2">{r.email || "—"}</td>
-                  <td className="p-2">{r.geofence_name || "—"}</td>
-                  <td className="p-2">{r.activity_name || "—"}</td>
-                  <td className="p-2">
-                    {r.asignacion_id ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})` : "—"}
-                  </td>
-                  <td className="p-2">{r.first_check_in || "—"}</td>
-                  <td className="p-2">{r.last_check_out || "—"}</td>
-                  <td className="p-2 text-center">{r.total_marks ?? "—"}</td>
-                  <td className="p-2 text-center">{r.inside_count ?? "—"}</td>
-                  <td className="p-2 text-center">{r.avg_distance_m ?? "—"}</td>
-                  <td className="p-2">
-                    {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+                  {loadingFilters ? "Cargando…" : "Recargar filtros"}
+                </button>
+
+                <button
+                  onClick={clearSelections}
+                  disabled={filtersDisabled}
+                  className={buttonSecondary}
+                  title="Limpiar selecciones (no borra fechas)"
+                >
+                  Limpiar selecciones
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-5">
+            {/* Fecha + acciones */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-900">Desde</label>
+                <input
+                  type="date"
+                  value={start}
+                  onChange={(e) => setStart(e.target.value)}
+                  className={inputBase}
+                  disabled={filtersDisabled}
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-900">Hasta</label>
+                <input
+                  type="date"
+                  value={end}
+                  onChange={(e) => setEnd(e.target.value)}
+                  className={inputBase}
+                  disabled={filtersDisabled}
+                />
+              </div>
+
+              <div className="md:col-span-6 flex flex-wrap gap-2 md:justify-end">
+                <button onClick={loadReport} disabled={loadingReport} className={buttonPrimary}>
+                  {loadingReport ? "Generando…" : "Generar"}
+                </button>
+
+                <button
+                  onClick={() => exportRowsToCSV(rows, "reportes")}
+                  disabled={!rows.length}
+                  className={buttonSecondary}
+                >
+                  Exportar CSV
+                </button>
+              </div>
+
+              {/* hint */}
+              <div className="md:col-span-12">
+                <div className="text-xs text-gray-600">
+                  <span className="font-medium text-gray-900">Tip:</span> En listas multi-select usa{" "}
+                  <span className="font-medium text-gray-900">Ctrl</span> (Windows) /{" "}
+                  <span className="font-medium text-gray-900">Command</span> (Mac) para seleccionar múltiples.
+                </div>
+              </div>
+            </div>
+
+            {/* Multi selects */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Geocercas */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900">
+                  Geocercas <span className="text-xs font-normal text-gray-600">(multi)</span>
+                </label>
+                <select
+                  multiple
+                  value={selectedGeocercaIds}
+                  onChange={onMultiSelectChange(setSelectedGeocercaIds)}
+                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  disabled={loadingFilters}
+                >
+                  {filters.geocercas.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Personas */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900">
+                  Personas <span className="text-xs font-normal text-gray-600">(multi)</span>
+                </label>
+                <select
+                  multiple
+                  value={selectedPersonalIds}
+                  onChange={onMultiSelectChange(setSelectedPersonalIds)}
+                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  disabled={loadingFilters}
+                >
+                  {filters.personas.map((p) => {
+                    const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Actividades */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900">
+                  Actividades <span className="text-xs font-normal text-gray-600">(multi)</span>
+                </label>
+                <select
+                  multiple
+                  value={selectedActivityIds}
+                  onChange={onMultiSelectChange(setSelectedActivityIds)}
+                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  disabled={loadingFilters}
+                >
+                  {filters.activities.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Asignaciones */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900">
+                  Asignaciones <span className="text-xs font-normal text-gray-600">(multi)</span>
+                </label>
+                <select
+                  multiple
+                  value={selectedAsignacionIds}
+                  onChange={onMultiSelectChange(setSelectedAsignacionIds)}
+                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  disabled={loadingFilters}
+                >
+                  {filters.asignaciones.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {(a.status || a.estado || "asignación")} — {String(a.id).slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-gray-600">
+                  Nota: si tus asignaciones no tienen <span className="font-medium">personal_id</span>, el cruce con
+                  marcajes puede salir vacío.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ===== Resultados ===== */}
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-gray-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Resultados</h2>
+              <p className="text-xs text-gray-600">
+                {loadingReport
+                  ? "Generando reporte…"
+                  : rows.length
+                    ? `Filas: ${rows.length}`
+                    : "Aún no hay datos. Ajusta filtros y genera."}
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            {loadingReport ? (
+              <p className="p-4 text-sm text-gray-700">Cargando…</p>
+            ) : rows.length === 0 ? (
+              <p className="p-4 text-sm text-gray-700">
+                No hay datos con los filtros seleccionados.
+              </p>
+            ) : (
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-gray-900">
+                  <tr className="border-b border-gray-200">
+                    <th className="p-2 text-left font-semibold">Día</th>
+                    <th className="p-2 text-left font-semibold">Persona</th>
+                    <th className="p-2 text-left font-semibold">Email</th>
+                    <th className="p-2 text-left font-semibold">Geocerca</th>
+                    <th className="p-2 text-left font-semibold">Actividad</th>
+                    <th className="p-2 text-left font-semibold">Asignación</th>
+                    <th className="p-2 text-left font-semibold">Entrada</th>
+                    <th className="p-2 text-left font-semibold">Salida</th>
+                    <th className="p-2 text-center font-semibold">Marcajes</th>
+                    <th className="p-2 text-center font-semibold">Dentro</th>
+                    <th className="p-2 text-center font-semibold">Dist (m)</th>
+                    <th className="p-2 text-left font-semibold">Tarifa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr
+                      key={r.attendance_id ? `${r.attendance_id}-${i}` : i}
+                      className={`border-t border-gray-100 hover:bg-gray-50 ${
+                        i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                      }`}
+                    >
+                      <td className="p-2 text-gray-900">{r.work_day || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.personal_nombre || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.email || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.geofence_name || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.activity_name || "—"}</td>
+                      <td className="p-2 text-gray-900">
+                        {r.asignacion_id
+                          ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})`
+                          : "—"}
+                      </td>
+                      <td className="p-2 text-gray-900">{r.first_check_in || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.last_check_out || "—"}</td>
+                      <td className="p-2 text-center text-gray-900">{r.total_marks ?? "—"}</td>
+                      <td className="p-2 text-center text-gray-900">{r.inside_count ?? "—"}</td>
+                      <td className="p-2 text-center text-gray-900">{r.avg_distance_m ?? "—"}</td>
+                      <td className="p-2 text-gray-900">
+                        {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
