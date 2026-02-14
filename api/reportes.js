@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
  * - Auth fallback: Authorization: Bearer <token>
  *
  * Actions:
- * - GET /api/reportes?action=filters[&org_id=<uuid>]
+ * - GET /api/reportes?action=filters
  * - GET /api/reportes?action=report&start=YYYY-MM-DD&end=YYYY-MM-DD
  *     &geocerca_ids=uuid,uuid
  *     &geocerca_names=text,text
@@ -16,9 +16,6 @@ import { createClient } from "@supabase/supabase-js";
  *     &activity_ids=uuid,uuid
  *     &asignacion_ids=uuid,uuid
  *     &limit=200&offset=0
- *
- * Nota canónica:
- * - Para filters: si get_current_org_id() no está disponible, aceptamos org_id SOLO si el usuario es miembro.
  */
 
 function getEnv(nameList) {
@@ -61,8 +58,7 @@ function normalizeOffset(v) {
   return Math.floor(n);
 }
 
-// Intenta resolver org activa desde DB (si existe contexto)
-async function resolveCurrentOrgIdFromDb(supabase) {
+async function resolveCurrentOrgId(supabase) {
   const a = await supabase.rpc("get_current_org_id");
   if (!a.error && a.data) return a.data;
 
@@ -70,31 +66,6 @@ async function resolveCurrentOrgIdFromDb(supabase) {
   if (!b.error && b.data) return b.data;
 
   return null;
-}
-
-// Valida que el usuario sea miembro de orgId (NO confiamos en input)
-async function assertUserIsMemberOfOrg(supabase, userId, orgId) {
-  // Preferimos memberships (según tus policies)
-  const m = await supabase
-    .from("memberships")
-    .select("org_id")
-    .eq("user_id", userId)
-    .eq("org_id", orgId)
-    .limit(1);
-
-  if (!m.error && Array.isArray(m.data) && m.data.length > 0) return true;
-
-  // Fallback: si tu proyecto usa org_members (lo vi en policies de asignaciones)
-  const om = await supabase
-    .from("org_members")
-    .select("org_id")
-    .eq("user_id", userId)
-    .eq("org_id", orgId)
-    .limit(1);
-
-  if (!om.error && Array.isArray(om.data) && om.data.length > 0) return true;
-
-  return false;
 }
 
 export default async function handler(req, res) {
@@ -146,44 +117,18 @@ export default async function handler(req, res) {
       auth: { persistSession: false },
     });
 
-    // Usuario (auth.uid equivalente)
-    const userRes = await supabase.auth.getUser();
-    if (userRes.error || !userRes.data?.user?.id) {
-      return res.status(401).json({
-        error: "Invalid session token (cannot resolve user).",
-        details: userRes.error?.message || "No user",
-      });
-    }
-    const userId = userRes.data.user.id;
-
     const action = String(req.query.action || "").toLowerCase();
 
     // ======================
     // action=filters
     // ======================
     if (action === "filters") {
-      // 1) Intento canónico DB
-      let orgId = await resolveCurrentOrgIdFromDb(supabase);
-
-      // 2) Fallback seguro: org_id desde query pero VALIDADO por memberships
+      const orgId = await resolveCurrentOrgId(supabase);
       if (!orgId) {
-        const orgFromQuery = req.query.org_id ? String(req.query.org_id) : "";
-        if (!orgFromQuery) {
-          return res.status(401).json({
-            error:
-              "No se pudo resolver org activa (get_current_org_id/current_org_id) y falta org_id en query.",
-            hint:
-              "Envía org_id desde el frontend (currentOrg.id) y el backend lo validará por memberships.",
-          });
-        }
-
-        const ok = await assertUserIsMemberOfOrg(supabase, userId, orgFromQuery);
-        if (!ok) {
-          return res.status(403).json({
-            error: "Forbidden: user is not member of requested org_id.",
-          });
-        }
-        orgId = orgFromQuery;
+        return res.status(401).json({
+          error: "No hay org activa. Selecciona una organización e inténtalo de nuevo.",
+          hint: "La org activa se obtiene con get_current_org_id() (persistente).",
+        });
       }
 
       const [geocercasRes, personasRes, activitiesRes, asignacionesRes] =
@@ -233,7 +178,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         data: { geocercas, personas, activities, asignaciones },
-        meta: { org_id: orgId, user_id: userId },
+        meta: { org_id: orgId },
       });
     }
 
@@ -258,7 +203,6 @@ export default async function handler(req, res) {
       const limit = normalizeLimit(req.query.limit, 200, 1000);
       const offset = normalizeOffset(req.query.offset);
 
-      // La vista debe filtrar por org de forma canónica.
       let query = supabase
         .from("v_reportes_diario_con_asignacion")
         .select("*")
@@ -282,7 +226,7 @@ export default async function handler(req, res) {
         return res.status(400).json({
           error: error.message,
           hint:
-            "Revisa vistas v_reportes_* (get_current_org_id), y RLS en attendances/personal/activities/asignaciones/geocercas.",
+            "Revisa v_reportes_* y RLS. get_current_org_id() debe estar funcionando (tabla user_current_org).",
         });
       }
 
