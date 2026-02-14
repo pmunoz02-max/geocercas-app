@@ -11,6 +11,10 @@ async function callInviteTracker(payload) {
     data: { session },
   } = await supabase.auth.getSession();
 
+  // 🔎 DEBUG (Preview)
+  console.log("[invite_tracker] url:", supabaseUrl);
+  console.log("[invite_tracker] hasToken:", !!session?.access_token);
+
   if (!session?.access_token) {
     return { ok: false, status: 401, data: { error: "No session token" } };
   }
@@ -134,13 +138,19 @@ export default function InvitarTracker() {
         org_id: orgId,
       });
 
-      if (!resp.ok || !resp.data) {
-        setMessage({
-          type: "error",
-          text: t("inviteTracker.messages.serverProblem"),
-        });
-        return;
-      }
+      if (!resp.ok) {
+  const errText =
+    typeof resp.data === "string"
+      ? resp.data
+      : resp.data?.error || resp.data?.message || JSON.stringify(resp.data);
+
+  setMessage({
+    type: "error",
+    text: `Error invitaciones (${resp.status}): ${errText}`,
+  });
+  return;
+}
+
 
       const via = resp.data.invited_via; // "email" | "action_link"
       const link = resp.data.action_link || "";
