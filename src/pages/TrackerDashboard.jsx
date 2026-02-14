@@ -224,12 +224,7 @@ function FitIfOutOfView({ geofencePolygons, fitSignal, onBoundsComputed, onViewp
 /** =========================
  * MultiSelect Geocercas UI
  * ========================= */
-function MultiGeofenceSelect({
-  geofences,
-  selectedIds,
-  setSelectedIds,
-  disabled,
-}) {
+function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const rootRef = useRef(null);
@@ -247,65 +242,65 @@ function MultiGeofenceSelect({
     });
   }, [geofences, q]);
 
+  const isNoneMode = useMemo(() => {
+    return Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__";
+  }, [selectedIds]);
+
   const effectiveSelectedCount = useMemo(() => {
-    // selectedIds.length === 0 significa "Todas"
     if (!geofences?.length) return 0;
+    if (isNoneMode) return 0;
     return selectedIds?.length ? selectedIds.length : geofences.length;
-  }, [geofences, selectedIds]);
+  }, [geofences, selectedIds, isNoneMode]);
 
   const label = useMemo(() => {
-    if (!geofences?.length) return "Geocercas: 0";
+    if (!geofences?.length) return "Geocercas";
+    if (isNoneMode) return "Geocercas: Ninguna";
     if (!selectedIds?.length) return `Geocercas: Todas (${geofences.length})`;
     return `Geocercas: ${effectiveSelectedCount}`;
-  }, [geofences, selectedIds, effectiveSelectedCount]);
+  }, [geofences, selectedIds, effectiveSelectedCount, isNoneMode]);
 
   const toggle = (id) => {
-  const sid = String(id);
-  setSelectedIds((prev) => {
-    const arr = Array.isArray(prev) ? prev.map(String) : [];
+    const sid = String(id);
+    setSelectedIds((prev) => {
+      const arr = Array.isArray(prev) ? prev.map(String) : [];
 
-    // si estaba en modo NONE, al marcar una geocerca salimos de NONE y dejamos solo esa
-    if (arr.length === 1 && arr[0] === "__none__") {
-      return [sid];
-    }
+      // si estaba en modo NONE, al marcar una geocerca salimos de NONE y dejamos solo esa
+      if (arr.length === 1 && arr[0] === "__none__") {
+        return [sid];
+      }
 
-    // si estaba en "Todas" (arr vacío), expandimos a todas menos la que desmarcamos
-    if (arr.length === 0) {
-      const all = (geofences || []).map((g) => String(g.id));
-      return all.filter((x) => x !== sid);
-    }
+      // si estaba en "Todas" (arr vacío), expandimos a todas menos la que desmarcamos
+      if (arr.length === 0) {
+        const all = (geofences || []).map((g) => String(g.id));
+        return all.filter((x) => x !== sid);
+      }
 
-    const set = new Set(arr);
-    if (set.has(sid)) set.delete(sid);
-    else set.add(sid);
+      const set = new Set(arr);
+      if (set.has(sid)) set.delete(sid);
+      else set.add(sid);
 
-    const next = Array.from(set);
+      const next = Array.from(set);
 
-    // si quedó vacío, volvemos a "todas"
-    return next.length ? next : [];
-  });
-};
-
-const setAll = () => setSelectedIds([]); // vacío = Todas
-const setNone = () => setSelectedIds(["__none__"]); // sentinel para "ninguna"
-
-const isNoneMode = useMemo(() => {
-  return Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__";
-}, [selectedIds]);
-
-// cerrar al hacer click afuera
-useEffect(() => {
-  if (!open) return;
-  const onDoc = (e) => {
-    const el = rootRef.current;
-    if (!el) return;
-    if (!el.contains(e.target)) setOpen(false);
+      // si quedó vacío, volvemos a "todas"
+      return next.length ? next : [];
+    });
   };
-  document.addEventListener("mousedown", onDoc);
-  return () => document.removeEventListener("mousedown", onDoc);
-}, [open]);
 
-  // Si estamos en modo NONE, no hay seleccionadas
+  const setAll = () => setSelectedIds([]); // vacío = Todas
+  const setNone = () => setSelectedIds(["__none__"]); // sentinel para "ninguna"
+
+  // cerrar al hacer click afuera
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => {
+      const el = rootRef.current;
+      if (!el) return;
+      if (!el.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
   const isChecked = (id) => {
     if (isNoneMode) return false;
     if (!selectedIds?.length) return true; // Todas
@@ -323,76 +318,94 @@ useEffect(() => {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50 flex items-center justify-between gap-2 min-w-[220px]"
+        className={[
+          "w-full",
+          "bg-white text-gray-900",
+          "border border-gray-300 rounded-md",
+          "px-3 py-2 text-sm",
+          "flex items-center justify-between gap-2",
+          "hover:bg-gray-50",
+          "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+          disabled ? "opacity-60 cursor-not-allowed" : "",
+        ].join(" ")}
         onClick={() => !disabled && setOpen((v) => !v)}
         disabled={disabled}
         title={disabled ? "No hay geocercas" : "Seleccionar geocercas"}
       >
         <span className="truncate">{label}</span>
-        <span className="text-slate-500">({countText})</span>
+        <span className="text-gray-500 text-xs">
+          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 border border-gray-200">
+            {countText}
+          </span>
+        </span>
       </button>
 
       {open && !disabled && (
-        <div className="absolute right-0 mt-2 w-[320px] max-w-[90vw] bg-white border rounded shadow-lg p-2 z-[9999]">
+        <div className="absolute left-0 mt-2 w-[360px] max-w-[92vw] bg-white border border-gray-200 rounded-lg shadow-xl p-3 z-[9999]">
           <div className="flex items-center gap-2 mb-2">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar geocerca…"
-              className="border rounded px-2 py-1 text-xs w-full"
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-3">
             <button
               type="button"
-              className="border rounded px-2 py-1 text-[11px] hover:bg-slate-50"
+              className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={setAll}
               title="Seleccionar todas"
             >
-              Todas
+              Mostrar todas
             </button>
             <button
               type="button"
-              className="border rounded px-2 py-1 text-[11px] hover:bg-slate-50"
+              className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={setNone}
               title="Quitar todas"
             >
-              Ninguna
+              Ocultar todas
             </button>
 
-            <div className="ml-auto text-[11px] text-slate-500">
+            <div className="ml-auto text-xs text-gray-500">
               {filtered.length}/{geofences?.length || 0}
             </div>
           </div>
 
-          <div className="max-h-[260px] overflow-auto border rounded">
+          <div className="max-h-[280px] overflow-auto border border-gray-200 rounded-lg">
             {filtered.map((g) => (
               <label
                 key={g.id}
-                className="flex items-center gap-2 px-2 py-1 text-xs hover:bg-slate-50 cursor-pointer"
+                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
               >
                 <input
                   type="checkbox"
+                  className="h-4 w-4"
                   checked={isChecked(g.id)}
                   onChange={() => toggle(g.id)}
                 />
-                <span className="truncate">{g.name || g.id}</span>
-                <span className="ml-auto text-[10px] text-slate-400 font-mono truncate max-w-[120px]">
+                <span className="truncate text-gray-900">{g.name || g.id}</span>
+                <span className="ml-auto text-xs text-gray-400 font-mono truncate max-w-[140px]">
                   {String(g.id).slice(0, 8)}
                 </span>
               </label>
             ))}
 
             {!filtered.length && (
-              <div className="p-3 text-xs text-slate-500">Sin resultados…</div>
+              <div className="p-3 text-sm text-gray-500">Sin resultados…</div>
             )}
           </div>
 
-          <div className="flex justify-end mt-2">
+          <div className="flex justify-end mt-3">
             <button
               type="button"
-              className="border rounded px-2 py-1 text-xs hover:bg-slate-50"
+              className="border border-gray-300 bg-white text-gray-900 rounded-md px-3 py-2 text-sm hover:bg-gray-50
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={() => setOpen(false)}
             >
               Cerrar
@@ -426,7 +439,7 @@ export default function TrackerDashboard() {
 
   const [geofenceRows, setGeofenceRows] = useState([]);
 
-  // ✅ NUEVO: selección multi de geocercas (vacío = "todas", ["__none__"] = ninguna)
+  // ✅ selección multi de geocercas (vacío = "todas", ["__none__"] = ninguna)
   const [selectedGeofenceIds, setSelectedGeofenceIds] = useState([]);
 
   const [geoDbg, setGeoDbg] = useState({
@@ -454,8 +467,6 @@ export default function TrackerDashboard() {
     lastTargetCount: 0,
     assignedGeofenceIds: 0,
     skippedZeroZero: 0,
-
-    // NUEVO diag
     selectedGeofences: 0,
   });
 
@@ -519,9 +530,6 @@ export default function TrackerDashboard() {
     }));
   }, [todayStrUtc]);
 
-  // ✅ Trae SIEMPRE geojson canónico desde vista.
-  //    1) Intenta v_geofences_ui
-  //    2) Si falla, cae a v_geocercas_tracker_ui
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
@@ -537,10 +545,10 @@ export default function TrackerDashboard() {
       return;
     }
 
-    // --- intento #1
     let data = null;
     let error = null;
 
+    // intento #1
     {
       const res = await supabase
         .from("v_geofences_ui")
@@ -552,7 +560,7 @@ export default function TrackerDashboard() {
       error = res.error;
     }
 
-    // --- fallback #2
+    // fallback #2
     if (error) {
       const res2 = await supabase
         .from("v_geocercas_tracker_ui")
@@ -602,14 +610,14 @@ export default function TrackerDashboard() {
 
     setGeofenceRows(normalized);
 
-    // ✅ si había selección previa, la “recortamos” a las que aún existen (y si era NONE, se queda NONE)
+    // recortar selección previa
     setSelectedGeofenceIds((prev) => {
       const arr = Array.isArray(prev) ? prev.map(String) : [];
       if (arr.length === 1 && arr[0] === "__none__") return ["__none__"];
       if (arr.length === 0) return []; // "todas"
       const allowed = new Set(normalized.map((g) => String(g.id)));
       const next = arr.filter((id) => allowed.has(String(id)));
-      return next.length ? next : []; // si quedó vacío, volvemos a "todas"
+      return next.length ? next : [];
     });
 
     setDiag((d) => ({
@@ -765,19 +773,13 @@ export default function TrackerDashboard() {
     });
   }, [assignmentTrackers, personalByUserId]);
 
-  // ✅ Aplicar filtro de geocercas seleccionadas
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
     if (!all.length) return [];
-
-    // modo none
     if (Array.isArray(selectedGeofenceIds) && selectedGeofenceIds.length === 1 && selectedGeofenceIds[0] === "__none__") {
       return [];
     }
-
-    // vacío = todas
     if (!selectedGeofenceIds?.length) return all;
-
     const set = new Set(selectedGeofenceIds.map(String));
     return all.filter((g) => set.has(String(g.id)));
   }, [geofenceRows, selectedGeofenceIds]);
@@ -813,197 +815,255 @@ export default function TrackerDashboard() {
     return map;
   }, [positions]);
 
+  const Badge = ({ children }) => (
+    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">
+      {children}
+    </span>
+  );
+
   return (
-    <div className="p-3 md:p-6 space-y-3">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div>
-          <h1 className="text-xl md:text-2xl font-semibold">Tracker Dashboard</h1>
-          <div className="text-[11px] text-slate-500">
-            Org: <span className="font-mono">{String(orgId || "—")}</span>
+    <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+      <div className="px-3 md:px-6 py-4">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+            <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600">
+              <span>
+                Org: <span className="font-mono text-gray-800">{String(orgId || "—")}</span>
+              </span>
+              <Badge>geocercas: {diag.geofencesFound}</Badge>
+              <Badge>polys: {diag.geofencePolys}</Badge>
+              <Badge>posiciones: {diag.positionsFound}</Badge>
+              <Badge>seleccionadas: {diag.selectedGeofences}</Badge>
+            </div>
           </div>
-          <div className="text-[11px] text-slate-500">
-            Bounds geocerca: <span className="font-mono">{geofenceBoundsText}</span>
-          </div>
-          <div className="text-[11px] text-slate-500">
-            Viewport mapa: <span className="font-mono">{viewportText}</span> | intersects:{" "}
-            <span className="font-mono">{intersectsText}</span>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
-          <label className="text-xs flex items-center gap-2">
-            <span className="font-medium">Ventana:</span>
-            <select className="border rounded px-2 py-1 text-xs" value={timeWindowId} onChange={(e) => setTimeWindowId(e.target.value)}>
-              {TIME_WINDOWS.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {tOr(w.labelKey, w.fallback)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-xs flex items-center gap-2">
-            <span className="font-medium">Tracker:</span>
-            <select className="border rounded px-2 py-1 text-xs min-w-[180px]" value={selectedTrackerId} onChange={(e) => setSelectedTrackerId(e.target.value)}>
-              <option value="all">Todos</option>
-              {trackersUi.map((x) => (
-                <option key={x.user_id} value={x.user_id}>
-                  {x.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {/* ✅ NUEVO: droplist multi geocercas */}
-          <MultiGeofenceSelect
-            geofences={geofenceRows}
-            selectedIds={selectedGeofenceIds}
-            setSelectedIds={setSelectedGeofenceIds}
-            disabled={!geofenceRows?.length}
-          />
-
-          <button
-            type="button"
-            onClick={() => fetchPositions(orgId, { showSpinner: true })}
-            className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
-            disabled={loading}
-          >
-            {loading ? "Cargando…" : "Actualizar"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setFitSignal((x) => x + 1)}
-            className="border rounded px-3 py-2 text-xs bg-white hover:bg-slate-50"
-            disabled={geofencePolygons.length === 0}
-            title={geofencePolygons.length === 0 ? "No hay geocercas seleccionadas para centrar" : "Centrar geocerca(s) seleccionada(s)"}
-          >
-            Centrar geocerca
-          </button>
-        </div>
-      </div>
-
-      {errorMsg && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded text-sm">
-          {errorMsg}
-        </div>
-      )}
-
-      <div className="rounded border bg-white p-3 text-xs grid grid-cols-2 md:grid-cols-6 gap-2">
-        <div><b>assignmentsRows</b>: {diag.assignmentsRows}</div>
-        <div><b>trackersFound</b>: {diag.trackersFound}</div>
-        <div><b>positionsFound</b>: {diag.positionsFound}</div>
-        <div><b>geofencesFound</b>: {diag.geofencesFound}</div>
-        <div><b>geofencePolys</b>: {diag.geofencePolys}</div>
-        <div><b>assignedGeofenceIds</b>: {diag.assignedGeofenceIds}</div>
-
-        <div><b>selectedGeofences</b>: {diag.selectedGeofences}</div>
-
-        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>fromIso</b>: {diag.lastFromIso || "—"}
-        </div>
-
-        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>assignErr</b>: {diag.lastAssignmentsError || "—"} | <b>geoErr</b>: {diag.lastGeofencesError || "—"} | <b>posErr</b>: {diag.lastPositionsError || "—"}
-        </div>
-
-        <div className="col-span-2 md:col-span-6 text-[11px] text-slate-500">
-          <b>geoDbg</b>: rows={geoDbg.rows} geom_type={String(geoDbg.geomType)} geojson_type={String(geoDbg.firstType)} polys(first)={geoDbg.polysComputed} | <b>skippedZeroZero</b>: {diag.skippedZeroZero}
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-white overflow-hidden" style={{ height: 520, minHeight: 420 }}>
-        <MapContainer
-          center={mapCenter}
-          zoom={12}
-          style={{ height: "100%", width: "100%" }}
-          scrollWheelZoom
-          whenCreated={(map) => {
-            mapRef.current = map;
-            try { map.invalidateSize(); } catch {}
-          }}
-          whenReady={() => {
-            try { mapRef.current?.invalidateSize?.(); } catch {}
-          }}
-        >
-          <MapDiagnostics setDiag={setDiag} />
-
-          <FitIfOutOfView
-            geofencePolygons={geofencePolygons}
-            fitSignal={fitSignal}
-            onBoundsComputed={(b) => {
-              try {
-                const sw = b.getSouthWest();
-                const ne = b.getNorthEast();
-                setGeofenceBoundsText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
-
-                const v = mapRef.current?.getBounds?.();
-                if (v?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
-              } catch {
-                setGeofenceBoundsText("—");
-              }
-            }}
-            onViewportComputed={(v) => {
-              try {
-                const sw = v.getSouthWest();
-                const ne = v.getNorthEast();
-                setViewportText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
-
-                const all = [];
-                geofencePolygons.forEach((g) => (g.positions || []).forEach((p) => all.push(p)));
-                if (all.length >= 3) {
-                  const b = L.latLngBounds(all);
-                  if (b?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
-                }
-              } catch {
-                setViewportText("—");
-              }
-            }}
-          />
-
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
-          />
-
-          {geofencePolygons.map((g) => (
-            <Polygon
-              key={`${g.geofenceId}-${g.idx}`}
-              positions={g.positions}
-              pathOptions={{ color: "#2563eb", weight: 4, opacity: 1, fillOpacity: 0.25 }}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => fetchPositions(orgId, { showSpinner: true })}
+              className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium
+                         hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              disabled={loading}
             >
-              <Tooltip sticky>{g.name}</Tooltip>
-            </Polygon>
-          ))}
+              {loading ? "Cargando…" : "Actualizar"}
+            </button>
 
-          {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
-            const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
-            const chron = [...pts].reverse();
-            const latlngs = chron.map((p) => [p.lat, p.lng]).filter(Boolean);
-            const latest = pts[0];
-            if (!latest) return null;
+            <button
+              type="button"
+              onClick={() => setFitSignal((x) => x + 1)}
+              className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
+                         border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              disabled={geofencePolygons.length === 0}
+              title={geofencePolygons.length === 0 ? "No hay geocercas seleccionadas para centrar" : "Centrar geocerca(s) seleccionada(s)"}
+            >
+              Centrar geocerca
+            </button>
+          </div>
+        </div>
 
-            return (
-              <React.Fragment key={trackerId}>
-                {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
-                <CircleMarker
-                  center={[latest.lat, latest.lng]}
-                  radius={7}
-                  pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
+        {errorMsg && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Layout: Sidebar + Map */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Sidebar */}
+          <aside className="lg:col-span-4 xl:col-span-3">
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Filtros</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Selecciona ventana, tracker y geocercas a mostrar.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-900 mb-1">Ventana</span>
+                  <select
+                    className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={timeWindowId}
+                    onChange={(e) => setTimeWindowId(e.target.value)}
+                  >
+                    {TIME_WINDOWS.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {tOr(w.labelKey, w.fallback)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-900 mb-1">Tracker</span>
+                  <select
+                    className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={selectedTrackerId}
+                    onChange={(e) => setSelectedTrackerId(e.target.value)}
+                  >
+                    <option value="all">Todos</option>
+                    {trackersUi.map((x) => (
+                      <option key={x.user_id} value={x.user_id}>
+                        {x.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div>
+                  <span className="block text-sm font-medium text-gray-900 mb-1">Geocercas</span>
+                  <MultiGeofenceSelect
+                    geofences={geofenceRows}
+                    selectedIds={selectedGeofenceIds}
+                    setSelectedIds={setSelectedGeofenceIds}
+                    disabled={!geofenceRows?.length}
+                  />
+                  <div className="mt-2 text-xs text-gray-600">
+                    Tip: “Mostrar todas” y “Ocultar todas” están dentro del selector.
+                  </div>
+                </div>
+              </div>
+
+              {/* Diagnostics (visible pero ordenado) */}
+              <div className="pt-3 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Diagnóstico</h3>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                  <div><b>assignments</b>: {diag.assignmentsRows}</div>
+                  <div><b>trackers</b>: {diag.trackersFound}</div>
+                  <div><b>positions</b>: {diag.positionsFound}</div>
+                  <div><b>geofences</b>: {diag.geofencesFound}</div>
+                  <div><b>polys</b>: {diag.geofencePolys}</div>
+                  <div><b>assignedIds</b>: {diag.assignedGeofenceIds}</div>
+                  <div><b>selected</b>: {diag.selectedGeofences}</div>
+                  <div><b>skipped(0,0)</b>: {diag.skippedZeroZero}</div>
+                </div>
+
+                <div className="mt-2 text-[11px] text-gray-600 space-y-1">
+                  <div><b>fromIso</b>: <span className="font-mono">{diag.lastFromIso || "—"}</span></div>
+                  <div><b>bounds</b>: <span className="font-mono">{geofenceBoundsText}</span></div>
+                  <div><b>viewport</b>: <span className="font-mono">{viewportText}</span> | <b>intersects</b>: <span className="font-mono">{intersectsText}</span></div>
+                  <div><b>geoDbg</b>: rows={geoDbg.rows} geom_type={String(geoDbg.geomType)} geojson_type={String(geoDbg.firstType)} polys(first)={geoDbg.polysComputed}</div>
+                  <div><b>errors</b>: assign={diag.lastAssignmentsError || "—"} | geo={diag.lastGeofencesError || "—"} | pos={diag.lastPositionsError || "—"}</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Map */}
+          <section className="lg:col-span-8 xl:col-span-9">
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div className="text-sm font-semibold text-gray-900">Mapa</div>
+                <div className="text-xs text-gray-600">
+                  {diag.mapCreated ? (
+                    <span className="font-mono">map {diag.w}×{diag.h} z{diag.zoom ?? "—"}</span>
+                  ) : (
+                    <span>Inicializando mapa…</span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ height: 560, minHeight: 440 }} className="relative">
+                <MapContainer
+                  center={mapCenter}
+                  zoom={12}
+                  style={{ height: "100%", width: "100%" }}
+                  scrollWheelZoom
+                  whenCreated={(map) => {
+                    mapRef.current = map;
+                    try { map.invalidateSize(); } catch {}
+                  }}
+                  whenReady={() => {
+                    try { mapRef.current?.invalidateSize?.(); } catch {}
+                  }}
                 >
-                  <Tooltip direction="top">
-                    <div className="text-xs">
-                      <div><b>Tracker</b>: {trackerId}</div>
-                      <div><b>Hora</b>: {formatTime(latest.recorded_at)}</div>
-                      <div><b>Lat</b>: {latest.lat.toFixed(6)}</div>
-                      <div><b>Lng</b>: {latest.lng.toFixed(6)}</div>
-                    </div>
-                  </Tooltip>
-                </CircleMarker>
-              </React.Fragment>
-            );
-          })}
-        </MapContainer>
+                  <MapDiagnostics setDiag={setDiag} />
+
+                  <FitIfOutOfView
+                    geofencePolygons={geofencePolygons}
+                    fitSignal={fitSignal}
+                    onBoundsComputed={(b) => {
+                      try {
+                        const sw = b.getSouthWest();
+                        const ne = b.getNorthEast();
+                        setGeofenceBoundsText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
+
+                        const v = mapRef.current?.getBounds?.();
+                        if (v?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
+                      } catch {
+                        setGeofenceBoundsText("—");
+                      }
+                    }}
+                    onViewportComputed={(v) => {
+                      try {
+                        const sw = v.getSouthWest();
+                        const ne = v.getNorthEast();
+                        setViewportText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
+
+                        const all = [];
+                        geofencePolygons.forEach((g) => (g.positions || []).forEach((p) => all.push(p)));
+                        if (all.length >= 3) {
+                          const b = L.latLngBounds(all);
+                          if (b?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
+                        }
+                      } catch {
+                        setViewportText("—");
+                      }
+                    }}
+                  />
+
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
+                  />
+
+                  {geofencePolygons.map((g) => (
+                    <Polygon
+                      key={`${g.geofenceId}-${g.idx}`}
+                      positions={g.positions}
+                      pathOptions={{ color: "#2563eb", weight: 4, opacity: 1, fillOpacity: 0.18 }}
+                    >
+                      <Tooltip sticky>{g.name}</Tooltip>
+                    </Polygon>
+                  ))}
+
+                  {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
+                    const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
+                    const chron = [...pts].reverse();
+                    const latlngs = chron.map((p) => [p.lat, p.lng]).filter(Boolean);
+                    const latest = pts[0];
+                    if (!latest) return null;
+
+                    return (
+                      <React.Fragment key={trackerId}>
+                        {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
+                        <CircleMarker
+                          center={[latest.lat, latest.lng]}
+                          radius={7}
+                          pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
+                        >
+                          <Tooltip direction="top">
+                            <div className="text-xs">
+                              <div><b>Tracker</b>: {trackerId}</div>
+                              <div><b>Hora</b>: {formatTime(latest.recorded_at)}</div>
+                              <div><b>Lat</b>: {latest.lat.toFixed(6)}</div>
+                              <div><b>Lng</b>: {latest.lng.toFixed(6)}</div>
+                            </div>
+                          </Tooltip>
+                        </CircleMarker>
+                      </React.Fragment>
+                    );
+                  })}
+                </MapContainer>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
