@@ -63,13 +63,13 @@ export default function InvitarTracker() {
       setLoadingPeople(true);
       try {
         /**
-         * IMPORTANTÍSIMO:
-         * - NO pedir `is_deleted` en el select
-         * - NO filtrar por `is_deleted` desde el frontend
-         * La vista ya filtra is_deleted=false.
+         * UNIVERSAL/PERMANENTE:
+         * - Consultamos vista neutral: v_org_people_ui_all
+         * - La org se filtra EXPLÍCITAMENTE por orgId (frontend)
+         * - NO dependemos de get_current_org_id() dentro de la vista
          */
         const { data, error } = await supabase
-          .from("v_org_people_ui")
+          .from("v_org_people_ui_all")
           .select("org_people_id, person_id, org_id, nombre, apellido, email, label")
           .eq("org_id", orgId)
           .order("nombre", { ascending: true });
@@ -263,7 +263,11 @@ export default function InvitarTracker() {
         <button
           disabled={!canInvite}
           className={`w-full rounded-xl px-4 py-3 text-base font-semibold text-white
-            ${canInvite ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-300 cursor-not-allowed"}`}
+            ${
+              canInvite
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-slate-300 cursor-not-allowed"
+            }`}
         >
           {sending ? t("inviteTracker.form.buttonSending") : t("inviteTracker.form.buttonSend")}
         </button>
