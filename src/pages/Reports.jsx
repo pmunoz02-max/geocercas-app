@@ -36,7 +36,6 @@ export default function Reports() {
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
 
-  // filtros
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
 
@@ -59,7 +58,6 @@ export default function Reports() {
     [ready, authenticated, currentOrg]
   );
 
-  // ===== UI classnames (canónicas) =====
   const inputBase =
     "block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
     "placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 " +
@@ -94,7 +92,6 @@ export default function Reports() {
     return json;
   }
 
-  // ===== cargar filtros =====
   useEffect(() => {
     if (!canRun) return;
     loadFilters();
@@ -105,7 +102,13 @@ export default function Reports() {
     setLoadingFilters(true);
     setErrorMsg("");
     try {
-      const json = await apiGet("/api/reportes?action=filters");
+      // ✅ mandamos org_id (pero el backend lo valida por memberships)
+      const orgId = currentOrg?.id;
+      const url = orgId
+        ? `/api/reportes?action=filters&org_id=${encodeURIComponent(orgId)}`
+        : "/api/reportes?action=filters";
+
+      const json = await apiGet(url);
       const data = json?.data || {};
       setFilters({
         geocercas: Array.isArray(data.geocercas) ? data.geocercas : [],
@@ -122,7 +125,6 @@ export default function Reports() {
     }
   }
 
-  // ===== generar reporte =====
   async function loadReport() {
     setErrorMsg("");
     setRows([]);
@@ -148,7 +150,6 @@ export default function Reports() {
       if (selectedActivityIds.length) params.set("activity_ids", selectedActivityIds.join(","));
       if (selectedAsignacionIds.length) params.set("asignacion_ids", selectedAsignacionIds.join(","));
 
-      // paging simple (puedes agregar UI después)
       params.set("limit", "500");
       params.set("offset", "0");
 
@@ -162,7 +163,6 @@ export default function Reports() {
     }
   }
 
-  // helpers multiselect
   function onMultiSelectChange(setter) {
     return (e) => {
       const values = Array.from(e.target.selectedOptions).map((o) => o.value);
@@ -177,7 +177,6 @@ export default function Reports() {
     setSelectedAsignacionIds([]);
   }
 
-  // ===== estados globales =====
   if (!ready) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -210,14 +209,15 @@ export default function Reports() {
 
   const filtersDisabled = loadingFilters || loadingReport;
 
-  // ===== render =====
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
         <p className="text-xs text-gray-600">
-          Org actual: <span className="font-medium text-gray-900">{currentOrg?.name || currentOrg?.id}</span>
+          Org actual:{" "}
+          <span className="font-medium text-gray-900">
+            {currentOrg?.name || currentOrg?.id}
+          </span>
         </p>
       </div>
 
@@ -227,16 +227,15 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Layout: Filtros + Resultados */}
       <div className="grid grid-cols-1 gap-6">
-        {/* ===== Filtros ===== */}
         <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">Filtros</h2>
                 <p className="text-xs text-gray-600">
-                  Selecciona rangos y listas. Luego presiona <span className="font-medium text-gray-900">Generar</span>.
+                  Selecciona rangos y listas. Luego presiona{" "}
+                  <span className="font-medium text-gray-900">Generar</span>.
                 </p>
               </div>
 
@@ -263,7 +262,6 @@ export default function Reports() {
           </div>
 
           <div className="p-4 space-y-5">
-            {/* Fecha + acciones */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
               <div className="md:col-span-3">
                 <label className="block text-sm font-medium text-gray-900">Desde</label>
@@ -301,7 +299,6 @@ export default function Reports() {
                 </button>
               </div>
 
-              {/* hint */}
               <div className="md:col-span-12">
                 <div className="text-xs text-gray-600">
                   <span className="font-medium text-gray-900">Tip:</span> En listas multi-select usa{" "}
@@ -311,9 +308,7 @@ export default function Reports() {
               </div>
             </div>
 
-            {/* Multi selects */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Geocercas */}
               <div>
                 <label className="block text-sm font-medium text-gray-900">
                   Geocercas <span className="text-xs font-normal text-gray-600">(multi)</span>
@@ -333,7 +328,6 @@ export default function Reports() {
                 </select>
               </div>
 
-              {/* Personas */}
               <div>
                 <label className="block text-sm font-medium text-gray-900">
                   Personas <span className="text-xs font-normal text-gray-600">(multi)</span>
@@ -356,7 +350,6 @@ export default function Reports() {
                 </select>
               </div>
 
-              {/* Actividades */}
               <div>
                 <label className="block text-sm font-medium text-gray-900">
                   Actividades <span className="text-xs font-normal text-gray-600">(multi)</span>
@@ -377,7 +370,6 @@ export default function Reports() {
                 </select>
               </div>
 
-              {/* Asignaciones */}
               <div>
                 <label className="block text-sm font-medium text-gray-900">
                   Asignaciones <span className="text-xs font-normal text-gray-600">(multi)</span>
@@ -396,15 +388,14 @@ export default function Reports() {
                   ))}
                 </select>
                 <p className="mt-1 text-[11px] text-gray-600">
-                  Nota: si tus asignaciones no tienen <span className="font-medium">personal_id</span>, el cruce con
-                  marcajes puede salir vacío.
+                  Nota: si tus asignaciones no tienen{" "}
+                  <span className="font-medium">personal_id</span>, el cruce con marcajes puede salir vacío.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ===== Resultados ===== */}
         <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -423,9 +414,7 @@ export default function Reports() {
             {loadingReport ? (
               <p className="p-4 text-sm text-gray-700">Cargando…</p>
             ) : rows.length === 0 ? (
-              <p className="p-4 text-sm text-gray-700">
-                No hay datos con los filtros seleccionados.
-              </p>
+              <p className="p-4 text-sm text-gray-700">No hay datos con los filtros seleccionados.</p>
             ) : (
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-gray-900">
