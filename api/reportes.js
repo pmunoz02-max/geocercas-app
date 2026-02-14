@@ -58,6 +58,20 @@ function normalizeOffset(v) {
   return Math.floor(n);
 }
 
+// Resuelve org activa desde el servidor (canónico)
+async function resolveCurrentOrgId(supabase) {
+  // Preferimos get_current_org_id()
+  const a = await supabase.rpc("get_current_org_id");
+  if (!a.error && a.data) return a.data;
+
+  // Fallback a current_org_id() si existe
+  const b = await supabase.rpc("current_org_id");
+  if (!b.error && b.data) return b.data;
+
+  // Si ambas fallan, devolvemos null (y el handler dará error claro)
+  return null;
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "GET") {
@@ -113,26 +127,44 @@ export default async function handler(req, res) {
     // action=filters
     // ======================
     if (action === "filters") {
+      // ✅ org activa CANÓNICA (no viene del cliente)
+      const orgId = await resolveCurrentOrgId(supabase);
+      if (!orgId) {
+        return res.status(401).json({
+          error: "No se pudo resolver org activa (get_current_org_id/current_org_id).",
+          hint: "Revisa que el JWT/cookie tg_at contenga contexto de org activa (canonical memberships).",
+        });
+      }
+
       const [geocercasRes, personasRes, activitiesRes, asignacionesRes] =
         await Promise.all([
-          supabase.from("geocercas").select("id, nombre").order("nombre", { ascending: true }),
+          supabase
+            .from("geocercas")
+            .select("id, nombre")
+            .eq("org_id", orgId)
+            .order("nombre", { ascending: true }),
+
           supabase
             .from("personal")
             .select("id, nombre, apellido, email, email_norm, activo, vigente, is_deleted")
+            .eq("org_id", orgId)
             .order("nombre", { ascending: true }),
+
           supabase
             .from("activities")
             .select("id, name, active, hourly_rate, currency_code")
+            .eq("org_id", orgId)
             .order("name", { ascending: true }),
+
           supabase
             .from("asignaciones")
             .select(
               "id, status, estado, geocerca_id, personal_id, activity_id, start_time, end_time, period, is_deleted"
             )
+            .eq("org_id", orgId)
             .order("created_at", { ascending: false }),
         ]);
 
-      // si alguno falla, devolvemos error claro
       const errors = [];
       if (geocercasRes.error) errors.push({ source: "geocercas", error: geocercasRes.error.message });
       if (personasRes.error) errors.push({ source: "personal", error: personasRes.error.message });
@@ -151,6 +183,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         data: { geocercas, personas, activities, asignaciones },
+        meta: { org_id: orgId }, // útil para debug en preview
       });
     }
 
@@ -175,16 +208,15 @@ export default async function handler(req, res) {
       const limit = normalizeLimit(req.query.limit, 200, 1000);
       const offset = normalizeOffset(req.query.offset);
 
+      // La vista ya debería aplicar get_current_org_id() internamente (canonical)
       let query = supabase
         .from("v_reportes_diario_con_asignacion")
         .select("*")
         .order("work_day", { ascending: false });
 
-      // work_day es DATE en la vista
       if (start) query = query.gte("work_day", start);
       if (end) query = query.lte("work_day", end);
 
-      // filtros múltiples
       if (geocercaIds.length) query = query.in("geocerca_id", geocercaIds);
       if (geocercaNames.length) query = query.in("geofence_name", geocercaNames);
       if (personalIds.length) query = query.in("personal_id", personalIds);
@@ -192,7 +224,6 @@ export default async function handler(req, res) {
       if (activityIds.length) query = query.in("activity_id", activityIds);
       if (asignacionIds.length) query = query.in("asignacion_id", asignacionIds);
 
-      // paginación
       query = query.range(offset, offset + limit - 1);
 
       const { data, error } = await query;
