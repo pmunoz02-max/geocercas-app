@@ -1,4 +1,3 @@
-// src/pages/Login.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -79,8 +78,8 @@ export default function Login() {
     return url.toString();
   }, [siteUrl, nextInput]);
 
-  async function bootstrapCookie(accessToken: string) {
-    // Crea cookie tg_at en backend (sesión real API-first)
+  async function bootstrapCookie(accessToken: string, refreshToken: string, expiresIn?: number) {
+    // ✅ Crea cookies tg_at + tg_rt en backend (sesión API-first)
     const res = await fetch("/api/auth/bootstrap", {
       method: "POST",
       headers: {
@@ -88,7 +87,10 @@ export default function Login() {
         "Content-Type": "application/json",
       },
       credentials: "include",
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+        expires_in: typeof expiresIn === "number" ? expiresIn : undefined,
+      }),
     });
 
     if (!res.ok) {
@@ -124,7 +126,7 @@ export default function Login() {
         return;
       }
 
-      // 2) PASSWORD  ✅ AHORA CON BOOTSTRAP (cookie tg_at)
+      // 2) PASSWORD  ✅ AHORA CON BOOTSTRAP (cookie tg_at + tg_rt)
       if (mode === "password") {
         if (!password || password.length < 6) {
           setErr("Ingresa tu contraseña (mínimo 6 caracteres).");
@@ -137,16 +139,17 @@ export default function Login() {
         });
         if (error) throw error;
 
-        const accessToken =
-          data?.session?.access_token ||
-          (await supabase.auth.getSession()).data.session?.access_token;
+        const session = data?.session || (await supabase.auth.getSession()).data.session;
 
-        if (!accessToken) {
-          throw new Error("No se pudo obtener access_token de sesión.");
-        }
+        const accessToken = session?.access_token || "";
+        const refreshToken = session?.refresh_token || "";
+        const expiresIn = typeof session?.expires_in === "number" ? session.expires_in : undefined;
 
-        // ✅ crea cookie tg_at en backend
-        await bootstrapCookie(accessToken);
+        if (!accessToken) throw new Error("No se pudo obtener access_token de sesión.");
+        if (!refreshToken) throw new Error("No se pudo obtener refresh_token de sesión.");
+
+        // ✅ crea cookies tg_at + tg_rt en backend
+        await bootstrapCookie(accessToken, refreshToken, expiresIn);
 
         setMsg("✅ Sesión iniciada. Entrando...");
         navigate(safeNextPath(nextInput), { replace: true });

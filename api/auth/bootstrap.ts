@@ -1,15 +1,16 @@
 // api/auth/bootstrap.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+const BUILD_TAG = "auth-bootstrap-v2-set-tg_at-tg_rt-20260214";
+
 function getBearer(req: VercelRequest): string {
   const h = req.headers["authorization"] || req.headers["Authorization"];
   if (!h || Array.isArray(h)) return "";
-  const m = h.match(/^Bearer\s+(.+)$/i);
+  const m = String(h).match(/^Bearer\s+(.+)$/i);
   return m?.[1]?.trim() ?? "";
 }
 
 function parseJsonBody(req: VercelRequest): any {
-  // Vercel node api a veces ya parsea req.body si viene JSON
   if (!req.body) return {};
   if (typeof req.body === "object") return req.body;
   if (typeof req.body === "string") {
@@ -23,15 +24,14 @@ function parseJsonBody(req: VercelRequest): any {
 }
 
 function buildCookie(name: string, value: string, maxAgeSeconds: number): string {
-  // Cookie robusta para HTTPS (preview.tugeocercas.com)
-  // SameSite=Lax permite navegación normal y es lo más compatible para magic links.
+  // Host-only cookie (NO Domain=) => evita mezclar preview/prod
   const parts = [
-    `${name}=${encodeURIComponent(value)}`,
+    `${name}=${encodeURIComponent(value ?? "")}`,
     `Path=/`,
     `HttpOnly`,
     `Secure`,
     `SameSite=Lax`,
-    `Max-Age=${maxAgeSeconds}`,
+    `Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}`,
   ];
   return parts.join("; ");
 }
@@ -39,33 +39,50 @@ function buildCookie(name: string, value: string, maxAgeSeconds: number): string
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== "POST") {
-      res.status(405).json({ ok: false, error: "method_not_allowed" });
+      res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "method_not_allowed" });
       return;
     }
 
     const bearer = getBearer(req);
     const body = parseJsonBody(req);
-    const token = bearer || (body?.access_token as string) || "";
 
-    if (!token) {
-      res.status(400).json({ ok: false, error: "missing_access_token" });
+    // Prefer Authorization Bearer as access_token source
+    const accessToken = bearer || String(body?.access_token || "").trim();
+    const refreshToken = String(body?.refresh_token || "").trim();
+
+    if (!accessToken) {
+      res.status(400).json({ ok: false, build_tag: BUILD_TAG, error: "missing_access_token" });
       return;
     }
 
-    // 30 días (ajústalo si quieres)
-    const maxAge = 60 * 60 * 24 * 30;
+    // TTLs (permanente/universal)
+    // access: 1 hora por defecto (si no te pasan expires_in)
+    const accessMaxAge = Number(body?.expires_in || 3600);
+    // refresh: 30 días
+    const refreshMaxAge = 60 * 60 * 24 * 30;
 
-    // Set cookie tg_at
-    res.setHeader("Set-Cookie", buildCookie("tg_at", token, maxAge));
+    const cookies: string[] = [];
+    cookies.push(buildCookie("tg_at", accessToken, accessMaxAge));
 
-    // Opcional: evitar cache
+    // ✅ Set tg_rt if provided (required for server-side refresh)
+    if (refreshToken) {
+      cookies.push(buildCookie("tg_rt", refreshToken, refreshMaxAge));
+    }
+
+    res.setHeader("Set-Cookie", cookies);
     res.setHeader("Cache-Control", "no-store");
 
-    res.status(200).json({ ok: true });
+    res.status(200).json({
+      ok: true,
+      build_tag: BUILD_TAG,
+      has_tg_rt: Boolean(refreshToken),
+    });
   } catch (e: any) {
-    // Nunca reventar — devolver error controlado
-    res
-      .status(500)
-      .json({ ok: false, error: "bootstrap_internal_error", detail: e?.message || String(e) });
+    res.status(500).json({
+      ok: false,
+      build_tag: BUILD_TAG,
+      error: "bootstrap_internal_error",
+      detail: e?.message || String(e),
+    });
   }
 }
