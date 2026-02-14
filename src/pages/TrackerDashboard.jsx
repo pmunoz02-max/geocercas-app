@@ -39,11 +39,7 @@ function isValidLatLng(lat, lng) {
 
 function formatTime(dtString) {
   if (!dtString) return "-";
-  try {
-    return new Date(dtString).toLocaleTimeString();
-  } catch {
-    return dtString;
-  }
+  try { return new Date(dtString).toLocaleTimeString(); } catch { return dtString; }
 }
 
 function resolveTrackerAuthIdFromPersonal(row) {
@@ -114,7 +110,6 @@ function boundsFromPolys(polys) {
   }
 }
 
-// Heurística SOLO para descartar basura 0,0
 function isProbablyZeroZeroBounds(b) {
   try {
     if (!b?.isValid?.()) return false;
@@ -188,17 +183,12 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
   const bounds = useMemo(() => {
     try {
       const pts = [];
-
-      // polígonos
       (layerItems || []).forEach((it) => {
-        if (it.type === "polygon") {
-          (it.positions || []).forEach((p) => pts.push(p));
-        } else if (it.type === "circle") {
-          const c = it.center;
-          if (Array.isArray(c) && c.length >= 2) pts.push(c);
+        if (it.type === "polygon") (it.positions || []).forEach((p) => pts.push(p));
+        else if (it.type === "circle") {
+          if (Array.isArray(it.center) && it.center.length >= 2) pts.push(it.center);
         }
       });
-
       if (pts.length < 1) return null;
       const b = L.latLngBounds(pts);
       return b.isValid() ? b : null;
@@ -225,13 +215,6 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
       if (doFit) {
         map.fitBounds(bounds, { padding: [24, 24] });
         lastFitSignalRef.current = fitSignal;
-
-        setTimeout(() => {
-          try {
-            const v2 = map.getBounds?.();
-            if (v2?.isValid?.()) onViewportComputed?.(v2);
-          } catch {}
-        }, 50);
       }
     } catch {}
   }, [map, bounds, fitSignal, onBoundsComputed, onViewportComputed]);
@@ -239,9 +222,9 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
   return null;
 }
 
-/** =========================
- * MultiSelect Geocercas UI
- * ========================= */
+// -----------------------
+// MultiSelect Geocercas UI
+// -----------------------
 function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -260,9 +243,7 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
     });
   }, [geofences, q]);
 
-  const isNoneMode = useMemo(() => {
-    return Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__";
-  }, [selectedIds]);
+  const isNoneMode = useMemo(() => Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__", [selectedIds]);
 
   const effectiveSelectedCount = useMemo(() => {
     if (!geofences?.length) return 0;
@@ -282,9 +263,7 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
     setSelectedIds((prev) => {
       const arr = Array.isArray(prev) ? prev.map(String) : [];
 
-      if (arr.length === 1 && arr[0] === "__none__") {
-        return [sid];
-      }
+      if (arr.length === 1 && arr[0] === "__none__") return [sid];
 
       if (arr.length === 0) {
         const all = (geofences || []).map((g) => String(g.id));
@@ -343,7 +322,6 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
         ].join(" ")}
         onClick={() => !disabled && setOpen((v) => !v)}
         disabled={disabled}
-        title={disabled ? "No hay geocercas" : "Seleccionar geocercas"}
       >
         <span className="truncate">{label}</span>
         <span className="text-gray-500 text-xs">
@@ -371,7 +349,6 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
               className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={setAll}
-              title="Seleccionar todas"
             >
               Mostrar todas
             </button>
@@ -380,7 +357,6 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
               className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={setNone}
-              title="Quitar todas"
             >
               Ocultar todas
             </button>
@@ -392,26 +368,12 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
 
           <div className="max-h-[280px] overflow-auto border border-gray-200 rounded-lg">
             {filtered.map((g) => (
-              <label
-                key={g.id}
-                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-              >
-                <input
-                  type="checkbox"
-                  className="h-4 w-4"
-                  checked={isChecked(g.id)}
-                  onChange={() => toggle(g.id)}
-                />
+              <label key={g.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+                <input type="checkbox" className="h-4 w-4" checked={isChecked(g.id)} onChange={() => toggle(g.id)} />
                 <span className="truncate text-gray-900">{g.name || g.id}</span>
-                <span className="ml-auto text-xs text-gray-400 font-mono truncate max-w-[140px]">
-                  {String(g.id).slice(0, 8)}
-                </span>
               </label>
             ))}
-
-            {!filtered.length && (
-              <div className="p-3 text-sm text-gray-500">Sin resultados…</div>
-            )}
+            {!filtered.length && <div className="p-3 text-sm text-gray-500">Sin resultados…</div>}
           </div>
 
           <div className="flex justify-end mt-3">
@@ -437,25 +399,12 @@ function inferCircleFromRow(row) {
   const geo = parseMaybeJson(row?.geojson);
   const gt = String(row?.geom_type || "").toLowerCase();
 
-  // radius posibles
-  const r =
-    toNum(row?.radius_m) ??
-    toNum(row?.radius) ??
-    toNum(row?.radio_m) ??
-    toNum(row?.radio) ??
-    null;
+  const r = toNum(row?.radius_m) ?? toNum(row?.radius) ?? toNum(row?.radio_m) ?? toNum(row?.radio) ?? null;
 
-  // center posibles
   let center = null;
+  if (geo?.type === "Feature" && geo?.geometry?.type === "Point") center = toLatLngStrict(geo.geometry.coordinates);
+  else if (geo?.type === "Point") center = toLatLngStrict(geo.coordinates);
 
-  // 1) GeoJSON Point
-  if (geo?.type === "Feature" && geo?.geometry?.type === "Point") {
-    center = toLatLngStrict(geo.geometry.coordinates);
-  } else if (geo?.type === "Point") {
-    center = toLatLngStrict(geo.coordinates);
-  }
-
-  // 2) columnas center_lat/center_lng
   if (!center) {
     const lat = toNum(row?.center_lat ?? row?.lat ?? row?.latitude);
     const lng = toNum(row?.center_lng ?? row?.lng ?? row?.longitude);
@@ -471,46 +420,17 @@ function inferCircleFromRow(row) {
 function buildGeofenceLayerItems(geofenceRows) {
   const items = [];
   for (const g of geofenceRows || []) {
-    const circle = inferCircleFromRow(g);
-
-    // Polígonos (Polygon / MultiPolygon)
     const polys = normalizeGeoJSONToPolygons(g.geojson);
-    polys.forEach((p, idx) => {
-      items.push({
-        type: "polygon",
-        geofenceId: g.id,
-        name: g.name || g.id,
-        positions: p,
-        idx,
-      });
-    });
+    polys.forEach((p, idx) => items.push({ type: "polygon", geofenceId: g.id, name: g.name || g.id, positions: p, idx }));
 
-    // Círculos
+    const circle = inferCircleFromRow(g);
     if (circle) {
-      // filtro suave de basura 0,0 para círculos pequeños
       const nearZero = Math.abs(circle.center[0]) < 0.01 && Math.abs(circle.center[1]) < 0.01;
-      const tiny = circle.radius_m < 300; // si es muy pequeño y está en 0,0, casi seguro basura
-      if (!(nearZero && tiny)) {
-        items.push({
-          type: "circle",
-          geofenceId: g.id,
-          name: g.name || g.id,
-          center: circle.center,
-          radius_m: circle.radius_m,
-          idx: "c",
-        });
-      }
+      const tiny = circle.radius_m < 300;
+      if (!(nearZero && tiny)) items.push({ type: "circle", geofenceId: g.id, name: g.name || g.id, center: circle.center, radius_m: circle.radius_m, idx: "c" });
     }
   }
   return items;
-}
-
-async function fetchJson(url, opts = {}) {
-  const res = await fetch(url, { credentials: "include", ...opts });
-  const raw = await res.text();
-  let data = null;
-  try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
-  return { ok: res.ok, status: res.status, data, raw };
 }
 
 export default function TrackerDashboard() {
@@ -535,18 +455,10 @@ export default function TrackerDashboard() {
 
   const [geofenceRows, setGeofenceRows] = useState([]);
 
-  // selección multi de geocercas (vacío = "todas", ["__none__"] = ninguna)
   const [selectedGeofenceIds, setSelectedGeofenceIds] = useState([]);
 
-  const [geoDbg, setGeoDbg] = useState({
-    rows: 0,
-    firstType: null,
-    geomType: null,
-    parseOk: null,
-    polysComputed: 0,
-    circlesComputed: 0,
-    source: "—",
-  });
+  // ✅ NUEVO: permitir “mostrar todas” cuando no hay assignments
+  const [showAllGeofences, setShowAllGeofences] = useState(false);
 
   const [diag, setDiag] = useState({
     mapCreated: false,
@@ -633,143 +545,71 @@ export default function TrackerDashboard() {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
 
-    const geofenceIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
+    const assignedIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
 
-    if (!geofenceIds.length) {
+    // ✅ caso: NO hay assignments -> si showAllGeofences, cargar todas las geocercas de la org
+    const shouldLoadAll = assignedIds.length === 0 && showAllGeofences;
+
+    if (assignedIds.length === 0 && !shouldLoadAll) {
       setGeofenceRows([]);
-      setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: null, polysComputed: 0, circlesComputed: 0, source: "—" });
-      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, geofenceCircles: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
       setSelectedGeofenceIds([]);
-      setErrorMsg("No hay geocercas asignadas (tracker_assignments.geofence_id).");
+      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, geofenceCircles: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
+      setErrorMsg("No hay asignaciones activas en tracker_assignments para esta org.");
       return;
     }
 
-    let rows = [];
-    let source = "—";
+    const q = supabase
+      .from("geocercas")
+      .select("id, org_id, nombre, name, geojson, geom_type, radius_m, center_lat, center_lng")
+      .eq("org_id", currentOrgId);
 
-    // Intento #1: endpoint canónico
-    try {
-      const q = encodeURIComponent(geofenceIds.join(","));
-      const r1 = await fetchJson(`/api/geocercas?ids=${q}`);
-      if (r1.ok && Array.isArray(r1.data)) {
-        rows = r1.data;
-        source = "/api/geocercas";
-      } else if (r1.ok && Array.isArray(r1.data?.rows)) {
-        rows = r1.data.rows;
-        source = "/api/geocercas";
-      }
-    } catch {}
+    const { data, error } = shouldLoadAll ? await q : await q.in("id", assignedIds);
 
-    // Intento #2: supabase directo (tabla real)
-    if (!rows.length) {
-      const { data, error } = await supabase
-        .from("geocercas")
-        .select("id, org_id, nombre, name, geojson, geom_type, radius_m, radius, radio_m, radio, center_lat, center_lng, lat, lng, latitude, longitude")
-        .eq("org_id", currentOrgId)
-        .in("id", geofenceIds);
-
-      if (error) {
-        setDiag((d) => ({
-          ...d,
-          lastGeofencesError: error.message || String(error),
-          geofencesFound: 0,
-          geofencePolys: 0,
-          geofenceCircles: 0,
-          skippedZeroZero: 0,
-          selectedGeofences: 0,
-        }));
-        setGeofenceRows([]);
-        setGeoDbg({ rows: 0, firstType: null, geomType: null, parseOk: false, polysComputed: 0, circlesComputed: 0, source: "geocercas(error)" });
-        setErrorMsg("Error al cargar geocercas (tabla geocercas).");
-        return;
-      }
-
-      rows = Array.isArray(data) ? data : [];
-      source = "geocercas";
+    if (error) {
+      setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error), geofencesFound: 0, geofencePolys: 0, geofenceCircles: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
+      setGeofenceRows([]);
+      setErrorMsg("Error al cargar geocercas (geocercas).");
+      return;
     }
 
-    // Normalización UI
-    const normalizedRaw = rows.map((r) => ({
+    const rows = Array.isArray(data) ? data : [];
+    let skipped = 0;
+
+    const normalized = rows.map((r) => ({
       id: r.id,
       org_id: r.org_id,
       name: r.name || r.nombre || r.id,
       geojson: r.geojson,
       geom_type: r.geom_type || null,
-
-      // opcional para círculos
-      radius_m: r.radius_m ?? r.radius ?? r.radio_m ?? r.radio ?? null,
-      center_lat: r.center_lat ?? r.lat ?? r.latitude ?? null,
-      center_lng: r.center_lng ?? r.lng ?? r.longitude ?? null,
-    }));
-
-    // Filtra SOLO polígonos corruptos 0,0 (no tumba círculos)
-    let skipped = 0;
-    const filtered = normalizedRaw.filter((r) => {
+      radius_m: r.radius_m ?? null,
+      center_lat: r.center_lat ?? null,
+      center_lng: r.center_lng ?? null,
+    })).filter((r) => {
       const polys = normalizeGeoJSONToPolygons(r.geojson);
-      if (!polys.length) return true; // puede ser círculo, lo dejamos pasar
+      if (!polys.length) return true; // puede ser círculo
       const b = boundsFromPolys(polys);
       const bad = isProbablyZeroZeroBounds(b);
       if (bad) skipped += 1;
       return !bad;
     });
 
-    const polysCount = filtered.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
-    const circlesCount = filtered.reduce((acc, g) => acc + (inferCircleFromRow(g) ? 1 : 0), 0);
+    const polysCount = normalized.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
+    const circlesCount = normalized.reduce((acc, g) => acc + (inferCircleFromRow(g) ? 1 : 0), 0);
 
-    setGeofenceRows(filtered);
-
-    // recortar selección previa
-    setSelectedGeofenceIds((prev) => {
-      const arr = Array.isArray(prev) ? prev.map(String) : [];
-      if (arr.length === 1 && arr[0] === "__none__") return ["__none__"];
-      if (arr.length === 0) return [];
-      const allowed = new Set(filtered.map((g) => String(g.id)));
-      const next = arr.filter((id) => allowed.has(String(id)));
-      return next.length ? next : [];
-    });
+    setGeofenceRows(normalized);
+    setSelectedGeofenceIds([]); // por simplicidad: “todas”
 
     setDiag((d) => ({
       ...d,
-      geofencesFound: filtered.length,
+      geofencesFound: normalized.length,
       geofencePolys: polysCount,
       geofenceCircles: circlesCount,
       skippedZeroZero: skipped,
     }));
 
-    const first = filtered[0] || null;
-    let firstType = null;
-    let parseOk = null;
-    let firstPolys = 0;
-
-    if (first?.geojson != null) {
-      const obj = parseMaybeJson(first.geojson);
-      if (obj) {
-        firstType = obj?.type ?? null;
-        parseOk = true;
-      } else {
-        parseOk = false;
-      }
-      firstPolys = normalizeGeoJSONToPolygons(first.geojson).length;
-    }
-
-    setGeoDbg({
-      rows: filtered.length,
-      firstType,
-      geomType: first?.geom_type ?? null,
-      parseOk,
-      polysComputed: firstPolys,
-      circlesComputed: inferCircleFromRow(first) ? 1 : 0,
-      source,
-    });
-
-    if (!filtered.length) {
-      setErrorMsg("No hay geocercas visibles: o están inactivas, o solo existe la corrupta (0,0), o no hay asignaciones válidas.");
-      return;
-    }
-
-    setErrorMsg("");
+    setErrorMsg(shouldLoadAll ? "No hay asignaciones: mostrando TODAS las geocercas de la org (modo visual)." : "");
     setFitSignal((x) => x + 1);
-  }, []);
+  }, [showAllGeofences]);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
@@ -831,14 +671,7 @@ export default function TrackerDashboard() {
         .map((r) => {
           const lat = toNum(r.latitude);
           const lng = toNum(r.longitude);
-          return {
-            id: r.id,
-            user_id: r.user_id ? String(r.user_id) : null,
-            lat,
-            lng,
-            recorded_at: r.created_at,
-            _valid: isValidLatLng(lat, lng),
-          };
+          return { id: r.id, user_id: r.user_id ? String(r.user_id) : null, lat, lng, recorded_at: r.created_at, _valid: isValidLatLng(lat, lng) };
         })
         .filter((p) => p._valid);
 
@@ -887,17 +720,14 @@ export default function TrackerDashboard() {
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
     if (!all.length) return [];
-    if (Array.isArray(selectedGeofenceIds) && selectedGeofenceIds.length === 1 && selectedGeofenceIds[0] === "__none__") {
-      return [];
-    }
+    if (Array.isArray(selectedGeofenceIds) && selectedGeofenceIds.length === 1 && selectedGeofenceIds[0] === "__none__") return [];
     if (!selectedGeofenceIds?.length) return all;
     const set = new Set(selectedGeofenceIds.map(String));
     return all.filter((g) => set.has(String(g.id)));
   }, [geofenceRows, selectedGeofenceIds]);
 
   useEffect(() => {
-    const cnt = filteredGeofenceRows.length;
-    setDiag((d) => ({ ...d, selectedGeofences: cnt }));
+    setDiag((d) => ({ ...d, selectedGeofences: filteredGeofenceRows.length }));
   }, [filteredGeofenceRows]);
 
   const layerItems = useMemo(() => buildGeofenceLayerItems(filteredGeofenceRows), [filteredGeofenceRows]);
@@ -905,13 +735,10 @@ export default function TrackerDashboard() {
   const mapCenter = useMemo(() => {
     const last = positions?.[0];
     if (last && isValidLatLng(last.lat, last.lng)) return [last.lat, last.lng];
-
     const poly = layerItems.find((x) => x.type === "polygon" && x.positions?.length)?.positions?.[0];
     if (poly) return poly;
-
     const circ = layerItems.find((x) => x.type === "circle" && Array.isArray(x.center))?.center;
     if (circ) return circ;
-
     return [-0.22985, -78.52495];
   }, [positions, layerItems]);
 
@@ -926,27 +753,22 @@ export default function TrackerDashboard() {
   }, [positions]);
 
   const Badge = ({ children }) => (
-    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">
-      {children}
-    </span>
+    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
   );
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
       <div className="px-3 md:px-6 py-4">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
             <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600">
-              <span>
-                Org: <span className="font-mono text-gray-800">{String(orgId || "—")}</span>
-              </span>
+              <span>Org: <span className="font-mono text-gray-800">{String(orgId || "—")}</span></span>
+              <Badge>assignments: {diag.assignmentsRows}</Badge>
               <Badge>geocercas: {diag.geofencesFound}</Badge>
               <Badge>polys: {diag.geofencePolys}</Badge>
               <Badge>circles: {diag.geofenceCircles}</Badge>
               <Badge>posiciones: {diag.positionsFound}</Badge>
-              <Badge>seleccionadas: {diag.selectedGeofences}</Badge>
             </div>
           </div>
 
@@ -967,10 +789,22 @@ export default function TrackerDashboard() {
               className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
               disabled={layerItems.length === 0}
-              title={layerItems.length === 0 ? "No hay geocercas seleccionadas para centrar" : "Centrar geocerca(s) seleccionada(s)"}
             >
               Centrar geocerca
             </button>
+
+            {/* ✅ botón aparece si NO hay assignments */}
+            {diag.assignmentsRows === 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAllGeofences(true)}
+                className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
+                           border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Si no hay asignaciones activas, permite visualizar todas las geocercas de la org"
+              >
+                Mostrar todas (org)
+              </button>
+            )}
           </div>
         </div>
 
@@ -980,16 +814,12 @@ export default function TrackerDashboard() {
           </div>
         )}
 
-        {/* Layout: Sidebar + Map */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Sidebar */}
           <aside className="lg:col-span-4 xl:col-span-3">
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">Filtros</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Selecciona ventana, tracker y geocercas a mostrar.
-                </p>
+                <p className="text-sm text-gray-600 mt-1">Selecciona ventana, tracker y geocercas a mostrar.</p>
               </div>
 
               <div className="space-y-3">
@@ -1034,13 +864,9 @@ export default function TrackerDashboard() {
                     setSelectedIds={setSelectedGeofenceIds}
                     disabled={!geofenceRows?.length}
                   />
-                  <div className="mt-2 text-xs text-gray-600">
-                    Tip: “Mostrar todas” y “Ocultar todas” están dentro del selector.
-                  </div>
                 </div>
               </div>
 
-              {/* Diagnostics */}
               <div className="pt-3 border-t border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">Diagnóstico</h3>
                 <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
@@ -1052,33 +878,22 @@ export default function TrackerDashboard() {
                   <div><b>circles</b>: {diag.geofenceCircles}</div>
                   <div><b>assignedIds</b>: {diag.assignedGeofenceIds}</div>
                   <div><b>selected</b>: {diag.selectedGeofences}</div>
-                  <div><b>skipped(0,0)</b>: {diag.skippedZeroZero}</div>
                 </div>
 
                 <div className="mt-2 text-[11px] text-gray-600 space-y-1">
-                  <div><b>fromIso</b>: <span className="font-mono">{diag.lastFromIso || "—"}</span></div>
                   <div><b>bounds</b>: <span className="font-mono">{geofenceBoundsText}</span></div>
                   <div><b>viewport</b>: <span className="font-mono">{viewportText}</span> | <b>intersects</b>: <span className="font-mono">{intersectsText}</span></div>
-                  <div>
-                    <b>geoDbg</b>: rows={geoDbg.rows} source={geoDbg.source} geom_type={String(geoDbg.geomType)} geojson_type={String(geoDbg.firstType)} polys(first)={geoDbg.polysComputed} circles(first)={geoDbg.circlesComputed}
-                  </div>
-                  <div><b>errors</b>: assign={diag.lastAssignmentsError || "—"} | geo={diag.lastGeofencesError || "—"} | pos={diag.lastPositionsError || "—"}</div>
                 </div>
               </div>
             </div>
           </aside>
 
-          {/* Map */}
           <section className="lg:col-span-8 xl:col-span-9">
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                 <div className="text-sm font-semibold text-gray-900">Mapa</div>
                 <div className="text-xs text-gray-600">
-                  {diag.mapCreated ? (
-                    <span className="font-mono">map {diag.w}×{diag.h} z{diag.zoom ?? "—"}</span>
-                  ) : (
-                    <span>Inicializando mapa…</span>
-                  )}
+                  {diag.mapCreated ? <span className="font-mono">map {diag.w}×{diag.h} z{diag.zoom ?? "—"}</span> : <span>Inicializando mapa…</span>}
                 </div>
               </div>
 
@@ -1092,9 +907,6 @@ export default function TrackerDashboard() {
                     mapRef.current = map;
                     try { map.invalidateSize(); } catch {}
                   }}
-                  whenReady={() => {
-                    try { mapRef.current?.invalidateSize?.(); } catch {}
-                  }}
                 >
                   <MapDiagnostics setDiag={setDiag} />
 
@@ -1106,21 +918,16 @@ export default function TrackerDashboard() {
                         const sw = b.getSouthWest();
                         const ne = b.getNorthEast();
                         setGeofenceBoundsText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
-
                         const v = mapRef.current?.getBounds?.();
                         if (v?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
-                      } catch {
-                        setGeofenceBoundsText("—");
-                      }
+                      } catch { setGeofenceBoundsText("—"); }
                     }}
                     onViewportComputed={(v) => {
                       try {
                         const sw = v.getSouthWest();
                         const ne = v.getNorthEast();
                         setViewportText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
-                      } catch {
-                        setViewportText("—");
-                      }
+                      } catch { setViewportText("—"); }
                     }}
                   />
 
@@ -1129,7 +936,6 @@ export default function TrackerDashboard() {
                     attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
                   />
 
-                  {/* Geocercas: polígonos + círculos */}
                   {layerItems.map((it) => {
                     if (it.type === "polygon") {
                       return (
@@ -1157,7 +963,6 @@ export default function TrackerDashboard() {
                     return null;
                   })}
 
-                  {/* Trackers */}
                   {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
                     const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
                     const chron = [...pts].reverse();
