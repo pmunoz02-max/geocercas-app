@@ -1,7 +1,7 @@
 // api/geocercas.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "geocercas-api-v9-ctx-org-server-owned";
+const VERSION = "geocercas-api-v10-memberships-canonical";
 
 /* =========================
    Cookies + Headers
@@ -92,7 +92,40 @@ async function readBody(req) {
 }
 
 /* =========================
+   Sanitizers (server-owned)
+========================= */
+
+function stripServerOwned(payload) {
+  const p = payload && typeof payload === "object" ? payload : {};
+  const out = { ...p };
+
+  // server-owned / generated / audit
+  delete out.nombre_ci;
+  delete out.created_at;
+  delete out.updated_at;
+  delete out.deleted_at;
+  delete out.revoked_at;
+  delete out.created_by;
+  delete out.updated_by;
+
+  // multi-tenant / ownership (siempre desde ctx)
+  delete out.org_id;
+  delete out.tenant_id;
+  delete out.user_id;
+  delete out.owner_id;
+  delete out.usuario_id;
+
+  // compat: NO permitir orgId enviado
+  delete out.orgId;
+
+  return out;
+}
+
+/* =========================
    Context Resolver (CANÓNICO)
+   - auth: cookie tg_at
+   - user: supabase auth.getUser() con anon key
+   - org/role: memberships (y opcional user_current_org)
 ========================= */
 
 async function resolveContext(req) {
@@ -124,6 +157,7 @@ async function resolveContext(req) {
     return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
   }
 
+  // Cliente para validar usuario (usa anon + bearer)
   const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -135,53 +169,66 @@ async function resolveContext(req) {
     return { ok: false, status: 401, error: "Invalid session", details: uerr?.message || "No user" };
   }
 
-  let ctx = null;
-  try {
-    const { data, error } = await sbUser.rpc("bootstrap_user_context");
-    if (!error) ctx = Array.isArray(data) ? data[0] || null : data;
-  } catch {}
-
-  if (!ctx?.org_id || !ctx?.role) {
-    return {
-      ok: false,
-      status: 403,
-      error: "Missing org/role context",
-      details: "bootstrap_user_context did not return org_id/role",
-    };
-  }
-
+  // Cliente service role (server-owned)
   const sbSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
+  // 1) Intentar org activa persistida (si existe tabla user_current_org)
+  // Si falla (tabla no existe), seguimos sin romper.
+  let currentOrgId = null;
+  try {
+    const { data: uco, error: ucoErr } = await sbSrv
+      .from("user_current_org")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
+  } catch {}
+
+  // 2) Resolver membership: preferimos org activa si existe, si no, default
+  let mRow = null;
+
+  if (currentOrgId) {
+    const { data, error } = await sbSrv
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at")
+      .eq("user_id", user.id)
+      .eq("org_id", currentOrgId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (!error && data?.org_id && data?.role) mRow = data;
+  }
+
+  if (!mRow) {
+    const { data, error } = await sbSrv
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at")
+      .eq("user_id", user.id)
+      .is("revoked_at", null)
+      .order("is_default", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data?.org_id && data?.role) mRow = data;
+  }
+
+  if (!mRow?.org_id || !mRow?.role) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Missing org/role context",
+      details: "No active membership found for user",
+    };
+  }
+
+  const ctx = {
+    org_id: String(mRow.org_id),
+    role: String(mRow.role),
+    tenant_id: String(mRow.org_id), // canónico: tenant == org
+  };
+
   return { ok: true, user, ctx, sbSrv };
-}
-
-/* =========================
-   Sanitizers (server-owned)
-========================= */
-
-function stripServerOwned(payload) {
-  const p = payload && typeof payload === "object" ? payload : {};
-  const out = { ...p };
-
-  // server-owned / generated / audit
-  delete out.nombre_ci; // GENERATED ALWAYS lower(nombre)
-  delete out.created_at;
-  delete out.updated_at;
-  delete out.deleted_at;
-  delete out.revoked_at;
-  delete out.created_by;
-  delete out.updated_by;
-
-  // multi-tenant / ownership (siempre desde ctx)
-  delete out.org_id;
-  delete out.tenant_id;
-  delete out.user_id;
-  delete out.owner_id;
-  delete out.usuario_id;
-
-  return out;
 }
 
 /* =========================
@@ -207,7 +254,6 @@ export default async function handler(req, res) {
     }
 
     const { ctx, sbSrv } = ctxRes;
-
     const org_id = String(ctx.org_id);
     const tenant_id = String(ctx.tenant_id || ctx.org_id);
 
@@ -275,9 +321,6 @@ export default async function handler(req, res) {
           return send(res, 400, { ok: false, error: "nombre (or name) is required" });
         }
 
-        // ✅ Reactivación permanente:
-        // si existía la fila y estaba activo=false por delete soft,
-        // al guardar de nuevo debe volver a activo=true.
         const finalActivo =
           payload?.activo !== undefined
             ? Boolean(payload.activo)
@@ -285,7 +328,7 @@ export default async function handler(req, res) {
             ? Boolean(payload.active)
             : payload?.activa !== undefined
             ? Boolean(payload.activa)
-            : true; // 🔥 default: true
+            : true;
 
         const row = {
           id: payload?.id || undefined,
