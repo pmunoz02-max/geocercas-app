@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "../supabaseClient.js";
 import { useTranslation } from "react-i18next";
@@ -42,32 +42,71 @@ export default function InvitarTracker() {
   const [peopleList, setPeopleList] = useState([]);
   const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
 
+  const [loadingPeople, setLoadingPeople] = useState(false);
+  const [peopleError, setPeopleError] = useState("");
+
   const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text: string }
   const [actionLink, setActionLink] = useState("");
 
+  const orgId = currentOrg?.id || "";
+
   useEffect(() => {
+    let alive = true;
+
     async function loadPeople() {
-      if (!currentOrg?.id) return;
+      setPeopleError("");
+      setPeopleList([]);
+      setSelectedOrgPeopleId("");
 
-      const { data, error } = await supabase
-        .from("v_org_people_ui")
-        .select("org_people_id, nombre, apellido, email, is_deleted")
-        .eq("org_id", currentOrg.id)
-        .eq("is_deleted", false)
-        .order("nombre");
+      if (!orgId) return;
 
-      if (!error) setPeopleList(data || []);
+      setLoadingPeople(true);
+      try {
+        /**
+         * IMPORTANTÍSIMO:
+         * - NO pedir `is_deleted` en el select
+         * - NO filtrar por `is_deleted` desde el frontend
+         * La vista ya filtra is_deleted=false.
+         */
+        const { data, error } = await supabase
+          .from("v_org_people_ui")
+          .select("org_people_id, person_id, org_id, nombre, apellido, email, label")
+          .eq("org_id", orgId)
+          .order("nombre", { ascending: true });
+
+        if (!alive) return;
+
+        if (error) {
+          console.error("[InvitarTracker] loadPeople error:", error);
+          setPeopleError(error.message || "Error cargando personal");
+          setPeopleList([]);
+          return;
+        }
+
+        setPeopleList(Array.isArray(data) ? data : []);
+      } finally {
+        if (alive) setLoadingPeople(false);
+      }
     }
 
     loadPeople();
-  }, [currentOrg?.id]);
+
+    return () => {
+      alive = false;
+    };
+  }, [orgId]);
+
+  const canInvite = useMemo(() => {
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    return Boolean(orgId) && cleanEmail.includes("@") && !sending;
+  }, [email, orgId, sending]);
 
   function handleSelectPerson(e) {
-    const id = e.target.value;
+    const id = String(e.target.value || "");
     setSelectedOrgPeopleId(id);
 
-    const p = peopleList.find((x) => x.org_people_id === id);
-    if (p?.email) setEmail(String(p.email).toLowerCase());
+    const p = peopleList.find((x) => String(x.org_people_id) === id);
+    if (p?.email) setEmail(String(p.email).trim().toLowerCase());
   }
 
   async function handleSubmit(e) {
@@ -82,7 +121,7 @@ export default function InvitarTracker() {
       return;
     }
 
-    if (!currentOrg?.id) {
+    if (!orgId) {
       setMessage({ type: "error", text: t("inviteTracker.errors.noOrg") });
       return;
     }
@@ -92,7 +131,7 @@ export default function InvitarTracker() {
 
       const resp = await callInviteTracker({
         email: cleanEmail,
-        org_id: currentOrg.id,
+        org_id: orgId,
       });
 
       if (!resp.ok || !resp.data) {
@@ -118,7 +157,6 @@ export default function InvitarTracker() {
           text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo al tracker: ${cleanEmail}`,
         });
       } else {
-        // fallback ultra seguro
         setActionLink(link);
         setMessage({
           type: "warn",
@@ -147,34 +185,85 @@ export default function InvitarTracker() {
       : "text-red-600";
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-xl mx-auto">
       <h1 className="text-2xl font-semibold mb-4">{t("inviteTracker.title")}</h1>
 
-      <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-5 space-y-4">
-        <select
-          className="w-full border rounded px-3 py-2 text-sm"
-          value={selectedOrgPeopleId}
-          onChange={handleSelectPerson}
-        >
-          <option value="">{t("inviteTracker.form.selectPlaceholder")}</option>
-          {peopleList.map((p) => (
-            <option key={p.org_people_id} value={p.org_people_id}>
-              {`${p.nombre || ""} ${p.apellido || ""}`} — {p.email}
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white border rounded-2xl p-6 space-y-5 shadow-sm"
+      >
+        {/* PERSONA */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-slate-800">
+            {t("inviteTracker.form.selectLabel") || "Escoge una persona"}
+          </label>
+
+          <select
+            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-base bg-white
+                       focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-400"
+            value={selectedOrgPeopleId}
+            onChange={handleSelectPerson}
+            disabled={!orgId || loadingPeople}
+          >
+            <option value="">
+              {loadingPeople
+                ? (t("inviteTracker.form.loadingPeople") || "Cargando personas...")
+                : t("inviteTracker.form.selectPlaceholder")}
             </option>
-          ))}
-        </select>
 
-        <input
-          type="email"
-          className="w-full border rounded px-3 py-2 text-sm"
-          placeholder="tracker@ejemplo.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+            {peopleList.map((p) => (
+              <option key={p.org_people_id} value={p.org_people_id}>
+                {p.label || `${p.nombre || ""} ${p.apellido || ""}`.trim()}
+              </option>
+            ))}
+          </select>
 
+          {!orgId ? (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              {t("inviteTracker.errors.noOrg") || "No hay organización seleccionada."}
+            </div>
+          ) : null}
+
+          {peopleError ? (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">
+              {peopleError}
+            </div>
+          ) : null}
+
+          {orgId && !loadingPeople && !peopleError && peopleList.length === 0 ? (
+            <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              No hay personas disponibles para esta organización.
+            </div>
+          ) : null}
+        </div>
+
+        {/* EMAIL */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-slate-800">
+            {t("inviteTracker.form.emailLabel") || "Correo del tracker"}
+          </label>
+
+          <input
+            type="email"
+            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-base
+                       focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-400"
+            placeholder="tracker@ejemplo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            inputMode="email"
+            autoComplete="email"
+          />
+
+          <div className="text-xs text-slate-500">
+            Tip: si escoges una persona arriba, el email se llena solo.
+          </div>
+        </div>
+
+        {/* BOTÓN */}
         <button
-          disabled={sending}
-          className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm"
+          disabled={!canInvite}
+          className={`w-full rounded-xl px-4 py-3 text-base font-semibold text-white
+            ${canInvite ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-300 cursor-not-allowed"}`}
         >
           {sending ? t("inviteTracker.form.buttonSending") : t("inviteTracker.form.buttonSend")}
         </button>
@@ -182,33 +271,32 @@ export default function InvitarTracker() {
         {message && <div className={`text-sm ${msgClass}`}>{message.text}</div>}
 
         {actionLink ? (
-          <div className="text-xs break-all bg-slate-50 border rounded p-3">
-            <div className="font-semibold mb-2">Magic Link (tracker)</div>
+          <div className="text-sm break-all bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <div className="font-semibold mb-3">Magic Link (tracker)</div>
 
-            <div className="flex gap-2 mb-2">
+            <div className="flex flex-wrap gap-2 mb-3">
               <button
                 type="button"
                 onClick={() => navigator.clipboard.writeText(actionLink)}
-                className="bg-blue-600 text-white rounded px-3 py-2 text-xs"
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-semibold"
               >
                 Copiar link
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  // abre el link para prueba local
-                  window.open(actionLink, "_blank", "noopener,noreferrer");
-                }}
-                className="bg-slate-700 text-white rounded px-3 py-2 text-xs"
+                onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
+                className="bg-slate-800 hover:bg-slate-900 text-white rounded-xl px-4 py-2 text-sm font-semibold"
               >
                 Probar link
               </button>
             </div>
 
-            <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
+            <div className="bg-white border border-slate-200 rounded-xl p-3 select-all">
+              {actionLink}
+            </div>
 
-            <div className="text-[11px] text-slate-500 mt-2">
+            <div className="text-xs text-slate-500 mt-3">
               Recomendación: el tracker debe abrirlo en Chrome/Safari (mejor incógnito si ya intentó).
             </div>
           </div>

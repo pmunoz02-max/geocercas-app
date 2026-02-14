@@ -102,11 +102,8 @@ export default function Reports() {
     setLoadingFilters(true);
     setErrorMsg("");
     try {
-      // ✅ mandamos org_id (pero el backend lo valida por memberships)
-      const orgId = currentOrg?.id;
-      const url = orgId
-        ? `/api/reportes?action=filters&org_id=${encodeURIComponent(orgId)}`
-        : "/api/reportes?action=filters";
+            // ✅ modo canónico: org activa se resuelve con get_current_org_id() en backend
+      const url = "/api/reportes?action=filters";
 
       const json = await apiGet(url);
       const data = json?.data || {};
@@ -116,6 +113,7 @@ export default function Reports() {
         activities: Array.isArray(data.activities) ? data.activities : [],
         asignaciones: Array.isArray(data.asignaciones) ? data.asignaciones : [],
       });
+
     } catch (e) {
       console.error("[Reports] loadFilters:", e);
       setErrorMsg(e?.message || "Error cargando filtros.");
