@@ -1,19 +1,6 @@
 // api/auth/password.js
-// AUTH-V8 – Robust password login (no crashes) + HttpOnly cookies + redirect
-
-function parseCookies(cookieHeader = "") {
-  const out = {};
-  cookieHeader.split(";").forEach((part) => {
-    const p = part.trim();
-    if (!p) return;
-    const i = p.indexOf("=");
-    if (i < 0) return;
-    const k = p.slice(0, i).trim();
-    const v = p.slice(i + 1).trim();
-    out[k] = decodeURIComponent(v);
-  });
-  return out;
-}
+// AUTH-V10 – Password login + HttpOnly cookies tg_at + tg_rt + JSON response (no 302)
+// Universal/permanent for TWA/WebView and browsers: avoid redirect 302 so cookies persist reliably.
 
 function makeCookie(name, value, opts = {}) {
   const {
@@ -56,7 +43,7 @@ async function readBody(req) {
 }
 
 export default async function handler(req, res) {
-  const version = "auth-password-v8-safe-2026-01-18";
+  const build_tag = "auth-password-v10-json-sets-tg_rt-20260214";
 
   try {
     // ======================
@@ -69,13 +56,14 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
 
-    if (req.method === "OPTIONS") {
-      return res.status(200).end();
-    }
+    // Never cache auth responses
+    res.setHeader("Cache-Control", "no-store");
+
+    if (req.method === "OPTIONS") return res.status(200).end();
 
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return res.status(405).end("Method Not Allowed");
+      return res.status(405).json({ ok: false, build_tag, error: "Method Not Allowed" });
     }
 
     // ======================
@@ -86,9 +74,12 @@ export default async function handler(req, res) {
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       return res.status(500).json({
+        ok: false,
+        build_tag,
         error: "Server misconfigured",
         details: "Missing SUPABASE_URL or SUPABASE_ANON_KEY",
-        version,
+        hasUrl: !!SUPABASE_URL,
+        hasAnon: !!SUPABASE_ANON_KEY,
       });
     }
 
@@ -99,7 +90,7 @@ export default async function handler(req, res) {
     try {
       body = await readBody(req);
     } catch {
-      return res.status(400).json({ error: "Invalid request body" });
+      return res.status(400).json({ ok: false, build_tag, error: "Invalid request body" });
     }
 
     const email = String(body.email || "").trim().toLowerCase();
@@ -107,7 +98,11 @@ export default async function handler(req, res) {
     const next = String(body.next || "/inicio");
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password required" });
+      return res.status(400).json({
+        ok: false,
+        build_tag,
+        error: "Email and password required",
+      });
     }
 
     // ======================
@@ -131,21 +126,37 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error("[auth/password] fetch failed:", err);
       return res.status(502).json({
+        ok: false,
+        build_tag,
         error: "Authentication service unreachable",
       });
     }
 
-    if (!r.ok || !data?.access_token) {
-      return res.status(401).json({ error: "Invalid credentials" });
+    if (!r.ok) {
+      return res.status(401).json({ ok: false, build_tag, error: "Invalid credentials" });
+    }
+
+    const accessToken = String(data?.access_token || "");
+    const refreshToken = String(data?.refresh_token || "");
+
+    // ✅ REQUIRED: tg_rt must exist or server-side refresh cannot work reliably
+    if (!accessToken || !refreshToken) {
+      return res.status(500).json({
+        ok: false,
+        build_tag,
+        error: "Auth provider did not return refresh_token",
+        diag: {
+          has_access_token: !!accessToken,
+          has_refresh_token: !!refreshToken,
+          returned_keys: Object.keys(data || {}),
+        },
+      });
     }
 
     // ======================
     // Cookies
     // ======================
-    const accessToken = data.access_token;
-    const refreshToken = data.refresh_token || "";
-
-    const accessMaxAge = Number(data.expires_in || 3600);
+    const accessMaxAge = Number(data?.expires_in || 3600);
     const refreshMaxAge = 30 * 24 * 60 * 60;
 
     const cookies = [
@@ -168,17 +179,20 @@ export default async function handler(req, res) {
     res.setHeader("Set-Cookie", cookies);
 
     // ======================
-    // Redirect
+    // Response (NO 302)
+    // Frontend should redirect with window.location
     // ======================
-    res.statusCode = 302;
-    res.setHeader("Location", next);
-    res.end();
+    return res.status(200).json({
+      ok: true,
+      build_tag,
+      redirect_to: next,
+    });
   } catch (fatal) {
-    // 🔒 Nunca crash
     console.error("[auth/password] fatal:", fatal);
-    res.status(500).json({
+    return res.status(500).json({
+      ok: false,
+      build_tag,
       error: "Unexpected authentication error",
-      version,
     });
   }
 }
