@@ -3,34 +3,18 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "../supabaseClient.js";
 import { useTranslation } from "react-i18next";
 
+/**
+ * ✅ UNIVERSAL / PERMANENTE (TWA/WebView safe):
+ * - NO depende de supabase.auth.getSession() en el browser (porque persistSession=false)
+ * - El server (/api/invite-tracker) lee cookie HttpOnly tg_at y proxyea a Edge Function
+ */
 async function callInviteTracker(payload) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  // 🔎 DEBUG (Preview)
-  console.log("[invite_tracker] url:", supabaseUrl);
-  console.log("[invite_tracker] hasToken:", !!session?.access_token);
-
-  if (!session?.access_token) {
-    return { ok: false, status: 401, data: { error: "No session token" } };
-  }
-
-  const res = await fetch(
-    `${String(supabaseUrl || "").replace(/\/$/, "")}/functions/v1/invite_tracker`,
-    {
-      method: "POST",
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
+  const res = await fetch("/api/invite-tracker", {
+    method: "POST",
+    credentials: "include", // ✅ manda cookie tg_at
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
   const json = await res.json().catch(() => null);
   return { ok: res.ok, status: res.status, data: json };
@@ -138,7 +122,7 @@ export default function InvitarTracker() {
         org_id: orgId,
       });
 
-            if (!resp.ok) {
+      if (!resp.ok) {
         const errText =
           typeof resp.data === "string"
             ? resp.data
@@ -153,10 +137,8 @@ export default function InvitarTracker() {
         return;
       }
 
-
-
-      const via = resp.data.invited_via; // "email" | "action_link"
-      const link = resp.data.action_link || "";
+      const via = resp.data?.invited_via; // "email" | "action_link"
+      const link = resp.data?.action_link || "";
 
       if (via === "email") {
         setMessage({
@@ -170,7 +152,8 @@ export default function InvitarTracker() {
           text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo al tracker: ${cleanEmail}`,
         });
       } else {
-        setActionLink(link);
+        // fallback
+        if (link) setActionLink(link);
         setMessage({
           type: "warn",
           text: `⚠️ Invitación generada. Si no llega correo, usa el Magic Link para ${cleanEmail}.`,
@@ -220,7 +203,7 @@ export default function InvitarTracker() {
           >
             <option value="">
               {loadingPeople
-                ? (t("inviteTracker.form.loadingPeople") || "Cargando personas...")
+                ? t("inviteTracker.form.loadingPeople") || "Cargando personas..."
                 : t("inviteTracker.form.selectPlaceholder")}
             </option>
 
@@ -276,11 +259,7 @@ export default function InvitarTracker() {
         <button
           disabled={!canInvite}
           className={`w-full rounded-xl px-4 py-3 text-base font-semibold text-white
-            ${
-              canInvite
-                ? "bg-emerald-600 hover:bg-emerald-700"
-                : "bg-slate-300 cursor-not-allowed"
-            }`}
+            ${canInvite ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-300 cursor-not-allowed"}`}
         >
           {sending ? t("inviteTracker.form.buttonSending") : t("inviteTracker.form.buttonSend")}
         </button>
