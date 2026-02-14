@@ -138,18 +138,21 @@ export default function InvitarTracker() {
         org_id: orgId,
       });
 
-      if (!resp.ok) {
-  const errText =
-    typeof resp.data === "string"
-      ? resp.data
-      : resp.data?.error || resp.data?.message || JSON.stringify(resp.data);
+            if (!resp.ok) {
+        const errText =
+          typeof resp.data === "string"
+            ? resp.data
+            : resp.data?.error ||
+              resp.data?.message ||
+              (resp.data ? JSON.stringify(resp.data) : "sin detalle");
 
-  setMessage({
-    type: "error",
-    text: `Error invitaciones (${resp.status}): ${errText}`,
-  });
-  return;
-}
+        setMessage({
+          type: "error",
+          text: `Error invitaciones (${resp.status}): ${errText}`,
+        });
+        return;
+      }
+
 
 
       const via = resp.data.invited_via; // "email" | "action_link"
