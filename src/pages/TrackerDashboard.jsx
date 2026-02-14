@@ -47,16 +47,6 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
-// GeoJSON siempre es [lng,lat] => Leaflet [lat,lng]
-function toLatLngStrict(coord) {
-  if (!coord || !Array.isArray(coord) || coord.length < 2) return null;
-  const lng = Number(coord[0]);
-  const lat = Number(coord[1]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
-  return [lat, lng];
-}
-
 function parseMaybeJson(input) {
   if (!input) return null;
   if (typeof input === "object") return input;
@@ -66,10 +56,18 @@ function parseMaybeJson(input) {
   return null;
 }
 
+// GeoJSON es [lng,lat] => Leaflet [lat,lng]
+function toLatLngStrict(coord) {
+  if (!coord || !Array.isArray(coord) || coord.length < 2) return null;
+  const lng = Number(coord[0]);
+  const lat = Number(coord[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return [lat, lng];
+}
+
 function normalizeGeoJSONToPolygons(input) {
   const polygons = [];
-  if (!input) return polygons;
-
   const obj = parseMaybeJson(input);
   if (!obj) return polygons;
 
@@ -222,9 +220,47 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
   return null;
 }
 
-// -----------------------
-// MultiSelect Geocercas UI
-// -----------------------
+// ✅ escoger geometría disponible en orden de preferencia
+function pickGeometry(row) {
+  return row?.geojson ?? row?.geom ?? row?.polygon ?? row?.geometry ?? null;
+}
+
+function inferCircleFromRow(row) {
+  const r = toNum(row?.radius_m);
+  const lat = toNum(row?.lat);
+  const lng = toNum(row?.lng);
+  if (!r || r <= 0) return null;
+  if (!isValidLatLng(lat, lng)) return null;
+  return { center: [lat, lng], radius_m: r };
+}
+
+function buildGeofenceLayerItems(geofenceRows) {
+  const items = [];
+  let skipped = 0;
+
+  for (const g of geofenceRows || []) {
+    const gj = pickGeometry(g);
+    const polys = normalizeGeoJSONToPolygons(gj);
+
+    if (polys.length) {
+      const b = boundsFromPolys(polys);
+      if (isProbablyZeroZeroBounds(b)) {
+        skipped += 1;
+      } else {
+        polys.forEach((p, idx) => items.push({ type: "polygon", geofenceId: g.id, name: g.name || g.id, positions: p, idx }));
+      }
+    }
+
+    const circle = inferCircleFromRow(g);
+    if (circle) items.push({ type: "circle", geofenceId: g.id, name: g.name || g.id, center: circle.center, radius_m: circle.radius_m, idx: "c" });
+  }
+
+  return { items, skipped };
+}
+
+/** =========================
+ * MultiSelect Geocercas UI
+ * ========================= */
 function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -262,18 +298,14 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
     const sid = String(id);
     setSelectedIds((prev) => {
       const arr = Array.isArray(prev) ? prev.map(String) : [];
-
       if (arr.length === 1 && arr[0] === "__none__") return [sid];
-
       if (arr.length === 0) {
         const all = (geofences || []).map((g) => String(g.id));
         return all.filter((x) => x !== sid);
       }
-
       const set = new Set(arr);
       if (set.has(sid)) set.delete(sid);
       else set.add(sid);
-
       const next = Array.from(set);
       return next.length ? next : [];
     });
@@ -360,10 +392,6 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
             >
               Ocultar todas
             </button>
-
-            <div className="ml-auto text-xs text-gray-500">
-              {filtered.length}/{geofences?.length || 0}
-            </div>
           </div>
 
           <div className="max-h-[280px] overflow-auto border border-gray-200 rounded-lg">
@@ -392,47 +420,6 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
   );
 }
 
-// -----------------------
-// Geofence layer normalize
-// -----------------------
-function inferCircleFromRow(row) {
-  const geo = parseMaybeJson(row?.geojson);
-  const gt = String(row?.geom_type || "").toLowerCase();
-
-  const r = toNum(row?.radius_m) ?? toNum(row?.radius) ?? toNum(row?.radio_m) ?? toNum(row?.radio) ?? null;
-
-  let center = null;
-  if (geo?.type === "Feature" && geo?.geometry?.type === "Point") center = toLatLngStrict(geo.geometry.coordinates);
-  else if (geo?.type === "Point") center = toLatLngStrict(geo.coordinates);
-
-  if (!center) {
-    const lat = toNum(row?.center_lat ?? row?.lat ?? row?.latitude);
-    const lng = toNum(row?.center_lng ?? row?.lng ?? row?.longitude);
-    if (isValidLatLng(lat, lng)) center = [lat, lng];
-  }
-
-  const isCircle = gt.includes("circle") || (center && r && r > 0);
-  if (!isCircle || !center || !r || r <= 0) return null;
-
-  return { center, radius_m: r };
-}
-
-function buildGeofenceLayerItems(geofenceRows) {
-  const items = [];
-  for (const g of geofenceRows || []) {
-    const polys = normalizeGeoJSONToPolygons(g.geojson);
-    polys.forEach((p, idx) => items.push({ type: "polygon", geofenceId: g.id, name: g.name || g.id, positions: p, idx }));
-
-    const circle = inferCircleFromRow(g);
-    if (circle) {
-      const nearZero = Math.abs(circle.center[0]) < 0.01 && Math.abs(circle.center[1]) < 0.01;
-      const tiny = circle.radius_m < 300;
-      if (!(nearZero && tiny)) items.push({ type: "circle", geofenceId: g.id, name: g.name || g.id, center: circle.center, radius_m: circle.radius_m, idx: "c" });
-    }
-  }
-  return items;
-}
-
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -454,10 +441,8 @@ export default function TrackerDashboard() {
   const [positions, setPositions] = useState([]);
 
   const [geofenceRows, setGeofenceRows] = useState([]);
-
   const [selectedGeofenceIds, setSelectedGeofenceIds] = useState([]);
 
-  // ✅ NUEVO: permitir “mostrar todas” cuando no hay assignments
   const [showAllGeofences, setShowAllGeofences] = useState(false);
 
   const [diag, setDiag] = useState({
@@ -474,8 +459,6 @@ export default function TrackerDashboard() {
     lastAssignmentsError: null,
     lastGeofencesError: null,
     lastPositionsError: null,
-    lastFromIso: null,
-    lastTargetCount: 0,
     assignedGeofenceIds: 0,
     skippedZeroZero: 0,
     selectedGeofences: 0,
@@ -546,8 +529,6 @@ export default function TrackerDashboard() {
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
 
     const assignedIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
-
-    // ✅ caso: NO hay assignments -> si showAllGeofences, cargar todas las geocercas de la org
     const shouldLoadAll = assignedIds.length === 0 && showAllGeofences;
 
     if (assignedIds.length === 0 && !shouldLoadAll) {
@@ -558,46 +539,54 @@ export default function TrackerDashboard() {
       return;
     }
 
-    const q = supabase
+    const base = supabase
       .from("geocercas")
-      .select("id, org_id, nombre, name, geojson, geom_type, radius_m, center_lat, center_lng")
-      .eq("org_id", currentOrgId);
+      .select("id, org_id, nombre, name, geojson, geom, polygon, geometry, lat, lng, radius_m, active, activo, activa, visible, is_deleted")
+      .eq("org_id", currentOrgId)
+      .eq("is_deleted", false);
 
-    const { data, error } = shouldLoadAll ? await q : await q.in("id", assignedIds);
+    const res = shouldLoadAll ? await base : await base.in("id", assignedIds);
 
-    if (error) {
-      setDiag((d) => ({ ...d, lastGeofencesError: error.message || String(error), geofencesFound: 0, geofencePolys: 0, geofenceCircles: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
+    if (res.error) {
+      setDiag((d) => ({
+        ...d,
+        lastGeofencesError: res.error.message || String(res.error),
+        geofencesFound: 0,
+        geofencePolys: 0,
+        geofenceCircles: 0,
+        skippedZeroZero: 0,
+        selectedGeofences: 0,
+      }));
       setGeofenceRows([]);
       setErrorMsg("Error al cargar geocercas (geocercas).");
       return;
     }
 
-    const rows = Array.isArray(data) ? data : [];
-    let skipped = 0;
+    const rows = Array.isArray(res.data) ? res.data : [];
 
-    const normalized = rows.map((r) => ({
-      id: r.id,
-      org_id: r.org_id,
-      name: r.name || r.nombre || r.id,
-      geojson: r.geojson,
-      geom_type: r.geom_type || null,
-      radius_m: r.radius_m ?? null,
-      center_lat: r.center_lat ?? null,
-      center_lng: r.center_lng ?? null,
-    })).filter((r) => {
-      const polys = normalizeGeoJSONToPolygons(r.geojson);
-      if (!polys.length) return true; // puede ser círculo
-      const b = boundsFromPolys(polys);
-      const bad = isProbablyZeroZeroBounds(b);
-      if (bad) skipped += 1;
-      return !bad;
-    });
+    const normalized = rows
+      .filter((r) => (r.activo ?? r.active ?? r.activa ?? true) === true)
+      .filter((r) => (r.visible ?? true) === true)
+      .map((r) => ({
+        id: r.id,
+        org_id: r.org_id,
+        name: r.name || r.nombre || r.id,
+        geojson: r.geojson,
+        geom: r.geom,
+        polygon: r.polygon,
+        geometry: r.geometry,
+        lat: r.lat,
+        lng: r.lng,
+        radius_m: r.radius_m,
+      }));
 
-    const polysCount = normalized.reduce((acc, g) => acc + normalizeGeoJSONToPolygons(g.geojson).length, 0);
-    const circlesCount = normalized.reduce((acc, g) => acc + (inferCircleFromRow(g) ? 1 : 0), 0);
+    // construir items + skipped
+    const { items, skipped } = buildGeofenceLayerItems(normalized);
+    const polysCount = items.filter((x) => x.type === "polygon").length;
+    const circlesCount = items.filter((x) => x.type === "circle").length;
 
     setGeofenceRows(normalized);
-    setSelectedGeofenceIds([]); // por simplicidad: “todas”
+    setSelectedGeofenceIds([]);
 
     setDiag((d) => ({
       ...d,
@@ -639,7 +628,6 @@ export default function TrackerDashboard() {
       const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
       const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
-      setDiag((d) => ({ ...d, lastFromIso: fromIso, lastTargetCount: allowedTrackerIds.length }));
 
       if (!allowedTrackerIds.length) {
         setPositions([]);
@@ -730,7 +718,7 @@ export default function TrackerDashboard() {
     setDiag((d) => ({ ...d, selectedGeofences: filteredGeofenceRows.length }));
   }, [filteredGeofenceRows]);
 
-  const layerItems = useMemo(() => buildGeofenceLayerItems(filteredGeofenceRows), [filteredGeofenceRows]);
+  const { items: layerItems } = useMemo(() => buildGeofenceLayerItems(filteredGeofenceRows), [filteredGeofenceRows]);
 
   const mapCenter = useMemo(() => {
     const last = positions?.[0];
@@ -793,14 +781,12 @@ export default function TrackerDashboard() {
               Centrar geocerca
             </button>
 
-            {/* ✅ botón aparece si NO hay assignments */}
             {diag.assignmentsRows === 0 && (
               <button
                 type="button"
                 onClick={() => setShowAllGeofences(true)}
                 className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                            border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                title="Si no hay asignaciones activas, permite visualizar todas las geocercas de la org"
               >
                 Mostrar todas (org)
               </button>
@@ -819,7 +805,6 @@ export default function TrackerDashboard() {
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">Filtros</h2>
-                <p className="text-sm text-gray-600 mt-1">Selecciona ventana, tracker y geocercas a mostrar.</p>
               </div>
 
               <div className="space-y-3">
@@ -859,7 +844,7 @@ export default function TrackerDashboard() {
                 <div>
                   <span className="block text-sm font-medium text-gray-900 mb-1">Geocercas</span>
                   <MultiGeofenceSelect
-                    geofences={geofenceRows}
+                    geofences={geofenceRows.map((g) => ({ id: g.id, name: g.name }))}
                     selectedIds={selectedGeofenceIds}
                     setSelectedIds={setSelectedGeofenceIds}
                     disabled={!geofenceRows?.length}
