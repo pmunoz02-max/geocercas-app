@@ -2,10 +2,10 @@
 // Preview-only safe proxy for calling Supabase Edge Function invite_tracker
 // - Reads HttpOnly cookies tg_at + tg_rt
 // - If upstream returns 401 Invalid JWT, refreshes access_token using tg_rt server-side
-// - Updates tg_at cookie (host-only) and retries once
+// - Updates tg_at (and tg_rt if rotated) cookies (host-only) and retries once
 // - Adds build_tag + diagnostics (no token leakage)
 
-const BUILD_TAG = "invite-proxy-v3-refresh-20260214";
+const BUILD_TAG = "invite-proxy-v4-refresh-authheader-20260214";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
 function getCookie(req, name) {
@@ -60,7 +60,11 @@ function nowUnix() {
   return Math.floor(Date.now() / 1000);
 }
 
-function makeCookie(name, value, { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" }) {
+function makeCookie(
+  name,
+  value,
+  { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" }
+) {
   // Host-only cookie: DO NOT set Domain= (prevents preview/prod mixing)
   const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`, `SameSite=${sameSite}`];
   if (httpOnly) parts.push("HttpOnly");
@@ -76,6 +80,7 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
     method: "POST",
     headers: {
       apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`, // ✅ IMPORTANT
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ refresh_token: refreshToken }),
@@ -89,12 +94,10 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
     json = { raw: text };
   }
 
-  if (!r.ok) {
-    return { ok: false, status: r.status, body: json };
-  }
+  if (!r.ok) return { ok: false, status: r.status, body: json };
 
-  const access_token = json?.access_token || "";
-  const refresh_token = json?.refresh_token || ""; // may rotate
+  const access_token = String(json?.access_token || "");
+  const refresh_token = String(json?.refresh_token || ""); // may rotate
   const expires_in = typeof json?.expires_in === "number" ? json.expires_in : null;
 
   if (!access_token) {
@@ -157,7 +160,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Preview guardrail: ensure env points to preview project
     if (vercelEnv === "preview") {
       const urlHasRef = String(supabaseUrl).includes(PREVIEW_REF);
       if (!urlHasRef) {
@@ -182,15 +184,15 @@ export default async function handler(req, res) {
       });
     }
 
-    // Decode for diag only (no token leakage)
-    const decoded = tryDecodeJwt(tgAt);
-    const payload = decoded.ok ? decoded.payload : null;
+    // diag from current token (may be invalid)
+    const d1 = tryDecodeJwt(tgAt);
+    const p1 = d1.ok ? d1.payload : null;
     const diag = {
       vercelEnv,
       supabaseUrl,
-      iss: payload?.iss || null,
-      aud: payload?.aud || null,
-      exp: payload?.exp || null,
+      iss: p1?.iss || null,
+      aud: p1?.aud || null,
+      exp: p1?.exp || null,
       now: nowUnix(),
       has_tg_rt: !!tgRt,
       build_tag: BUILD_TAG,
@@ -208,7 +210,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ build_tag: BUILD_TAG, ...first.json });
     }
 
-    // 2) If 401 Invalid JWT -> attempt refresh using tg_rt, then retry once
     const first401 =
       first.status === 401 &&
       (String(first.json?.message || "").toLowerCase().includes("invalid jwt") ||
@@ -244,22 +245,24 @@ export default async function handler(req, res) {
         });
       }
 
-      // Set new cookies (host-only). Keep secure/httpOnly.
-      // access_token TTL is expires_in seconds if present
+      // Decode refreshed token for diag (no token leakage)
+      const d2 = tryDecodeJwt(refreshed.access_token);
+      const p2 = d2.ok ? d2.payload : null;
+
+      const diag_refreshed = {
+        iss: p2?.iss || null,
+        aud: p2?.aud || null,
+        exp: p2?.exp || null,
+        now: nowUnix(),
+      };
+
+      // Set new cookies (host-only)
       const cookieHeaders = [];
-      if (refreshed.expires_in) {
-        cookieHeaders.push(
-          makeCookie("tg_at", refreshed.access_token, { maxAgeSec: refreshed.expires_in })
-        );
-      } else {
-        // fallback: 1 hour
-        cookieHeaders.push(makeCookie("tg_at", refreshed.access_token, { maxAgeSec: 3600 }));
-      }
+      const atMax = refreshed.expires_in ? refreshed.expires_in : 3600;
+      cookieHeaders.push(makeCookie("tg_at", refreshed.access_token, { maxAgeSec: atMax }));
 
       // refresh_token may rotate
       if (refreshed.refresh_token) {
-        // Supabase refresh tokens are long-lived; we set 30 days as a safe max-age.
-        // If you manage exact TTL elsewhere, adjust later.
         cookieHeaders.push(makeCookie("tg_rt", refreshed.refresh_token, { maxAgeSec: 60 * 60 * 24 * 30 }));
       }
 
@@ -277,6 +280,8 @@ export default async function handler(req, res) {
         return res.status(200).json({
           build_tag: BUILD_TAG,
           refreshed: true,
+          diag,
+          diag_refreshed,
           ...second.json,
         });
       }
@@ -288,10 +293,10 @@ export default async function handler(req, res) {
         refreshed: true,
         upstream: second.json,
         diag,
+        diag_refreshed,
       });
     }
 
-    // Other upstream errors (pass through)
     return res.status(first.status).json({
       ok: false,
       build_tag: BUILD_TAG,
