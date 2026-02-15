@@ -424,8 +424,13 @@ export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
 
+  // ⚠️ Para debug visual únicamente. NO se usa como fuente de org.
   const { currentOrg } = useAuth();
-  const orgId = typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
+  const authOrgId = typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
+
+  // ✅ Fuente única y canónica de org (server-owned)
+  const [orgId, setOrgId] = useState(null);
+  const [orgResolveError, setOrgResolveError] = useState("");
 
   const mapRef = useRef(null);
 
@@ -476,6 +481,28 @@ export default function TrackerDashboard() {
     const dd = String(d.getUTCDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }, []);
+
+  // ✅ Resolver org de forma canónica (RPC)
+  const resolveOrgId = useCallback(async () => {
+    setOrgResolveError("");
+    try {
+      const { data, error } = await supabase.rpc("get_current_org_id");
+      if (error) throw error;
+      if (!data) throw new Error("get_current_org_id() devolvió null");
+      setOrgId(String(data));
+      return String(data);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setOrgId(null);
+      setOrgResolveError(msg);
+      return null;
+    }
+  }, []);
+
+  // 1) Resolver org al entrar
+  useEffect(() => {
+    resolveOrgId();
+  }, [resolveOrgId]);
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
@@ -615,9 +642,7 @@ export default function TrackerDashboard() {
   }, []);
 
   /**
-   * ✅ CORREGIDO:
    * Lee desde public.positions (multi-tenant real)
-   * columnas: lat, lng, org_id, user_id, recorded_at, created_at, accuracy, speed, heading, battery, source
    */
   const fetchPositions = useCallback(async (currentOrgId, options = { showSpinner: true }) => {
     if (!currentOrgId) return;
@@ -642,7 +667,6 @@ export default function TrackerDashboard() {
           targetIds = allowedTrackerIds.includes(wanted) ? [wanted] : allowedTrackerIds;
         }
       } else {
-        // sin assignments => si el usuario eligió un tracker específico, intenta usarlo (siempre dentro de org)
         if (selectedTrackerId !== "all") targetIds = [String(selectedTrackerId)];
       }
 
@@ -696,6 +720,7 @@ export default function TrackerDashboard() {
     }
   }, [assignmentTrackers, selectedTrackerId, timeWindowId]);
 
+  // 2) Cargar data usando orgId canónico
   useEffect(() => {
     if (!orgId) return;
     (async () => {
@@ -770,29 +795,53 @@ export default function TrackerDashboard() {
     <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
   );
 
+  const effectiveOrgText = orgId ? String(orgId) : "—";
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
       <div className="px-3 md:px-6 py-4">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+
             <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600">
-              <span>Org: <span className="font-mono text-gray-800">{String(orgId || "—")}</span></span>
+              <span>
+                Org (RPC): <span className="font-mono text-gray-800">{effectiveOrgText}</span>
+              </span>
+              <span>
+                Org (Auth debug): <span className="font-mono text-gray-500">{String(authOrgId || "—")}</span>
+              </span>
+
               <Badge>assignments: {diag.assignmentsRows}</Badge>
               <Badge>geocercas: {diag.geofencesFound}</Badge>
               <Badge>polys: {diag.geofencePolys}</Badge>
               <Badge>circles: {diag.geofenceCircles}</Badge>
               <Badge>posiciones: {diag.positionsFound}</Badge>
             </div>
+
+            {orgResolveError && (
+              <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                Error resolviendo org por RPC: <span className="font-mono">{orgResolveError}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => fetchPositions(orgId, { showSpinner: true })}
+              onClick={() => resolveOrgId()}
+              className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
+                         border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+            >
+              Re-resolver org (RPC)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => orgId && fetchPositions(orgId, { showSpinner: true })}
               className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium
                          hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-              disabled={loading}
+              disabled={loading || !orgId}
             >
               {loading ? "Cargando…" : "Actualizar"}
             </button>
@@ -813,6 +862,7 @@ export default function TrackerDashboard() {
                 onClick={() => setShowAllGeofences(true)}
                 className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                            border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={!orgId}
               >
                 Mostrar todas (org)
               </button>
@@ -823,6 +873,12 @@ export default function TrackerDashboard() {
         {errorMsg && (
           <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
             {errorMsg}
+          </div>
+        )}
+
+        {!orgId && !orgResolveError && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
+            Resolviendo organización activa por RPC…
           </div>
         )}
 
@@ -841,6 +897,7 @@ export default function TrackerDashboard() {
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={timeWindowId}
                     onChange={(e) => setTimeWindowId(e.target.value)}
+                    disabled={!orgId}
                   >
                     {TIME_WINDOWS.map((w) => (
                       <option key={w.id} value={w.id}>
@@ -857,6 +914,7 @@ export default function TrackerDashboard() {
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={selectedTrackerId}
                     onChange={(e) => setSelectedTrackerId(e.target.value)}
+                    disabled={!orgId}
                   >
                     <option value="all">Todos</option>
                     {trackersUi.map((x) => (
@@ -873,7 +931,7 @@ export default function TrackerDashboard() {
                     geofences={geofenceRows.map((g) => ({ id: g.id, name: g.name }))}
                     selectedIds={selectedGeofenceIds}
                     setSelectedIds={setSelectedGeofenceIds}
-                    disabled={!geofenceRows?.length}
+                    disabled={!geofenceRows?.length || !orgId}
                   />
                 </div>
               </div>
