@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
@@ -22,11 +22,35 @@ const inputClass =
 
 type Mode = "magic" | "password" | "reset";
 
+function normalizeMode(m: string): Mode {
+  const v = (m || "").toLowerCase().trim();
+  if (v === "password") return "password";
+  if (v === "reset") return "reset";
+  return "magic";
+}
+
+const MODE_LS_KEY = "login_mode_v1";
+
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [mode, setMode] = useState<Mode>("magic");
+  // ✅ Modo persistente (universal): URL ?mode= + fallback localStorage
+  const modeFromUrl = useMemo(() => normalizeMode(getQueryParam(location.search, "mode")), [location.search]);
+
+  const modeFromStorage = useMemo(() => {
+    try {
+      return normalizeMode(localStorage.getItem(MODE_LS_KEY) || "");
+    } catch {
+      return "magic" as Mode;
+    }
+  }, []);
+
+  const initialMode = useMemo<Mode>(() => {
+    return modeFromUrl !== "magic" ? modeFromUrl : modeFromStorage;
+  }, [modeFromUrl, modeFromStorage]);
+
+  const [mode, setMode] = useState<Mode>(initialMode);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,6 +79,35 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
+  // ✅ Mantener el modo sincronizado con URL si viene explícito
+  useEffect(() => {
+    if (modeFromUrl && modeFromUrl !== mode) {
+      setMode(modeFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeFromUrl]);
+
+  // ✅ Guardar modo en localStorage (persistente ante remount)
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODE_LS_KEY, mode);
+    } catch {
+      // ignore
+    }
+  }, [mode]);
+
+  // ✅ Helper: setMode + actualizar query param sin romper next/err
+  function setModePersist(nextMode: Mode) {
+    setMode(nextMode);
+    setErr(null);
+    setMsg(null);
+
+    const sp = new URLSearchParams(location.search || "");
+    sp.set("mode", nextMode);
+    // preserva next y err si existen
+    navigate(`/login?${sp.toString()}`, { replace: true });
+  }
+
   // IMPORTANTE: fallback robusto (si VITE_SITE_URL está vacío en preview)
   const siteUrl = useMemo(() => {
     const envUrl = (import.meta.env.VITE_SITE_URL || "").trim();
@@ -62,7 +115,7 @@ export default function Login() {
     return window.location.origin;
   }, []);
 
-  // Magic Link / Callback
+  // Magic Link / Callback (APP)
   const redirectTo = useMemo(() => {
     const next = safeNextPath(nextInput);
     const url = new URL("/auth/callback", siteUrl);
@@ -79,7 +132,6 @@ export default function Login() {
   }, [siteUrl, nextInput]);
 
   async function bootstrapCookie(accessToken: string, refreshToken: string, expiresIn?: number) {
-    // ✅ Crea cookies tg_at + tg_rt en backend (sesión API-first)
     const res = await fetch("/api/auth/bootstrap", {
       method: "POST",
       headers: {
@@ -126,7 +178,7 @@ export default function Login() {
         return;
       }
 
-      // 2) PASSWORD  ✅ AHORA CON BOOTSTRAP (cookie tg_at + tg_rt)
+      // 2) PASSWORD
       if (mode === "password") {
         if (!password || password.length < 6) {
           setErr("Ingresa tu contraseña (mínimo 6 caracteres).");
@@ -148,7 +200,6 @@ export default function Login() {
         if (!accessToken) throw new Error("No se pudo obtener access_token de sesión.");
         if (!refreshToken) throw new Error("No se pudo obtener refresh_token de sesión.");
 
-        // ✅ crea cookies tg_at + tg_rt en backend
         await bootstrapCookie(accessToken, refreshToken, expiresIn);
 
         setMsg("✅ Sesión iniciada. Entrando...");
@@ -163,9 +214,7 @@ export default function Login() {
         });
         if (error) throw error;
 
-        setMsg(
-          "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM."
-        );
+        setMsg("✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM.");
         return;
       }
     } catch (e2: any) {
@@ -175,17 +224,12 @@ export default function Login() {
     }
   }
 
-  const tabBase =
-    "flex-1 rounded-xl px-3 py-2 text-sm font-medium border transition";
+  const tabBase = "flex-1 rounded-xl px-3 py-2 text-sm font-medium border transition";
   const tabOn = "bg-slate-900 text-white border-slate-900";
   const tabOff = "bg-white text-slate-900 border-slate-300 hover:bg-slate-50";
 
   const primaryText =
-    mode === "magic"
-      ? "Enviar Magic Link"
-      : mode === "password"
-      ? "Entrar"
-      : "Enviar enlace de reset";
+    mode === "magic" ? "Enviar Magic Link" : mode === "password" ? "Entrar" : "Enviar enlace de reset";
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 bg-slate-50 !text-gray-900">
@@ -197,33 +241,21 @@ export default function Login() {
           <button
             type="button"
             className={`${tabBase} ${mode === "magic" ? tabOn : tabOff}`}
-            onClick={() => {
-              setMode("magic");
-              setErr(null);
-              setMsg(null);
-            }}
+            onClick={() => setModePersist("magic")}
           >
             Magic Link
           </button>
           <button
             type="button"
             className={`${tabBase} ${mode === "password" ? tabOn : tabOff}`}
-            onClick={() => {
-              setMode("password");
-              setErr(null);
-              setMsg(null);
-            }}
+            onClick={() => setModePersist("password")}
           >
             Password
           </button>
           <button
             type="button"
             className={`${tabBase} ${mode === "reset" ? tabOn : tabOff}`}
-            onClick={() => {
-              setMode("reset");
-              setErr(null);
-              setMsg(null);
-            }}
+            onClick={() => setModePersist("reset")}
           >
             Reset
           </button>
@@ -256,9 +288,7 @@ export default function Login() {
 
           {mode === "password" && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium !text-gray-900">
-                Contraseña
-              </label>
+              <label className="block text-sm font-medium !text-gray-900">Contraseña</label>
               <input
                 className={inputClass}
                 type="password"
@@ -305,6 +335,9 @@ export default function Login() {
           </div>
           <div>
             Redirect Reset: <span className="break-all">{resetRedirectTo}</span>
+          </div>
+          <div>
+            Mode persistente: <span className="break-all">{mode}</span>
           </div>
         </div>
       </div>
