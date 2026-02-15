@@ -185,9 +185,43 @@ export default function TrackerGpsPage() {
         setMembershipStatus("pending");
         setMembershipDetail("Ejecutando accept-tracker-invite…");
 
-        const { data, error } = await supabaseTracker.functions.invoke("accept-tracker-invite", {
-          body: { org_id: orgId },
-        });
+       const { data: sData, error: sErr } = await supabaseTracker.auth.getSession();
+const tokenB = sData?.session?.access_token || "";
+
+if (sErr || !tokenB) {
+  setMembershipStatus("failed");
+  setMembershipDetail("No session token available for accept-tracker-invite");
+  return;
+}
+
+const resp = await fetch(
+  `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: TRACKER_ANON,
+      Authorization: `Bearer ${tokenB}`,
+    },
+    body: JSON.stringify({ org_id: orgId }),
+  }
+);
+
+const text = await resp.text();
+let j = null;
+try { j = text ? JSON.parse(text) : null; } catch { j = { raw: text }; }
+
+if (!resp.ok) {
+  setMembershipStatus("failed");
+  setMembershipDetail(
+    `accept-tracker-invite status=${resp.status} body=${text}`
+  );
+  return;
+}
+
+setMembershipStatus("ok");
+setMembershipDetail(`accept-tracker-invite OK: ${JSON.stringify(j)}`);
+
 
         if (error) {
           const extra = await readEdgeErrorDetails(error);
