@@ -25,17 +25,6 @@ function buildNextUrl(defaultNextPath, search) {
   return qs ? `${next}?${qs}` : next;
 }
 
-function parseHashTokens(hash) {
-  const h = String(hash || "");
-  const hp = new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
-  return {
-    access_token: hp.get("access_token") || "",
-    refresh_token: hp.get("refresh_token") || "",
-    type: hp.get("type") || "",
-    expires_in: hp.get("expires_in") || "",
-  };
-}
-
 function looksLikeJwt(token) {
   const t = String(token || "");
   return t.split(".").length === 3;
@@ -47,6 +36,10 @@ function readStorageNow() {
   } catch {
     return "localStorage_error";
   }
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 export default function AuthCallbackTracker() {
@@ -73,7 +66,7 @@ export default function AuthCallbackTracker() {
         const fullUrl = window.location.href;
         const u = new URL(fullUrl);
         const code = u.searchParams.get("code") || "";
-        const { access_token, refresh_token } = parseHashTokens(window.location.hash || "");
+        const hasHash = !!(window.location.hash || "").trim();
 
         setDebug((d) => ({
           ...d,
@@ -82,56 +75,59 @@ export default function AuthCallbackTracker() {
           href: fullUrl,
           path: u.pathname,
           search: u.search,
-          hash: window.location.hash ? "(present)" : "(empty)",
+          hash: hasHash ? "(present)" : "(empty)",
           hasCode: !!code,
-          hasHashTokens: !!(access_token && refresh_token),
           storage_before: readStorageNow(),
+          note:
+            "En este callback NO hacemos exchangeCodeForSession ni setSession. detectSessionInUrl=true debe persistir sesión automáticamente.",
         }));
 
-        if (code) {
-          setStatus("Intercambiando code por sesión (Tracker)…");
-          const { error } = await supabaseTracker.auth.exchangeCodeForSession(fullUrl);
-          if (error) throw error;
-        } else if (access_token && refresh_token) {
-          setStatus("Creando sesión desde hash (Tracker)…");
-          const { error } = await supabaseTracker.auth.setSession({ access_token, refresh_token });
-          if (error) throw error;
-        } else {
-          setStatus("No hay code ni tokens en el callback.");
-          setDebug((d) => ({
-            ...d,
-            phase: "missing_code_and_tokens",
-            storage_after: readStorageNow(),
-            hint:
-              "El redirect_to del magic link NO llegó a /auth/callback-tracker con code/tokens. Revisa allowlist de Redirect URLs en Supabase Auth.",
-          }));
-          return;
+        // Limpia hash para evitar loops visuales y para que el usuario no re-procese tokens al refrescar.
+        // (No borra el ?code=... porque Supabase maneja eso internamente)
+        if (hasHash) {
+          try {
+            history.replaceState(null, "", `${u.pathname}${u.search}`);
+          } catch {}
         }
 
-        setStatus("Validando sesión creada…");
-        const { data, error } = await supabaseTracker.auth.getSession();
-        if (error) throw error;
+        setStatus("Esperando a que Supabase detecte y persista la sesión…");
 
-        const token = data?.session?.access_token || "";
+        // Espera corta con reintentos: algunos navegadores tardan un poco en persistir.
+        // Total ~2.5s, suficiente sin hacer “parches”.
+        let session = null;
+        let lastErr = null;
+
+        for (let i = 0; i < 10; i++) {
+          if (cancelled) return;
+
+          const { data, error } = await supabaseTracker.auth.getSession();
+          lastErr = error ?? null;
+          session = data?.session ?? null;
+
+          if (session?.access_token && looksLikeJwt(session.access_token)) break;
+          await sleep(250);
+        }
 
         setDebug((d) => ({
           ...d,
-          phase: "after_exchange",
-          gotSession: !!data?.session,
-          tokenLooksOk: looksLikeJwt(token),
+          phase: "after_wait",
+          gotSession: !!session,
+          tokenLooksOk: looksLikeJwt(session?.access_token || ""),
           storage_after: readStorageNow(),
+          lastErr: lastErr?.message || null,
         }));
 
-        if (!token || !looksLikeJwt(token)) {
-          setStatus("Sesión NO quedó válida (sin access_token).");
+        if (!session?.access_token || !looksLikeJwt(session.access_token)) {
+          setStatus("No se detectó una sesión persistida. Abre un Magic Link NUEVO.");
           setCanContinue(false);
           return;
         }
 
-        setStatus("✅ Sesión OK. Puedes continuar al Tracker.");
+        setStatus("✅ Sesión OK (persistida). Puedes continuar al Tracker.");
         setCanContinue(true);
 
-        // IMPORTANT: NO redirigimos automáticamente (pausa para debug)
+        // Si quieres redirección automática, descomenta:
+        // navigate(nextUrl, { replace: true });
       } catch (e) {
         const msg = e?.message || String(e);
         setStatus(`Error: ${msg}`);
@@ -148,7 +144,7 @@ export default function AuthCallbackTracker() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, nextUrl]);
+  }, [nextUrl, navigate]);
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
