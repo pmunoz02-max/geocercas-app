@@ -1,3 +1,4 @@
+// src/pages/InvitarTracker.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "../supabaseClient.js";
@@ -33,7 +34,7 @@ export default function InvitarTracker() {
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [peopleError, setPeopleError] = useState("");
 
-  const [message, setMessage] = useState(null); // { type: "success"|"error"|"warn", text: string }
+  const [message, setMessage] = useState(null); // { type: "success"|"error"|"info", text: string }
   const [actionLink, setActionLink] = useState("");
 
   const orgId = currentOrg?.id || "";
@@ -137,28 +138,22 @@ export default function InvitarTracker() {
         return;
       }
 
-      const via = resp.data?.invited_via; // "email" | "action_link"
+      /**
+       * ✅ CAMBIO UNIVERSAL/PERMANENTE:
+       * generateLink() suele devolver action_link SIEMPRE, incluso cuando el email SÍ se envió (SMTP OK).
+       * Por eso NO debemos inferir "falló el correo" por action_link / invited_via.
+       *
+       * Estrategia:
+       * - Si ok => "Invitación enviada / generada"
+       * - action_link se muestra SOLO como fallback ("si no llega el correo")
+       */
       const link = resp.data?.action_link || "";
+      if (link) setActionLink(link);
 
-      if (via === "email") {
-        setMessage({
-          type: "success",
-          text: `✅ Invitación enviada por correo a ${cleanEmail}. Revisa spam/promociones si no aparece.`,
-        });
-      } else if (via === "action_link") {
-        setActionLink(link);
-        setMessage({
-          type: "warn",
-          text: `⚠️ No se pudo enviar correo automáticamente. Copia el Magic Link y envíalo al tracker: ${cleanEmail}`,
-        });
-      } else {
-        // fallback
-        if (link) setActionLink(link);
-        setMessage({
-          type: "warn",
-          text: `⚠️ Invitación generada. Si no llega correo, usa el Magic Link para ${cleanEmail}.`,
-        });
-      }
+      setMessage({
+        type: "success",
+        text: `✅ Invitación enviada/generada para ${cleanEmail}. Si no llega el correo, usa el enlace de respaldo (Magic Link).`,
+      });
 
       setEmail("");
       setSelectedOrgPeopleId("");
@@ -176,8 +171,8 @@ export default function InvitarTracker() {
   const msgClass =
     message?.type === "success"
       ? "text-emerald-700"
-      : message?.type === "warn"
-      ? "text-amber-700"
+      : message?.type === "info"
+      ? "text-slate-700"
       : "text-red-600";
 
   return (
@@ -266,36 +261,41 @@ export default function InvitarTracker() {
 
         {message && <div className={`text-sm ${msgClass}`}>{message.text}</div>}
 
+        {/* Fallback link (no asumimos fallo de email) */}
         {actionLink ? (
-          <div className="text-sm break-all bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <div className="font-semibold mb-3">Magic Link (tracker)</div>
+          <details className="text-sm bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <summary className="font-semibold cursor-pointer select-none">
+              Enlace de respaldo (Magic Link) — usar solo si no llega el correo
+            </summary>
 
-            <div className="flex flex-wrap gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => navigator.clipboard.writeText(actionLink)}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-semibold"
-              >
-                Copiar link
-              </button>
+            <div className="mt-3 break-all">
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(actionLink)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-semibold"
+                >
+                  Copiar link
+                </button>
 
-              <button
-                type="button"
-                onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
-                className="bg-slate-800 hover:bg-slate-900 text-white rounded-xl px-4 py-2 text-sm font-semibold"
-              >
-                Probar link
-              </button>
+                <button
+                  type="button"
+                  onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
+                  className="bg-slate-800 hover:bg-slate-900 text-white rounded-xl px-4 py-2 text-sm font-semibold"
+                >
+                  Probar link
+                </button>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl p-3 select-all">
+                {actionLink}
+              </div>
+
+              <div className="text-xs text-slate-500 mt-3">
+                Recomendación: el tracker debe abrirlo en Chrome/Safari (mejor incógnito si ya intentó).
+              </div>
             </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl p-3 select-all">
-              {actionLink}
-            </div>
-
-            <div className="text-xs text-slate-500 mt-3">
-              Recomendación: el tracker debe abrirlo en Chrome/Safari (mejor incógnito si ya intentó).
-            </div>
-          </div>
+          </details>
         ) : null}
       </form>
     </div>

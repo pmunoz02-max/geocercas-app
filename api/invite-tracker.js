@@ -160,6 +160,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // Preview safety
     if (vercelEnv === "preview") {
       const urlHasRef = String(supabaseUrl).includes(PREVIEW_REF);
       if (!urlHasRef) {
