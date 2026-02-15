@@ -9,14 +9,43 @@ function safeNextPath(next) {
   return "/tracker-gps";
 }
 
+/**
+ * Preserva parámetros importantes del callback hacia el destino (tracker-gps):
+ * - org / org_id / orgId
+ * - (y cualquier otro param adicional que quieras mantener)
+ *
+ * No copia: next, code, access_token, refresh_token, type, expires_in, etc.
+ */
+function buildNextUrl(nextPath, search) {
+  const sp = new URLSearchParams(search || "");
+
+  const next = safeNextPath(sp.get("next") || nextPath || "/tracker-gps");
+
+  // params a preservar
+  const preserve = new URLSearchParams();
+
+  const org = sp.get("org");
+  const org_id = sp.get("org_id");
+  const orgId = sp.get("orgId");
+
+  if (org) preserve.set("org", org);
+  else if (org_id) preserve.set("org", org_id);
+  else if (orgId) preserve.set("org", orgId);
+
+  // Si en el futuro quieres preservar más params, agrégalos aquí:
+  // const foo = sp.get("foo"); if (foo) preserve.set("foo", foo);
+
+  const qs = preserve.toString();
+  return qs ? `${next}?${qs}` : next;
+}
+
 export default function AuthCallbackTracker() {
   const location = useLocation();
   const navigate = useNavigate();
   const [status, setStatus] = useState("Procesando autenticación de Tracker...");
 
-  const next = useMemo(() => {
-    const n = new URLSearchParams(location.search).get("next") || "/tracker-gps";
-    return safeNextPath(n);
+  const nextUrl = useMemo(() => {
+    return buildNextUrl("/tracker-gps", location.search);
   }, [location.search]);
 
   useEffect(() => {
@@ -54,6 +83,7 @@ export default function AuthCallbackTracker() {
           }
         }
 
+        // Limpia hash (no toca querystring, porque ahí viaja org/next)
         if (!cancelled) {
           const clean = new URL(window.location.href);
           clean.hash = "";
@@ -61,7 +91,7 @@ export default function AuthCallbackTracker() {
         }
 
         setStatus("Listo. Entrando al Tracker...");
-        if (!cancelled) navigate(next, { replace: true });
+        if (!cancelled) navigate(nextUrl, { replace: true });
       } catch (e) {
         const msg = e?.message || "tracker_auth_failed";
         setStatus(`Error: ${msg}`);
@@ -72,13 +102,16 @@ export default function AuthCallbackTracker() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, next]);
+  }, [navigate, nextUrl]);
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-gray-900">Tracker Auth</h1>
         <p className="mt-3 text-sm text-gray-700">{status}</p>
+        <p className="mt-2 text-xs text-gray-500 break-all">
+          next: {nextUrl}
+        </p>
       </div>
     </div>
   );
