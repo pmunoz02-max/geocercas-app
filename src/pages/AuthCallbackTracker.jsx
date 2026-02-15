@@ -11,23 +11,20 @@ function safeNextPath(next) {
 function buildNextUrl(defaultNextPath, search) {
   const sp = new URLSearchParams(search || "");
   const next = safeNextPath(sp.get("next") || defaultNextPath || "/tracker-gps");
+  return next;
+}
 
-  const preserve = new URLSearchParams();
-  const org = sp.get("org");
-  const org_id = sp.get("org_id");
-  const orgId = sp.get("orgId");
-
-  if (org) preserve.set("org", org);
-  else if (org_id) preserve.set("org", org_id);
-  else if (orgId) preserve.set("org", orgId);
-
-  const qs = preserve.toString();
-  return qs ? `${next}?${qs}` : next;
+function parseHashTokens(hash) {
+  const h = String(hash || "");
+  const hp = new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
+  return {
+    access_token: hp.get("access_token") || "",
+    refresh_token: hp.get("refresh_token") || "",
+  };
 }
 
 function looksLikeJwt(token) {
-  const t = String(token || "");
-  return t.split(".").length === 3;
+  return token && token.split(".").length === 3;
 }
 
 function readStorageNow() {
@@ -58,85 +55,63 @@ export default function AuthCallbackTracker() {
     async function run() {
       try {
         if (!supabaseTracker) {
-          setStatus("Tracker no configurado en este deployment (faltan envs).");
-          setDebug({ hint: "supabaseTracker is null" });
+          setStatus("Tracker no configurado.");
           return;
         }
 
-        const fullUrl = window.location.href;
-        const u = new URL(fullUrl);
-        const code = u.searchParams.get("code") || "";
-        const hasHash = !!(window.location.hash || "").trim();
+        const { access_token, refresh_token } = parseHashTokens(window.location.hash);
 
-        setDebug((d) => ({
-          ...d,
+        setDebug({
           phase: "start",
-          nextUrl,
-          href: fullUrl,
-          path: u.pathname,
-          search: u.search,
-          hash: hasHash ? "(present)" : "(empty)",
-          hasCode: !!code,
+          hasAccess: !!access_token,
           storage_before: readStorageNow(),
-          note:
-            "En este callback NO hacemos exchangeCodeForSession ni setSession. detectSessionInUrl=true debe persistir sesión automáticamente.",
-        }));
+        });
 
-        // Limpia hash para evitar loops visuales y para que el usuario no re-procese tokens al refrescar.
-        // (No borra el ?code=... porque Supabase maneja eso internamente)
-        if (hasHash) {
-          try {
-            history.replaceState(null, "", `${u.pathname}${u.search}`);
-          } catch {}
-        }
-
-        setStatus("Esperando a que Supabase detecte y persista la sesión…");
-
-        // Espera corta con reintentos: algunos navegadores tardan un poco en persistir.
-        // Total ~2.5s, suficiente sin hacer “parches”.
-        let session = null;
-        let lastErr = null;
-
-        for (let i = 0; i < 10; i++) {
-          if (cancelled) return;
-
-          const { data, error } = await supabaseTracker.auth.getSession();
-          lastErr = error ?? null;
-          session = data?.session ?? null;
-
-          if (session?.access_token && looksLikeJwt(session.access_token)) break;
-          await sleep(250);
-        }
-
-        setDebug((d) => ({
-          ...d,
-          phase: "after_wait",
-          gotSession: !!session,
-          tokenLooksOk: looksLikeJwt(session?.access_token || ""),
-          storage_after: readStorageNow(),
-          lastErr: lastErr?.message || null,
-        }));
-
-        if (!session?.access_token || !looksLikeJwt(session.access_token)) {
-          setStatus("No se detectó una sesión persistida. Abre un Magic Link NUEVO.");
-          setCanContinue(false);
+        if (!access_token || !refresh_token) {
+          setStatus("No se detectaron tokens en el callback.");
           return;
         }
 
-        setStatus("✅ Sesión OK (persistida). Puedes continuar al Tracker.");
-        setCanContinue(true);
+        setStatus("Creando sesión desde hash…");
 
-        // Si quieres redirección automática, descomenta:
-        // navigate(nextUrl, { replace: true });
-      } catch (e) {
-        const msg = e?.message || String(e);
-        setStatus(`Error: ${msg}`);
+        const { error } = await supabaseTracker.auth.setSession({
+          access_token,
+          refresh_token,
+        });
+
+        if (error) {
+          setStatus(`Error setSession: ${error.message}`);
+          return;
+        }
+
+        // Esperar a que persista en localStorage
+        let session = null;
+        for (let i = 0; i < 10; i++) {
+          const { data } = await supabaseTracker.auth.getSession();
+          session = data?.session;
+          if (session?.access_token && looksLikeJwt(session.access_token)) break;
+          await sleep(200);
+        }
+
         setDebug((d) => ({
           ...d,
-          phase: "exception",
-          exception: msg,
-          storage_after_error: readStorageNow(),
+          phase: "after_setSession",
+          gotSession: !!session,
+          storage_after: readStorageNow(),
         }));
+
+        if (!session?.access_token) {
+          setStatus("Sesión no persistió.");
+          return;
+        }
+
+        // Limpia hash
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+
+        setStatus("✅ Sesión OK. Puedes continuar.");
+        setCanContinue(true);
+      } catch (e) {
+        setStatus(`Error: ${e.message}`);
       }
     }
 
@@ -144,7 +119,7 @@ export default function AuthCallbackTracker() {
     return () => {
       cancelled = true;
     };
-  }, [nextUrl, navigate]);
+  }, [navigate, nextUrl]);
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
@@ -152,20 +127,17 @@ export default function AuthCallbackTracker() {
         <h1 className="text-xl font-semibold text-gray-900">Tracker Auth</h1>
         <p className="mt-3 text-sm text-gray-700">{status}</p>
 
-        <p className="mt-2 text-xs text-gray-500 break-all">next: {nextUrl}</p>
-        <p className="mt-2 text-xs text-gray-500 break-all">storageKey: sb-tracker-auth</p>
-
-        {canContinue ? (
+        {canContinue && (
           <button
             onClick={() => navigate(nextUrl, { replace: true })}
             className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-white font-semibold"
           >
             Continuar al Tracker
           </button>
-        ) : null}
+        )}
 
         <details className="mt-4" open>
-          <summary className="text-xs text-gray-600 cursor-pointer">Debug (copia/pega)</summary>
+          <summary className="text-xs text-gray-600 cursor-pointer">Debug</summary>
           <pre className="mt-2 text-[11px] bg-gray-50 border rounded-xl p-3 overflow-auto">
             {JSON.stringify(debug, null, 2)}
           </pre>
