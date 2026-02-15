@@ -1,283 +1,183 @@
-// src/pages/InvitarTracker.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/context/AuthContext";
-import { supabase } from "../supabaseClient.js";
-import { useTranslation } from "react-i18next";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuthSafe } from "../context/AuthContext.jsx";
 
-/**
- * ✅ UNIVERSAL / PERMANENTE (TWA/WebView safe):
- * - NO depende de supabase.auth.getSession() en el browser (porque persistSession=false)
- * - El server (/api/invite-tracker) lee cookie HttpOnly tg_at y proxyea a Edge Function
- */
-async function callInviteTracker(payload) {
-  const res = await fetch("/api/invite-tracker", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const json = await res.json().catch(() => null);
-  return { ok: res.ok, status: res.status, data: json };
+function normalizeEmail(v) {
+  return String(v || "").trim().toLowerCase();
 }
 
 export default function InvitarTracker() {
-  const { currentOrg } = useAuth();
-  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const auth = useAuthSafe();
 
   const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const [peopleList, setPeopleList] = useState([]);
-  const [selectedOrgPeopleId, setSelectedOrgPeopleId] = useState("");
+  const [okMsg, setOkMsg] = useState(null);
+  const [errMsg, setErrMsg] = useState(null);
 
-  const [loadingPeople, setLoadingPeople] = useState(false);
-  const [peopleError, setPeopleError] = useState("");
+  const orgId = useMemo(() => {
+    // ✅ Universal: usa org canónica del AuthContext (la que ya usa RequireOrg)
+    const id =
+      auth?.orgId ||
+      auth?.currentOrgId ||
+      auth?.org?.id ||
+      auth?.org_id ||
+      "";
+    return String(id || "").trim();
+  }, [auth]);
 
-  const [message, setMessage] = useState(null); // { type: "success"|"error", text: string }
-  const [actionLink, setActionLink] = useState("");
-
-  const orgId = currentOrg?.id || "";
-
-  useEffect(() => {
-    let alive = true;
-
-    async function loadPeople() {
-      setPeopleError("");
-      setPeopleList([]);
-      setSelectedOrgPeopleId("");
-
-      if (!orgId) return;
-
-      setLoadingPeople(true);
-      try {
-        const { data, error } = await supabase
-          .from("v_org_people_ui_all")
-          .select("org_people_id, person_id, org_id, nombre, apellido, email, label")
-          .eq("org_id", orgId)
-          .order("nombre", { ascending: true });
-
-        if (!alive) return;
-
-        if (error) {
-          console.error("[InvitarTracker] loadPeople error:", error);
-          setPeopleError(error.message || "Error cargando personal");
-          setPeopleList([]);
-          return;
-        }
-
-        setPeopleList(Array.isArray(data) ? data : []);
-      } finally {
-        if (alive) setLoadingPeople(false);
-      }
-    }
-
-    loadPeople();
-    return () => {
-      alive = false;
+  const who = useMemo(() => {
+    return {
+      email: auth?.user?.email || "",
+      user_id: auth?.user?.id || "",
+      org_id: orgId,
     };
-  }, [orgId]);
+  }, [auth, orgId]);
 
-  const canInvite = useMemo(() => {
-    const cleanEmail = String(email || "").trim().toLowerCase();
-    return Boolean(orgId) && cleanEmail.includes("@") && !sending;
-  }, [email, orgId, sending]);
-
-  function handleSelectPerson(e) {
-    const id = String(e.target.value || "");
-    setSelectedOrgPeopleId(id);
-
-    const p = peopleList.find((x) => String(x.org_people_id) === id);
-    if (p?.email) setEmail(String(p.email).trim().toLowerCase());
-  }
-
-  async function handleSubmit(e) {
+  async function onSendInvite(e) {
     e.preventDefault();
-    setMessage(null);
-    setActionLink("");
 
-    const cleanEmail = String(email || "").trim().toLowerCase();
+    // ✅ Reset universal: nunca dejar mensaje viejo pegado
+    setOkMsg(null);
+    setErrMsg(null);
 
+    const cleanEmail = normalizeEmail(email);
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setMessage({ type: "error", text: t("inviteTracker.errors.emailInvalid") });
+      setErrMsg("Ingresa un email válido.");
       return;
     }
 
     if (!orgId) {
-      setMessage({ type: "error", text: t("inviteTracker.errors.noOrg") });
+      setErrMsg("No hay organización activa. Ve a /inicio y selecciona tu organización.");
       return;
     }
 
     try {
-      setSending(true);
+      setBusy(true);
 
-      const resp = await callInviteTracker({
-        email: cleanEmail,
-        org_id: orgId,
-        role: "tracker", // ✅ explícito para tracker
+      const res = await fetch("/api/invite-tracker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: cleanEmail,
+          org_id: orgId,
+          role: "tracker",
+        }),
       });
 
-      if (!resp.ok) {
-        const errText =
-          typeof resp.data === "string"
-            ? resp.data
-            : resp.data?.error ||
-              resp.data?.message ||
-              (resp.data ? JSON.stringify(resp.data) : "sin detalle");
+      const text = await res.text().catch(() => "");
+      let body = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        body = { raw: text };
+      }
 
-        setMessage({
-          type: "error",
-          text: `Error invitaciones (${resp.status}): ${errText}`,
-        });
+      // ✅ Caso 1: HTTP no-ok => error real
+      if (!res.ok) {
+        const msg =
+          body?.error ||
+          body?.message ||
+          body?.raw ||
+          `HTTP ${res.status}`;
+        setErrMsg(`Error invitaciones (${res.status}): ${msg}`);
         return;
       }
 
-      // ✅ éxito siempre. Si hay action_link, lo dejamos como fallback.
-      const link = resp.data?.action_link || "";
-      if (link) setActionLink(link);
+      // ✅ Caso 2: HTTP ok pero ok=false => upstream error real (403 etc)
+      if (body && body.ok === false) {
+        const upstreamStatus = body?.upstream_status || "";
+        const upstreamMsg =
+          body?.upstream?.error ||
+          body?.error ||
+          body?.message ||
+          "UPSTREAM_ERROR";
+        setErrMsg(
+          `Error invitaciones (${upstreamStatus || "?"}): ${upstreamMsg}`
+        );
+        return;
+      }
 
-      const via = String(resp.data?.invited_via || "");
-      const viaNote =
-        via === "existing_user_auto_reinvite"
-          ? " (re-invitación automática)"
-          : "";
+      // ✅ Caso 3: ok=true => éxito
+      const actionLink = body?.action_link || "";
+      const emailSent = body?.email_sent;
 
-      setMessage({
-        type: "success",
-        text: `✅ Invitación enviada/generada para ${cleanEmail}${viaNote}. Si no llega el correo, usa el enlace de respaldo (Magic Link).`,
-      });
-
+      let msg = `✅ Invitación generada para ${cleanEmail}.`;
+      if (emailSent === true) msg += ` Correo enviado.`;
+      if (emailSent === false && actionLink) msg += ` Si no llega, usa el enlace de respaldo.`;
+      setOkMsg({ msg, actionLink, diag: body?.diag || null });
       setEmail("");
-      setSelectedOrgPeopleId("");
     } catch (err) {
-      console.error("[InvitarTracker] unexpected:", err);
-      setMessage({
-        type: "error",
-        text: t("inviteTracker.messages.unexpectedError"),
-      });
+      setErrMsg(String(err?.message || err));
     } finally {
-      setSending(false);
+      setBusy(false);
     }
   }
 
-  const msgClass =
-    message?.type === "success" ? "text-emerald-700" : "text-red-600";
-
   return (
-    <div className="max-w-xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">{t("inviteTracker.title")}</h1>
-
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white border rounded-2xl p-6 space-y-5 shadow-sm"
-      >
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold text-slate-800">
-            {t("inviteTracker.form.selectLabel") || "Escoge una persona"}
-          </label>
-
-          <select
-            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-base bg-white
-                       focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-400"
-            value={selectedOrgPeopleId}
-            onChange={handleSelectPerson}
-            disabled={!orgId || loadingPeople}
+    <div className="min-h-[70vh] flex items-center justify-center p-6">
+      <div className="w-full max-w-xl rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-gray-900">Invitar Tracker</h1>
+          <button
+            type="button"
+            onClick={() => navigate("/tracker")}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
           >
-            <option value="">
-              {loadingPeople
-                ? t("inviteTracker.form.loadingPeople") || "Cargando personas..."
-                : t("inviteTracker.form.selectPlaceholder")}
-            </option>
-
-            {peopleList.map((p) => (
-              <option key={p.org_people_id} value={p.org_people_id}>
-                {p.label || `${p.nombre || ""} ${p.apellido || ""}`.trim()}
-              </option>
-            ))}
-          </select>
-
-          {!orgId ? (
-            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
-              {t("inviteTracker.errors.noOrg") || "No hay organización seleccionada."}
-            </div>
-          ) : null}
-
-          {peopleError ? (
-            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">
-              {peopleError}
-            </div>
-          ) : null}
-
-          {orgId && !loadingPeople && !peopleError && peopleList.length === 0 ? (
-            <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-3">
-              No hay personas disponibles para esta organización.
-            </div>
-          ) : null}
+            Volver a Tracker
+          </button>
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold text-slate-800">
-            {t("inviteTracker.form.emailLabel") || "Correo del tracker"}
-          </label>
+        {/* Info diagnóstico (universal) */}
+        <div className="mt-4 rounded-xl border bg-slate-50 p-3 text-xs text-slate-700">
+          <div><b>Org usada:</b> {who.org_id || "—"}</div>
+          <div><b>Usuario:</b> {who.email || "—"} ({who.user_id || "—"})</div>
+        </div>
 
-          <input
-            type="email"
-            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-base
-                       focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-400"
-            placeholder="tracker@ejemplo.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            inputMode="email"
-            autoComplete="email"
-          />
-
-          <div className="text-xs text-slate-500">
-            Tip: si escoges una persona arriba, el email se llena solo.
+        {errMsg && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {errMsg}
           </div>
-        </div>
+        )}
 
-        <button
-          disabled={!canInvite}
-          className={`w-full rounded-xl px-4 py-3 text-base font-semibold text-white
-            ${canInvite ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-300 cursor-not-allowed"}`}
-        >
-          {sending ? t("inviteTracker.form.buttonSending") : t("inviteTracker.form.buttonSend")}
-        </button>
+        {okMsg && (
+          <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            <div>{okMsg.msg}</div>
 
-        {message && <div className={`text-sm ${msgClass}`}>{message.text}</div>}
-
-        {actionLink ? (
-          <details className="text-sm bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <summary className="font-semibold cursor-pointer select-none">
-              Enlace de respaldo (Magic Link) — usar solo si no llega el correo
-            </summary>
-
-            <div className="mt-3 break-all">
-              <div className="flex flex-wrap gap-2 mb-3">
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard.writeText(actionLink)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-semibold"
-                >
-                  Copiar link
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
-                  className="bg-slate-800 hover:bg-slate-900 text-white rounded-xl px-4 py-2 text-sm font-semibold"
-                >
-                  Probar link
-                </button>
+            {okMsg.actionLink ? (
+              <div className="mt-2 text-xs text-slate-700">
+                <div className="font-semibold">Magic Link (respaldo):</div>
+                <div className="mt-1 break-all rounded-lg border bg-white p-2">
+                  {okMsg.actionLink}
+                </div>
               </div>
+            ) : null}
+          </div>
+        )}
 
-              <div className="bg-white border border-slate-200 rounded-xl p-3 select-all">
-                {actionLink}
-              </div>
-            </div>
-          </details>
-        ) : null}
-      </form>
+        <form onSubmit={onSendInvite} className="mt-6 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-900">Email del tracker</label>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring bg-white text-gray-900"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tracker@email.com"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-60"
+          >
+            {busy ? "Enviando..." : "Enviar invitación"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
