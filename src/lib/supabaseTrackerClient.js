@@ -1,17 +1,24 @@
 // src/lib/supabaseTrackerClient.js
 import { createClient } from "@supabase/supabase-js";
 
-const trackerUrl = import.meta.env.VITE_SUPABASE_TRACKER_URL;
-const trackerAnonKey = import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY;
-
 /**
- * UNIVERSAL/PERMANENTE:
- * - No romper la app si faltan envs del tracker en Preview/Prod.
- * - Exportar null y que las páginas del tracker lo manejen.
+ * Permanente:
+ * - Si existe config TRACKER (Project B), úsala.
+ * - Si NO existe, usa el proyecto APP (Project A) pero con storageKey separado.
+ *   Esto evita: blank screens + JWT mismatch + pisado de sesión del dashboard.
  */
+const appUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+const appAnon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+
+const trackerUrl = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
+const trackerAnon = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
+
+const url = trackerUrl || appUrl;
+const anon = trackerAnon || appAnon;
+
 export const supabaseTracker =
-  trackerUrl && trackerAnonKey
-    ? createClient(trackerUrl, trackerAnonKey, {
+  url && anon
+    ? createClient(url, anon, {
         auth: {
           persistSession: true,
           autoRefreshToken: true,
@@ -21,9 +28,12 @@ export const supabaseTracker =
       })
     : null;
 
-if (!trackerUrl || !trackerAnonKey) {
+if (!url || !anon) {
   // eslint-disable-next-line no-console
   console.warn(
-    "[supabaseTrackerClient] Tracker env missing. Set VITE_SUPABASE_TRACKER_URL and VITE_SUPABASE_TRACKER_ANON_KEY in Vercel."
+    "[supabaseTrackerClient] Missing Supabase config. Need VITE_SUPABASE_URL/ANON_KEY (or TRACKER_*)"
   );
+} else {
+  // eslint-disable-next-line no-console
+  console.log("[supabaseTrackerClient] tracker client ready:", url);
 }
