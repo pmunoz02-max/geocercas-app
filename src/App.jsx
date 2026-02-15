@@ -23,6 +23,8 @@ import UpdatePassword from "./pages/UpdatePassword.jsx";
 
 // ✅ Tracker GPS public page
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
+// ✅ NUEVO callback tracker (sesión aislada)
+import AuthCallbackTracker from "./pages/AuthCallbackTracker.jsx";
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
@@ -104,9 +106,14 @@ function AppRoutes() {
       {/* 🌐 Public */}
       <Route path="/" element={<RootEntry />} />
       <Route path="/login" element={<Login />} />
+
+      {/* ✅ App callback */}
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      {/* ✅ Tracker GPS (PUBLIC): el magic link debe caer aquí */}
+      {/* ✅ Tracker callback (sesión aislada, NO pisa sesión del owner) */}
+      <Route path="/auth/callback-tracker" element={<AuthCallbackTracker />} />
+
+      {/* ✅ Tracker GPS (PUBLIC): el magic link debe terminar en /tracker-gps */}
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
       {/* 🔐 Password flows */}
@@ -117,7 +124,6 @@ function AppRoutes() {
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
       <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
       <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
-      {/* ❌ REMOVIDO: /tracker-gps ya no redirige a /tracker */}
       <Route path="/admin" element={<Navigate to="/admins" replace />} />
       <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
