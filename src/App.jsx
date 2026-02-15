@@ -21,6 +21,9 @@ import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import UpdatePassword from "./pages/UpdatePassword.jsx";
 
+// ✅ Tracker GPS public page
+import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
+
 // App pages
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/GeocercasPage.jsx";
@@ -66,7 +69,6 @@ function AdminRoute({ children }) {
   const auth = useAuthSafe();
   const location = useLocation();
 
-  // ✅ Si por alguna razón no hay provider, no crasheamos
   if (!auth) {
     return (
       <Navigate
@@ -104,6 +106,9 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
+      {/* ✅ Tracker GPS (PUBLIC): el magic link debe caer aquí */}
+      <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+
       {/* 🔐 Password flows */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />
@@ -112,7 +117,7 @@ function AppRoutes() {
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
       <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
       <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
-      <Route path="/tracker-gps" element={<Navigate to="/tracker" replace />} />
+      {/* ❌ REMOVIDO: /tracker-gps ya no redirige a /tracker */}
       <Route path="/admin" element={<Navigate to="/admins" replace />} />
       <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
