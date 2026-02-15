@@ -580,7 +580,6 @@ export default function TrackerDashboard() {
         radius_m: r.radius_m,
       }));
 
-    // construir items + skipped
     const { items, skipped } = buildGeofenceLayerItems(normalized);
     const polysCount = items.filter((x) => x.type === "polygon").length;
     const circlesCount = items.filter((x) => x.type === "circle").length;
@@ -615,6 +614,11 @@ export default function TrackerDashboard() {
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
+  /**
+   * ✅ CORREGIDO:
+   * Lee desde public.positions (multi-tenant real)
+   * columnas: lat, lng, org_id, user_id, recorded_at, created_at, accuracy, speed, heading, battery, source
+   */
   const fetchPositions = useCallback(async (currentOrgId, options = { showSpinner: true }) => {
     if (!currentOrgId) return;
     const { showSpinner } = options;
@@ -627,39 +631,61 @@ export default function TrackerDashboard() {
       const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
       const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
+      // Si hay assignments, limita a trackers asignados. Si no, muestra por org (modo visual).
       const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
 
-      if (!allowedTrackerIds.length) {
+      let targetIds = null;
+      if (allowedTrackerIds.length) {
+        targetIds = allowedTrackerIds;
+        if (selectedTrackerId !== "all") {
+          const wanted = String(selectedTrackerId);
+          targetIds = allowedTrackerIds.includes(wanted) ? [wanted] : allowedTrackerIds;
+        }
+      } else {
+        // sin assignments => si el usuario eligió un tracker específico, intenta usarlo (siempre dentro de org)
+        if (selectedTrackerId !== "all") targetIds = [String(selectedTrackerId)];
+      }
+
+      let q = supabase
+        .from("positions")
+        .select("id, org_id, user_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at")
+        .eq("org_id", currentOrgId)
+        .gte("recorded_at", fromIso)
+        .order("recorded_at", { ascending: false })
+        .limit(500);
+
+      if (Array.isArray(targetIds) && targetIds.length) {
+        q = q.in("user_id", targetIds);
+      }
+
+      const { data, error } = await q;
+
+      if (error) {
+        setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
+        setErrorMsg("Error al cargar posiciones (positions).");
         setPositions([]);
         setDiag((d) => ({ ...d, positionsFound: 0 }));
         return;
       }
 
-      let targetIds = allowedTrackerIds;
-      if (selectedTrackerId !== "all") {
-        const wanted = String(selectedTrackerId);
-        targetIds = allowedTrackerIds.includes(wanted) ? [wanted] : allowedTrackerIds;
-      }
-
-      const { data, error } = await supabase
-        .from("tracker_positions")
-        .select("id, user_id, latitude, longitude, accuracy, created_at")
-        .gte("created_at", fromIso)
-        .in("user_id", targetIds)
-        .order("created_at", { ascending: false })
-        .limit(500);
-
-      if (error) {
-        setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
-        setErrorMsg("Error al cargar posiciones.");
-        return;
-      }
-
       const normalized = (data || [])
         .map((r) => {
-          const lat = toNum(r.latitude);
-          const lng = toNum(r.longitude);
-          return { id: r.id, user_id: r.user_id ? String(r.user_id) : null, lat, lng, recorded_at: r.created_at, _valid: isValidLatLng(lat, lng) };
+          const lat = toNum(r.lat);
+          const lng = toNum(r.lng);
+          const ts = r.recorded_at || r.created_at || null;
+          return {
+            id: r.id,
+            user_id: r.user_id ? String(r.user_id) : null,
+            lat,
+            lng,
+            recorded_at: ts,
+            accuracy: r.accuracy ?? null,
+            speed: r.speed ?? null,
+            heading: r.heading ?? null,
+            battery: r.battery ?? null,
+            source: r.source ?? null,
+            _valid: isValidLatLng(lat, lng),
+          };
         })
         .filter((p) => p._valid);
 
@@ -969,6 +995,13 @@ export default function TrackerDashboard() {
                               <div><b>Hora</b>: {formatTime(latest.recorded_at)}</div>
                               <div><b>Lat</b>: {latest.lat.toFixed(6)}</div>
                               <div><b>Lng</b>: {latest.lng.toFixed(6)}</div>
+                              {latest.accuracy !== null && latest.accuracy !== undefined && (
+                                <div><b>Acc</b>: {Number(latest.accuracy).toFixed?.(0) ?? String(latest.accuracy)} m</div>
+                              )}
+                              {latest.speed !== null && latest.speed !== undefined && (
+                                <div><b>Speed</b>: {Number(latest.speed).toFixed?.(1) ?? String(latest.speed)}</div>
+                              )}
+                              {latest.source && <div><b>Src</b>: {String(latest.source)}</div>}
                             </div>
                           </Tooltip>
                         </CircleMarker>
