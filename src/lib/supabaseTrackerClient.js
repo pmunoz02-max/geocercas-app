@@ -1,38 +1,32 @@
 import { createClient } from "@supabase/supabase-js";
 
-const TRACKER_URL = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
-const TRACKER_ANON = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
-
-function mustBeSupabaseUrl(url) {
-  if (!url) return "";
-  if (url.includes(".supabase.co") || url.includes("localhost")) return url;
-  return "";
+function safeLocalStorage() {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  } catch {}
+  return undefined;
 }
 
-const url = mustBeSupabaseUrl(TRACKER_URL);
-const anon = TRACKER_ANON;
+const url = import.meta.env.VITE_SUPABASE_TRACKER_URL?.trim();
+const anon = import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY?.trim();
 
-export const supabaseTracker =
-  url && anon
-    ? createClient(url, anon, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-          storageKey: "sb-tracker-auth",
-          storage: window.localStorage,   // 👈 FIX CRÍTICO
-        },
-      })
-    : null;
+let client = null;
 
-if (!url || !anon) {
-  console.error("[supabaseTrackerClient] INVALID CONFIG", {
-    hasUrl: !!url,
-    hasAnon: !!anon,
-  });
-} else {
-  console.log("[supabaseTrackerClient] tracker client ready", {
-    url,
-    storageKey: "sb-tracker-auth",
-  });
+if (url && anon) {
+  // 👇 SINGLETON GLOBAL
+  if (!window.__SUPABASE_TRACKER__) {
+    window.__SUPABASE_TRACKER__ = createClient(url, anon, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        storageKey: "sb-tracker-auth",
+        storage: safeLocalStorage(),
+      },
+    });
+  }
+
+  client = window.__SUPABASE_TRACKER__;
 }
+
+export const supabaseTracker = client;
