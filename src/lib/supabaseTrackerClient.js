@@ -1,20 +1,28 @@
-// src/lib/supabaseTrackerClient.js
 import { createClient } from "@supabase/supabase-js";
 
 /**
  * Permanente:
- * - Si existe config TRACKER (Project B), úsala.
- * - Si NO existe, usa el proyecto APP (Project A) pero con storageKey separado.
- *   Esto evita: blank screens + JWT mismatch + pisado de sesión del dashboard.
+ * - Usa TRACKER_* si existe, si no usa APP_*.
+ * - Storage aislado: sb-tracker-auth (no pisa dashboard).
+ * - VALIDACIÓN: la URL debe ser *.supabase.co (evita CORS por env mal seteado).
  */
-const appUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
-const appAnon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
 
-const trackerUrl = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
-const trackerAnon = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
+function mustBeSupabaseUrl(url) {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  // Acepta localhost (dev) o supabase.co
+  const ok = u.includes(".supabase.co") || u.includes("localhost");
+  return ok ? u : "";
+}
 
-const url = trackerUrl || appUrl;
-const anon = trackerAnon || appAnon;
+const appUrlRaw = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+const appAnonRaw = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+
+const trackerUrlRaw = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
+const trackerAnonRaw = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
+
+const url = mustBeSupabaseUrl(trackerUrlRaw) || mustBeSupabaseUrl(appUrlRaw);
+const anon = (trackerAnonRaw || appAnonRaw || "").trim();
 
 export const supabaseTracker =
   url && anon
@@ -30,9 +38,12 @@ export const supabaseTracker =
 
 if (!url || !anon) {
   // eslint-disable-next-line no-console
-  console.warn(
-    "[supabaseTrackerClient] Missing Supabase config. Need VITE_SUPABASE_URL/ANON_KEY (or TRACKER_*)"
-  );
+  console.error("[supabaseTrackerClient] INVALID/MISSING config:", {
+    trackerUrlRaw,
+    appUrlRaw,
+    hasAnon: !!anon,
+    rule: "URL must be *.supabase.co (never vercel.app / preview domain)",
+  });
 } else {
   // eslint-disable-next-line no-console
   console.log("[supabaseTrackerClient] tracker client ready:", url);
