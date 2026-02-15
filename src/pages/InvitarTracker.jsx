@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 async function callInviteTracker(payload) {
   const res = await fetch("/api/invite-tracker", {
     method: "POST",
-    credentials: "include", // ✅ manda cookie tg_at
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
@@ -34,7 +34,7 @@ export default function InvitarTracker() {
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [peopleError, setPeopleError] = useState("");
 
-  const [message, setMessage] = useState(null); // { type: "success"|"error"|"info", text: string }
+  const [message, setMessage] = useState(null); // { type: "success"|"error", text: string }
   const [actionLink, setActionLink] = useState("");
 
   const orgId = currentOrg?.id || "";
@@ -51,12 +51,6 @@ export default function InvitarTracker() {
 
       setLoadingPeople(true);
       try {
-        /**
-         * UNIVERSAL/PERMANENTE:
-         * - Consultamos vista neutral: v_org_people_ui_all
-         * - La org se filtra EXPLÍCITAMENTE por orgId (frontend)
-         * - NO dependemos de get_current_org_id() dentro de la vista
-         */
         const { data, error } = await supabase
           .from("v_org_people_ui_all")
           .select("org_people_id, person_id, org_id, nombre, apellido, email, label")
@@ -79,7 +73,6 @@ export default function InvitarTracker() {
     }
 
     loadPeople();
-
     return () => {
       alive = false;
     };
@@ -121,6 +114,7 @@ export default function InvitarTracker() {
       const resp = await callInviteTracker({
         email: cleanEmail,
         org_id: orgId,
+        role: "tracker", // ✅ explícito para tracker
       });
 
       if (!resp.ok) {
@@ -138,21 +132,19 @@ export default function InvitarTracker() {
         return;
       }
 
-      /**
-       * ✅ CAMBIO UNIVERSAL/PERMANENTE:
-       * generateLink() suele devolver action_link SIEMPRE, incluso cuando el email SÍ se envió (SMTP OK).
-       * Por eso NO debemos inferir "falló el correo" por action_link / invited_via.
-       *
-       * Estrategia:
-       * - Si ok => "Invitación enviada / generada"
-       * - action_link se muestra SOLO como fallback ("si no llega el correo")
-       */
+      // ✅ éxito siempre. Si hay action_link, lo dejamos como fallback.
       const link = resp.data?.action_link || "";
       if (link) setActionLink(link);
 
+      const via = String(resp.data?.invited_via || "");
+      const viaNote =
+        via === "existing_user_auto_reinvite"
+          ? " (re-invitación automática)"
+          : "";
+
       setMessage({
         type: "success",
-        text: `✅ Invitación enviada/generada para ${cleanEmail}. Si no llega el correo, usa el enlace de respaldo (Magic Link).`,
+        text: `✅ Invitación enviada/generada para ${cleanEmail}${viaNote}. Si no llega el correo, usa el enlace de respaldo (Magic Link).`,
       });
 
       setEmail("");
@@ -169,11 +161,7 @@ export default function InvitarTracker() {
   }
 
   const msgClass =
-    message?.type === "success"
-      ? "text-emerald-700"
-      : message?.type === "info"
-      ? "text-slate-700"
-      : "text-red-600";
+    message?.type === "success" ? "text-emerald-700" : "text-red-600";
 
   return (
     <div className="max-w-xl mx-auto">
@@ -183,7 +171,6 @@ export default function InvitarTracker() {
         onSubmit={handleSubmit}
         className="bg-white border rounded-2xl p-6 space-y-5 shadow-sm"
       >
-        {/* PERSONA */}
         <div className="space-y-2">
           <label className="block text-sm font-semibold text-slate-800">
             {t("inviteTracker.form.selectLabel") || "Escoge una persona"}
@@ -228,7 +215,6 @@ export default function InvitarTracker() {
           ) : null}
         </div>
 
-        {/* EMAIL */}
         <div className="space-y-2">
           <label className="block text-sm font-semibold text-slate-800">
             {t("inviteTracker.form.emailLabel") || "Correo del tracker"}
@@ -250,7 +236,6 @@ export default function InvitarTracker() {
           </div>
         </div>
 
-        {/* BOTÓN */}
         <button
           disabled={!canInvite}
           className={`w-full rounded-xl px-4 py-3 text-base font-semibold text-white
@@ -261,7 +246,6 @@ export default function InvitarTracker() {
 
         {message && <div className={`text-sm ${msgClass}`}>{message.text}</div>}
 
-        {/* Fallback link (no asumimos fallo de email) */}
         {actionLink ? (
           <details className="text-sm bg-slate-50 border border-slate-200 rounded-2xl p-4">
             <summary className="font-semibold cursor-pointer select-none">
@@ -289,10 +273,6 @@ export default function InvitarTracker() {
 
               <div className="bg-white border border-slate-200 rounded-xl p-3 select-all">
                 {actionLink}
-              </div>
-
-              <div className="text-xs text-slate-500 mt-3">
-                Recomendación: el tracker debe abrirlo en Chrome/Safari (mejor incógnito si ya intentó).
               </div>
             </div>
           </details>
