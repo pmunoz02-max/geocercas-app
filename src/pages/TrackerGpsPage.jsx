@@ -2,14 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
-// ====== Config 5 minutos ======
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
 
-// Key para fallback (si no viene org por query)
 const LS_TRACKER_ORG_KEY = "geocercas_tracker_org_id";
-
-// ✅ Evita spamear accept-tracker-invite por org
 const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
 
 function isUuid(v) {
@@ -20,10 +16,21 @@ function isUuid(v) {
 function pickOrgIdFromSearch(search) {
   try {
     const sp = new URLSearchParams(search || "");
-    // soporta varios nombres por compatibilidad
     const candidates = [sp.get("org"), sp.get("org_id"), sp.get("orgId")].filter(Boolean);
     for (const c of candidates) {
       if (isUuid(c)) return String(c);
+    }
+  } catch {}
+  return null;
+}
+
+async function readEdgeErrorDetails(err) {
+  // Intenta extraer status + body del Response si existe
+  try {
+    const ctx = err?.context;
+    if (ctx && typeof ctx.status === "number" && typeof ctx.text === "function") {
+      const t = await ctx.text();
+      return { status: ctx.status, body: t };
     }
   } catch {}
   return null;
@@ -43,7 +50,6 @@ export default function TrackerGpsPage() {
 
   const [orgId, setOrgId] = useState(null);
 
-  // ✅ NUEVO: onboarding/membership gate
   const [membershipStatus, setMembershipStatus] = useState("pending"); // pending | ok | failed | skipped
   const [membershipDetail, setMembershipDetail] = useState("");
 
@@ -54,7 +60,6 @@ export default function TrackerGpsPage() {
   const lastSentAtRef = useRef(0);
   const onboardingLockRef = useRef(false);
 
-  // ✅ PERMANENTE: Tracker SIEMPRE usa Project B. Nunca fallback a Project A.
   const TRACKER_URL = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
   const TRACKER_ANON = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
 
@@ -68,7 +73,6 @@ export default function TrackerGpsPage() {
     console.log("[TrackerGpsPage]", line, extra || "");
   };
 
-  // 0) Validación de config del Tracker (universal)
   useEffect(() => {
     if (!supabaseTracker) {
       setTrackerReady(false);
@@ -98,13 +102,6 @@ export default function TrackerGpsPage() {
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
 
-  /**
-   * 0.5) Resolver ORG del Tracker
-   * ✅ Universal y estable:
-   * - Primero: querystring ?org=<uuid> (recomendado)
-   * - Segundo: localStorage (fallback)
-   * - Si no hay org, no enviamos posiciones
-   */
   useEffect(() => {
     const qOrg = pickOrgIdFromSearch(location?.search || "");
     if (qOrg) {
@@ -130,7 +127,6 @@ export default function TrackerGpsPage() {
     log("orgId missing (query + localStorage empty)");
   }, [location?.search]);
 
-  // 1) Sesión Project B (Tracker)
   useEffect(() => {
     if (!trackerReady || !supabaseTracker) return;
 
@@ -159,23 +155,15 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady]);
 
-  /**
-   * ✅ 1.5) Onboarding universal (NO depende de callback)
-   * - Si hay orgId + sesión, intenta accept-tracker-invite UNA VEZ por org.
-   * - Si hay invite pendiente, crea membership -> send_position deja de dar 403.
-   * - Si NO hay invite, falla con mensaje claro (es lo correcto por seguridad).
-   */
   useEffect(() => {
     if (!trackerReady || !hasSession || !supabaseTracker) return;
 
-    // Si no hay orgId, no hay onboarding
     if (!orgId) {
       setMembershipStatus("skipped");
       setMembershipDetail("Sin org_id; no se puede activar membership.");
       return;
     }
 
-    // Evitar múltiples ejecuciones simultáneas
     if (onboardingLockRef.current) return;
 
     const ssKey = `${SS_ACCEPTED_PREFIX}${orgId}`;
@@ -202,22 +190,25 @@ export default function TrackerGpsPage() {
         });
 
         if (error) {
+          const extra = await readEdgeErrorDetails(error);
           setMembershipStatus("failed");
-          setMembershipDetail(`accept-tracker-invite error: ${error.message}`);
-          log("accept-tracker-invite FAILED", { orgId, error: error.message });
+          setMembershipDetail(
+            `accept-tracker-invite error: ${error.message}` +
+              (extra ? ` | status=${extra.status} body=${extra.body}` : "")
+          );
+          log("accept-tracker-invite FAILED", { orgId, error: error.message, extra });
           return;
         }
 
-        // Si la función responde ok:false, lo mostramos (por si devuelve payload)
         if (data && data.ok === false) {
           setMembershipStatus("failed");
-          setMembershipDetail(`accept-tracker-invite rejected: ${data.error || "unknown"}`);
+          setMembershipDetail(`accept-tracker-invite rejected: ${data.error || "unknown"} | ${JSON.stringify(data)}`);
           log("accept-tracker-invite rejected", { orgId, data });
           return;
         }
 
         setMembershipStatus("ok");
-        setMembershipDetail(`accept-tracker-invite OK`);
+        setMembershipDetail(`accept-tracker-invite OK: ${JSON.stringify(data)}`);
         try {
           sessionStorage.setItem(ssKey, "1");
         } catch {}
@@ -232,7 +223,6 @@ export default function TrackerGpsPage() {
     })();
   }, [trackerReady, hasSession, orgId]);
 
-  // 2) GPS
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
 
@@ -256,7 +246,6 @@ export default function TrackerGpsPage() {
       lastCoordsRef.current = c;
       setCoords(c);
 
-      // status depende de membership gate
       if (membershipStatus === "ok") setStatus("Tracker activo");
       else if (membershipStatus === "pending") setStatus("Activando Tracker en la org…");
       else if (membershipStatus === "failed") setStatus("Tracker sin permiso en la org");
@@ -284,7 +273,6 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, membershipStatus]);
 
-  // 3) Envío throttled (SIEMPRE hacia Project B) + gated por membershipStatus
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (!supabaseTracker) return;
@@ -303,16 +291,12 @@ export default function TrackerGpsPage() {
       return;
     }
 
-    // ✅ Gate universal: no enviar hasta intentar accept
     if (membershipStatus === "pending") {
       log("send paused: membership pending", { orgId });
       return;
     }
     if (membershipStatus === "failed") {
       setStatus("Tracker sin permiso en la org");
-      setLastError(
-        "No existe invitación pendiente para esta org (tracker_invites vacío) o el invite está vencido/usado. Pide al admin que te invite nuevamente para ESTA org."
-      );
       log("send blocked: membership failed", { orgId, membershipDetail });
       return;
     }
@@ -402,57 +386,13 @@ export default function TrackerGpsPage() {
       <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-4">
         <h1 className="text-lg font-semibold text-center">Tracker GPS</h1>
 
-        {!trackerReady && (
-          <div className="mt-4 text-center">
-            <p className="text-sm text-slate-300 mb-3">Tracker no configurado en este deployment.</p>
-            <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
-              {lastError}
-            </div>
-            <button
-              onClick={() => navigate("/")}
-              className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
-            >
-              Ir a inicio
-            </button>
-          </div>
-        )}
-
-        {trackerReady && !hasSession && (
-          <div className="mt-4 text-center">
-            <p className="text-sm text-slate-300 mb-3">Esta página es solo para trackers invitados.</p>
-            {lastError ? (
-              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
-                {lastError}
-              </div>
-            ) : null}
-            <button
-              onClick={() => navigate("/")}
-              className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
-            >
-              Ir a inicio
-            </button>
-          </div>
-        )}
-
         {trackerReady && hasSession && (
           <>
             <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
               <div>Último envío: {formattedLastSend}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl || "—"}</div>
-              <div className="mt-2 text-[11px] text-slate-400 break-all">
-                org_id: {orgId || "— (falta org en query ?org=...)"}
-              </div>
-
-              <div className="mt-2 text-[11px] text-slate-400 break-all">
-                membership:{" "}
-                {membershipStatus === "ok"
-                  ? "ok"
-                  : membershipStatus === "pending"
-                  ? "pending"
-                  : membershipStatus === "failed"
-                  ? "failed"
-                  : "skipped"}
-              </div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
@@ -480,6 +420,30 @@ export default function TrackerGpsPage() {
               </div>
             ) : null}
           </>
+        )}
+
+        {trackerReady && !hasSession && (
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-300 mb-3">Esta página es solo para trackers invitados.</p>
+            <button
+              onClick={() => navigate("/")}
+              className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+            >
+              Ir a inicio
+            </button>
+          </div>
+        )}
+
+        {!trackerReady && (
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-300 mb-3">Tracker no configurado en este deployment.</p>
+            <button
+              onClick={() => navigate("/")}
+              className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+            >
+              Ir a inicio
+            </button>
+          </div>
         )}
       </div>
     </div>
