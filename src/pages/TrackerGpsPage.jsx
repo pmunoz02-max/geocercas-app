@@ -24,16 +24,14 @@ function pickOrgIdFromSearch(search) {
   return null;
 }
 
-async function readEdgeErrorDetails(err) {
-  // Intenta extraer status + body del Response si existe
+function decodeJwtPayload(token) {
   try {
-    const ctx = err?.context;
-    if (ctx && typeof ctx.status === "number" && typeof ctx.text === "function") {
-      const t = await ctx.text();
-      return { status: ctx.status, body: t };
-    }
-  } catch {}
-  return null;
+    const part = token.split(".")[1];
+    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
 export default function TrackerGpsPage() {
@@ -47,11 +45,11 @@ export default function TrackerGpsPage() {
 
   const [hasSession, setHasSession] = useState(false);
   const [trackerReady, setTrackerReady] = useState(true);
-
   const [orgId, setOrgId] = useState(null);
 
   const [membershipStatus, setMembershipStatus] = useState("pending"); // pending | ok | failed | skipped
   const [membershipDetail, setMembershipDetail] = useState("");
+  const [tokenIss, setTokenIss] = useState("");
 
   const watchIdRef = useRef(null);
   const intervalRef = useRef(null);
@@ -63,6 +61,11 @@ export default function TrackerGpsPage() {
   const TRACKER_URL = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
   const TRACKER_ANON = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
 
+  const acceptUrl = useMemo(() => {
+    if (!TRACKER_URL) return null;
+    return `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`;
+  }, [TRACKER_URL]);
+
   const sendUrl = useMemo(() => {
     if (!TRACKER_URL) return null;
     return `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/send_position`;
@@ -73,18 +76,14 @@ export default function TrackerGpsPage() {
     console.log("[TrackerGpsPage]", line, extra || "");
   };
 
+  // 0) Validación config
   useEffect(() => {
     if (!supabaseTracker) {
       setTrackerReady(false);
       setHasSession(false);
       setStatus("Tracker no configurado en este deployment.");
-      setLastError(
-        "Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview)."
-      );
-      log("supabaseTracker is null (missing env)", {
-        hasTrackerUrl: !!TRACKER_URL,
-        hasTrackerAnon: !!TRACKER_ANON,
-      });
+      setLastError("Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview).");
+      log("supabaseTracker is null", { hasTrackerUrl: !!TRACKER_URL, hasTrackerAnon: !!TRACKER_ANON });
       return;
     }
 
@@ -92,9 +91,7 @@ export default function TrackerGpsPage() {
       setTrackerReady(false);
       setHasSession(false);
       setStatus("Tracker no configurado en este deployment.");
-      setLastError(
-        "Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview)."
-      );
+      setLastError("Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview).");
       log("tracker env missing", { hasTrackerUrl: !!TRACKER_URL, hasTrackerAnon: !!TRACKER_ANON });
       return;
     }
@@ -102,6 +99,7 @@ export default function TrackerGpsPage() {
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
 
+  // 0.5) ORG resolver
   useEffect(() => {
     const qOrg = pickOrgIdFromSearch(location?.search || "");
     if (qOrg) {
@@ -124,9 +122,10 @@ export default function TrackerGpsPage() {
     }
 
     setOrgId(null);
-    log("orgId missing (query + localStorage empty)");
+    log("orgId missing");
   }, [location?.search]);
 
+  // 1) Sesión
   useEffect(() => {
     if (!trackerReady || !supabaseTracker) return;
 
@@ -140,14 +139,14 @@ export default function TrackerGpsPage() {
         setHasSession(false);
         setStatus("No hay sesión activa de tracker.");
         setLastError("Abre esta página únicamente desde tu Magic Link del Tracker.");
-        log("getSession(B): sin sesión", { error });
+        log("getSession: none", { error });
         return;
       }
 
       setHasSession(true);
       setStatus("Sesión OK. Preparando tracker…");
       setLastError(null);
-      log("getSession(B): OK", { email: data.session.user.email });
+      log("getSession: OK", { email: data.session.user.email });
     })();
 
     return () => {
@@ -155,12 +154,19 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady]);
 
+  // 1.5) Onboarding universal: accept-tracker-invite (fetch + Bearer)
   useEffect(() => {
     if (!trackerReady || !hasSession || !supabaseTracker) return;
 
     if (!orgId) {
       setMembershipStatus("skipped");
       setMembershipDetail("Sin org_id; no se puede activar membership.");
+      return;
+    }
+
+    if (!acceptUrl) {
+      setMembershipStatus("failed");
+      setMembershipDetail("No se pudo construir acceptUrl.");
       return;
     }
 
@@ -185,78 +191,56 @@ export default function TrackerGpsPage() {
         setMembershipStatus("pending");
         setMembershipDetail("Ejecutando accept-tracker-invite…");
 
-       const { data: sData, error: sErr } = await supabaseTracker.auth.getSession();
-const tokenB = sData?.session?.access_token || "";
+        const { data: sData, error: sErr } = await supabaseTracker.auth.getSession();
+        const tokenB = sData?.session?.access_token || "";
 
-if (sErr || !tokenB) {
-  setMembershipStatus("failed");
-  setMembershipDetail("No session token available for accept-tracker-invite");
-  return;
-}
-
-const resp = await fetch(
-  `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`,
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: TRACKER_ANON,
-      Authorization: `Bearer ${tokenB}`,
-    },
-    body: JSON.stringify({ org_id: orgId }),
-  }
-);
-
-const text = await resp.text();
-let j = null;
-try { j = text ? JSON.parse(text) : null; } catch { j = { raw: text }; }
-
-if (!resp.ok) {
-  setMembershipStatus("failed");
-  setMembershipDetail(
-    `accept-tracker-invite status=${resp.status} body=${text}`
-  );
-  return;
-}
-
-setMembershipStatus("ok");
-setMembershipDetail(`accept-tracker-invite OK: ${JSON.stringify(j)}`);
-
-
-        if (error) {
-          const extra = await readEdgeErrorDetails(error);
+        if (sErr || !tokenB) {
           setMembershipStatus("failed");
-          setMembershipDetail(
-            `accept-tracker-invite error: ${error.message}` +
-              (extra ? ` | status=${extra.status} body=${extra.body}` : "")
-          );
-          log("accept-tracker-invite FAILED", { orgId, error: error.message, extra });
+          setMembershipDetail("No session token available for accept-tracker-invite");
           return;
         }
 
-        if (data && data.ok === false) {
+        const payload = decodeJwtPayload(tokenB);
+        const iss = payload?.iss ? String(payload.iss) : "";
+        setTokenIss(iss);
+        log("JWT iss check", { iss });
+
+        const resp = await fetch(acceptUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: TRACKER_ANON,
+            Authorization: `Bearer ${tokenB}`,
+          },
+          body: JSON.stringify({ org_id: orgId }),
+        });
+
+        const text = await resp.text();
+
+        if (!resp.ok) {
           setMembershipStatus("failed");
-          setMembershipDetail(`accept-tracker-invite rejected: ${data.error || "unknown"} | ${JSON.stringify(data)}`);
-          log("accept-tracker-invite rejected", { orgId, data });
+          setMembershipDetail(`accept-tracker-invite status=${resp.status} body=${text}`);
+          log("accept-tracker-invite non-2xx", { status: resp.status, body: text, orgId });
           return;
         }
 
         setMembershipStatus("ok");
-        setMembershipDetail(`accept-tracker-invite OK: ${JSON.stringify(data)}`);
+        setMembershipDetail(`accept-tracker-invite OK: ${text || "ok"}`);
         try {
           sessionStorage.setItem(ssKey, "1");
         } catch {}
-        log("accept-tracker-invite OK", { orgId, data });
+        log("accept-tracker-invite OK", { orgId, body: text });
       } catch (e) {
         setMembershipStatus("failed");
         setMembershipDetail(`accept-tracker-invite exception: ${String(e?.message || e)}`);
-        log("accept-tracker-invite EXCEPTION", { orgId, err: String(e?.message || e) });
+        log("accept-tracker-invite exception", { orgId, err: String(e?.message || e) });
       } finally {
         onboardingLockRef.current = false;
       }
     })();
-  }, [trackerReady, hasSession, orgId]);
+  }, [trackerReady, hasSession, orgId, acceptUrl, TRACKER_ANON]);
 
+  // 2) GPS
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
 
@@ -307,6 +291,7 @@ setMembershipDetail(`accept-tracker-invite OK: ${JSON.stringify(j)}`);
     };
   }, [trackerReady, hasSession, membershipStatus]);
 
+  // 3) Envío (gated por membershipStatus)
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (!supabaseTracker) return;
@@ -427,6 +412,9 @@ setMembershipDetail(`accept-tracker-invite OK: ${JSON.stringify(j)}`);
               <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
+              {tokenIss ? (
+                <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div>
+              ) : null}
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
