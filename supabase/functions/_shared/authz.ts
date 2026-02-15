@@ -1,5 +1,6 @@
 // supabase/functions/_shared/authz.ts
-import { getAdminClient, getSupabaseUrl, getUserClient } from "./supabaseAdmin.ts";
+import { getAdminClient, getSupabaseUrl } from "./supabaseAdmin.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 /**
  * HttpError para devolver status correcto (401/403/400/500) de forma universal.
@@ -43,17 +44,25 @@ function expectedProjectRefFromUrl(url: string) {
   }
 }
 
+function env(name: string, fallback?: string) {
+  const v = Deno.env.get(name) ?? fallback;
+  if (!v) throw new Error(`Missing env var: ${name}`);
+  return v;
+}
+
 /**
- * ✅ UNIVERSAL:
+ * ✅ UNIVERSAL (REALMENTE UNIVERSAL):
  * - Requiere Authorization Bearer
- * - Valida con client "user-scoped" (anon + Authorization)
- * - Detecta mismatch de project ref (si el JWT trae claim ref)
+ * - Valida SIEMPRE contra el MISMO proyecto de la Edge Function:
+ *   usando SUPABASE_URL + SUPABASE_ANON_KEY del runtime
+ * - No depende de getUserClient(req)
+ * - No hace validación manual de firma/JWT secret
  */
 export async function requireUser(req: Request) {
   const jwt = getBearer(req);
   if (!jwt) throw new HttpError(401, "Missing Authorization Bearer token");
 
-  // Diagnóstico permanente: mismatch preview/prod (token de otro proyecto)
+  // Diagnóstico permanente: mismatch preview/prod (si el token trae claim ref)
   const payload = decodeJwtPayload(jwt);
   const expectedRef = expectedProjectRefFromUrl(getSupabaseUrl());
   const tokenRef = payload?.ref ? String(payload.ref) : "";
@@ -64,9 +73,15 @@ export async function requireUser(req: Request) {
     );
   }
 
-  // Validación real del token en el MISMO proyecto, propagando Authorization
-  const supa = getUserClient(req);
-  const { data, error } = await supa.auth.getUser();
+  // ✅ Validación estable con GoTrue del MISMO proyecto (sin header-magic)
+  const SUPABASE_URL = env("SUPABASE_URL", getSupabaseUrl());
+  const SUPABASE_ANON_KEY = env("SUPABASE_ANON_KEY");
+
+  const supa = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+
+  const { data, error } = await supa.auth.getUser(jwt);
   if (error || !data?.user) throw new HttpError(401, "Invalid JWT");
 
   return data.user;
@@ -75,15 +90,23 @@ export async function requireUser(req: Request) {
 /**
  * ✅ UNIVERSAL MULTI-TENANT:
  * Requiere que el usuario sea admin/owner EN ESA ORG.
- * (Mucho más permanente que user_roles global para SaaS multi-org)
  */
 export async function requireOrgAdmin(req: Request, orgId: string) {
   const user = await requireUser(req);
   const org_id = String(orgId || "").trim();
   if (!org_id) throw new HttpError(400, "org_id required");
 
-  // Consulta memberships con RLS (o puedes usar admin si tu RLS lo bloquea)
-  const supaUser = getUserClient(req);
+  // Aquí puedes usar user-scoped query, pero para no depender de getUserClient(req),
+  // lo hacemos con anon+token y RLS (si tu RLS lo permite).
+  const SUPABASE_URL = env("SUPABASE_URL", getSupabaseUrl());
+  const SUPABASE_ANON_KEY = env("SUPABASE_ANON_KEY");
+  const jwt = getBearer(req);
+
+  const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+  });
+
   const { data, error } = await supaUser
     .from("memberships")
     .select("role")
@@ -100,7 +123,6 @@ export async function requireOrgAdmin(req: Request, orgId: string) {
 
 /**
  * Compatibilidad: requireRole(role) global via user_roles.
- * (La dejamos, pero NO es lo más permanente para multi-org)
  */
 export async function requireRole(req: Request, role: string) {
   const user = await requireUser(req);
