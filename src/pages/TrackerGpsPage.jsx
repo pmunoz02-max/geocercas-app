@@ -1,13 +1,39 @@
+// src/pages/TrackerGpsPage.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 // ====== Config 5 minutos ======
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
 
+// Key para fallback (si no viene org por query)
+const LS_TRACKER_ORG_KEY = "geocercas_tracker_org_id";
+
+function isUuid(v) {
+  const s = String(v ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+function pickOrgIdFromSearch(search) {
+  try {
+    const sp = new URLSearchParams(search || "");
+    // soporta varios nombres por compatibilidad
+    const candidates = [
+      sp.get("org"),
+      sp.get("org_id"),
+      sp.get("orgId"),
+    ].filter(Boolean);
+    for (const c of candidates) {
+      if (isUuid(c)) return String(c);
+    }
+  } catch {}
+  return null;
+}
+
 export default function TrackerGpsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [status, setStatus] = useState("Iniciando tracker…");
   const [coords, setCoords] = useState(null);
@@ -16,6 +42,8 @@ export default function TrackerGpsPage() {
 
   const [hasSession, setHasSession] = useState(false);
   const [trackerReady, setTrackerReady] = useState(true); // false si faltan envs o supabaseTracker=null
+
+  const [orgId, setOrgId] = useState(null);
 
   const watchIdRef = useRef(null);
   const intervalRef = useRef(null);
@@ -66,6 +94,34 @@ export default function TrackerGpsPage() {
 
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
+
+  /**
+   * 0.5) Resolver ORG del Tracker
+   * ✅ Universal y estable:
+   * - Primero: querystring ?org=<uuid> (recomendado)
+   * - Segundo: localStorage (fallback)
+   * - Si no hay org, no enviamos posiciones (evita “org_id mismatch”)
+   */
+  useEffect(() => {
+    const qOrg = pickOrgIdFromSearch(location?.search || "");
+    if (qOrg) {
+      setOrgId(qOrg);
+      try { localStorage.setItem(LS_TRACKER_ORG_KEY, qOrg); } catch {}
+      log("orgId from query", { orgId: qOrg });
+      return;
+    }
+
+    let lsOrg = null;
+    try { lsOrg = localStorage.getItem(LS_TRACKER_ORG_KEY); } catch {}
+    if (lsOrg && isUuid(lsOrg)) {
+      setOrgId(String(lsOrg));
+      log("orgId from localStorage", { orgId: String(lsOrg) });
+      return;
+    }
+
+    setOrgId(null);
+    log("orgId missing (query + localStorage empty)");
+  }, [location?.search]);
 
   // 1) Sesión Project B (Tracker)
   useEffect(() => {
@@ -154,6 +210,15 @@ export default function TrackerGpsPage() {
       return;
     }
 
+    if (!orgId) {
+      setStatus("Error configuración");
+      setLastError(
+        "Falta org_id para el Tracker. Abre el Tracker desde un Magic Link que incluya ?org=<ORG_UUID>."
+      );
+      log("send disabled: orgId missing");
+      return;
+    }
+
     async function sendOnce() {
       const c = lastCoordsRef.current;
       if (!c) return;
@@ -177,10 +242,11 @@ export default function TrackerGpsPage() {
         }
 
         const payload = {
+          org_id: orgId, // ✅ CLAVE: evita mismatch
           lat: c.lat,
           lng: c.lng,
           accuracy: c.accuracy,
-          at: new Date().toISOString(),
+          recorded_at: new Date().toISOString(), // ✅ align con positions.recorded_at
           source: "tracker-gps-web",
         };
 
@@ -207,7 +273,7 @@ export default function TrackerGpsPage() {
           setLastError(
             `send_position ${resp.status}: ${j?.error || j?.message || j?.raw || "sin detalle"}`
           );
-          log("send_position FAILED", { status: resp.status, body: j, sendUrl });
+          log("send_position FAILED", { status: resp.status, body: j, sendUrl, orgId });
           return;
         }
 
@@ -215,11 +281,11 @@ export default function TrackerGpsPage() {
         setLastSend(new Date());
         setStatus("Posición enviada correctamente.");
         setLastError(null);
-        log("send_position OK", { sendUrl, body: j });
+        log("send_position OK", { sendUrl, orgId, body: j });
       } catch (e) {
         setStatus("Error enviando posición");
         setLastError(String(e?.message || e));
-        log("send_position EXCEPTION", { err: String(e?.message || e), sendUrl });
+        log("send_position EXCEPTION", { err: String(e?.message || e), sendUrl, orgId });
       } finally {
         isSendingRef.current = false;
       }
@@ -231,7 +297,7 @@ export default function TrackerGpsPage() {
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [trackerReady, hasSession, sendUrl, TRACKER_ANON]);
+  }, [trackerReady, hasSession, sendUrl, TRACKER_ANON, orgId]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
@@ -282,6 +348,9 @@ export default function TrackerGpsPage() {
               <div>Último envío: {formattedLastSend}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">
                 send_url: {sendUrl || "—"}
+              </div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">
+                org_id: {orgId || "— (falta org en query ?org=...)"}
               </div>
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
