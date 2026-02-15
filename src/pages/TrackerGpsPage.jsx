@@ -34,6 +34,11 @@ function decodeJwtPayload(token) {
   }
 }
 
+function looksLikeJwt(token) {
+  const t = String(token || "");
+  return t.split(".").length === 3;
+}
+
 export default function TrackerGpsPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -76,13 +81,27 @@ export default function TrackerGpsPage() {
     console.log("[TrackerGpsPage]", line, extra || "");
   };
 
+  async function hardLogoutTracker(reason) {
+    try {
+      await supabaseTracker?.auth?.signOut();
+    } catch {}
+    setHasSession(false);
+    setMembershipStatus("failed");
+    setStatus("Sesión inválida");
+    setLastError("Tu sesión de tracker no es válida o expiró. Abre un Magic Link NUEVO.");
+    setMembershipDetail(String(reason || "hardLogout"));
+    log("hardLogoutTracker", { reason: String(reason || "") });
+  }
+
   // 0) Validación config
   useEffect(() => {
     if (!supabaseTracker) {
       setTrackerReady(false);
       setHasSession(false);
       setStatus("Tracker no configurado en este deployment.");
-      setLastError("Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview).");
+      setLastError(
+        "Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview)."
+      );
       log("supabaseTracker is null", { hasTrackerUrl: !!TRACKER_URL, hasTrackerAnon: !!TRACKER_ANON });
       return;
     }
@@ -91,7 +110,9 @@ export default function TrackerGpsPage() {
       setTrackerReady(false);
       setHasSession(false);
       setStatus("Tracker no configurado en este deployment.");
-      setLastError("Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview).");
+      setLastError(
+        "Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview)."
+      );
       log("tracker env missing", { hasTrackerUrl: !!TRACKER_URL, hasTrackerAnon: !!TRACKER_ANON });
       return;
     }
@@ -135,18 +156,24 @@ export default function TrackerGpsPage() {
       const { data, error } = await supabaseTracker.auth.getSession();
       if (cancelled) return;
 
-      if (error || !data?.session) {
+      const tokenB = data?.session?.access_token || "";
+
+      if (error || !data?.session || !tokenB || !looksLikeJwt(tokenB)) {
         setHasSession(false);
         setStatus("No hay sesión activa de tracker.");
         setLastError("Abre esta página únicamente desde tu Magic Link del Tracker.");
-        log("getSession: none", { error });
+        log("getSession: none/invalid", { error, hasSession: !!data?.session, hasToken: !!tokenB });
         return;
       }
+
+      const payload = decodeJwtPayload(tokenB);
+      const iss = payload?.iss ? String(payload.iss) : "";
+      setTokenIss(iss);
 
       setHasSession(true);
       setStatus("Sesión OK. Preparando tracker…");
       setLastError(null);
-      log("getSession: OK", { email: data.session.user.email });
+      log("getSession: OK", { email: data.session.user.email, iss });
     })();
 
     return () => {
@@ -194,9 +221,8 @@ export default function TrackerGpsPage() {
         const { data: sData, error: sErr } = await supabaseTracker.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
 
-        if (sErr || !tokenB) {
-          setMembershipStatus("failed");
-          setMembershipDetail("No session token available for accept-tracker-invite");
+        if (sErr || !tokenB || !looksLikeJwt(tokenB)) {
+          await hardLogoutTracker("accept: missing/invalid token");
           return;
         }
 
@@ -216,6 +242,15 @@ export default function TrackerGpsPage() {
         });
 
         const text = await resp.text();
+
+        // Si es invalid JWT, hacemos hardLogout para forzar magic link nuevo
+        if (resp.status === 401 || resp.status === 403) {
+          const lower = String(text || "").toLowerCase();
+          if (lower.includes("invalid jwt") || lower.includes("bad_jwt") || lower.includes("malformed")) {
+            await hardLogoutTracker(`accept: ${resp.status} ${text}`);
+            return;
+          }
+        }
 
         if (!resp.ok) {
           setMembershipStatus("failed");
@@ -269,7 +304,7 @@ export default function TrackerGpsPage() {
       else if (membershipStatus === "failed") setStatus("Tracker sin permiso en la org");
       else setStatus("Tracker activo");
 
-      setLastError(null);
+      // no borres lastError aquí; a veces queremos que siga visible
     };
 
     const handleError = (err) => {
@@ -334,11 +369,8 @@ export default function TrackerGpsPage() {
         const { data: sData, error: sErr } = await supabaseTracker.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
 
-        if (sErr || !tokenB) {
-          setStatus("No hay sesión activa");
-          setLastError("Sesión expirada. Abre el Magic Link nuevamente.");
-          log("sendOnce: no tokenB", { sErr });
-          setHasSession(false);
+        if (sErr || !tokenB || !looksLikeJwt(tokenB)) {
+          await hardLogoutTracker("send: missing/invalid token");
           return;
         }
 
@@ -412,14 +444,11 @@ export default function TrackerGpsPage() {
               <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
-              {tokenIss ? (
-                <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div>
-              ) : null}
+              {tokenIss ? <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div> : null}
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
-                  lat: {coords.lat?.toFixed?.(6)} | lng: {coords.lng?.toFixed?.(6)} | acc:{" "}
-                  {coords.accuracy ?? "—"}
+                  lat: {coords.lat?.toFixed?.(6)} | lng: {coords.lng?.toFixed?.(6)} | acc: {coords.accuracy ?? "—"}
                 </div>
               ) : (
                 <div className="mt-2 text-xs text-slate-400">Esperando coordenadas…</div>
@@ -447,6 +476,11 @@ export default function TrackerGpsPage() {
         {trackerReady && !hasSession && (
           <div className="mt-4 text-center">
             <p className="text-sm text-slate-300 mb-3">Esta página es solo para trackers invitados.</p>
+            {lastError ? (
+              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
+                {lastError}
+              </div>
+            ) : null}
             <button
               onClick={() => navigate("/")}
               className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
@@ -459,6 +493,11 @@ export default function TrackerGpsPage() {
         {!trackerReady && (
           <div className="mt-4 text-center">
             <p className="text-sm text-slate-300 mb-3">Tracker no configurado en este deployment.</p>
+            {lastError ? (
+              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
+                {lastError}
+              </div>
+            ) : null}
             <button
               onClick={() => navigate("/")}
               className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
