@@ -9,31 +9,25 @@ function safeNextPath(next) {
   return "/tracker-gps";
 }
 
+function extractOrg(search) {
+  const sp = new URLSearchParams(search || "");
+  return sp.get("org") || sp.get("org_id") || sp.get("orgId") || "";
+}
+
 /**
  * Preserva parámetros importantes del callback hacia el destino (tracker-gps):
  * - org / org_id / orgId
- * - (y cualquier otro param adicional que quieras mantener)
  *
  * No copia: next, code, access_token, refresh_token, type, expires_in, etc.
  */
 function buildNextUrl(nextPath, search) {
   const sp = new URLSearchParams(search || "");
-
   const next = safeNextPath(sp.get("next") || nextPath || "/tracker-gps");
 
-  // params a preservar
   const preserve = new URLSearchParams();
-
-  const org = sp.get("org");
-  const org_id = sp.get("org_id");
-  const orgId = sp.get("orgId");
+  const org = extractOrg(search);
 
   if (org) preserve.set("org", org);
-  else if (org_id) preserve.set("org", org_id);
-  else if (orgId) preserve.set("org", orgId);
-
-  // Si en el futuro quieres preservar más params, agrégalos aquí:
-  // const foo = sp.get("foo"); if (foo) preserve.set("foo", foo);
 
   const qs = preserve.toString();
   return qs ? `${next}?${qs}` : next;
@@ -43,6 +37,9 @@ export default function AuthCallbackTracker() {
   const location = useLocation();
   const navigate = useNavigate();
   const [status, setStatus] = useState("Procesando autenticación de Tracker...");
+  const [detail, setDetail] = useState("");
+
+  const orgId = useMemo(() => extractOrg(location.search), [location.search]);
 
   const nextUrl = useMemo(() => {
     return buildNextUrl("/tracker-gps", location.search);
@@ -90,6 +87,23 @@ export default function AuthCallbackTracker() {
           window.history.replaceState({}, "", clean.toString());
         }
 
+        // ✅ Paso nuevo: aceptar invite y crear membership real (solo si hay orgId)
+        if (orgId) {
+          setStatus("Validando invitación y activando Tracker en la org...");
+          const { data, error } = await supabaseTracker.functions.invoke("accept-tracker-invite", {
+            body: { org_id: orgId },
+          });
+
+          if (error) {
+            // En Preview dejamos diagnóstico visible
+            setDetail(`accept-tracker-invite error: ${error.message}`);
+          } else {
+            setDetail(`accept-tracker-invite ok: ${JSON.stringify(data)}`);
+          }
+        } else {
+          setDetail("Warning: no orgId en querystring; no se ejecutó accept-tracker-invite.");
+        }
+
         setStatus("Listo. Entrando al Tracker...");
         if (!cancelled) navigate(nextUrl, { replace: true });
       } catch (e) {
@@ -102,16 +116,24 @@ export default function AuthCallbackTracker() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, nextUrl]);
+  }, [navigate, nextUrl, orgId]);
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-gray-900">Tracker Auth</h1>
         <p className="mt-3 text-sm text-gray-700">{status}</p>
+
         <p className="mt-2 text-xs text-gray-500 break-all">
+          org: {orgId || "(none)"} <br />
           next: {nextUrl}
         </p>
+
+        {detail ? (
+          <pre className="mt-3 text-[11px] leading-snug p-2 rounded-lg bg-gray-50 border overflow-auto max-h-40">
+            {detail}
+          </pre>
+        ) : null}
       </div>
     </div>
   );
