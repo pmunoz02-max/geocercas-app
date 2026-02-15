@@ -1,4 +1,3 @@
-// src/pages/TrackerGpsPage.jsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabaseTracker } from "../supabaseTrackerClient";
@@ -23,13 +22,18 @@ export default function TrackerGpsPage() {
   const isSendingRef = useRef(false);
   const lastSentAtRef = useRef(0);
 
-  const A_URL = import.meta.env.VITE_SUPABASE_URL;
-  const A_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const SEND_URL = A_URL ? `${A_URL}/functions/v1/send_position` : null;
+  // ✅ IMPORTANT: tokenB es Project B => endpoint y apikey deben ser Project B
+  const B_URL =
+    import.meta.env.VITE_SUPABASE_TRACKER_URL || import.meta.env.VITE_SUPABASE_URL;
+  const B_ANON =
+    import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  const log = (msg) => {
+  const SEND_URL = B_URL ? `${String(B_URL).replace(/\/$/, "")}/functions/v1/send_position` : null;
+
+  const log = (msg, extra) => {
     const line = `${new Date().toISOString().slice(11, 19)} - ${msg}`;
-    console.log("[TrackerGpsPage]", line);
+    console.log("[TrackerGpsPage]", line, extra || "");
   };
 
   // 1) Sesión Project B
@@ -44,14 +48,14 @@ export default function TrackerGpsPage() {
         setHasSession(false);
         setStatus("No hay sesión activa de tracker.");
         setLastError("Abre esta página únicamente desde tu Magic Link.");
-        log("getSession(B): sin sesión");
+        log("getSession(B): sin sesión", { error });
         return;
       }
 
       setHasSession(true);
       setStatus("Sesión OK. Iniciando geolocalización…");
       setLastError(null);
-      log(`getSession(B): OK email=${data.session.user.email}`);
+      log("getSession(B): OK", { email: data.session.user.email });
     })();
 
     return () => {
@@ -90,7 +94,7 @@ export default function TrackerGpsPage() {
       if (cancelled) return;
       setStatus("Error GPS");
       setLastError(err?.message || String(err));
-      log(`GPS error: ${err?.message || String(err)}`);
+      log("GPS error", { err: err?.message || String(err) });
     };
 
     watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
@@ -105,9 +109,16 @@ export default function TrackerGpsPage() {
     };
   }, [hasSession]);
 
-  // 3) Envío throttled
+  // 3) Envío throttled (con diagnóstico real)
   useEffect(() => {
-    if (!hasSession || !SEND_URL || !A_ANON) return;
+    if (!hasSession) return;
+
+    if (!SEND_URL || !B_ANON) {
+      setStatus("Error configuración");
+      setLastError("Falta configuración tracker (URL/ANON) para send_position.");
+      log("Missing env for send_position", { SEND_URL, hasAnon: !!B_ANON, B_URL });
+      return;
+    }
 
     async function sendOnce() {
       const c = lastCoordsRef.current;
@@ -120,9 +131,15 @@ export default function TrackerGpsPage() {
       isSendingRef.current = true;
 
       try {
-        const { data: sData } = await supabaseTracker.auth.getSession();
+        const { data: sData, error: sErr } = await supabaseTracker.auth.getSession();
         const tokenB = sData?.session?.access_token;
-        if (!tokenB) return;
+
+        if (sErr || !tokenB) {
+          setStatus("No hay sesión activa");
+          setLastError("Sesión expirada. Abre el Magic Link nuevamente.");
+          log("sendOnce: no tokenB", { sErr });
+          return;
+        }
 
         const payload = {
           lat: c.lat,
@@ -136,28 +153,49 @@ export default function TrackerGpsPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            apikey: A_ANON,
+            apikey: B_ANON,
             Authorization: `Bearer ${tokenB}`,
           },
           body: JSON.stringify(payload),
         });
 
-        if (!resp.ok) return;
+        const text = await resp.text();
+        let j = null;
+        try {
+          j = text ? JSON.parse(text) : null;
+        } catch {
+          j = { raw: text };
+        }
+
+        if (!resp.ok) {
+          setStatus("Error enviando posición");
+          setLastError(`send_position ${resp.status}: ${j?.error || j?.message || text || "sin detalle"}`);
+          log("send_position FAILED", { status: resp.status, body: j });
+          return;
+        }
 
         lastSentAtRef.current = Date.now();
         setLastSend(new Date());
         setStatus("Posición enviada correctamente.");
+        setLastError(null);
+        log("send_position OK", j);
+      } catch (e) {
+        setStatus("Error enviando posición");
+        setLastError(String(e?.message || e));
+        log("send_position EXCEPTION", { err: String(e?.message || e) });
       } finally {
         isSendingRef.current = false;
       }
     }
 
+    // tick + primer envío inmediato
     intervalRef.current = window.setInterval(sendOnce, TICK_MS);
+    sendOnce();
 
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [hasSession, SEND_URL, A_ANON]);
+  }, [hasSession, SEND_URL, B_ANON]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
@@ -184,10 +222,25 @@ export default function TrackerGpsPage() {
           <>
             <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
               <div>Último envío: {formattedLastSend}</div>
+              {coords ? (
+                <div className="mt-2 text-xs text-slate-300">
+                  lat: {coords.lat?.toFixed?.(6)} | lng: {coords.lng?.toFixed?.(6)} | acc:{" "}
+                  {coords.accuracy ?? "—"}
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-slate-400">Esperando coordenadas…</div>
+              )}
             </div>
+
             <div className="mt-3 text-xs">
               Estado: <span className="text-slate-100">{status}</span>
             </div>
+
+            {lastError ? (
+              <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
+                {lastError}
+              </div>
+            ) : null}
           </>
         )}
       </div>
