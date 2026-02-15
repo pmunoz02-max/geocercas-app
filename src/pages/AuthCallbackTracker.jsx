@@ -24,8 +24,13 @@ export default function AuthCallbackTracker() {
 
     async function run() {
       try {
-        // Soporta links con ?code=... o hash tokens, según el flujo.
-        // exchangeCodeForSession maneja el intercambio si viene "code".
+        if (!supabaseTracker) {
+          setStatus(
+            "Tracker no configurado en este deployment. Falta VITE_SUPABASE_TRACKER_URL/ANON_KEY en Vercel (Preview)."
+          );
+          return;
+        }
+
         const url = window.location.href;
         const hasCode = new URL(url).searchParams.get("code");
 
@@ -34,7 +39,6 @@ export default function AuthCallbackTracker() {
           const { error } = await supabaseTracker.auth.exchangeCodeForSession(url);
           if (error) throw error;
         } else {
-          // Si viene por hash (access_token/refresh_token)
           const hash = window.location.hash || "";
           const hp = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
           const access_token = hp.get("access_token") || "";
@@ -50,7 +54,6 @@ export default function AuthCallbackTracker() {
           }
         }
 
-        // Limpia URL
         if (!cancelled) {
           const clean = new URL(window.location.href);
           clean.hash = "";
@@ -62,7 +65,6 @@ export default function AuthCallbackTracker() {
       } catch (e) {
         const msg = e?.message || "tracker_auth_failed";
         setStatus(`Error: ${msg}`);
-        // No mandamos a /login del app para no mezclar sesiones.
       }
     }
 
