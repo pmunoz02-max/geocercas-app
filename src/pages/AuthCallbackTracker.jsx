@@ -36,12 +36,26 @@ function parseHashTokens(hash) {
   };
 }
 
+function looksLikeJwt(token) {
+  const t = String(token || "");
+  return t.split(".").length === 3;
+}
+
+function readStorageNow() {
+  try {
+    return localStorage.getItem("sb-tracker-auth");
+  } catch {
+    return "localStorage_error";
+  }
+}
+
 export default function AuthCallbackTracker() {
   const location = useLocation();
   const navigate = useNavigate();
 
   const [status, setStatus] = useState("Procesando autenticación de Tracker…");
   const [debug, setDebug] = useState({});
+  const [canContinue, setCanContinue] = useState(false);
 
   const nextUrl = useMemo(() => buildNextUrl("/tracker-gps", location.search), [location.search]);
 
@@ -51,12 +65,8 @@ export default function AuthCallbackTracker() {
     async function run() {
       try {
         if (!supabaseTracker) {
-          setStatus(
-            "Tracker no configurado en este deployment. Falta VITE_SUPABASE_TRACKER_URL/ANON_KEY en Vercel (Preview)."
-          );
-          setDebug({
-            hint: "supabaseTracker is null",
-          });
+          setStatus("Tracker no configurado en este deployment (faltan envs).");
+          setDebug({ hint: "supabaseTracker is null" });
           return;
         }
 
@@ -67,30 +77,22 @@ export default function AuthCallbackTracker() {
 
         setDebug((d) => ({
           ...d,
+          phase: "start",
           nextUrl,
-          hasCode: !!code,
-          hasHashTokens: !!(access_token && refresh_token),
+          href: fullUrl,
           path: u.pathname,
           search: u.search,
-          hashPresent: !!window.location.hash,
-          storageKey: "sb-tracker-auth",
-          storageValuePresent: (() => {
-            try {
-              return !!localStorage.getItem("sb-tracker-auth");
-            } catch {
-              return "localStorage_error";
-            }
-          })(),
+          hash: window.location.hash ? "(present)" : "(empty)",
+          hasCode: !!code,
+          hasHashTokens: !!(access_token && refresh_token),
+          storage_before: readStorageNow(),
         }));
 
-        // 1) Intercambiar code -> session
         if (code) {
           setStatus("Intercambiando code por sesión (Tracker)…");
           const { error } = await supabaseTracker.auth.exchangeCodeForSession(fullUrl);
           if (error) throw error;
-        }
-        // 2) Si viene por hash -> setSession
-        else if (access_token && refresh_token) {
+        } else if (access_token && refresh_token) {
           setStatus("Creando sesión desde hash (Tracker)…");
           const { error } = await supabaseTracker.auth.setSession({ access_token, refresh_token });
           if (error) throw error;
@@ -98,58 +100,46 @@ export default function AuthCallbackTracker() {
           setStatus("No hay code ni tokens en el callback.");
           setDebug((d) => ({
             ...d,
-            error: "missing_code_and_tokens",
-            hint: "El redirectTo del magic link debe apuntar a /auth/callback-tracker?...",
+            phase: "missing_code_and_tokens",
+            storage_after: readStorageNow(),
+            hint:
+              "El redirect_to del magic link NO llegó a /auth/callback-tracker con code/tokens. Revisa allowlist de Redirect URLs en Supabase Auth.",
           }));
           return;
         }
 
-        // 3) Confirmar que la sesión quedó realmente creada y persistida
         setStatus("Validando sesión creada…");
         const { data, error } = await supabaseTracker.auth.getSession();
         if (error) throw error;
 
-        const tokenB = data?.session?.access_token || "";
-        if (!tokenB || tokenB.split(".").length !== 3) {
-          setStatus("Sesión inválida (sin access_token).");
-          setDebug((d) => ({
-            ...d,
-            gotSession: !!data?.session,
-            hasAccessToken: !!tokenB,
-            storageValueAfter: (() => {
-              try {
-                return localStorage.getItem("sb-tracker-auth");
-              } catch {
-                return "localStorage_error";
-              }
-            })(),
-            hint: "La sesión no se persistió. Revisa supabaseTrackerClient y el redirect del magic link.",
-          }));
+        const token = data?.session?.access_token || "";
+
+        setDebug((d) => ({
+          ...d,
+          phase: "after_exchange",
+          gotSession: !!data?.session,
+          tokenLooksOk: looksLikeJwt(token),
+          storage_after: readStorageNow(),
+        }));
+
+        if (!token || !looksLikeJwt(token)) {
+          setStatus("Sesión NO quedó válida (sin access_token).");
+          setCanContinue(false);
           return;
         }
 
-        // 4) Limpia hash DESPUÉS de tener sesión OK (no toca querystring org/next)
-        if (!cancelled) {
-          const clean = new URL(window.location.href);
-          clean.hash = "";
-          window.history.replaceState({}, "", clean.toString());
-        }
+        setStatus("✅ Sesión OK. Puedes continuar al Tracker.");
+        setCanContinue(true);
 
-        setStatus("Sesión OK. Redirigiendo al Tracker…");
-        if (!cancelled) navigate(nextUrl, { replace: true });
+        // IMPORTANT: NO redirigimos automáticamente (pausa para debug)
       } catch (e) {
         const msg = e?.message || String(e);
         setStatus(`Error: ${msg}`);
         setDebug((d) => ({
           ...d,
+          phase: "exception",
           exception: msg,
-          storageValueAfterError: (() => {
-            try {
-              return localStorage.getItem("sb-tracker-auth");
-            } catch {
-              return "localStorage_error";
-            }
-          })(),
+          storage_after_error: readStorageNow(),
         }));
       }
     }
@@ -161,14 +151,25 @@ export default function AuthCallbackTracker() {
   }, [navigate, nextUrl]);
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center p-6">
+    <div className="min-h-[70vh] flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-gray-900">Tracker Auth</h1>
         <p className="mt-3 text-sm text-gray-700">{status}</p>
-        <p className="mt-2 text-xs text-gray-500 break-all">next: {nextUrl}</p>
 
-        <details className="mt-4">
-          <summary className="text-xs text-gray-600 cursor-pointer">Debug</summary>
+        <p className="mt-2 text-xs text-gray-500 break-all">next: {nextUrl}</p>
+        <p className="mt-2 text-xs text-gray-500 break-all">storageKey: sb-tracker-auth</p>
+
+        {canContinue ? (
+          <button
+            onClick={() => navigate(nextUrl, { replace: true })}
+            className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2 text-white font-semibold"
+          >
+            Continuar al Tracker
+          </button>
+        ) : null}
+
+        <details className="mt-4" open>
+          <summary className="text-xs text-gray-600 cursor-pointer">Debug (copia/pega)</summary>
           <pre className="mt-2 text-[11px] bg-gray-50 border rounded-xl p-3 overflow-auto">
             {JSON.stringify(debug, null, 2)}
           </pre>
