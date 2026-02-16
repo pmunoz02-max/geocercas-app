@@ -26,9 +26,10 @@ function humanize(s) {
     .join(" ");
 }
 
-function fallbackFromPath(path) {
+function fallbackFromPath(path, t) {
   const p = String(path || "").split("/").filter(Boolean).pop() || "";
-  return humanize(p) || "Tab";
+  const h = humanize(p);
+  return h || t("common.actions.loading", { defaultValue: "Tab" }); // fallback neutro
 }
 
 function resolveLabel(t, tab) {
@@ -46,7 +47,7 @@ function resolveLabel(t, tab) {
   const direct = safeText(tab?.label).trim();
   if (direct) return direct;
 
-  return fallbackFromPath(tab?.path);
+  return "";
 }
 
 export default function TopTabs({ tabs = [] }) {
@@ -71,7 +72,11 @@ export default function TopTabs({ tabs = [] }) {
   const items = Array.isArray(tabs) ? tabs : [];
 
   const roleRaw = safeText(currentRole).trim().toLowerCase();
-  const roleLabel = isAppRoot ? "ROOT" : roleRaw ? roleRaw.toUpperCase() : "SIN ROL";
+  const roleLabel = isAppRoot
+    ? t("common.roles.root")
+    : roleRaw
+    ? roleRaw.toUpperCase()
+    : t("common.roles.noRole");
 
   const isActive = (path) => {
     const p = safeText(path).trim();
@@ -79,20 +84,17 @@ export default function TopTabs({ tabs = [] }) {
     return location.pathname === p || location.pathname.startsWith(p + "/");
   };
 
-  // ✅ Forzamos contraste dentro del contenedor blanco (evita “disabled look”)
   const wrapCls = "w-full text-slate-900";
   const panelCls =
     "bg-white border border-slate-200 rounded-2xl px-3 py-2 shadow-sm text-slate-900";
 
-  // ✅ Tabs estilo SaaS limpio (sin dots)
   const baseCls =
     "no-underline inline-flex items-center justify-center px-4 py-2 rounded-full " +
     "text-sm font-semibold whitespace-nowrap border transition-all duration-150 " +
     "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 " +
     "focus-visible:ring-offset-white";
 
-  const activeCls =
-    "bg-slate-900 border-slate-900 !text-white shadow-sm";
+  const activeCls = "bg-slate-900 border-slate-900 !text-white shadow-sm";
 
   const inactiveCls =
     "bg-white border-slate-200 !text-slate-900 " +
@@ -115,7 +117,8 @@ export default function TopTabs({ tabs = [] }) {
                 if (!path) return null;
 
                 const on = isActive(path);
-                const label = safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
+                const labelResolved = safeText(resolveLabel(t, tab)).trim();
+                const label = labelResolved || fallbackFromPath(path, t);
 
                 return (
                   <NavLink
@@ -126,7 +129,6 @@ export default function TopTabs({ tabs = [] }) {
                   >
                     <span className="relative">
                       {label}
-                      {/* ✅ Acento emerald SOLO en activa (limpio) */}
                       {on ? (
                         <span className="absolute left-0 -bottom-1 h-[2px] w-full rounded-full bg-emerald-400/80" />
                       ) : null}
@@ -139,7 +141,9 @@ export default function TopTabs({ tabs = [] }) {
 
           {user && (
             <div className="hidden md:flex flex-col text-right text-xs px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
-              <span className="font-medium text-slate-900">{user.email ?? "Sin email"}</span>
+              <span className="font-medium text-slate-900">
+                {user.email ?? t("common.fallbacks.noEmail")}
+              </span>
               <span className="text-slate-600">{roleLabel}</span>
             </div>
           )}

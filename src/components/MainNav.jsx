@@ -1,9 +1,11 @@
 // src/components/MainNav.jsx
 import { NavLink, useNavigate } from "react-router-dom";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function MainNav({ role }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
@@ -46,11 +48,10 @@ export default function MainNav({ role }) {
   return (
     <div className="flex items-center gap-3 w-full justify-end">
       <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-        <Pill to="/geocerca">Geocerca</Pill>
-        <Pill to="/personal">Personal</Pill>
-        <Pill to="/tracker">Tracker</Pill>
-
-        {isAdmin && <Pill to="/reportes">Reportes</Pill>}
+        <Pill to="/geocerca">{t("app.tabs.geocerca", { defaultValue: t("app.tabs.geocercas") })}</Pill>
+        <Pill to="/personal">{t("app.tabs.personal")}</Pill>
+        <Pill to="/tracker">{t("app.tabs.tracker")}</Pill>
+        {isAdmin && <Pill to="/reportes">{t("app.tabs.reportes")}</Pill>}
       </div>
 
       {user && (
@@ -58,7 +59,7 @@ export default function MainNav({ role }) {
           onClick={handleSignOut}
           className="inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition"
         >
-          Salir
+          {t("app.header.logout")}
         </button>
       )}
     </div>
