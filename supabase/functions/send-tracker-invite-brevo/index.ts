@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
+const BUILD_TAG = "send-tracker-invite-brevo-x-user-jwt-20260216";
+
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, x-api-key, content-type",
+    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
@@ -30,6 +32,19 @@ function normEmail(email: string) {
 function isPgUniqueViolation(err: any) {
   const code = err?.code || err?.details?.code;
   return String(code) === "23505";
+}
+
+function looksLikeJwt(t: string) {
+  const s = String(t || "").trim();
+  // JWT = 3 partes separadas por "."
+  return s.split(".").length === 3;
+}
+
+// ✅ CANÓNICO: callback existente
+function buildRedirectTo(appPreviewUrl: string, orgId: string) {
+  const base = appPreviewUrl.replace(/\/$/, "");
+  const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}`;
+  return `${base}/auth/callback?next=${encodeURIComponent(next)}`;
 }
 
 async function brevoSendEmail(opts: {
@@ -66,19 +81,8 @@ async function brevoSendEmail(opts: {
 }
 
 /**
- * ✅ CANÓNICO
- * Usamos /auth/callback (ya existe, ya funciona, ya hace bootstrap cookie tg_at)
- * next contiene org_id para que el tracker abra en la org correcta
- */
-function buildRedirectTo(appPreviewUrl: string, orgId: string) {
-  const base = appPreviewUrl.replace(/\/$/, "");
-  const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}`;
-  return `${base}/auth/callback?next=${encodeURIComponent(next)}`;
-}
-
-/**
- * ✅ Validación robusta del JWT del caller.
- * (evita depender de supabase-js getUser(jwt) dentro de service role)
+ * ✅ Validación robusta del JWT del usuario usando /auth/v1/user
+ * NOTA: aquí jwt es el x-user-jwt (NO Authorization)
  */
 async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string; jwt: string }) {
   const url = `${params.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`;
@@ -102,7 +106,7 @@ async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string;
 
   const id = json?.id ? String(json.id) : "";
   if (!id) return { ok: false as const, status: 500, body: { error: "NO_USER_ID", raw: json } };
-  return { ok: true as const, user_id: id, raw: json };
+  return { ok: true as const, user_id: id };
 }
 
 /**
@@ -140,7 +144,7 @@ async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: 
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { ok: false, error: "Method not allowed" });
+  if (req.method !== "POST") return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -153,30 +157,32 @@ serve(async (req) => {
     const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com").replace(/\/$/, "");
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return jsonResponse(500, { ok: false, error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY" });
+      return jsonResponse(500, { ok: false, error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY", build_tag: BUILD_TAG });
     }
     if (!SUPABASE_ANON_KEY) {
-      return jsonResponse(500, { ok: false, error: "Missing SUPABASE_ANON_KEY (needed to validate JWT via /auth/v1/user)" });
+      return jsonResponse(500, { ok: false, error: "Missing SUPABASE_ANON_KEY", build_tag: BUILD_TAG });
     }
     if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
-      return jsonResponse(500, { ok: false, error: "Missing BREVO_API_KEY / BREVO_SENDER_EMAIL" });
+      return jsonResponse(500, { ok: false, error: "Missing BREVO_API_KEY / BREVO_SENDER_EMAIL", build_tag: BUILD_TAG });
     }
 
-    const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
-    if (!authHeader.startsWith("Bearer ")) {
-      return jsonResponse(401, { ok: false, error: "Missing Bearer token" });
+    // ✅ 100% x-user-jwt (Authorization ya NO es user jwt)
+    const userJwt = (req.headers.get("x-user-jwt") || "").trim();
+    if (!userJwt) {
+      return jsonResponse(401, { ok: false, error: "Missing x-user-jwt", build_tag: BUILD_TAG });
     }
-    const jwt = authHeader.slice("Bearer ".length).trim();
-    if (!jwt) return jsonResponse(401, { ok: false, error: "Missing Bearer token" });
+    if (!looksLikeJwt(userJwt)) {
+      return jsonResponse(401, { ok: false, error: "Invalid x-user-jwt format", build_tag: BUILD_TAG });
+    }
 
     const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
     // ✅ validar caller (quien invita)
-    const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt });
+    const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt: userJwt });
     if (!u.ok) {
-      return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status });
+      return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status, build_tag: BUILD_TAG });
     }
     const callerUserId = u.user_id;
 
@@ -185,8 +191,8 @@ serve(async (req) => {
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
 
-    if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id" });
-    if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email" });
+    if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
+    if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
 
     // ✅ Caller debe ser owner de esa org
     const { data: ownerRow, error: ownerErr } = await sbAdmin
@@ -198,13 +204,13 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (ownerErr) return jsonResponse(500, { ok: false, error: "DB error checking owner", detail: ownerErr.message });
+    if (ownerErr) return jsonResponse(500, { ok: false, error: "DB error checking owner", detail: ownerErr.message, build_tag: BUILD_TAG });
     if (!ownerRow || String(ownerRow.role) !== "owner") {
-      return jsonResponse(403, { ok: false, error: "Not allowed (must be owner of org)" });
+      return jsonResponse(403, { ok: false, error: "Not allowed (must be owner of org)", build_tag: BUILD_TAG });
     }
 
     const nowIso = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(); // 7 días
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
     const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id);
 
     // ✅ DB idempotente + retry por carreras
@@ -219,9 +225,9 @@ serve(async (req) => {
           const { error: updErr } = await sbAdmin
             .from("tracker_invites")
             .update({
-              email,              // importante por unique (org_id,email) where accepted_at is null
+              email,
               email_norm: email,
-              is_active: true,    // importante por unique is_active=true
+              is_active: true,
               expires_at: expiresAt,
             } as any)
             .eq("id", open.id);
@@ -264,7 +270,7 @@ serve(async (req) => {
     }
 
     if (!trackerInviteId) {
-      return jsonResponse(500, { ok: false, error: "Failed upserting invite", detail: "No invite id returned" });
+      return jsonResponse(500, { ok: false, error: "Failed upserting invite", detail: "No invite id returned", build_tag: BUILD_TAG });
     }
 
     // ✅ generar magic link con redirect
@@ -275,7 +281,7 @@ serve(async (req) => {
     });
 
     if (linkErr || !linkData?.properties?.action_link) {
-      return jsonResponse(500, { ok: false, error: "generateLink failed", detail: linkErr?.message || "no action_link" });
+      return jsonResponse(500, { ok: false, error: "generateLink failed", detail: linkErr?.message || "no action_link", build_tag: BUILD_TAG });
     }
 
     const actionLink = linkData.properties.action_link;
@@ -310,6 +316,7 @@ serve(async (req) => {
 
     return jsonResponse(200, {
       ok: true,
+      build_tag: BUILD_TAG,
       mode,
       org_id,
       email,
@@ -318,6 +325,6 @@ serve(async (req) => {
       action_link: actionLink,
     });
   } catch (e) {
-    return jsonResponse(500, { ok: false, error: "Unhandled", detail: String((e as any)?.message || e) });
+    return jsonResponse(500, { ok: false, error: "Unhandled", detail: String((e as any)?.message || e), build_tag: BUILD_TAG });
   }
 });
