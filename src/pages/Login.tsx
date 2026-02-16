@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
 function getQueryParam(search: string, key: string) {
@@ -37,7 +38,15 @@ const inputClass =
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
+  // ✅ T() “blindado”: si la key no existe, i18next devuelve la key -> usamos fallback ES literal
+  function T(key: string, fallbackEs: string) {
+    const v = t(key);
+    return v && v !== key ? v : fallbackEs;
+  }
+
+  // ✅ Modo persistente (universal): URL ?mode= + fallback localStorage
   const modeFromUrl = useMemo(
     () => normalizeMode(getQueryParam(location.search, "mode")),
     [location.search]
@@ -84,6 +93,7 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
+  // ✅ Mantener el modo sincronizado con URL si viene explícito
   useEffect(() => {
     if (modeFromUrl && modeFromUrl !== mode) {
       setMode(modeFromUrl);
@@ -91,6 +101,7 @@ export default function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeFromUrl]);
 
+  // ✅ Guardar modo en localStorage (persistente ante remount)
   useEffect(() => {
     try {
       localStorage.setItem(MODE_LS_KEY, mode);
@@ -99,6 +110,7 @@ export default function Login() {
     }
   }, [mode]);
 
+  // ✅ Helper: setMode + actualizar query param sin romper next/err
   function setModePersist(nextMode: Mode) {
     setMode(nextMode);
     setErr(null);
@@ -109,12 +121,14 @@ export default function Login() {
     navigate(`/login?${sp.toString()}`, { replace: true });
   }
 
+  // IMPORTANTE: fallback robusto (si VITE_SITE_URL está vacío en preview)
   const siteUrl = useMemo(() => {
     const envUrl = (import.meta.env.VITE_SITE_URL || "").trim();
     if (envUrl) return envUrl;
     return window.location.origin;
   }, []);
 
+  // Magic Link / Callback (APP)
   const redirectTo = useMemo(() => {
     const next = safeNextPath(nextInput);
     const url = new URL("/auth/callback", siteUrl);
@@ -122,6 +136,7 @@ export default function Login() {
     return url.toString();
   }, [siteUrl, nextInput]);
 
+  // Reset Password debe entrar por /auth/callback para setSession + bootstrap cookie
   const resetRedirectTo = useMemo(() => {
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", "/reset-password");
@@ -146,7 +161,10 @@ export default function Login() {
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       throw new Error(
-        `No se pudo completar bootstrap de sesión (HTTP ${res.status}). ${txt || ""}`.trim()
+        `${T(
+          "common.fallbacks.noAuth",
+          "No se pudo completar bootstrap de sesión"
+        )} (HTTP ${res.status}). ${txt || ""}`.trim()
       );
     }
   }
@@ -158,26 +176,33 @@ export default function Login() {
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setErr("Ingresa un correo válido.");
+      setErr(T("login.errors.invalidEmail", "Ingresa un correo válido."));
       return;
     }
 
     try {
       setBusy(true);
 
+      // 1) MAGIC LINK
       if (mode === "magic") {
         const { error } = await supabase.auth.signInWithOtp({
           email: cleanEmail,
           options: { emailRedirectTo: redirectTo },
         });
         if (error) throw error;
-        setMsg("Listo. Te enviamos un Magic Link. Ábrelo en el mismo navegador.");
+        setMsg(
+          T(
+            "login.messages.magicSent",
+            "Listo. Te enviamos un Magic Link. Ábrelo en el mismo navegador."
+          )
+        );
         return;
       }
 
+      // 2) PASSWORD
       if (mode === "password") {
         if (!password || password.length < 6) {
-          setErr("Ingresa tu contraseña (mínimo 6 caracteres).");
+          setErr(T("login.errors.passwordMin", "Ingresa tu contraseña (mínimo 6 caracteres)."));
           return;
         }
 
@@ -193,27 +218,33 @@ export default function Login() {
         const refreshToken = session?.refresh_token || "";
         const expiresIn = typeof session?.expires_in === "number" ? session.expires_in : undefined;
 
-        if (!accessToken) throw new Error("No se pudo obtener access_token de sesión.");
-        if (!refreshToken) throw new Error("No se pudo obtener refresh_token de sesión.");
+        if (!accessToken) throw new Error(T("login.errors.noAccessToken", "No se pudo obtener access_token de sesión."));
+        if (!refreshToken) throw new Error(T("login.errors.noRefreshToken", "No se pudo obtener refresh_token de sesión."));
 
         await bootstrapCookie(accessToken, refreshToken, expiresIn);
 
-        setMsg("✅ Sesión iniciada. Entrando...");
+        setMsg(T("login.messages.signedIn", "✅ Sesión iniciada. Entrando..."));
         navigate(safeNextPath(nextInput), { replace: true });
         return;
       }
 
+      // 3) RESET PASSWORD (ENVIAR EMAIL)
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: resetRedirectTo,
         });
         if (error) throw error;
 
-        setMsg("✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM.");
+        setMsg(
+          T(
+            "login.messages.resetSent",
+            "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM."
+          )
+        );
         return;
       }
     } catch (e2: any) {
-      setErr(e2?.message || "No se pudo procesar la solicitud.");
+      setErr(e2?.message || T("common.fallbacks.noAuth", "No se pudo procesar la solicitud."));
     } finally {
       setBusy(false);
     }
@@ -225,91 +256,100 @@ export default function Login() {
   const tabOff = "bg-white/[0.03] text-slate-200 border-white/10 hover:bg-white/[0.06]";
 
   const primaryText =
-    mode === "magic" ? "Enviar Magic Link" : mode === "password" ? "Entrar" : "Enviar enlace de reset";
+    mode === "magic"
+      ? T("login.actions.sendMagic", "Enviar Magic Link")
+      : mode === "password"
+      ? T("login.actions.signIn", "Entrar")
+      : T("login.actions.sendReset", "Enviar enlace de reset");
 
   const modeHint =
     mode === "magic"
-      ? "Te enviaremos un enlace seguro para entrar sin contraseña."
+      ? T("login.hints.magic", "Te enviaremos un enlace seguro para entrar sin contraseña.")
       : mode === "password"
-      ? "Ingresa con tu contraseña (usuarios internos / admins)."
-      : "Te enviaremos un enlace para crear una nueva contraseña.";
+      ? T("login.hints.password", "Ingresa con tu contraseña (usuarios internos / admins).")
+      : T("login.hints.reset", "Te enviaremos un enlace para crear una nueva contraseña.");
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
       <div className="w-full max-w-md">
+        {/* Brand / header */}
         <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-            Smart field control
+            {T("login.badge", "Smart field control")}
           </div>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-white">
-            Controla tu personal <span className="text-emerald-300">con geocercas</span>
+            {T("login.hero.title1", "Controla tu personal")}{" "}
+            <span className="text-emerald-300">{T("login.hero.title2", "con geocercas")}</span>
           </h1>
           <p className="mt-2 text-sm text-slate-300">
-            Accede a tu cuenta para ver paneles, asignaciones y tracking en tiempo real.
+            {T(
+              "login.hero.subtitle",
+              "Accede a tu cuenta para ver paneles, asignaciones y tracking en tiempo real."
+            )}
           </p>
         </div>
 
+        {/* Card */}
         <div className="auth-card">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">Ingresar</h2>
+              <h2 className="text-lg font-semibold text-white">{T("login.title", "Ingresar")}</h2>
               <p className="mt-1 text-sm text-slate-300">{modeHint}</p>
             </div>
 
-            {/* 🔒 Blindaje: z-index + pointer-events para que NO lo tape ningún overlay */}
             <div className="flex flex-col items-end gap-2 relative z-20 pointer-events-auto">
               <div className="hidden sm:block text-xs text-slate-400">
                 <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
                   PREVIEW
                 </span>
               </div>
-
-              <div className="pointer-events-auto">
-                <LanguageSwitcher />
-              </div>
+              <LanguageSwitcher />
             </div>
           </div>
 
+          {/* Tabs */}
           <div className="mt-5 grid grid-cols-3 gap-2">
             <button
               type="button"
               className={`${tabBase} ${mode === "magic" ? tabOn : tabOff}`}
               onClick={() => setModePersist("magic")}
             >
-              Magic Link
+              {T("login.tabs.magic", "Magic Link")}
             </button>
             <button
               type="button"
               className={`${tabBase} ${mode === "password" ? tabOn : tabOff}`}
               onClick={() => setModePersist("password")}
             >
-              Password
+              {T("login.tabs.password", "Password")}
             </button>
             <button
               type="button"
               className={`${tabBase} ${mode === "reset" ? tabOn : tabOff}`}
               onClick={() => setModePersist("reset")}
             >
-              Reset
+              {T("login.tabs.reset", "Reset")}
             </button>
           </div>
 
           {err && (
             <div className="mt-4 banner banner-error">
-              <div className="font-semibold">Error</div>
+              <div className="font-semibold">{T("common.error", "Error")}</div>
               <div className="text-sm opacity-90">{err}</div>
             </div>
           )}
           {msg && (
             <div className="mt-4 banner banner-success">
-              <div className="font-semibold">Listo</div>
+              <div className="font-semibold">{T("common.done", "Listo")}</div>
               <div className="text-sm opacity-90">{msg}</div>
             </div>
           )}
 
           <form className="mt-5 space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">Email</label>
+              <label className="block text-sm font-medium text-slate-200">
+                {T("login.fields.email", "Email")}
+              </label>
               <input
                 className={inputClass}
                 type="email"
@@ -317,30 +357,34 @@ export default function Login() {
                 inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
+                placeholder={T("login.placeholders.email", "tu@email.com")}
               />
             </div>
 
             {mode === "password" && (
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-200">Contraseña</label>
+                <label className="block text-sm font-medium text-slate-200">
+                  {T("login.fields.password", "Contraseña")}
+                </label>
                 <input
                   className={inputClass}
                   type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={T("login.placeholders.password", "••••••••")}
                 />
               </div>
             )}
 
             <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <summary className="cursor-pointer select-none text-sm text-slate-300">
-                Opciones avanzadas
+                {T("login.advanced.title", "Opciones avanzadas")}
               </summary>
               <div className="mt-3 space-y-2">
-                <label className="block text-sm font-medium text-slate-200">Ir a (next)</label>
+                <label className="block text-sm font-medium text-slate-200">
+                  {T("login.advanced.nextLabel", "Ir a (next)")}
+                </label>
                 <input
                   className={inputClass}
                   type="text"
@@ -349,22 +393,22 @@ export default function Login() {
                   placeholder="/inicio"
                 />
                 <p className="text-xs text-slate-400">
-                  Útil para pruebas en PREVIEW. En producción normalmente no se toca.
+                  {T("login.advanced.hint", "Útil para pruebas en PREVIEW. En producción normalmente no se toca.")}
                 </p>
               </div>
             </details>
 
             <button className="btn-primary w-full" disabled={busy} type="submit">
-              {busy ? "Procesando..." : primaryText}
+              {busy ? T("common.processing", "Procesando...") : primaryText}
             </button>
 
             <button type="button" className="btn-outline w-full" onClick={() => navigate("/")}>
-              Volver
+              {T("common.actions.back", "Volver")}
             </button>
           </form>
 
           <details className="mt-4 text-xs text-slate-400">
-            <summary className="cursor-pointer select-none">Debug</summary>
+            <summary className="cursor-pointer select-none">{T("common.debug", "Debug")}</summary>
             <div className="mt-2 space-y-2">
               <div>
                 Redirect Magic Link: <span className="break-all text-slate-300">{redirectTo}</span>
@@ -380,7 +424,7 @@ export default function Login() {
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          Privacidad: ubicación solo para geocercas y tracking según permisos del usuario.
+          {T("login.footer.privacy", "Privacidad: ubicación solo para geocercas y tracking según permisos del usuario.")}
         </p>
       </div>
     </div>
