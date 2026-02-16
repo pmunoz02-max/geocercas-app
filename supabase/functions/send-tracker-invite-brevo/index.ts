@@ -28,7 +28,6 @@ function normEmail(email: string) {
 }
 
 function isPgUniqueViolation(err: any) {
-  // PostgREST / supabase-js suele exponer code: "23505"
   const code = err?.code || err?.details?.code;
   return String(code) === "23505";
 }
@@ -74,11 +73,34 @@ function buildRedirectTo(appPreviewUrl: string, orgId: string) {
   }`;
 }
 
+async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string; jwt: string }) {
+  const url = `${params.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`;
+  const r = await fetch(url, {
+    method: "GET",
+    headers: {
+      apikey: params.anonKey,
+      Authorization: `Bearer ${params.jwt}`,
+    },
+  });
+
+  const text = await r.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+
+  if (!r.ok) {
+    return { ok: false as const, status: r.status, body: json };
+  }
+
+  const id = json?.id ? String(json.id) : "";
+  if (!id) return { ok: false as const, status: 500, body: { error: "NO_USER_ID", raw: json } };
+  return { ok: true as const, user_id: id, raw: json };
+}
+
 async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) {
-  // “Abierto” = cualquiera que pueda caer en los uniques:
-  // - accepted_at IS NULL  (ux_tracker_invites_org_email_active usa email, pero nosotros usamos email_norm para buscar)
-  // - used_at IS NULL
-  // - is_active = true
   const { data, error } = await sbAdmin
     .from("tracker_invites")
     .select("id, org_id, email, email_norm, is_active, used_at, accepted_at, created_at")
@@ -94,10 +116,9 @@ async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) 
 }
 
 async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: string, keepId: string, nowIso: string) {
-  // Evita chocar con unique (org_id,email_norm) WHERE is_active=true
   const { error } = await sbAdmin
     .from("tracker_invites")
-    .update({ is_active: false, updated_at: nowIso } as any)
+    .update({ is_active: false } as any)
     .eq("org_id", org_id)
     .eq("email_norm", email_norm)
     .neq("id", keepId)
@@ -113,6 +134,7 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
     const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") || "";
     const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL") || "";
@@ -122,12 +144,17 @@ serve(async (req) => {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return jsonResponse(500, { ok: false, error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY" });
     }
+    if (!SUPABASE_ANON_KEY) {
+      return jsonResponse(500, { ok: false, error: "Missing SUPABASE_ANON_KEY (needed to validate JWT via /auth/v1/user)" });
+    }
     if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
       return jsonResponse(500, { ok: false, error: "Missing BREVO_API_KEY / BREVO_SENDER_EMAIL" });
     }
 
     const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
-    if (!authHeader.startsWith("Bearer ")) return jsonResponse(401, { ok: false, error: "Missing Bearer token" });
+    if (!authHeader.startsWith("Bearer ")) {
+      return jsonResponse(401, { ok: false, error: "Missing Bearer token" });
+    }
     const jwt = authHeader.slice("Bearer ".length).trim();
     if (!jwt) return jsonResponse(401, { ok: false, error: "Missing Bearer token" });
 
@@ -135,12 +162,12 @@ serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ✅ validar caller (quien invita)
-    const { data: callerData, error: callerErr } = await sbAdmin.auth.getUser(jwt);
-    if (callerErr || !callerData?.user?.id) {
-      return jsonResponse(401, { ok: false, error: "Invalid token", detail: callerErr?.message });
+    // ✅ validar caller (quien invita) vía Auth REST (más robusto)
+    const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt });
+    if (!u.ok) {
+      return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status });
     }
-    const callerUserId = callerData.user.id;
+    const callerUserId = u.user_id;
 
     const body = await req.json().catch(() => ({}));
     const org_id = String(body?.org_id || "").trim();
@@ -167,10 +194,9 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(); // 7 días
-
     const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id);
 
-    // ✅ DB: crear o renovar invite de forma idempotente (con retry por carreras)
+    // ✅ DB idempotente con retry por carreras
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | null = null;
 
@@ -179,15 +205,13 @@ serve(async (req) => {
         const open = await findOpenInvite(sbAdmin, org_id, email);
 
         if (open?.id) {
-          // Reusar invite abierto → UPDATE (evita chocar con accepted_at NULL y used_at NULL)
           const { error: updErr } = await sbAdmin
             .from("tracker_invites")
             .update({
-              email,              // IMPORTANTE por ux_tracker_invites_org_email_active
+              email,
               email_norm: email,
               is_active: true,
               expires_at: expiresAt,
-              updated_at: nowIso,
             } as any)
             .eq("id", open.id);
 
@@ -198,12 +222,11 @@ serve(async (req) => {
           trackerInviteId = open.id;
           mode = "updated";
         } else {
-          // No hay abierto → INSERT
           const { data: invRow, error: insErr } = await sbAdmin
             .from("tracker_invites")
             .insert({
               org_id,
-              email,               // IMPORTANTE por unique accepted_at IS NULL
+              email,
               email_norm: email,
               created_by_user_id: callerUserId,
               created_at: nowIso,
@@ -212,7 +235,6 @@ serve(async (req) => {
               used_by_user_id: null,
               accepted_at: null,
               is_active: true,
-              updated_at: nowIso,
             } as any)
             .select("id")
             .single();
@@ -223,12 +245,9 @@ serve(async (req) => {
           mode = "inserted";
         }
 
-        break; // éxito
+        break;
       } catch (err) {
-        if (attempt === 1 && isPgUniqueViolation(err)) {
-          // Carrera: otro request insertó/activó justo antes. Reintenta reusando “open”.
-          continue;
-        }
+        if (attempt === 1 && isPgUniqueViolation(err)) continue;
         throw err;
       }
     }
@@ -250,7 +269,6 @@ serve(async (req) => {
 
     const actionLink = linkData.properties.action_link;
 
-    // ✅ enviar correo
     const subject = "Invitación: Tracker GPS - App Geocercas";
     const html = `
       <div style="font-family:Arial,sans-serif;line-height:1.4">
@@ -280,12 +298,12 @@ serve(async (req) => {
 
     return jsonResponse(200, {
       ok: true,
-      mode,                 // "updated" o "inserted"
+      mode,
       org_id,
       email,
       tracker_invite_id: trackerInviteId,
       redirect_to: redirectTo,
-      action_link: actionLink, // útil para debug (si luego lo quieres ocultar, lo quitamos)
+      action_link: actionLink,
     });
   } catch (e) {
     return jsonResponse(500, { ok: false, error: "Unhandled", detail: String((e as any)?.message || e) });
