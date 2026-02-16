@@ -86,10 +86,13 @@ export default function TrackerGpsPage() {
   const TRACKER_URL = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
   const TRACKER_ANON = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
 
+  // ✅ acceptUrl ahora incluye org_id en querystring cuando exista
   const acceptUrl = useMemo(() => {
     if (!TRACKER_URL) return null;
-    return `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`;
-  }, [TRACKER_URL]);
+    const base = `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`;
+    if (orgId && isUuid(orgId)) return `${base}?org_id=${encodeURIComponent(orgId)}`;
+    return base;
+  }, [TRACKER_URL, orgId]);
 
   const sendUrl = useMemo(() => {
     if (!TRACKER_URL) return null;
@@ -113,7 +116,7 @@ export default function TrackerGpsPage() {
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
 
-  // 0.5) org seed (querystring primero, luego localStorage)
+  // 0.5) org seed
   useEffect(() => {
     const qOrg = pickOrgIdFromSearch(location?.search || "");
     if (qOrg) {
@@ -132,7 +135,7 @@ export default function TrackerGpsPage() {
     setOrgId(null);
   }, [location?.search]);
 
-  // 1) Sesión (hidratación + onAuthStateChange)
+  // 1) Sesión
   useEffect(() => {
     if (!trackerReady || !supabaseTracker) return;
 
@@ -214,7 +217,12 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady]);
 
-  // 1.5) Onboarding: accept-tracker-invite (AHORA manda org_id explícito si existe)
+  // ✅ Cuando cambia orgId, queremos reintentar onboarding (sin quedar bloqueados por locks viejos)
+  useEffect(() => {
+    onboardingLockRef.current = false;
+  }, [orgId]);
+
+  // 1.5) Onboarding: accept-tracker-invite (body + querystring)
   useEffect(() => {
     if (!trackerReady || !hasSession || !supabaseTracker) return;
 
@@ -250,7 +258,7 @@ export default function TrackerGpsPage() {
           }
         } catch {}
 
-        // 🔥 CLAVE: si el usuario está en múltiples orgs, aquí le pasamos org_id explícito
+        // 🔥 org_id por body (y además ya va en query por acceptUrl)
         const body = orgId && isUuid(orgId) ? { org_id: orgId } : {};
 
         const resp = await fetch(acceptUrl, {
@@ -267,16 +275,6 @@ export default function TrackerGpsPage() {
         const text = await resp.text();
 
         if (!resp.ok) {
-          // ayuda contextual: si falta orgId y el backend dice multiple orgs
-          const hintMultiple = (text || "").toLowerCase().includes("multiple orgs");
-          if (!orgId && hintMultiple) {
-            setMembershipStatus("failed");
-            setMembershipDetail(
-              `accept-tracker-invite status=${resp.status} body=${text}\n\nSOLUCIÓN: abre /tracker-gps con ?org_id=<TU_ORG_ID> (ej: ${"ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a"})`
-            );
-            return;
-          }
-
           setMembershipStatus("failed");
           setMembershipDetail(`accept-tracker-invite status=${resp.status} body=${text}`);
           return;
