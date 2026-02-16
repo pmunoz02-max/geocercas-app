@@ -79,16 +79,26 @@ export default function TopTabs({ tabs = [] }) {
     return location.pathname === p || location.pathname.startsWith(p + "/");
   };
 
+  // ✅ Estilo “pill SaaS” (sin tocar lógica)
   const baseCls =
-    "no-underline inline-flex items-center justify-center px-4 py-2 rounded-md text-sm " +
-    "font-semibold border transition-colors whitespace-nowrap min-w-[92px]";
+    "no-underline inline-flex items-center justify-center gap-2 " +
+    "px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap " +
+    "border transition-all duration-150 " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 " +
+    "focus-visible:ring-offset-white min-w-[108px]";
 
-  const activeCls = "shadow-sm border-slate-900";
-  const inactiveCls = "border-slate-300 hover:bg-slate-50 hover:border-slate-400";
+  const activeCls =
+    "bg-slate-900 text-white border-slate-900 shadow-sm " +
+    "shadow-emerald-500/10";
+
+  const inactiveCls =
+    "bg-white text-slate-700 border-slate-200 " +
+    "hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 hover:shadow-sm";
 
   return (
-    <div className="w-full" data-top-tabs="v9">
-      <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+    <div className="w-full" data-top-tabs="v10">
+      {/* Contenedor más “premium” */}
+      <div className="bg-white border border-slate-200 rounded-2xl px-3 py-2 shadow-sm">
         <div className="flex items-center gap-3">
           {!flags.noorg ? (
             <div className="shrink-0">
@@ -96,8 +106,8 @@ export default function TopTabs({ tabs = [] }) {
             </div>
           ) : null}
 
-          <nav className="flex-1 overflow-x-auto">
-            <div className="flex gap-2 min-w-max">
+          <nav className="flex-1 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-2 min-w-max items-center">
               {items.map((tab, idx) => {
                 const path = safeText(tab?.path).trim();
                 if (!path) return null;
@@ -105,19 +115,25 @@ export default function TopTabs({ tabs = [] }) {
                 const on = isActive(path);
                 const label = safeText(resolveLabel(t, tab)).trim() || fallbackFromPath(path);
 
-                const style = on
-                  ? { background: "#0f172a", color: "#ffffff" }
-                  : { background: "#ffffff", color: "#0f172a" };
-
                 return (
                   <NavLink
                     key={path || `tab-${idx}`}
                     to={path}
                     className={`${baseCls} ${on ? activeCls : inactiveCls}`}
-                    style={style}
                     title={label}
                   >
-                    {label}
+                    {/* Indicador sutil emerald solo cuando está activo */}
+                    {on ? (
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.18)]" />
+                    ) : (
+                      <span className="h-2 w-2 rounded-full bg-slate-300" />
+                    )}
+                    <span>{label}</span>
+
+                    {/* underline moderno (solo activo) */}
+                    {on ? (
+                      <span className="ml-1 h-[2px] w-6 rounded-full bg-emerald-400/80" />
+                    ) : null}
                   </NavLink>
                 );
               })}
@@ -125,7 +141,7 @@ export default function TopTabs({ tabs = [] }) {
           </nav>
 
           {user && (
-            <div className="hidden md:flex flex-col text-right text-xs px-2 py-1 rounded bg-slate-100">
+            <div className="hidden md:flex flex-col text-right text-xs px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
               <span className="font-medium text-slate-800">{user.email ?? "Sin email"}</span>
               <span className="text-slate-600">{roleLabel}</span>
             </div>

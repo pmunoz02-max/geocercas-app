@@ -1,3 +1,4 @@
+// src/components/MainNav.jsx
 import { NavLink, useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -17,37 +18,45 @@ export default function MainNav({ role }) {
   };
 
   const base =
-    "inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap border transition-all";
-  const active = "bg-emerald-600 text-white border-emerald-600";
+    "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full " +
+    "text-sm font-semibold whitespace-nowrap border transition-all duration-150 " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white";
+
+  const active =
+    "bg-slate-900 text-white border-slate-900 shadow-sm shadow-emerald-500/10";
+
   const inactive =
-    "bg-slate-50 text-slate-900 border-slate-300 hover:bg-emerald-50";
+    "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 hover:shadow-sm";
+
+  const Pill = ({ to, children }) => (
+    <NavLink to={to} className={({ isActive }) => `${base} ${isActive ? active : inactive}`}>
+      {({ isActive }) => (
+        <>
+          <span
+            className={`h-2 w-2 rounded-full ${
+              isActive ? "bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.18)]" : "bg-slate-300"
+            }`}
+          />
+          <span>{children}</span>
+        </>
+      )}
+    </NavLink>
+  );
 
   return (
     <div className="flex items-center gap-3 w-full justify-end">
-      <div className="flex gap-2 overflow-x-auto">
-        <NavLink to="/geocerca" className={({ isActive }) => `${base} ${isActive ? active : inactive}`}>
-          Geocerca
-        </NavLink>
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        <Pill to="/geocerca">Geocerca</Pill>
+        <Pill to="/personal">Personal</Pill>
+        <Pill to="/tracker">Tracker</Pill>
 
-        <NavLink to="/personal" className={({ isActive }) => `${base} ${isActive ? active : inactive}`}>
-          Personal
-        </NavLink>
-
-        <NavLink to="/tracker" className={({ isActive }) => `${base} ${isActive ? active : inactive}`}>
-          Tracker
-        </NavLink>
-
-        {isAdmin && (
-          <NavLink to="/reportes" className={({ isActive }) => `${base} ${isActive ? active : inactive}`}>
-            Reportes
-          </NavLink>
-        )}
+        {isAdmin && <Pill to="/reportes">Reportes</Pill>}
       </div>
 
       {user && (
         <button
           onClick={handleSignOut}
-          className="px-3 py-2 rounded-full text-sm font-semibold border border-slate-300 bg-white"
+          className="inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition"
         >
           Salir
         </button>
