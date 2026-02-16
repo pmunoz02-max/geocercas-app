@@ -38,7 +38,6 @@ export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ Modo persistente (universal): URL ?mode= + fallback localStorage
   const modeFromUrl = useMemo(
     () => normalizeMode(getQueryParam(location.search, "mode")),
     [location.search]
@@ -85,7 +84,6 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
-  // ✅ Mantener el modo sincronizado con URL si viene explícito
   useEffect(() => {
     if (modeFromUrl && modeFromUrl !== mode) {
       setMode(modeFromUrl);
@@ -93,7 +91,6 @@ export default function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeFromUrl]);
 
-  // ✅ Guardar modo en localStorage (persistente ante remount)
   useEffect(() => {
     try {
       localStorage.setItem(MODE_LS_KEY, mode);
@@ -102,7 +99,6 @@ export default function Login() {
     }
   }, [mode]);
 
-  // ✅ Helper: setMode + actualizar query param sin romper next/err
   function setModePersist(nextMode: Mode) {
     setMode(nextMode);
     setErr(null);
@@ -113,14 +109,12 @@ export default function Login() {
     navigate(`/login?${sp.toString()}`, { replace: true });
   }
 
-  // IMPORTANTE: fallback robusto (si VITE_SITE_URL está vacío en preview)
   const siteUrl = useMemo(() => {
     const envUrl = (import.meta.env.VITE_SITE_URL || "").trim();
     if (envUrl) return envUrl;
     return window.location.origin;
   }, []);
 
-  // Magic Link / Callback (APP)
   const redirectTo = useMemo(() => {
     const next = safeNextPath(nextInput);
     const url = new URL("/auth/callback", siteUrl);
@@ -128,7 +122,6 @@ export default function Login() {
     return url.toString();
   }, [siteUrl, nextInput]);
 
-  // Reset Password debe entrar por /auth/callback para setSession + bootstrap cookie
   const resetRedirectTo = useMemo(() => {
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", "/reset-password");
@@ -172,7 +165,6 @@ export default function Login() {
     try {
       setBusy(true);
 
-      // 1) MAGIC LINK
       if (mode === "magic") {
         const { error } = await supabase.auth.signInWithOtp({
           email: cleanEmail,
@@ -183,7 +175,6 @@ export default function Login() {
         return;
       }
 
-      // 2) PASSWORD
       if (mode === "password") {
         if (!password || password.length < 6) {
           setErr("Ingresa tu contraseña (mínimo 6 caracteres).");
@@ -212,16 +203,13 @@ export default function Login() {
         return;
       }
 
-      // 3) RESET PASSWORD (ENVIAR EMAIL)
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: resetRedirectTo,
         });
         if (error) throw error;
 
-        setMsg(
-          "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM."
-        );
+        setMsg("✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM.");
         return;
       }
     } catch (e2: any) {
@@ -237,11 +225,7 @@ export default function Login() {
   const tabOff = "bg-white/[0.03] text-slate-200 border-white/10 hover:bg-white/[0.06]";
 
   const primaryText =
-    mode === "magic"
-      ? "Enviar Magic Link"
-      : mode === "password"
-      ? "Entrar"
-      : "Enviar enlace de reset";
+    mode === "magic" ? "Enviar Magic Link" : mode === "password" ? "Entrar" : "Enviar enlace de reset";
 
   const modeHint =
     mode === "magic"
@@ -253,7 +237,6 @@ export default function Login() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
       <div className="w-full max-w-md">
-        {/* Brand / header */}
         <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
             Smart field control
@@ -266,7 +249,6 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Card */}
         <div className="auth-card">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -274,18 +256,20 @@ export default function Login() {
               <p className="mt-1 text-sm text-slate-300">{modeHint}</p>
             </div>
 
-            {/* Right controls: PREVIEW + Language */}
-            <div className="flex flex-col items-end gap-2">
+            {/* 🔒 Blindaje: z-index + pointer-events para que NO lo tape ningún overlay */}
+            <div className="flex flex-col items-end gap-2 relative z-20 pointer-events-auto">
               <div className="hidden sm:block text-xs text-slate-400">
                 <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
                   PREVIEW
                 </span>
               </div>
-              <LanguageSwitcher />
+
+              <div className="pointer-events-auto">
+                <LanguageSwitcher />
+              </div>
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="mt-5 grid grid-cols-3 gap-2">
             <button
               type="button"
@@ -351,7 +335,6 @@ export default function Login() {
               </div>
             )}
 
-            {/* next (lo dejo, pero visualmente “avanzado”) */}
             <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <summary className="cursor-pointer select-none text-sm text-slate-300">
                 Opciones avanzadas
@@ -380,7 +363,6 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Debug: plegable para no ensuciar UI */}
           <details className="mt-4 text-xs text-slate-400">
             <summary className="cursor-pointer select-none">Debug</summary>
             <div className="mt-2 space-y-2">
@@ -388,8 +370,7 @@ export default function Login() {
                 Redirect Magic Link: <span className="break-all text-slate-300">{redirectTo}</span>
               </div>
               <div>
-                Redirect Reset:{" "}
-                <span className="break-all text-slate-300">{resetRedirectTo}</span>
+                Redirect Reset: <span className="break-all text-slate-300">{resetRedirectTo}</span>
               </div>
               <div>
                 Mode persistente: <span className="break-all text-slate-300">{mode}</span>
