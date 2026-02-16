@@ -7,6 +7,8 @@ const LANGS = [
   { code: "fr", label: "FR" },
 ] as const;
 
+const SUPPORTED = ["es", "en", "fr"] as const;
+
 function buildHref(code: string) {
   try {
     if (typeof window === "undefined") return `?lang=${code}`;
@@ -21,8 +23,8 @@ function buildHref(code: string) {
 export default function LanguageSwitcher() {
   const { i18n } = useTranslation();
 
-  const current =
-    ((i18n.resolvedLanguage || i18n.language || "es") as string).toLowerCase().slice(0, 2);
+  const currentRaw = ((i18n.resolvedLanguage || i18n.language || "es") as string).toLowerCase();
+  const current = currentRaw.slice(0, 2);
 
   const handle = (e: React.MouseEvent<HTMLAnchorElement>, code: string) => {
     // Si JS funciona, cambia sin recargar.
@@ -31,19 +33,18 @@ export default function LanguageSwitcher() {
       if (code === current) return;
       e.preventDefault();
 
-      // Cambia idioma en runtime
+      // Cambia idioma (tu i18n.js persiste app_lang en languageChanged)
       Promise.resolve(i18n.changeLanguage(code)).catch(() => {});
 
-      // Persistencia: compatibilidad con tu app + compatibilidad con i18next estándar
+      // Persistencia extra (por si algún WebView bloquea events en edge-cases)
       try {
         localStorage.setItem("app_lang", code);
       } catch {}
-      try {
-        localStorage.setItem("i18nextLng", code);
-      } catch {}
 
       // html lang
-      if (typeof document !== "undefined") document.documentElement.lang = code;
+      try {
+        if (typeof document !== "undefined") document.documentElement.lang = code;
+      } catch {}
 
       // limpia ?lang= (opcional)
       try {
@@ -60,6 +61,9 @@ export default function LanguageSwitcher() {
     <div className="flex items-center gap-2 text-xs sm:text-sm">
       {LANGS.map((lang) => {
         const active = current === lang.code;
+        const valid = (SUPPORTED as readonly string[]).includes(lang.code);
+        if (!valid) return null;
+
         return (
           <a
             key={lang.code}
