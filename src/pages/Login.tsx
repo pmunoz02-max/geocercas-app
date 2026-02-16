@@ -1,8 +1,8 @@
 // src/pages/Login.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
 import { useTranslation } from "react-i18next";
+import { supabase } from "../lib/supabaseClient";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
 function getQueryParam(search: string, key: string) {
@@ -39,12 +39,6 @@ export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  // ✅ T() “blindado”: si la key no existe, i18next devuelve la key -> usamos fallback ES literal
-  function T(key: string, fallbackEs: string) {
-    const v = t(key);
-    return v && v !== key ? v : fallbackEs;
-  }
 
   // ✅ Modo persistente (universal): URL ?mode= + fallback localStorage
   const modeFromUrl = useMemo(
@@ -110,7 +104,7 @@ export default function Login() {
     }
   }, [mode]);
 
-  // ✅ Helper: setMode + actualizar query param sin romper next/err
+  // ✅ Helper: setMode + actualizar query param sin romper next/err/lang
   function setModePersist(nextMode: Mode) {
     setMode(nextMode);
     setErr(null);
@@ -149,22 +143,19 @@ export default function Login() {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
       credentials: "include",
       body: JSON.stringify({
         refresh_token: refreshToken,
-        expires_in: typeof expiresIn === "number" ? expiresIn : undefined,
-      }),
+        expires_in: typeof expiresIn === "number" ? expiresIn : undefined
+      })
     });
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       throw new Error(
-        `${T(
-          "common.fallbacks.noAuth",
-          "No se pudo completar bootstrap de sesión"
-        )} (HTTP ${res.status}). ${txt || ""}`.trim()
+        `No se pudo completar bootstrap de sesión (HTTP ${res.status}). ${txt || ""}`.trim()
       );
     }
   }
@@ -176,7 +167,7 @@ export default function Login() {
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setErr(T("login.errors.invalidEmail", "Ingresa un correo válido."));
+      setErr(t("login.errors.invalidEmail"));
       return;
     }
 
@@ -187,28 +178,23 @@ export default function Login() {
       if (mode === "magic") {
         const { error } = await supabase.auth.signInWithOtp({
           email: cleanEmail,
-          options: { emailRedirectTo: redirectTo },
+          options: { emailRedirectTo: redirectTo }
         });
         if (error) throw error;
-        setMsg(
-          T(
-            "login.messages.magicSent",
-            "Listo. Te enviamos un Magic Link. Ábrelo en el mismo navegador."
-          )
-        );
+        setMsg(t("login.infoMagicLinkSent"));
         return;
       }
 
       // 2) PASSWORD
       if (mode === "password") {
         if (!password || password.length < 6) {
-          setErr(T("login.errors.passwordMin", "Ingresa tu contraseña (mínimo 6 caracteres)."));
+          setErr(t("login.errorMissingCredentials"));
           return;
         }
 
         const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
-          password,
+          password
         });
         if (error) throw error;
 
@@ -218,12 +204,12 @@ export default function Login() {
         const refreshToken = session?.refresh_token || "";
         const expiresIn = typeof session?.expires_in === "number" ? session.expires_in : undefined;
 
-        if (!accessToken) throw new Error(T("login.errors.noAccessToken", "No se pudo obtener access_token de sesión."));
-        if (!refreshToken) throw new Error(T("login.errors.noRefreshToken", "No se pudo obtener refresh_token de sesión."));
+        if (!accessToken) throw new Error("No se pudo obtener access_token de sesión.");
+        if (!refreshToken) throw new Error("No se pudo obtener refresh_token de sesión.");
 
         await bootstrapCookie(accessToken, refreshToken, expiresIn);
 
-        setMsg(T("login.messages.signedIn", "✅ Sesión iniciada. Entrando..."));
+        setMsg("✅ Sesión iniciada. Entrando...");
         navigate(safeNextPath(nextInput), { replace: true });
         return;
       }
@@ -231,20 +217,15 @@ export default function Login() {
       // 3) RESET PASSWORD (ENVIAR EMAIL)
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: resetRedirectTo,
+          redirectTo: resetRedirectTo
         });
         if (error) throw error;
 
-        setMsg(
-          T(
-            "login.messages.resetSent",
-            "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM."
-          )
-        );
+        setMsg(t("login.infoResetPasswordSent"));
         return;
       }
     } catch (e2: any) {
-      setErr(e2?.message || T("common.fallbacks.noAuth", "No se pudo procesar la solicitud."));
+      setErr(e2?.message || t("login.errors.unknown"));
     } finally {
       setBusy(false);
     }
@@ -257,17 +238,17 @@ export default function Login() {
 
   const primaryText =
     mode === "magic"
-      ? T("login.actions.sendMagic", "Enviar Magic Link")
+      ? t("login.magicButton")
       : mode === "password"
-      ? T("login.actions.signIn", "Entrar")
-      : T("login.actions.sendReset", "Enviar enlace de reset");
+      ? t("login.submit")
+      : t("resetPassword.title");
 
   const modeHint =
     mode === "magic"
-      ? T("login.hints.magic", "Te enviaremos un enlace seguro para entrar sin contraseña.")
+      ? t("login.magicDescription")
       : mode === "password"
-      ? T("login.hints.password", "Ingresa con tu contraseña (usuarios internos / admins).")
-      : T("login.hints.reset", "Te enviaremos un enlace para crear una nueva contraseña.");
+      ? t("login.subtitle")
+      : t("resetPassword.subtitle");
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
@@ -275,29 +256,26 @@ export default function Login() {
         {/* Brand / header */}
         <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-            {T("login.badge", "Smart field control")}
+            {t("landing.heroBadge")}
           </div>
+
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-white">
-            {T("login.hero.title1", "Controla tu personal")}{" "}
-            <span className="text-emerald-300">{T("login.hero.title2", "con geocercas")}</span>
+            {t("landing.heroTitlePrefix")}{" "}
+            <span className="text-emerald-300">{t("landing.heroTitleHighlight")}</span>
           </h1>
-          <p className="mt-2 text-sm text-slate-300">
-            {T(
-              "login.hero.subtitle",
-              "Accede a tu cuenta para ver paneles, asignaciones y tracking en tiempo real."
-            )}
-          </p>
+
+          <p className="mt-2 text-sm text-slate-300">{t("landing.heroSubtitle")}</p>
         </div>
 
         {/* Card */}
         <div className="auth-card">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">{T("login.title", "Ingresar")}</h2>
+              <h2 className="text-lg font-semibold text-white">{t("login.title")}</h2>
               <p className="mt-1 text-sm text-slate-300">{modeHint}</p>
             </div>
 
-            <div className="flex flex-col items-end gap-2 relative z-20 pointer-events-auto">
+            <div className="flex items-center gap-3">
               <div className="hidden sm:block text-xs text-slate-400">
                 <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
                   PREVIEW
@@ -314,33 +292,33 @@ export default function Login() {
               className={`${tabBase} ${mode === "magic" ? tabOn : tabOff}`}
               onClick={() => setModePersist("magic")}
             >
-              {T("login.tabs.magic", "Magic Link")}
+              {t("login.modeMagic")}
             </button>
             <button
               type="button"
               className={`${tabBase} ${mode === "password" ? tabOn : tabOff}`}
               onClick={() => setModePersist("password")}
             >
-              {T("login.tabs.password", "Password")}
+              {t("login.modePassword")}
             </button>
             <button
               type="button"
               className={`${tabBase} ${mode === "reset" ? tabOn : tabOff}`}
               onClick={() => setModePersist("reset")}
             >
-              {T("login.tabs.reset", "Reset")}
+              Reset
             </button>
           </div>
 
           {err && (
             <div className="mt-4 banner banner-error">
-              <div className="font-semibold">{T("common.error", "Error")}</div>
+              <div className="font-semibold">{t("reportes.errorLabel")}</div>
               <div className="text-sm opacity-90">{err}</div>
             </div>
           )}
           {msg && (
             <div className="mt-4 banner banner-success">
-              <div className="font-semibold">{T("common.done", "Listo")}</div>
+              <div className="font-semibold">OK</div>
               <div className="text-sm opacity-90">{msg}</div>
             </div>
           )}
@@ -348,7 +326,7 @@ export default function Login() {
           <form className="mt-5 space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-200">
-                {T("login.fields.email", "Email")}
+                {t("login.emailLabel")}
               </label>
               <input
                 className={inputClass}
@@ -357,14 +335,14 @@ export default function Login() {
                 inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={T("login.placeholders.email", "tu@email.com")}
+                placeholder={t("login.emailPlaceholder")}
               />
             </div>
 
             {mode === "password" && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-200">
-                  {T("login.fields.password", "Contraseña")}
+                  {t("login.passwordLabel")}
                 </label>
                 <input
                   className={inputClass}
@@ -372,19 +350,18 @@ export default function Login() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={T("login.placeholders.password", "••••••••")}
+                  placeholder={t("login.passwordPlaceholder")}
                 />
               </div>
             )}
 
+            {/* next (lo dejo, pero visualmente “avanzado”) */}
             <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <summary className="cursor-pointer select-none text-sm text-slate-300">
-                {T("login.advanced.title", "Opciones avanzadas")}
+                Opciones avanzadas
               </summary>
               <div className="mt-3 space-y-2">
-                <label className="block text-sm font-medium text-slate-200">
-                  {T("login.advanced.nextLabel", "Ir a (next)")}
-                </label>
+                <label className="block text-sm font-medium text-slate-200">Ir a (next)</label>
                 <input
                   className={inputClass}
                   type="text"
@@ -393,22 +370,23 @@ export default function Login() {
                   placeholder="/inicio"
                 />
                 <p className="text-xs text-slate-400">
-                  {T("login.advanced.hint", "Útil para pruebas en PREVIEW. En producción normalmente no se toca.")}
+                  Útil para pruebas en PREVIEW. En producción normalmente no se toca.
                 </p>
               </div>
             </details>
 
             <button className="btn-primary w-full" disabled={busy} type="submit">
-              {busy ? T("common.processing", "Procesando...") : primaryText}
+              {busy ? t("common.actions.loading") : primaryText}
             </button>
 
             <button type="button" className="btn-outline w-full" onClick={() => navigate("/")}>
-              {T("common.actions.back", "Volver")}
+              {t("common.actions.back")}
             </button>
           </form>
 
+          {/* Debug: plegable para no ensuciar UI */}
           <details className="mt-4 text-xs text-slate-400">
-            <summary className="cursor-pointer select-none">{T("common.debug", "Debug")}</summary>
+            <summary className="cursor-pointer select-none">Debug</summary>
             <div className="mt-2 space-y-2">
               <div>
                 Redirect Magic Link: <span className="break-all text-slate-300">{redirectTo}</span>
@@ -423,9 +401,7 @@ export default function Login() {
           </details>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-400">
-          {T("login.footer.privacy", "Privacidad: ubicación solo para geocercas y tracking según permisos del usuario.")}
-        </p>
+        <p className="mt-6 text-center text-xs text-slate-400">{t("landing.privacyMiniNote")}</p>
       </div>
     </div>
   );
