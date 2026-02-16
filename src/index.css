@@ -5,12 +5,30 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- Base / Variables ---------- */
+/* ---------- Base / Variables (Design Tokens) ---------- */
 @layer base {
   :root {
+    /* Backgrounds */
     --app-bg: #020617; /* slate-950 */
+    --app-bg-2: #0b1020; /* deep navy */
     --app-fg: #e5e7eb; /* slate-200 */
-    --muted-fg: #94a3b8;
+    --muted-fg: rgba(226, 232, 240, 0.72);
+
+    /* Surfaces */
+    --card-bg: rgba(255, 255, 255, 0.06);
+    --card-border: rgba(255, 255, 255, 0.10);
+
+    /* Primary (verde) */
+    --primary: #22c55e;
+    --primary-hover: #16a34a;
+    --primary-fg: #ffffff;
+    --ring: rgba(34, 197, 94, 0.35);
+
+    /* Error/Success */
+    --danger: #ef4444;
+    --danger-bg: rgba(239, 68, 68, 0.12);
+    --success: #34d399;
+    --success-bg: rgba(52, 211, 153, 0.12);
   }
 
   html,
@@ -23,15 +41,15 @@
   body {
     margin: 0;
     background-color: var(--app-bg);
-    color: var(--app-fg); /* ✅ CLAVE: evita texto negro sobre fondo oscuro */
+    color: var(--app-fg);
   }
 
   body {
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-      Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+      Arial, "Apple Color Emoji", "Segoe UI Emoji";
   }
 
-  /* ===== Links: por defecto heredan color y NO decoran ===== */
+  /* Links: heredan color */
   a {
     color: inherit;
     text-decoration: none;
@@ -39,8 +57,6 @@
   a:visited {
     color: inherit;
   }
-
-  /* ✅ Subrayado SOLO si el link es texto (opt-in con clase) */
   .text-link:hover {
     text-decoration: underline;
   }
@@ -50,13 +66,11 @@
   input:focus-visible,
   select:focus-visible,
   textarea:focus-visible {
-    outline: 2px solid rgba(16, 185, 129, 0.8); /* emerald-500 */
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
-    border-radius: 0.25rem;
+    border-radius: 0.5rem;
   }
 
-  /* ✅ NO “retemamos” inputs/buttons globalmente.
-     Eso debe hacerlo Tailwind en cada componente/vista. */
   input,
   select,
   textarea,
@@ -80,8 +94,9 @@
   }
 }
 
-/* ---------- Componentes utilitarios ---------- */
+/* ---------- Components (Global UI System) ---------- */
 @layer components {
+  /* Card base */
   .app-card {
     background: #020617;
     color: #e5e7eb;
@@ -90,24 +105,91 @@
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   }
 
+  /* Auth background */
+  .auth-bg {
+    background-image:
+      radial-gradient(1000px 600px at 50% -10%, rgba(16, 185, 129, 0.20), transparent 60%),
+      radial-gradient(900px 600px at 20% 30%, rgba(59, 130, 246, 0.12), transparent 60%),
+      linear-gradient(to bottom, var(--app-bg-2), var(--app-bg));
+  }
+
+  /* Auth card */
+  .auth-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Banners */
+  .banner {
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    padding: 0.75rem 0.85rem;
+  }
+
   .banner-success {
-    background: #34d399;
-    color: #020617;
-    border: 2px solid #059669;
-    border-radius: 0.5rem;
-    padding: 0.6rem 0.8rem;
-    font-weight: 700;
-    box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+    background: var(--success-bg);
+    border-color: rgba(52, 211, 153, 0.35);
+    color: #d1fae5;
   }
 
   .banner-error {
-    background: #f87171;
-    color: #020617;
-    border: 2px solid #b91c1c;
-    border-radius: 0.5rem;
-    padding: 0.6rem 0.8rem;
+    background: var(--danger-bg);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fee2e2;
+  }
+
+  /* ✅ Buttons (global) */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    padding: 0 1rem;
+    border-radius: 0.85rem;
     font-weight: 700;
-    box-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
+    font-size: 0.95rem;
+    transition: transform 120ms ease, background-color 160ms ease, border-color 160ms ease,
+      box-shadow 160ms ease, color 160ms ease, opacity 160ms ease;
+    user-select: none;
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+  }
+
+  .btn-primary {
+    @apply btn;
+    background: var(--primary);
+    color: var(--primary-fg);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 14px 30px rgba(34, 197, 94, 0.18);
+  }
+  .btn-primary:hover {
+    background: var(--primary-hover);
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .btn-outline {
+    @apply btn;
+    background: rgba(255, 255, 255, 0.02);
+    color: #e2e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .btn-outline:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.20);
+  }
+  .btn-outline:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
 
@@ -122,7 +204,7 @@
   }
 }
 
-/* 🔒 En navegación NO subrayar en hover (si usas .text-link en contenido, ahí sí) */
+/* 🔒 En navegación NO subrayar en hover */
 nav a:hover {
   text-decoration: none;
 }

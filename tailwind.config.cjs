@@ -1,11 +1,25 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,jsx,ts,tsx}"
-  ],
+  content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
-    extend: {},
+    extend: {
+      borderRadius: {
+        xl: "0.85rem",
+        "2xl": "1rem",
+      },
+      colors: {
+        app: {
+          bg: "var(--app-bg)",
+          fg: "var(--app-fg)",
+          muted: "var(--muted-fg)",
+        },
+        primary: {
+          DEFAULT: "var(--primary)",
+          hover: "var(--primary-hover)",
+          fg: "var(--primary-fg)",
+        },
+      },
+    },
   },
   plugins: [],
   safelist: [
@@ -29,6 +43,15 @@ module.exports = {
     "text-slate-300",
     "text-slate-400",
     "text-emerald-300",
-    "text-emerald-400"
+    "text-emerald-400",
+    // botones globales (por si usas className literal)
+    "btn",
+    "btn-primary",
+    "btn-outline",
+    "auth-bg",
+    "auth-card",
+    "banner",
+    "banner-success",
+    "banner-error",
   ],
 };

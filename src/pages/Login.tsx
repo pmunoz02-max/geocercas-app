@@ -1,3 +1,4 @@
+// src/pages/Login.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -13,13 +14,6 @@ function safeNextPath(next: string) {
   return "/inicio";
 }
 
-const inputClass =
-  "w-full rounded-xl border px-3 py-2 outline-none focus:ring " +
-  "bg-white !text-gray-900 caret-black !placeholder:text-gray-400 " +
-  "autofill:shadow-[inset_0_0_0px_1000px_rgb(255,255,255)] " +
-  "autofill:[-webkit-text-fill-color:rgb(17,24,39)] " +
-  "autofill:caret-black";
-
 type Mode = "magic" | "password" | "reset";
 
 function normalizeMode(m: string): Mode {
@@ -31,12 +25,23 @@ function normalizeMode(m: string): Mode {
 
 const MODE_LS_KEY = "login_mode_v1";
 
+const inputClass =
+  "w-full rounded-xl border px-3 py-2 outline-none focus:ring " +
+  "bg-white/5 text-slate-100 placeholder:text-slate-400 border-white/10 " +
+  "focus:ring-emerald-500/30 focus:border-emerald-400/40 " +
+  "autofill:shadow-[inset_0_0_0px_1000px_rgba(2,6,23,0.95)] " +
+  "autofill:[-webkit-text-fill-color:rgb(241,245,249)] " +
+  "autofill:caret-[rgb(241,245,249)]";
+
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
 
   // ✅ Modo persistente (universal): URL ?mode= + fallback localStorage
-  const modeFromUrl = useMemo(() => normalizeMode(getQueryParam(location.search, "mode")), [location.search]);
+  const modeFromUrl = useMemo(
+    () => normalizeMode(getQueryParam(location.search, "mode")),
+    [location.search]
+  );
 
   const modeFromStorage = useMemo(() => {
     try {
@@ -104,7 +109,6 @@ export default function Login() {
 
     const sp = new URLSearchParams(location.search || "");
     sp.set("mode", nextMode);
-    // preserva next y err si existen
     navigate(`/login?${sp.toString()}`, { replace: true });
   }
 
@@ -224,122 +228,166 @@ export default function Login() {
     }
   }
 
-  const tabBase = "flex-1 rounded-xl px-3 py-2 text-sm font-medium border transition";
-  const tabOn = "bg-slate-900 text-white border-slate-900";
-  const tabOff = "bg-white text-slate-900 border-slate-300 hover:bg-slate-50";
+  const tabBase =
+    "flex-1 rounded-xl px-3 py-2 text-sm font-semibold border transition select-none";
+  const tabOn = "bg-white/10 text-white border-white/20 shadow-sm";
+  const tabOff = "bg-white/[0.03] text-slate-200 border-white/10 hover:bg-white/[0.06]";
 
   const primaryText =
     mode === "magic" ? "Enviar Magic Link" : mode === "password" ? "Entrar" : "Enviar enlace de reset";
 
-  return (
-    <div className="min-h-[70vh] flex items-center justify-center p-6 bg-slate-50 !text-gray-900">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm !text-gray-900">
-        <h1 className="text-xl font-semibold !text-gray-900">Ingresar</h1>
+  const modeHint =
+    mode === "magic"
+      ? "Te enviaremos un enlace seguro para entrar sin contraseña."
+      : mode === "password"
+      ? "Ingresa con tu contraseña (usuarios internos / admins)."
+      : "Te enviaremos un enlace para crear una nueva contraseña.";
 
-        {/* Tabs */}
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            className={`${tabBase} ${mode === "magic" ? tabOn : tabOff}`}
-            onClick={() => setModePersist("magic")}
-          >
-            Magic Link
-          </button>
-          <button
-            type="button"
-            className={`${tabBase} ${mode === "password" ? tabOn : tabOff}`}
-            onClick={() => setModePersist("password")}
-          >
-            Password
-          </button>
-          <button
-            type="button"
-            className={`${tabBase} ${mode === "reset" ? tabOn : tabOff}`}
-            onClick={() => setModePersist("reset")}
-          >
-            Reset
-          </button>
+  return (
+    <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
+      <div className="w-full max-w-md">
+        {/* Brand / header */}
+        <div className="mb-6 text-center">
+          <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+            Smart field control
+          </div>
+          <h1 className="mt-4 text-3xl font-bold tracking-tight text-white">
+            Controla tu personal <span className="text-emerald-300">con geocercas</span>
+          </h1>
+          <p className="mt-2 text-sm text-slate-300">
+            Accede a tu cuenta para ver paneles, asignaciones y tracking en tiempo real.
+          </p>
         </div>
 
-        {err && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {err}
-          </div>
-        )}
-        {msg && (
-          <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-            {msg}
-          </div>
-        )}
-
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium !text-gray-900">Email</label>
-            <input
-              className={inputClass}
-              type="email"
-              autoComplete="email"
-              inputMode="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@email.com"
-            />
+        {/* Card */}
+        <div className="auth-card">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Ingresar</h2>
+              <p className="mt-1 text-sm text-slate-300">{modeHint}</p>
+            </div>
+            <div className="hidden sm:block text-xs text-slate-400">
+              <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
+                PREVIEW
+              </span>
+            </div>
           </div>
 
-          {mode === "password" && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium !text-gray-900">Contraseña</label>
-              <input
-                className={inputClass}
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
+          {/* Tabs */}
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              className={`${tabBase} ${mode === "magic" ? tabOn : tabOff}`}
+              onClick={() => setModePersist("magic")}
+            >
+              Magic Link
+            </button>
+            <button
+              type="button"
+              className={`${tabBase} ${mode === "password" ? tabOn : tabOff}`}
+              onClick={() => setModePersist("password")}
+            >
+              Password
+            </button>
+            <button
+              type="button"
+              className={`${tabBase} ${mode === "reset" ? tabOn : tabOff}`}
+              onClick={() => setModePersist("reset")}
+            >
+              Reset
+            </button>
+          </div>
+
+          {err && (
+            <div className="mt-4 banner banner-error">
+              <div className="font-semibold">Error</div>
+              <div className="text-sm opacity-90">{err}</div>
+            </div>
+          )}
+          {msg && (
+            <div className="mt-4 banner banner-success">
+              <div className="font-semibold">Listo</div>
+              <div className="text-sm opacity-90">{msg}</div>
             </div>
           )}
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium !text-gray-900">Ir a (next)</label>
-            <input
-              className={inputClass}
-              type="text"
-              value={nextInput}
-              onChange={(e) => setNextInput(e.target.value)}
-              placeholder="/inicio"
-            />
-          </div>
+          <form className="mt-5 space-y-4" onSubmit={onSubmit}>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-200">Email</label>
+              <input
+                className={inputClass}
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu@email.com"
+              />
+            </div>
 
-          <button
-            className="w-full rounded-xl !bg-black px-4 py-2 !text-white disabled:opacity-60"
-            disabled={busy}
-            type="submit"
-          >
-            {busy ? "Procesando..." : primaryText}
-          </button>
+            {mode === "password" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-200">Contraseña</label>
+                <input
+                  className={inputClass}
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+            )}
 
-          <button
-            type="button"
-            className="w-full rounded-xl border px-4 py-2 !text-gray-900 bg-white"
-            onClick={() => navigate("/")}
-          >
-            Volver
-          </button>
-        </form>
+            {/* next (lo dejo, pero visualmente “avanzado”) */}
+            <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+              <summary className="cursor-pointer select-none text-sm text-slate-300">
+                Opciones avanzadas
+              </summary>
+              <div className="mt-3 space-y-2">
+                <label className="block text-sm font-medium text-slate-200">Ir a (next)</label>
+                <input
+                  className={inputClass}
+                  type="text"
+                  value={nextInput}
+                  onChange={(e) => setNextInput(e.target.value)}
+                  placeholder="/inicio"
+                />
+                <p className="text-xs text-slate-400">
+                  Útil para pruebas en PREVIEW. En producción normalmente no se toca.
+                </p>
+              </div>
+            </details>
 
-        {/* Debug / info */}
-        <div className="mt-4 text-xs text-gray-500 space-y-2">
-          <div>
-            Redirect Magic Link: <span className="break-all">{redirectTo}</span>
-          </div>
-          <div>
-            Redirect Reset: <span className="break-all">{resetRedirectTo}</span>
-          </div>
-          <div>
-            Mode persistente: <span className="break-all">{mode}</span>
-          </div>
+            <button className="btn-primary w-full" disabled={busy} type="submit">
+              {busy ? "Procesando..." : primaryText}
+            </button>
+
+            <button type="button" className="btn-outline w-full" onClick={() => navigate("/")}>
+              Volver
+            </button>
+          </form>
+
+          {/* Debug: plegable para no ensuciar UI */}
+          <details className="mt-4 text-xs text-slate-400">
+            <summary className="cursor-pointer select-none">Debug</summary>
+            <div className="mt-2 space-y-2">
+              <div>
+                Redirect Magic Link: <span className="break-all text-slate-300">{redirectTo}</span>
+              </div>
+              <div>
+                Redirect Reset: <span className="break-all text-slate-300">{resetRedirectTo}</span>
+              </div>
+              <div>
+                Mode persistente: <span className="break-all text-slate-300">{mode}</span>
+              </div>
+            </div>
+          </details>
         </div>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Privacidad: ubicación solo para geocercas y tracking según permisos del usuario.
+        </p>
       </div>
     </div>
   );
