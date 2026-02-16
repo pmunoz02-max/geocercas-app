@@ -99,6 +99,7 @@
   },
   "login": {
     "title": "Iniciar sesión",
+    "advancedOptions": "Opciones avanzadas",
     "subtitle": "Accede a tu cuenta de App Geocercas",
     "emailLabel": "Correo electrónico",
     "passwordLabel": "Contraseña",

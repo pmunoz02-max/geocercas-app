@@ -32,7 +32,8 @@
   "app": {
     "title": "App Geocercas",
     "header": {
-      "loggedAs": "Logged in as",
+      "loggedAs": "Logged in as", 
+      "advancedOptions": "Options avancées",
       "logout": "Logout",
       "login": "Log in",
       "goToPanel": "Go to dashboard",
