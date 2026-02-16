@@ -24,7 +24,8 @@ function pickOrgIdFromSearch(search) {
 
 function decodeJwtPayload(token) {
   try {
-    const part = token.split(".")[1];
+    const part = String(token || "").split(".")[1];
+    if (!part) return null;
     const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
     return JSON.parse(json);
   } catch {
@@ -124,12 +125,16 @@ export default function TrackerGpsPage() {
     const qOrg = pickOrgIdFromSearch(location?.search || "");
     if (qOrg) {
       setOrgId(qOrg);
-      try { localStorage.setItem(LS_TRACKER_ORG_KEY, qOrg); } catch {}
+      try {
+        localStorage.setItem(LS_TRACKER_ORG_KEY, qOrg);
+      } catch {}
       return;
     }
 
     let lsOrg = null;
-    try { lsOrg = localStorage.getItem(LS_TRACKER_ORG_KEY); } catch {}
+    try {
+      lsOrg = localStorage.getItem(LS_TRACKER_ORG_KEY);
+    } catch {}
     if (lsOrg && isUuid(lsOrg)) {
       setOrgId(String(lsOrg));
       return;
@@ -142,8 +147,8 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!trackerReady || !supabaseTracker) return;
 
-    let unsub = null;
     let cancelled = false;
+    let unsub = null;
 
     const updateDebugFromToken = (token) => {
       const payload = token ? decodeJwtPayload(token) : null;
@@ -217,11 +222,13 @@ export default function TrackerGpsPage() {
 
     return () => {
       cancelled = true;
-      try { unsub?.unsubscribe?.(); } catch {}
+      try {
+        unsub?.unsubscribe?.();
+      } catch {}
     };
   }, [trackerReady]);
 
-  // 1.5) Onboarding (si hay sesión) — universal, con CORS headers completos
+  // 1.5) Onboarding (si hay sesión) — universal
   useEffect(() => {
     if (!trackerReady || !hasSession || !supabaseTracker) return;
 
@@ -230,8 +237,8 @@ export default function TrackerGpsPage() {
       setMembershipDetail("No se pudo construir acceptUrl.");
       return;
     }
-    if (onboardingLockRef.current) return;
 
+    if (onboardingLockRef.current) return;
     onboardingLockRef.current = true;
 
     (async () => {
@@ -250,6 +257,7 @@ export default function TrackerGpsPage() {
         }
 
         const ssKey = `${SS_ACCEPTED_PREFIX}${userId || "unknown"}`;
+
         try {
           if (sessionStorage.getItem(ssKey) === "1") {
             setMembershipStatus("ok");
@@ -278,17 +286,25 @@ export default function TrackerGpsPage() {
         }
 
         let j = null;
-        try { j = text ? JSON.parse(text) : null; } catch { j = { raw: text }; }
+        try {
+          j = text ? JSON.parse(text) : null;
+        } catch {
+          j = { raw: text };
+        }
 
         const returnedOrg = j?.org_id;
         if (returnedOrg && isUuid(returnedOrg)) {
           setOrgId(String(returnedOrg));
-          try { localStorage.setItem(LS_TRACKER_ORG_KEY, String(returnedOrg)); } catch {}
+          try {
+            localStorage.setItem(LS_TRACKER_ORG_KEY, String(returnedOrg));
+          } catch {}
         }
 
         setMembershipStatus("ok");
         setMembershipDetail(`accept-tracker-invite OK: ${text || "ok"}`);
-        try { sessionStorage.setItem(ssKey, "1"); } catch {}
+        try {
+          sessionStorage.setItem(ssKey, "1");
+        } catch {}
       } catch (e) {
         setMembershipStatus("failed");
         setMembershipDetail(`accept-tracker-invite exception: ${String(e?.message || e)}`);
@@ -313,7 +329,12 @@ export default function TrackerGpsPage() {
     const handleSuccess = (pos) => {
       if (cancelled) return;
 
-      const c = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null };
+      const c = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy ?? null,
+      };
+
       lastCoordsRef.current = c;
       setCoords(c);
 
@@ -345,7 +366,6 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (!sendUrl) return;
-
     if (membershipStatus !== "ok") return;
     if (!orgId) return;
 
@@ -389,6 +409,7 @@ export default function TrackerGpsPage() {
         });
 
         const text = await resp.text();
+
         if (!resp.ok) {
           setLastError(`send_position ${resp.status}: ${text}`);
           return;
@@ -422,7 +443,7 @@ export default function TrackerGpsPage() {
             <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
               <div>Último envío: {formattedLastSend}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl || "—"}</div>
-              <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"} </div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
               {tokenIss ? <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div> : null}
 
