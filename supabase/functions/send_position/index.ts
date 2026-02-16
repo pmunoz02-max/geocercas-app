@@ -94,9 +94,24 @@ function parseRecordedAt(body: Payload): string {
   return d.toISOString();
 }
 
-async function resolveOrgIdServerOwned(admin: ReturnType<typeof getAdminClient>, userId: string): Promise<string> {
+/**
+ * ✅ Resolver canónico (universal):
+ * - Fuente: user_current_org
+ * - Fallback: memberships + org_members
+ * - Si encuentra exactamente 1 org => la persiste en user_current_org
+ * - Si encuentra 2+ orgs => ERROR (no elige "min uuid", no persiste nada)
+ */
+async function resolveOrgIdServerOwned(
+  admin: ReturnType<typeof getAdminClient>,
+  userId: string
+): Promise<string> {
   // 1) user_current_org
-  const uco = await admin.from("user_current_org").select("org_id").eq("user_id", userId).maybeSingle();
+  const uco = await admin
+    .from("user_current_org")
+    .select("org_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
   if (uco.error) throw new Error(`user_current_org read failed: ${uco.error.message}`);
   if (uco.data?.org_id) return String(uco.data.org_id);
 
@@ -114,26 +129,23 @@ async function resolveOrgIdServerOwned(admin: ReturnType<typeof getAdminClient>,
   const arr = Array.from(orgs);
   if (arr.length === 0) throw new Error("No org membership found for user.");
 
-  // 1 org => persist
+  // ✅ 1 org => persistimos y retornamos
   if (arr.length === 1) {
     const orgId = arr[0];
     const up = await admin.from("user_current_org").upsert(
       { user_id: userId, org_id: orgId, updated_at: new Date().toISOString() },
-      { onConflict: "user_id" },
+      { onConflict: "user_id" }
     );
     if (up.error) throw new Error(`user_current_org upsert failed: ${up.error.message}`);
     return orgId;
   }
 
-  // 2+ orgs => deterministic pick (min uuid) + persist
-  arr.sort(); // lexicographic stable for UUIDs
-  const orgId = arr[0];
-  const up = await admin.from("user_current_org").upsert(
-    { user_id: userId, org_id: orgId, updated_at: new Date().toISOString() },
-    { onConflict: "user_id" },
+  // ✅ 2+ orgs => error explícito (no persistimos nada)
+  throw new Error(
+    `Multiple org memberships found for user. Please select current org (set_current_org) before sending positions. orgs=${arr.join(
+      ","
+    )}`
   );
-  if (up.error) throw new Error(`user_current_org upsert failed: ${up.error.message}`);
-  return orgId;
 }
 
 Deno.serve(async (req) => {
@@ -180,8 +192,15 @@ Deno.serve(async (req) => {
       headers: { ...C, "Content-Type": "application/json" },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), {
-      status: 401,
+    // ✅ Si falla por multi-org, devolvemos 400 (no 401)
+    const msg = String(e?.message || e);
+    const status =
+      msg.includes("Multiple org memberships") || msg.includes("No org membership")
+        ? 400
+        : 401;
+
+    return new Response(JSON.stringify({ ok: false, error: msg }), {
+      status,
       headers: { ...C, "Content-Type": "application/json" },
     });
   }
