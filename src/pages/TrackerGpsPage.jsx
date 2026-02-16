@@ -111,24 +111,23 @@ export default function TrackerGpsPage() {
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
 
-  // 0.5) org seed
-  useEffect(() => {
-    const qOrg = pickOrgIdFromSearch(location?.search || "");
-    if (qOrg) {
-      setOrgId(qOrg);
-      try { localStorage.setItem(LS_TRACKER_ORG_KEY, qOrg); } catch {}
-      return;
-    }
+  // 0.5) org seed (MODO ESTRICTO: SOLO querystring)
+useEffect(() => {
+  const qOrg = pickOrgIdFromSearch(location?.search || "");
+  if (qOrg) {
+    setOrgId(qOrg);
+    // opcional: guardar para debug, pero no usarlo como fallback
+    try { localStorage.setItem(LS_TRACKER_ORG_KEY, qOrg); } catch {}
+    return;
+  }
 
-    let lsOrg = null;
-    try { lsOrg = localStorage.getItem(LS_TRACKER_ORG_KEY); } catch {}
-    if (lsOrg && isUuid(lsOrg)) {
-      setOrgId(String(lsOrg));
-      return;
-    }
+  setOrgId(null);
+  setMembershipStatus("failed");
+  setMembershipDetail(
+    "Falta org_id en la URL. Abre esta página desde el link de invitación: /tracker-gps?org_id=<TU_ORG_ID>"
+  );
+}, [location?.search]);
 
-    setOrgId(null);
-  }, [location?.search]);
 
   // 1) Sesión
   useEffect(() => {
