@@ -65,14 +65,21 @@ async function brevoSendEmail(opts: {
   return text;
 }
 
-// 🔒 Siempre pasa por callback tracker, y lleva org_id dentro del next
+/**
+ * ✅ CANÓNICO
+ * Usamos /auth/callback (ya existe, ya funciona, ya hace bootstrap cookie tg_at)
+ * next contiene org_id para que el tracker abra en la org correcta
+ */
 function buildRedirectTo(appPreviewUrl: string, orgId: string) {
+  const base = appPreviewUrl.replace(/\/$/, "");
   const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}`;
-  return `${appPreviewUrl.replace(/\/$/, "")}/auth/callback-tracker?next=${
-    encodeURIComponent(next)
-  }`;
+  return `${base}/auth/callback?next=${encodeURIComponent(next)}`;
 }
 
+/**
+ * ✅ Validación robusta del JWT del caller.
+ * (evita depender de supabase-js getUser(jwt) dentro de service role)
+ */
 async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string; jwt: string }) {
   const url = `${params.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`;
   const r = await fetch(url, {
@@ -91,15 +98,19 @@ async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string;
     json = { raw: text };
   }
 
-  if (!r.ok) {
-    return { ok: false as const, status: r.status, body: json };
-  }
+  if (!r.ok) return { ok: false as const, status: r.status, body: json };
 
   const id = json?.id ? String(json.id) : "";
   if (!id) return { ok: false as const, status: 500, body: { error: "NO_USER_ID", raw: json } };
   return { ok: true as const, user_id: id, raw: json };
 }
 
+/**
+ * “Open invite” = cualquiera que pueda chocar con tus uniques:
+ * - used_at IS NULL (pending unique)
+ * - is_active = true (active unique)
+ * - accepted_at IS NULL (email unique)
+ */
 async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) {
   const { data, error } = await sbAdmin
     .from("tracker_invites")
@@ -115,7 +126,7 @@ async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) 
   return data || null;
 }
 
-async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: string, keepId: string, nowIso: string) {
+async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: string, keepId: string) {
   const { error } = await sbAdmin
     .from("tracker_invites")
     .update({ is_active: false } as any)
@@ -162,7 +173,7 @@ serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ✅ validar caller (quien invita) vía Auth REST (más robusto)
+    // ✅ validar caller (quien invita)
     const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt });
     if (!u.ok) {
       return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status });
@@ -196,7 +207,7 @@ serve(async (req) => {
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(); // 7 días
     const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id);
 
-    // ✅ DB idempotente con retry por carreras
+    // ✅ DB idempotente + retry por carreras
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | null = null;
 
@@ -208,16 +219,16 @@ serve(async (req) => {
           const { error: updErr } = await sbAdmin
             .from("tracker_invites")
             .update({
-              email,
+              email,              // importante por unique (org_id,email) where accepted_at is null
               email_norm: email,
-              is_active: true,
+              is_active: true,    // importante por unique is_active=true
               expires_at: expiresAt,
             } as any)
             .eq("id", open.id);
 
           if (updErr) throw updErr;
 
-          await deactivateOtherActives(sbAdmin, org_id, email, open.id, nowIso);
+          await deactivateOtherActives(sbAdmin, org_id, email, open.id);
 
           trackerInviteId = open.id;
           mode = "updated";
@@ -269,6 +280,7 @@ serve(async (req) => {
 
     const actionLink = linkData.properties.action_link;
 
+    // ✅ enviar correo
     const subject = "Invitación: Tracker GPS - App Geocercas";
     const html = `
       <div style="font-family:Arial,sans-serif;line-height:1.4">
