@@ -5,6 +5,15 @@
       "en": "English",
       "fr": "French"
     },
+    "fallbacks": {
+      "noEmail": "No email",
+      "noOrg": "No organization",
+      "noAuth": "Not authenticated"
+    },
+    "roles": {
+      "root": "ROOT",
+      "noRole": "NO ROLE"
+    },
     "actions": {
       "close": "Close",
       "cancel": "Cancel",
@@ -15,7 +24,14 @@
       "yes": "Yes",
       "no": "No",
       "loading": "Loading..."
-    },
+    }
+  },
+
+  "app": {
+    "brand": "App Geocercas"
+  }
+}
+
     "edit": "Edit",
     "yes": "Yes",
     "no": "No",
