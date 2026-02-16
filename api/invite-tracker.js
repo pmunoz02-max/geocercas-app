@@ -1,12 +1,15 @@
 // api/invite-tracker.js
-// Preview-only safe proxy for calling Supabase Edge Function invite_tracker
+// Preview-only safe proxy for calling Supabase Edge Function send-tracker-invite-brevo
 // - Reads HttpOnly cookies tg_at + tg_rt
 // - If upstream returns 401 Invalid JWT, refreshes access_token using tg_rt server-side
 // - Updates tg_at (and tg_rt if rotated) cookies (host-only) and retries once
 // - Adds build_tag + diagnostics (no token leakage)
 
-const BUILD_TAG = "invite-proxy-v4-refresh-authheader-20260214";
+const BUILD_TAG = "invite-proxy-v5-point-to-brevo-20260216";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
+
+// ✅ SINGLE SOURCE OF TRUTH: Edge Function name
+const EDGE_FN_NAME = "send-tracker-invite-brevo";
 
 function getCookie(req, name) {
   const raw = req?.headers?.cookie || "";
@@ -63,7 +66,7 @@ function nowUnix() {
 function makeCookie(
   name,
   value,
-  { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" }
+  { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" },
 ) {
   // Host-only cookie: DO NOT set Domain= (prevents preview/prod mixing)
   const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`, `SameSite=${sameSite}`];
@@ -108,7 +111,7 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
 }
 
 async function callInviteEdge({ supabaseUrl, anonKey, accessToken, body }) {
-  const url = String(supabaseUrl).replace(/\/$/, "") + "/functions/v1/invite_tracker";
+  const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${EDGE_FN_NAME}`;
 
   const upstream = await fetch(url, {
     method: "POST",
@@ -137,7 +140,7 @@ export default async function handler(req, res) {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader(
         "Access-Control-Allow-Headers",
-        "authorization, x-client-info, apikey, content-type"
+        "authorization, x-client-info, apikey, content-type",
       );
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       return res.status(200).send("ok");
@@ -156,7 +159,7 @@ export default async function handler(req, res) {
         ok: false,
         build_tag: BUILD_TAG,
         error: "Server missing SUPABASE env (URL/ANON)",
-        diag: { vercelEnv, hasSupabaseUrl: !!supabaseUrl, hasAnonKey: !!anonKey, supabaseUrl },
+        diag: { vercelEnv, hasSupabaseUrl: !!supabaseUrl, hasAnonKey: !!anonKey, supabaseUrl, edge_fn: EDGE_FN_NAME },
       });
     }
 
@@ -168,7 +171,7 @@ export default async function handler(req, res) {
           ok: false,
           build_tag: BUILD_TAG,
           error: "PREVIEW_ENV_MISMATCH",
-          diag: { vercelEnv, expected_ref: PREVIEW_REF, supabaseUrl },
+          diag: { vercelEnv, expected_ref: PREVIEW_REF, supabaseUrl, edge_fn: EDGE_FN_NAME },
         });
       }
     }
@@ -181,7 +184,7 @@ export default async function handler(req, res) {
         ok: false,
         build_tag: BUILD_TAG,
         error: "Missing tg_at cookie",
-        diag: { vercelEnv, has_tg_rt: !!tgRt, supabaseUrl },
+        diag: { vercelEnv, has_tg_rt: !!tgRt, supabaseUrl, edge_fn: EDGE_FN_NAME },
       });
     }
 
@@ -191,6 +194,7 @@ export default async function handler(req, res) {
     const diag = {
       vercelEnv,
       supabaseUrl,
+      edge_fn: EDGE_FN_NAME,
       iss: p1?.iss || null,
       aud: p1?.aud || null,
       exp: p1?.exp || null,
