@@ -1,28 +1,18 @@
 import { getAdminClient } from "../_shared/supabaseAdmin.ts";
-import { requireUser } from "../_shared/authz.ts";
 
 type Payload = {
-  // Ignorado: frontend NO manda org_id
-  org_id?: string | null;
-
-  tracker_id?: string | null;
-  user_id?: string | null;
-
+  org_id?: string | null; // ignorado
   lat: number;
   lng: number;
-
   accuracy?: number | null;
   speed?: number | null;
   heading?: number | null;
   battery?: number | null;
-
   at?: string | null;
   ts?: string | null;
   recorded_at?: string | null;
-
   personal_id?: string | null;
   asignacion_id?: string | null;
-
   source?: string | null;
   is_mock?: boolean | null;
 };
@@ -39,6 +29,37 @@ function cors(origin: string | null) {
   };
 }
 
+function getBearer(req: Request) {
+  const h = req.headers.get("authorization") || req.headers.get("Authorization") || "";
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m?.[1] || "";
+}
+
+async function requireUserViaAuthAPI(req: Request): Promise<{ id: string; email?: string }> {
+  const token = getBearer(req);
+  if (!token) throw new Error("Missing Authorization Bearer token");
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !anon) throw new Error("Missing SUPABASE_URL / SUPABASE_ANON_KEY");
+
+  const r = await fetch(`${url}/auth/v1/user`, {
+    headers: {
+      apikey: anon,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`Auth user lookup failed (${r.status}): ${txt || r.statusText}`);
+  }
+
+  const u = await r.json();
+  if (!u?.id) throw new Error("Auth user lookup returned no id");
+  return { id: String(u.id), email: u.email ? String(u.email) : undefined };
+}
+
 function num(v: unknown, name: string) {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) throw new Error(`Invalid number: ${name}`);
@@ -53,14 +74,7 @@ function clampInt(v: unknown, name: string) {
 }
 
 function isValidLatLng(lat: number, lng: number) {
-  return (
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    lat >= -90 &&
-    lat <= 90 &&
-    lng >= -180 &&
-    lng <= 180
-  );
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
 function parseRecordedAt(body: Payload): string {
@@ -82,72 +96,54 @@ function parseRecordedAt(body: Payload): string {
 
 async function resolveOrgIdServerOwned(admin: ReturnType<typeof getAdminClient>, userId: string): Promise<string> {
   // 1) user_current_org
-  {
-    const { data, error } = await admin
-      .from("user_current_org")
-      .select("org_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (error) throw new Error(`user_current_org read failed: ${error.message}`);
-    if (data?.org_id) return String(data.org_id);
-  }
+  const uco = await admin.from("user_current_org").select("org_id").eq("user_id", userId).maybeSingle();
+  if (uco.error) throw new Error(`user_current_org read failed: ${uco.error.message}`);
+  if (uco.data?.org_id) return String(uco.data.org_id);
 
   // 2) memberships + org_members
-  const orgSet = new Set<string>();
+  const orgs = new Set<string>();
 
-  {
-    const { data, error } = await admin
-      .from("memberships")
-      .select("org_id")
-      .eq("user_id", userId);
+  const m = await admin.from("memberships").select("org_id").eq("user_id", userId);
+  if (m.error) throw new Error(`memberships read failed: ${m.error.message}`);
+  (m.data || []).forEach((r: any) => r?.org_id && orgs.add(String(r.org_id)));
 
-    if (error) throw new Error(`memberships read failed: ${error.message}`);
-    (data || []).forEach((r: any) => r?.org_id && orgSet.add(String(r.org_id)));
-  }
+  const om = await admin.from("org_members").select("org_id").eq("user_id", userId);
+  if (om.error) throw new Error(`org_members read failed: ${om.error.message}`);
+  (om.data || []).forEach((r: any) => r?.org_id && orgs.add(String(r.org_id)));
 
-  {
-    const { data, error } = await admin
-      .from("org_members")
-      .select("org_id")
-      .eq("user_id", userId);
+  const arr = Array.from(orgs);
+  if (arr.length === 0) throw new Error("No org membership found for user.");
 
-    if (error) throw new Error(`org_members read failed: ${error.message}`);
-    (data || []).forEach((r: any) => r?.org_id && orgSet.add(String(r.org_id)));
-  }
-
-  const orgs = Array.from(orgSet);
-
-  if (orgs.length === 0) {
-    throw new Error("No org membership found for user (memberships/org_members).");
-  }
-
-  if (orgs.length === 1) {
-    const orgId = orgs[0];
-    const { error: upErr } = await admin
-      .from("user_current_org")
-      .upsert(
-        { user_id: userId, org_id: orgId, updated_at: new Date().toISOString() },
-        { onConflict: "user_id" },
-      );
-    if (upErr) throw new Error(`user_current_org upsert failed: ${upErr.message}`);
+  // 1 org => persist
+  if (arr.length === 1) {
+    const orgId = arr[0];
+    const up = await admin.from("user_current_org").upsert(
+      { user_id: userId, org_id: orgId, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" },
+    );
+    if (up.error) throw new Error(`user_current_org upsert failed: ${up.error.message}`);
     return orgId;
   }
 
-  throw new Error(`Multiple orgs for user; select current org first. orgs=${orgs.join(",")}`);
+  // 2+ orgs => deterministic pick (min uuid) + persist
+  arr.sort(); // lexicographic stable for UUIDs
+  const orgId = arr[0];
+  const up = await admin.from("user_current_org").upsert(
+    { user_id: userId, org_id: orgId, updated_at: new Date().toISOString() },
+    { onConflict: "user_id" },
+  );
+  if (up.error) throw new Error(`user_current_org upsert failed: ${up.error.message}`);
+  return orgId;
 }
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   const C = cors(origin);
 
-  // ✅ Handle OPTIONS (preflight)
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: C });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: C });
 
   try {
-    const user = await requireUser(req);
+    const user = await requireUserViaAuthAPI(req);
 
     const body: Payload = await req.json();
     const lat = num(body.lat, "lat");
@@ -173,21 +169,20 @@ Deno.serve(async (req) => {
       heading: body.heading ?? null,
       battery: clampInt(body.battery, "battery"),
       is_mock: body.is_mock ?? null,
-      source: body.source ?? "tracker",
+      source: body.source ?? "tracker-gps-web",
       recorded_at,
     };
 
-    const { error } = await admin.from(positionsTable).insert(row);
-    if (error) throw new Error(`Insert failed: ${error.message}`);
+    const ins = await admin.from(positionsTable).insert(row);
+    if (ins.error) throw new Error(`Insert failed: ${ins.error.message}`);
 
     return new Response(JSON.stringify({ ok: true, org_id: orgId, recorded_at }), {
       headers: { ...C, "Content-Type": "application/json" },
     });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), {
-      status: 400,
+      status: 401,
       headers: { ...C, "Content-Type": "application/json" },
     });
   }
 });
-
