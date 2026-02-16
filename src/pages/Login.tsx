@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 function getQueryParam(search: string, key: string) {
   const v = new URLSearchParams(search).get(key);
@@ -218,7 +219,9 @@ export default function Login() {
         });
         if (error) throw error;
 
-        setMsg("✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM.");
+        setMsg(
+          "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM."
+        );
         return;
       }
     } catch (e2: any) {
@@ -234,7 +237,11 @@ export default function Login() {
   const tabOff = "bg-white/[0.03] text-slate-200 border-white/10 hover:bg-white/[0.06]";
 
   const primaryText =
-    mode === "magic" ? "Enviar Magic Link" : mode === "password" ? "Entrar" : "Enviar enlace de reset";
+    mode === "magic"
+      ? "Enviar Magic Link"
+      : mode === "password"
+      ? "Entrar"
+      : "Enviar enlace de reset";
 
   const modeHint =
     mode === "magic"
@@ -266,10 +273,15 @@ export default function Login() {
               <h2 className="text-lg font-semibold text-white">Ingresar</h2>
               <p className="mt-1 text-sm text-slate-300">{modeHint}</p>
             </div>
-            <div className="hidden sm:block text-xs text-slate-400">
-              <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
-                PREVIEW
-              </span>
+
+            {/* Right controls: PREVIEW + Language */}
+            <div className="flex flex-col items-end gap-2">
+              <div className="hidden sm:block text-xs text-slate-400">
+                <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
+                  PREVIEW
+                </span>
+              </div>
+              <LanguageSwitcher />
             </div>
           </div>
 
@@ -376,7 +388,8 @@ export default function Login() {
                 Redirect Magic Link: <span className="break-all text-slate-300">{redirectTo}</span>
               </div>
               <div>
-                Redirect Reset: <span className="break-all text-slate-300">{resetRedirectTo}</span>
+                Redirect Reset:{" "}
+                <span className="break-all text-slate-300">{resetRedirectTo}</span>
               </div>
               <div>
                 Mode persistente: <span className="break-all text-slate-300">{mode}</span>
