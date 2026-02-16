@@ -28,16 +28,7 @@
   },
 
   "app": {
-    "brand": "App Geocercas"
-  }
-}
-
-    "edit": "Edit",
-    "yes": "Yes",
-    "no": "No",
-    "loading": "Loading..."
-  },
-  "app": {
+    "brand": "App Geocercas",
     "title": "App Geocercas",
     "header": {
       "loggedAs": "Logged in as",
@@ -69,6 +60,7 @@
       "invitar_tracker": "Invite tracker"
     }
   },
+
   "landing": {
     "brandName": "App Geocercas",
     "brandTagline": "Personnel control by geofences",
@@ -121,6 +113,7 @@
     "magicLinkSent": "We sent you an access link. Check your email.",
     "magicLinkError": "Could not send the link. Please try again."
   },
+
   "login": {
     "title": "Log in",
     "subtitle": "Access your App Geocercas account",
@@ -168,6 +161,7 @@
     "modeDesc": "If login is correct, the server redirects to /auth/callback with tokens.",
     "back": "Back"
   },
+
   "inicio": {
     "header": {
       "badge": "Help center & resources",
@@ -223,6 +217,7 @@
       "orgIdLabel": "Organization ID:"
     }
   },
+
   "geocercas": {
     "titleNew": "New geofence",
     "subtitleNew": "Draw a geofence on the map and assign it to your personnel or activities.",
@@ -266,6 +261,7 @@
     "deletedCount": "Deleted: {{count}}",
     "savedOk": "Geofence saved successfully."
   },
+
   "personal": {
     "title": "Personnel",
     "orgInfoLabel": "Organization:",
@@ -337,6 +333,7 @@
       }
     }
   },
+
   "actividades": {
     "title": "Activities",
     "formTitleNew": "New activity",
@@ -396,6 +393,7 @@
     "errorToggle": "Could not change activity status.",
     "confirmDelete": "Are you sure you want to delete the activity \"{{name}}\"?"
   },
+
   "asignaciones": {
     "title": "Assignments",
     "filters": {
@@ -492,6 +490,7 @@
       "missingEnd": "You must enter an end date/time."
     }
   },
+
   "reportes": {
     "title": "Cost reports",
     "headerSubtitle": "View and export costs by person, activity, and geofence.",
@@ -570,6 +569,7 @@
       "noResults": "No records found for the selected filters."
     }
   },
+
   "dashboard": {
     "title": "Costs dashboard",
     "subtitle": "View aggregated costs by person, activity, and geofence.",
@@ -593,6 +593,7 @@
     },
     "errorLoad": "Error loading the costs dashboard."
   },
+
   "dashboardCostos": {
     "title": "Costs dashboard",
     "subtitle": "View KPIs and cost charts by person, activity, and geofence.",
@@ -642,6 +643,7 @@
     "colRegistros": "Records",
     "tableEmpty": "No data to display"
   },
+
   "tracker": {
     "title": "GPS Tracker",
     "subtitle": "View in real time the location of trackers inside your geofences.",
@@ -671,6 +673,7 @@
     },
     "errorLoad": "Error loading tracker positions."
   },
+
   "trackerDashboard": {
     "title": "Real-time Tracking Dashboard",
     "subtitle": "Points update automatically. The send frequency is defined by the administrator.",
@@ -714,6 +717,7 @@
       "checkConsole": "Check the console if it persists."
     }
   },
+
   "inviteTracker": {
     "orgFallback": "your organization",
     "title": "Invite tracker",
@@ -744,6 +748,7 @@
       "unexpectedError": "Unexpected error processing the invitation."
     }
   },
+
   "admins": {
     "title": "Admins",
     "subtitle": "Manage admins of your organization and their roles.",
@@ -778,6 +783,7 @@
       "remove": "Could not remove the admin."
     }
   },
+
   "help": {
     "common": {
       "breadcrumb": "Help Center",
@@ -954,6 +960,7 @@
       "notConfigured": "Support contact is not configured yet."
     }
   },
+
   "resetPassword": {
     "title": "Reset password",
     "subtitle": "Create a new password for your account.",
@@ -977,6 +984,7 @@
     "backHome": "Go to landing",
     "tip": "Tip: go back to /login, enter your email and use “Forgot your password?” to generate a new link."
   },
+
   "authInvite": {
     "title": "You’ve been invited",
     "processing": "Validating invitation…",
@@ -986,6 +994,7 @@
     "goToLogin": "Go to login",
     "timeout": "Invitation validation took too long. Please try again."
   },
+
   "auth": {
     "processing": "Authenticating…",
     "timeout": "Authentication took too long. Please try again.",
@@ -993,6 +1002,7 @@
     "errorTitle": "Authentication failed",
     "backToLogin": "Back to login"
   },
+
   "home": {
     "welcome": "Welcome to App Geocercas",
     "sessionAs": "Logged in as",
