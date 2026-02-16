@@ -5,7 +5,7 @@ const LANGS = [
   { code: "es", label: "ES" },
   { code: "en", label: "EN" },
   { code: "fr", label: "FR" },
-];
+] as const;
 
 function buildHref(code: string) {
   try {
@@ -20,7 +20,9 @@ function buildHref(code: string) {
 
 export default function LanguageSwitcher() {
   const { i18n } = useTranslation();
-  const current = (i18n.language || "es").slice(0, 2);
+
+  const current =
+    ((i18n.resolvedLanguage || i18n.language || "es") as string).toLowerCase().slice(0, 2);
 
   const handle = (e: React.MouseEvent<HTMLAnchorElement>, code: string) => {
     // Si JS funciona, cambia sin recargar.
@@ -28,10 +30,19 @@ export default function LanguageSwitcher() {
     try {
       if (code === current) return;
       e.preventDefault();
-      i18n.changeLanguage(code);
+
+      // Cambia idioma en runtime
+      Promise.resolve(i18n.changeLanguage(code)).catch(() => {});
+
+      // Persistencia: compatibilidad con tu app + compatibilidad con i18next estándar
       try {
         localStorage.setItem("app_lang", code);
       } catch {}
+      try {
+        localStorage.setItem("i18nextLng", code);
+      } catch {}
+
+      // html lang
       if (typeof document !== "undefined") document.documentElement.lang = code;
 
       // limpia ?lang= (opcional)
@@ -60,6 +71,9 @@ export default function LanguageSwitcher() {
                 ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
                 : "bg-sky-500 text-white border-sky-500 hover:bg-sky-400")
             }
+            aria-pressed={active}
+            aria-label={`Cambiar idioma a ${lang.label}`}
+            title={`Cambiar a ${lang.label}`}
           >
             {lang.label}
           </a>
