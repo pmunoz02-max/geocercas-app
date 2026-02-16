@@ -103,14 +103,7 @@ export default function TrackerGpsPage() {
 
   // 0) Config
   useEffect(() => {
-    if (!supabaseTracker) {
-      setTrackerReady(false);
-      setHasSession(false);
-      setStatus("Tracker no configurado en este deployment.");
-      setLastError("Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview).");
-      return;
-    }
-    if (!TRACKER_URL || !TRACKER_ANON) {
+    if (!supabaseTracker || !TRACKER_URL || !TRACKER_ANON) {
       setTrackerReady(false);
       setHasSession(false);
       setStatus("Tracker no configurado en este deployment.");
@@ -120,21 +113,17 @@ export default function TrackerGpsPage() {
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
 
-  // 0.5) org seed
+  // 0.5) org seed (querystring primero, luego localStorage)
   useEffect(() => {
     const qOrg = pickOrgIdFromSearch(location?.search || "");
     if (qOrg) {
       setOrgId(qOrg);
-      try {
-        localStorage.setItem(LS_TRACKER_ORG_KEY, qOrg);
-      } catch {}
+      try { localStorage.setItem(LS_TRACKER_ORG_KEY, qOrg); } catch {}
       return;
     }
 
     let lsOrg = null;
-    try {
-      lsOrg = localStorage.getItem(LS_TRACKER_ORG_KEY);
-    } catch {}
+    try { lsOrg = localStorage.getItem(LS_TRACKER_ORG_KEY); } catch {}
     if (lsOrg && isUuid(lsOrg)) {
       setOrgId(String(lsOrg));
       return;
@@ -143,7 +132,7 @@ export default function TrackerGpsPage() {
     setOrgId(null);
   }, [location?.search]);
 
-  // 1) Sesión (hidratación robusta + onAuthStateChange) — SIN signOut
+  // 1) Sesión (hidratación + onAuthStateChange)
   useEffect(() => {
     if (!trackerReady || !supabaseTracker) return;
 
@@ -175,7 +164,6 @@ export default function TrackerGpsPage() {
     (async () => {
       setStatus("Leyendo sesión del tracker…");
 
-      // Retry corto para hidratar
       let session = null;
       for (let i = 0; i < 10; i++) {
         const { data } = await supabaseTracker.auth.getSession();
@@ -222,13 +210,11 @@ export default function TrackerGpsPage() {
 
     return () => {
       cancelled = true;
-      try {
-        unsub?.unsubscribe?.();
-      } catch {}
+      try { unsub?.unsubscribe?.(); } catch {}
     };
   }, [trackerReady]);
 
-  // 1.5) Onboarding (si hay sesión) — universal
+  // 1.5) Onboarding: accept-tracker-invite (AHORA manda org_id explícito si existe)
   useEffect(() => {
     if (!trackerReady || !hasSession || !supabaseTracker) return;
 
@@ -237,7 +223,6 @@ export default function TrackerGpsPage() {
       setMembershipDetail("No se pudo construir acceptUrl.");
       return;
     }
-
     if (onboardingLockRef.current) return;
     onboardingLockRef.current = true;
 
@@ -257,7 +242,6 @@ export default function TrackerGpsPage() {
         }
 
         const ssKey = `${SS_ACCEPTED_PREFIX}${userId || "unknown"}`;
-
         try {
           if (sessionStorage.getItem(ssKey) === "1") {
             setMembershipStatus("ok");
@@ -265,6 +249,9 @@ export default function TrackerGpsPage() {
             return;
           }
         } catch {}
+
+        // 🔥 CLAVE: si el usuario está en múltiples orgs, aquí le pasamos org_id explícito
+        const body = orgId && isUuid(orgId) ? { org_id: orgId } : {};
 
         const resp = await fetch(acceptUrl, {
           method: "POST",
@@ -274,37 +261,39 @@ export default function TrackerGpsPage() {
             "x-api-key": TRACKER_ANON,
             Authorization: `Bearer ${tokenB}`,
           },
-          body: JSON.stringify({}), // universal
+          body: JSON.stringify(body),
         });
 
         const text = await resp.text();
 
         if (!resp.ok) {
+          // ayuda contextual: si falta orgId y el backend dice multiple orgs
+          const hintMultiple = (text || "").toLowerCase().includes("multiple orgs");
+          if (!orgId && hintMultiple) {
+            setMembershipStatus("failed");
+            setMembershipDetail(
+              `accept-tracker-invite status=${resp.status} body=${text}\n\nSOLUCIÓN: abre /tracker-gps con ?org_id=<TU_ORG_ID> (ej: ${"ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a"})`
+            );
+            return;
+          }
+
           setMembershipStatus("failed");
           setMembershipDetail(`accept-tracker-invite status=${resp.status} body=${text}`);
           return;
         }
 
         let j = null;
-        try {
-          j = text ? JSON.parse(text) : null;
-        } catch {
-          j = { raw: text };
-        }
+        try { j = text ? JSON.parse(text) : null; } catch { j = { raw: text }; }
 
         const returnedOrg = j?.org_id;
         if (returnedOrg && isUuid(returnedOrg)) {
           setOrgId(String(returnedOrg));
-          try {
-            localStorage.setItem(LS_TRACKER_ORG_KEY, String(returnedOrg));
-          } catch {}
+          try { localStorage.setItem(LS_TRACKER_ORG_KEY, String(returnedOrg)); } catch {}
         }
 
         setMembershipStatus("ok");
         setMembershipDetail(`accept-tracker-invite OK: ${text || "ok"}`);
-        try {
-          sessionStorage.setItem(ssKey, "1");
-        } catch {}
+        try { sessionStorage.setItem(ssKey, "1"); } catch {}
       } catch (e) {
         setMembershipStatus("failed");
         setMembershipDetail(`accept-tracker-invite exception: ${String(e?.message || e)}`);
@@ -312,7 +301,7 @@ export default function TrackerGpsPage() {
         onboardingLockRef.current = false;
       }
     })();
-  }, [trackerReady, hasSession, acceptUrl, TRACKER_ANON]);
+  }, [trackerReady, hasSession, acceptUrl, TRACKER_ANON, orgId]);
 
   // 2) GPS
   useEffect(() => {
@@ -329,12 +318,7 @@ export default function TrackerGpsPage() {
     const handleSuccess = (pos) => {
       if (cancelled) return;
 
-      const c = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracy: pos.coords.accuracy ?? null,
-      };
-
+      const c = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null };
       lastCoordsRef.current = c;
       setCoords(c);
 
@@ -409,7 +393,6 @@ export default function TrackerGpsPage() {
         });
 
         const text = await resp.text();
-
         if (!resp.ok) {
           setLastError(`send_position ${resp.status}: ${text}`);
           return;
@@ -475,7 +458,7 @@ export default function TrackerGpsPage() {
             </div>
 
             {membershipDetail ? (
-              <div className="mt-3 text-[11px] text-slate-200 bg-slate-800/40 border border-slate-700 rounded-xl p-3">
+              <div className="mt-3 text-[11px] text-slate-200 bg-slate-800/40 border border-slate-700 rounded-xl p-3 whitespace-pre-wrap">
                 {membershipDetail}
               </div>
             ) : null}
