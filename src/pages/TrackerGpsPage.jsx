@@ -16,8 +16,8 @@ function isUuid(v) {
 function pickOrgIdFromSearch(search) {
   try {
     const sp = new URLSearchParams(search || "");
-    const candidates = [sp.get("org_id"), sp.get("org"), sp.get("orgId")].filter(Boolean);
-    for (const c of candidates) if (isUuid(c)) return String(c).trim();
+    const candidates = [sp.get("org"), sp.get("org_id"), sp.get("orgId")].filter(Boolean);
+    for (const c of candidates) if (isUuid(c)) return String(c);
   } catch {}
   return null;
 }
@@ -46,6 +46,15 @@ function readSbTrackerAuthRaw() {
   }
 }
 
+function parseHashTokens(hash) {
+  const h = String(hash || "");
+  const hp = new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
+  return {
+    access_token: hp.get("access_token") || "",
+    refresh_token: hp.get("refresh_token") || "",
+  };
+}
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -53,7 +62,7 @@ function sleep(ms) {
 export default function TrackerGpsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const params = useParams(); // ✅ /tracker-gps/:orgId
+  const params = useParams();
 
   const [status, setStatus] = useState("Iniciando tracker…");
   const [coords, setCoords] = useState(null);
@@ -75,7 +84,7 @@ export default function TrackerGpsPage() {
     token_looks_jwt: null,
     token_iss: "",
     token_sub: "",
-    org_source: "",
+    org_source: "none",
     router_search: "",
     path_orgId: "",
   });
@@ -86,6 +95,7 @@ export default function TrackerGpsPage() {
   const isSendingRef = useRef(false);
   const lastSentAtRef = useRef(0);
   const onboardingLockRef = useRef(false);
+  const didHashSessionRef = useRef(false);
 
   const TRACKER_URL = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
   const TRACKER_ANON = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
@@ -114,28 +124,23 @@ export default function TrackerGpsPage() {
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
 
-  // ✅ org seed: query OR path param
+  // 0.2) Org: PRIORIDAD PATH, luego query
   useEffect(() => {
+    const pOrg = String(params?.orgId || "").trim();
     const qOrg = pickOrgIdFromSearch(location?.search || "");
-    const pOrg = isUuid(params?.orgId) ? String(params.orgId).trim() : null;
 
-    const found = qOrg || pOrg || null;
-    const source = qOrg ? "query" : (pOrg ? "path" : "none");
+    const picked = isUuid(pOrg) ? pOrg : (isUuid(qOrg) ? qOrg : "");
 
     setDebug((d) => ({
       ...d,
-      org_source: source,
-      router_search: String(location?.search || ""),
-      path_orgId: String(params?.orgId || ""),
+      router_search: location?.search || "",
+      path_orgId: pOrg || "",
+      org_source: isUuid(pOrg) ? "path" : (isUuid(qOrg) ? "query" : "none"),
     }));
 
-    if (found && isUuid(found)) {
-      setOrgId(found);
-      try { localStorage.setItem(LS_TRACKER_ORG_KEY, found); } catch {}
-      if (membershipStatus === "failed" && membershipDetail?.includes("Falta org_id")) {
-        setMembershipStatus("pending");
-        setMembershipDetail("");
-      }
+    if (picked) {
+      setOrgId(picked);
+      try { localStorage.setItem(LS_TRACKER_ORG_KEY, picked); } catch {}
       return;
     }
 
@@ -146,12 +151,49 @@ export default function TrackerGpsPage() {
     );
   }, [location?.search, params?.orgId]);
 
+  // 0.3) Si viene magic link con tokens en HASH, crear sesión aquí (sin callback)
+  useEffect(() => {
+    if (!trackerReady || !supabaseTracker) return;
+    if (didHashSessionRef.current) return;
+
+    const { access_token, refresh_token } = parseHashTokens(window.location.hash);
+    if (!access_token || !refresh_token || !looksLikeJwt(access_token)) return;
+
+    didHashSessionRef.current = true;
+
+    (async () => {
+      try {
+        setStatus("Procesando Magic Link del Tracker…");
+
+        const { error } = await supabaseTracker.auth.setSession({ access_token, refresh_token });
+        if (error) {
+          setLastError(`setSession error: ${error.message}`);
+          return;
+        }
+
+        // Esperar a que persista
+        for (let i = 0; i < 10; i++) {
+          const { data } = await supabaseTracker.auth.getSession();
+          if (data?.session?.access_token && looksLikeJwt(data.session.access_token)) break;
+          await sleep(200);
+        }
+
+        // Limpia hash
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+
+        setLastError(null);
+        setStatus("Sesión OK. Preparando tracker…");
+      } catch (e) {
+        setLastError(`hash session error: ${String(e?.message || e)}`);
+      }
+    })();
+  }, [trackerReady]);
+
   // 1) Sesión
   useEffect(() => {
     if (!trackerReady || !supabaseTracker) return;
 
     let cancelled = false;
-    let unsub = null;
 
     const updateDebugFromToken = (token) => {
       const payload = token ? decodeJwtPayload(token) : null;
@@ -218,7 +260,7 @@ export default function TrackerGpsPage() {
       }
     });
 
-    unsub = sub?.subscription;
+    const unsub = sub?.subscription;
 
     return () => {
       cancelled = true;
@@ -226,7 +268,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady]);
 
-  // 1.5) Onboarding robusto (igual que antes)
+  // 1.5) Onboarding robusto
   useEffect(() => {
     if (!trackerReady || !hasSession || !supabaseTracker) return;
     if (!orgId || !isUuid(orgId)) return;
@@ -264,6 +306,7 @@ export default function TrackerGpsPage() {
           }
         } catch {}
 
+        // 1) membership directa
         const { data: mRows, error: mErr } = await supabaseTracker
           .from("memberships")
           .select("role, revoked_at, org_id, user_id")
@@ -285,6 +328,7 @@ export default function TrackerGpsPage() {
           return;
         }
 
+        // 2) accept
         setMembershipDetail("No hay membership. Ejecutando accept-tracker-invite…");
 
         const resp = await fetch(acceptUrl, {

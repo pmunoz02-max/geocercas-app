@@ -1,12 +1,5 @@
-// src/App.jsx
 import React from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import { useAuthSafe } from "./context/AuthContext.jsx";
 
@@ -23,8 +16,6 @@ import UpdatePassword from "./pages/UpdatePassword.jsx";
 
 // ✅ Tracker GPS public page
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
-// ✅ NUEVO callback tracker (sesión aislada)
-import AuthCallbackTracker from "./pages/AuthCallbackTracker.jsx";
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
@@ -74,25 +65,19 @@ function AdminRoute({ children }) {
   if (!auth) {
     return (
       <Navigate
-        to={`/login?next=${encodeURIComponent(
-          location.pathname || "/inicio"
-        )}&err=${encodeURIComponent("auth_provider_missing")}`}
+        to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}&err=${encodeURIComponent(
+          "auth_provider_missing"
+        )}`}
         replace
       />
     );
   }
 
   const { loading, user, isAppRoot } = auth;
-
   if (loading) return null;
 
   if (!user) {
-    return (
-      <Navigate
-        to={`/login?next=${encodeURIComponent(location.pathname)}`}
-        replace
-      />
-    );
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
   if (!isAppRoot) return <Navigate to="/inicio" replace />;
@@ -110,13 +95,8 @@ function AppRoutes() {
       {/* ✅ App callback */}
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      {/* ✅ Tracker callback (sesión aislada, NO pisa sesión del owner) */}
-      <Route path="/auth/callback-tracker" element={<AuthCallbackTracker />} />
-
       {/* ✅ Tracker GPS (PUBLIC) */}
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-
-      {/* ✅ Tracker GPS (PUBLIC) robusto: orgId en path */}
       <Route path="/tracker-gps/:orgId" element={<TrackerGpsPage />} />
 
       {/* 🔐 Password flows */}
