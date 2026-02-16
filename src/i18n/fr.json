@@ -5,6 +5,15 @@
       "en": "Anglais",
       "fr": "Français"
     },
+    "fallbacks": {
+      "noEmail": "Sans e-mail",
+      "noOrg": "Aucune organisation",
+      "noAuth": "Non authentifié"
+    },
+    "roles": {
+      "root": "ROOT",
+      "noRole": "AUCUN RÔLE"
+    },
     "actions": {
       "close": "Fermer",
       "cancel": "Annuler",
@@ -18,11 +27,7 @@
     },
     "orgNamePlaceholder": "Organization name (e.g. Farm A)",
     "createOrganization": "Create organization",
-    "refreshContext": "Refresh context",
-    "edit": "Modifier",
-    "yes": "Oui",
-    "no": "Non",
-    "loading": "Chargement…"
+    "refreshContext": "Refresh context"
   },
   "app": {
     "title": "App Geocercas",
