@@ -361,7 +361,9 @@ export default function Login() {
                 {t("login.advancedOptions")}
               </summary>
               <div className="mt-3 space-y-2">
-                <label className="block text-sm font-medium text-slate-200">Ir a (next)</label>
+                <label className="block text-sm font-medium text-slate-200">
+                  {t("login.goToDashboard")} (next)
+                </label>
                 <input
                   className={inputClass}
                   type="text"
@@ -369,9 +371,7 @@ export default function Login() {
                   onChange={(e) => setNextInput(e.target.value)}
                   placeholder="/inicio"
                 />
-                <p className="text-xs text-slate-400">
-                  Útil para pruebas en PREVIEW. En producción normalmente no se toca.
-                </p>
+                <p className="text-xs text-slate-400">{t("login.info")}</p>
               </div>
             </details>
 
