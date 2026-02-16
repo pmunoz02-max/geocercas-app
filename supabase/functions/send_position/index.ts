@@ -1,12 +1,10 @@
-import { corsHeaders, handleOptions } from "../_shared/cors.ts";
 import { getAdminClient } from "../_shared/supabaseAdmin.ts";
 import { requireUser } from "../_shared/authz.ts";
 
 type Payload = {
-  // ⚠️ Se ignora (frontend NO manda org_id)
+  // Ignorado: frontend NO manda org_id
   org_id?: string | null;
 
-  // Compat (no usados para org)
   tracker_id?: string | null;
   user_id?: string | null;
 
@@ -18,7 +16,6 @@ type Payload = {
   heading?: number | null;
   battery?: number | null;
 
-  // Compat timestamps
   at?: string | null;
   ts?: string | null;
   recorded_at?: string | null;
@@ -29,6 +26,18 @@ type Payload = {
   source?: string | null;
   is_mock?: boolean | null;
 };
+
+function cors(origin: string | null) {
+  const o = origin ?? "*";
+  return {
+    "Access-Control-Allow-Origin": o,
+    "Vary": "Origin",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, apikey, x-api-key, content-type, x-client-info, accept, accept-language",
+    "Access-Control-Expose-Headers": "content-length, content-type",
+  };
+}
 
 function num(v: unknown, name: string) {
   const n = typeof v === "number" ? v : Number(v);
@@ -58,7 +67,6 @@ function parseRecordedAt(body: Payload): string {
   const raw = body.at ?? body.recorded_at ?? body.ts ?? null;
   if (!raw) return new Date().toISOString();
 
-  // Permite epoch (ms o s)
   const asNum = Number(raw);
   if (Number.isFinite(asNum) && String(raw).trim() !== "") {
     const ms = asNum > 1e12 ? asNum : asNum * 1000;
@@ -72,13 +80,6 @@ function parseRecordedAt(body: Payload): string {
   return d.toISOString();
 }
 
-/**
- * Resolve org_id server-owned for this user:
- * 1) user_current_org
- * 2) if exactly one org in memberships/org_members -> use it AND persist user_current_org
- * 3) if none -> error
- * 4) if multiple -> error (must pick via set_current_org flow)
- */
 async function resolveOrgIdServerOwned(admin: ReturnType<typeof getAdminClient>, userId: string): Promise<string> {
   // 1) user_current_org
   {
@@ -92,7 +93,7 @@ async function resolveOrgIdServerOwned(admin: ReturnType<typeof getAdminClient>,
     if (data?.org_id) return String(data.org_id);
   }
 
-  // 2) collect orgs from memberships + org_members
+  // 2) memberships + org_members
   const orgSet = new Set<string>();
 
   {
@@ -121,37 +122,34 @@ async function resolveOrgIdServerOwned(admin: ReturnType<typeof getAdminClient>,
     throw new Error("No org membership found for user (memberships/org_members).");
   }
 
-  // If exactly one, persist and return
   if (orgs.length === 1) {
     const orgId = orgs[0];
-
     const { error: upErr } = await admin
       .from("user_current_org")
       .upsert(
         { user_id: userId, org_id: orgId, updated_at: new Date().toISOString() },
         { onConflict: "user_id" },
       );
-
     if (upErr) throw new Error(`user_current_org upsert failed: ${upErr.message}`);
     return orgId;
   }
 
-  // Multiple orgs but none selected
-  throw new Error(
-    `Multiple org memberships found for user. Must select current org (set_current_org). orgs=${orgs.join(",")}`,
-  );
+  throw new Error(`Multiple orgs for user; select current org first. orgs=${orgs.join(",")}`);
 }
 
 Deno.serve(async (req) => {
-  const opt = handleOptions(req);
-  if (opt) return opt;
+  const origin = req.headers.get("origin");
+  const C = cors(origin);
+
+  // ✅ Handle OPTIONS (preflight)
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: C });
+  }
 
   try {
-    // Auth (JWT válido)
     const user = await requireUser(req);
 
     const body: Payload = await req.json();
-
     const lat = num(body.lat, "lat");
     const lng = num(body.lng, "lng");
     if (!isValidLatLng(lat, lng)) throw new Error("Invalid lat/lng range");
@@ -159,13 +157,10 @@ Deno.serve(async (req) => {
     const recorded_at = parseRecordedAt(body);
 
     const admin = getAdminClient();
-
-    // ✅ Org server-owned (NO depende de org_id del body, NO depende de RPC)
     const orgId = await resolveOrgIdServerOwned(admin, user.id);
 
     const positionsTable = Deno.env.get("POSITIONS_TABLE") ?? "positions";
 
-    // Schema real (según tu tabla D): recorded_at / created_at (default)
     const row: Record<string, unknown> = {
       org_id: orgId,
       user_id: user.id,
@@ -186,12 +181,13 @@ Deno.serve(async (req) => {
     if (error) throw new Error(`Insert failed: ${error.message}`);
 
     return new Response(JSON.stringify({ ok: true, org_id: orgId, recorded_at }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...C, "Content-Type": "application/json" },
     });
   } catch (e) {
-    return new Response(
-      JSON.stringify({ ok: false, error: String(e?.message || e) }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), {
+      status: 400,
+      headers: { ...C, "Content-Type": "application/json" },
+    });
   }
 });
+
