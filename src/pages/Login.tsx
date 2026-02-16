@@ -358,7 +358,7 @@ export default function Login() {
             {/* next (lo dejo, pero visualmente “avanzado”) */}
             <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <summary className="cursor-pointer select-none text-sm text-slate-300">
-                Opciones avanzadas
+                {t("login.advancedOptions")}
               </summary>
               <div className="mt-3 space-y-2">
                 <label className="block text-sm font-medium text-slate-200">Ir a (next)</label>
