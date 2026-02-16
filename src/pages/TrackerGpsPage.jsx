@@ -88,18 +88,16 @@ export default function TrackerGpsPage() {
 
   const acceptUrl = useMemo(() => {
     if (!TRACKER_URL) return null;
-    return `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`;
-  }, [TRACKER_URL]);
+    const base = `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`;
+    // También por query, por compatibilidad con funciones viejas
+    if (orgId && isUuid(orgId)) return `${base}?org_id=${encodeURIComponent(orgId)}`;
+    return base;
+  }, [TRACKER_URL, orgId]);
 
   const sendUrl = useMemo(() => {
     if (!TRACKER_URL) return null;
     return `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/send_position`;
   }, [TRACKER_URL]);
-
-  const log = (msg, extra) => {
-    const line = `${new Date().toISOString().slice(11, 19)} - ${msg}`;
-    console.log("[TrackerGpsPage]", line, extra || "");
-  };
 
   // 0) Config
   useEffect(() => {
@@ -113,7 +111,7 @@ export default function TrackerGpsPage() {
     setTrackerReady(true);
   }, [TRACKER_URL, TRACKER_ANON]);
 
-  // 0.5) org seed (querystring primero, luego localStorage)
+  // 0.5) org seed
   useEffect(() => {
     const qOrg = pickOrgIdFromSearch(location?.search || "");
     if (qOrg) {
@@ -132,7 +130,7 @@ export default function TrackerGpsPage() {
     setOrgId(null);
   }, [location?.search]);
 
-  // 1) Sesión (hidratación + onAuthStateChange)
+  // 1) Sesión
   useEffect(() => {
     if (!trackerReady || !supabaseTracker) return;
 
@@ -183,14 +181,12 @@ export default function TrackerGpsPage() {
         setHasSession(false);
         setStatus("No hay sesión activa de tracker.");
         setLastError("Abre esta página únicamente desde tu Magic Link del Tracker (y no cierres la pestaña antes de continuar).");
-        log("getSession: none/invalid", { hasSession: !!session, tokenLooks: looksLikeJwt(tokenB) });
         return;
       }
 
       setHasSession(true);
       setStatus("Sesión OK. Preparando tracker…");
       setLastError(null);
-      log("getSession: OK", { iss: decodeJwtPayload(tokenB)?.iss });
     })();
 
     const { data: sub } = supabaseTracker.auth.onAuthStateChange((_event, session) => {
@@ -214,44 +210,73 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady]);
 
-  // 1.5) Onboarding: accept-tracker-invite (AHORA manda org_id explícito si existe)
+  // 1.5) Onboarding robusto:
+  //   1) si YA existe membership activa => OK (idempotente)
+  //   2) si NO existe => intenta accept-tracker-invite (si está bien)
   useEffect(() => {
     if (!trackerReady || !hasSession || !supabaseTracker) return;
+    if (!orgId || !isUuid(orgId)) return;
 
     if (!acceptUrl) {
       setMembershipStatus("failed");
       setMembershipDetail("No se pudo construir acceptUrl.");
       return;
     }
+
     if (onboardingLockRef.current) return;
     onboardingLockRef.current = true;
 
     (async () => {
       try {
         setMembershipStatus("pending");
-        setMembershipDetail("Ejecutando accept-tracker-invite…");
+        setMembershipDetail("Verificando membership…");
 
         const { data: sData } = await supabaseTracker.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
         const userId = sData?.session?.user?.id || "";
 
-        if (!tokenB || !looksLikeJwt(tokenB)) {
+        if (!tokenB || !looksLikeJwt(tokenB) || !userId) {
           setMembershipStatus("failed");
-          setMembershipDetail("No hay token válido en /tracker-gps (session not hydrated).");
+          setMembershipDetail("No hay token/user válido en /tracker-gps.");
           return;
         }
 
-        const ssKey = `${SS_ACCEPTED_PREFIX}${userId || "unknown"}`;
+        // cache por sesión
+        const ssKey = `${SS_ACCEPTED_PREFIX}${userId}:${orgId}`;
         try {
           if (sessionStorage.getItem(ssKey) === "1") {
             setMembershipStatus("ok");
-            setMembershipDetail("Membership ya activado en esta sesión.");
+            setMembershipDetail("Membership OK (cache de sesión).");
             return;
           }
         } catch {}
 
-        // 🔥 CLAVE: si el usuario está en múltiples orgs, aquí le pasamos org_id explícito
-        const body = orgId && isUuid(orgId) ? { org_id: orgId } : {};
+        // 1) membership directa (tu caso actual)
+        const { data: mRows, error: mErr } = await supabaseTracker
+          .from("memberships")
+          .select("role, revoked_at, org_id, user_id")
+          .eq("org_id", orgId)
+          .eq("user_id", userId)
+          .limit(1);
+
+        if (mErr) {
+          setMembershipStatus("failed");
+          setMembershipDetail(`memberships select error: ${mErr.message}`);
+          return;
+        }
+
+        const m = (mRows || [])[0];
+        if (m && !m.revoked_at) {
+          setMembershipStatus("ok");
+          setMembershipDetail(`Membership ya existe: role=${m.role}`);
+          try { sessionStorage.setItem(ssKey, "1"); } catch {}
+          return;
+        }
+
+        // 2) Si no hay membership, intentamos accept
+        setMembershipDetail("No hay membership. Ejecutando accept-tracker-invite…");
+
+        const body = { org_id: orgId };
 
         const resp = await fetch(acceptUrl, {
           method: "POST",
@@ -267,28 +292,9 @@ export default function TrackerGpsPage() {
         const text = await resp.text();
 
         if (!resp.ok) {
-          // ayuda contextual: si falta orgId y el backend dice multiple orgs
-          const hintMultiple = (text || "").toLowerCase().includes("multiple orgs");
-          if (!orgId && hintMultiple) {
-            setMembershipStatus("failed");
-            setMembershipDetail(
-              `accept-tracker-invite status=${resp.status} body=${text}\n\nSOLUCIÓN: abre /tracker-gps con ?org_id=<TU_ORG_ID> (ej: ${"ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a"})`
-            );
-            return;
-          }
-
           setMembershipStatus("failed");
           setMembershipDetail(`accept-tracker-invite status=${resp.status} body=${text}`);
           return;
-        }
-
-        let j = null;
-        try { j = text ? JSON.parse(text) : null; } catch { j = { raw: text }; }
-
-        const returnedOrg = j?.org_id;
-        if (returnedOrg && isUuid(returnedOrg)) {
-          setOrgId(String(returnedOrg));
-          try { localStorage.setItem(LS_TRACKER_ORG_KEY, String(returnedOrg)); } catch {}
         }
 
         setMembershipStatus("ok");
@@ -296,7 +302,7 @@ export default function TrackerGpsPage() {
         try { sessionStorage.setItem(ssKey, "1"); } catch {}
       } catch (e) {
         setMembershipStatus("failed");
-        setMembershipDetail(`accept-tracker-invite exception: ${String(e?.message || e)}`);
+        setMembershipDetail(`onboarding exception: ${String(e?.message || e)}`);
       } finally {
         onboardingLockRef.current = false;
       }
@@ -428,6 +434,7 @@ export default function TrackerGpsPage() {
               <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
+
               {tokenIss ? <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div> : null}
 
               {coords ? (
