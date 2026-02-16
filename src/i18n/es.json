@@ -5,6 +5,15 @@
       "en": "Inglés",
       "fr": "Francés"
     },
+    "fallbacks": {
+      "noEmail": "Sin email",
+      "noOrg": "Sin organización",
+      "noAuth": "No autenticado"
+    },
+    "roles": {
+      "root": "ROOT",
+      "noRole": "SIN ROL"
+    },
     "actions": {
       "close": "Cerrar",
       "cancel": "Cancelar",
@@ -18,11 +27,7 @@
     },
     "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
     "createOrganization": "Crear organización",
-    "refreshContext": "Refrescar contexto",
-    "edit": "Editar",
-    "yes": "Sí",
-    "no": "No",
-    "loading": "Cargando…"
+    "refreshContext": "Refrescar contexto"
   },
   "app": {
     "title": "App Geocercas",
@@ -813,7 +818,7 @@
       "resultBullets": [
         "Al menos 1 geocerca guardada y visible en el mapa",
         "Personal registrado y listo para asignaciones",
-        "Actividades con moneda y tarifa por hora configuradas",
+        "Actividades con moneda y tarifa por hora configurada",
         "Asignaciones activas (persona + actividad + geocerca)",
         "Puntos GPS visibles en Tracker / Dashboard de tracking",
         "Reportes y dashboard de costos listos para exportar y analizar"
