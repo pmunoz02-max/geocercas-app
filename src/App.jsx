@@ -113,8 +113,11 @@ function AppRoutes() {
       {/* ✅ Tracker callback (sesión aislada, NO pisa sesión del owner) */}
       <Route path="/auth/callback-tracker" element={<AuthCallbackTracker />} />
 
-      {/* ✅ Tracker GPS (PUBLIC): el magic link debe terminar en /tracker-gps */}
+      {/* ✅ Tracker GPS (PUBLIC) */}
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+
+      {/* ✅ Tracker GPS (PUBLIC) robusto: orgId en path */}
+      <Route path="/tracker-gps/:orgId" element={<TrackerGpsPage />} />
 
       {/* 🔐 Password flows */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
