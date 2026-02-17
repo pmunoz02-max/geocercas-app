@@ -154,9 +154,9 @@ export default function Login() {
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      throw new Error(
-        `No se pudo completar bootstrap de sesión (HTTP ${res.status}). ${txt || ""}`.trim()
-      );
+      // i18n-friendly message (fallback)
+      const fallback = `Bootstrap failed (HTTP ${res.status}). ${txt || ""}`.trim();
+      throw new Error(t("login.errors.bootstrapFailed", { defaultValue: fallback, status: res.status, details: txt || "" }));
     }
   }
 
@@ -204,12 +204,18 @@ export default function Login() {
         const refreshToken = session?.refresh_token || "";
         const expiresIn = typeof session?.expires_in === "number" ? session.expires_in : undefined;
 
-        if (!accessToken) throw new Error("No se pudo obtener access_token de sesión.");
-        if (!refreshToken) throw new Error("No se pudo obtener refresh_token de sesión.");
+        if (!accessToken) {
+          setErr(t("login.errors.noAccessToken", { defaultValue: "Could not get access token." }));
+          return;
+        }
+        if (!refreshToken) {
+          setErr(t("login.errors.noRefreshToken", { defaultValue: "Could not get refresh token." }));
+          return;
+        }
 
         await bootstrapCookie(accessToken, refreshToken, expiresIn);
 
-        setMsg("✅ Sesión iniciada. Entrando...");
+        setMsg(t("login.sessionStarted", { defaultValue: "✅ Session started. Entering…" }));
         navigate(safeNextPath(nextInput), { replace: true });
         return;
       }
@@ -249,6 +255,21 @@ export default function Login() {
       : mode === "password"
       ? t("login.subtitle")
       : t("resetPassword.subtitle");
+
+  // Keys nuevas (nota técnica)
+  const advTitle = t("login.advancedOptions");
+  const goToNextLabel = t("login.goToNext", { defaultValue: t("login.goToDashboard", { defaultValue: "Go to" }) });
+  const nextHint = t(
+    "login.nextHint",
+    {
+      defaultValue:
+        "Useful for tests in PREVIEW. In production, normally you don’t change it."
+    }
+  );
+
+  const resetTabLabel = t("login.modeReset", { defaultValue: t("resetPassword.title", { defaultValue: "Reset" }) });
+  const okLabel = t("common.ok", { defaultValue: "OK" });
+  const debugLabel = t("common.debug", { defaultValue: "Debug" });
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
@@ -306,7 +327,7 @@ export default function Login() {
               className={`${tabBase} ${mode === "reset" ? tabOn : tabOff}`}
               onClick={() => setModePersist("reset")}
             >
-              Reset
+              {resetTabLabel}
             </button>
           </div>
 
@@ -318,7 +339,7 @@ export default function Login() {
           )}
           {msg && (
             <div className="mt-4 banner banner-success">
-              <div className="font-semibold">OK</div>
+              <div className="font-semibold">{okLabel}</div>
               <div className="text-sm opacity-90">{msg}</div>
             </div>
           )}
@@ -358,11 +379,11 @@ export default function Login() {
             {/* next (lo dejo, pero visualmente “avanzado”) */}
             <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <summary className="cursor-pointer select-none text-sm text-slate-300">
-                {t("login.advancedOptions")}
+                {advTitle}
               </summary>
               <div className="mt-3 space-y-2">
                 <label className="block text-sm font-medium text-slate-200">
-                  {t("login.goToDashboard")} (next)
+                  {goToNextLabel} (next)
                 </label>
                 <input
                   className={inputClass}
@@ -371,7 +392,7 @@ export default function Login() {
                   onChange={(e) => setNextInput(e.target.value)}
                   placeholder="/inicio"
                 />
-                <p className="text-xs text-slate-400">{t("login.info")}</p>
+                <p className="text-xs text-slate-400">{nextHint}</p>
               </div>
             </details>
 
@@ -386,7 +407,7 @@ export default function Login() {
 
           {/* Debug: plegable para no ensuciar UI */}
           <details className="mt-4 text-xs text-slate-400">
-            <summary className="cursor-pointer select-none">Debug</summary>
+            <summary className="cursor-pointer select-none">{debugLabel}</summary>
             <div className="mt-2 space-y-2">
               <div>
                 Redirect Magic Link: <span className="break-all text-slate-300">{redirectTo}</span>
