@@ -356,7 +356,7 @@
         "inactivo": "Inactives"
       },
       "refresh": "Rafraîchir",
-      "refreshLoading": "Actualizando…"
+      "refreshLoading": "Mise à jour.."
     },
     "form": {
       "newTitle": "Nouvelle affectation",
@@ -376,9 +376,9 @@
       "saveButton": "Enregistrer l’affectation",
       "updateButton": "Mettre à jour",
       "cancelEditButton": "Annuler la modification",
-      "buttonCreate": "Crear asignación",
-      "buttonUpdate": "Actualizar asignación",
-      "buttonCancel": "Cancelar",
+      "buttonCreate": "Créer une affectation",
+      "buttonUpdate": "Mise à jour de l'allocation",
+      "buttonCancel": "Annuler",
       "endOptionalHint": "Optionnel",
       "quickActivity": {
         "noActivitiesHint": "Aucune activité (créez-en une dans le module Activités ou ci-dessous).",
@@ -413,39 +413,39 @@
     },
     "messages": {
       "loadError": "Erreur lors du chargement des affectations.",
-      "catalogError": "Error al cargar catálogos (personal, geocercas, actividades).",
+      "catalogError": "Erreur lors du chargement des catalogues (personnel, géofences, activités).",
       "loadingData": "Chargement des affectations…",
-      "overlapError": "La persona ya tiene una asignación activa que se solapa en ese rango de fechas.",
+      "overlapError": "La personne a déjà une mission active qui se chevauche dans cette plage de dates.",
       "selectPersonAndFence": "Vous devez sélectionner une personne et un géorepère.",
       "selectDates": "Vous devez renseigner la date/heure de début et de fin.",
       "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
-      "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
+      "frequencyInvalidRange": "La fréquence doit être comprise entre 5 minutes et 12 heures.",
       "saveGenericError": "Erreur lors de l’enregistrement de l’affectation.",
-      "createGenericError": "No se pudo crear la asignación.",
-      "createSuccess": "Asignación creada correctamente.",
-      "updateGenericError": "No se pudo actualizar la asignación.",
-      "updateSuccess": "Asignación actualizada correctamente.",
+      "createGenericError": "L'affectation n'a pas pu être créée.",
+      "createSuccess": "Affectation créée avec succès.",
+      "updateGenericError": "L'affectation n'a pas pu être mise à jour.",
+      "updateSuccess": "L'affectation a été correctement mise à jour.",
       "deleteError": "Impossible de supprimer l’affectation.",
-      "deleteSuccess": "Asignación eliminada correctamente.",
+      "deleteSuccess": "Affectation supprimée avec succès.",
       "confirmDelete": "Êtes-vous sûr de vouloir supprimer cette affectation ?",
       "noPersonal": "Il n’y a aucun personnel actif dans cette organisation. Créez ou réactivez au moins une personne.",
       "noActivities": "Aucune activité n’a été créée. Créez au moins une activité pour pouvoir affecter."
     },
     "error": {
-      "load": "Error al cargar las asignaciones.",
-      "save": "No se pudo guardar la asignación.",
-      "delete": "No se pudo eliminar la asignación.",
-      "missingPerson": "Debe seleccionar una persona.",
-      "missingGeofence": "Debe seleccionar una geocerca.",
+      "load": "Erreur de chargement des affectations.",
+      "save": "L'affectation n'a pas pu être sauvegardée.",
+      "delete": "L'affectation n'a pas pu être supprimée.",
+      "missingPerson": "Vous devez sélectionner une personne.",
+      "missingGeofence": "Vous devez sélectionner une géofence.",
       "missingActivity": "Vous devez sélectionner une activité.",
-      "missingStart": "Debe ingresar fecha/hora de inicio.",
-      "missingEnd": "Debe ingresar fecha/hora de fin."
+      "missingStart": "Vous devez saisir la date et l'heure de début.",
+      "missingEnd": "Vous devez saisir la date et l'heure de fin."
     }
   },
   "reportes": {
     "title": "Cost reports",
-    "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
-    "noAccessBody": "No tienes permisos para visualizar los reportes de costos. Este módulo está disponible solo para propietarios y administradores.",
+    "headerSubtitle": "Visualiser et exporter les coûts par personne, par activité et par géofence.",
+    "noAccessBody": "Vous n'avez pas le droit de consulter les rapports de coûts. Ce module n'est accessible qu'aux propriétaires et aux administrateurs.",
     "loadingReport": "Loading report…",
     "filtersTitle": "Filters",
     "filtersFrom": "From",
@@ -454,16 +454,16 @@
     "filtersActivity": "Activity",
     "filtersGeofence": "Geofence",
     "filtersAll": "All",
-    "filtersClear": "Limpiar filtros",
-    "filtersApply": "Aplicar filtros",
+    "filtersClear": "Nettoyer les filtres",
+    "filtersApply": "Appliquer les filtres",
     "summaryTotalHoursLabel": "Total hours",
-    "summaryTotalHoursHelp": "Suma de las horas de todas las asignaciones en el rango seleccionado.",
+    "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans l'intervalle sélectionné.",
     "summaryTotalCostLabel": "Total cost",
-    "summaryTotalCostHelp": "Suma de los costos calculados por persona, actividad y geocerca.",
+    "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
     "summaryRecordsLabel": "Records",
-    "summaryRecordsHelp": "Cantidad de filas que cumplen con los filtros actuales.",
+    "summaryRecordsHelp": "Nombre de lignes conformes aux filtres actuels.",
     "tableTitle": "Cost details",
-    "tableExportHelp": "Exporta el detalle actual como archivo CSV.",
+    "tableExportHelp": "Exporte le détail actuel dans un fichier CSV.",
     "tableExportButton": "Export CSV",
     "colPersona": "Person",
     "colGeocerca": "Geofence",
@@ -485,26 +485,26 @@
     "csvHeaderCosto": "Total_cost",
     "csvHeaderMoneda": "Currency",
     "buttonDownloadCsv": "Download CSV",
-    "errorLoad": "Error al cargar los reportes.",
-    "errorCsv": "No se pudo generar el archivo CSV.",
-    "errorLoadFilters": "Error al cargar filtros (personas, actividades, geocercas).",
-    "errorRangeInvalid": "La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
-    "errorViewMissing": "La vista v_costos_detalle aún no está creada en Supabase.",
-    "errorLoadReport": "Error al cargar el reporte de costos.",
-    "errorLabel": "Error:",
+    "errorLoad": "Erreur de chargement des rapports.",
+    "errorCsv": "Le fichier CSV n'a pas pu être généré.",
+    "errorLoadFilters": "Erreur de chargement des filtres (personnes, activités, géofences).",
+    "errorRangeInvalid": "La date \"Du\" ne peut être supérieure à la date \"Au\".",
+    "errorViewMissing": "La vue v_cost_detail n'est pas encore créée dans Supabase.",
+    "errorLoadReport": "Erreur de téléchargement du rapport de coûts.",
+    "errorLabel": "Erreur :",
     "exportNoData": "No data to export.",
-    "tableEmpty": "No hay registros para los filtros seleccionados.",
-    "personNoName": "Persona sin nombre",
-    "geofenceNoName": "Geocerca sin nombre",
-    "activityNoName": "Actividad sin nombre",
+    "tableEmpty": "Il n'y a pas d'enregistrements pour les filtres sélectionnés.",
+    "personNoName": "Personne non nommée",
+    "geofenceNoName": "Géofence sans nom",
+    "activityNoName": "Activité sans nom",
     "filters": {
       "dateFromLabel": "From",
       "dateToLabel": "To",
       "personLabel": "Person",
       "activityLabel": "Activity",
       "geofenceLabel": "Geofence",
-      "apply": "Aplicar filtros",
-      "clear": "Limpiar filtros"
+      "apply": "Appliquer les filtres",
+      "clear": "Nettoyer les filtres"
     },
     "table": {
       "title": "Cost details",
@@ -517,12 +517,12 @@
       "rate": "Rate/hour",
       "total": "Total cost",
       "currency": "Currency",
-      "noResults": "No se encontraron registros para los filtros seleccionados."
+      "noResults": "Aucun enregistrement n'a été trouvé pour les filtres sélectionnés."
     }
   },
   "dashboard": {
-    "title": "Dashboard de costos",
-    "subtitle": "Visualiza los costos agregados por persona, actividad y geocerca.",
+    "title": "Tableau de bord des coûts",
+    "subtitle": "Visualiser les coûts agrégés par personne, activité et géofence.",
     "cards": {
       "totalCost": "Total cost",
       "totalHours": "Total hours",
@@ -536,16 +536,16 @@
       "clear": "Clear"
     },
     "charts": {
-      "costByActivity": "Costo por actividad",
-      "costByPerson": "Costo por persona",
-      "costByGeofence": "Costo por geocerca",
+      "costByActivity": "Coût par activité",
+      "costByPerson": "Coût par personne",
+      "costByGeofence": "Coût par géofence",
       "hoursByDay": "Hours by day"
     },
-    "errorLoad": "Error al cargar el dashboard de costos."
+    "errorLoad": "Erreur de chargement du tableau de bord des coûts."
   },
   "dashboardCostos": {
-    "title": "Dashboard de costos",
-    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
+    "title": "Tableau de bord des coûts",
+    "subtitle": "Visualisez les indicateurs clés de performance et les diagrammes de coûts par personne, par activité et par zone géographique.",
     "refreshButton": "Refresh data",
     "filtersTitle": "Filters",
     "filtersFrom": "From",
@@ -554,8 +554,8 @@
     "filtersActivity": "Activity",
     "filtersGeofence": "Geofence",
     "filtersAll": "All",
-    "filtersClear": "Limpiar filtros",
-    "filtersApply": "Aplicar filtros",
+    "filtersClear": "Nettoyer les filtres",
+    "filtersApply": "Appliquer les filtres",
     "kpiTotalHours": "Total hours",
     "kpiTotalCost": "Total cost",
     "kpiRecords": "Records",
@@ -570,7 +570,7 @@
     "metricCost": "Cost",
     "metricHours": "Hours",
     "metricRecords": "Records",
-    "tableTitle": "Detalle para la dimensión seleccionada",
+    "tableTitle": "Détail de la dimension sélectionnée",
     "colPersona": "Person",
     "colActividad": "Activity",
     "colGeocerca": "Geofence",
@@ -578,8 +578,8 @@
     "colHoras": "Hours",
     "colCosto": "Cost",
     "colMoneda": "Currency",
-    "tableNoResults": "No hay datos para los filtros actuales.",
-    "errorLoad": "Error al cargar el dashboard de costos.",
+    "tableNoResults": "Il n'y a pas de données pour les filtres actuels.",
+    "errorLoad": "Erreur de chargement du tableau de bord des coûts.",
     "exportDataButton": "Export data",
     "exportChartButton": "Export chart",
     "chartType": "Chart type",
@@ -594,7 +594,7 @@
   },
   "tracker": {
     "title": "GPS Tracker",
-    "subtitle": "Visualiza en tiempo real la ubicación de los trackers dentro de tus geocercas.",
+    "subtitle": "Visualisez en temps réel l'emplacement des traceurs à l'intérieur de vos géofences.",
     "status": {
       "online": "Tracker online",
       "offline": "No recent data"
@@ -619,13 +619,13 @@
       "status": "Status",
       "noResults": "No positions recorded."
     },
-    "errorLoad": "Error al cargar las posiciones de tracker."
+    "errorLoad": "Erreur de chargement des positions du tracker."
   },
   "trackerDashboard": {
     "title": "Real-time Tracking Dashboard",
-    "subtitle": "Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador.",
+    "subtitle": "Les points sont mis à jour automatiquement. La fréquence d'envoi est définie par l'administrateur.",
     "filters": {
-      "trackerLabel": "Tracker",
+      "trackerLabel": "Traceur",
       "timeWindowLabel": "Window",
       "timeWindowSuffix": "hours",
       "geofenceLabel": "Geofence",
@@ -638,14 +638,14 @@
       "trackersProfiles": "Trackers (profiles)",
       "pointsInMap": "Map points (current filter)",
       "lastPoint": "Last recorded point",
-      "noPoints": "Sin puntos para el filtro actual."
+      "noPoints": "Aucun point pour le filtre actuel."
     },
     "legend": {
       "title": "Tracker legend",
       "points": "pts"
     },
     "popup": {
-      "tracker": "Tracker",
+      "tracker": "Traceur",
       "time": "Time",
       "accuracy": "Accuracy",
       "countHere": "Records at this position",
@@ -653,50 +653,50 @@
       "geofence": "Geofence",
       "inside": "Inside geofence",
       "yes": "Yes",
-      "no": "No"
+      "no": "Non"
     },
     "messages": {
-      "noOrg": "Debes seleccionar una organización.",
-      "autoRefresh": "Los puntos se actualizan automáticamente. No necesitas recargar la página.",
+      "noOrg": "Vous devez sélectionner une organisation.",
+      "autoRefresh": "Les points sont mis à jour automatiquement. Il n'est pas nécessaire de recharger la page.",
       "loading": "Loading tracking data…",
-      "noData": "No se encontraron posiciones para los filtros seleccionados.",
-      "error": "Error cargando datos de tracking.",
-      "checkConsole": "Revisa la consola si persiste."
+      "noData": "Aucun poste n'a été trouvé pour les filtres sélectionnés.",
+      "error": "Erreur de chargement des données de suivi.",
+      "checkConsole": "Vérifiez la console si le problème persiste."
     }
   },
   "inviteTracker": {
-    "orgFallback": "tu organización",
+    "orgFallback": "votre organisation",
     "title": "Invite tracker",
-    "subtitle": "Selecciona un miembro de tu personal o ingresa un correo manualmente para invitarlo como tracker en {{orgName}}.",
+    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un courriel manuellement pour l'inviter à participer au suivi sur {{orgName}}.",
     "form": {
       "selectLabel": "Select active personnel (optional)",
       "selectPlaceholder": "-- Select personnel --",
-      "selectHelp": "Si seleccionas un personal, su correo se llenará automáticamente.",
+      "selectHelp": "Si vous sélectionnez un membre du personnel, son courrier sera automatiquement rempli.",
       "emailLabel": "Tracker email",
       "emailPlaceholder": "tracker@example.com",
-      "emailHelp": "Se enviará una invitación a este correo.",
+      "emailHelp": "Une invitation sera envoyée à cette adresse électronique.",
       "buttonSending": "Sending invitation…",
       "buttonSend": "Send invitation"
     },
     "errors": {
-      "emailRequired": "Debes ingresar un correo electrónico.",
+      "emailRequired": "Vous devez saisir une adresse électronique.",
       "emailInvalid": "Enter a valid email address."
     },
     "messages": {
-      "serverProblem": "Hubo un problema al contactar al servidor de invitaciones.",
-      "notOk": "No se pudo completar la invitación. Revisa el correo e inténtalo de nuevo.",
-      "invited": "Se ha enviado una invitación a {{email}} para unirse como tracker en {{orgName}}.",
-      "magiclinkSent": "Se envió un link mágico de acceso a {{email}}.",
-      "linkOnlyWithLink": "La invitación fue creada. Usa este enlace para compartir el acceso: {{link}}.",
-      "linkOnlyNoLink": "La invitación fue creada, pero no se recibió un enlace público.",
+      "serverProblem": "Il y a eu un problème de contact avec le serveur d'invitation.",
+      "notOk": "L'invitation n'a pas pu être complétée. Veuillez vérifier votre courrier électronique et réessayer.",
+      "invited": "Une invitation a été envoyée à {{email}} pour qu'il se joigne en tant que traqueur à {{orgName}}.",
+      "magiclinkSent": "Un lien magique a été envoyé à {{email}}.",
+      "linkOnlyWithLink": "L'invitation a été créée. Utilisez ce lien pour partager l'accès : {{link}}.",
+      "linkOnlyNoLink": "L'invitation a été créée, mais aucun lien public n'a été reçu.",
       "createdWithoutEmail": "Tracker access was created without sending an email.",
-      "genericProcessed": "La invitación para {{email}} se procesó correctamente.",
-      "unexpectedError": "Error inesperado al procesar la invitación."
+      "genericProcessed": "L'invitation pour {{email}} a été traitée avec succès.",
+      "unexpectedError": "Erreur inattendue lors du traitement de l'invitation."
     }
   },
   "admins": {
     "title": "Admins",
-    "subtitle": "Gestiona los administradores de tu organización y sus roles.",
+    "subtitle": "Gérer les administrateurs de votre organisation et leurs rôles.",
     "table": {
       "name": "Name",
       "email": "Email",
@@ -706,7 +706,7 @@
       "noResults": "No admins registered."
     },
     "form": {
-      "inviteTitle": "Invitar nuevo administrador",
+      "inviteTitle": "Inviter un nouvel administrateur",
       "emailLabel": "Email",
       "roleLabel": "Role",
       "buttonInvite": "Send invitation"
@@ -719,13 +719,13 @@
     "banner": {
       "invitationSent": "Invitation sent successfully.",
       "roleUpdated": "Role updated.",
-      "removed": "Administrador eliminado de la organización."
+      "removed": "Administrateur retiré de l'organisation."
     },
     "error": {
-      "load": "Error al cargar la lista de administradores.",
-      "invite": "No se pudo enviar la invitación.",
-      "updateRole": "No se pudo actualizar el rol.",
-      "remove": "No se pudo eliminar al administrador."
+      "load": "Erreur de chargement de la liste des administrateurs.",
+      "invite": "L'invitation n'a pas pu être envoyée.",
+      "updateRole": "Le rôle n'a pas pu être mis à jour.",
+      "remove": "L'administrateur n'a pas pu être supprimé."
     }
   },
   "help": {
@@ -735,133 +735,133 @@
       "goHome": "Go to Home",
       "viewFaq": "View FAQ",
       "badge": "Help center",
-      "quickGuideBadge": "Guía rápida"
+      "quickGuideBadge": "Guide rapide"
     },
     "instructions": {
-      "title": "Guía rápida de configuración",
-      "subtitle": "Sigue estos pasos para configurar tu organización, crear geocercas, asignar personal y empezar a trackear.",
+      "title": "Guide de configuration rapide",
+      "subtitle": "Suivez les étapes suivantes pour configurer votre organisation, créer des géofences, affecter du personnel et commencer le suivi.",
       "jumpToSteps": "Jump to steps",
       "viewResult": "View result",
       "tocTitle": "Table of contents",
-      "tocSubtitle": "Usa estos accesos para navegar la guía.",
+      "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
       "tocSteps": "Steps",
       "tocTips": "Best practices",
       "tocResult": "Expected result",
       "recommendationTitle": "Recommendation",
-      "recommendationBody": "Empieza con 1 geocerca y 1 tracker. Cuando el flujo funcione, escala a más zonas y personas.",
+      "recommendationBody": "Commencez avec 1 géofence et 1 tracker. Lorsque le flux fonctionne, augmentez le nombre de zones et de personnes.",
       "stepsTitle": "Step-by-step",
-      "stepsSubtitle": "Una secuencia práctica que funciona para la mayoría de organizaciones.",
+      "stepsSubtitle": "Une séquence pratique qui fonctionne pour la plupart des organisations.",
       "steps": [
         {
-          "title": "Selecciona tu organización",
+          "title": "Sélectionnez votre organisation",
           "bullets": [
-            "Usa el selector de organización para elegir dónde vas a trabajar.",
-            "Si eres Propietario, puedes administrar varias organizaciones."
+            "Utilisez le sélecteur d'organisation pour choisir votre lieu de travail.",
+            "Si vous êtes propriétaire, vous pouvez gérer plusieurs organisations."
           ]
         },
         {
-          "title": "Crea tu primera geocerca",
+          "title": "Créez votre première géofence",
           "bullets": [
-            "Ve a Geocerca y dibuja el área en el mapa.",
+            "Allez dans Geofence et dessinez la zone sur la carte.",
             "Give it a clear name (Farm A, Field 3, Plant 1, etc.).",
-            "Guarda y verifica que aparezca en Geocercas."
+            "Enregistrez et vérifiez qu'il apparaît dans Geofences."
           ]
         },
         {
-          "title": "Registra tu personal",
+          "title": "Inscrivez votre personnel",
           "bullets": [
-            "Ve a Personal y crea los registros de las personas que trabajarán.",
-            "Usa un correo válido si los vas a invitar como trackers."
+            "Allez dans Personnel et créez les fiches des personnes qui travailleront.",
+            "Utilisez une adresse électronique valide si vous les invitez en tant que traqueurs."
           ]
         },
         {
-          "title": "Crea actividades y tarifas",
+          "title": "Créer des activités et des tarifs",
           "bullets": [
-            "Ve a Actividades y define tareas (Cosecha, Riego, Mantenimiento…).",
-            "Configura moneda y tarifa por hora para calcular costos y reportes."
+            "Allez dans Activités et définissez les tâches (Récolte, Irrigation, Maintenance...).",
+            "Configurer la devise et les taux horaires pour l'établissement des coûts et des rapports."
           ]
         },
         {
           "title": "Create assignments",
           "bullets": [
-            "Ve a Asignaciones y vincula: Persona + Actividad + Geocerca.",
-            "Define inicio/fin y estado Activa.",
+            "Allez dans Affectations et liez : Personne + Activité + Géo-barrière.",
+            "Définit le début/la fin et l'état actif.",
             "Define frequency (minimum 5 minutes)."
           ]
         },
         {
           "title": "Invite trackers (field phones)",
           "bullets": [
-            "Ve a Invitar tracker y envía invitación por correo.",
-            "El invitado puede entrar con Link mágico desde el móvil.",
-            "Al iniciar, el tracker enviará puntos GPS según la asignación."
+            "Accédez à l'outil de suivi des invitations et envoyez l'invitation par courrier.",
+            "L'invité peut se connecter avec Link magic depuis son mobile.",
+            "Au démarrage, le traceur envoie des points GPS en fonction de l'affectation."
           ]
         },
         {
-          "title": "Revisa reportes y dashboard",
+          "title": "Examiner les rapports et le tableau de bord",
           "bullets": [
-            "Abre Reportes para filtrar por geocerca/persona/actividad y descargar CSV.",
-            "Abre Dashboard Costos para ver KPIs y gráficos."
+            "Ouvrez les rapports pour filtrer par géofence/personne/activité et télécharger le fichier CSV.",
+            "Ouvrez le tableau de bord Coûts pour afficher les indicateurs de performance et les graphiques."
           ]
         }
       ],
       "tipsTitle": "Best practices",
       "bestPractice1Title": "Use clear names",
-      "bestPractice1Body": "Nombra geocercas y actividades de forma que tu equipo las reconozca al instante (Finca, Lote, Bloque, Tarea).",
+      "bestPractice1Body": "Nommez les géofences et les activités de manière à ce que votre équipe les reconnaisse instantanément (Ferme, Lot, Bloc, Tâche).",
       "bestPractice2Title": "Start small, then scale",
-      "bestPractice2Body": "Valida el flujo completo con una persona y una geocerca antes de crear decenas de registros.",
+      "bestPractice2Body": "Validez l'ensemble du flux avec une personne et un périmètre avant de créer des dizaines d'enregistrements.",
       "bestPractice3Title": "Keep assignments updated",
-      "bestPractice3Body": "Cierra o desactiva asignaciones antiguas para que el tracker siga solo el plan vigente.",
-      "bestPractice4Title": "Batería y precisión",
-      "bestPractice4Body": "Usa una frecuencia razonable. Una frecuencia muy alta consume más batería y datos móviles.",
+      "bestPractice3Body": "Fermez ou désactivez les anciennes affectations afin que le traceur ne suive que le plan en cours.",
+      "bestPractice4Title": "Batterie et précision",
+      "bestPractice4Body": "Utilisez une fréquence raisonnable. Une fréquence très élevée consomme plus de batterie et de données mobiles.",
       "resultTitle": "What you should see",
-      "resultIntro": "Al completar los pasos, tu organización debería tener lo siguiente:",
+      "resultIntro": "Une fois les étapes franchies, votre organisation devrait disposer des éléments suivants :",
       "resultBullets": [
-        "Al menos 1 geocerca guardada y visible en el mapa",
-        "Personal registrado y listo para asignaciones",
-        "Actividades con moneda y tarifa por hora configurada",
-        "Asignaciones activas (persona + actividad + geocerca)",
-        "Puntos GPS visibles en Tracker / Dashboard de tracking",
-        "Reportes y dashboard de costos listos para exportar y analizar"
+        "Au moins 1 géofence enregistrée et visible sur la carte",
+        "Personnel inscrit et prêt à être affecté",
+        "Activités avec devise et taux horaire",
+        "Affectations actives (personne + activité + géofence)",
+        "Points GPS visibles dans Tracker / Tracking Dashboard",
+        "Rapports sur les coûts et tableau de bord prêts à être exportés et analysés"
       ]
     },
     "faq": {
       "title": "Frequently asked questions",
-      "subtitle": "Respuestas rápidas sobre invitaciones, roles, tracking, reportes y privacidad de datos.",
-      "seeQuickGuide": "Ver guía rápida",
-      "backToPanel": "Ir al panel",
+      "subtitle": "Réponses rapides sur les invitations, les rôles, le suivi, les rapports et la confidentialité des données.",
+      "seeQuickGuide": "Voir le guide rapide",
+      "backToPanel": "Accéder au tableau de bord",
       "sections": [
         {
           "title": "Access & roles",
           "items": [
             {
-              "q": "¿Cómo obtengo acceso a la app?",
-              "a": "Necesitas una invitación de un Propietario/Admin de una organización. Si no tienes acceso, solicita que te inviten."
+              "q": "comment accéder à l'application ?",
+              "a": "Vous devez être invité par un propriétaire/administrateur d'une organisation. Si vous n'avez pas d'accès, demandez à être invité."
             },
             {
-              "q": "¿Cuál es la diferencia entre Propietario, Administrador y Tracker?",
-              "a": "Propietario gestiona la organización y administradores. Administrador gestiona datos operativos (geocercas, personal, actividades, asignaciones). Tracker es un usuario de campo que envía puntos GPS."
+              "q": "quelle est la différence entre le propriétaire, l'administrateur et le suiveur ?",
+              "a": "Le propriétaire gère l'organisation et les administrateurs. L'administrateur gère les données opérationnelles (géofences, personnel, activités, affectations). Le traqueur est un utilisateur sur le terrain qui envoie des points GPS."
             },
             {
               "q": "Can I manage more than one organization?",
-              "a": "Sí. Los Propietarios pueden trabajar con varias organizaciones y cambiar usando el selector de organización."
+              "a": "Oui, les propriétaires peuvent travailler avec plusieurs organisations et passer d'une organisation à l'autre en utilisant le sélecteur d'organisation."
             }
           ]
         },
         {
-          "title": "Tracking",
+          "title": "Suivi",
           "items": [
             {
-              "q": "¿Por qué veo “Sin datos recientes” en Tracker?",
-              "a": "El tracker puede estar sin conexión, sin permisos de ubicación, o sin asignación activa. Verifica permisos y asignaciones."
+              "q": "pourquoi le message \"Pas de données récentes\" apparaît-il dans Tracker ?",
+              "a": "Il se peut que le traqueur soit hors ligne, qu'il n'ait pas d'autorisations de localisation ou qu'il n'ait pas d'affectation active. Vérifiez les autorisations et les affectations."
             },
             {
-              "q": "¿Cada cuánto se envía la ubicación?",
-              "a": "La frecuencia se define en la asignación. El mínimo permitido es 5 minutos para cuidar batería y datos."
+              "q": "quelle est la fréquence d'envoi de la localisation ?",
+              "a": "La fréquence est définie dans l'affectation. Le minimum autorisé est de 5 minutes pour prendre soin de la batterie et des données."
             },
             {
-              "q": "¿Funciona con señal débil?",
-              "a": "Sí. El tracker puede almacenar puntos y sincronizar cuando regresa la conectividad (según tu build y permisos)."
+              "q": "fonctionne-t-il avec un signal faible ?",
+              "a": "Oui, le tracker peut stocker des points et se synchroniser lorsque la connectivité est rétablie (en fonction de votre construction et de vos autorisations)."
             }
           ]
         },
@@ -870,15 +870,15 @@
           "items": [
             {
               "q": "How are costs calculated?",
-              "a": "Los costos se calculan a partir de las asignaciones (horas) y la tarifa por hora configurada en cada actividad."
+              "a": "Les coûts sont calculés sur la base des allocations (heures) et du taux horaire fixé pour chaque activité."
             },
             {
-              "q": "¿Puedo exportar a Excel?",
-              "a": "Sí. Los reportes se exportan como CSV, que puedes abrir en Excel o Google Sheets."
+              "q": "puis-je exporter vers Excel ?",
+              "a": "Oui, les rapports sont exportés au format CSV, que vous pouvez ouvrir dans Excel ou Google Sheets."
             },
             {
-              "q": "¿Puedo filtrar por geocerca, persona, actividad y rango de fechas?",
-              "a": "Sí. Usa los filtros en Reportes y Dashboard Costos para enfocarte por geocerca(s), persona(s), actividad(es) y fechas."
+              "q": "puis-je filtrer par géofence, par personne, par activité et par plage de dates ?",
+              "a": "Oui. Utilisez les filtres des rapports et du tableau de bord Coûts pour cibler les géofences, les personnes, les activités et les dates."
             }
           ]
         },
@@ -972,5 +972,20 @@
     "orgNotResolved": "(non résolue)",
     "roleEmpty": "(vide)",
     "retry": "Réessayer"
+  },
+  "forgot": {
+    "back": "Volver a Login",
+    "title": "Restablecer contraseña",
+    "subtitle": "Te enviaremos un enlace para crear una nueva contraseña. Si no te llega, revisa SPAM.",
+    "tip": "Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
+    "email": "Correo",
+    "emailPh": "tu@correo.com",
+    "sending": "Enviando…",
+    "send": "Enviar enlace",
+    "noteTitle": "Nota",
+    "noteDesc": "El enlace entrará por /auth/callback y te enviará a /reset-password para crear la nueva contraseña.",
+    "errorEmail": "Ingresa un correo válido.",
+    "errorGeneric": "No se pudo enviar el correo.",
+    "success": "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador."
   }
 }

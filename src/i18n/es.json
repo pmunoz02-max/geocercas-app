@@ -972,5 +972,20 @@
     "orgNotResolved": "(no resuelta)",
     "roleEmpty": "(vacío)",
     "retry": "Reintentar"
+  },
+  "forgot": {
+    "back": "Volver a Login",
+    "title": "Restablecer contraseña",
+    "subtitle": "Te enviaremos un enlace para crear una nueva contraseña. Si no te llega, revisa SPAM.",
+    "tip": "Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
+    "email": "Correo",
+    "emailPh": "tu@correo.com",
+    "sending": "Enviando…",
+    "send": "Enviar enlace",
+    "noteTitle": "Nota",
+    "noteDesc": "El enlace entrará por /auth/callback y te enviará a /reset-password para crear la nueva contraseña.",
+    "errorEmail": "Ingresa un correo válido.",
+    "errorGeneric": "No se pudo enviar el correo.",
+    "success": "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador."
   }
 }

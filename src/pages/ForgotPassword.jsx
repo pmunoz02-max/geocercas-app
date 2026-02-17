@@ -34,7 +34,8 @@ export default function ForgotPassword() {
     if (!cleanEmail) {
       setMsg({
         type: "error",
-        text: t("forgot.errorEmail", { defaultValue: "Ingresa un correo válido." }),
+        // ✅ defaultValue en EN (nunca ES)
+        text: t("forgot.errorEmail", { defaultValue: "Enter a valid email." }),
       });
       return;
     }
@@ -60,7 +61,7 @@ export default function ForgotPassword() {
           type: "error",
           text:
             error.message ||
-            t("forgot.errorGeneric", { defaultValue: "No se pudo enviar el correo." }),
+            t("forgot.errorGeneric", { defaultValue: "Could not send the email." }),
         });
         return;
       }
@@ -69,7 +70,7 @@ export default function ForgotPassword() {
         type: "success",
         text: t("forgot.success", {
           defaultValue:
-            "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador.",
+            "✅ If the email exists, you will receive a link to create a new password. Check SPAM and open it in the same browser.",
         }),
       });
 
@@ -77,7 +78,7 @@ export default function ForgotPassword() {
     } catch (e2) {
       setMsg({
         type: "error",
-        text: e2?.message || t("forgot.errorGeneric", { defaultValue: "Error inesperado." }),
+        text: e2?.message || t("forgot.errorGeneric", { defaultValue: "Unexpected error." }),
       });
     } finally {
       setBusy(false);
@@ -96,19 +97,19 @@ export default function ForgotPassword() {
       <div className="w-full max-w-xl">
         <div className="flex items-center justify-between mb-4 px-1">
           <Link to={`/login?next=${encodeURIComponent(next)}`} className={linkClass}>
-            {t("forgot.back", { defaultValue: "Volver a Login" })}
+            {t("forgot.back", { defaultValue: "Back to Login" })}
           </Link>
           <LanguageSwitcher />
         </div>
 
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
           <h1 className="text-2xl font-semibold mb-2">
-            {t("forgot.title", { defaultValue: "Restablecer contraseña" })}
+            {t("forgot.title", { defaultValue: "Reset password" })}
           </h1>
           <p className="text-sm text-slate-300/80 mb-6">
             {t("forgot.subtitle", {
               defaultValue:
-                "Te enviaremos un enlace para crear una nueva contraseña. Si no te llega, revisa SPAM.",
+                "We will send you a link to create a new password. If it doesn't arrive, check SPAM.",
             })}
           </p>
 
@@ -118,14 +119,14 @@ export default function ForgotPassword() {
             <div className="mb-6 text-xs p-4 rounded-2xl border border-white/10 bg-white/5 text-slate-100">
               {t("forgot.tip", {
                 defaultValue:
-                  "Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
+                  "Tip: if the link fails, generate a new one and open it in an incognito window.",
               })}
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
             <label className="block mb-2 text-sm">
-              {t("forgot.email", { defaultValue: "Correo" })}
+              {t("forgot.email", { defaultValue: "Email" })}
             </label>
             <input
               className={inputClass}
@@ -133,23 +134,23 @@ export default function ForgotPassword() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={t("forgot.emailPh", { defaultValue: "tu@correo.com" })}
+              placeholder={t("forgot.emailPh", { defaultValue: "you@email.com" })}
               required
             />
 
             <button type="submit" className={buttonClass} disabled={busy}>
               {busy
-                ? t("forgot.sending", { defaultValue: "Enviando…" })
-                : t("forgot.send", { defaultValue: "Enviar enlace" })}
+                ? t("forgot.sending", { defaultValue: "Sending…" })
+                : t("forgot.send", { defaultValue: "Send link" })}
             </button>
           </form>
 
           <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4">
-            <div className="opacity-90">{t("forgot.noteTitle", { defaultValue: "Nota" })}</div>
+            <div className="opacity-90">{t("forgot.noteTitle", { defaultValue: "Note" })}</div>
             <div className="opacity-80">
               {t("forgot.noteDesc", {
                 defaultValue:
-                  "El enlace entrará por /auth/callback y te enviará a /reset-password para crear la nueva contraseña.",
+                  "The link will go through /auth/callback and then redirect you to /reset-password to set the new password.",
               })}
             </div>
           </div>

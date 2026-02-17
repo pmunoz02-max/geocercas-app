@@ -112,23 +112,22 @@
     "magicLinkError": "Could not send the link. Please try again."
   },
   "login": {
-  "title": "Log in",
-  "subtitle": "Access your App Geocercas account",
-  "advancedOptions": "Advanced options",
-  "emailLabel": "Email",
-  "passwordLabel": "Password",
-  "passwordLoginButton": "Enter with password",
-  "magicLinkTitle": "Enter with magic link",
-  "magicLinkDescription": "We will send a secure link to your email to log in without a password.",
-  "magicLinkButton": "Send magic link",
-  "magicLinkSent": "We sent a magic link to your email.",
-  "sessionActive": "You already have an active session.",
-  "goToDashboard": "Go to dashboard",
-  "errors": {
-    "invalidEmail": "Enter a valid email address.",
-    "unknown": "An error occurred while logging in."
-  },
-
+    "title": "Log in",
+    "subtitle": "Access your App Geocercas account",
+    "advancedOptions": "Advanced options",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "passwordLoginButton": "Enter with password",
+    "magicLinkTitle": "Enter with magic link",
+    "magicLinkDescription": "We will send a secure link to your email to log in without a password.",
+    "magicLinkButton": "Send magic link",
+    "magicLinkSent": "We sent a magic link to your email.",
+    "sessionActive": "You already have an active session.",
+    "goToDashboard": "Go to dashboard",
+    "errors": {
+      "invalidEmail": "Enter a valid email address.",
+      "unknown": "An error occurred while logging in."
+    },
     "modePassword": "Password",
     "modeMagic": "Magic Link",
     "submit": "Enter",
@@ -1014,5 +1013,20 @@
     "orgNotResolved": "(not resolved)",
     "roleEmpty": "(empty)",
     "retry": "Retry"
+  },
+  "forgot": {
+    "back": "Back to Login",
+    "title": "Reset password",
+    "subtitle": "We will send you a link to create a new password. If it doesn't arrive, check SPAM.",
+    "tip": "Tip: if the link fails, generate a new one and open it in an incognito window.",
+    "email": "Email",
+    "emailPh": "you@email.com",
+    "sending": "Sending…",
+    "send": "Send link",
+    "noteTitle": "Note",
+    "noteDesc": "The link will go through /auth/callback and then redirect you to /reset-password to set the new password.",
+    "errorEmail": "Enter a valid email.",
+    "errorGeneric": "Could not send the email.",
+    "success": "✅ If the email exists, you will receive a link to create a new password. Check SPAM and open it in the same browser."
   }
 }
