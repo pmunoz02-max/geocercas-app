@@ -501,21 +501,21 @@
       "dateFromLabel": "De",
       "dateToLabel": "To",
       "personLabel": "Personne",
-      "activityLabel": "Actividad",
-      "geofenceLabel": "Geocerca",
+      "activityLabel": "Activité",
+      "geofenceLabel": "Géofence",
       "apply": "Appliquer les filtres",
       "clear": "Nettoyer les filtres"
     },
     "table": {
-      "title": "Detalle de costos",
-      "person": "Persona",
-      "activity": "Actividad",
-      "geofence": "Geocerca",
-      "start": "Inicio",
+      "title": "Ventilation des coûts",
+      "person": "Personne",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "start": "Accueil",
       "end": "Fin",
       "hours": "Hours",
       "rate": "Rate/hour",
-      "total": "Costo total",
+      "total": "Coût total",
       "currency": "Currency",
       "noResults": "Aucun enregistrement n'a été trouvé pour les filtres sélectionnés."
     }
@@ -524,16 +524,16 @@
     "title": "Tableau de bord des coûts",
     "subtitle": "Visualiser les coûts agrégés par personne, activité et géofence.",
     "cards": {
-      "totalCost": "Costo total",
+      "totalCost": "Coût total",
       "totalHours": "Total hours",
-      "totalPersons": "Personas",
-      "totalGeofences": "Geocercas"
+      "totalPersons": "Personnes",
+      "totalGeofences": "Géofencing"
     },
     "filters": {
-      "dateFromLabel": "Desde",
+      "dateFromLabel": "De",
       "dateToLabel": "To",
-      "apply": "Aplicar",
-      "clear": "Limpiar"
+      "apply": "Appliquer",
+      "clear": "Nettoyer"
     },
     "charts": {
       "costByActivity": "Coût par activité",
@@ -547,41 +547,41 @@
     "title": "Tableau de bord des coûts",
     "subtitle": "Visualisez les indicateurs clés de performance et les diagrammes de coûts par personne, par activité et par zone géographique.",
     "refreshButton": "Refresh data",
-    "filtersTitle": "Filtros",
-    "filtersFrom": "Desde",
+    "filtersTitle": "Filtres",
+    "filtersFrom": "De",
     "filtersTo": "To",
-    "filtersPerson": "Persona",
-    "filtersActivity": "Actividad",
-    "filtersGeofence": "Geocerca",
+    "filtersPerson": "Personne",
+    "filtersActivity": "Activité",
+    "filtersGeofence": "Géofence",
     "filtersAll": "All",
     "filtersClear": "Nettoyer les filtres",
     "filtersApply": "Appliquer les filtres",
     "kpiTotalHours": "Total hours",
-    "kpiTotalCost": "Costo total",
+    "kpiTotalCost": "Coût total",
     "kpiRecords": "Records",
     "kpiCurrencies": "Currencies",
-    "chartTitle": "Gráfico de costos",
+    "chartTitle": "Tableau des coûts",
     "chartDimension": "Dimension",
     "chartMetric": "Metric",
-    "dimensionPersona": "Persona",
-    "dimensionActividad": "Actividad",
-    "dimensionGeocerca": "Geocerca",
+    "dimensionPersona": "Personne",
+    "dimensionActividad": "Activité",
+    "dimensionGeocerca": "Géofence",
     "dimensionFecha": "Date",
-    "metricCost": "Costo",
+    "metricCost": "Coût",
     "metricHours": "Hours",
     "metricRecords": "Records",
     "tableTitle": "Détail de la dimension sélectionnée",
-    "colPersona": "Persona",
-    "colActividad": "Actividad",
-    "colGeocerca": "Geocerca",
+    "colPersona": "Personne",
+    "colActividad": "Activité",
+    "colGeocerca": "Géofence",
     "colFecha": "Date",
     "colHoras": "Hours",
-    "colCosto": "Costo",
+    "colCosto": "Coût",
     "colMoneda": "Currency",
     "tableNoResults": "Il n'y a pas de données pour les filtres actuels.",
     "errorLoad": "Erreur de chargement du tableau de bord des coûts.",
-    "exportDataButton": "Exportar datos",
-    "exportChartButton": "Exportar gráfico",
+    "exportDataButton": "Exporter des données",
+    "exportChartButton": "Exporter le graphique",
     "chartType": "Chart type",
     "chartTypeBar": "Bar",
     "chartTypeLine": "Line",
@@ -590,31 +590,31 @@
     "colCategoria": "Category",
     "colTarifaPromedio": "Average rate",
     "colRegistros": "Records",
-    "tableEmpty": "No hay datos para mostrar"
+    "tableEmpty": "Pas de données à afficher"
   },
   "tracker": {
     "title": "GPS Tracker",
     "subtitle": "Visualisez en temps réel l'emplacement des traceurs à l'intérieur de vos géofences.",
     "status": {
-      "online": "Tracker en línea",
+      "online": "Suivi en ligne",
       "offline": "No recent data"
     },
     "controls": {
-      "centerOnUser": "Centrar en mi posición",
+      "centerOnUser": "Se concentrer sur ma position",
       "refresh": "Refresh positions",
       "showAll": "Show all",
-      "showInside": "Solo dentro de geocercas"
+      "showInside": "Uniquement à l'intérieur des géofences"
     },
     "legend": {
-      "insideFence": "Dentro de geocerca",
-      "outsideFence": "Fuera de geocerca",
-      "geofence": "Geocerca"
+      "insideFence": "A l'intérieur d'une géofence",
+      "outsideFence": "En dehors de la géofence",
+      "geofence": "Géofence"
     },
     "table": {
       "title": "Latest positions",
-      "person": "Persona",
-      "activity": "Actividad",
-      "geofence": "Geocerca",
+      "person": "Personne",
+      "activity": "Activité",
+      "geofence": "Géofence",
       "timestamp": "Date/time",
       "status": "Status",
       "noResults": "No positions recorded."
@@ -622,21 +622,21 @@
     "errorLoad": "Erreur de chargement des positions du tracker."
   },
   "trackerDashboard": {
-    "title": "Dashboard de Tracking en tiempo real",
+    "title": "Tableau de bord de suivi en temps réel",
     "subtitle": "Les points sont mis à jour automatiquement. La fréquence d'envoi est définie par l'administrateur.",
     "filters": {
       "trackerLabel": "Traceur",
       "timeWindowLabel": "Window",
       "timeWindowSuffix": "hours",
-      "geofenceLabel": "Geocerca",
+      "geofenceLabel": "Géofence",
       "allTrackers": "All trackers",
-      "allGeofences": "Todas las geocercas"
+      "allGeofences": "Toutes les géofences"
     },
     "summary": {
       "title": "Summary",
-      "geofencesActive": "Geocercas activas",
+      "geofencesActive": "Géofences actives",
       "trackersProfiles": "Trackers (profiles)",
-      "pointsInMap": "Puntos en mapa (filtro actual)",
+      "pointsInMap": "Points sur la carte (filtre actuel)",
       "lastPoint": "Last recorded point",
       "noPoints": "Aucun point pour le filtre actuel."
     },
@@ -649,9 +649,9 @@
       "time": "Time",
       "accuracy": "Accuracy",
       "countHere": "Records at this position",
-      "activity": "Actividad",
-      "geofence": "Geocerca",
-      "inside": "Dentro de geocerca",
+      "activity": "Activité",
+      "geofence": "Géofence",
+      "inside": "A l'intérieur d'une géofence",
       "yes": "Yes",
       "no": "Non"
     },
@@ -666,7 +666,7 @@
   },
   "inviteTracker": {
     "orgFallback": "votre organisation",
-    "title": "Invitar tracker",
+    "title": "Suivi des invitations",
     "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un courriel manuellement pour l'inviter à participer au suivi sur {{orgName}}.",
     "form": {
       "selectLabel": "Select active personnel (optional)",
@@ -676,11 +676,11 @@
       "emailPlaceholder": "tracker@example.com",
       "emailHelp": "Une invitation sera envoyée à cette adresse électronique.",
       "buttonSending": "Sending invitation…",
-      "buttonSend": "Enviar invitación"
+      "buttonSend": "Envoyer une invitation"
     },
     "errors": {
       "emailRequired": "Vous devez saisir une adresse électronique.",
-      "emailInvalid": "Ingresa un correo electrónico válido."
+      "emailInvalid": "Veuillez saisir une adresse électronique valide."
     },
     "messages": {
       "serverProblem": "Il y a eu un problème de contact avec le serveur d'invitation.",
@@ -709,7 +709,7 @@
       "inviteTitle": "Inviter un nouvel administrateur",
       "emailLabel": "Email",
       "roleLabel": "Role",
-      "buttonInvite": "Enviar invitación"
+      "buttonInvite": "Envoyer une invitation"
     },
     "actions": {
       "makeOwner": "Make owner",
@@ -730,17 +730,17 @@
   },
   "help": {
     "common": {
-      "breadcrumb": "Centro de Ayuda",
+      "breadcrumb": "Centre d'aide",
       "back": "Back",
-      "goHome": "Ir a Inicio",
-      "viewFaq": "Ver FAQ",
-      "badge": "Centro de ayuda",
-      "quickGuideBadge": "Guía rápida"
+      "goHome": "Aller à l'accueil",
+      "viewFaq": "Voir FAQ",
+      "badge": "Centre d'aide",
+      "quickGuideBadge": "Guide rapide"
     },
     "instructions": {
       "title": "Guide de configuration rapide",
       "subtitle": "Suivez les étapes suivantes pour configurer votre organisation, créer des géofences, affecter du personnel et commencer le suivi.",
-      "jumpToSteps": "Ir a pasos",
+      "jumpToSteps": "Aller aux étapes",
       "viewResult": "View result",
       "tocTitle": "Table of contents",
       "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
@@ -793,7 +793,7 @@
           "title": "Invite trackers (field phones)",
           "bullets": [
             "Accédez à l'outil de suivi des invitations et envoyez l'invitation par courrier.",
-            "El invitado puede entrar con Link mágico desde el móvil.",
+            "L'invité peut se connecter avec Link magic depuis son mobile.",
             "Au démarrage, le traceur envoie des points GPS en fonction de l'affectation."
           ]
         },
@@ -806,15 +806,15 @@
         }
       ],
       "tipsTitle": "Best practices",
-      "bestPractice1Title": "Nombres claros",
+      "bestPractice1Title": "Noms clairs",
       "bestPractice1Body": "Nommez les géofences et les activités de manière à ce que votre équipe les reconnaisse instantanément (Ferme, Lot, Bloc, Tâche).",
-      "bestPractice2Title": "Empieza pequeño y escala",
+      "bestPractice2Title": "Commencer petit et passer à l'échelle supérieure",
       "bestPractice2Body": "Validez l'ensemble du flux avec une personne et un périmètre avant de créer des dizaines d'enregistrements.",
       "bestPractice3Title": "Keep assignments updated",
       "bestPractice3Body": "Fermez ou désactivez les anciennes affectations afin que le traceur ne suive que le plan en cours.",
       "bestPractice4Title": "Batterie et précision",
       "bestPractice4Body": "Utilisez une fréquence raisonnable. Une fréquence très élevée consomme plus de batterie et de données mobiles.",
-      "resultTitle": "Qué deberías ver",
+      "resultTitle": "Ce qu'il faut voir",
       "resultIntro": "Une fois les étapes franchies, votre organisation devrait disposer des éléments suivants :",
       "resultBullets": [
         "Au moins 1 géofence enregistrée et visible sur la carte",
@@ -869,7 +869,7 @@
           "title": "Costs & reports",
           "items": [
             {
-              "q": "¿Cómo se calculan los costos?",
+              "q": "comment les coûts sont-ils calculés ?",
               "a": "Les coûts sont calculés sur la base des allocations (heures) et du taux horaire fixé pour chaque activité."
             },
             {
@@ -898,9 +898,9 @@
       ]
     },
     "support": {
-      "title": "Soporte",
+      "title": "Soutien",
       "subtitle": "Contactez-nous pour une assistance technique, des questions de facturation ou une formation.",
-      "emailLabel": "Correo de soporte",
+      "emailLabel": "Courrier de soutien",
       "notConfigured": "Support contact is not configured yet."
     }
   },
@@ -914,7 +914,7 @@
     "unexpected": "Une erreur s'est produite lors de la préparation de la réinitialisation du mot de passe.",
     "newPassword": "Nouveau mot de passe",
     "newPasswordPlaceholder": "Minimum 8 characters",
-    "confirmPassword": "Confirmar contraseña",
+    "confirmPassword": "Confirmer le mot de passe",
     "confirmPlaceholder": "Repeat",
     "passwordMin": "Password must be at least 8 characters.",
     "passwordMismatch": "Passwords do not match.",
@@ -924,7 +924,7 @@
     "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
     "success": "Le mot de passe a été mis à jour avec succès. Vous pouvez maintenant vous connecter.",
     "backToLogin": "Se reconnecter",
-    "backHome": "Ir a la landing",
+    "backHome": "Aller à la page d'atterrissage",
     "tip": "Conseil : retournez à /login, entrez votre adresse électronique et utilisez \"Mot de passe oublié\" pour générer un nouveau lien."
   },
   "authInvite": {
@@ -932,7 +932,7 @@
     "processing": "Validating invitation…",
     "notInviteLink": "Ce lien n'est pas une invitation valide. Veuillez utiliser le lien d'invitation que vous avez reçu par courrier.",
     "expiredOrUsed": "L'invitation n'est pas valable, a expiré ou a été utilisée.",
-    "continue": "Continuar",
+    "continue": "Continuer",
     "goToLogin": "Accéder à la connexion",
     "timeout": "Invitation validation took too long. Please try again."
   },
@@ -954,11 +954,11 @@
     },
     "help": {
       "title": "Centre d’aide",
-      "quick": "Guía rápida",
+      "quick": "Guide rapide",
       "quickDesc": "Apprenez à utiliser l’application étape par étape.",
       "faq": "Questions fréquentes",
       "faqDesc": "Réponses aux questions les plus courantes.",
-      "support": "Soporte",
+      "support": "Soutien",
       "supportDesc": "Vous avez un problème ou une question ? Contactez-nous.",
       "news": "Nouveautés",
       "newsDesc": "Changements, améliorations et mises à jour récentes."

@@ -1,20 +1,18 @@
 // scripts/i18n-full-fr-translate.mjs
-// ES (base) -> FR (target) full translator + fixer
+// ES (base) -> FR (target) full translator + fixer (DeepL)
+// Batch + retry-on-429 to avoid rate limits.
 //
-// Features:
-// - Autodetects ES/FR locale JSON files (common layouts)
-// - Traverses ES keys (objects + arrays)
-// - Fills missing keys in FR
-// - Re-translates FR values that look English or that are exactly equal to ES (Spanish)
-// - Preserves {{placeholders}}, line breaks, punctuation
-// - Optional: REMOVE_EXTRA=1 removes FR keys not present in ES
-// - DRY_RUN=1 does not write files, only reports
-// - Optional overrides: ES_PATH / FR_PATH / LOCALES_DIR
-//
-// Provider: DeepL via DEEPL_API_KEY (header-based auth)
-//   - DEEPL_API_URL optional (default: api-free)
-//
-// IMPORTANT: Run only on branch preview.
+// Env:
+// - DEEPL_API_KEY (required)
+// - DEEPL_API_URL (optional, default api-free)
+// - LOCALES_DIR or ES_PATH/FR_PATH
+// - REMOVE_EXTRA=1 (optional)
+// - DRY_RUN=1 (optional)
+// - I18N_CONCURRENCY (kept for compatibility; batch mode uses 1 request per batch)
+// - I18N_BATCH_SIZE (default 20)
+// - I18N_RETRY_MAX (default 6)
+// - I18N_RETRY_BASE_MS (default 1200)
+// - I18N_RETRY_JITTER_MS (default 500)
 
 import fs from "node:fs";
 import path from "node:path";
@@ -28,10 +26,18 @@ const REMOVE_EXTRA = String(process.env.REMOVE_EXTRA || "").trim() === "1";
 const DEEPL_API_KEY = String(process.env.DEEPL_API_KEY || "").trim();
 const DEEPL_API_URL = String(process.env.DEEPL_API_URL || "https://api-free.deepl.com/v2/translate").trim();
 
-// Optional overrides (highest priority)
 const OVERRIDE_ES_PATH = String(process.env.ES_PATH || "").trim();
 const OVERRIDE_FR_PATH = String(process.env.FR_PATH || "").trim();
 const OVERRIDE_LOCALES_DIR = String(process.env.LOCALES_DIR || "").trim();
+
+const BATCH_SIZE = Math.max(1, Number(process.env.I18N_BATCH_SIZE || 20));
+const RETRY_MAX = Math.max(0, Number(process.env.I18N_RETRY_MAX || 6));
+const RETRY_BASE_MS = Math.max(100, Number(process.env.I18N_RETRY_BASE_MS || 1200));
+const RETRY_JITTER_MS = Math.max(0, Number(process.env.I18N_RETRY_JITTER_MS || 500));
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function exists(p) {
   try {
@@ -67,16 +73,13 @@ function normalizeSlashes(p) {
   return p.replaceAll("\\", "/");
 }
 
-// --- Auto-detect locale paths ---
 function detectLocaleFiles() {
-  // 1) Explicit overrides
   if (OVERRIDE_ES_PATH && OVERRIDE_FR_PATH) {
     const esAbs = path.isAbsolute(OVERRIDE_ES_PATH) ? OVERRIDE_ES_PATH : path.join(ROOT, OVERRIDE_ES_PATH);
     const frAbs = path.isAbsolute(OVERRIDE_FR_PATH) ? OVERRIDE_FR_PATH : path.join(ROOT, OVERRIDE_FR_PATH);
     return { esPath: esAbs, frPath: frAbs, mode: "override:ES_PATH/FR_PATH" };
   }
 
-  // 2) If LOCALES_DIR provided, use it
   if (OVERRIDE_LOCALES_DIR) {
     const dirAbs = path.isAbsolute(OVERRIDE_LOCALES_DIR) ? OVERRIDE_LOCALES_DIR : path.join(ROOT, OVERRIDE_LOCALES_DIR);
     const esAbs = path.join(dirAbs, "es.json");
@@ -84,7 +87,6 @@ function detectLocaleFiles() {
     return { esPath: esAbs, frPath: frAbs, mode: "override:LOCALES_DIR" };
   }
 
-  // 3) Autodetect by scanning common roots
   const roots = [path.join(ROOT, "src"), path.join(ROOT, "public"), ROOT].filter(exists);
 
   const allFiles = [];
@@ -92,9 +94,6 @@ function detectLocaleFiles() {
 
   const jsons = allFiles.filter((f) => f.toLowerCase().endsWith(".json"));
 
-  // Support patterns:
-  // A) **/es.json + fr.json
-  // B) public/locales/es/translation.json + public/locales/fr/translation.json (i18next)
   const esCandidates = jsons.filter((f) => {
     const p = normalizeSlashes(f).toLowerCase();
     return p.endsWith("/es.json") || p.endsWith("/locales/es/translation.json");
@@ -106,12 +105,7 @@ function detectLocaleFiles() {
   });
 
   if (!esCandidates.length || !frCandidates.length) {
-    return {
-      esPath: null,
-      frPath: null,
-      mode: "auto:failed",
-      details: { esCandidates, frCandidates },
-    };
+    return { esPath: null, frPath: null, mode: "auto:failed", details: { esCandidates, frCandidates } };
   }
 
   const scoreFile = (f) => {
@@ -125,7 +119,6 @@ function detectLocaleFiles() {
     return s;
   };
 
-  // Prefer ES/FR in same directory, otherwise highest score pair
   let best = null;
   let bestScore = -1;
 
@@ -135,7 +128,7 @@ function detectLocaleFiles() {
       const frDir = path.dirname(frPath);
       let s = scoreFile(esPath) + scoreFile(frPath);
 
-      if (esDir === frDir) s += 100; // same folder boost
+      if (esDir === frDir) s += 100;
 
       const esp = normalizeSlashes(esPath).toLowerCase();
       const frp = normalizeSlashes(frPath).toLowerCase();
@@ -169,8 +162,7 @@ function clone(v) {
   return JSON.parse(JSON.stringify(v));
 }
 
-// --- Heuristics to detect English / untranslated in FR ---
-// NOTE: We want to catch short EN strings too: "Log in", "Back", "Control your team"
+// --- English detection (short strings too) ---
 const EN_HINT_WORDS = [
   "the","and","or","your","you","with","without","password","reset","sign","signin","sign-in","log","login","log-in",
   "dashboard","cost","costs","people","person","activity","activities","geofence","geofences","organization",
@@ -180,17 +172,8 @@ const EN_HINT_WORDS = [
   "team","staff","send","link","magic","enter","home"
 ];
 
-// common short phrases
 const EN_HINT_PHRASES = [
-  "log in",
-  "login",
-  "sign in",
-  "send magic link",
-  "magic link",
-  "back to",
-  "control your team",
-  "go to",
-  "reset password"
+  "log in","login","sign in","send magic link","magic link","back to","control your team","go to","reset password"
 ];
 
 function tokenizeWords(s) {
@@ -204,44 +187,37 @@ function looksEnglish(s) {
 
   const lower = t.toLowerCase();
 
-  // If it already contains obvious French cues, don't mark it as English.
-  // (Very light check so we don't block valid FR.)
-  if (/\b(le|la|les|des|une|un|du|au|aux|et|ou|votre|vos|mot de passe|réinitialiser)\b/i.test(lower)) {
+  // quick FR cues -> not English
+  if (/\b(le|la|les|des|une|un|du|au|aux|et|ou|votre|vos|mot de passe|réinitialiser|connexion)\b/i.test(lower)) {
     return false;
   }
 
-  // Explicit phrase matches (covers very short UI labels)
   for (const p of EN_HINT_PHRASES) {
     if (lower.includes(p)) return true;
   }
 
-  // Contractions typical of English
   if (/\b(don't|doesn't|can't|won't|it's|you're|we're|they're|i'm)\b/i.test(t)) return true;
 
   const words = tokenizeWords(t);
   if (!words.length) return false;
 
-  // Count hint hits (by word exact match)
   let hits = 0;
-  const set = new Set(words);
+  const set = new Set(words.map((w) => w.replace(/-/g, "")));
+
   for (const w of EN_HINT_WORDS) {
-    const ww = w.replace(/[^a-z-]/g, "");
+    const ww = w.toLowerCase().replace(/[^a-z-]/g, "");
     if (!ww) continue;
-    // allow both "log-in" and "login" style in tokens
-    if (set.has(ww.replace(/-/g, "")) || set.has(ww) || lower.includes(` ${ww} `) || lower.startsWith(`${ww} `) || lower.endsWith(` ${ww}`)) {
-      hits++;
-    }
+    const ww2 = ww.replace(/-/g, "");
+    if (set.has(ww2) || lower.includes(` ${ww} `) || lower.startsWith(`${ww} `) || lower.endsWith(` ${ww}`)) hits++;
     if (hits >= 2) return true;
   }
 
-  // NEW RULE: short strings (<= 28 chars) with 1 hit and only ASCII letters => likely English UI label
   const asciiLetters = (t.match(/[A-Za-z]/g) || []).length;
   const accents = (t.match(/[À-ÿ]/g) || []).length;
   const hasOnlyBasic = /^[A-Za-z0-9\s.,'"\-–—:;!?()]+$/.test(t);
 
   if (t.length <= 28 && hits >= 1 && asciiLetters >= 3 && accents === 0 && hasOnlyBasic) return true;
 
-  // Long ASCII sentence with common EN stopwords
   if (asciiLetters >= 18 && accents === 0) {
     if (/\b(the|and|with|your|you|from|to|for|in|on)\b/i.test(t)) return true;
   }
@@ -257,7 +233,15 @@ function sameAsBase(frVal, esVal) {
   return a === b;
 }
 
-// --- Deep traversal ---
+// --- traversal (build markers) ---
+const pending = [];
+
+function translateOrFallback(esText, keyPath, reason) {
+  const marker = `__PENDING_TRANSLATION__${Math.random().toString(16).slice(2)}`;
+  pending.push({ marker, esText, keyPath, reason });
+  return marker;
+}
+
 function walk(esNode, frNode, keyPath = []) {
   const stats = {
     visited: 0,
@@ -333,122 +317,6 @@ function walk(esNode, frNode, keyPath = []) {
   return [clone(frNode), stats];
 }
 
-// --- DeepL translate (header-based auth) ---
-function deeplTranslate(text) {
-  return new Promise((resolve, reject) => {
-    if (!DEEPL_API_KEY) {
-      reject(new Error("DEEPL_API_KEY not set"));
-      return;
-    }
-
-    const data = new URLSearchParams();
-    data.set("text", text);
-    data.set("source_lang", "ES");
-    data.set("target_lang", "FR");
-    data.set("preserve_formatting", "1");
-
-    const url = new URL(DEEPL_API_URL);
-    const req = https.request(
-      {
-        method: "POST",
-        hostname: url.hostname,
-        path: url.pathname + (url.search || ""),
-        headers: {
-          "Authorization": `DeepL-Auth-Key ${DEEPL_API_KEY}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Content-Length": Buffer.byteLength(data.toString())
-        }
-      },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk) => (body += chunk));
-        res.on("end", () => {
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const json = JSON.parse(body);
-              const out = json?.translations?.[0]?.text;
-              if (!out) return reject(new Error("DeepL returned empty translation"));
-              resolve(out);
-            } catch (e) {
-              reject(new Error(`DeepL JSON parse error: ${String(e)}`));
-            }
-          } else {
-            reject(new Error(`DeepL HTTP ${res.statusCode}: ${body}`));
-          }
-        });
-      }
-    );
-
-    req.on("error", reject);
-    req.write(data.toString());
-    req.end();
-  });
-}
-
-// --- Preserve mustache placeholders exactly ---
-function protectPlaceholders(s) {
-  const placeholders = [];
-  const protectedText = s.replace(/{{\s*[^}]+\s*}}/g, (m) => {
-    const token = `__PH_${placeholders.length}__`;
-    placeholders.push({ token, value: m });
-    return token;
-  });
-  return { protectedText, placeholders };
-}
-
-function restorePlaceholders(s, placeholders) {
-  let out = s;
-  for (const p of placeholders) out = out.replaceAll(p.token, p.value);
-  return out;
-}
-
-async function translateTextES2FR(esText) {
-  const { protectedText, placeholders } = protectPlaceholders(esText);
-  const translated = await deeplTranslate(protectedText);
-  const restored = restorePlaceholders(translated, placeholders);
-  return String(restored).replace(/\r\n/g, "\n");
-}
-
-// Translate queue with concurrency to avoid rate limits
-const CONCURRENCY = Number(process.env.I18N_CONCURRENCY || 3);
-const queue = [];
-let active = 0;
-
-function runQueue() {
-  if (active >= CONCURRENCY) return;
-  const job = queue.shift();
-  if (!job) return;
-  active++;
-  job()
-    .catch(() => {})
-    .finally(() => {
-      active--;
-      runQueue();
-    });
-}
-
-function enqueue(job) {
-  return new Promise((resolve, reject) => {
-    queue.push(async () => {
-      try {
-        const r = await job();
-        resolve(r);
-      } catch (e) {
-        reject(e);
-      }
-    });
-    runQueue();
-  });
-}
-
-function translateOrFallback(esText, keyPath, reason) {
-  const marker = `__PENDING_TRANSLATION__${Math.random().toString(16).slice(2)}`;
-  pending.push({ marker, esText, keyPath, reason });
-  return marker;
-}
-
-const pending = [];
-
 function replaceMarkers(node, map) {
   if (typeof node === "string") return map.has(node) ? map.get(node) : node;
   if (Array.isArray(node)) return node.map((x) => replaceMarkers(x, map));
@@ -470,6 +338,107 @@ function pruneExtras(frObj, esObj) {
       out[k] = pruneExtras(frObj[k], esObj[k]);
     }
   }
+  return out;
+}
+
+// --- placeholders protection ---
+function protectPlaceholders(s) {
+  const placeholders = [];
+  const protectedText = s.replace(/{{\s*[^}]+\s*}}/g, (m) => {
+    const token = `__PH_${placeholders.length}__`;
+    placeholders.push({ token, value: m });
+    return token;
+  });
+  return { protectedText, placeholders };
+}
+
+function restorePlaceholders(s, placeholders) {
+  let out = s;
+  for (const p of placeholders) out = out.replaceAll(p.token, p.value);
+  return out;
+}
+
+// --- DeepL batch translate with retry on 429 ---
+async function deeplTranslateBatch(texts) {
+  if (!DEEPL_API_KEY) throw new Error("DEEPL_API_KEY not set");
+
+  // Protect placeholders per item
+  const protectedItems = texts.map((txt) => protectPlaceholders(txt));
+  const protectedTexts = protectedItems.map((x) => x.protectedText);
+
+  const doRequest = () =>
+    new Promise((resolve, reject) => {
+      const data = new URLSearchParams();
+      for (const t of protectedTexts) data.append("text", t);
+      data.set("source_lang", "ES");
+      data.set("target_lang", "FR");
+      data.set("preserve_formatting", "1");
+
+      const url = new URL(DEEPL_API_URL);
+      const req = https.request(
+        {
+          method: "POST",
+          hostname: url.hostname,
+          path: url.pathname + (url.search || ""),
+          headers: {
+            "Authorization": `DeepL-Auth-Key ${DEEPL_API_KEY}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": Buffer.byteLength(data.toString())
+          }
+        },
+        (res) => {
+          let body = "";
+          res.on("data", (chunk) => (body += chunk));
+          res.on("end", () => {
+            const code = res.statusCode || 0;
+            if (code >= 200 && code < 300) {
+              try {
+                const json = JSON.parse(body);
+                const arr = json?.translations || [];
+                resolve({ ok: true, translations: arr.map((x) => x?.text || ""), code });
+              } catch (e) {
+                reject(new Error(`DeepL JSON parse error: ${String(e)}`));
+              }
+            } else {
+              const err = new Error(`DeepL HTTP ${code}: ${body}`);
+              err.statusCode = code;
+              reject(err);
+            }
+          });
+        }
+      );
+
+      req.on("error", reject);
+      req.write(data.toString());
+      req.end();
+    });
+
+  let attempt = 0;
+  while (true) {
+    try {
+      const r = await doRequest();
+      // restore placeholders
+      const restored = r.translations.map((tr, i) =>
+        restorePlaceholders(String(tr).replace(/\r\n/g, "\n"), protectedItems[i].placeholders)
+      );
+      return restored;
+    } catch (e) {
+      const code = Number(e?.statusCode || 0);
+      if (code === 429 && attempt < RETRY_MAX) {
+        const wait = RETRY_BASE_MS * Math.pow(2, attempt) + Math.floor(Math.random() * RETRY_JITTER_MS);
+        console.warn(`⏳ DeepL 429: retry ${attempt + 1}/${RETRY_MAX} in ${wait}ms (batch size=${texts.length})`);
+        await sleep(wait);
+        attempt++;
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
@@ -518,27 +487,33 @@ async function main() {
       process.exit(1);
     }
 
-    console.log(`🧠 Pending translations: ${pending.length} (provider: DeepL, concurrency: ${CONCURRENCY})`);
+    console.log(`🧠 Pending translations: ${pending.length} (provider: DeepL, batch=${BATCH_SIZE})`);
 
-    const tasks = pending.map((p) =>
-      enqueue(async () => {
-        try {
-          const tr = await translateTextES2FR(p.esText);
-          markerMap.set(p.marker, tr);
+    const batches = chunk(pending, BATCH_SIZE);
+
+    for (let bi = 0; bi < batches.length; bi++) {
+      const b = batches[bi];
+      const texts = b.map((p) => p.esText);
+
+      try {
+        const trs = await deeplTranslateBatch(texts);
+        for (let i = 0; i < b.length; i++) {
+          markerMap.set(b[i].marker, trs[i] || b[i].esText);
           ok++;
-        } catch (e) {
-          fail++;
-          markerMap.set(p.marker, p.esText); // fallback ES
-          console.error(`⚠️ Translate failed for ${p.keyPath} (${p.reason}): ${String(e?.message || e)}`);
         }
-      })
-    );
-
-    await Promise.allSettled(tasks);
+        console.log(`✅ Batch ${bi + 1}/${batches.length} ok (${b.length})`);
+      } catch (e) {
+        // If a batch fails (non-429 or exhausted retries), fallback each item to ES
+        console.error(`⚠️ Batch ${bi + 1}/${batches.length} failed: ${String(e?.message || e)}`);
+        for (const p of b) {
+          markerMap.set(p.marker, p.esText);
+          fail++;
+        }
+      }
+    }
   }
 
   let frOut = replaceMarkers(frDraft, markerMap);
-
   if (REMOVE_EXTRA) frOut = pruneExtras(frOut, es);
 
   if (!DRY_RUN) writeJson(FR_PATH, frOut);
