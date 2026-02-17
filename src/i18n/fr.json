@@ -32,8 +32,8 @@
   "app": {
     "title": "Application Geofencing",
     "header": {
-      "loggedAs": "Logged in as",
-      "logout": "Logout",
+      "loggedAs": "La session a commencé par",
+      "logout": "Sortie",
       "login": "Se connecter",
       "goToPanel": "Accéder au tableau de bord",
       "roleOwner": "Owner",
@@ -84,11 +84,11 @@
     "multiOrgTitle": "Organisation multiple",
     "multiOrgBody": "Gérer plusieurs entreprises ou projets à partir d'un seul compte, avec des rôles et des autorisations distincts.",
     "goToDashboard": "Accéder au tableau de bord",
-    "logout": "Logout",
+    "logout": "Sortie",
     "footerFaq": "Questions fréquemment posées",
     "footerSupport": "Soutien",
-    "footerTerms": "Terms",
-    "footerPrivacy": "Privacy",
+    "footerTerms": "Conditions",
+    "footerPrivacy": "Vie privée",
     "rightsReserved": "All rights reserved",
     "loginButton": "Entrer",
     "accessTitle": "Accès avec compte autorisé",
@@ -121,7 +121,7 @@
     "magicButton": "Envoyer le lien magique",
     "magicSubmitting": "Sending link…",
     "magicDescription": "Nous vous enverrons un lien sécurisé à votre adresse électronique afin que vous puissiez vous connecter sans mot de passe.",
-    "emailPlaceholder": "you@example.com",
+    "emailPlaceholder": "tucorreo@ejemplo.com",
     "passwordPlaceholder": "Entrez votre mot de passe",
     "forgotPassword": "vous avez oublié votre mot de passe ?",
     "forgotPasswordAlt": "préférez-vous réinitialiser votre mot de passe (envoyer un e-mail) ?",
@@ -140,7 +140,7 @@
   },
   "inicio": {
     "header": {
-      "badge": "Help center & resources",
+      "badge": "Centre d'aide et de ressources",
       "title": "Bienvenue à votre panel",
       "subtitle": "De là, vous pouvez accéder aux instructions, aux questions fréquemment posées, à l'assistance et aux nouvelles concernant l'application Geocercas."
     },
@@ -149,7 +149,7 @@
         "badge": "Guide rapide",
         "title": "Instructions",
         "body": "Suivez les étapes de la création d'organisations, de géofences, de personnel, d'activités et de traqueurs.",
-        "cta": "View instructions"
+        "cta": "Voir les instructions"
       },
       "faq": {
         "badge": "Aide",
@@ -171,7 +171,7 @@
       },
       "queEs": {
         "badge": "Information",
-        "title": "What is App Geocercas?",
+        "title": "Qu'est-ce que l'App Geofencing ?",
         "body": "Découvrez la vision, les cas d'utilisation et les avantages de l'application Geocercas pour votre organisation.",
         "cta": "Read more"
       },
@@ -179,7 +179,7 @@
         "badge": "Updates",
         "title": "Updates / Changelog",
         "body": "Examinez l'historique des modifications, des nouvelles fonctionnalités, des améliorations et des corrections apportées à la plateforme.",
-        "cta": "View changelog"
+        "cta": "Voir le journal des modifications"
       },
       "common": {
         "soon": "Coming soon"
@@ -223,7 +223,7 @@
     "roleLabel": "Role:",
     "pillCanEdit": "Modifiable",
     "pillReadOnly": "Read-only",
-    "bannerLoadingSession": "Loading session…",
+    "bannerLoadingSession": "Chargement de la session...",
     "bannerLoginRequired": "Vous devez être connecté pour accéder à cette section.",
     "bannerRefreshedOk": "Data refreshed successfully.",
     "bannerSelected": "Selected record.",
@@ -241,8 +241,8 @@
     "errorNoPermissionEdit": "Vous n'avez pas le droit de modifier le personnel.",
     "errorMustSelectForEdit": "Vous devez sélectionner un enregistrement pour le modifier.",
     "errorNoPermissionSave": "Vous n'avez pas le droit d'enregistrer les modifications.",
-    "errorMissingName": "Name is required.",
-    "errorMissingEmail": "Email is required.",
+    "errorMissingName": "Le nom est obligatoire.",
+    "errorMissingEmail": "L'adresse électronique est obligatoire.",
     "errorPhonePolicy": "Le numéro de téléphone doit commencer par + (format international E.164).",
     "errorSaveNoRecord": "No updated record received.",
     "errorSave": "Il n'a pas été possible de sauver le personnel.",
@@ -253,7 +253,7 @@
     "searchPlaceholder": "Search by name, last name, email, or phone…",
     "onlyActive": "Active only",
     "buttonRefresh": "Refresh",
-    "buttonFullList": "View all",
+    "buttonFullList": "Voir tous",
     "buttonNew": "Nouveau",
     "buttonEdit": "Editer",
     "buttonSave": "Économiser",
@@ -446,7 +446,7 @@
     "title": "Rapports sur les coûts",
     "headerSubtitle": "Visualiser et exporter les coûts par personne, par activité et par géofence.",
     "noAccessBody": "Vous n'avez pas le droit de consulter les rapports de coûts. Ce module n'est accessible qu'aux propriétaires et aux administrateurs.",
-    "loadingReport": "Loading report…",
+    "loadingReport": "Chargement du rapport...",
     "filtersTitle": "Filtres",
     "filtersFrom": "De",
     "filtersTo": "To",
@@ -593,7 +593,7 @@
     "tableEmpty": "Pas de données à afficher"
   },
   "tracker": {
-    "title": "GPS Tracker",
+    "title": "Traceur GPS",
     "subtitle": "Visualisez en temps réel l'emplacement des traceurs à l'intérieur de vos géofences.",
     "status": {
       "online": "Suivi en ligne",
@@ -616,7 +616,7 @@
       "activity": "Activité",
       "geofence": "Géofence",
       "timestamp": "Date/time",
-      "status": "Status",
+      "status": "État",
       "noResults": "No positions recorded."
     },
     "errorLoad": "Erreur de chargement des positions du tracker."
@@ -641,7 +641,7 @@
       "noPoints": "Aucun point pour le filtre actuel."
     },
     "legend": {
-      "title": "Tracker legend",
+      "title": "Légende du traceur",
       "points": "points"
     },
     "popup": {
@@ -658,7 +658,7 @@
     "messages": {
       "noOrg": "Vous devez sélectionner une organisation.",
       "autoRefresh": "Les points sont mis à jour automatiquement. Il n'est pas nécessaire de recharger la page.",
-      "loading": "Loading tracking data…",
+      "loading": "Chargement des données de suivi...",
       "noData": "Aucun poste n'a été trouvé pour les filtres sélectionnés.",
       "error": "Erreur de chargement des données de suivi.",
       "checkConsole": "Vérifiez la console si le problème persiste."
@@ -669,11 +669,11 @@
     "title": "Suivi des invitations",
     "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un courriel manuellement pour l'inviter à participer au suivi sur {{orgName}}.",
     "form": {
-      "selectLabel": "Select active personnel (optional)",
-      "selectPlaceholder": "-- Select personnel --",
+      "selectLabel": "Sélectionner le personnel actuel (facultatif)",
+      "selectPlaceholder": "-- Sélection du personnel --",
       "selectHelp": "Si vous sélectionnez un membre du personnel, son courrier sera automatiquement rempli.",
-      "emailLabel": "Tracker email",
-      "emailPlaceholder": "tracker@example.com",
+      "emailLabel": "Adresse électronique du traqueur",
+      "emailPlaceholder": "tracker@ejemplo.com",
       "emailHelp": "Une invitation sera envoyée à cette adresse électronique.",
       "buttonSending": "Sending invitation…",
       "buttonSend": "Envoyer une invitation"
@@ -689,7 +689,7 @@
       "magiclinkSent": "Un lien magique a été envoyé à {{email}}.",
       "linkOnlyWithLink": "L'invitation a été créée. Utilisez ce lien pour partager l'accès : {{link}}.",
       "linkOnlyNoLink": "L'invitation a été créée, mais aucun lien public n'a été reçu.",
-      "createdWithoutEmail": "Tracker access was created without sending an email.",
+      "createdWithoutEmail": "L'accès au tracker a été créé sans envoi de courrier électronique.",
       "genericProcessed": "L'invitation pour {{email}} a été traitée avec succès.",
       "unexpectedError": "Erreur inattendue lors du traitement de l'invitation."
     }
@@ -701,7 +701,7 @@
       "name": "Name",
       "email": "Email",
       "role": "Role",
-      "status": "Status",
+      "status": "État",
       "actions": "Actions",
       "noResults": "No admins registered."
     },
@@ -731,7 +731,7 @@
   "help": {
     "common": {
       "breadcrumb": "Centre d'aide",
-      "back": "Back",
+      "back": "Retour à",
       "goHome": "Aller à l'accueil",
       "viewFaq": "Voir FAQ",
       "badge": "Centre d'aide",
@@ -741,8 +741,8 @@
       "title": "Guide de configuration rapide",
       "subtitle": "Suivez les étapes suivantes pour configurer votre organisation, créer des géofences, affecter du personnel et commencer le suivi.",
       "jumpToSteps": "Aller aux étapes",
-      "viewResult": "View result",
-      "tocTitle": "Table of contents",
+      "viewResult": "Voir le résultat",
+      "tocTitle": "Table des matières",
       "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
       "tocSteps": "Steps",
       "tocTips": "Best practices",
@@ -782,7 +782,7 @@
           ]
         },
         {
-          "title": "Create assignments",
+          "title": "Créer des affectations",
           "bullets": [
             "Allez dans Affectations et liez : Personne + Activité + Géo-barrière.",
             "Définit le début/la fin et l'état actif.",
@@ -790,7 +790,7 @@
           ]
         },
         {
-          "title": "Invite trackers (field phones)",
+          "title": "Traceurs Invita (téléphones de terrain)",
           "bullets": [
             "Accédez à l'outil de suivi des invitations et envoyez l'invitation par courrier.",
             "L'invité peut se connecter avec Link magic depuis son mobile.",
@@ -852,7 +852,7 @@
           "title": "Suivi",
           "items": [
             {
-              "q": "pourquoi le message \"Pas de données récentes\" apparaît-il dans Tracker ?",
+              "q": "Pourquoi le message \"Pas de données récentes\" apparaît-il dans Tracker ?",
               "a": "Il se peut que le traqueur soit hors ligne, qu'il n'ait pas d'autorisations de localisation ou qu'il n'ait pas d'affectation active. Vérifiez les autorisations et les affectations."
             },
             {
@@ -883,10 +883,10 @@
           ]
         },
         {
-          "title": "Data & privacy",
+          "title": "Données et vie privée",
           "items": [
             {
-              "q": "What location data is stored?",
+              "q": "Quelles sont les données de localisation stockées ?",
               "a": "Seuls les points nécessaires au suivi et à la validation par géofence. L'accès est contrôlé par les rôles et l'organisation."
             },
             {
@@ -901,13 +901,13 @@
       "title": "Soutien",
       "subtitle": "Contactez-nous pour une assistance technique, des questions de facturation ou une formation.",
       "emailLabel": "Courrier de soutien",
-      "notConfigured": "Support contact is not configured yet."
+      "notConfigured": "Le contact d'assistance n'est pas encore configuré."
     }
   },
   "resetPassword": {
     "title": "Réinitialiser le mot de passe",
     "subtitle": "Créez un nouveau mot de passe pour votre compte.",
-    "loading": "Preparing recovery link…",
+    "loading": "Préparation du lien de récupération...",
     "invalidOrExpired": "Le lien de récupération n'est pas valide ou a expiré. Demandez-en un nouveau.",
     "noSession": "Il n'y a pas de session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
     "noticeType": "Session détectée. Si ce lien n'était pas un lien de récupération, reconnectez-vous normalement.",
@@ -919,7 +919,7 @@
     "passwordMin": "Password must be at least 8 characters.",
     "passwordMismatch": "Passwords do not match.",
     "saveButton": "Enregistrer le nouveau mot de passe",
-    "saving": "Saving…",
+    "saving": "Économiser...",
     "updateFailed": "Le mot de passe n'a pas pu être mis à jour. Veuillez réessayer.",
     "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
     "success": "Le mot de passe a été mis à jour avec succès. Vous pouvez maintenant vous connecter.",
@@ -934,11 +934,11 @@
     "expiredOrUsed": "L'invitation n'est pas valable, a expiré ou a été utilisée.",
     "continue": "Continuer",
     "goToLogin": "Accéder à la connexion",
-    "timeout": "Invitation validation took too long. Please try again."
+    "timeout": "La validation de l'invitation a pris trop de temps. Veuillez réessayer."
   },
   "auth": {
     "processing": "Authenticating…",
-    "timeout": "Authentication took too long. Please try again.",
+    "timeout": "L'authentification a pris trop de temps. Veuillez réessayer.",
     "invalidOrExpiredLink": "Le lien n'est pas valide, a expiré ou a été utilisé.",
     "errorTitle": "Authentication failed",
     "backToLogin": "Retour au login"

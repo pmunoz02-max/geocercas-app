@@ -1,439 +1,340 @@
-// scripts/i18n-full-fr-translate.mjs
-// ES (base) -> FR (target) full translator + fixer (DeepL)
-// Batch + retry-on-429 to avoid rate limits.
-//
-// Env:
-// - DEEPL_API_KEY (required)
-// - DEEPL_API_URL (optional, default api-free)
-// - LOCALES_DIR or ES_PATH/FR_PATH
-// - REMOVE_EXTRA=1 (optional)
-// - DRY_RUN=1 (optional)
-// - I18N_CONCURRENCY (kept for compatibility; batch mode uses 1 request per batch)
-// - I18N_BATCH_SIZE (default 20)
-// - I18N_RETRY_MAX (default 6)
-// - I18N_RETRY_BASE_MS (default 1200)
-// - I18N_RETRY_JITTER_MS (default 500)
+#!/usr/bin/env node
+/**
+ * i18n-full-fr-translate.mjs
+ * - Base: ES (src/i18n/es.json)
+ * - Target: FR (src/i18n/fr.json)
+ * - Traduce por DeepL: missing + looks_english + same_as_base + force-keys
+ * - FORCE_KEYS_FILE: lista de key-paths que SIEMPRE se traducen desde ES y sobrescriben FR
+ *
+ * Env:
+ *   DEEPL_API_KEY (required)
+ *   DEEPL_API_URL (default https://api-free.deepl.com/v2/translate)
+ *   LOCALES_DIR (default src/i18n)
+ *   ES_PATH / FR_PATH (optional overrides)
+ *   I18N_BATCH_SIZE (default 10)
+ *   I18N_RETRY_MAX (default 6)
+ *   I18N_RETRY_BASE_MS (default 600)
+ *   REMOVE_EXTRA=1 (optional prune keys not in ES)
+ *   DRY_RUN=1 (optional no writes)
+ *   FORCE_KEYS_FILE (optional, default "")
+ */
 
 import fs from "node:fs";
 import path from "node:path";
-import https from "node:https";
+import process from "node:process";
 
-const ROOT = process.cwd();
+const ENV = process.env;
 
-const DRY_RUN = String(process.env.DRY_RUN || "").trim() === "1";
-const REMOVE_EXTRA = String(process.env.REMOVE_EXTRA || "").trim() === "1";
+const LOCALES_DIR = ENV.LOCALES_DIR || "src/i18n";
+const ES_PATH = ENV.ES_PATH || path.join(LOCALES_DIR, "es.json");
+const FR_PATH = ENV.FR_PATH || path.join(LOCALES_DIR, "fr.json");
 
-const DEEPL_API_KEY = String(process.env.DEEPL_API_KEY || "").trim();
-const DEEPL_API_URL = String(process.env.DEEPL_API_URL || "https://api-free.deepl.com/v2/translate").trim();
+const DEEPL_API_KEY = ENV.DEEPL_API_KEY;
+const DEEPL_API_URL = ENV.DEEPL_API_URL || "https://api-free.deepl.com/v2/translate";
 
-const OVERRIDE_ES_PATH = String(process.env.ES_PATH || "").trim();
-const OVERRIDE_FR_PATH = String(process.env.FR_PATH || "").trim();
-const OVERRIDE_LOCALES_DIR = String(process.env.LOCALES_DIR || "").trim();
+const I18N_BATCH_SIZE = toInt(ENV.I18N_BATCH_SIZE, 10);
+const I18N_RETRY_MAX = toInt(ENV.I18N_RETRY_MAX, 6);
+const I18N_RETRY_BASE_MS = toInt(ENV.I18N_RETRY_BASE_MS, 600);
 
-const BATCH_SIZE = Math.max(1, Number(process.env.I18N_BATCH_SIZE || 20));
-const RETRY_MAX = Math.max(0, Number(process.env.I18N_RETRY_MAX || 6));
-const RETRY_BASE_MS = Math.max(100, Number(process.env.I18N_RETRY_BASE_MS || 1200));
-const RETRY_JITTER_MS = Math.max(0, Number(process.env.I18N_RETRY_JITTER_MS || 500));
+const REMOVE_EXTRA = ENV.REMOVE_EXTRA === "1";
+const DRY_RUN = ENV.DRY_RUN === "1";
+
+const FORCE_KEYS_FILE = (ENV.FORCE_KEYS_FILE || "").trim();
+
+if (!DEEPL_API_KEY) {
+  console.error("❌ Missing DEEPL_API_KEY in env.");
+  process.exit(1);
+}
+
+function toInt(v, d) {
+  const n = Number.parseInt(String(v ?? ""), 10);
+  return Number.isFinite(n) ? n : d;
+}
 
 function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise((res) => setTimeout(res, ms));
 }
 
-function exists(p) {
-  try {
-    return fs.existsSync(p);
-  } catch {
-    return false;
+function readJson(p) {
+  return JSON.parse(fs.readFileSync(p, "utf8"));
+}
+
+function writeJson(p, obj) {
+  const json = JSON.stringify(obj, null, 2) + "\n";
+  fs.writeFileSync(p, json, "utf8");
+}
+
+function isObject(x) {
+  return x && typeof x === "object" && !Array.isArray(x);
+}
+
+function deepClone(x) {
+  return JSON.parse(JSON.stringify(x));
+}
+
+function normalizeNewlines(s) {
+  return String(s).replace(/\r\n/g, "\n");
+}
+
+/**
+ * getByPath(obj, "a.b.0.c")
+ */
+function getByPath(obj, keyPath) {
+  if (!keyPath) return undefined;
+  const parts = String(keyPath).split(".");
+  let cur = obj;
+  for (const part of parts) {
+    if (cur == null) return undefined;
+    const isIndex = /^\d+$/.test(part);
+    cur = isIndex ? cur[Number(part)] : cur[part];
   }
+  return cur;
 }
 
-function safeReadDir(dir) {
-  try {
-    return fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
+/**
+ * setByPath(obj, "a.b.0.c", value)
+ * Creates intermediate objects/arrays as needed.
+ */
+function setByPath(obj, keyPath, value) {
+  const parts = String(keyPath).split(".");
+  let cur = obj;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const last = i === parts.length - 1;
+    const nextPart = parts[i + 1];
+    const nextIsIndex = nextPart != null && /^\d+$/.test(nextPart);
+    const isIndex = /^\d+$/.test(part);
 
-function findFilesRecursive(startDir, maxDepth = 8) {
-  const out = [];
-  function walk(dir, depth) {
-    if (depth > maxDepth) return;
-    for (const ent of safeReadDir(dir)) {
-      const full = path.join(dir, ent.name);
-      if (ent.isDirectory()) walk(full, depth + 1);
-      else if (ent.isFile()) out.push(full);
+    if (last) {
+      if (isIndex) cur[Number(part)] = value;
+      else cur[part] = value;
+      return;
+    }
+
+    if (isIndex) {
+      const idx = Number(part);
+      if (!Array.isArray(cur)) {
+        // convert current slot into array if needed
+        // (this happens only if someone set mismatched structures)
+      }
+      if (cur[idx] == null || (nextIsIndex ? !Array.isArray(cur[idx]) : !isObject(cur[idx]))) {
+        cur[idx] = nextIsIndex ? [] : {};
+      }
+      cur = cur[idx];
+    } else {
+      if (cur[part] == null || (nextIsIndex ? !Array.isArray(cur[part]) : !isObject(cur[part]))) {
+        cur[part] = nextIsIndex ? [] : {};
+      }
+      cur = cur[part];
     }
   }
-  walk(startDir, 0);
+}
+
+/**
+ * Flatten strings into keyPath->value
+ */
+function flattenStrings(obj, prefix = "") {
+  const out = [];
+  if (typeof obj === "string") {
+    out.push({ keyPath: prefix, value: obj });
+    return out;
+  }
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      const p = prefix ? `${prefix}.${i}` : String(i);
+      out.push(...flattenStrings(obj[i], p));
+    }
+    return out;
+  }
+  if (isObject(obj)) {
+    for (const k of Object.keys(obj)) {
+      const p = prefix ? `${prefix}.${k}` : k;
+      out.push(...flattenStrings(obj[k], p));
+    }
+    return out;
+  }
   return out;
 }
 
-function normalizeSlashes(p) {
-  return p.replaceAll("\\", "/");
-}
-
-function detectLocaleFiles() {
-  if (OVERRIDE_ES_PATH && OVERRIDE_FR_PATH) {
-    const esAbs = path.isAbsolute(OVERRIDE_ES_PATH) ? OVERRIDE_ES_PATH : path.join(ROOT, OVERRIDE_ES_PATH);
-    const frAbs = path.isAbsolute(OVERRIDE_FR_PATH) ? OVERRIDE_FR_PATH : path.join(ROOT, OVERRIDE_FR_PATH);
-    return { esPath: esAbs, frPath: frAbs, mode: "override:ES_PATH/FR_PATH" };
-  }
-
-  if (OVERRIDE_LOCALES_DIR) {
-    const dirAbs = path.isAbsolute(OVERRIDE_LOCALES_DIR) ? OVERRIDE_LOCALES_DIR : path.join(ROOT, OVERRIDE_LOCALES_DIR);
-    const esAbs = path.join(dirAbs, "es.json");
-    const frAbs = path.join(dirAbs, "fr.json");
-    return { esPath: esAbs, frPath: frAbs, mode: "override:LOCALES_DIR" };
-  }
-
-  const roots = [path.join(ROOT, "src"), path.join(ROOT, "public"), ROOT].filter(exists);
-
-  const allFiles = [];
-  for (const r of roots) allFiles.push(...findFilesRecursive(r, 9));
-
-  const jsons = allFiles.filter((f) => f.toLowerCase().endsWith(".json"));
-
-  const esCandidates = jsons.filter((f) => {
-    const p = normalizeSlashes(f).toLowerCase();
-    return p.endsWith("/es.json") || p.endsWith("/locales/es/translation.json");
-  });
-
-  const frCandidates = jsons.filter((f) => {
-    const p = normalizeSlashes(f).toLowerCase();
-    return p.endsWith("/fr.json") || p.endsWith("/locales/fr/translation.json");
-  });
-
-  if (!esCandidates.length || !frCandidates.length) {
-    return { esPath: null, frPath: null, mode: "auto:failed", details: { esCandidates, frCandidates } };
-  }
-
-  const scoreFile = (f) => {
-    const p = normalizeSlashes(f).toLowerCase();
-    let s = 0;
-    if (p.includes("/src/")) s += 10;
-    if (p.includes("/i18n/")) s += 10;
-    if (p.includes("/locales/")) s += 10;
-    if (p.endsWith("/es.json") || p.endsWith("/fr.json")) s += 20;
-    if (p.endsWith("/translation.json")) s += 5;
-    return s;
-  };
-
-  let best = null;
-  let bestScore = -1;
-
-  for (const esPath of esCandidates) {
-    const esDir = path.dirname(esPath);
-    for (const frPath of frCandidates) {
-      const frDir = path.dirname(frPath);
-      let s = scoreFile(esPath) + scoreFile(frPath);
-
-      if (esDir === frDir) s += 100;
-
-      const esp = normalizeSlashes(esPath).toLowerCase();
-      const frp = normalizeSlashes(frPath).toLowerCase();
-      if (esp.endsWith("/locales/es/translation.json") && frp.endsWith("/locales/fr/translation.json")) s += 60;
-
-      if (s > bestScore) {
-        bestScore = s;
-        best = { esPath, frPath };
-      }
+/**
+ * Remove keys from target that are not present in base
+ */
+function pruneToBase(target, base) {
+  if (typeof base === "string") return target; // keep whatever string (will be replaced by translate logic)
+  if (Array.isArray(base)) {
+    if (!Array.isArray(target)) return deepClone(base);
+    const arr = [];
+    for (let i = 0; i < base.length; i++) {
+      if (i in base) arr[i] = pruneToBase(target?.[i], base[i]);
     }
+    return arr;
   }
-
-  return { ...best, mode: "auto:ok", details: { esCandidates, frCandidates } };
+  if (isObject(base)) {
+    const obj = {};
+    for (const k of Object.keys(base)) {
+      obj[k] = pruneToBase(target?.[k], base[k]);
+    }
+    return obj;
+  }
+  // numbers/booleans/null – mirror base
+  return deepClone(base);
 }
 
-function readJson(filePath) {
-  const raw = fs.readFileSync(filePath, "utf8");
-  return JSON.parse(raw);
-}
-
-function writeJson(filePath, obj) {
-  const txt = JSON.stringify(obj, null, 2) + "\n";
-  fs.writeFileSync(filePath, txt, "utf8");
-}
-
-function isObject(v) {
-  return v && typeof v === "object" && !Array.isArray(v);
-}
-
-function clone(v) {
-  return JSON.parse(JSON.stringify(v));
-}
-
-// --- English detection (short strings too) ---
-const EN_HINT_WORDS = [
-  "the","and","or","your","you","with","without","password","reset","sign","signin","sign-in","log","login","log-in",
-  "dashboard","cost","costs","people","person","activity","activities","geofence","geofences","organization",
-  "start","end","from","to","filter","filters","apply","clear","export","download","loading",
-  "error","success","new","edit","save","delete","cancel","continue","invite","invitation","support",
-  "help","faq","guide","quick","panel","live","system","online","offline",
-  "team","staff","send","link","magic","enter","home"
-];
-
-const EN_HINT_PHRASES = [
-  "log in","login","sign in","send magic link","magic link","back to","control your team","go to","reset password"
-];
-
-function tokenizeWords(s) {
-  return (String(s).toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || []);
-}
-
+/**
+ * Heuristic: looks like English (loose, but helpful)
+ * - You can tweak patterns safely.
+ */
 function looksEnglish(s) {
-  if (typeof s !== "string") return false;
-  const t = s.trim();
+  const t = String(s || "").trim();
   if (!t) return false;
 
-  const lower = t.toLowerCase();
+  // If already clearly French (accents or common FR articles), skip:
+  if (/[àâçéèêëîïôùûüÿœæ]/i.test(t)) return false;
+  if (/\b(le|la|les|des|une|un|du|de|et|pour|avec|sans|sur|dans)\b/i.test(t)) return false;
 
-  // quick FR cues -> not English
-  if (/\b(le|la|les|des|une|un|du|au|aux|et|ou|votre|vos|mot de passe|réinitialiser|connexion)\b/i.test(lower)) {
-    return false;
+  // English-ish triggers:
+  if (/\b(sign in|log in|logout|dashboard|help|support|terms|privacy|reset password|loading|send|saving|back|view|table of contents|preparing|recovery link)\b/i.test(t)) {
+    return true;
   }
 
-  for (const p of EN_HINT_PHRASES) {
-    if (lower.includes(p)) return true;
-  }
+  // Many common English words (basic signal)
+  const hits = (t.match(/\b(the|and|or|to|from|with|without|your|you|are|is|in|on|of|for|please|select|create|invite|profile|status|error|timeout)\b/gi) || []).length;
+  if (hits >= 2) return true;
 
-  if (/\b(don't|doesn't|can't|won't|it's|you're|we're|they're|i'm)\b/i.test(t)) return true;
-
-  const words = tokenizeWords(t);
-  if (!words.length) return false;
-
-  let hits = 0;
-  const set = new Set(words.map((w) => w.replace(/-/g, "")));
-
-  for (const w of EN_HINT_WORDS) {
-    const ww = w.toLowerCase().replace(/[^a-z-]/g, "");
-    if (!ww) continue;
-    const ww2 = ww.replace(/-/g, "");
-    if (set.has(ww2) || lower.includes(` ${ww} `) || lower.startsWith(`${ww} `) || lower.endsWith(` ${ww}`)) hits++;
-    if (hits >= 2) return true;
-  }
-
-  const asciiLetters = (t.match(/[A-Za-z]/g) || []).length;
-  const accents = (t.match(/[À-ÿ]/g) || []).length;
-  const hasOnlyBasic = /^[A-Za-z0-9\s.,'"\-–—:;!?()]+$/.test(t);
-
-  if (t.length <= 28 && hits >= 1 && asciiLetters >= 3 && accents === 0 && hasOnlyBasic) return true;
-
-  if (asciiLetters >= 18 && accents === 0) {
-    if (/\b(the|and|with|your|you|from|to|for|in|on)\b/i.test(t)) return true;
+  // If mostly ASCII letters/spaces and ends with typical EN punctuation patterns
+  const asciiRatio = (t.match(/[\x20-\x7E]/g) || []).length / Math.max(1, t.length);
+  if (asciiRatio > 0.98 && t.length >= 6 && /[a-z]/i.test(t) && !/[¿¡]/.test(t)) {
+    // still might be ES without accents; keep this as weak signal:
+    if (hits >= 1) return true;
   }
 
   return false;
 }
 
-function sameAsBase(frVal, esVal) {
-  if (typeof frVal !== "string" || typeof esVal !== "string") return false;
-  const a = frVal.trim();
-  const b = esVal.trim();
-  if (!a || !b) return false;
-  return a === b;
+/**
+ * Protect placeholders like {{count}} {{email}} to avoid DeepL modifying them.
+ * We also protect sequences like ${var} if they exist.
+ */
+function protectPlaceholders(text) {
+  const src = String(text);
+  const tokens = [];
+  let out = src;
+
+  const patterns = [
+    /\{\{\s*[^}]+\s*\}\}/g, // {{...}}
+    /\$\{\s*[^}]+\s*\}/g,   // ${...}
+  ];
+
+  for (const re of patterns) {
+    out = out.replace(re, (m) => {
+      const id = tokens.length;
+      tokens.push(m);
+      return `___I18N_PH_${id}___`;
+    });
+  }
+
+  return { text: out, tokens };
 }
 
-// --- traversal (build markers) ---
-const pending = [];
-
-function translateOrFallback(esText, keyPath, reason) {
-  const marker = `__PENDING_TRANSLATION__${Math.random().toString(16).slice(2)}`;
-  pending.push({ marker, esText, keyPath, reason });
-  return marker;
-}
-
-function walk(esNode, frNode, keyPath = []) {
-  const stats = {
-    visited: 0,
-    filledMissing: 0,
-    kept: 0,
-    skippedNonString: 0,
-    englishFixed: 0,
-    sameAsBaseFixed: 0
-  };
-
-  function add(other) {
-    stats.visited += other.visited;
-    stats.filledMissing += other.filledMissing;
-    stats.kept += other.kept;
-    stats.skippedNonString += other.skippedNonString;
-    stats.englishFixed += other.englishFixed;
-    stats.sameAsBaseFixed += other.sameAsBaseFixed;
-  }
-
-  if (Array.isArray(esNode)) {
-    const frArr = Array.isArray(frNode) ? frNode : [];
-    const out = [];
-    for (let i = 0; i < esNode.length; i++) {
-      const [child, childStats] = walk(esNode[i], frArr[i], keyPath.concat(String(i)));
-      out[i] = child;
-      add(childStats);
-    }
-    return [out, stats];
-  }
-
-  if (isObject(esNode)) {
-    const frObj = isObject(frNode) ? frNode : {};
-    const out = { ...frObj };
-    for (const k of Object.keys(esNode)) {
-      const [child, childStats] = walk(esNode[k], frObj[k], keyPath.concat(k));
-      out[k] = child;
-      add(childStats);
-    }
-    return [out, stats];
-  }
-
-  stats.visited += 1;
-
-  if (typeof esNode === "string") {
-    const esText = esNode;
-    const frText = typeof frNode === "string" ? frNode : undefined;
-
-    const missing = frText === undefined || frText === null || String(frText).trim() === "";
-    const english = typeof frText === "string" ? looksEnglish(frText) : false;
-    const sameBase = typeof frText === "string" ? sameAsBase(frText, esText) : false;
-
-    if (missing) {
-      stats.filledMissing += 1;
-      return [translateOrFallback(esText, keyPath.join("."), "missing"), stats];
-    }
-
-    if (english) {
-      stats.englishFixed += 1;
-      return [translateOrFallback(esText, keyPath.join("."), "looks_english"), stats];
-    }
-
-    if (sameBase) {
-      stats.sameAsBaseFixed += 1;
-      return [translateOrFallback(esText, keyPath.join("."), "same_as_base"), stats];
-    }
-
-    stats.kept += 1;
-    return [frText, stats];
-  }
-
-  if (frNode === undefined) return [clone(esNode), stats];
-  stats.skippedNonString += 1;
-  return [clone(frNode), stats];
-}
-
-function replaceMarkers(node, map) {
-  if (typeof node === "string") return map.has(node) ? map.get(node) : node;
-  if (Array.isArray(node)) return node.map((x) => replaceMarkers(x, map));
-  if (isObject(node)) {
-    const out = {};
-    for (const [k, v] of Object.entries(node)) out[k] = replaceMarkers(v, map);
-    return out;
-  }
-  return node;
-}
-
-function pruneExtras(frObj, esObj) {
-  if (Array.isArray(frObj) || Array.isArray(esObj)) return frObj;
-  if (!isObject(frObj) || !isObject(esObj)) return frObj;
-
-  const out = {};
-  for (const k of Object.keys(esObj)) {
-    if (Object.prototype.hasOwnProperty.call(frObj, k)) {
-      out[k] = pruneExtras(frObj[k], esObj[k]);
-    }
+function restorePlaceholders(text, tokens) {
+  let out = String(text);
+  for (let i = 0; i < tokens.length; i++) {
+    out = out.replaceAll(`___I18N_PH_${i}___`, tokens[i]);
   }
   return out;
 }
 
-// --- placeholders protection ---
-function protectPlaceholders(s) {
-  const placeholders = [];
-  const protectedText = s.replace(/{{\s*[^}]+\s*}}/g, (m) => {
-    const token = `__PH_${placeholders.length}__`;
-    placeholders.push({ token, value: m });
-    return token;
-  });
-  return { protectedText, placeholders };
-}
-
-function restorePlaceholders(s, placeholders) {
-  let out = s;
-  for (const p of placeholders) out = out.replaceAll(p.token, p.value);
-  return out;
-}
-
-// --- DeepL batch translate with retry on 429 ---
-async function deeplTranslateBatch(texts) {
-  if (!DEEPL_API_KEY) throw new Error("DEEPL_API_KEY not set");
+/**
+ * DeepL translate batch with retry on 429 + exponential backoff
+ */
+async function deeplTranslateBatch(texts, sourceLang = "ES", targetLang = "FR") {
+  if (!texts.length) return [];
 
   // Protect placeholders per item
-  const protectedItems = texts.map((txt) => protectPlaceholders(txt));
-  const protectedTexts = protectedItems.map((x) => x.protectedText);
+  const protectedItems = texts.map((t) => protectPlaceholders(normalizeNewlines(t)));
 
-  const doRequest = () =>
-    new Promise((resolve, reject) => {
-      const data = new URLSearchParams();
-      for (const t of protectedTexts) data.append("text", t);
-      data.set("source_lang", "ES");
-      data.set("target_lang", "FR");
-      data.set("preserve_formatting", "1");
-
-      const url = new URL(DEEPL_API_URL);
-      const req = https.request(
-        {
-          method: "POST",
-          hostname: url.hostname,
-          path: url.pathname + (url.search || ""),
-          headers: {
-            "Authorization": `DeepL-Auth-Key ${DEEPL_API_KEY}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": Buffer.byteLength(data.toString())
-          }
-        },
-        (res) => {
-          let body = "";
-          res.on("data", (chunk) => (body += chunk));
-          res.on("end", () => {
-            const code = res.statusCode || 0;
-            if (code >= 200 && code < 300) {
-              try {
-                const json = JSON.parse(body);
-                const arr = json?.translations || [];
-                resolve({ ok: true, translations: arr.map((x) => x?.text || ""), code });
-              } catch (e) {
-                reject(new Error(`DeepL JSON parse error: ${String(e)}`));
-              }
-            } else {
-              const err = new Error(`DeepL HTTP ${code}: ${body}`);
-              err.statusCode = code;
-              reject(err);
-            }
-          });
-        }
-      );
-
-      req.on("error", reject);
-      req.write(data.toString());
-      req.end();
-    });
+  // DeepL accepts multiple "text" fields
+  const body = new URLSearchParams();
+  body.set("source_lang", sourceLang);
+  body.set("target_lang", targetLang);
+  for (const item of protectedItems) body.append("text", item.text);
 
   let attempt = 0;
   while (true) {
+    attempt++;
     try {
-      const r = await doRequest();
-      // restore placeholders
-      const restored = r.translations.map((tr, i) =>
-        restorePlaceholders(String(tr).replace(/\r\n/g, "\n"), protectedItems[i].placeholders)
-      );
-      return restored;
-    } catch (e) {
-      const code = Number(e?.statusCode || 0);
-      if (code === 429 && attempt < RETRY_MAX) {
-        const wait = RETRY_BASE_MS * Math.pow(2, attempt) + Math.floor(Math.random() * RETRY_JITTER_MS);
-        console.warn(`⏳ DeepL 429: retry ${attempt + 1}/${RETRY_MAX} in ${wait}ms (batch size=${texts.length})`);
+      const res = await fetch(DEEPL_API_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `DeepL-Auth-Key ${DEEPL_API_KEY}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      });
+
+      if (res.status === 429) {
+        if (attempt > I18N_RETRY_MAX) {
+          const msg = await safeText(res);
+          throw new Error(`DeepL 429 too many requests (max retries reached). Body: ${msg}`);
+        }
+        const wait = I18N_RETRY_BASE_MS * Math.pow(2, attempt - 1);
+        console.warn(`⚠️  DeepL 429 rate-limited. Retry ${attempt}/${I18N_RETRY_MAX} in ${wait}ms...`);
         await sleep(wait);
-        attempt++;
         continue;
       }
-      throw e;
+
+      if (!res.ok) {
+        const msg = await safeText(res);
+        throw new Error(`DeepL error HTTP ${res.status}: ${msg}`);
+      }
+
+      const json = await res.json();
+      const translations = json?.translations || [];
+      if (translations.length !== protectedItems.length) {
+        throw new Error(`DeepL returned ${translations.length} translations, expected ${protectedItems.length}.`);
+      }
+
+      // Restore placeholders
+      const out = translations.map((tr, i) => {
+        const raw = tr?.text ?? "";
+        return restorePlaceholders(raw, protectedItems[i].tokens);
+      });
+      return out;
+    } catch (err) {
+      // network / unexpected: retry a bit (also with backoff)
+      if (attempt > I18N_RETRY_MAX) throw err;
+      const wait = I18N_RETRY_BASE_MS * Math.pow(2, attempt - 1);
+      console.warn(`⚠️  DeepL request failed (${String(err?.message || err)}). Retry ${attempt}/${I18N_RETRY_MAX} in ${wait}ms...`);
+      await sleep(wait);
     }
   }
+}
+
+async function safeText(res) {
+  try {
+    return await res.text();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Load force keys file.
+ * Accepts:
+ * - ["a.b.c", "x.y"]
+ * - {"keys": ["a.b.c"]}
+ */
+function loadForceKeys(forceFile) {
+  if (!forceFile) return [];
+  if (!fs.existsSync(forceFile)) {
+    console.warn(`⚠️  FORCE_KEYS_FILE not found: ${forceFile}`);
+    return [];
+  }
+  const raw = readJson(forceFile);
+  if (Array.isArray(raw)) return raw.map(String);
+  if (raw && Array.isArray(raw.keys)) return raw.keys.map(String);
+  console.warn(`⚠️  FORCE_KEYS_FILE format not recognized. Use array or {keys:[...]}.`);
+  return [];
 }
 
 function chunk(arr, size) {
@@ -442,90 +343,125 @@ function chunk(arr, size) {
   return out;
 }
 
+function eqNormalized(a, b) {
+  return normalizeNewlines(String(a ?? "")).trim() === normalizeNewlines(String(b ?? "")).trim();
+}
+
 async function main() {
-  const detected = detectLocaleFiles();
+  console.log("🧩 i18n FR full translate");
+  console.log(`   ES: ${ES_PATH}`);
+  console.log(`   FR: ${FR_PATH}`);
+  console.log(`   FORCE_KEYS_FILE: ${FORCE_KEYS_FILE || "(none)"}`);
+  console.log(`   BATCH: ${I18N_BATCH_SIZE} | RETRY_MAX: ${I18N_RETRY_MAX} | RETRY_BASE_MS: ${I18N_RETRY_BASE_MS}`);
+  console.log(`   REMOVE_EXTRA: ${REMOVE_EXTRA ? "1" : "0"} | DRY_RUN: ${DRY_RUN ? "1" : "0"}`);
 
-  if (!detected.esPath || !detected.frPath) {
-    console.error("❌ Could not auto-detect ES/FR locale files.");
-    if (detected.details) {
-      console.error("— ES candidates:", detected.details.esCandidates);
-      console.error("— FR candidates:", detected.details.frCandidates);
-    }
-    console.error("✅ Fix: set LOCALES_DIR or ES_PATH/FR_PATH env vars.");
-    console.error('   Example (PowerShell): $env:LOCALES_DIR="src/i18n"');
+  if (!fs.existsSync(ES_PATH)) {
+    console.error(`❌ ES file not found: ${ES_PATH}`);
     process.exit(1);
   }
-
-  const ES_PATH = detected.esPath;
-  const FR_PATH = detected.frPath;
-
-  if (!exists(ES_PATH)) {
-    console.error(`❌ Missing: ${ES_PATH}`);
+  if (!fs.existsSync(FR_PATH)) {
+    console.error(`❌ FR file not found: ${FR_PATH}`);
     process.exit(1);
   }
-  if (!exists(FR_PATH)) {
-    console.error(`❌ Missing: ${FR_PATH}`);
-    process.exit(1);
-  }
-
-  console.log("📍 Locales resolved:", detected.mode);
-  console.log("— ES:", ES_PATH);
-  console.log("— FR:", FR_PATH);
 
   const es = readJson(ES_PATH);
   const fr = readJson(FR_PATH);
 
-  const [frDraft, stats] = walk(es, fr);
+  // Optionally prune fr structure to match es
+  let frOut = deepClone(fr);
+  if (REMOVE_EXTRA) {
+    frOut = pruneToBase(frOut, es);
+  }
 
-  const markerMap = new Map();
-  let ok = 0;
-  let fail = 0;
+  // Flatten strings for base and current target
+  const esFlat = new Map(flattenStrings(es).map(({ keyPath, value }) => [keyPath, value]));
+  const frFlat = new Map(flattenStrings(frOut).map(({ keyPath, value }) => [keyPath, value]));
 
-  if (pending.length) {
-    if (!DEEPL_API_KEY) {
-      console.error("❌ DEEPL_API_KEY is not set. Cannot auto-translate.");
-      process.exit(1);
-    }
+  // Determine candidates
+  const pending = [];
+  for (const [keyPath, esText] of esFlat.entries()) {
+    if (typeof esText !== "string") continue;
 
-    console.log(`🧠 Pending translations: ${pending.length} (provider: DeepL, batch=${BATCH_SIZE})`);
+    const frText = frFlat.get(keyPath);
 
-    const batches = chunk(pending, BATCH_SIZE);
+    const missing = frText == null || String(frText).trim() === "";
+    const same_as_base = frText != null && eqNormalized(frText, esText);
+    const looks_english = frText != null && looksEnglish(frText);
 
-    for (let bi = 0; bi < batches.length; bi++) {
-      const b = batches[bi];
-      const texts = b.map((p) => p.esText);
-
-      try {
-        const trs = await deeplTranslateBatch(texts);
-        for (let i = 0; i < b.length; i++) {
-          markerMap.set(b[i].marker, trs[i] || b[i].esText);
-          ok++;
-        }
-        console.log(`✅ Batch ${bi + 1}/${batches.length} ok (${b.length})`);
-      } catch (e) {
-        // If a batch fails (non-429 or exhausted retries), fallback each item to ES
-        console.error(`⚠️ Batch ${bi + 1}/${batches.length} failed: ${String(e?.message || e)}`);
-        for (const p of b) {
-          markerMap.set(p.marker, p.esText);
-          fail++;
-        }
-      }
+    if (missing || same_as_base || looks_english) {
+      pending.push({ keyPath, esText, reason: missing ? "missing" : same_as_base ? "same_as_base" : "looks_english" });
     }
   }
 
-  let frOut = replaceMarkers(frDraft, markerMap);
-  if (REMOVE_EXTRA) frOut = pruneExtras(frOut, es);
+  // Force keys always override FR from ES
+  const forceKeyPaths = loadForceKeys(FORCE_KEYS_FILE);
+  const forcePending = [];
+  const forceSet = new Set();
 
-  if (!DRY_RUN) writeJson(FR_PATH, frOut);
+  for (const kp of forceKeyPaths) {
+    const esText = esFlat.get(kp);
+    if (typeof esText !== "string" || !String(esText).trim()) {
+      console.warn(`⚠️  Force key not found in ES or not a string: ${kp}`);
+      continue;
+    }
+    forceSet.add(kp);
+    forcePending.push({ keyPath: kp, esText, reason: "force" });
+  }
 
-  console.log("✅ i18n FR translate done.");
-  console.log("— Stats:", stats);
-  console.log("— Translations:", { ok, fail });
-  console.log(DRY_RUN ? "🟡 DRY_RUN=1: no files written." : "🟢 FR written.");
-  console.log(REMOVE_EXTRA ? "🧹 REMOVE_EXTRA=1: extras removed in FR." : "ℹ️ Extras not removed.");
+  // Remove duplicates: if force includes a key, we translate it only once (as force)
+  const finalPending = [
+    ...pending.filter((p) => !forceSet.has(p.keyPath)),
+    ...forcePending,
+  ];
+
+  console.log(`📌 Pending translations: ${finalPending.length} (normal=${pending.length}, force=${forcePending.length})`);
+
+  if (!finalPending.length) {
+    console.log("✅ Nothing to translate.");
+    if (!DRY_RUN && REMOVE_EXTRA) {
+      console.log("💾 Writing pruned FR (REMOVE_EXTRA=1)...");
+      writeJson(FR_PATH, frOut);
+    }
+    return;
+  }
+
+  // Translate in batches (from ES text)
+  let translatedCount = 0;
+
+  const batches = chunk(finalPending, I18N_BATCH_SIZE);
+  for (let bi = 0; bi < batches.length; bi++) {
+    const batch = batches[bi];
+    const texts = batch.map((x) => x.esText);
+
+    console.log(`🔤 Batch ${bi + 1}/${batches.length} (${batch.length} items)...`);
+    const frTexts = await deeplTranslateBatch(texts, "ES", "FR");
+
+    for (let i = 0; i < batch.length; i++) {
+      const item = batch[i];
+      const tr = frTexts[i];
+
+      // Basic cleanup: keep original newlines as returned; do not over-trim punctuation
+      const outText = String(tr ?? "").replace(/\r\n/g, "\n");
+
+      // Apply to frOut at keyPath
+      setByPath(frOut, item.keyPath, outText);
+      translatedCount++;
+    }
+  }
+
+  console.log(`✅ Translated/applied: ${translatedCount}`);
+
+  if (DRY_RUN) {
+    console.log("🧪 DRY_RUN=1 → Not writing fr.json");
+    return;
+  }
+
+  console.log(`💾 Writing: ${FR_PATH}`);
+  writeJson(FR_PATH, frOut);
+  console.log("🎉 Done.");
 }
 
-main().catch((e) => {
-  console.error("❌ Fatal:", e);
+main().catch((err) => {
+  console.error("❌ Failed:", err);
   process.exit(1);
 });
