@@ -110,7 +110,7 @@ function detectLocaleFiles() {
       esPath: null,
       frPath: null,
       mode: "auto:failed",
-      details: { esCandidates, frCandidates }
+      details: { esCandidates, frCandidates },
     };
   }
 
@@ -170,13 +170,32 @@ function clone(v) {
 }
 
 // --- Heuristics to detect English / untranslated in FR ---
+// NOTE: We want to catch short EN strings too: "Log in", "Back", "Control your team"
 const EN_HINT_WORDS = [
-  "the","and","or","your","you","with","without","password","reset","sign","log","login","dashboard",
-  "cost","costs","people","person","activity","activities","geofence","geofences","organization",
+  "the","and","or","your","you","with","without","password","reset","sign","signin","sign-in","log","login","log-in",
+  "dashboard","cost","costs","people","person","activity","activities","geofence","geofences","organization",
   "start","end","from","to","filter","filters","apply","clear","export","download","loading",
   "error","success","new","edit","save","delete","cancel","continue","invite","invitation","support",
-  "help","faq","guide","quick","panel","live","system","online","offline"
+  "help","faq","guide","quick","panel","live","system","online","offline",
+  "team","staff","send","link","magic","enter","home"
 ];
+
+// common short phrases
+const EN_HINT_PHRASES = [
+  "log in",
+  "login",
+  "sign in",
+  "send magic link",
+  "magic link",
+  "back to",
+  "control your team",
+  "go to",
+  "reset password"
+];
+
+function tokenizeWords(s) {
+  return (String(s).toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || []);
+}
 
 function looksEnglish(s) {
   if (typeof s !== "string") return false;
@@ -184,22 +203,46 @@ function looksEnglish(s) {
   if (!t) return false;
 
   const lower = t.toLowerCase();
+
+  // If it already contains obvious French cues, don't mark it as English.
+  // (Very light check so we don't block valid FR.)
+  if (/\b(le|la|les|des|une|un|du|au|aux|et|ou|votre|vos|mot de passe|réinitialiser)\b/i.test(lower)) {
+    return false;
+  }
+
+  // Explicit phrase matches (covers very short UI labels)
+  for (const p of EN_HINT_PHRASES) {
+    if (lower.includes(p)) return true;
+  }
+
+  // Contractions typical of English
+  if (/\b(don't|doesn't|can't|won't|it's|you're|we're|they're|i'm)\b/i.test(t)) return true;
+
+  const words = tokenizeWords(t);
+  if (!words.length) return false;
+
+  // Count hint hits (by word exact match)
   let hits = 0;
+  const set = new Set(words);
   for (const w of EN_HINT_WORDS) {
-    if (
-      lower.includes(` ${w} `) ||
-      lower.startsWith(`${w} `) ||
-      lower.endsWith(` ${w}`) ||
-      lower === w
-    ) hits++;
+    const ww = w.replace(/[^a-z-]/g, "");
+    if (!ww) continue;
+    // allow both "log-in" and "login" style in tokens
+    if (set.has(ww.replace(/-/g, "")) || set.has(ww) || lower.includes(` ${ww} `) || lower.startsWith(`${ww} `) || lower.endsWith(` ${ww}`)) {
+      hits++;
+    }
     if (hits >= 2) return true;
   }
 
-  if (/\b(don't|doesn't|can't|won't|it's|you're|we're|they're|i'm)\b/i.test(t)) return true;
-
-  const letters = (t.match(/[A-Za-z]/g) || []).length;
+  // NEW RULE: short strings (<= 28 chars) with 1 hit and only ASCII letters => likely English UI label
+  const asciiLetters = (t.match(/[A-Za-z]/g) || []).length;
   const accents = (t.match(/[À-ÿ]/g) || []).length;
-  if (letters >= 20 && accents === 0) {
+  const hasOnlyBasic = /^[A-Za-z0-9\s.,'"\-–—:;!?()]+$/.test(t);
+
+  if (t.length <= 28 && hits >= 1 && asciiLetters >= 3 && accents === 0 && hasOnlyBasic) return true;
+
+  // Long ASCII sentence with common EN stopwords
+  if (asciiLetters >= 18 && accents === 0) {
     if (/\b(the|and|with|your|you|from|to|for|in|on)\b/i.test(t)) return true;
   }
 
@@ -218,7 +261,6 @@ function sameAsBase(frVal, esVal) {
 function walk(esNode, frNode, keyPath = []) {
   const stats = {
     visited: 0,
-    translated: 0,
     filledMissing: 0,
     kept: 0,
     skippedNonString: 0,
@@ -228,7 +270,6 @@ function walk(esNode, frNode, keyPath = []) {
 
   function add(other) {
     stats.visited += other.visited;
-    stats.translated += other.translated;
     stats.filledMissing += other.filledMissing;
     stats.kept += other.kept;
     stats.skippedNonString += other.skippedNonString;
@@ -427,8 +468,6 @@ function pruneExtras(frObj, esObj) {
   for (const k of Object.keys(esObj)) {
     if (Object.prototype.hasOwnProperty.call(frObj, k)) {
       out[k] = pruneExtras(frObj[k], esObj[k]);
-    } else {
-      out[k] = frObj[k];
     }
   }
   return out;
