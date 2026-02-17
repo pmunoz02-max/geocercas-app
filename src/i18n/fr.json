@@ -887,11 +887,11 @@
           "items": [
             {
               "q": "What location data is stored?",
-              "a": "Solo los puntos necesarios para tracking y validación por geocerca. El acceso está controlado por roles y organización."
+              "a": "Seuls les points nécessaires au suivi et à la validation par géofence. L'accès est contrôlé par les rôles et l'organisation."
             },
             {
               "q": "Can trackers see other organizations’ data?",
-              "a": "No. Los datos están aislados por organización (multi-tenant) y protegidos por reglas de seguridad en base de datos."
+              "a": "Non. Les données sont isolées par organisation (multi-tenant) et protégées par des règles de sécurité de la base de données."
             }
           ]
         }
@@ -899,49 +899,49 @@
     },
     "support": {
       "title": "Support",
-      "subtitle": "Contáctanos para soporte técnico, dudas de facturación o capacitación.",
+      "subtitle": "Contactez-nous pour une assistance technique, des questions de facturation ou une formation.",
       "emailLabel": "Support email",
       "notConfigured": "Support contact is not configured yet."
     }
   },
   "resetPassword": {
-    "title": "Restablecer contraseña",
-    "subtitle": "Crea una nueva contraseña para tu cuenta.",
+    "title": "Réinitialiser le mot de passe",
+    "subtitle": "Créez un nouveau mot de passe pour votre compte.",
     "loading": "Preparing recovery link…",
-    "invalidOrExpired": "El enlace de recuperación es inválido o expiró. Solicita uno nuevo.",
-    "noSession": "No hay una sesión válida para restablecer la contraseña. Vuelve a solicitar el enlace.",
-    "noticeType": "Sesión detectada. Si este enlace no era de recuperación, vuelve a iniciar sesión normalmente.",
-    "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
-    "newPassword": "Nueva contraseña",
+    "invalidOrExpired": "Le lien de récupération n'est pas valide ou a expiré. Demandez-en un nouveau.",
+    "noSession": "Il n'y a pas de session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
+    "noticeType": "Session détectée. Si ce lien n'était pas un lien de récupération, reconnectez-vous normalement.",
+    "unexpected": "Une erreur s'est produite lors de la préparation de la réinitialisation du mot de passe.",
+    "newPassword": "Nouveau mot de passe",
     "newPasswordPlaceholder": "Minimum 8 characters",
     "confirmPassword": "Confirm password",
     "confirmPlaceholder": "Repeat",
     "passwordMin": "Password must be at least 8 characters.",
     "passwordMismatch": "Passwords do not match.",
-    "saveButton": "Guardar nueva contraseña",
+    "saveButton": "Enregistrer le nouveau mot de passe",
     "saving": "Saving…",
-    "updateFailed": "No se pudo actualizar la contraseña. Intenta nuevamente.",
-    "updateUnexpected": "Error inesperado al actualizar la contraseña.",
-    "success": "Contraseña actualizada correctamente. Ahora puedes iniciar sesión.",
-    "backToLogin": "Volver a iniciar sesión",
+    "updateFailed": "Le mot de passe n'a pas pu être mis à jour. Veuillez réessayer.",
+    "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
+    "success": "Le mot de passe a été mis à jour avec succès. Vous pouvez maintenant vous connecter.",
+    "backToLogin": "Se reconnecter",
     "backHome": "Go to landing",
-    "tip": "Tip: vuelve a /login, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace."
+    "tip": "Conseil : retournez à /login, entrez votre adresse électronique et utilisez \"Mot de passe oublié\" pour générer un nouveau lien."
   },
   "authInvite": {
     "title": "You’ve been invited",
     "processing": "Validating invitation…",
-    "notInviteLink": "Este enlace no es una invitación válida. Usa el enlace de invitación que recibiste por correo.",
-    "expiredOrUsed": "La invitación es inválida, ya expiró o fue utilizada.",
+    "notInviteLink": "Ce lien n'est pas une invitation valide. Veuillez utiliser le lien d'invitation que vous avez reçu par courrier.",
+    "expiredOrUsed": "L'invitation n'est pas valable, a expiré ou a été utilisée.",
     "continue": "Continue",
-    "goToLogin": "Ir al login",
+    "goToLogin": "Accéder à la connexion",
     "timeout": "Invitation validation took too long. Please try again."
   },
   "auth": {
     "processing": "Authenticating…",
     "timeout": "Authentication took too long. Please try again.",
-    "invalidOrExpiredLink": "El enlace es inválido, ya expiró o fue utilizado.",
+    "invalidOrExpiredLink": "Le lien n'est pas valide, a expiré ou a été utilisé.",
     "errorTitle": "Authentication failed",
-    "backToLogin": "Volver al login"
+    "backToLogin": "Retour au login"
   },
   "home": {
     "welcome": "Bienvenue sur App Geocercas",
@@ -974,18 +974,18 @@
     "retry": "Réessayer"
   },
   "forgot": {
-    "back": "Volver a Login",
-    "title": "Restablecer contraseña",
-    "subtitle": "Te enviaremos un enlace para crear una nueva contraseña. Si no te llega, revisa SPAM.",
-    "tip": "Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
-    "email": "Correo",
+    "back": "Retour à la page d'accueil",
+    "title": "Réinitialiser le mot de passe",
+    "subtitle": "Nous vous enverrons un lien pour créer un nouveau mot de passe. Si vous ne le recevez pas, veuillez vérifier les SPAM.",
+    "tip": "Conseil : si le lien échoue, générez-en un nouveau et ouvrez-le dans une fenêtre incognito.",
+    "email": "Courriel",
     "emailPh": "tu@correo.com",
-    "sending": "Enviando…",
-    "send": "Enviar enlace",
-    "noteTitle": "Nota",
-    "noteDesc": "El enlace entrará por /auth/callback y te enviará a /reset-password para crear la nueva contraseña.",
-    "errorEmail": "Ingresa un correo válido.",
-    "errorGeneric": "No se pudo enviar el correo.",
-    "success": "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador."
+    "sending": "Envoi..",
+    "send": "Envoyer le lien",
+    "noteTitle": "Note",
+    "noteDesc": "Le lien passera par /auth/callback et vous enverra à /reset-password pour créer le nouveau mot de passe.",
+    "errorEmail": "Veuillez saisir une adresse électronique valide.",
+    "errorGeneric": "Le courrier n'a pas pu être envoyé.",
+    "success": "si l'e-mail existe, vous recevrez un lien pour créer un nouveau mot de passe. Vérifiez le SPAM et ouvrez-le dans le même navigateur."
   }
 }
