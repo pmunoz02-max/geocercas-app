@@ -32,17 +32,13 @@ async function callEdgeFunction(fnName, payload) {
 }
 
 async function copyToClipboard(text) {
-  // Intento moderno
   try {
     if (navigator?.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
       return { ok: true, method: "clipboard" };
     }
-  } catch (e) {
-    // seguimos al fallback
-  }
+  } catch (e) {}
 
-  // Fallback universal
   try {
     const ta = document.createElement("textarea");
     ta.value = text;
@@ -86,6 +82,9 @@ export default function InvitarAdmin() {
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recoveryMsg, setRecoveryMsg] = useState(null); // { type, text }
   const [recoveryLink, setRecoveryLink] = useState("");
+
+  // ✅ Reuse existing i18n placeholder (fixes FR/ES issue centrally)
+  const emailPh = t?.("login.emailPlaceholder") || "tu@email.com";
 
   useEffect(() => {
     async function loadPeople() {
@@ -169,7 +168,6 @@ export default function InvitarAdmin() {
 
       setActionLink(link);
 
-      // ✅ Si el backend envía email, lo reportará como email_status="sent"
       const emailStatus = String(resp.data.email_status || "").toLowerCase();
       const sent = emailStatus === "sent";
 
@@ -211,8 +209,7 @@ export default function InvitarAdmin() {
     } else {
       setMessage({
         type: "warn",
-        text:
-          "⚠️ El navegador bloqueó el copiado automático. Selecciona el link (abajo) y copia manualmente (Ctrl+C).",
+        text: "⚠️ El navegador bloqueó el copiado automático. Selecciona el link (abajo) y copia manualmente (Ctrl+C).",
       });
     }
   }
@@ -236,9 +233,6 @@ export default function InvitarAdmin() {
     try {
       setRecoveryBusy(true);
 
-      // ✅ UNIVERSAL FIX:
-      // Los links OTP (token_hash) deben pasar por /auth/callback para ejecutar verifyOtp y crear sesión,
-      // y luego AuthCallback redirige a /reset-password.
       const redirect_to = `${window.location.origin}/auth/callback`;
 
       const resp = await callEdgeFunction("generate_recovery_link", {
@@ -367,9 +361,11 @@ export default function InvitarAdmin() {
             <input
               type="email"
               className="w-full border rounded px-3 py-2 text-sm"
-              placeholder="admin@ejemplo.com"
+              placeholder={emailPh}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              inputMode="email"
             />
             {role === "admin" && !canInviteAdmin ? (
               <div className="text-xs text-red-600 mt-2">
@@ -389,6 +385,7 @@ export default function InvitarAdmin() {
                 placeholder="Mi nueva organización"
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
+                autoComplete="organization"
               />
               <div className="text-[11px] text-slate-500 mt-2">
                 {t?.("inviteAdmin.form.orgNameHelp") || "Si lo dejas vacío, se usa el email por defecto."}
@@ -458,9 +455,11 @@ export default function InvitarAdmin() {
             <input
               type="email"
               className="w-full border rounded px-3 py-2 text-sm"
-              placeholder="usuario@ejemplo.com"
+              placeholder={emailPh}
               value={recoveryEmail}
               onChange={(e) => setRecoveryEmail(e.target.value)}
+              autoComplete="email"
+              inputMode="email"
             />
           </div>
 
