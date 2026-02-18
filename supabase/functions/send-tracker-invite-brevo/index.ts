@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-auth-subdomain-20260218_ROLE_NORM_FIX";
+const BUILD_TAG = "send-tracker-invite-brevo-auth-subdomain-20260218_LANG_I18N_EMAIL_FIX";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt",
+    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt, x-app-lang",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
@@ -43,11 +43,96 @@ function normRole(role: unknown) {
   return String(role ?? "").trim().toLowerCase();
 }
 
-// ✅ CANÓNICO: callback existente
-function buildRedirectTo(appPreviewUrl: string, orgId: string) {
+// ---------- i18n helpers (email + redirect) ----------
+const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
+
+function sanitizeLang(v: unknown) {
+  const raw = String(v ?? "").trim().toLowerCase();
+  const two = raw.slice(0, 2);
+  return SUPPORTED_LANGS.has(two) ? two : "es";
+}
+
+function pickLangFromAcceptLanguage(h: string | null) {
+  const s = String(h || "").toLowerCase();
+  if (!s) return "";
+  const first = s.split(",")[0].trim(); // "fr-ca"
+  return first.slice(0, 2);
+}
+
+type EmailCopy = {
+  subject: string;
+  title: string;
+  intro1: string;
+  intro2: string;
+  expires: string;
+  cta: string;
+  copyLink: string;
+  footer1: string;
+  footer2: string;
+};
+
+function defaultEmailCopy(lang: string): EmailCopy {
+  if (lang === "en") {
+    return {
+      subject: "Invitation: GPS Tracker – App Geofences",
+      title: "Invitation to GPS Tracker",
+      intro1: "You have been invited to use the GPS Tracker for App Geofences.",
+      intro2: "This link will open the Tracker in the correct organization.",
+      expires: "This link expires in 7 days.",
+      cta: "Open GPS Tracker",
+      copyLink: "If you can't click, copy and paste this link:",
+      footer1:
+        "You received this email because an App Geofences administrator invited you to access the GPS Tracker.",
+      footer2:
+        "If you weren't expecting this invitation, you can ignore this message or reply to report it.",
+    };
+  }
+  if (lang === "fr") {
+    return {
+      subject: "Invitation : GPS Tracker – App Geocercas",
+      title: "Invitation au GPS Tracker",
+      intro1: "Vous avez été invité à utiliser le GPS Tracker d’App Geocercas.",
+      intro2: "Ce lien ouvrira le Tracker dans la bonne organisation.",
+      expires: "Ce lien expire dans 7 jours.",
+      cta: "Ouvrir le GPS Tracker",
+      copyLink: "Si vous ne pouvez pas cliquer, copiez et collez ce lien :",
+      footer1:
+        "Vous recevez cet e-mail car un administrateur App Geocercas vous a invité à accéder au GPS Tracker.",
+      footer2:
+        "Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce message ou répondre pour le signaler.",
+    };
+  }
+  // es default
+  return {
+    subject: "Invitación: Tracker GPS – App Geocercas",
+    title: "Invitación a Tracker GPS",
+    intro1: "Has sido invitado a usar el Tracker GPS de App Geocercas.",
+    intro2: "Este enlace abrirá el Tracker en la organización correcta.",
+    expires: "Este enlace expira en 7 días.",
+    cta: "Abrir Tracker GPS",
+    copyLink: "Si no puedes hacer clic, copia y pega este enlace:",
+    footer1:
+      "Recibiste este correo porque un administrador de App Geocercas te invitó a acceder al Tracker GPS.",
+    footer2:
+      "Si no esperabas esta invitación, puedes ignorar este mensaje o responder a este correo para reportarlo.",
+  };
+}
+
+// ✅ CANÓNICO: callback existente + preserva idioma
+function buildRedirectTo(appPreviewUrl: string, orgId: string, lang: string) {
   const base = appPreviewUrl.replace(/\/$/, "");
-  const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}`;
-  return `${base}/auth/callback?next=${encodeURIComponent(next)}`;
+  // preserva lang también dentro de next para que la app continúe en ese idioma
+  const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(lang)}`;
+  return `${base}/auth/callback?lang=${encodeURIComponent(lang)}&next=${encodeURIComponent(next)}`;
+}
+
+// escape simple para HTML
+function escHtml(s: string) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 async function brevoSendEmail(opts: {
@@ -94,7 +179,7 @@ async function brevoSendEmail(opts: {
 
 /**
  * ✅ Validación robusta del JWT del usuario usando /auth/v1/user
- * NOTA: aquí jwt es el x-user-jwt (NO Authorization)
+ * NOTA: aquí jwt es el x-user-jwt (NO Authorization de gateway)
  */
 async function authUserIdFromJwt(params: {
   supabaseUrl: string;
@@ -218,10 +303,24 @@ serve(async (req) => {
     }
     const callerUserId = u.user_id;
 
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({} as any));
     const org_id = String(body?.org_id || "").trim();
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
+
+    // ✅ idioma: body.lang -> header x-app-lang -> Accept-Language -> es
+    const lang =
+      sanitizeLang(body?.lang) ||
+      sanitizeLang(req.headers.get("x-app-lang")) ||
+      sanitizeLang(pickLangFromAcceptLanguage(req.headers.get("accept-language"))) ||
+      "es";
+
+    // ✅ copy: si viene desde el proxy, úsalo; si no, default
+    const copyFromBody = body?.email_copy && typeof body.email_copy === "object" ? body.email_copy : null;
+    const copy: EmailCopy = {
+      ...defaultEmailCopy(lang),
+      ...(copyFromBody || {}),
+    };
 
     if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
     if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
@@ -263,7 +362,9 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
-    const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id);
+
+    // ✅ redirect preserva lang
+    const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang);
 
     // ✅ DB idempotente + retry por carreras
     let trackerInviteId: string | null = null;
@@ -346,45 +447,41 @@ serve(async (req) => {
       });
     }
 
-    const actionLink = linkData.properties.action_link;
+    const actionLink = String(linkData.properties.action_link);
+    const safeAction = escHtml(actionLink);
 
-    const subject = "Invitación: Tracker GPS - App Geocercas";
+    // ✅ email traducido
+    const subject = copy.subject;
 
-    const safeAction = String(actionLink).replace(/"/g, "&quot;");
     const html = `
       <div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827">
-        <h2 style="margin:0 0 12px 0">Invitación a Tracker GPS</h2>
-        <p style="margin:0 0 10px 0">
-          Has sido invitado a usar el <b>Tracker GPS</b> de <b>App Geocercas</b>.
-        </p>
+        <h2 style="margin:0 0 12px 0">${escHtml(copy.title)}</h2>
+        <p style="margin:0 0 10px 0">${escHtml(copy.intro1)}</p>
         <p style="margin:0 0 14px 0">
-          Este enlace abrirá el Tracker en la organización correcta.
-          <br />
-          <span style="color:#6b7280;font-size:12px">Este enlace expira en 7 días.</span>
+          ${escHtml(copy.intro2)}<br />
+          <span style="color:#6b7280;font-size:12px">${escHtml(copy.expires)}</span>
         </p>
         <p style="margin:0 0 16px 0">
           <a href="${safeAction}"
              style="display:inline-block;padding:12px 16px;background:#10b981;color:#0b1220;text-decoration:none;border-radius:10px;font-weight:700">
-            Abrir Tracker GPS
+            ${escHtml(copy.cta)}
           </a>
         </p>
-        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">Si no puedes hacer clic, copia y pega este enlace:</p>
+        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">${escHtml(copy.copyLink)}</p>
         <p style="word-break:break-all;font-size:12px;margin:0 0 16px 0">${safeAction}</p>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0" />
-        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">
-          Recibiste este correo porque un administrador de App Geocercas te invitó a acceder al Tracker GPS.
-        </p>
-        <p style="color:#6b7280;font-size:12px;margin:0">
-          Si no esperabas esta invitación, puedes ignorar este mensaje o responder a este correo para reportarlo.
-        </p>
+        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">${escHtml(copy.footer1)}</p>
+        <p style="color:#6b7280;font-size:12px;margin:0">${escHtml(copy.footer2)}</p>
       </div>
     `;
 
     const text =
-      `Invitación a Tracker GPS - App Geocercas\n\n` +
-      `Has sido invitado a usar el Tracker GPS.\n` +
-      `Abre el enlace (expira en 7 días):\n${actionLink}\n\n` +
-      `Si no esperabas esta invitación, ignora este correo o responde para reportarlo.\n`;
+      `${copy.title}\n\n` +
+      `${copy.intro1}\n` +
+      `${copy.intro2}\n` +
+      `${copy.expires}\n\n` +
+      `${actionLink}\n\n` +
+      `${copy.footer2}\n`;
 
     await brevoSendEmail({
       apiKey: BREVO_API_KEY,
@@ -403,6 +500,7 @@ serve(async (req) => {
       ok: true,
       build_tag: BUILD_TAG,
       mode,
+      lang,
       org_id,
       email,
       tracker_invite_id: trackerInviteId,

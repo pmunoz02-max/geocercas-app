@@ -707,6 +707,59 @@
       "checkConsole": "Vérifiez la console si le problème persiste."
     }
   },
+
+  "trackerGps": {
+    "title": "Traceur GPS",
+    "lastSend": "Dernier envoi",
+    "waitingCoords": "En attente des coordonnées…",
+    "debugCopyPaste": "Débogage (copier/coller)",
+    "stateLabel": "Statut",
+    "onlyInvited": "Cette page est réservée aux traceurs invités.",
+    "goHome": "Aller à l’accueil",
+    "status": {
+      "initializing": "Démarrage du traceur…",
+      "processingMagicLink": "Traitement du Magic Link du traceur…",
+      "sessionOkPreparing": "Session OK. Préparation du traceur…",
+      "readingSession": "Lecture de la session du traceur…",
+      "noSession": "Aucune session active du traceur.",
+      "noGeolocation": "Cet appareil ne prend pas en charge la géolocalisation.",
+      "gpsError": "Erreur GPS",
+      "active": "Traceur actif",
+      "activating": "Activation du traceur dans l’organisation…",
+      "noPermission": "Traceur sans permission / onboarding"
+    },
+    "errors": {
+      "notConfigured": "Le traceur n’est pas configuré pour ce déploiement.",
+      "noSupabaseClient": "Client Supabase principal introuvable.",
+      "missingEnv": "Variables d’environnement manquantes : VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.",
+      "setSession": "Erreur setSession :",
+      "hashSession": "Erreur de session (hash) :",
+      "openFromMagicLinkOnly": "Ouvrez cette page uniquement depuis votre Magic Link de traceur.",
+      "geolocationUnavailable": "Géolocalisation indisponible.",
+      "sendNoValidToken": "send_position : aucun jeton valide dans /tracker-gps"
+    },
+    "membership": {
+      "missingOrgId": "org_id manquant dans l’URL. Ouvrez cette page depuis le lien d’invitation : /tracker-gps?org_id=<ORG_ID>.",
+      "noAcceptUrl": "Impossible de construire acceptUrl.",
+      "checking": "Vérification de l’adhésion…",
+      "noValidTokenUser": "Aucun jeton/utilisateur valide dans /tracker-gps.",
+      "okSessionCache": "Adhésion OK (cache de session).",
+      "alreadyExists": "Adhésion déjà existante : rôle={{role}}",
+      "runningAccept": "Aucune adhésion. Exécution de accept-tracker-invite…",
+      "acceptOkRole": "accept-tracker-invite OK. rôle={{role}}",
+      "acceptOk": "accept-tracker-invite OK : {{text}}"
+    },
+    "diag": {
+      "sendUrl": "send_url",
+      "orgId": "org_id",
+      "membership": "membership",
+      "tokenIss": "token_iss",
+      "lat": "lat",
+      "lng": "lng",
+      "acc": "acc"
+    }
+  },
+
   "inviteTracker": {
     "orgFallback": "votre organisation",
     "title": "Suivi des invitations",

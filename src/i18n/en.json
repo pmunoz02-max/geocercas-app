@@ -709,12 +709,54 @@
   },
   "trackerGps": {
     "title": "GPS Tracker",
-    "lastSend": "Last sent",
+    "lastSend": "Last send",
     "waitingCoords": "Waiting for coordinates…",
-    "debugCopyPaste": "Copy/paste (debug)",
+    "debugCopyPaste": "Debug (copy/paste)",
     "stateLabel": "Status",
-    "onlyInvited": "Invited only",
-    "goHome": "Go home"
+    "onlyInvited": "This page is only for invited trackers.",
+    "goHome": "Go to home",
+    "status": {
+      "initializing": "Starting tracker…",
+      "processingMagicLink": "Processing Tracker Magic Link…",
+      "sessionOkPreparing": "Session OK. Preparing tracker…",
+      "readingSession": "Reading tracker session…",
+      "noSession": "No active tracker session.",
+      "noGeolocation": "This device does not support geolocation.",
+      "gpsError": "GPS error",
+      "active": "Tracker active",
+      "activating": "Activating tracker in the org…",
+      "noPermission": "Tracker without permission / onboarding"
+    },
+    "errors": {
+      "notConfigured": "Tracker is not configured in this deployment.",
+      "noSupabaseClient": "Primary Supabase client not found.",
+      "missingEnv": "Missing env vars: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.",
+      "setSession": "setSession error:",
+      "hashSession": "hash session error:",
+      "openFromMagicLinkOnly": "Open this page only from your Tracker Magic Link.",
+      "geolocationUnavailable": "Geolocation not available.",
+      "sendNoValidToken": "send_position: no valid token in /tracker-gps"
+    },
+    "membership": {
+      "missingOrgId": "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>.",
+      "noAcceptUrl": "Could not build acceptUrl.",
+      "checking": "Checking membership…",
+      "noValidTokenUser": "No valid token/user in /tracker-gps.",
+      "okSessionCache": "Membership OK (session cache).",
+      "alreadyExists": "Membership already exists: role={{role}}",
+      "runningAccept": "No membership. Running accept-tracker-invite…",
+      "acceptOkRole": "accept-tracker-invite OK. role={{role}}",
+      "acceptOk": "accept-tracker-invite OK: {{text}}"
+    },
+    "diag": {
+      "sendUrl": "send_url",
+      "orgId": "org_id",
+      "membership": "membership",
+      "tokenIss": "token_iss",
+      "lat": "lat",
+      "lng": "lng",
+      "acc": "acc"
+    }
   },
   "inviteTracker": {
     "orgFallback": "your organization",
