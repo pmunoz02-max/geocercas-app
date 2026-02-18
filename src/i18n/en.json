@@ -24,7 +24,9 @@
       "yes": "Yes",
       "no": "No",
       "loading": "Loading..."
-    }
+    },
+    "select": "— Select —",
+    "sending": "Sending..."
   },
   "app": {
     "brand": "App Geocercas",
@@ -733,7 +735,13 @@
       "createdWithoutEmail": "Tracker access was created without sending an email.",
       "genericProcessed": "The invitation for {{email}} was processed successfully.",
       "unexpectedError": "Unexpected error processing the invitation."
-    }
+    },
+    "backToTracker": "Back to Tracker",
+    "selectPersonLabel": "Select a person",
+    "onlyExistingNote": "You can only invite people that already exist in your organization.",
+    "emailLabel": "Tracker email",
+    "emailPlaceholder": "tracker@example.com",
+    "sendInvite": "Send invite"
   },
   "admins": {
     "title": "Admins",

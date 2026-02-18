@@ -27,7 +27,9 @@
     },
     "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
     "createOrganization": "Crear organización",
-    "refreshContext": "Refrescar contexto"
+    "refreshContext": "Refrescar contexto",
+    "select": "— Selecciona —",
+    "sending": "Enviando..."
   },
   "app": {
     "title": "App Geocercas",
@@ -692,7 +694,13 @@
       "createdWithoutEmail": "Se creó el acceso del tracker sin enviar correo electrónico.",
       "genericProcessed": "La invitación para {{email}} se procesó correctamente.",
       "unexpectedError": "Error inesperado al procesar la invitación."
-    }
+    },
+    "backToTracker": "Volver a Tracker",
+    "selectPersonLabel": "Selecciona una persona",
+    "onlyExistingNote": "Solo se puede invitar a personas existentes en tu organización.",
+    "emailLabel": "Correo electrónico del tracker",
+    "emailPlaceholder": "tracker@ejemplo.com",
+    "sendInvite": "Enviar invitación"
   },
   "admins": {
     "title": "Administradores",
