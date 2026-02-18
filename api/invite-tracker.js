@@ -5,6 +5,62 @@
 const BUILD_TAG = "invite-proxy-v6-anon-bearer-userjwt-20260216";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 const EDGE_FN_NAME = "send-tracker-invite-brevo";
+const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
+
+function pickLangFromAcceptLanguage(h) {
+  const s = String(h || "").toLowerCase();
+  if (!s) return "";
+  // e.g. "fr-CA,fr;q=0.9,en;q=0.8"
+  const first = s.split(",")[0].trim();
+  const two = first.slice(0, 2);
+  return two;
+}
+
+function sanitizeLang(v) {
+  const raw = String(v || "").trim().toLowerCase();
+  if (!raw) return "es";
+  const two = raw.slice(0, 2);
+  if (SUPPORTED_LANGS.has(two)) return two;
+  return "es";
+}
+
+function emailCopyFor(lang) {
+  // Mantén copy corto y claro (email HTML real lo arma la Edge Function).
+  // La Edge Function debe usar estos textos si vienen en el payload.
+  if (lang === "en") {
+    return {
+      subject: "Invitation: GPS Tracker – App Geofences",
+      title: "Invitation to GPS Tracker",
+      intro1: "You have been invited to use the GPS Tracker for App Geofences.",
+      intro2: "This link will open the Tracker in the correct organization.",
+      expires: "This link expires in 7 days.",
+      cta: "Open GPS Tracker",
+      copyLink: "If you can't click, copy and paste this link:"
+    };
+  }
+  if (lang === "fr") {
+    return {
+      subject: "Invitation : GPS Tracker – App Geocercas",
+      title: "Invitation au GPS Tracker",
+      intro1: "Vous avez été invité à utiliser le GPS Tracker d’App Geocercas.",
+      intro2: "Ce lien ouvrira le Tracker dans la bonne organisation.",
+      expires: "Ce lien expire dans 7 jours.",
+      cta: "Ouvrir le GPS Tracker",
+      copyLink: "Si vous ne pouvez pas cliquer, copiez et collez ce lien :"
+    };
+  }
+  // es (default)
+  return {
+    subject: "Invitación: Tracker GPS – App Geocercas",
+    title: "Invitación a Tracker GPS",
+    intro1: "Has sido invitado a usar el Tracker GPS de App Geocercas.",
+    intro2: "Este enlace abrirá el Tracker en la organización correcta.",
+    expires: "Este enlace expira en 7 días.",
+    cta: "Abrir Tracker GPS",
+    copyLink: "Si no puedes hacer clic, copia y pega este enlace:"
+  };
+}
+
 
 function getCookie(req, name) {
   const raw = req?.headers?.cookie || "";
@@ -173,7 +229,7 @@ export default async function handler(req, res) {
 
       const diag_refreshed = { iss: p2?.iss || null, aud: p2?.aud || null, exp: p2?.exp || null, now: nowUnix() };
 
-      const second = await callEdge({ supabaseUrl, anonKey, userJwt: refreshed.access_token, body: req.body || {} });
+      const second = await callEdge({ supabaseUrl, anonKey, userJwt: refreshed.access_token, body: edgeBody });
       if (second.ok) return res.status(200).json({ build_tag: BUILD_TAG, refreshed: true, diag, diag_refreshed, ...second.json });
 
       return res.status(second.status).json({ ok: false, build_tag: BUILD_TAG, error: "UPSTREAM_ERROR_AFTER_REFRESH", refreshed: true, upstream: second.json, diag, diag_refreshed });

@@ -24,7 +24,7 @@ function pickLabel(row) {
 
 export default function InvitarTracker() {
   const navigate = useNavigate();
-  const { t } = useTranslation(); // 👈 usa namespace default (translation)
+  const { t, i18n } = useTranslation(); // usa i18n runtime
   const auth = useAuthSafe();
 
   const [busy, setBusy] = useState(false);
@@ -55,7 +55,20 @@ export default function InvitarTracker() {
     };
   }, [auth, orgId]);
 
-  // Mapa de emails permitidos (solo miembros de org)
+  
+
+// Idioma actual para emails (prioridad: ?lang= -> i18n -> fallback 'es')
+const lang = useMemo(() => {
+  try {
+    const qp = new URLSearchParams(window.location.search);
+    const qlang = String(qp.get("lang") || "").trim().toLowerCase();
+    if (qlang === "es" || qlang === "en" || qlang === "fr") return qlang;
+  } catch {}
+  const l = String(i18n?.resolvedLanguage || i18n?.language || "es").trim().toLowerCase();
+  if (l.startsWith("en")) return "en";
+  if (l.startsWith("fr")) return "fr";
+  return "es";
+}, [i18n]);// Mapa de emails permitidos (solo miembros de org)
   const allowedEmails = useMemo(() => {
     const set = new Set();
     for (const r of people) {
@@ -148,6 +161,7 @@ export default function InvitarTracker() {
           email: cleanEmail,
           org_id: orgId,
           role: "tracker",
+          lang,
         }),
       });
 
