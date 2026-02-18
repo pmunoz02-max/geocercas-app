@@ -137,7 +137,7 @@
     "infoMagicLinkSent": "Hemos enviado un link mágico a tu correo.",
     "errorMagicLinkUnexpected": "Error inesperado al enviar el link mágico.",
     "errorResetPassword": "No se pudo enviar el correo de recuperación.",
-    "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.",
+    "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa la bandeja de entrada.",
     "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación."
   },
   "inicio": {
@@ -666,6 +666,15 @@
       "checkConsole": "Revisa la consola si persiste."
     }
   },
+  "trackerGps": {
+    "title": "Tracker GPS",
+    "lastSend": "Último envío",
+    "waitingCoords": "Esperando coordenadas…",
+    "debugCopyPaste": "Copiar/pegar (debug)",
+    "stateLabel": "Estado",
+    "onlyInvited": "Solo invitados",
+    "goHome": "Ir al inicio"
+  },
   "inviteTracker": {
     "orgFallback": "tu organización",
     "title": "Invitar tracker",
@@ -917,7 +926,7 @@
     "subtitle": "Crea una nueva contraseña para tu cuenta.",
     "loading": "Preparando enlace de recuperación…",
     "invalidOrExpired": "El enlace de recuperación es inválido o expiró. Solicita uno nuevo.",
-    "noSession": "No hay una sesión válida para restablecer la contraseña. Vuelve a solicitar el enlace.",
+    "noSession": "No hay una sesión válida para restablecer la contraseña. Vuelve a solicitar una.",
     "noticeType": "Sesión detectada. Si este enlace no era de recuperación, vuelve a iniciar sesión normalmente.",
     "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
     "newPassword": "Nueva contraseña",

@@ -1,6 +1,7 @@
 // src/pages/TrackerGpsPage.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 // ✅ MISMO CLIENTE QUE AuthCallback (mismo proyecto Supabase PRINCIPAL)
 import { supabase } from "../lib/supabaseClient";
@@ -56,12 +57,39 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function sanitizeLang(v) {
+  const l = String(v || "").trim().toLowerCase().slice(0, 2);
+  return l === "en" || l === "fr" || l === "es" ? l : "es";
+}
+
 export default function TrackerGpsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
+  const { t, i18n } = useTranslation();
 
-  const [status, setStatus] = useState("Iniciando tracker…");
+  // ✅ Idioma desde query: /tracker-gps?...&lang=fr
+  const lang = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(location.search || "");
+      return sanitizeLang(sp.get("lang") || "");
+    } catch {
+      return "es";
+    }
+  }, [location.search]);
+
+  // ✅ Aplica idioma en runtime (para que esta página responda al lang)
+  useEffect(() => {
+    (async () => {
+      try {
+        if (i18n?.resolvedLanguage !== lang) {
+          await i18n.changeLanguage(lang);
+        }
+      } catch {}
+    })();
+  }, [i18n, lang]);
+
+  const [status, setStatus] = useState(t("trackerGps.status.initializing", { defaultValue: "Starting tracker…" }));
   const [coords, setCoords] = useState(null);
   const [lastSend, setLastSend] = useState(null);
   const [lastError, setLastError] = useState(null);
@@ -127,21 +155,25 @@ export default function TrackerGpsPage() {
     if (!PRIMARY) {
       setTrackerReady(false);
       setHasSession(false);
-      setStatus("Tracker no configurado en este deployment.");
-      setLastError("No existe supabase client principal.");
+      setStatus(t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." }));
+      setLastError(t("trackerGps.errors.noSupabaseClient", { defaultValue: "Primary Supabase client not found." }));
       return;
     }
 
     if (!API_URL || !API_ANON) {
       setTrackerReady(false);
       setHasSession(false);
-      setStatus("Tracker no configurado en este deployment.");
-      setLastError("Faltan variables: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.");
+      setStatus(t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." }));
+      setLastError(
+        t("trackerGps.errors.missingEnv", {
+          defaultValue: "Missing env vars: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.",
+        })
+      );
       return;
     }
 
     setTrackerReady(true);
-  }, [API_URL, API_ANON, PRIMARY]);
+  }, [API_URL, API_ANON, PRIMARY, t]);
 
   // 0.2) Org: PATH (si existe) luego query
   useEffect(() => {
@@ -168,9 +200,12 @@ export default function TrackerGpsPage() {
     setOrgId(null);
     setMembershipStatus("failed");
     setMembershipDetail(
-      "Falta org_id en la URL. Abre esta página desde el link de invitación: /tracker-gps?org_id=<ORG_ID>."
+      t("trackerGps.membership.missingOrgId", {
+        defaultValue:
+          "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>.",
+      })
     );
-  }, [location?.search, params?.orgId]);
+  }, [location?.search, params?.orgId, t]);
 
   // 0.3) Si viene magic link con tokens en HASH, crear sesión en PRIMARY
   useEffect(() => {
@@ -184,11 +219,11 @@ export default function TrackerGpsPage() {
 
     (async () => {
       try {
-        setStatus("Procesando Magic Link del Tracker…");
+        setStatus(t("trackerGps.status.processingMagicLink", { defaultValue: "Processing Tracker Magic Link…" }));
 
         const { error } = await PRIMARY.auth.setSession({ access_token, refresh_token });
         if (error) {
-          setLastError(`setSession error: ${error.message}`);
+          setLastError(t("trackerGps.errors.setSession", { defaultValue: "setSession error:" }) + ` ${error.message}`);
           return;
         }
 
@@ -202,12 +237,15 @@ export default function TrackerGpsPage() {
         window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
 
         setLastError(null);
-        setStatus("Sesión OK. Preparando tracker…");
+        setStatus(t("trackerGps.status.sessionOkPreparing", { defaultValue: "Session OK. Preparing tracker…" }));
       } catch (e) {
-        setLastError(`hash session error: ${String(e?.message || e)}`);
+        setLastError(
+          t("trackerGps.errors.hashSession", { defaultValue: "hash session error:" }) +
+            ` ${String(e?.message || e)}`
+        );
       }
     })();
-  }, [trackerReady, PRIMARY]);
+  }, [trackerReady, PRIMARY, t]);
 
   // 1) Sesión (PRIMARY)
   useEffect(() => {
@@ -228,7 +266,7 @@ export default function TrackerGpsPage() {
     };
 
     (async () => {
-      setStatus("Leyendo sesión del tracker…");
+      setStatus(t("trackerGps.status.readingSession", { defaultValue: "Reading tracker session…" }));
 
       let session = null;
       for (let i = 0; i < 10; i++) {
@@ -247,13 +285,17 @@ export default function TrackerGpsPage() {
 
       if (!ok) {
         setHasSession(false);
-        setStatus("No hay sesión activa de tracker.");
-        setLastError("Abre esta página únicamente desde tu Magic Link del Tracker.");
+        setStatus(t("trackerGps.status.noSession", { defaultValue: "No active tracker session." }));
+        setLastError(
+          t("trackerGps.errors.openFromMagicLinkOnly", {
+            defaultValue: "Open this page only from your Tracker Magic Link.",
+          })
+        );
         return;
       }
 
       setHasSession(true);
-      setStatus("Sesión OK. Preparando tracker…");
+      setStatus(t("trackerGps.status.sessionOkPreparing", { defaultValue: "Session OK. Preparing tracker…" }));
       setLastError(null);
     })();
 
@@ -264,7 +306,7 @@ export default function TrackerGpsPage() {
 
       if (tokenB && looksLikeJwt(tokenB)) {
         setHasSession(true);
-        setStatus("Sesión OK. Preparando tracker…");
+        setStatus(t("trackerGps.status.sessionOkPreparing", { defaultValue: "Session OK. Preparing tracker…" }));
         setLastError(null);
       }
     });
@@ -277,7 +319,7 @@ export default function TrackerGpsPage() {
         unsub?.unsubscribe?.();
       } catch {}
     };
-  }, [trackerReady, PRIMARY]);
+  }, [trackerReady, PRIMARY, t]);
 
   // 1.5) Onboarding: validar membership y si falta, ejecutar accept-tracker-invite
   useEffect(() => {
@@ -286,7 +328,7 @@ export default function TrackerGpsPage() {
 
     if (!acceptUrl) {
       setMembershipStatus("failed");
-      setMembershipDetail("No se pudo construir acceptUrl.");
+      setMembershipDetail(t("trackerGps.membership.noAcceptUrl", { defaultValue: "Could not build acceptUrl." }));
       return;
     }
 
@@ -296,7 +338,7 @@ export default function TrackerGpsPage() {
     (async () => {
       try {
         setMembershipStatus("pending");
-        setMembershipDetail("Verificando membership…");
+        setMembershipDetail(t("trackerGps.membership.checking", { defaultValue: "Checking membership…" }));
 
         const { data: sData } = await PRIMARY.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
@@ -304,7 +346,9 @@ export default function TrackerGpsPage() {
 
         if (!tokenB || !looksLikeJwt(tokenB) || !userId) {
           setMembershipStatus("failed");
-          setMembershipDetail("No hay token/user válido en /tracker-gps.");
+          setMembershipDetail(
+            t("trackerGps.membership.noValidTokenUser", { defaultValue: "No valid token/user in /tracker-gps." })
+          );
           return;
         }
 
@@ -312,7 +356,9 @@ export default function TrackerGpsPage() {
         try {
           if (sessionStorage.getItem(ssKey) === "1") {
             setMembershipStatus("ok");
-            setMembershipDetail("Membership OK (cache de sesión).");
+            setMembershipDetail(
+              t("trackerGps.membership.okSessionCache", { defaultValue: "Membership OK (session cache)." })
+            );
             return;
           }
         } catch {}
@@ -334,7 +380,12 @@ export default function TrackerGpsPage() {
         const m = (mRows || [])[0];
         if (m && !m.revoked_at) {
           setMembershipStatus("ok");
-          setMembershipDetail(`Membership ya existe: role=${m.role}`);
+          setMembershipDetail(
+            t("trackerGps.membership.alreadyExists", {
+              defaultValue: "Membership already exists: role={{role}}",
+              role: m.role,
+            })
+          );
           try {
             sessionStorage.setItem(ssKey, "1");
           } catch {}
@@ -342,7 +393,9 @@ export default function TrackerGpsPage() {
         }
 
         // 2) accept-tracker-invite (edge function) — MISMO proyecto
-        setMembershipDetail("No hay membership. Ejecutando accept-tracker-invite…");
+        setMembershipDetail(
+          t("trackerGps.membership.runningAccept", { defaultValue: "No membership. Running accept-tracker-invite…" })
+        );
 
         const resp = await fetch(acceptUrl, {
           method: "POST",
@@ -374,10 +427,17 @@ export default function TrackerGpsPage() {
         const m2 = (m2Rows || [])[0];
         if (m2 && !m2.revoked_at) {
           setMembershipStatus("ok");
-          setMembershipDetail(`accept-tracker-invite OK. role=${m2.role}`);
+          setMembershipDetail(
+            t("trackerGps.membership.acceptOkRole", {
+              defaultValue: "accept-tracker-invite OK. role={{role}}",
+              role: m2.role,
+            })
+          );
         } else {
           setMembershipStatus("ok");
-          setMembershipDetail(`accept-tracker-invite OK: ${text || "ok"}`);
+          setMembershipDetail(
+            t("trackerGps.membership.acceptOk", { defaultValue: "accept-tracker-invite OK: {{text}}", text: text || "ok" })
+          );
         }
 
         try {
@@ -390,15 +450,15 @@ export default function TrackerGpsPage() {
         onboardingLockRef.current = false;
       }
     })();
-  }, [trackerReady, hasSession, acceptUrl, API_ANON, orgId, PRIMARY]);
+  }, [trackerReady, hasSession, acceptUrl, API_ANON, orgId, PRIMARY, t]);
 
   // 2) GPS
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
 
     if (!("geolocation" in navigator)) {
-      setStatus("Este dispositivo no soporta geolocalización.");
-      setLastError("Geolocation no disponible.");
+      setStatus(t("trackerGps.status.noGeolocation", { defaultValue: "This device does not support geolocation." }));
+      setLastError(t("trackerGps.errors.geolocationUnavailable", { defaultValue: "Geolocation not available." }));
       return;
     }
 
@@ -415,14 +475,15 @@ export default function TrackerGpsPage() {
       lastCoordsRef.current = c;
       setCoords(c);
 
-      if (membershipStatus === "ok") setStatus("Tracker activo");
-      else if (membershipStatus === "pending") setStatus("Activando Tracker en la org…");
-      else setStatus("Tracker sin permiso / sin onboarding");
+      if (membershipStatus === "ok") setStatus(t("trackerGps.status.active", { defaultValue: "Tracker active" }));
+      else if (membershipStatus === "pending")
+        setStatus(t("trackerGps.status.activating", { defaultValue: "Activating tracker in the org…" }));
+      else setStatus(t("trackerGps.status.noPermission", { defaultValue: "Tracker without permission / onboarding" }));
     };
 
     const handleError = (err) => {
       if (cancelled) return;
-      setStatus("Error GPS");
+      setStatus(t("trackerGps.status.gpsError", { defaultValue: "GPS error" }));
       setLastError(err?.message || String(err));
     };
 
@@ -436,7 +497,7 @@ export default function TrackerGpsPage() {
       cancelled = true;
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
-  }, [trackerReady, hasSession, membershipStatus]);
+  }, [trackerReady, hasSession, membershipStatus, t]);
 
   // 3) Envío (solo si membership ok + orgId)
   useEffect(() => {
@@ -460,7 +521,7 @@ export default function TrackerGpsPage() {
         const tokenB = sData?.session?.access_token || "";
 
         if (!tokenB || !looksLikeJwt(tokenB)) {
-          setLastError("send_position: no hay token válido en /tracker-gps");
+          setLastError(t("trackerGps.errors.sendNoValidToken", { defaultValue: "send_position: no valid token in /tracker-gps" }));
           return;
         }
 
@@ -504,43 +565,59 @@ export default function TrackerGpsPage() {
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [trackerReady, hasSession, sendUrl, API_ANON, orgId, membershipStatus, PRIMARY]);
+  }, [trackerReady, hasSession, sendUrl, API_ANON, orgId, membershipStatus, PRIMARY, t]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
       <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-4">
-        <h1 className="text-lg font-semibold text-center">Tracker GPS</h1>
+        <h1 className="text-lg font-semibold text-center">{t("trackerGps.title", { defaultValue: "Tracker GPS" })}</h1>
 
         {trackerReady && hasSession && (
           <>
             <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
-              <div>Último envío: {formattedLastSend}</div>
-              <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl || "—"}</div>
-              <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
-              <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
+              <div>
+                {t("trackerGps.lastSend", { defaultValue: "Last send" })}: {formattedLastSend}
+              </div>
+
+              <div className="mt-2 text-[11px] text-slate-400 break-all">
+                {t("trackerGps.diag.sendUrl", { defaultValue: "send_url" })}: {sendUrl || "—"}
+              </div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">
+                {t("trackerGps.diag.orgId", { defaultValue: "org_id" })}: {orgId || "—"}
+              </div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">
+                {t("trackerGps.diag.membership", { defaultValue: "membership" })}: {membershipStatus}
+              </div>
 
               {tokenIss ? (
-                <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div>
+                <div className="mt-2 text-[11px] text-slate-400 break-all">
+                  {t("trackerGps.diag.tokenIss", { defaultValue: "token_iss" })}: {tokenIss}
+                </div>
               ) : null}
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
-                  lat: {coords.lat?.toFixed?.(6)} | lng: {coords.lng?.toFixed?.(6)} | acc: {coords.accuracy ?? "—"}
+                  {t("trackerGps.diag.lat", { defaultValue: "lat" })}: {coords.lat?.toFixed?.(6)} |{" "}
+                  {t("trackerGps.diag.lng", { defaultValue: "lng" })}: {coords.lng?.toFixed?.(6)} |{" "}
+                  {t("trackerGps.diag.acc", { defaultValue: "acc" })}: {coords.accuracy ?? "—"}
                 </div>
               ) : (
-                <div className="mt-2 text-xs text-slate-400">Esperando coordenadas…</div>
+                <div className="mt-2 text-xs text-slate-400">{t("trackerGps.waitingCoords", { defaultValue: "Waiting for coordinates…" })}</div>
               )}
             </div>
 
             <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
-              <summary className="cursor-pointer text-sm text-slate-200">Debug (copiar/pegar)</summary>
+              <summary className="cursor-pointer text-sm text-slate-200">
+                {t("trackerGps.debugCopyPaste", { defaultValue: "Debug (copy/paste)" })}
+              </summary>
               <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">{JSON.stringify(debug, null, 2)}</pre>
             </details>
 
             <div className="mt-3 text-xs">
-              Estado: <span className="text-slate-100">{status}</span>
+              {t("trackerGps.stateLabel", { defaultValue: "Status" })}:{" "}
+              <span className="text-slate-100">{status}</span>
             </div>
 
             {membershipDetail ? (
@@ -559,34 +636,42 @@ export default function TrackerGpsPage() {
 
         {trackerReady && !hasSession && (
           <div className="mt-4 text-center">
-            <p className="text-sm text-slate-300 mb-3">Esta página es solo para trackers invitados.</p>
+            <p className="text-sm text-slate-300 mb-3">
+              {t("trackerGps.onlyInvited", { defaultValue: "This page is only for invited trackers." })}
+            </p>
+
             {lastError ? (
               <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
                 {lastError}
               </div>
             ) : null}
+
             <button
               onClick={() => navigate("/")}
               className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
             >
-              Ir a inicio
+              {t("trackerGps.goHome", { defaultValue: "Go to home" })}
             </button>
           </div>
         )}
 
         {!trackerReady && (
           <div className="mt-4 text-center">
-            <p className="text-sm text-slate-300 mb-3">Tracker no configurado en este deployment.</p>
+            <p className="text-sm text-slate-300 mb-3">
+              {t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." })}
+            </p>
+
             {lastError ? (
               <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
                 {lastError}
               </div>
             ) : null}
+
             <button
               onClick={() => navigate("/")}
               className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
             >
-              Ir a inicio
+              {t("trackerGps.goHome", { defaultValue: "Go to home" })}
             </button>
           </div>
         )}

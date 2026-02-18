@@ -707,6 +707,15 @@
       "checkConsole": "Check the console if it persists."
     }
   },
+  "trackerGps": {
+    "title": "GPS Tracker",
+    "lastSend": "Last sent",
+    "waitingCoords": "Waiting for coordinates…",
+    "debugCopyPaste": "Copy/paste (debug)",
+    "stateLabel": "Status",
+    "onlyInvited": "Invited only",
+    "goHome": "Go home"
+  },
   "inviteTracker": {
     "orgFallback": "your organization",
     "title": "Invite tracker",
