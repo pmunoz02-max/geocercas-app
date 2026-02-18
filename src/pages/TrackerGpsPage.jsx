@@ -1,11 +1,9 @@
+// src/pages/TrackerGpsPage.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 
-// ✅ USAR EL MISMO CLIENTE QUE AuthCallback (mismo proyecto Supabase)
+// ✅ MISMO CLIENTE QUE AuthCallback (mismo proyecto Supabase PRINCIPAL)
 import { supabase } from "../lib/supabaseClient";
-
-// (Opcional) Si tienes tracker separado, lo dejamos como fallback sin romper nada
-import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
@@ -15,7 +13,9 @@ const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
 
 function isUuid(v) {
   const s = String(v ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    s
+  );
 }
 
 function pickOrgIdFromSearch(search) {
@@ -94,24 +94,16 @@ export default function TrackerGpsPage() {
   const onboardingLockRef = useRef(false);
   const didHashSessionRef = useRef(false);
 
-  // ✅ Preferimos el Supabase principal (mismo que AuthCallback)
-  // Si por alguna razón quieres tracker separado, lo dejamos como fallback opcional.
+  // ✅ Opción A: TODO en el proyecto principal
   const PRIMARY = supabase;
-  const FALLBACK = supabaseTracker || null;
 
-  // ✅ URLs/keys: si existen las de tracker, las usamos para llamar funciones; si no, usamos las normales
+  // ✅ SOLO proyecto principal
   const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").trim();
   const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
 
-  const TRACKER_URL = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
-  const TRACKER_ANON = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
-
-  // ✅ En la práctica, para que el flujo funcione SIEMPRE con magic link del proyecto principal:
-  // - Session se lee del PRIMARY (supabase)
-  // - Las llamadas a functions pueden ir al mismo proyecto (recomendado)
-  // Si tienes functions en otro proyecto, pon TRACKER_URL/TRACKER_ANON y funcionará igual.
-  const API_URL = (TRACKER_URL || SUPABASE_URL || "").replace(/\/$/, "");
-  const API_ANON = (TRACKER_ANON || SUPABASE_ANON || "").trim();
+  // ✅ Forzar API al proyecto principal (elimina mismatch de issuer)
+  const API_URL = (SUPABASE_URL || "").replace(/\/$/, "");
+  const API_ANON = (SUPABASE_ANON || "").trim();
 
   const acceptUrl = useMemo(() => {
     if (!API_URL) return null;
@@ -132,7 +124,6 @@ export default function TrackerGpsPage() {
       supabase_url: API_URL || "",
     }));
 
-    // Requisito mínimo: tener URL/ANON para functions y tener supabase client
     if (!PRIMARY) {
       setTrackerReady(false);
       setHasSession(false);
@@ -145,9 +136,7 @@ export default function TrackerGpsPage() {
       setTrackerReady(false);
       setHasSession(false);
       setStatus("Tracker no configurado en este deployment.");
-      setLastError(
-        "Faltan variables. Debe existir VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY (o VITE_SUPABASE_TRACKER_URL/VITE_SUPABASE_TRACKER_ANON_KEY)."
-      );
+      setLastError("Faltan variables: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.");
       return;
     }
 
@@ -159,18 +148,20 @@ export default function TrackerGpsPage() {
     const pOrg = String(params?.orgId || "").trim();
     const qOrg = pickOrgIdFromSearch(location?.search || "");
 
-    const picked = isUuid(pOrg) ? pOrg : (isUuid(qOrg) ? qOrg : "");
+    const picked = isUuid(pOrg) ? pOrg : isUuid(qOrg) ? qOrg : "";
 
     setDebug((d) => ({
       ...d,
       router_search: location?.search || "",
       path_orgId: pOrg || "",
-      org_source: isUuid(pOrg) ? "path" : (isUuid(qOrg) ? "query" : "none"),
+      org_source: isUuid(pOrg) ? "path" : isUuid(qOrg) ? "query" : "none",
     }));
 
     if (picked) {
       setOrgId(picked);
-      try { localStorage.setItem(LS_TRACKER_ORG_KEY, picked); } catch {}
+      try {
+        localStorage.setItem(LS_TRACKER_ORG_KEY, picked);
+      } catch {}
       return;
     }
 
@@ -181,7 +172,7 @@ export default function TrackerGpsPage() {
     );
   }, [location?.search, params?.orgId]);
 
-  // 0.3) Si viene magic link con tokens en HASH, crear sesión en PRIMARY (supabase)
+  // 0.3) Si viene magic link con tokens en HASH, crear sesión en PRIMARY
   useEffect(() => {
     if (!trackerReady || !PRIMARY) return;
     if (didHashSessionRef.current) return;
@@ -207,6 +198,7 @@ export default function TrackerGpsPage() {
           await sleep(200);
         }
 
+        // limpia hash
         window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
 
         setLastError(null);
@@ -281,11 +273,13 @@ export default function TrackerGpsPage() {
 
     return () => {
       cancelled = true;
-      try { unsub?.unsubscribe?.(); } catch {}
+      try {
+        unsub?.unsubscribe?.();
+      } catch {}
     };
   }, [trackerReady, PRIMARY]);
 
-  // 1.5) Onboarding: validar membership (en DB del PRIMARY) y si falta, ejecutar accept-tracker-invite
+  // 1.5) Onboarding: validar membership y si falta, ejecutar accept-tracker-invite
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
     if (!orgId || !isUuid(orgId)) return;
@@ -323,7 +317,7 @@ export default function TrackerGpsPage() {
           }
         } catch {}
 
-        // 1) membership directa (en el mismo proyecto donde está memberships)
+        // 1) membership directa
         const { data: mRows, error: mErr } = await PRIMARY
           .from("memberships")
           .select("role, revoked_at, org_id, user_id")
@@ -341,11 +335,13 @@ export default function TrackerGpsPage() {
         if (m && !m.revoked_at) {
           setMembershipStatus("ok");
           setMembershipDetail(`Membership ya existe: role=${m.role}`);
-          try { sessionStorage.setItem(ssKey, "1"); } catch {}
+          try {
+            sessionStorage.setItem(ssKey, "1");
+          } catch {}
           return;
         }
 
-        // 2) accept-tracker-invite (edge function)
+        // 2) accept-tracker-invite (edge function) — MISMO proyecto
         setMembershipDetail("No hay membership. Ejecutando accept-tracker-invite…");
 
         const resp = await fetch(acceptUrl, {
@@ -367,7 +363,7 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        // Re-chequeo rápido (opcional pero robusto)
+        // Re-chequeo
         const { data: m2Rows } = await PRIMARY
           .from("memberships")
           .select("role, revoked_at")
@@ -384,7 +380,9 @@ export default function TrackerGpsPage() {
           setMembershipDetail(`accept-tracker-invite OK: ${text || "ok"}`);
         }
 
-        try { sessionStorage.setItem(ssKey, "1"); } catch {}
+        try {
+          sessionStorage.setItem(ssKey, "1");
+        } catch {}
       } catch (e) {
         setMembershipStatus("failed");
         setMembershipDetail(`onboarding exception: ${String(e?.message || e)}`);
@@ -467,7 +465,7 @@ export default function TrackerGpsPage() {
         }
 
         const payload = {
-          org_id: orgId,
+          org_id: orgId, // ignorado server-owned
           lat: c.lat,
           lng: c.lng,
           accuracy: c.accuracy,
@@ -538,9 +536,7 @@ export default function TrackerGpsPage() {
 
             <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
               <summary className="cursor-pointer text-sm text-slate-200">Debug (copiar/pegar)</summary>
-              <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">
-{JSON.stringify(debug, null, 2)}
-              </pre>
+              <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">{JSON.stringify(debug, null, 2)}</pre>
             </details>
 
             <div className="mt-3 text-xs">

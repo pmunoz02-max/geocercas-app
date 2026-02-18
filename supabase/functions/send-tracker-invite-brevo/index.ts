@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-x-user-jwt-20260216";
+const BUILD_TAG = "send-tracker-invite-brevo-auth-subdomain-20260218";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -56,14 +56,24 @@ async function brevoSendEmail(opts: {
   subject: string;
   html: string;
   text?: string;
+  replyToEmail?: string;
+  replyToName?: string;
 }) {
-  const payload = {
+  const payload: any = {
     sender: { email: opts.senderEmail, name: opts.senderName },
     to: [{ email: opts.toEmail, name: opts.toName || opts.toEmail }],
     subject: opts.subject,
     htmlContent: opts.html,
     textContent: opts.text || undefined,
   };
+
+  // ✅ Mejora universal: Reply-To (ayuda deliverability/UX)
+  if (opts.replyToEmail) {
+    payload.replyTo = {
+      email: opts.replyToEmail,
+      name: opts.replyToName || opts.replyToEmail,
+    };
+  }
 
   const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -84,7 +94,11 @@ async function brevoSendEmail(opts: {
  * ✅ Validación robusta del JWT del usuario usando /auth/v1/user
  * NOTA: aquí jwt es el x-user-jwt (NO Authorization)
  */
-async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string; jwt: string }) {
+async function authUserIdFromJwt(params: {
+  supabaseUrl: string;
+  anonKey: string;
+  jwt: string;
+}) {
   const url = `${params.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`;
   const r = await fetch(url, {
     method: "GET",
@@ -130,7 +144,12 @@ async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) 
   return data || null;
 }
 
-async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: string, keepId: string) {
+async function deactivateOtherActives(
+  sbAdmin: any,
+  org_id: string,
+  email_norm: string,
+  keepId: string,
+) {
   const { error } = await sbAdmin
     .from("tracker_invites")
     .update({ is_active: false } as any)
@@ -144,7 +163,9 @@ async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: 
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
+  if (req.method !== "POST") {
+    return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
+  }
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -154,23 +175,34 @@ serve(async (req) => {
     const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") || "";
     const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL") || "";
     const BREVO_SENDER_NAME = Deno.env.get("BREVO_SENDER_NAME") || "App Geocercas";
-    const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com").replace(/\/$/, "");
+
+    // ✅ Reply-to opcional (si no la seteas, usa el sender)
+    const BREVO_REPLYTO_EMAIL = (Deno.env.get("BREVO_REPLYTO_EMAIL") || "").trim();
+
+    const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com")
+      .replace(/\/$/, "");
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return jsonResponse(500, { ok: false, error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY", build_tag: BUILD_TAG });
+      return jsonResponse(500, {
+        ok: false,
+        error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY",
+        build_tag: BUILD_TAG,
+      });
     }
     if (!SUPABASE_ANON_KEY) {
       return jsonResponse(500, { ok: false, error: "Missing SUPABASE_ANON_KEY", build_tag: BUILD_TAG });
     }
     if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
-      return jsonResponse(500, { ok: false, error: "Missing BREVO_API_KEY / BREVO_SENDER_EMAIL", build_tag: BUILD_TAG });
+      return jsonResponse(500, {
+        ok: false,
+        error: "Missing BREVO_API_KEY / BREVO_SENDER_EMAIL",
+        build_tag: BUILD_TAG,
+      });
     }
 
     // ✅ 100% x-user-jwt (Authorization ya NO es user jwt)
     const userJwt = (req.headers.get("x-user-jwt") || "").trim();
-    if (!userJwt) {
-      return jsonResponse(401, { ok: false, error: "Missing x-user-jwt", build_tag: BUILD_TAG });
-    }
+    if (!userJwt) return jsonResponse(401, { ok: false, error: "Missing x-user-jwt", build_tag: BUILD_TAG });
     if (!looksLikeJwt(userJwt)) {
       return jsonResponse(401, { ok: false, error: "Invalid x-user-jwt format", build_tag: BUILD_TAG });
     }
@@ -182,7 +214,13 @@ serve(async (req) => {
     // ✅ validar caller (quien invita)
     const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt: userJwt });
     if (!u.ok) {
-      return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status, build_tag: BUILD_TAG });
+      return jsonResponse(401, {
+        ok: false,
+        error: "Invalid JWT",
+        detail: u.body,
+        status: u.status,
+        build_tag: BUILD_TAG,
+      });
     }
     const callerUserId = u.user_id;
 
@@ -204,7 +242,14 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (ownerErr) return jsonResponse(500, { ok: false, error: "DB error checking owner", detail: ownerErr.message, build_tag: BUILD_TAG });
+    if (ownerErr) {
+      return jsonResponse(500, {
+        ok: false,
+        error: "DB error checking owner",
+        detail: ownerErr.message,
+        build_tag: BUILD_TAG,
+      });
+    }
     if (!ownerRow || String(ownerRow.role) !== "owner") {
       return jsonResponse(403, { ok: false, error: "Not allowed (must be owner of org)", build_tag: BUILD_TAG });
     }
@@ -270,7 +315,12 @@ serve(async (req) => {
     }
 
     if (!trackerInviteId) {
-      return jsonResponse(500, { ok: false, error: "Failed upserting invite", detail: "No invite id returned", build_tag: BUILD_TAG });
+      return jsonResponse(500, {
+        ok: false,
+        error: "Failed upserting invite",
+        detail: "No invite id returned",
+        build_tag: BUILD_TAG,
+      });
     }
 
     // ✅ generar magic link con redirect
@@ -281,27 +331,62 @@ serve(async (req) => {
     });
 
     if (linkErr || !linkData?.properties?.action_link) {
-      return jsonResponse(500, { ok: false, error: "generateLink failed", detail: linkErr?.message || "no action_link", build_tag: BUILD_TAG });
+      return jsonResponse(500, {
+        ok: false,
+        error: "generateLink failed",
+        detail: linkErr?.message || "no action_link",
+        build_tag: BUILD_TAG,
+      });
     }
 
     const actionLink = linkData.properties.action_link;
 
-    // ✅ enviar correo
+    // ✅ enviar correo (más “Microsoft-friendly”)
     const subject = "Invitación: Tracker GPS - App Geocercas";
+
+    const safeAction = String(actionLink).replace(/"/g, "&quot;");
     const html = `
-      <div style="font-family:Arial,sans-serif;line-height:1.4">
-        <h2>Invitación a Tracker GPS</h2>
-        <p>Has sido invitado a usar el Tracker GPS de <b>App Geocercas</b>.</p>
-        <p>Este link te abrirá el Tracker en la organización correcta.</p>
-        <p>
-          <a href="${actionLink}" style="display:inline-block;padding:12px 16px;background:#10b981;color:#0b1220;text-decoration:none;border-radius:8px;font-weight:700">
+      <div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827">
+        <h2 style="margin:0 0 12px 0">Invitación a Tracker GPS</h2>
+
+        <p style="margin:0 0 10px 0">
+          Has sido invitado a usar el <b>Tracker GPS</b> de <b>App Geocercas</b>.
+        </p>
+
+        <p style="margin:0 0 14px 0">
+          Este enlace abrirá el Tracker en la organización correcta.
+          <br />
+          <span style="color:#6b7280;font-size:12px">
+            Este enlace expira en 7 días.
+          </span>
+        </p>
+
+        <p style="margin:0 0 16px 0">
+          <a href="${safeAction}"
+             style="display:inline-block;padding:12px 16px;background:#10b981;color:#0b1220;text-decoration:none;border-radius:10px;font-weight:700">
             Abrir Tracker GPS
           </a>
         </p>
-        <p style="color:#6b7280;font-size:12px">Si no puedes hacer clic, copia y pega este link:</p>
-        <p style="word-break:break-all;font-size:12px">${actionLink}</p>
+
+        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">Si no puedes hacer clic, copia y pega este enlace:</p>
+        <p style="word-break:break-all;font-size:12px;margin:0 0 16px 0">${safeAction}</p>
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0" />
+
+        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">
+          Recibiste este correo porque un administrador de App Geocercas te invitó a acceder al Tracker GPS.
+        </p>
+        <p style="color:#6b7280;font-size:12px;margin:0">
+          Si no esperabas esta invitación, puedes ignorar este mensaje o responder a este correo para reportarlo.
+        </p>
       </div>
     `;
+
+    const text =
+      `Invitación a Tracker GPS - App Geocercas\n\n` +
+      `Has sido invitado a usar el Tracker GPS.\n` +
+      `Abre el enlace (expira en 7 días):\n${actionLink}\n\n` +
+      `Si no esperabas esta invitación, ignora este correo o responde para reportarlo.\n`;
 
     await brevoSendEmail({
       apiKey: BREVO_API_KEY,
@@ -311,7 +396,9 @@ serve(async (req) => {
       toName: to_name,
       subject,
       html,
-      text: `Invitación Tracker GPS: ${actionLink}`,
+      text,
+      replyToEmail: BREVO_REPLYTO_EMAIL || BREVO_SENDER_EMAIL,
+      replyToName: BREVO_SENDER_NAME,
     });
 
     return jsonResponse(200, {
@@ -325,6 +412,11 @@ serve(async (req) => {
       action_link: actionLink,
     });
   } catch (e) {
-    return jsonResponse(500, { ok: false, error: "Unhandled", detail: String((e as any)?.message || e), build_tag: BUILD_TAG });
+    return jsonResponse(500, {
+      ok: false,
+      error: "Unhandled",
+      detail: String((e as any)?.message || e),
+      build_tag: BUILD_TAG,
+    });
   }
 });
