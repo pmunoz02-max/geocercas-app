@@ -1,12 +1,31 @@
 // src/pages/AuthCallback.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { supabase, setMemoryAccessToken } from "../lib/supabaseClient";
 
 function safeNextPath(next: string) {
   if (!next) return "/inicio";
   if (next.startsWith("/")) return next;
   return "/inicio";
+}
+
+function sanitizeLang(v: string) {
+  const l = String(v || "").trim().toLowerCase().slice(0, 2);
+  return l === "en" || l === "fr" || l === "es" ? l : "es";
+}
+
+function ensureLangInUrlPath(path: string, lang: string) {
+  // path puede venir como "/tracker-gps?org_id=...". Asegura lang=xx en query.
+  try {
+    const u = new URL(path, window.location.origin);
+    if (!u.searchParams.get("lang")) u.searchParams.set("lang", lang);
+    return u.pathname + (u.search ? u.search : "") + (u.hash ? u.hash : "");
+  } catch {
+    // fallback simple
+    if (path.includes("lang=")) return path;
+    return path.includes("?") ? `${path}&lang=${encodeURIComponent(lang)}` : `${path}?lang=${encodeURIComponent(lang)}`;
+  }
 }
 
 async function apiBootstrap(accessToken: string) {
@@ -29,13 +48,39 @@ async function apiBootstrap(accessToken: string) {
 export default function AuthCallback() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
 
-  const [status, setStatus] = useState("Procesando autenticación...");
+  const lang = useMemo(() => {
+    const qp = new URLSearchParams(location.search);
+    return sanitizeLang(qp.get("lang") || "");
+  }, [location.search]);
 
   const next = useMemo(() => {
-    const n = new URLSearchParams(location.search).get("next") || "/inicio";
+    const qp = new URLSearchParams(location.search);
+    const n = qp.get("next") || "/inicio";
     return safeNextPath(n);
   }, [location.search]);
+
+  const [status, setStatus] = useState<string>("");
+
+  // 0) Aplicar idioma lo antes posible (para que esta página y el login salgan en el idioma correcto)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (i18n?.resolvedLanguage !== lang) {
+          await i18n.changeLanguage(lang);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setStatus(t("auth.processing", { defaultValue: "Processing authentication…" }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [i18n, lang, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +107,7 @@ export default function AuthCallback() {
             throw new Error("missing_access_token_or_refresh_token");
           }
 
-          setStatus("Creando sesión en Supabase...");
+          setStatus(t("auth.processing", { defaultValue: "Processing authentication…" }));
           const { data, error } = await supabase.auth.setSession({
             access_token,
             refresh_token,
@@ -77,7 +122,7 @@ export default function AuthCallback() {
         setMemoryAccessToken(accessToken);
 
         // 4) Bootstrap cookie tg_at para tu backend
-        setStatus("Inicializando cookie de sesión (bootstrap)...");
+        setStatus(t("auth.processing", { defaultValue: "Processing authentication…" }));
         await apiBootstrap(accessToken);
 
         // 5) Limpiar hash para que no quede el token en la URL
@@ -90,15 +135,18 @@ export default function AuthCallback() {
         // 6) Redirección final:
         //    - Si es recovery => forzar /reset-password (UpdatePassword)
         //    - Caso normal => next
-        const target = hashType === "recovery" ? "/reset-password" : next;
+        const targetBase = hashType === "recovery" ? "/reset-password" : next;
+        const target = ensureLangInUrlPath(targetBase, lang);
 
-        setStatus("Listo. Entrando...");
+        setStatus(t("auth.processing", { defaultValue: "Processing authentication…" }));
         if (!cancelled) navigate(target, { replace: true });
       } catch (e: any) {
         const msg = e?.message || "auth_failed";
         if (!cancelled) {
+          // Mantén lang también en login y next
+          const loginNext = ensureLangInUrlPath(next, lang);
           navigate(
-            `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`,
+            `/login?lang=${encodeURIComponent(lang)}&next=${encodeURIComponent(loginNext)}&err=${encodeURIComponent(msg)}`,
             { replace: true }
           );
         }
@@ -109,13 +157,15 @@ export default function AuthCallback() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, next]);
+  }, [navigate, next, lang, t]);
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold text-gray-900">Auth</h1>
-        <p className="mt-3 text-sm text-gray-700">{status}</p>
+        <h1 className="text-xl font-semibold text-gray-900">{t("auth.processing", { defaultValue: "Auth" })}</h1>
+        <p className="mt-3 text-sm text-gray-700">
+          {status || t("auth.processing", { defaultValue: "Processing authentication…" })}
+        </p>
       </div>
     </div>
   );
