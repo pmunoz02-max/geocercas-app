@@ -10,6 +10,23 @@ const OUT_DIR = path.join(SRC_DIR, "i18n", "_audit_en_fr");
 const EN_PATH = path.join(SRC_DIR, "i18n", "en.json");
 const FR_PATH = path.join(SRC_DIR, "i18n", "fr.json");
 
+// ✅ Valores que pueden ser iguales EN↔FR y NO deben contarse como issue
+// (términos "internacionales" o abreviaturas UI aceptables)
+const SAME_OK = new Set([
+  "date",
+  "description",
+  "actions",
+  "dimension",
+  "note",
+  "lat",
+  "lng",
+  "pts",
+  "instructions",
+  "contact / support",
+  "app geocercas",
+  "(login-v31 no-js)"
+]);
+
 function readJson(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
@@ -26,7 +43,12 @@ function isObject(v) {
 function flattenKeys(obj, prefix = "") {
   const out = [];
 
-  if (typeof obj === "string" || typeof obj === "number" || typeof obj === "boolean" || obj == null) {
+  if (
+    typeof obj === "string" ||
+    typeof obj === "number" ||
+    typeof obj === "boolean" ||
+    obj == null
+  ) {
     if (prefix) out.push(prefix);
     return out;
   }
@@ -72,13 +94,31 @@ function getByPath(obj, dotted) {
   return cur;
 }
 
+function normalizeLite(s) {
+  return String(s ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function isSameOk(enText, frText) {
+  // Si ambos son iguales (sin case/espacios) y están en whitelist, no es issue.
+  const a = normalizeLite(enText);
+  const b = normalizeLite(frText);
+  if (!a || a !== b) return false;
+  return SAME_OK.has(a);
+}
+
 function scanIssues(enObj, frObj) {
   const keys = flattenKeys(enObj).sort();
   const issues = [];
 
   const frenchChars = /[àâçéèêëîïôùûüÿœæ]/i;
   const spanishChars = /[¿¡ñáéíóúü]/i;
-  const placeholder = /@ejemplo\.com|tucorreo@|tracker@ejemplo\.com/i;
+
+  // ⚠️ placeholders / dominios “malos” a detectar
+  const placeholderBad = /@ejemplo\.com|tucorreo@|tracker@ejemplo\.com/i;
+  const exampleBad = /@example\.com/i; // EN → queremos @exemple.com en FR
 
   const englishHints = [
     "go to",
@@ -106,8 +146,21 @@ function scanIssues(enObj, frObj) {
     const val = frVal.trim();
     const enText = typeof enVal === "string" ? enVal.trim() : "";
 
+    // ✅ detecta placeholders/dominios primero (aunque sean "same_as_en")
+    if (placeholderBad.test(val)) {
+      issues.push({ key: k, type: "placeholder_email", sample: val });
+      continue;
+    }
+    if (exampleBad.test(val)) {
+      issues.push({ key: k, type: "placeholder_email", sample: val });
+      continue;
+    }
+
+    // ✅ same_as_en pero permitido
     if (enText && val === enText) {
-      issues.push({ key: k, type: "same_as_en", sample: val });
+      if (!isSameOk(enText, val)) {
+        issues.push({ key: k, type: "same_as_en", sample: val });
+      }
       continue;
     }
 
@@ -122,10 +175,6 @@ function scanIssues(enObj, frObj) {
     if (spanishChars.test(val) && !frenchChars.test(val)) {
       issues.push({ key: k, type: "looks_spanish", sample: val });
       continue;
-    }
-
-    if (placeholder.test(val)) {
-      issues.push({ key: k, type: "placeholder_email", sample: val });
     }
   }
 
