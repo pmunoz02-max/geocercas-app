@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { useAuthSafe } from "../context/AuthContext.jsx";
 
@@ -8,7 +9,7 @@ function normalizeEmail(v) {
 }
 
 // Heurística para mostrar nombre si existe
-function pickLabel(row) {
+function pickLabel(row, t) {
   const email = row?.email || row?.person_email || row?.user_email || "";
   const name =
     row?.full_name ||
@@ -17,13 +18,15 @@ function pickLabel(row) {
     row?.person_name ||
     row?.user_name ||
     "";
+
   if (name && email) return `${name} — ${email}`;
-  return email || name || "(sin datos)";
+  return email || name || t("common.noData");
 }
 
 export default function InvitarTracker() {
   const navigate = useNavigate();
   const auth = useAuthSafe();
+  const { t } = useTranslation();
 
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
@@ -74,13 +77,12 @@ export default function InvitarTracker() {
       if (!orgId) {
         setPeople([]);
         setLoadingPeople(false);
-        setErrMsg("No hay organización activa. Ve a /inicio y selecciona tu organización.");
+        setErrMsg(t("inviteTracker.errors.noActiveOrg"));
         return;
       }
 
       try {
         // ✅ Vista que ya existe según tu lista: v_org_people_ui_all
-        // Intentamos traer campos comunes; si tu view tiene otros, ajustamos.
         const { data, error } = await supabase
           .from("v_org_people_ui_all")
           .select("*")
@@ -88,18 +90,17 @@ export default function InvitarTracker() {
           .limit(500);
 
         if (cancelled) return;
-
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
         // Normalizamos sort por email/nombre para un droplist estable
-        rows.sort((a, b) => pickLabel(a).localeCompare(pickLabel(b)));
+        rows.sort((a, b) => pickLabel(a, t).localeCompare(pickLabel(b, t)));
         setPeople(rows);
 
-        // Si el user ya escribió algo, revalidamos
+        // Si el user ya escribió algo, revalidamos (sin borrar)
         const current = normalizeEmail(emailInput);
         if (current && !allowedEmails.has(current)) {
-          // no borramos, solo advertimos en UI al enviar
+          // no-op
         }
       } catch (e) {
         if (cancelled) return;
@@ -131,18 +132,18 @@ export default function InvitarTracker() {
     const cleanEmail = normalizeEmail(emailInput);
 
     if (!orgId) {
-      setErrMsg("No hay organización activa. Ve a /inicio y selecciona tu organización.");
+      setErrMsg(t("inviteTracker.errors.noActiveOrg"));
       return;
     }
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setErrMsg("Selecciona un email válido del droplist.");
+      setErrMsg(t("inviteTracker.errors.invalidEmailFromList"));
       return;
     }
 
     // ✅ REGLA: solo miembros existentes
     if (!allowedEmails.has(cleanEmail)) {
-      setErrMsg("Ese email no está registrado en esta organización. Primero regístralo en Personal.");
+      setErrMsg(t("inviteTracker.errors.emailNotInOrgRegisterInPersonnel"));
       return;
     }
 
@@ -170,7 +171,7 @@ export default function InvitarTracker() {
 
       if (!res.ok) {
         const msg = body?.error || body?.message || body?.raw || `HTTP ${res.status}`;
-        setErrMsg(`Error invitaciones (${res.status}): ${msg}`);
+        setErrMsg(t("inviteTracker.errors.inviteHttpError", { status: res.status, msg }));
         return;
       }
 
@@ -179,16 +180,21 @@ export default function InvitarTracker() {
         const upstreamStatus = body?.upstream_status || "?";
         const upstreamMsg =
           body?.upstream?.error || body?.error || body?.message || "UPSTREAM_ERROR";
-        setErrMsg(`Error invitaciones (${upstreamStatus}): ${upstreamMsg}`);
+        setErrMsg(
+          t("inviteTracker.errors.inviteUpstreamError", {
+            status: upstreamStatus,
+            msg: upstreamMsg,
+          })
+        );
         return;
       }
 
       const actionLink = body?.action_link || "";
       const emailSent = body?.email_sent;
 
-      let msg = `✅ Invitación generada para ${cleanEmail}.`;
-      if (emailSent === true) msg += " Correo enviado.";
-      if (emailSent === false && actionLink) msg += " Si no llega, usa el enlace de respaldo.";
+      let msg = t("inviteTracker.success.inviteGenerated", { email: cleanEmail });
+      if (emailSent === true) msg += " " + t("inviteTracker.success.emailSent");
+      if (emailSent === false && actionLink) msg += " " + t("inviteTracker.success.useBackupLink");
 
       setOkMsg({ msg, actionLink, diag: body?.diag || null });
     } catch (e2) {
@@ -202,22 +208,27 @@ export default function InvitarTracker() {
     <div className="min-h-[70vh] flex items-center justify-center p-6">
       <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold text-gray-900">Invitar Tracker</h1>
+          <h1 className="text-xl font-semibold text-gray-900">{t("inviteTracker.title")}</h1>
           <button
             type="button"
             onClick={() => navigate("/tracker")}
             className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
           >
-            Volver a Tracker
+            {t("inviteTracker.backToTracker")}
           </button>
         </div>
 
         {/* Diagnóstico */}
         <div className="mt-4 rounded-xl border bg-slate-50 p-3 text-xs text-slate-700">
-          <div><b>Org usada:</b> {who.org_id || "—"}</div>
-          <div><b>Usuario:</b> {who.email || "—"} ({who.user_id || "—"})</div>
+          <div>
+            <b>{t("inviteTracker.diag.orgUsed")}:</b> {who.org_id || "—"}
+          </div>
+          <div>
+            <b>{t("inviteTracker.diag.user")}:</b> {who.email || "—"} ({who.user_id || "—"})
+          </div>
           <div className="mt-1">
-            <b>Miembros cargados:</b> {loadingPeople ? "cargando…" : String(people.length)}
+            <b>{t("inviteTracker.diag.membersLoaded")}:</b>{" "}
+            {loadingPeople ? t("common.loading") : String(people.length)}
           </div>
         </div>
 
@@ -232,7 +243,7 @@ export default function InvitarTracker() {
             <div>{okMsg.msg}</div>
             {okMsg.actionLink ? (
               <div className="mt-2 text-xs text-slate-700">
-                <div className="font-semibold">Magic Link (respaldo):</div>
+                <div className="font-semibold">{t("inviteTracker.magicLinkBackupTitle")}:</div>
                 <div className="mt-1 break-all rounded-lg border bg-white p-2">
                   {okMsg.actionLink}
                 </div>
@@ -245,7 +256,7 @@ export default function InvitarTracker() {
           {/* Droplist de miembros de org */}
           <div>
             <label className="block text-sm font-medium text-gray-900">
-              Selecciona persona (solo miembros de la org)
+              {t("inviteTracker.selectPersonLabel")}
             </label>
 
             <select
@@ -262,32 +273,33 @@ export default function InvitarTracker() {
             >
               <option value="">
                 {loadingPeople
-                  ? "Cargando miembros…"
+                  ? t("inviteTracker.select.loadingMembers")
                   : people.length === 0
-                  ? "No hay miembros en esta org"
-                  : "— Selecciona —"}
+                  ? t("inviteTracker.select.noMembersInOrg")
+                  : t("common.select")}
               </option>
 
               {people.map((p, idx) => {
-                const email =
-                  normalizeEmail(p?.email || p?.person_email || p?.user_email || "");
+                const email = normalizeEmail(p?.email || p?.person_email || p?.user_email || "");
                 if (!email) return null;
                 return (
                   <option key={`${email}-${idx}`} value={email}>
-                    {pickLabel(p)}
+                    {pickLabel(p, t)}
                   </option>
                 );
               })}
             </select>
 
             <p className="mt-2 text-xs text-slate-600">
-              Solo podrás invitar emails que existan en esta lista. Para agregar más, regístralos en <b>Personal</b>.
+              {t("inviteTracker.onlyExistingNote")} <b>{t("app.tabs.personal")}</b>.
             </p>
           </div>
 
-          {/* Campo email (solo lectura efectiva; permite pegar pero valida pertenencia) */}
+          {/* Campo email */}
           <div>
-            <label className="block text-sm font-medium text-gray-900">Email del tracker</label>
+            <label className="block text-sm font-medium text-gray-900">
+              {t("inviteTracker.emailLabel")}
+            </label>
             <input
               className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring bg-white text-gray-900"
               type="email"
@@ -297,7 +309,7 @@ export default function InvitarTracker() {
                 setOkMsg(null);
                 setErrMsg(null);
               }}
-              placeholder="Selecciona desde el droplist"
+              placeholder={t("inviteTracker.emailPlaceholder")}
             />
           </div>
 
@@ -306,7 +318,7 @@ export default function InvitarTracker() {
             disabled={busy || loadingPeople}
             className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-60"
           >
-            {busy ? "Enviando..." : "Enviar invitación"}
+            {busy ? t("common.sending") : t("inviteTracker.sendInvite")}
           </button>
         </form>
       </div>
