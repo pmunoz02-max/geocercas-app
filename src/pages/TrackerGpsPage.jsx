@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
+
+// ✅ USAR EL MISMO CLIENTE QUE AuthCallback (mismo proyecto Supabase)
+import { supabase } from "../lib/supabaseClient";
+
+// (Opcional) Si tienes tracker separado, lo dejamos como fallback sin romper nada
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
@@ -38,14 +43,6 @@ function looksLikeJwt(token) {
   return t.split(".").length === 3;
 }
 
-function readSbTrackerAuthRaw() {
-  try {
-    return localStorage.getItem("sb-tracker-auth");
-  } catch {
-    return "localStorage_error";
-  }
-}
-
 function parseHashTokens(hash) {
   const h = String(hash || "");
   const hp = new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
@@ -73,13 +70,11 @@ export default function TrackerGpsPage() {
   const [trackerReady, setTrackerReady] = useState(true);
   const [orgId, setOrgId] = useState(null);
 
-  const [membershipStatus, setMembershipStatus] = useState("pending"); // pending | ok | failed | skipped
+  const [membershipStatus, setMembershipStatus] = useState("pending"); // pending | ok | failed
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
 
   const [debug, setDebug] = useState({
-    sb_tracker_auth_present: null,
-    sb_tracker_auth_len: null,
     session_exists: null,
     token_looks_jwt: null,
     token_iss: "",
@@ -87,6 +82,8 @@ export default function TrackerGpsPage() {
     org_source: "none",
     router_search: "",
     path_orgId: "",
+    client_used: "supabase",
+    supabase_url: "",
   });
 
   const watchIdRef = useRef(null);
@@ -97,34 +94,67 @@ export default function TrackerGpsPage() {
   const onboardingLockRef = useRef(false);
   const didHashSessionRef = useRef(false);
 
+  // ✅ Preferimos el Supabase principal (mismo que AuthCallback)
+  // Si por alguna razón quieres tracker separado, lo dejamos como fallback opcional.
+  const PRIMARY = supabase;
+  const FALLBACK = supabaseTracker || null;
+
+  // ✅ URLs/keys: si existen las de tracker, las usamos para llamar funciones; si no, usamos las normales
+  const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+  const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+
   const TRACKER_URL = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
   const TRACKER_ANON = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
 
+  // ✅ En la práctica, para que el flujo funcione SIEMPRE con magic link del proyecto principal:
+  // - Session se lee del PRIMARY (supabase)
+  // - Las llamadas a functions pueden ir al mismo proyecto (recomendado)
+  // Si tienes functions en otro proyecto, pon TRACKER_URL/TRACKER_ANON y funcionará igual.
+  const API_URL = (TRACKER_URL || SUPABASE_URL || "").replace(/\/$/, "");
+  const API_ANON = (TRACKER_ANON || SUPABASE_ANON || "").trim();
+
   const acceptUrl = useMemo(() => {
-    if (!TRACKER_URL) return null;
-    const base = `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`;
+    if (!API_URL) return null;
+    const base = `${API_URL}/functions/v1/accept-tracker-invite`;
     if (orgId && isUuid(orgId)) return `${base}?org_id=${encodeURIComponent(orgId)}`;
     return base;
-  }, [TRACKER_URL, orgId]);
+  }, [API_URL, orgId]);
 
   const sendUrl = useMemo(() => {
-    if (!TRACKER_URL) return null;
-    return `${TRACKER_URL.replace(/\/$/, "")}/functions/v1/send_position`;
-  }, [TRACKER_URL]);
+    if (!API_URL) return null;
+    return `${API_URL}/functions/v1/send_position`;
+  }, [API_URL]);
 
   // 0) Config
   useEffect(() => {
-    if (!supabaseTracker || !TRACKER_URL || !TRACKER_ANON) {
+    setDebug((d) => ({
+      ...d,
+      supabase_url: API_URL || "",
+    }));
+
+    // Requisito mínimo: tener URL/ANON para functions y tener supabase client
+    if (!PRIMARY) {
       setTrackerReady(false);
       setHasSession(false);
       setStatus("Tracker no configurado en este deployment.");
-      setLastError("Faltan variables VITE_SUPABASE_TRACKER_URL / VITE_SUPABASE_TRACKER_ANON_KEY en Vercel (Preview).");
+      setLastError("No existe supabase client principal.");
       return;
     }
-    setTrackerReady(true);
-  }, [TRACKER_URL, TRACKER_ANON]);
 
-  // 0.2) Org: PRIORIDAD PATH, luego query
+    if (!API_URL || !API_ANON) {
+      setTrackerReady(false);
+      setHasSession(false);
+      setStatus("Tracker no configurado en este deployment.");
+      setLastError(
+        "Faltan variables. Debe existir VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY (o VITE_SUPABASE_TRACKER_URL/VITE_SUPABASE_TRACKER_ANON_KEY)."
+      );
+      return;
+    }
+
+    setTrackerReady(true);
+  }, [API_URL, API_ANON, PRIMARY]);
+
+  // 0.2) Org: PATH (si existe) luego query
   useEffect(() => {
     const pOrg = String(params?.orgId || "").trim();
     const qOrg = pickOrgIdFromSearch(location?.search || "");
@@ -147,13 +177,13 @@ export default function TrackerGpsPage() {
     setOrgId(null);
     setMembershipStatus("failed");
     setMembershipDetail(
-      "Falta org_id en la URL. Abre esta página desde el link de invitación: /tracker-gps/<ORG_ID> (recomendado) o /tracker-gps?org_id=<ORG_ID>"
+      "Falta org_id en la URL. Abre esta página desde el link de invitación: /tracker-gps?org_id=<ORG_ID>."
     );
   }, [location?.search, params?.orgId]);
 
-  // 0.3) Si viene magic link con tokens en HASH, crear sesión aquí (sin callback)
+  // 0.3) Si viene magic link con tokens en HASH, crear sesión en PRIMARY (supabase)
   useEffect(() => {
-    if (!trackerReady || !supabaseTracker) return;
+    if (!trackerReady || !PRIMARY) return;
     if (didHashSessionRef.current) return;
 
     const { access_token, refresh_token } = parseHashTokens(window.location.hash);
@@ -165,20 +195,18 @@ export default function TrackerGpsPage() {
       try {
         setStatus("Procesando Magic Link del Tracker…");
 
-        const { error } = await supabaseTracker.auth.setSession({ access_token, refresh_token });
+        const { error } = await PRIMARY.auth.setSession({ access_token, refresh_token });
         if (error) {
           setLastError(`setSession error: ${error.message}`);
           return;
         }
 
-        // Esperar a que persista
         for (let i = 0; i < 10; i++) {
-          const { data } = await supabaseTracker.auth.getSession();
+          const { data } = await PRIMARY.auth.getSession();
           if (data?.session?.access_token && looksLikeJwt(data.session.access_token)) break;
           await sleep(200);
         }
 
-        // Limpia hash
         window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
 
         setLastError(null);
@@ -187,11 +215,11 @@ export default function TrackerGpsPage() {
         setLastError(`hash session error: ${String(e?.message || e)}`);
       }
     })();
-  }, [trackerReady]);
+  }, [trackerReady, PRIMARY]);
 
-  // 1) Sesión
+  // 1) Sesión (PRIMARY)
   useEffect(() => {
-    if (!trackerReady || !supabaseTracker) return;
+    if (!trackerReady || !PRIMARY) return;
 
     let cancelled = false;
 
@@ -202,27 +230,17 @@ export default function TrackerGpsPage() {
         token_looks_jwt: looksLikeJwt(token),
         token_iss: payload?.iss ? String(payload.iss) : "",
         token_sub: payload?.sub ? String(payload.sub) : "",
+        client_used: "supabase",
       }));
       setTokenIss(payload?.iss ? String(payload.iss) : "");
     };
-
-    const refreshStorageDebug = () => {
-      const raw = readSbTrackerAuthRaw();
-      setDebug((d) => ({
-        ...d,
-        sb_tracker_auth_present: raw != null && raw !== "localStorage_error",
-        sb_tracker_auth_len: raw && typeof raw === "string" ? raw.length : 0,
-      }));
-    };
-
-    refreshStorageDebug();
 
     (async () => {
       setStatus("Leyendo sesión del tracker…");
 
       let session = null;
       for (let i = 0; i < 10; i++) {
-        const { data } = await supabaseTracker.auth.getSession();
+        const { data } = await PRIMARY.auth.getSession();
         session = data?.session ?? null;
         if (session?.access_token) break;
         await sleep(150);
@@ -247,8 +265,7 @@ export default function TrackerGpsPage() {
       setLastError(null);
     })();
 
-    const { data: sub } = supabaseTracker.auth.onAuthStateChange((_event, session) => {
-      refreshStorageDebug();
+    const { data: sub } = PRIMARY.auth.onAuthStateChange((_event, session) => {
       const tokenB = session?.access_token || "";
       setDebug((d) => ({ ...d, session_exists: !!session }));
       updateDebugFromToken(tokenB);
@@ -266,11 +283,11 @@ export default function TrackerGpsPage() {
       cancelled = true;
       try { unsub?.unsubscribe?.(); } catch {}
     };
-  }, [trackerReady]);
+  }, [trackerReady, PRIMARY]);
 
-  // 1.5) Onboarding robusto
+  // 1.5) Onboarding: validar membership (en DB del PRIMARY) y si falta, ejecutar accept-tracker-invite
   useEffect(() => {
-    if (!trackerReady || !hasSession || !supabaseTracker) return;
+    if (!trackerReady || !hasSession || !PRIMARY) return;
     if (!orgId || !isUuid(orgId)) return;
 
     if (!acceptUrl) {
@@ -287,7 +304,7 @@ export default function TrackerGpsPage() {
         setMembershipStatus("pending");
         setMembershipDetail("Verificando membership…");
 
-        const { data: sData } = await supabaseTracker.auth.getSession();
+        const { data: sData } = await PRIMARY.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
         const userId = sData?.session?.user?.id || "";
 
@@ -306,8 +323,8 @@ export default function TrackerGpsPage() {
           }
         } catch {}
 
-        // 1) membership directa
-        const { data: mRows, error: mErr } = await supabaseTracker
+        // 1) membership directa (en el mismo proyecto donde está memberships)
+        const { data: mRows, error: mErr } = await PRIMARY
           .from("memberships")
           .select("role, revoked_at, org_id, user_id")
           .eq("org_id", orgId)
@@ -328,15 +345,15 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        // 2) accept
+        // 2) accept-tracker-invite (edge function)
         setMembershipDetail("No hay membership. Ejecutando accept-tracker-invite…");
 
         const resp = await fetch(acceptUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            apikey: TRACKER_ANON,
-            "x-api-key": TRACKER_ANON,
+            apikey: API_ANON,
+            "x-api-key": API_ANON,
             Authorization: `Bearer ${tokenB}`,
           },
           body: JSON.stringify({ org_id: orgId }),
@@ -350,8 +367,23 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        setMembershipStatus("ok");
-        setMembershipDetail(`accept-tracker-invite OK: ${text || "ok"}`);
+        // Re-chequeo rápido (opcional pero robusto)
+        const { data: m2Rows } = await PRIMARY
+          .from("memberships")
+          .select("role, revoked_at")
+          .eq("org_id", orgId)
+          .eq("user_id", userId)
+          .limit(1);
+
+        const m2 = (m2Rows || [])[0];
+        if (m2 && !m2.revoked_at) {
+          setMembershipStatus("ok");
+          setMembershipDetail(`accept-tracker-invite OK. role=${m2.role}`);
+        } else {
+          setMembershipStatus("ok");
+          setMembershipDetail(`accept-tracker-invite OK: ${text || "ok"}`);
+        }
+
         try { sessionStorage.setItem(ssKey, "1"); } catch {}
       } catch (e) {
         setMembershipStatus("failed");
@@ -360,7 +392,7 @@ export default function TrackerGpsPage() {
         onboardingLockRef.current = false;
       }
     })();
-  }, [trackerReady, hasSession, acceptUrl, TRACKER_ANON, orgId]);
+  }, [trackerReady, hasSession, acceptUrl, API_ANON, orgId, PRIMARY]);
 
   // 2) GPS
   useEffect(() => {
@@ -377,14 +409,17 @@ export default function TrackerGpsPage() {
     const handleSuccess = (pos) => {
       if (cancelled) return;
 
-      const c = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null };
+      const c = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy ?? null,
+      };
       lastCoordsRef.current = c;
       setCoords(c);
 
       if (membershipStatus === "ok") setStatus("Tracker activo");
       else if (membershipStatus === "pending") setStatus("Activando Tracker en la org…");
-      else if (membershipStatus === "failed") setStatus("Tracker sin permiso / sin onboarding");
-      else setStatus("Tracker activo");
+      else setStatus("Tracker sin permiso / sin onboarding");
     };
 
     const handleError = (err) => {
@@ -423,7 +458,7 @@ export default function TrackerGpsPage() {
       isSendingRef.current = true;
 
       try {
-        const { data: sData } = await supabaseTracker.auth.getSession();
+        const { data: sData } = await PRIMARY.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
 
         if (!tokenB || !looksLikeJwt(tokenB)) {
@@ -444,8 +479,8 @@ export default function TrackerGpsPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            apikey: TRACKER_ANON,
-            "x-api-key": TRACKER_ANON,
+            apikey: API_ANON,
+            "x-api-key": API_ANON,
             Authorization: `Bearer ${tokenB}`,
           },
           body: JSON.stringify(payload),
@@ -471,7 +506,7 @@ export default function TrackerGpsPage() {
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [trackerReady, hasSession, sendUrl, TRACKER_ANON, orgId, membershipStatus]);
+  }, [trackerReady, hasSession, sendUrl, API_ANON, orgId, membershipStatus, PRIMARY]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
@@ -488,7 +523,9 @@ export default function TrackerGpsPage() {
               <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
 
-              {tokenIss ? <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div> : null}
+              {tokenIss ? (
+                <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div>
+              ) : null}
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
@@ -502,14 +539,7 @@ export default function TrackerGpsPage() {
             <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
               <summary className="cursor-pointer text-sm text-slate-200">Debug (copiar/pegar)</summary>
               <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">
-{JSON.stringify(
-  {
-    ...debug,
-    sb_tracker_auth_sample: (readSbTrackerAuthRaw() || "").slice(0, 120),
-  },
-  null,
-  2
-)}
+{JSON.stringify(debug, null, 2)}
               </pre>
             </details>
 
