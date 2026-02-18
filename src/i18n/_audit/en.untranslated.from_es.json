@@ -1,0 +1,128 @@
+[
+  {
+    "key": "actividades.currencies.EUR",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Euro"
+  },
+  {
+    "key": "app.header.roleTracker",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Tracker"
+  },
+  {
+    "key": "app.tabs.tracker",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Tracker"
+  },
+  {
+    "key": "app.title",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "App Geocercas"
+  },
+  {
+    "key": "asignaciones.table.frequency",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Freq (min)"
+  },
+  {
+    "key": "common.actions.no",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "No"
+  },
+  {
+    "key": "common.roles.root",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "ROOT"
+  },
+  {
+    "key": "home.labels.email",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Email:"
+  },
+  {
+    "key": "inicio.cards.videoDemo.badge",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Video"
+  },
+  {
+    "key": "inicio.cards.videoDemo.title",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Video demo"
+  },
+  {
+    "key": "landing.brandName",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "App Geocercas"
+  },
+  {
+    "key": "personal.no",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "No"
+  },
+  {
+    "key": "personal.pillCanEdit",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Editable"
+  },
+  {
+    "key": "reportes.errorLabel",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Error:"
+  },
+  {
+    "key": "trackerDashboard.filters.trackerLabel",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Tracker"
+  },
+  {
+    "key": "trackerDashboard.legend.points",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "pts"
+  },
+  {
+    "key": "trackerDashboard.popup.no",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "No"
+  },
+  {
+    "key": "trackerDashboard.popup.tracker",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "en",
+    "sample": "Tracker"
+  }
+]

@@ -8,5 +8,24 @@
   "help.instructions.steps.5.title",
   "help.instructions.resultBullets.4",
   "help.faq.sections.1.items.0.q",
-  "help.faq.sections.1.items.2.a"
+  "help.faq.sections.1.items.2.a",
+  "login.emailPlaceholder",
+  "login.emailLabel",
+
+  "actividades.fieldDescription",
+  "actividades.thActions",
+  "actividades.thDescription",
+  "admins.table.actions",
+  "app.brand",
+  "asignaciones.table.actions",
+  "dashboardCostos.chartDimension",
+  "dashboardCostos.colFecha",
+  "dashboardCostos.dimensionFecha",
+  "forgot.noteTitle",
+  "geocercas.lat",
+  "geocercas.lng",
+  "geocercas.pointsLabel",
+  "inicio.cards.instrucciones.title",
+  "inicio.cards.soporte.title",
+  "login.badge"
 ]

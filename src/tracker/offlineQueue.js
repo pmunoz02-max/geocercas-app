@@ -1,19 +1,23 @@
 // src/tracker/offlineQueue.js
 // Cola minimalista en IndexedDB para posiciones de tracker.
-// No dependencias externas.
+// CANÓNICO: tracker_positions
 
 const DB_NAME = "tracker-offline-db";
-const STORE = "positions";
-const DB_VERSION = 1;
+const STORE = "tracker_positions";
+const DB_VERSION = 2; // ↑ subimos versión para crear nuevo STORE
 
 function openDb() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
+
       if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
-        store.createIndex("by_ts", "created_at");
+        const store = db.createObjectStore(STORE, {
+          keyPath: "id",
+          autoIncrement: true,
+        });
+        store.createIndex("by_created_at", "created_at");
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -35,7 +39,6 @@ async function withStore(mode, fn) {
 
 // Guarda una posición (si estás offline o si el insert falló)
 export async function enqueuePosition(pos) {
-  // pos: { tracker_id, org_id, geofence_id?, lat, lng, accuracy?, speed?, heading?, battery?, provider?, created_at? }
   const payload = {
     ...pos,
     created_at: pos.created_at || new Date().toISOString(),
@@ -49,7 +52,7 @@ export async function enqueuePosition(pos) {
 export async function peekBatch(limit = 100) {
   const items = [];
   return withStore("readonly", (store) => {
-    const idx = store.index("by_ts");
+    const idx = store.index("by_created_at");
     const req = idx.openCursor();
     req.onsuccess = () => {
       const cur = req.result;
@@ -72,7 +75,11 @@ export async function removeByIds(ids) {
 export async function updateRetry(items, lastError) {
   return withStore("readwrite", (store) => {
     items.forEach((it) => {
-      const next = { ...it, _retries: (it._retries || 0) + 1, _lastError: lastError || "unknown" };
+      const next = {
+        ...it,
+        _retries: (it._retries || 0) + 1,
+        _lastError: lastError || "unknown",
+      };
       store.put(next);
     });
     return null;

@@ -1,0 +1,12 @@
+{
+  "app": {
+    "tabs": {
+      "geocercas": "Geocercas"
+    }
+  },
+  "common": {
+    "createOrganization": "Crear organización",
+    "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
+    "refreshContext": "Refrescar contexto"
+  }
+}

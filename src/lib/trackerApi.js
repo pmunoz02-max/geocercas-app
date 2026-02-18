@@ -1,13 +1,36 @@
 // src/lib/trackerApi.js
-// API unificada para tracking:
+// API unificada para tracking (CANÓNICO: tracker_positions)
 // - listTrackers: lista usuarios trackers del tenant
 // - getSessionUser: obtiene usuario actual
 // - upsertPositionCompat: envía posición al Edge Function send_position
-// - suscribirsePosiciones: snapshot + realtime + polling sobre la tabla positions
+// - suscribirsePosiciones: snapshot + realtime + polling sobre tracker_positions
+// - fetchLatest / subscribeLatest: helpers usados por useRealtimePositions
 
 import { supabase, getMemoryAccessToken } from "../lib/supabaseClient";
 
-const EDGE_URL = import.meta.env.VITE_EDGE_SEND_POSITION;
+// ✅ Tabla canónica única
+const POSITIONS_TABLE = "tracker_positions";
+
+// EDGE_URL puede venir como:
+// - URL completa a la function (recomendado): https://...supabase.co/functions/v1/send_position
+// - o base supabase url: https://...supabase.co  (se completa automáticamente)
+// - o vacío: intenta VITE_SUPABASE_FUNCTIONS_URL + /functions/v1/send_position
+const RAW_EDGE_URL =
+  import.meta.env.VITE_EDGE_SEND_POSITION ||
+  import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ||
+  "";
+
+function buildEdgeUrl(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  // si ya apunta a functions/v1, lo dejamos
+  if (s.includes("/functions/v1/")) return s;
+  // si termina en /, quitamos
+  const base = s.replace(/\/+$/, "");
+  return `${base}/functions/v1/send_position`;
+}
+
+const EDGE_URL = buildEdgeUrl(RAW_EDGE_URL);
 
 // ===================== Helpers de Auth =====================
 
@@ -38,10 +61,10 @@ async function getSessionAccessToken() {
 
 /**
  * upsertPositionCompat
- * Enviar posición al Edge Function send_position.
+ * Enviar posición al Edge Function send_position (server-owned):
  * payload:
- *  - orgId
- *  - userId
+ *  - orgId (opcional; server lo ignora y resuelve org canónica)
+ *  - userId (opcional; server usa el user del JWT)
  *  - personalId (opcional)
  *  - lat, lng
  *  - accuracy, speed, heading, battery (opcionales)
@@ -50,7 +73,7 @@ async function getSessionAccessToken() {
 export async function upsertPositionCompat(payload) {
   if (!EDGE_URL) {
     throw new Error(
-      "EDGE_URL no configurado (VITE_EDGE_SEND_POSITION). Revisa tu .env.local"
+      "EDGE_URL no configurado (VITE_EDGE_SEND_POSITION o VITE_SUPABASE_FUNCTIONS_URL). Revisa tu .env.local"
     );
   }
 
@@ -70,15 +93,12 @@ export async function upsertPositionCompat(payload) {
   if (typeof lat !== "number" || typeof lng !== "number") {
     throw new Error("Lat/Lng inválidos en upsertPositionCompat");
   }
-  if (!orgId) {
-    console.warn("[trackerApi] upsertPositionCompat sin orgId");
-  }
 
   const token = await getSessionAccessToken();
 
   const body = {
-    org_id: orgId || null,
-    user_id: userId || null,
+    org_id: orgId || null, // server-owned (ignorado)
+    user_id: userId || null, // server-owned (ignorado)
     personal_id: personalId || null,
     lat,
     lng,
@@ -143,7 +163,7 @@ export async function listTrackers() {
   return data || [];
 }
 
-// ===================== Suscripción a posiciones =====================
+// ===================== Suscripción a posiciones (CANÓNICO) =====================
 
 /**
  * suscribirsePosiciones(callback, options)
@@ -180,7 +200,7 @@ export function suscribirsePosiciones(callback, options = {}) {
       const since = new Date(
         Date.now() - f.sinceMinutes * 60 * 1000
       ).toISOString();
-      query = query.gte("ts", since);
+      query = query.gte("recorded_at", since);
     }
     return query;
   };
@@ -188,26 +208,29 @@ export function suscribirsePosiciones(callback, options = {}) {
   async function loadSnapshot(isPoll = false) {
     try {
       let query = supabase
-        .from("positions")
+        .from(POSITIONS_TABLE)
         .select(
-          "id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, ts, created_at"
+          "id, org_id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at"
         )
-        .order("ts", { ascending: false })
-        .limit(200);
+        .order("recorded_at", { ascending: false })
+        .limit(500);
 
       query = applyFilters(query);
 
       const { data, error } = await query;
       if (error) throw error;
 
-      // Última posición por personal_id
+      // Última posición por personal_id (o user_id como fallback)
       const map = new Map();
       for (const row of data || []) {
         const key = row.personal_id || row.user_id || row.id;
         if (!map.has(key)) map.set(key, row);
       }
 
-      callback({ type: isPoll ? "poll" : "snapshot", rows: Array.from(map.values()) });
+      callback({
+        type: isPoll ? "poll" : "snapshot",
+        rows: Array.from(map.values()),
+      });
     } catch (e) {
       console.error("[trackerApi] loadSnapshot error:", e);
       callback({ type: isPoll ? "poll_error" : "snapshot_error", error: e });
@@ -228,14 +251,13 @@ export function suscribirsePosiciones(callback, options = {}) {
   if (typeof supabase.channel === "function") {
     try {
       channel = supabase
-        .channel("positions_tracker")
+        .channel("tracker_positions_channel")
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "positions" },
+          { event: "*", schema: "public", table: POSITIONS_TABLE },
           (payload) => {
             if (stopped) return;
 
-            // Filtra por evento (INSERT/UPDATE/DELETE)
             if (payload?.eventType && !events.includes(payload.eventType)) return;
 
             const newRow = payload.new || payload.record || null;
@@ -251,7 +273,7 @@ export function suscribirsePosiciones(callback, options = {}) {
           if (status === "CHANNEL_ERROR") {
             callback({
               type: "realtime_error",
-              error: new Error("Error en canal realtime positions_tracker"),
+              error: new Error("Error en canal realtime tracker_positions_channel"),
             });
           }
         });
@@ -282,6 +304,58 @@ export function suscribirsePosiciones(callback, options = {}) {
         }
         channel = null;
       }
+    },
+  };
+}
+
+// ===================== Helpers usados por useRealtimePositions =====================
+
+export async function fetchLatest(orgId, { limit = 500 } = {}) {
+  if (!orgId) return [];
+
+  const { data, error } = await supabase
+    .from(POSITIONS_TABLE)
+    .select("id, org_id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at")
+    .eq("org_id", orgId)
+    .order("recorded_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("[trackerApi] fetchLatest error:", error);
+    throw error;
+  }
+
+  // last by user_id
+  const map = new Map();
+  for (const r of data || []) {
+    const k = r.user_id || r.id;
+    if (!map.has(k)) map.set(k, r);
+  }
+  return Array.from(map.values());
+}
+
+export function subscribeLatest({ orgId, onInsertOrUpdate } = {}) {
+  if (!orgId) return { unsubscribe: () => {} };
+
+  const ch = supabase
+    .channel(`rt-${POSITIONS_TABLE}-${orgId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: POSITIONS_TABLE, filter: `org_id=eq.${orgId}` },
+      (payload) => {
+        if (!payload) return;
+        if (payload.eventType !== "INSERT" && payload.eventType !== "UPDATE") return;
+        onInsertOrUpdate?.(payload);
+      }
+    )
+    .subscribe();
+
+  return {
+    unsubscribe() {
+      try {
+        if (typeof supabase.removeChannel === "function") supabase.removeChannel(ch);
+        else if (typeof ch.unsubscribe === "function") ch.unsubscribe();
+      } catch {}
     },
   };
 }

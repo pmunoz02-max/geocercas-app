@@ -1,6 +1,6 @@
 // src/hooks/useRealtimePositions.js
-import { useEffect, useRef, useState } from 'react';
-import { fetchLatest, subscribeLatest } from '../lib/trackerApi';
+import { useEffect, useRef, useState } from "react";
+import { fetchLatest, subscribeLatest } from "../lib/trackerApi";
 
 export default function useRealtimePositions(orgId, { initialLimit = 500 } = {}) {
   const [rows, setRows] = useState([]);
@@ -10,6 +10,12 @@ export default function useRealtimePositions(orgId, { initialLimit = 500 } = {})
     let unsub = null;
 
     async function boot() {
+      if (!orgId) {
+        rowsRef.current = [];
+        setRows([]);
+        return;
+      }
+
       const latest = await fetchLatest(orgId, { limit: initialLimit });
       rowsRef.current = latest;
       setRows(latest);
@@ -20,10 +26,7 @@ export default function useRealtimePositions(orgId, { initialLimit = 500 } = {})
           const newRow = payload.new ?? payload.old;
           if (!newRow) return;
 
-          // reemplaza por user_id
-          const idx = rowsRef.current.findIndex(
-            (r) => r.user_id === newRow.user_id
-          );
+          const idx = rowsRef.current.findIndex((r) => r.user_id === newRow.user_id);
           if (idx >= 0) {
             const next = [...rowsRef.current];
             next[idx] = { ...rowsRef.current[idx], ...newRow };
@@ -40,10 +43,10 @@ export default function useRealtimePositions(orgId, { initialLimit = 500 } = {})
       unsub = unsubscribe;
     }
 
-    boot();
+    boot().catch((e) => console.error("[useRealtimePositions] boot error:", e));
 
     return () => {
-      if (typeof unsub === 'function') unsub();
+      if (typeof unsub === "function") unsub();
     };
   }, [orgId, initialLimit]);
 

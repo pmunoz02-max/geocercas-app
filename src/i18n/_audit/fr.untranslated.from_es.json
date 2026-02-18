@@ -1,0 +1,51 @@
+[
+  {
+    "key": "asignaciones.table.end",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "fr",
+    "sample": "Fin"
+  },
+  {
+    "key": "forgot.emailPh",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "fr",
+    "sample": "tu@correo.com"
+  },
+  {
+    "key": "inicio.cards.soporte.title",
+    "type": "looks_english",
+    "base": "es",
+    "other": "fr",
+    "sample": "Contact / Support"
+  },
+  {
+    "key": "personal.table.columns.end",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "fr",
+    "sample": "Fin"
+  },
+  {
+    "key": "reportes.colFin",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "fr",
+    "sample": "Fin"
+  },
+  {
+    "key": "reportes.csvHeaderFin",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "fr",
+    "sample": "Fin"
+  },
+  {
+    "key": "reportes.table.end",
+    "type": "same_as_base",
+    "base": "es",
+    "other": "fr",
+    "sample": "Fin"
+  }
+]

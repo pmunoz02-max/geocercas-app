@@ -1,7 +1,7 @@
 import { getAdminClient } from "../_shared/supabaseAdmin.ts";
 
 type Payload = {
-  org_id?: string | null; // ignorado
+  org_id?: string | null; // ignorado (server-owned)
   lat: number;
   lng: number;
   accuracy?: number | null;
@@ -21,7 +21,7 @@ function cors(origin: string | null) {
   const o = origin ?? "*";
   return {
     "Access-Control-Allow-Origin": o,
-    "Vary": "Origin",
+    Vary: "Origin",
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Headers":
       "authorization, apikey, x-api-key, content-type, x-client-info, accept, accept-language",
@@ -105,7 +105,6 @@ async function resolveOrgIdServerOwned(
   admin: ReturnType<typeof getAdminClient>,
   userId: string
 ): Promise<string> {
-  // 1) user_current_org
   const uco = await admin
     .from("user_current_org")
     .select("org_id")
@@ -115,7 +114,6 @@ async function resolveOrgIdServerOwned(
   if (uco.error) throw new Error(`user_current_org read failed: ${uco.error.message}`);
   if (uco.data?.org_id) return String(uco.data.org_id);
 
-  // 2) memberships + org_members
   const orgs = new Set<string>();
 
   const m = await admin.from("memberships").select("org_id").eq("user_id", userId);
@@ -129,7 +127,6 @@ async function resolveOrgIdServerOwned(
   const arr = Array.from(orgs);
   if (arr.length === 0) throw new Error("No org membership found for user.");
 
-  // ✅ 1 org => persistimos y retornamos
   if (arr.length === 1) {
     const orgId = arr[0];
     const up = await admin.from("user_current_org").upsert(
@@ -140,7 +137,6 @@ async function resolveOrgIdServerOwned(
     return orgId;
   }
 
-  // ✅ 2+ orgs => error explícito (no persistimos nada)
   throw new Error(
     `Multiple org memberships found for user. Please select current org (set_current_org) before sending positions. orgs=${arr.join(
       ","
@@ -158,16 +154,23 @@ Deno.serve(async (req) => {
     const user = await requireUserViaAuthAPI(req);
 
     const body: Payload = await req.json();
+
     const lat = num(body.lat, "lat");
     const lng = num(body.lng, "lng");
-    if (!isValidLatLng(lat, lng)) throw new Error("Invalid lat/lng range");
+    if (!isValidLatLng(lat, lng)) {
+      return new Response(JSON.stringify({ ok: false, error: "Invalid lat/lng range" }), {
+        status: 400,
+        headers: { ...C, "Content-Type": "application/json" },
+      });
+    }
 
     const recorded_at = parseRecordedAt(body);
 
     const admin = getAdminClient();
     const orgId = await resolveOrgIdServerOwned(admin, user.id);
 
-    const positionsTable = Deno.env.get("POSITIONS_TABLE") ?? "positions";
+    // ✅ CANÓNICO por defecto
+    const positionsTable = Deno.env.get("POSITIONS_TABLE") ?? "tracker_positions";
 
     const row: Record<string, unknown> = {
       org_id: orgId,
@@ -186,21 +189,38 @@ Deno.serve(async (req) => {
     };
 
     const ins = await admin.from(positionsTable).insert(row);
-    if (ins.error) throw new Error(`Insert failed: ${ins.error.message}`);
+    if (ins.error) {
+      return new Response(JSON.stringify({ ok: false, error: `Insert failed: ${ins.error.message}` }), {
+        status: 500,
+        headers: { ...C, "Content-Type": "application/json" },
+      });
+    }
 
-    return new Response(JSON.stringify({ ok: true, org_id: orgId, recorded_at }), {
+    return new Response(JSON.stringify({ ok: true, org_id: orgId, recorded_at, table: positionsTable }), {
       headers: { ...C, "Content-Type": "application/json" },
     });
   } catch (e) {
-    // ✅ Si falla por multi-org, devolvemos 400 (no 401)
     const msg = String(e?.message || e);
-    const status =
-      msg.includes("Multiple org memberships") || msg.includes("No org membership")
-        ? 400
-        : 401;
 
+    // multi-org/no-membership => 400
+    if (msg.includes("Multiple org memberships") || msg.includes("No org membership")) {
+      return new Response(JSON.stringify({ ok: false, error: msg }), {
+        status: 400,
+        headers: { ...C, "Content-Type": "application/json" },
+      });
+    }
+
+    // auth lookup / missing bearer => 401
+    if (msg.includes("Missing Authorization") || msg.includes("Auth user lookup failed")) {
+      return new Response(JSON.stringify({ ok: false, error: msg }), {
+        status: 401,
+        headers: { ...C, "Content-Type": "application/json" },
+      });
+    }
+
+    // resto => 500
     return new Response(JSON.stringify({ ok: false, error: msg }), {
-      status,
+      status: 500,
       headers: { ...C, "Content-Type": "application/json" },
     });
   }

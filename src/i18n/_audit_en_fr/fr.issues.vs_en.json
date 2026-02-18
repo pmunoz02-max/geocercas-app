@@ -1,0 +1,92 @@
+[
+  {
+    "key": "actividades.fieldDescription",
+    "type": "same_as_en",
+    "sample": "Description"
+  },
+  {
+    "key": "actividades.thActions",
+    "type": "same_as_en",
+    "sample": "Actions"
+  },
+  {
+    "key": "actividades.thDescription",
+    "type": "same_as_en",
+    "sample": "Description"
+  },
+  {
+    "key": "admins.table.actions",
+    "type": "same_as_en",
+    "sample": "Actions"
+  },
+  {
+    "key": "app.brand",
+    "type": "same_as_en",
+    "sample": "App Geocercas"
+  },
+  {
+    "key": "asignaciones.table.actions",
+    "type": "same_as_en",
+    "sample": "Actions"
+  },
+  {
+    "key": "dashboardCostos.chartDimension",
+    "type": "same_as_en",
+    "sample": "Dimension"
+  },
+  {
+    "key": "dashboardCostos.colFecha",
+    "type": "same_as_en",
+    "sample": "Date"
+  },
+  {
+    "key": "dashboardCostos.dimensionFecha",
+    "type": "same_as_en",
+    "sample": "Date"
+  },
+  {
+    "key": "forgot.noteTitle",
+    "type": "same_as_en",
+    "sample": "Note"
+  },
+  {
+    "key": "geocercas.lat",
+    "type": "same_as_en",
+    "sample": "Lat"
+  },
+  {
+    "key": "geocercas.lng",
+    "type": "same_as_en",
+    "sample": "Lng"
+  },
+  {
+    "key": "geocercas.pointsLabel",
+    "type": "same_as_en",
+    "sample": "Pts"
+  },
+  {
+    "key": "inicio.cards.instrucciones.title",
+    "type": "same_as_en",
+    "sample": "Instructions"
+  },
+  {
+    "key": "inicio.cards.soporte.title",
+    "type": "same_as_en",
+    "sample": "Contact / Support"
+  },
+  {
+    "key": "inviteTracker.form.emailPlaceholder",
+    "type": "same_as_en",
+    "sample": "tracker@example.com"
+  },
+  {
+    "key": "login.badge",
+    "type": "same_as_en",
+    "sample": "(LOGIN-V31 NO-JS)"
+  },
+  {
+    "key": "login.emailPlaceholder",
+    "type": "same_as_en",
+    "sample": "you@example.com"
+  }
+]
