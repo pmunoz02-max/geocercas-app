@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-auth-subdomain-20260218";
+const BUILD_TAG = "send-tracker-invite-brevo-auth-subdomain-20260218_ROLE_NORM_FIX";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -36,8 +36,11 @@ function isPgUniqueViolation(err: any) {
 
 function looksLikeJwt(t: string) {
   const s = String(t || "").trim();
-  // JWT = 3 partes separadas por "."
   return s.split(".").length === 3;
+}
+
+function normRole(role: unknown) {
+  return String(role ?? "").trim().toLowerCase();
 }
 
 // ✅ CANÓNICO: callback existente
@@ -67,7 +70,6 @@ async function brevoSendEmail(opts: {
     textContent: opts.text || undefined,
   };
 
-  // ✅ Mejora universal: Reply-To (ayuda deliverability/UX)
   if (opts.replyToEmail) {
     payload.replyTo = {
       email: opts.replyToEmail,
@@ -123,12 +125,6 @@ async function authUserIdFromJwt(params: {
   return { ok: true as const, user_id: id };
 }
 
-/**
- * “Open invite” = cualquiera que pueda chocar con tus uniques:
- * - used_at IS NULL (pending unique)
- * - is_active = true (active unique)
- * - accepted_at IS NULL (email unique)
- */
 async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) {
   const { data, error } = await sbAdmin
     .from("tracker_invites")
@@ -175,8 +171,6 @@ serve(async (req) => {
     const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") || "";
     const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL") || "";
     const BREVO_SENDER_NAME = Deno.env.get("BREVO_SENDER_NAME") || "App Geocercas";
-
-    // ✅ Reply-to opcional (si no la seteas, usa el sender)
     const BREVO_REPLYTO_EMAIL = (Deno.env.get("BREVO_REPLYTO_EMAIL") || "").trim();
 
     const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com")
@@ -200,7 +194,7 @@ serve(async (req) => {
       });
     }
 
-    // ✅ 100% x-user-jwt (Authorization ya NO es user jwt)
+    // ✅ 100% x-user-jwt
     const userJwt = (req.headers.get("x-user-jwt") || "").trim();
     if (!userJwt) return jsonResponse(401, { ok: false, error: "Missing x-user-jwt", build_tag: BUILD_TAG });
     if (!looksLikeJwt(userJwt)) {
@@ -211,7 +205,7 @@ serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ✅ validar caller (quien invita)
+    // ✅ validar caller
     const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt: userJwt });
     if (!u.ok) {
       return jsonResponse(401, {
@@ -232,7 +226,7 @@ serve(async (req) => {
     if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
     if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
 
-    // ✅ Caller debe ser owner de esa org
+    // ✅ Caller debe ser owner de esa org (ROLE NORMALIZED)
     const { data: ownerRow, error: ownerErr } = await sbAdmin
       .from("memberships")
       .select("role, revoked_at")
@@ -250,8 +244,21 @@ serve(async (req) => {
         build_tag: BUILD_TAG,
       });
     }
-    if (!ownerRow || String(ownerRow.role) !== "owner") {
-      return jsonResponse(403, { ok: false, error: "Not allowed (must be owner of org)", build_tag: BUILD_TAG });
+
+    const roleNorm = normRole(ownerRow?.role);
+    if (!ownerRow || roleNorm !== "owner") {
+      return jsonResponse(403, {
+        ok: false,
+        error: "Not allowed (must be owner of org)",
+        build_tag: BUILD_TAG,
+        diag: {
+          callerUserId,
+          org_id,
+          role_raw: ownerRow?.role ?? null,
+          role_norm: roleNorm || null,
+          revoked_at: ownerRow?.revoked_at ?? null,
+        },
+      });
     }
 
     const nowIso = new Date().toISOString();
@@ -341,38 +348,29 @@ serve(async (req) => {
 
     const actionLink = linkData.properties.action_link;
 
-    // ✅ enviar correo (más “Microsoft-friendly”)
     const subject = "Invitación: Tracker GPS - App Geocercas";
 
     const safeAction = String(actionLink).replace(/"/g, "&quot;");
     const html = `
       <div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827">
         <h2 style="margin:0 0 12px 0">Invitación a Tracker GPS</h2>
-
         <p style="margin:0 0 10px 0">
           Has sido invitado a usar el <b>Tracker GPS</b> de <b>App Geocercas</b>.
         </p>
-
         <p style="margin:0 0 14px 0">
           Este enlace abrirá el Tracker en la organización correcta.
           <br />
-          <span style="color:#6b7280;font-size:12px">
-            Este enlace expira en 7 días.
-          </span>
+          <span style="color:#6b7280;font-size:12px">Este enlace expira en 7 días.</span>
         </p>
-
         <p style="margin:0 0 16px 0">
           <a href="${safeAction}"
              style="display:inline-block;padding:12px 16px;background:#10b981;color:#0b1220;text-decoration:none;border-radius:10px;font-weight:700">
             Abrir Tracker GPS
           </a>
         </p>
-
         <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">Si no puedes hacer clic, copia y pega este enlace:</p>
         <p style="word-break:break-all;font-size:12px;margin:0 0 16px 0">${safeAction}</p>
-
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0" />
-
         <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">
           Recibiste este correo porque un administrador de App Geocercas te invitó a acceder al Tracker GPS.
         </p>
