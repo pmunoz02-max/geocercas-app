@@ -24,7 +24,9 @@
       "yes": "Oui",
       "no": "Non",
       "loading": "Chargement…"
-    }
+    },
+    "select": "— Sélectionner —",
+    "sending": "Envoi..."
   },
   "app": {
     "brand": "App Geocercas",
@@ -733,7 +735,13 @@
       "createdWithoutEmail": "L'accès au tracker a été créé sans envoyer d'e-mail.",
       "genericProcessed": "L'invitation pour {{email}} a été traitée avec succès.",
       "unexpectedError": "Erreur inattendue lors du traitement de l'invitation."
-    }
+    },
+    "backToTracker": "Retour au Tracker",
+    "selectPersonLabel": "Sélectionnez une personne",
+    "onlyExistingNote": "Vous ne pouvez inviter que des personnes déjà existantes dans votre organisation.",
+    "emailLabel": "Courriel du traqueur",
+    "emailPlaceholder": "tracker@example.com",
+    "sendInvite": "Envoyer l’invitation"
   },
   "admins": {
     "title": "Administrateurs",
