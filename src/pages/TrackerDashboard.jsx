@@ -869,8 +869,7 @@ export default function TrackerDashboard() {
             )}
           </div>
         </div>
-
-        {errorMsg && (
+        {errorMsg && (positions?.length ?? 0) === 0 && (
           <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
             {errorMsg}
           </div>
