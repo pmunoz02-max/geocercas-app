@@ -39,24 +39,28 @@ const inputClass =
   "autofill:[-webkit-text-fill-color:rgb(241,245,249)] " +
   "autofill:caret-[rgb(241,245,249)]";
 
+function hostFromUrl(u?: string) {
+  try {
+    if (!u) return "";
+    return new URL(u).host;
+  } catch {
+    return "";
+  }
+}
+
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  // ✅ Detectar si el modo viene explícito por URL (universal)
-  const hasModeInUrl = useMemo(
-    () => hasQueryParam(location.search, "mode"),
-    [location.search]
-  );
+  // ====== MODO (universal) ======
+  const hasModeInUrl = useMemo(() => hasQueryParam(location.search, "mode"), [location.search]);
 
-  // ✅ Modo desde URL (si existe)
   const modeFromUrl = useMemo(
     () => normalizeMode(getQueryParam(location.search, "mode")),
     [location.search]
   );
 
-  // ✅ Modo desde storage (fallback universal)
   const modeFromStorage = useMemo(() => {
     try {
       return normalizeMode(localStorage.getItem(MODE_LS_KEY) || "");
@@ -65,15 +69,16 @@ export default function Login() {
     }
   }, []);
 
-  // ✅ Inicial: si URL trae mode => usarlo, si no => storage
   const initialMode = useMemo<Mode>(() => {
     return hasModeInUrl ? modeFromUrl : modeFromStorage;
   }, [hasModeInUrl, modeFromUrl, modeFromStorage]);
 
   const [mode, setMode] = useState<Mode>(initialMode);
 
+  // ====== FORM ======
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [nextInput, setNextInput] = useState("/inicio");
 
@@ -81,6 +86,7 @@ export default function Login() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // ====== NEXT / ERR from URL ======
   const nextFromUrl = useMemo(() => {
     const n = getQueryParam(location.search, "next");
     return safeNextPath(n || "/inicio");
@@ -99,15 +105,14 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
-  // ✅ SOLO si la URL trae `mode=` explícito, sincronizar.
-  // Evita que el default "magic" (por normalizeMode("")) te pise el modo real.
+  // ✅ Solo sincronizar desde URL si `mode=` existe
   useEffect(() => {
     if (!hasModeInUrl) return;
     if (modeFromUrl !== mode) setMode(modeFromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasModeInUrl, modeFromUrl]);
 
-  // ✅ Guardar modo en localStorage (persistente ante remount)
+  // ✅ Persist mode
   useEffect(() => {
     try {
       localStorage.setItem(MODE_LS_KEY, mode);
@@ -116,7 +121,6 @@ export default function Login() {
     }
   }, [mode]);
 
-  // ✅ Helper: setMode + actualizar query param sin romper next/err/lang
   function setModePersist(nextMode: Mode) {
     setMode(nextMode);
     setErr(null);
@@ -127,14 +131,15 @@ export default function Login() {
     navigate(`/login?${sp.toString()}`, { replace: true });
   }
 
-  // IMPORTANTE: fallback robusto (si VITE_SITE_URL está vacío en preview)
+  // ====== ENV (debug + UX universal) ======
+  const supabaseUrlHost = useMemo(() => hostFromUrl(import.meta.env.VITE_SUPABASE_URL), []);
   const siteUrl = useMemo(() => {
     const envUrl = (import.meta.env.VITE_SITE_URL || "").trim();
     if (envUrl) return envUrl;
     return window.location.origin;
   }, []);
 
-  // Magic Link / Callback (APP)
+  // ====== Redirects ======
   const redirectTo = useMemo(() => {
     const next = safeNextPath(nextInput);
     const url = new URL("/auth/callback", siteUrl);
@@ -142,7 +147,6 @@ export default function Login() {
     return url.toString();
   }, [siteUrl, nextInput]);
 
-  // Reset Password debe entrar por /auth/callback para setSession + bootstrap cookie
   const resetRedirectTo = useMemo(() => {
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", "/reset-password");
@@ -150,11 +154,7 @@ export default function Login() {
     return url.toString();
   }, [siteUrl, nextInput]);
 
-  async function bootstrapCookie(
-    accessToken: string,
-    refreshToken: string,
-    expiresIn?: number
-  ) {
+  async function bootstrapCookie(accessToken: string, refreshToken: string, expiresIn?: number) {
     const res = await fetch("/api/auth/bootstrap", {
       method: "POST",
       headers: {
@@ -179,6 +179,18 @@ export default function Login() {
         })
       );
     }
+  }
+
+  function prettyErr(e2: any) {
+    // Supabase suele devolver message
+    const m = e2?.message || "";
+    const code = e2?.code ? ` [${e2.code}]` : "";
+    const status = e2?.status ? ` (HTTP ${e2.status})` : "";
+    const hint =
+      /invalid login credentials/i.test(m)
+        ? " — Si nunca creaste contraseña en ESTE entorno, usa “Restablecer contraseña” para crearla y luego entra con contraseña."
+        : "";
+    return `${m}${code}${status}${hint}`.trim() || t("login.errors.unknown");
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -227,9 +239,7 @@ export default function Login() {
           typeof session?.expires_in === "number" ? session.expires_in : undefined;
 
         if (!accessToken) {
-          setErr(
-            t("login.errors.noAccessToken", { defaultValue: "Could not get access token." })
-          );
+          setErr(t("login.errors.noAccessToken", { defaultValue: "Could not get access token." }));
           return;
         }
         if (!refreshToken) {
@@ -239,6 +249,7 @@ export default function Login() {
           return;
         }
 
+        // 🔒 Cookie tg_at (fuente real de sesión)
         await bootstrapCookie(accessToken, refreshToken, expiresIn);
 
         setMsg(t("login.sessionStarted", { defaultValue: "✅ Session started. Entering…" }));
@@ -257,7 +268,7 @@ export default function Login() {
         return;
       }
     } catch (e2: any) {
-      setErr(e2?.message || t("login.errors.unknown"));
+      setErr(prettyErr(e2));
     } finally {
       setBusy(false);
     }
@@ -287,8 +298,7 @@ export default function Login() {
     defaultValue: t("login.goToDashboard", { defaultValue: "Go to" }),
   });
   const nextHint = t("login.nextHint", {
-    defaultValue:
-      "Useful for tests in PREVIEW. In production, normally you don’t change it.",
+    defaultValue: "Useful for tests in PREVIEW. In production, normally you don’t change it.",
   });
 
   const resetTabLabel = t("login.modeReset", {
@@ -300,7 +310,6 @@ export default function Login() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
       <div className="w-full max-w-md">
-        {/* Brand / header */}
         <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
             {t("landing.heroBadge")}
@@ -314,7 +323,6 @@ export default function Login() {
           <p className="mt-2 text-sm text-slate-300">{t("landing.heroSubtitle")}</p>
         </div>
 
-        {/* Card */}
         <div className="auth-card">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -332,7 +340,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="mt-5 grid grid-cols-3 gap-2">
             <button
               type="button"
@@ -360,13 +367,13 @@ export default function Login() {
           {err && (
             <div className="mt-4 banner banner-error">
               <div className="font-semibold">{t("reportes.errorLabel")}</div>
-              <div className="text-sm opacity-90">{err}</div>
+              <div className="text-sm opacity-90 whitespace-pre-wrap">{err}</div>
             </div>
           )}
           {msg && (
             <div className="mt-4 banner banner-success">
               <div className="font-semibold">{okLabel}</div>
-              <div className="text-sm opacity-90">{msg}</div>
+              <div className="text-sm opacity-90 whitespace-pre-wrap">{msg}</div>
             </div>
           )}
 
@@ -391,18 +398,32 @@ export default function Login() {
                 <label className="block text-sm font-medium text-slate-200">
                   {t("login.passwordLabel")}
                 </label>
-                <input
-                  className={inputClass}
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={t("login.passwordPlaceholder")}
-                />
+
+                <div className="relative">
+                  <input
+                    className={`${inputClass} pr-12`}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={t("login.passwordPlaceholder")}
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-slate-200 hover:bg-white/[0.08]"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? "🙈" : "👁"}
+                  </button>
+                </div>
+
+                <div className="text-xs text-slate-400">
+                  Tip: en Preview y Producción la contraseña es distinta (Supabase distinto).
+                </div>
               </div>
             )}
 
-            {/* next (lo dejo, pero visualmente “avanzado”) */}
             <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <summary className="cursor-pointer select-none text-sm text-slate-300">
                 {advTitle}
@@ -431,10 +452,12 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Debug: plegable para no ensuciar UI */}
           <details className="mt-4 text-xs text-slate-400">
             <summary className="cursor-pointer select-none">{debugLabel}</summary>
             <div className="mt-2 space-y-2">
+              <div>
+                Supabase: <span className="break-all text-slate-300">{supabaseUrlHost}</span>
+              </div>
               <div>
                 Redirect Magic Link:{" "}
                 <span className="break-all text-slate-300">{redirectTo}</span>
@@ -444,7 +467,7 @@ export default function Login() {
                 <span className="break-all text-slate-300">{resetRedirectTo}</span>
               </div>
               <div>
-                Mode persistente: <span className="break-all text-slate-300">{mode}</span>
+                Mode: <span className="break-all text-slate-300">{mode}</span>
               </div>
               <div>
                 hasModeInUrl:{" "}
@@ -454,9 +477,7 @@ export default function Login() {
           </details>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-400">
-          {t("landing.privacyMiniNote")}
-        </p>
+        <p className="mt-6 text-center text-xs text-slate-400">{t("landing.privacyMiniNote")}</p>
       </div>
     </div>
   );
