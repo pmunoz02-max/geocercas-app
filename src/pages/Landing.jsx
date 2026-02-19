@@ -1,11 +1,18 @@
 // src/pages/Landing.jsx
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
-const BUILD_MARKER = "PREVIEW_20260212_B"; // <- si no ves esto en pantalla, NO estás en el último deploy
+const BUILD_MARKER = "PREVIEW_20260218_A"; // <- cambia el marker para validar deploy
 
 export default function Landing() {
+  const { t } = useTranslation();
+  const location = useLocation();
+
+  // Conserva querystring (incluye ?lang=fr) cuando navegas a /login y /help
+  const withSameSearch = (to) => `${to}${location.search || ""}`;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center relative">
       {/* ✅ marcador VISIBLE */}
@@ -16,17 +23,22 @@ export default function Landing() {
       <div className="max-w-xl w-full px-6">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-8 shadow-2xl">
           <div className="flex items-center justify-between gap-4">
-            <h1 className="text-3xl font-semibold">Geocercas</h1>
+            {/* Antes decía "Geocercas" hardcodeado */}
+            <h1 className="text-3xl font-semibold">
+              {t("landing.brandName")}
+            </h1>
+
             <LanguageSwitcher />
           </div>
 
+          {/* Antes decía "Bienvenido..." hardcodeado */}
           <p className="mt-4 text-sm text-slate-300">
-            Bienvenido. Inicia sesión para administrar tus geocercas.
+            {t("landing.accessBody")}
           </p>
 
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <Link
-              to="/login"
+              to={withSameSearch("/login")}
               className="inline-flex items-center justify-center rounded-2xl px-5 py-3 font-semibold"
               // ✅ inline style para ganar a cualquier CSS global raro
               style={{
@@ -37,11 +49,11 @@ export default function Landing() {
                 filter: "none",
               }}
             >
-              Iniciar sesión
+              {t("app.header.login")}
             </Link>
 
             <Link
-              to="/help/instructions"
+              to={withSameSearch("/help/instructions")}
               className="inline-flex items-center justify-center rounded-2xl px-5 py-3"
               style={{
                 backgroundColor: "transparent",
@@ -52,7 +64,8 @@ export default function Landing() {
                 filter: "none",
               }}
             >
-              Ayuda
+              {/* Usamos una key ya existente con traducción FR */}
+              {t("help.common.badge")}
             </Link>
           </div>
         </div>
