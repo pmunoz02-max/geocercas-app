@@ -11,6 +11,10 @@
 // - tracker_user_id se resuelve desde personal.user_id (fallback personal.owner_id)
 // - active en tracker_assignments depende de status/estado + is_deleted
 // - start_date/end_date se derivan de start_time/end_time (YYYY-MM-DD)
+//
+// ✅ FIX UNIVERSAL:
+// - catalogs.geocercas muestra SOLO activas por defecto:
+//   intenta activo=true, si no existe intenta active=true, si no existe no rompe.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -35,7 +39,6 @@ function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("X-Api-Version", VERSION);
 
-  // anti-cache (consistente con otros endpoints)
   res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
@@ -89,7 +92,6 @@ async function readJson(req) {
 }
 
 function normalizeStatus(payload) {
-  // UI manda status, algunas filas viejas usan estado
   const v = payload?.status ?? payload?.estado ?? null;
   if (!v) return null;
   return String(v).trim().toLowerCase();
@@ -133,16 +135,11 @@ function supabaseServiceRole() {
   });
 }
 
-/**
- * Resuelve usuario + org canónico desde memberships (lectura con service_role):
- * select org_id, role from memberships where user_id=? order by is_default desc limit 1
- */
 async function getCanonicalContextOr401(req) {
   const cookies = parseCookies(req);
   const token = cookies.tg_at || null;
   if (!token) return { ok: false, status: 401, error: "missing tg_at cookie" };
 
-  // 1) Validar token y obtener user_id (anon + bearer)
   const supaUser = supabaseAnonForToken(token);
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
   if (userErr || !userData?.user?.id) {
@@ -150,10 +147,8 @@ async function getCanonicalContextOr401(req) {
   }
   const userId = userData.user.id;
 
-  // 2) Resolver org desde memberships con SERVICE_ROLE (bypass RLS, consistente prod/preview)
   const supaSrv = supabaseServiceRole();
 
-  // Preferir is_default true, si no existe, fallback al más reciente
   let m = null;
 
   const d1 = await supaSrv
@@ -184,14 +179,7 @@ async function getCanonicalContextOr401(req) {
   const orgId = m?.org_id || null;
   if (!orgId) return { ok: false, status: 403, error: "no org in memberships" };
 
-  return {
-    ok: true,
-    userId,
-    orgId,
-    role: m?.role || null,
-    // cliente server-owned para TODA operación a tablas
-    supaSrv,
-  };
+  return { ok: true, userId, orgId, role: m?.role || null, supaSrv };
 }
 
 /* =========================
@@ -199,7 +187,7 @@ async function getCanonicalContextOr401(req) {
 ========================= */
 
 async function loadCatalogs(supaSrv, { orgId }) {
-  // Personal
+  // Personal (ya canónico: no borrados)
   let personal = [];
   {
     const r = await supaSrv
@@ -212,16 +200,46 @@ async function loadCatalogs(supaSrv, { orgId }) {
     if (!r.error) personal = r.data || [];
   }
 
-  // Geocercas
+  // Geocercas (✅ UNIVERSAL: preferir activas; tolerante a schema)
   let geocercas = [];
   {
-    const r = await supaSrv
+    // intento 1: activo=true
+    let r = await supaSrv
       .from("geocercas")
-      .select("id,nombre,org_id")
+      .select("id,nombre,org_id,activo,active")
       .eq("org_id", orgId)
+      .eq("activo", true)
       .order("nombre", { ascending: true });
 
+    if (r.error) {
+      // intento 2: active=true
+      r = await supaSrv
+        .from("geocercas")
+        .select("id,nombre,org_id,activo,active")
+        .eq("org_id", orgId)
+        .eq("active", true)
+        .order("nombre", { ascending: true });
+
+      // intento 3: sin filtro (no romper)
+      if (r.error) {
+        r = await supaSrv
+          .from("geocercas")
+          .select("id,nombre,org_id")
+          .eq("org_id", orgId)
+          .order("nombre", { ascending: true });
+      }
+    }
+
     if (!r.error) geocercas = r.data || [];
+
+    // hardening extra: si vinieron flags, filtrar en memoria (por si active/activo es null)
+    geocercas = (geocercas || []).filter((g) => {
+      if (g && typeof g === "object") {
+        if ("activo" in g) return g.activo === true;
+        if ("active" in g) return g.active === true;
+      }
+      return true; // si no hay flag, no filtramos
+    });
   }
 
   // Activities
@@ -236,7 +254,6 @@ async function loadCatalogs(supaSrv, { orgId }) {
     if (!r.error) activities = r.data || [];
   }
 
-  // Alias para UIs viejas
   const people = personal.map((p) => ({
     org_people_id: p.id,
     nombre: p.nombre,
@@ -383,9 +400,6 @@ export default async function handler(req, res) {
 
     const { supaSrv, orgId, role } = ctxRes;
 
-    // ======================
-    // GET
-    // ======================
     if (req.method === "GET") {
       const q = await supaSrv
         .from("asignaciones")
@@ -416,30 +430,20 @@ export default async function handler(req, res) {
 
       const catalogs = await loadCatalogs(supaSrv, { orgId });
 
-      return json(res, 200, {
-        ok: true,
-        data: { asignaciones: q.data || [], catalogs },
-      });
+      return json(res, 200, { ok: true, data: { asignaciones: q.data || [], catalogs } });
     }
 
-    // ======================
-    // POST (create)
-    // ======================
     if (req.method === "POST") {
       if (!requireWriteRole(role)) {
         return json(res, 403, { ok: false, error: "forbidden", details: "requires owner/admin" });
       }
 
       const body = (await readJson(req)) || {};
-
-      // Server-owned payload
       const payload = { ...body, org_id: orgId };
 
-      // requeridos
       if (!payload.personal_id) return json(res, 400, { ok: false, error: "personal_id is required" });
       if (!payload.geocerca_id) return json(res, 400, { ok: false, error: "geocerca_id is required" });
 
-      // Nunca confiar en legacy/cliente
       delete payload.tenant_id;
       delete payload.org_people_id;
 
@@ -448,7 +452,6 @@ export default async function handler(req, res) {
 
       const row = Array.isArray(ins.data) && ins.data.length ? ins.data[0] : null;
 
-      // Sync tracker_assignments (best effort)
       const sync = row ? await syncTrackerAssignmentsFromAsignacion(supaSrv, { orgId, asignacionRow: row }) : null;
 
       return json(res, 200, {
@@ -459,9 +462,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // ======================
-    // PATCH (update)
-    // ======================
     if (req.method === "PATCH") {
       if (!requireWriteRole(role)) {
         return json(res, 403, { ok: false, error: "forbidden", details: "requires owner/admin" });
@@ -473,7 +473,6 @@ export default async function handler(req, res) {
 
       if (!id || !patch) return json(res, 400, { ok: false, error: "missing id/patch" });
 
-      // Leer estado actual (server-owned)
       const prevRes = await supaSrv
         .from("asignaciones")
         .select("id, org_id, personal_id, geocerca_id, start_time, end_time, status, estado, is_deleted")
@@ -482,7 +481,6 @@ export default async function handler(req, res) {
         .limit(1);
 
       if (prevRes.error) return json(res, 400, { ok: false, error: prevRes.error.message });
-
       const prev = Array.isArray(prevRes.data) && prevRes.data.length ? prevRes.data[0] : null;
       if (!prev) return json(res, 404, { ok: false, error: "asignacion not found" });
 
@@ -503,12 +501,10 @@ export default async function handler(req, res) {
 
       const updated = Array.isArray(updRes.data) && updRes.data.length ? updRes.data[0] : null;
 
-      // Sync nueva relación
       const syncNew = updated
         ? await syncTrackerAssignmentsFromAsignacion(supaSrv, { orgId, asignacionRow: updated })
         : null;
 
-      // Si cambió personal o geocerca, desactivar la relación anterior
       let deactivatedPrev = null;
       try {
         const changed =
@@ -525,9 +521,7 @@ export default async function handler(req, res) {
             });
           }
         }
-      } catch {
-        // best effort
-      }
+      } catch {}
 
       return json(res, 200, {
         ok: true,
@@ -538,9 +532,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // ======================
-    // DELETE (soft)
-    // ======================
     if (req.method === "DELETE") {
       if (!requireWriteRole(role)) {
         return json(res, 403, { ok: false, error: "forbidden", details: "requires owner/admin" });
@@ -550,7 +541,6 @@ export default async function handler(req, res) {
       const id = body.id;
       if (!id) return json(res, 400, { ok: false, error: "missing id" });
 
-      // Leer asignación para desactivar tracker_assignment
       const prevRes = await supaSrv
         .from("asignaciones")
         .select("id, org_id, personal_id, geocerca_id")
@@ -559,7 +549,6 @@ export default async function handler(req, res) {
         .limit(1);
 
       if (prevRes.error) return json(res, 400, { ok: false, error: prevRes.error.message });
-
       const prev = Array.isArray(prevRes.data) && prevRes.data.length ? prevRes.data[0] : null;
 
       const delRes = await supaSrv
@@ -570,7 +559,6 @@ export default async function handler(req, res) {
 
       if (delRes.error) return json(res, 400, { ok: false, error: delRes.error.message });
 
-      // Desactivar tracker_assignment (best effort)
       let deactivated = null;
       if (prev?.personal_id && prev?.geocerca_id) {
         const rPrev = await resolveTrackerUserIdFromPersonal(supaSrv, { orgId, personalId: prev.personal_id });
