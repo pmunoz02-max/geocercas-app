@@ -2,34 +2,26 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "www.tugeocercas.com"
-        }
-      ],
+      "has": [{ "type": "host", "value": "www.tugeocercas.com" }],
       "destination": "https://tugeocercas.com/$1",
       "permanent": true
     }
   ],
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/auth/bootstrap", "destination": "/api/auth?route=bootstrap" },
+    { "source": "/api/auth/ensure-context", "destination": "/api/auth?route=ensure-context" },
+    { "source": "/api/auth/magic", "destination": "/api/auth?route=magic" },
+    { "source": "/api/auth/password", "destination": "/api/auth?route=password" },
+    { "source": "/api/auth/recover", "destination": "/api/auth?route=recover" },
+    { "source": "/api/auth/session", "destination": "/api/auth?route=session" },
+
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
       "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "preview.tugeocercas.com"
-        }
-      ],
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
+      "has": [{ "type": "host", "value": "preview.tugeocercas.com" }],
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     }
   ]
 }
