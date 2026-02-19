@@ -3,14 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 
 /**
  * Supabase client — FRONTEND (Vite)
- * Arquitectura FINAL:
- * - Implicit flow (hash token) ✅
- * - Token opcional en memoria (para bootstrap)
- * - NO localStorage
- * - Backend cookie tg_at es la fuente de verdad real
+ * Arquitectura universal (Preview/Prod):
+ * - Auth de Supabase sí debe persistir sesión en browser para:
+ *   - Password login (getSession inmediato)
+ *   - Reset/OTP callbacks que requieren hidratar session
+ * - El backend (cookie tg_at) sigue siendo la "fuente de verdad" para la app,
+ *   pero el frontend necesita tokens para bootstrap y compatibilidad.
  */
 
-const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260212_A";
+const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260219_LOGIN_PASSWORD_FIX_A";
 
 function normUrl(u) {
   return String(u || "")
@@ -41,16 +42,14 @@ function normRef(r) {
 }
 
 function expectedRefFromEnvOrMode() {
-  // ✅ Preferencia: variable explícita por ambiente (universal y permanente)
+  // ✅ Preferencia: variable explícita por ambiente (universal)
   const fromEnv = normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
   if (fromEnv) return fromEnv;
 
-  // ✅ Fallback seguro por modo/ambiente (evita que producción se rompa si faltó la env)
-  // Nota: Vercel define import.meta.env.PROD=true en builds de producción.
+  // ✅ Fallback seguro si olvidan setear la env
   const isProdBuild = Boolean(import.meta.env.PROD);
 
-  // Si no existe VITE_SUPABASE_PROJECT_REF, usamos defaults conocidos del proyecto
-  // (mantén estos dos valores alineados con tus proyectos Supabase)
+  // Defaults conocidos de tu arquitectura (preview/prod separados en Supabase)
   return isProdBuild ? "wpaixkvokdkudymgjoua" : "mujwsfhkocsuuahlrssn";
 }
 
@@ -79,7 +78,7 @@ if (EXPECTED_PROJECT_REF && currentRef !== EXPECTED_PROJECT_REF) {
   );
 }
 
-// ✅ Token solo en memoria (para enviar Bearer al backend si hace falta)
+// ✅ Token en memoria (para adjuntar Bearer al backend si hace falta)
 let __memoryAccessToken = null;
 
 export function setMemoryAccessToken(token) {
@@ -89,17 +88,6 @@ export function setMemoryAccessToken(token) {
 export function getMemoryAccessToken() {
   return __memoryAccessToken;
 }
-
-// ✅ Storage NO persistente
-const memoryStorage = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
-  key: () => null,
-  get length() {
-    return 0;
-  },
-};
 
 function toHeaders(h) {
   if (!h) return new Headers();
@@ -118,22 +106,49 @@ const wrappedFetch = async (url, options = {}) => {
   return fetch(url, { ...options, headers });
 };
 
+// ✅ Storage universal para browser (necesario para password + getSession)
+const browserStorage =
+  typeof window !== "undefined" && window?.localStorage
+    ? window.localStorage
+    : undefined;
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
+    // ⚠️ Supabase recomienda PKCE, pero tu app usa callback + bootstrap.
+    // Mantengo implicit para no romper recovery/legacy. (Universal y estable en tu base)
     flowType: "implicit",
 
-    // ✅ CLAVE: permitir capturar access_token desde URL hash del Magic Link
-    // (No persiste sesión; solo “lee” el hash una vez)
+    // ✅ Captura sesión desde URL hash en callbacks
     detectSessionInUrl: true,
 
-    persistSession: false,
-    autoRefreshToken: false,
-    storage: memoryStorage,
+    // ✅ CLAVE: ahora sí persistimos sesión en browser
+    persistSession: true,
+
+    // ✅ Mantener sesión viva (evita que desaparezca en medio del flujo)
+    autoRefreshToken: true,
+
+    // ✅ Storage real en navegador
+    storage: browserStorage,
   },
   global: { fetch: wrappedFetch },
 });
 
+// ✅ Mantener __memoryAccessToken sincronizado automáticamente
 if (typeof window !== "undefined") {
+  // Cargar token inicial si existe session
+  supabase.auth
+    .getSession()
+    .then(({ data }) => {
+      const token = data?.session?.access_token || null;
+      setMemoryAccessToken(token);
+    })
+    .catch(() => {});
+
+  // Escuchar cambios de auth
+  supabase.auth.onAuthStateChange((_event, session) => {
+    setMemoryAccessToken(session?.access_token || null);
+  });
+
   window.__TG_SUPABASE_ENV_LOGGED__ = window.__TG_SUPABASE_ENV_LOGGED__ || false;
 
   const info = {
@@ -146,8 +161,9 @@ if (typeof window !== "undefined") {
     EXPECTED_PROJECT_REF,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
     FLOW: "implicit",
-    PERSIST_SESSION: false,
-    AUTO_REFRESH: false,
+    PERSIST_SESSION: true,
+    AUTO_REFRESH: true,
+    STORAGE: browserStorage ? "localStorage" : "none",
     SOURCE: "src/lib/supabaseClient.js",
   };
 
@@ -160,7 +176,7 @@ if (typeof window !== "undefined") {
 
   if (!window.__TG_SUPABASE_ENV_LOGGED__) {
     window.__TG_SUPABASE_ENV_LOGGED__ = true;
-    console.info(`[${BUILD_MARKER}] [ENV CHECK v4 - REF BY ENV]`, info);
+    console.info(`[${BUILD_MARKER}] [ENV CHECK v5 - SESSION PERSIST ENABLED]`, info);
     console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
