@@ -175,7 +175,6 @@ async function resolveContext(req) {
   });
 
   // 1) Intentar org activa persistida (si existe tabla user_current_org)
-  // Si falla (tabla no existe), seguimos sin romper.
   let currentOrgId = null;
   try {
     const { data: uco, error: ucoErr } = await sbSrv
@@ -253,9 +252,10 @@ export default async function handler(req, res) {
       return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
     }
 
-    const { ctx, sbSrv } = ctxRes;
+    const { ctx, sbSrv, user } = ctxRes;
     const org_id = String(ctx.org_id);
     const tenant_id = String(ctx.tenant_id || ctx.org_id);
+    const user_id = String(user.id);
 
     // GET
     if (req.method === "GET") {
@@ -330,12 +330,42 @@ export default async function handler(req, res) {
             ? Boolean(payload.activa)
             : true;
 
+        // --- AUDIT HARDENING (CRÍTICO PARA PRODUCCIÓN)
+        // updated_by SIEMPRE, created_by solo si inserción (o si no existe)
+        const incomingId = payload?.id ? String(payload.id) : null;
+
+        let createdByToUse = user_id;
+
+        // Si parece UPDATE por id, intentamos conservar created_by existente
+        if (incomingId) {
+          try {
+            const { data: prev, error: prevErr } = await sbSrv
+              .from("geocercas")
+              .select("created_by")
+              .eq("org_id", org_id)
+              .eq("id", incomingId)
+              .maybeSingle();
+
+            if (!prevErr && prev?.created_by) {
+              createdByToUse = String(prev.created_by);
+            }
+          } catch {
+            // si falla, no rompemos: usamos user_id
+            createdByToUse = user_id;
+          }
+        }
+
+        const nowIso = new Date().toISOString();
+
         const row = {
-          id: payload?.id || undefined,
+          id: incomingId || undefined,
           org_id,
           tenant_id,
+
+          // canonical names
           nombre: finalName,
           name: finalName,
+
           descripcion: payload?.descripcion ?? undefined,
           geojson: payload?.geojson ?? undefined,
           geometry: payload?.geometry ?? undefined,
@@ -349,7 +379,13 @@ export default async function handler(req, res) {
           personal_ids: payload?.personal_ids ?? undefined,
           asignacion_ids: payload?.asignacion_ids ?? undefined,
           activo: finalActivo,
-          updated_at: new Date().toISOString(),
+
+          // audit fields (FIX)
+          created_by: incomingId ? createdByToUse : user_id,
+          updated_by: user_id,
+
+          // timestamps
+          updated_at: nowIso,
         };
 
         const { data, error } = await sbSrv
@@ -378,7 +414,11 @@ export default async function handler(req, res) {
 
         let q = sbSrv
           .from("geocercas")
-          .update({ activo: false, updated_at: new Date().toISOString() })
+          .update({
+            activo: false,
+            updated_at: new Date().toISOString(),
+            updated_by: user_id, // audit hardening
+          })
           .eq("org_id", org_id)
           .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,updated_at");
 
