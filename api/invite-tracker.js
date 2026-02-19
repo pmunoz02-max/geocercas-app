@@ -4,11 +4,11 @@
 // - fallback de AUTH MODE:
 //   A) Authorization: Bearer ANON + x-user-jwt: USER_JWT
 //   B) Authorization: Bearer USER_JWT (standard Supabase)
+// - En PRODUCCIÓN: forzamos MODO B primero (muchas edge functions no aceptan modo A)
+// - Retry si upstream dice "Invalid token" (400) -> probar MODO B
 // - Refresh tg_rt si upstream devuelve 401 invalid jwt
-// - FIX v9: si hay invite pendiente (unique tracker_invites_one_pending_per_org_email_ux),
-//           cancelar pendiente via RPC (service_role) y reintentar 1 vez.
 
-const BUILD_TAG = "invite-proxy-v9-cancel-pending-on-unique-20260219";
+const BUILD_TAG = "invite-proxy-v10-force-modeB-in-prod-20260219";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
 const DEFAULT_EDGE_FN_CANDIDATES = [
@@ -111,8 +111,16 @@ function nowUnix() {
   return Math.floor(Date.now() / 1000);
 }
 
-function makeCookie(name, value, { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" }) {
-  const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`, `SameSite=${sameSite}`];
+function makeCookie(
+  name,
+  value,
+  { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" }
+) {
+  const parts = [
+    `${name}=${encodeURIComponent(value)}`,
+    `Path=${path}`,
+    `SameSite=${sameSite}`,
+  ];
   if (httpOnly) parts.push("HttpOnly");
   if (secure) parts.push("Secure");
   if (typeof maxAgeSec === "number") parts.push(`Max-Age=${Math.max(0, Math.floor(maxAgeSec))}`);
@@ -120,8 +128,14 @@ function makeCookie(name, value, { maxAgeSec, httpOnly = true, secure = true, sa
 }
 
 function parseEdgeFnCandidates() {
-  const raw = process.env.INVITE_TRACKER_EDGE_FNS || process.env.NEXT_PUBLIC_INVITE_TRACKER_EDGE_FNS || "";
-  const list = String(raw).split(",").map((s) => s.trim()).filter(Boolean);
+  const raw =
+    process.env.INVITE_TRACKER_EDGE_FNS ||
+    process.env.NEXT_PUBLIC_INVITE_TRACKER_EDGE_FNS ||
+    "";
+  const list = String(raw)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const seen = new Set();
   const out = [];
@@ -141,17 +155,27 @@ function parseEdgeFnCandidates() {
 }
 
 async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
-  const url = String(supabaseUrl).replace(/\/$/, "") + "/auth/v1/token?grant_type=refresh_token";
+  const url =
+    String(supabaseUrl).replace(/\/$/, "") +
+    "/auth/v1/token?grant_type=refresh_token";
 
   const r = await fetch(url, {
     method: "POST",
-    headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
 
   const text = await r.text();
   let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
 
   if (!r.ok) return { ok: false, status: r.status, body: json };
 
@@ -159,7 +183,9 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   const refresh_token = String(json?.refresh_token || "");
   const expires_in = typeof json?.expires_in === "number" ? json.expires_in : null;
 
-  if (!access_token) return { ok: false, status: 500, body: { error: "NO_ACCESS_TOKEN_RETURNED", raw: json } };
+  if (!access_token) {
+    return { ok: false, status: 500, body: { error: "NO_ACCESS_TOKEN_RETURNED", raw: json } };
+  }
 
   return { ok: true, access_token, refresh_token, expires_in };
 }
@@ -185,14 +211,14 @@ function isMissingSubClaim401(upstreamStatus, upstreamJson) {
   return det.includes("missing sub claim");
 }
 
-function isPendingInviteUniqueViolation(upstreamStatus, upstreamJson) {
-  if (upstreamStatus !== 500) return false;
-  const det = String(upstreamJson?.detail || "").toLowerCase();
-  const msg = String(upstreamJson?.message || "").toLowerCase();
-  return det.includes("tracker_invites_one_pending_per_org_email_ux") || msg.includes("tracker_invites_one_pending_per_org_email_ux");
+// ✅ producción suele devolver 400 Invalid token si se llama con auth modo A
+function isInvalidToken400(upstreamStatus, upstreamJson) {
+  if (upstreamStatus !== 400) return false;
+  const msg = String(upstreamJson?.message || upstreamJson?.error || "").toLowerCase();
+  return msg.includes("invalid token");
 }
 
-// MODE A
+// MODE A: Authorization=ANON, x-user-jwt=USER
 async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
@@ -213,7 +239,7 @@ async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   return { status: upstream.status, ok: upstream.ok, json, mode: "A" };
 }
 
-// MODE B
+// MODE B: Authorization=USER (standard), sin x-user-jwt
 async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
@@ -233,29 +259,6 @@ async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   return { status: upstream.status, ok: upstream.ok, json, mode: "B" };
 }
 
-// RPC cancel_pending_tracker_invite via service_role
-async function cancelPendingInvite({ supabaseUrl, serviceRoleKey, orgId, email }) {
-  if (!serviceRoleKey) return { ok: false, error: "MISSING_SERVICE_ROLE" };
-  const url = String(supabaseUrl).replace(/\/$/, "") + "/rest/v1/rpc/cancel_pending_tracker_invite";
-
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ p_org_id: orgId, p_email: email }),
-  });
-
-  const text = await r.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
-
-  if (!r.ok) return { ok: false, status: r.status, body: json };
-  return { ok: true, status: r.status, body: json };
-}
-
 export default async function handler(req, res) {
   try {
     if (req.method === "OPTIONS") {
@@ -272,17 +275,17 @@ export default async function handler(req, res) {
     const vercelEnv = String(process.env.VERCEL_ENV || "").toLowerCase();
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
     if (!supabaseUrl || !anonKey) {
       return res.status(500).json({
         ok: false,
         build_tag: BUILD_TAG,
         error: "Server missing SUPABASE env",
-        diag: { vercelEnv, supabaseUrl, hasAnonKey: !!anonKey, hasServiceRole: !!serviceRoleKey },
+        diag: { vercelEnv, supabaseUrl, hasAnonKey: !!anonKey },
       });
     }
 
+    // Preview debe apuntar a su proyecto
     if (vercelEnv === "preview" && !String(supabaseUrl).includes(PREVIEW_REF)) {
       return res.status(401).json({
         ok: false,
@@ -326,104 +329,47 @@ export default async function handler(req, res) {
       exp: p1?.exp || null,
       now: nowUnix(),
       has_tg_rt: !!tgRt,
-      has_service_role: !!serviceRoleKey,
+      has_service_role: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
       build_tag: BUILD_TAG,
       edge_fn_candidates: candidates,
     };
 
-    // ======== Attempt loop ========
+    const prodPreferB = vercelEnv === "production";
+
     for (const fnName of candidates) {
-      // 1) Try Mode A
+      // ===== PRODUCCIÓN: B primero =====
+      if (prodPreferB) {
+        let rb = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
+        if (rb.ok) {
+          return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: rb.mode, ...rb.json });
+        }
+        if (isFunctionNotFound(rb.status, rb.json)) {
+          continue;
+        }
+        // si dio 401 invalid jwt, seguimos al bloque refresh abajo
+        // si dio otro error, intentamos A como fallback final (por si alguna edge exige x-user-jwt)
+      }
+
+      // ===== Intento A =====
       let r = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
 
-      // If Mode A fails with "missing sub", try Mode B immediately (same fn)
+      // Missing sub -> B
       if (!r.ok && isMissingSubClaim401(r.status, r.json)) {
         r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
       }
 
+      // Invalid token 400 en A -> B
+      if (!r.ok && isInvalidToken400(r.status, r.json)) {
+        r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
+      }
+
       if (r.ok) {
-        return res.status(200).json({
-          build_tag: BUILD_TAG,
-          edge_fn: fnName,
-          auth_mode: r.mode,
-          ...r.json,
-        });
+        return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
       }
 
-      // If unique pending invite -> cancel + retry ONCE (same fn, same mode)
-      if (isPendingInviteUniqueViolation(r.status, r.json)) {
-        const orgId = edgeBody?.org_id || edgeBody?.orgId || null;
-        const email = edgeBody?.email || edgeBody?.email_norm || edgeBody?.emailNorm || null;
-
-        if (!orgId || !email) {
-          return res.status(500).json({
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "UPSTREAM_UNIQUE_PENDING_INVITE_MISSING_INPUT",
-            edge_fn: fnName,
-            auth_mode: r.mode,
-            upstream_status: r.status,
-            upstream: r.json,
-            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-          });
-        }
-
-        const cancelled = await cancelPendingInvite({ supabaseUrl, serviceRoleKey, orgId, email });
-        if (!cancelled.ok) {
-          return res.status(500).json({
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "CANCEL_PENDING_FAILED",
-            edge_fn: fnName,
-            auth_mode: r.mode,
-            upstream_status: r.status,
-            upstream: r.json,
-            cancel_status: cancelled.status,
-            cancel_body: cancelled.body,
-            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-          });
-        }
-
-        // retry once (prefer Mode B; si estábamos en A, repetimos A primero y luego B si missing-sub)
-        let rr =
-          r.mode === "A"
-            ? await callEdgeModeA({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody })
-            : await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-
-        if (!rr.ok && isMissingSubClaim401(rr.status, rr.json)) {
-          rr =
-            rr.mode === "A"
-              ? await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody })
-              : await callEdgeModeA({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-        }
-
-        if (rr.ok) {
-          return res.status(200).json({
-            build_tag: BUILD_TAG,
-            edge_fn: fnName,
-            auth_mode: rr.mode,
-            cancelled_pending: true,
-            ...rr.json,
-          });
-        }
-
-        return res.status(rr.status).json({
-          ok: false,
-          build_tag: BUILD_TAG,
-          error: "UPSTREAM_ERROR_AFTER_CANCEL_PENDING",
-          edge_fn: fnName,
-          auth_mode: rr.mode,
-          cancelled_pending: true,
-          upstream_status: rr.status,
-          upstream: rr.json,
-          diag: { ...diagBase, edge_fn: fnName, auth_mode: rr.mode },
-        });
-      }
-
-      // Not found -> try next fn
       if (isFunctionNotFound(r.status, r.json)) continue;
 
-      // Invalid JWT -> refresh once then retry same fn
+      // ===== Refresh token si 401 invalid jwt =====
       if (isInvalidJwt401(r.status, r.json)) {
         if (!tgRt) {
           return res.status(401).json({
@@ -457,13 +403,17 @@ export default async function handler(req, res) {
         if (refreshed.refresh_token) cookieHeaders.push(makeCookie("tg_rt", refreshed.refresh_token, { maxAgeSec: 60 * 60 * 24 * 30 }));
         res.setHeader("Set-Cookie", cookieHeaders);
 
-        const d2 = tryDecodeJwt(refreshed.access_token);
-        const p2 = d2.ok ? d2.payload : null;
-        const diag_refreshed = { iss: p2?.iss || null, aud: p2?.aud || null, exp: p2?.exp || null, now: nowUnix() };
-
+        // retry B first
         let rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
+
+        // missing-sub -> A
         if (!rr.ok && isMissingSubClaim401(rr.status, rr.json)) {
           rr = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
+        }
+
+        // invalid token 400 -> B
+        if (!rr.ok && isInvalidToken400(rr.status, rr.json)) {
+          rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
         }
 
         if (rr.ok) {
@@ -472,8 +422,6 @@ export default async function handler(req, res) {
             edge_fn: fnName,
             auth_mode: rr.mode,
             refreshed: true,
-            diag: { ...diagBase, edge_fn: fnName, auth_mode: rr.mode },
-            diag_refreshed,
             ...rr.json,
           });
         }
@@ -490,11 +438,10 @@ export default async function handler(req, res) {
           upstream_status: rr.status,
           upstream: rr.json,
           diag: { ...diagBase, edge_fn: fnName, auth_mode: rr.mode },
-          diag_refreshed,
         });
       }
 
-      // Other errors -> stop
+      // otros errores -> stop
       return res.status(r.status).json({
         ok: false,
         build_tag: BUILD_TAG,
