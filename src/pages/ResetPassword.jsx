@@ -1,6 +1,6 @@
 // src/pages/ResetPassword.jsx
 // RESET-PASSWORD-IMPLICIT-V2
-// Soporta 2 entradas:
+// Soporta 2 entrada:
 // A) Implicit recovery: /reset-password#access_token=...&refresh_token=...&type=recovery
 // B) Legacy token_hash: /reset-password?token_hash=...&type=recovery  (verifyOtp)
 
