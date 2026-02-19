@@ -1,7 +1,7 @@
 // api/personal.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v20-memberships-canonical-server-owned-universal";
+const VERSION = "personal-api-v21-memberships-canonical-server-owned-universal";
 
 /* =========================
    Utils
@@ -92,12 +92,12 @@ function normEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || ""));
+}
+
 /* =========================
    Context Resolver (UNIVERSAL)
-   - tg_at valida user (anon)
-   - org: user_current_org (si existe) -> memberships de esa org
-   - fallback: memberships default/first
-   - supaSrv: service role para TODA tabla (bypass RLS)
 ========================= */
 
 async function resolveContext(req) {
@@ -127,7 +127,6 @@ async function resolveContext(req) {
   const jwt = getCookie(req, "tg_at");
   if (!jwt) return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
 
-  // validar usuario con anon + bearer
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -140,12 +139,11 @@ async function resolveContext(req) {
 
   const user = userData.user;
 
-  // service role (server-owned)
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // 1) user_current_org (si existe)
+  // 1) user_current_org
   let currentOrgId = null;
   try {
     const { data: uco, error: ucoErr } = await supaSrv
@@ -156,7 +154,7 @@ async function resolveContext(req) {
     if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
   } catch {}
 
-  // 2) membership preferida: org activa
+  // 2) membership en org activa
   let mRow = null;
 
   if (currentOrgId) {
@@ -171,7 +169,7 @@ async function resolveContext(req) {
     if (!error && data?.org_id && data?.role) mRow = data;
   }
 
-  // 3) fallback: default o primera (revoked_at tolerante)
+  // 3) fallback default/primera
   if (!mRow) {
     let r = await supaSrv
       .from("memberships")
@@ -204,16 +202,14 @@ async function resolveContext(req) {
 }
 
 /* =========================
-   Helpers universales
+   Helpers
 ========================= */
 
-// ✅ Universal: dedupe por email_norm / email sin single/maybeSingle
 async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
   if (!emailNorm) return { row: null, error: null };
 
   const orClause = `email_norm.eq.${emailNorm},email.eq.${emailNorm},email.ilike.${emailNorm}`;
 
-  // 1) preferir NO borrados
   let r = await supaSrv
     .from("personal")
     .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
@@ -227,7 +223,6 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
   if (r.error) return { row: null, error: r.error };
   if (Array.isArray(r.data) && r.data.length) return { row: r.data[0], error: null };
 
-  // 2) fallback: incluye deleted (revive)
   r = await supaSrv
     .from("personal")
     .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
@@ -241,6 +236,35 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
   if (Array.isArray(r.data) && r.data.length) return { row: r.data[0], error: null };
 
   return { row: null, error: null };
+}
+
+// ✅ evita violar unique (user_id, org_id)
+async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePersonalId }) {
+  if (!desiredUserId) return { ok: true };
+  const q = supaSrv
+    .from("personal")
+    .select("id,user_id,email,is_deleted")
+    .eq("org_id", orgId)
+    .eq("user_id", desiredUserId)
+    .limit(1);
+
+  const { data, error } = await q;
+  if (error) return { ok: false, error };
+
+  const row = Array.isArray(data) && data.length ? data[0] : null;
+  if (!row) return { ok: true };
+
+  if (excludePersonalId && String(row.id) === String(excludePersonalId)) return { ok: true };
+
+  return {
+    ok: false,
+    conflict: true,
+    details: {
+      message: "Ya existe un registro personal vinculado a este usuario en esta organización",
+      conflict_personal_id: row.id,
+      conflict_email: row.email,
+    },
+  };
 }
 
 /* =========================
@@ -354,7 +378,7 @@ async function handlePost(req, res) {
     return json(res, 200, { ok: true, item: del, deleted: true });
   }
 
-  // UPSERT CREATE/REVIVE
+  // CREATE/REVIVE
   const nombre = String(payload.nombre || "").trim();
   const apellido = String(payload.apellido || "").trim();
   const emailNorm = normEmail(payload.email);
@@ -368,10 +392,7 @@ async function handlePost(req, res) {
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
-  // ⚠️ IMPORTANTE (UNIVERSAL):
-  // email_norm e identity_key son GENERATED ALWAYS -> NO se envían en INSERT/UPDATE.
-  // El constraint personal_active_requires_identity se cumple porque email NO es null.
-
+  // ⚠️ email_norm e identity_key son GENERATED ALWAYS -> NO se envían
   const baseRow = {
     nombre,
     apellido: apellido || null,
@@ -383,6 +404,22 @@ async function handlePost(req, res) {
     updated_at: nowIso,
   };
 
+  // user_id solo si viene explícito (vinculación real a auth.users)
+  const desiredUserId = isUuid(payload.user_id) ? String(payload.user_id) : null;
+
+  // si se intenta vincular, validar unique (user_id, org_id)
+  if (desiredUserId) {
+    const chk = await ensureUserOrgUnique({
+      supaSrv,
+      orgId: ctx.org_id,
+      desiredUserId,
+      excludePersonalId: null,
+    });
+    if (!chk.ok) {
+      return json(res, 409, { ok: false, error: "Conflicto de vínculo", details: chk.details || chk.error?.message });
+    }
+  }
+
   const { row: existing, error: findErr } = await findExistingByEmail({
     supaSrv,
     orgId: ctx.org_id,
@@ -391,16 +428,33 @@ async function handlePost(req, res) {
 
   if (findErr) return json(res, 500, { ok: false, error: "No se pudo validar duplicado", details: findErr.message });
 
-  // REVIVE/UPDATE
+  // UPDATE/REVIVE
   if (existing?.id) {
-    const ensureUserCols = {
-      user_id: existing.user_id || user.id,
+    // si quieren vincular a user_id explícitamente, validar unique excluyendo este registro
+    if (desiredUserId) {
+      const chk = await ensureUserOrgUnique({
+        supaSrv,
+        orgId: ctx.org_id,
+        desiredUserId,
+        excludePersonalId: existing.id,
+      });
+      if (!chk.ok) {
+        return json(res, 409, { ok: false, error: "Conflicto de vínculo", details: chk.details || chk.error?.message });
+      }
+    }
+
+    const updateRow = {
+      ...baseRow,
       owner_id: existing.owner_id || user.id,
+      // ✅ NO forzar user.id aquí (evita violar personal_user_org_unique)
+      ...(desiredUserId ? { user_id: desiredUserId } : {}),
+      is_deleted: false,
+      deleted_at: null,
     };
 
     const { data: updArr, error } = await supaSrv
       .from("personal")
-      .update({ ...baseRow, ...ensureUserCols, is_deleted: false, deleted_at: null })
+      .update(updateRow)
       .eq("id", existing.id)
       .eq("org_id", ctx.org_id)
       .select("*")
@@ -415,8 +469,8 @@ async function handlePost(req, res) {
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
-    owner_id: user.id,
-    user_id: user.id,
+    owner_id: user.id,      // quién lo creó
+    user_id: desiredUserId, // ✅ normalmente NULL; solo si se vincula explícitamente
     created_at: nowIso,
     is_deleted: false,
     position_interval_sec: 300,
