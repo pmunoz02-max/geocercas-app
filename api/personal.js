@@ -1,7 +1,7 @@
 // api/personal.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v19-memberships-canonical-server-owned-universal";
+const VERSION = "personal-api-v20-memberships-canonical-server-owned-universal";
 
 /* =========================
    Utils
@@ -173,7 +173,6 @@ async function resolveContext(req) {
 
   // 3) fallback: default o primera (revoked_at tolerante)
   if (!mRow) {
-    // intento con revoked_at
     let r = await supaSrv
       .from("memberships")
       .select("org_id, role, is_default, revoked_at, created_at")
@@ -184,7 +183,6 @@ async function resolveContext(req) {
       .limit(1);
 
     if (r.error) {
-      // fallback sin revoked_at (por si algún entorno no tiene esa col)
       r = await supaSrv
         .from("memberships")
         .select("org_id, role, is_default, created_at")
@@ -209,9 +207,11 @@ async function resolveContext(req) {
    Helpers universales
 ========================= */
 
-// ✅ Universal: dedupe por email_norm / lower(email) sin maybeSingle
+// ✅ Universal: dedupe por email_norm / email sin single/maybeSingle
 async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
   if (!emailNorm) return { row: null, error: null };
+
+  const orClause = `email_norm.eq.${emailNorm},email.eq.${emailNorm},email.ilike.${emailNorm}`;
 
   // 1) preferir NO borrados
   let r = await supaSrv
@@ -219,13 +219,12 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
     .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
     .eq("org_id", orgId)
     .eq("is_deleted", false)
-    .or(`email_norm.eq.${emailNorm},email.ilike.${emailNorm}`) // compat
+    .or(orClause)
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
     .limit(5);
 
   if (r.error) return { row: null, error: r.error };
-
   if (Array.isArray(r.data) && r.data.length) return { row: r.data[0], error: null };
 
   // 2) fallback: incluye deleted (revive)
@@ -233,7 +232,7 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
     .from("personal")
     .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
     .eq("org_id", orgId)
-    .or(`email_norm.eq.${emailNorm},email.ilike.${emailNorm}`)
+    .or(orClause)
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
     .limit(5);
@@ -369,8 +368,9 @@ async function handlePost(req, res) {
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
-  // ✅ UNIVERSAL: identity_key requerido por constraint
-  const identity_key = String(payload.identity_key || "").trim() || emailNorm;
+  // ⚠️ IMPORTANTE (UNIVERSAL):
+  // email_norm e identity_key son GENERATED ALWAYS -> NO se envían en INSERT/UPDATE.
+  // El constraint personal_active_requires_identity se cumple porque email NO es null.
 
   const baseRow = {
     nombre,
@@ -380,12 +380,9 @@ async function handlePost(req, res) {
     telefono: telefonoE164 || null,
     telefono_raw: telefonoRaw || null,
     vigente,
-    identity_key,
-    email_norm: emailNorm, // existe en tu schema
     updated_at: nowIso,
   };
 
-  // ✅ DEDUPE UNIVERSAL
   const { row: existing, error: findErr } = await findExistingByEmail({
     supaSrv,
     orgId: ctx.org_id,
@@ -397,7 +394,6 @@ async function handlePost(req, res) {
   // REVIVE/UPDATE
   if (existing?.id) {
     const ensureUserCols = {
-      // ✅ universal: si user_id/owner_id están null, sincronízalos
       user_id: existing.user_id || user.id,
       owner_id: existing.owner_id || user.id,
     };
@@ -420,7 +416,7 @@ async function handlePost(req, res) {
     ...baseRow,
     org_id: ctx.org_id,
     owner_id: user.id,
-    user_id: user.id, // ✅ universal: mantener user_id sincronizado
+    user_id: user.id,
     created_at: nowIso,
     is_deleted: false,
     position_interval_sec: 300,
