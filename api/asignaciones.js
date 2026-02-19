@@ -2,7 +2,7 @@
 // CANÓNICO (memberships) + SERVER-OWNED (service_role):
 // - cookie HttpOnly tg_at
 // - valida JWT (supabase.auth.getUser()) con ANON
-// - resuelve org_id desde memberships (default o 1ro)
+// - resuelve org_id desde memberships (default o 1ro) [tolerante a schemas]
 // - TODA escritura/lectura de tablas con SERVICE_ROLE (bypass RLS)
 // - devuelve: asignaciones + catalogs { personal, geocercas, activities, people(alias) }
 //
@@ -13,8 +13,8 @@
 // - start_date/end_date se derivan de start_time/end_time (YYYY-MM-DD)
 //
 // ✅ FIX UNIVERSAL:
-// - catalogs.geocercas muestra SOLO activas por defecto:
-//   intenta activo=true, si no existe intenta active=true, si no existe no rompe.
+// - catalogs.geocercas muestra SOLO activas por defecto (si existen columnas activo/active)
+//   sin romper si no existen esas columnas.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -76,7 +76,6 @@ async function readJson(req) {
       return null;
     }
   }
-
   return new Promise((resolve) => {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -111,6 +110,13 @@ function isoToYmd(iso) {
   }
 }
 
+function toInt(v, fallback = null) {
+  if (v === undefined || v === null || v === "") return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.trunc(n);
+}
+
 /* =========================
    Supabase clients
 ========================= */
@@ -135,6 +141,10 @@ function supabaseServiceRole() {
   });
 }
 
+/* =========================
+   Context resolver (universal)
+========================= */
+
 async function getCanonicalContextOr401(req) {
   const cookies = parseCookies(req);
   const token = cookies.tg_at || null;
@@ -149,33 +159,33 @@ async function getCanonicalContextOr401(req) {
 
   const supaSrv = supabaseServiceRole();
 
-  let m = null;
+  // memberships: tolerante a esquemas (revoked_at puede no existir)
+  async function queryMembership({ withRevokedAt }) {
+    const cols = withRevokedAt
+      ? "org_id, role, is_default, revoked_at, created_at"
+      : "org_id, role, is_default, created_at";
 
-  const d1 = await supaSrv
-    .from("memberships")
-    .select("org_id, role, is_default, revoked_at, created_at")
-    .eq("user_id", userId)
-    .eq("is_default", true)
-    .is("revoked_at", null)
-    .limit(1);
-
-  if (d1.error) return { ok: false, status: 500, error: d1.error.message || "memberships query error" };
-  if (Array.isArray(d1.data) && d1.data.length) m = d1.data[0];
-
-  if (!m?.org_id) {
-    const d2 = await supaSrv
+    let q = supaSrv
       .from("memberships")
-      .select("org_id, role, is_default, revoked_at, created_at")
+      .select(cols)
       .eq("user_id", userId)
-      .is("revoked_at", null)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (d2.error) return { ok: false, status: 500, error: d2.error.message || "memberships query error" };
-    if (Array.isArray(d2.data) && d2.data.length) m = d2.data[0];
+    if (withRevokedAt) q = q.is("revoked_at", null);
+
+    return await q;
   }
 
+  let mRes = await queryMembership({ withRevokedAt: true });
+  if (mRes.error) {
+    // fallback sin revoked_at
+    mRes = await queryMembership({ withRevokedAt: false });
+    if (mRes.error) return { ok: false, status: 500, error: mRes.error.message || "memberships query error" };
+  }
+
+  const m = Array.isArray(mRes.data) && mRes.data.length ? mRes.data[0] : null;
   const orgId = m?.org_id || null;
   if (!orgId) return { ok: false, status: 403, error: "no org in memberships" };
 
@@ -187,7 +197,7 @@ async function getCanonicalContextOr401(req) {
 ========================= */
 
 async function loadCatalogs(supaSrv, { orgId }) {
-  // Personal (ya canónico: no borrados)
+  // Personal
   let personal = [];
   {
     const r = await supaSrv
@@ -200,46 +210,37 @@ async function loadCatalogs(supaSrv, { orgId }) {
     if (!r.error) personal = r.data || [];
   }
 
-  // Geocercas (✅ UNIVERSAL: preferir activas; tolerante a schema)
+  // Geocercas (universal: intenta activo/active, si no, sin filtro)
   let geocercas = [];
   {
-    // intento 1: activo=true
+    // 1) activo=true
     let r = await supaSrv
       .from("geocercas")
-      .select("id,nombre,org_id,activo,active")
+      .select("id,nombre,org_id,activo")
       .eq("org_id", orgId)
       .eq("activo", true)
       .order("nombre", { ascending: true });
 
+    // 2) active=true
     if (r.error) {
-      // intento 2: active=true
       r = await supaSrv
         .from("geocercas")
-        .select("id,nombre,org_id,activo,active")
+        .select("id,nombre,org_id,active")
         .eq("org_id", orgId)
         .eq("active", true)
         .order("nombre", { ascending: true });
+    }
 
-      // intento 3: sin filtro (no romper)
-      if (r.error) {
-        r = await supaSrv
-          .from("geocercas")
-          .select("id,nombre,org_id")
-          .eq("org_id", orgId)
-          .order("nombre", { ascending: true });
-      }
+    // 3) fallback sin filtro (no romper)
+    if (r.error) {
+      r = await supaSrv
+        .from("geocercas")
+        .select("id,nombre,org_id")
+        .eq("org_id", orgId)
+        .order("nombre", { ascending: true });
     }
 
     if (!r.error) geocercas = r.data || [];
-
-    // hardening extra: si vinieron flags, filtrar en memoria (por si active/activo es null)
-    geocercas = (geocercas || []).filter((g) => {
-      if (g && typeof g === "object") {
-        if ("activo" in g) return g.activo === true;
-        if ("active" in g) return g.active === true;
-      }
-      return true; // si no hay flag, no filtramos
-    });
   }
 
   // Activities
@@ -254,6 +255,7 @@ async function loadCatalogs(supaSrv, { orgId }) {
     if (!r.error) activities = r.data || [];
   }
 
+  // Alias compat
   const people = personal.map((p) => ({
     org_people_id: p.id,
     nombre: p.nombre,
@@ -265,7 +267,7 @@ async function loadCatalogs(supaSrv, { orgId }) {
 }
 
 /* ======================================================
-   ✅ SYNC UNIVERSAL: asignaciones -> tracker_assignments
+   SYNC: asignaciones -> tracker_assignments (server-owned)
 ====================================================== */
 
 async function resolveTrackerUserIdFromPersonal(supaSrv, { orgId, personalId }) {
@@ -361,9 +363,7 @@ async function syncTrackerAssignmentsFromAsignacion(supaSrv, { orgId, asignacion
   const end_date = isoToYmd(asignacionRow?.end_time);
 
   const r = await resolveTrackerUserIdFromPersonal(supaSrv, { orgId, personalId });
-  if (!r.tracker_user_id) {
-    return { ok: false, warning: `cannot resolve tracker_user_id: ${r.reason}` };
-  }
+  if (!r.tracker_user_id) return { ok: false, warning: `cannot resolve tracker_user_id: ${r.reason}` };
 
   const up = await upsertTrackerAssignment(supaSrv, {
     orgId,
@@ -429,7 +429,6 @@ export default async function handler(req, res) {
       if (q.error) return json(res, 500, { ok: false, error: q.error.message });
 
       const catalogs = await loadCatalogs(supaSrv, { orgId });
-
       return json(res, 200, { ok: true, data: { asignaciones: q.data || [], catalogs } });
     }
 
@@ -444,6 +443,17 @@ export default async function handler(req, res) {
       if (!payload.personal_id) return json(res, 400, { ok: false, error: "personal_id is required" });
       if (!payload.geocerca_id) return json(res, 400, { ok: false, error: "geocerca_id is required" });
 
+      // normaliza frecuencia: UI suele mandar minutos -> segundos
+      if (payload.frecuencia_envio_min !== undefined && payload.frecuencia_envio_sec === undefined) {
+        const m = toInt(payload.frecuencia_envio_min, null);
+        if (m !== null) payload.frecuencia_envio_sec = m * 60;
+        delete payload.frecuencia_envio_min;
+      }
+      if (payload.frecuencia_envio_sec !== undefined) {
+        const s = toInt(payload.frecuencia_envio_sec, 300);
+        payload.frecuencia_envio_sec = Math.max(300, s);
+      }
+
       delete payload.tenant_id;
       delete payload.org_people_id;
 
@@ -451,7 +461,6 @@ export default async function handler(req, res) {
       if (ins.error) return json(res, 400, { ok: false, error: ins.error.message });
 
       const row = Array.isArray(ins.data) && ins.data.length ? ins.data[0] : null;
-
       const sync = row ? await syncTrackerAssignmentsFromAsignacion(supaSrv, { orgId, asignacionRow: row }) : null;
 
       return json(res, 200, {
@@ -501,9 +510,7 @@ export default async function handler(req, res) {
 
       const updated = Array.isArray(updRes.data) && updRes.data.length ? updRes.data[0] : null;
 
-      const syncNew = updated
-        ? await syncTrackerAssignmentsFromAsignacion(supaSrv, { orgId, asignacionRow: updated })
-        : null;
+      const syncNew = updated ? await syncTrackerAssignmentsFromAsignacion(supaSrv, { orgId, asignacionRow: updated }) : null;
 
       let deactivatedPrev = null;
       try {
