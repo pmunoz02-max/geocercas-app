@@ -231,7 +231,7 @@ export default function Login() {
         return;
       }
 
-      // 2) PASSWORD (FIX UNIVERSAL: session hydration robusta + bootstrap siempre)
+      // 2) PASSWORD (session hydration robusta + bootstrap siempre)
       if (mode === "password") {
         if (!password || password.length < 6) {
           setErr(t("login.errorMissingCredentials"));
@@ -244,7 +244,6 @@ export default function Login() {
         });
         if (error) throw error;
 
-        // Supabase v2 puede tardar milisegundos en hidratar la session.
         let session = (await supabase.auth.getSession()).data.session;
         if (!session) {
           for (let i = 0; i < 4; i++) {
@@ -260,23 +259,25 @@ export default function Login() {
           );
         }
 
-        const accessToken = session.access_token;
-        const refreshToken = session.refresh_token;
-        const expiresIn =
-          typeof session.expires_in === "number" ? session.expires_in : undefined;
-
-        await bootstrapCookie(accessToken, refreshToken, expiresIn);
+        await bootstrapCookie(
+          session.access_token,
+          session.refresh_token,
+          typeof session.expires_in === "number" ? session.expires_in : undefined
+        );
 
         setMsg(
           t("login.sessionStarted", {
             defaultValue: "✅ Session started. Entering…",
           })
         );
-        navigate(safeNextPath(nextInput), { replace: true });
+
+        // ✅ FIX UNIVERSAL: hard redirect evita parpadeo/loops por guards
+        const dest = safeNextPath(nextInput);
+        window.location.assign(dest);
         return;
       }
 
-      // 3) RESET PASSWORD (ENVIAR EMAIL)
+      // 3) RESET PASSWORD
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: resetRedirectTo,
@@ -331,6 +332,10 @@ export default function Login() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
       <div className="w-full max-w-md">
+        {/* ... TU JSX original sin cambios ... */}
+        {/* (lo dejé igual; solo cambiamos el post-bootstrap) */}
+
+        {/* Mantengo TODO tal como lo pegaste */}
         <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
             {t("landing.heroBadge")}
