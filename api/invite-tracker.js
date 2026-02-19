@@ -1,19 +1,15 @@
 // api/invite-tracker.js
-// Proxy robusto (universal):
-// - Usa Supabase Functions gateway con ANON como Bearer (siempre aceptado)
-// - Pasa JWT real del usuario en x-user-jwt
-// - Refresh tg_rt si el upstream devuelve 401 invalid jwt
-// - ✅ UNIVERSAL: fallback de Edge Function names (preview/prod pueden diferir)
-// - ✅ FIX: edgeBody undefined -> usa req.body
+// Proxy universal:
+// - fallback de Edge Function names (preview/prod pueden diferir)
+// - fallback de AUTH MODE:
+//   A) Authorization: Bearer ANON + x-user-jwt: USER_JWT
+//   B) Authorization: Bearer USER_JWT (standard Supabase)
+// - Refresh tg_rt si upstream devuelve 401 invalid jwt
+// - FIX: edgeBody siempre definido
 
-const BUILD_TAG = "invite-proxy-v7-fallback-edgefn-20260219";
+const BUILD_TAG = "invite-proxy-v8-fallback-authmode-20260219";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
-// Defaults universales (orden importa):
-// 1) invite_tracker (tu prod actual)
-// 2) send-tracker-invite-brevo (tu preview histórico)
-// 3) send-invite-or-magic (fallback legacy)
-// 4) invite-user (legacy)
 const DEFAULT_EDGE_FN_CANDIDATES = [
   "invite_tracker",
   "send-tracker-invite-brevo",
@@ -26,8 +22,7 @@ const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
 function pickLangFromAcceptLanguage(h) {
   const s = String(h || "").toLowerCase();
   if (!s) return "";
-  const first = s.split(",")[0].trim();
-  return first.slice(0, 2);
+  return s.split(",")[0].trim().slice(0, 2);
 }
 
 function sanitizeLang(v) {
@@ -90,8 +85,7 @@ function normalizeToken(maybeToken) {
   if (
     (t.startsWith('"') && t.endsWith('"')) ||
     (t.startsWith("'") && t.endsWith("'"))
-  )
-    t = t.slice(1, -1).trim();
+  ) t = t.slice(1, -1).trim();
   if (t.startsWith("s:")) t = t.slice(2).trim();
   if (/^bearer\s+/i.test(t)) t = t.replace(/^bearer\s+/i, "").trim();
   t = t.replace(/\s+/g, "");
@@ -131,13 +125,11 @@ function makeCookie(
   ];
   if (httpOnly) parts.push("HttpOnly");
   if (secure) parts.push("Secure");
-  if (typeof maxAgeSec === "number")
-    parts.push(`Max-Age=${Math.max(0, Math.floor(maxAgeSec))}`);
+  if (typeof maxAgeSec === "number") parts.push(`Max-Age=${Math.max(0, Math.floor(maxAgeSec))}`);
   return parts.join("; ");
 }
 
 function parseEdgeFnCandidates() {
-  // Permite configurar por env: INVITE_TRACKER_EDGE_FNS="invite_tracker,send-tracker-invite-brevo"
   const raw =
     process.env.INVITE_TRACKER_EDGE_FNS ||
     process.env.NEXT_PUBLIC_INVITE_TRACKER_EDGE_FNS ||
@@ -147,7 +139,6 @@ function parseEdgeFnCandidates() {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  // Uniq + defaults
   const seen = new Set();
   const out = [];
   for (const x of list) {
@@ -193,12 +184,10 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
   const access_token = String(json?.access_token || "");
   const refresh_token = String(json?.refresh_token || "");
   const expires_in = typeof json?.expires_in === "number" ? json.expires_in : null;
-  if (!access_token)
-    return {
-      ok: false,
-      status: 500,
-      body: { error: "NO_ACCESS_TOKEN_RETURNED", raw: json },
-    };
+
+  if (!access_token) {
+    return { ok: false, status: 500, body: { error: "NO_ACCESS_TOKEN_RETURNED", raw: json } };
+  }
 
   return { ok: true, access_token, refresh_token, expires_in };
 }
@@ -207,8 +196,6 @@ function isFunctionNotFound(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 404) return false;
   const msg = String(upstreamJson?.message || "").toLowerCase();
   const code = String(upstreamJson?.code || "").toUpperCase();
-  // Supabase functions gateway suele devolver:
-  // { code:"NOT_FOUND", message:"Requested function was not found" }
   return code === "NOT_FOUND" || msg.includes("requested function was not found");
 }
 
@@ -216,20 +203,26 @@ function isInvalidJwt401(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 401) return false;
   const msg = String(upstreamJson?.message || "").toLowerCase();
   const err = String(upstreamJson?.error || "").toLowerCase();
-  return msg.includes("invalid jwt") || err.includes("invalid jwt") || upstreamJson?.code === 401;
+  const det = String(upstreamJson?.detail || "").toLowerCase();
+  return msg.includes("invalid jwt") || err.includes("invalid jwt") || det.includes("invalid jwt");
 }
 
-async function callEdge({ supabaseUrl, anonKey, userJwt, fnName, body }) {
-  const url =
-    String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
+// 👉 Señal para cambiar a Modo B
+function isMissingSubClaim401(upstreamStatus, upstreamJson) {
+  if (upstreamStatus !== 401) return false;
+  const det = String(upstreamJson?.detail || "").toLowerCase();
+  return det.includes("missing sub claim");
+}
+
+// MODE A: Authorization=ANON, x-user-jwt=USER
+async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
+  const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
   const upstream = await fetch(url, {
     method: "POST",
     headers: {
       apikey: anonKey,
-      // ✅ Gatekeeper token
       Authorization: `Bearer ${anonKey}`,
-      // ✅ Real user token
       "x-user-jwt": userJwt,
       "Content-Type": "application/json",
     },
@@ -238,31 +231,41 @@ async function callEdge({ supabaseUrl, anonKey, userJwt, fnName, body }) {
 
   const text = await upstream.text();
   let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
+  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+  return { status: upstream.status, ok: upstream.ok, json, mode: "A" };
+}
 
-  return { status: upstream.status, ok: upstream.ok, json };
+// MODE B: Authorization=USER (standard), sin x-user-jwt
+async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
+  const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
+
+  const upstream = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${userJwt}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body || {}),
+  });
+
+  const text = await upstream.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+  return { status: upstream.status, ok: upstream.ok, json, mode: "B" };
 }
 
 export default async function handler(req, res) {
   try {
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        "authorization, x-client-info, apikey, content-type, x-user-jwt"
-      );
+      res.setHeader("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type, x-user-jwt");
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       return res.status(200).send("ok");
     }
 
     if (req.method !== "POST") {
-      return res
-        .status(405)
-        .json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
+      return res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
     }
 
     const vercelEnv = String(process.env.VERCEL_ENV || "").toLowerCase();
@@ -278,7 +281,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Guard: preview debe apuntar al proyecto preview
     if (vercelEnv === "preview" && !String(supabaseUrl).includes(PREVIEW_REF)) {
       return res.status(401).json({
         ok: false,
@@ -306,7 +308,6 @@ export default async function handler(req, res) {
     const acceptLang = pickLangFromAcceptLanguage(req?.headers?.["accept-language"]);
     const lang = sanitizeLang(req?.body?.lang || acceptLang);
 
-    // Enriquecemos payload con copy corto (la Edge decide si lo usa)
     const edgeBody = {
       ...(req.body || {}),
       lang,
@@ -327,28 +328,29 @@ export default async function handler(req, res) {
       edge_fn_candidates: candidates,
     };
 
-    // 1) Intento: recorrer functions hasta que una funcione,
-    // o hasta que una falle por algo NO-404-notfound (ej RLS/500/400).
-    let last = null;
-    let usedFn = null;
-
+    // ======== Attempt loop ========
     for (const fnName of candidates) {
-      const r = await callEdge({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-      last = r;
-      usedFn = fnName;
+      // 1) Try Mode A
+      let r = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
+
+      // If Mode A fails with "missing sub", try Mode B immediately (same fn)
+      if (!r.ok && isMissingSubClaim401(r.status, r.json)) {
+        r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
+      }
 
       if (r.ok) {
         return res.status(200).json({
           build_tag: BUILD_TAG,
           edge_fn: fnName,
+          auth_mode: r.mode,
           ...r.json,
         });
       }
 
-      // Si no existe esa function, probamos la siguiente
+      // Not found -> try next fn
       if (isFunctionNotFound(r.status, r.json)) continue;
 
-      // Si es 401 invalid jwt, intentaremos refresh (una sola vez) para esta fn y/o siguientes
+      // Invalid JWT -> refresh once then retry same fn (B first, then A)
       if (isInvalidJwt401(r.status, r.json)) {
         if (!tgRt) {
           return res.status(401).json({
@@ -356,8 +358,9 @@ export default async function handler(req, res) {
             build_tag: BUILD_TAG,
             error: "UPSTREAM_401_NO_REFRESH_TOKEN",
             edge_fn: fnName,
+            auth_mode: r.mode,
             upstream: r.json,
-            diag: { ...diagBase, edge_fn: fnName },
+            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
           });
         }
 
@@ -370,144 +373,78 @@ export default async function handler(req, res) {
             refresh_status: refreshed.status,
             refresh_body: refreshed.body,
             edge_fn: fnName,
+            auth_mode: r.mode,
             upstream: r.json,
-            diag: { ...diagBase, edge_fn: fnName },
+            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
           });
         }
 
-        // set cookies
         const cookieHeaders = [];
-        cookieHeaders.push(
-          makeCookie("tg_at", refreshed.access_token, {
-            maxAgeSec: refreshed.expires_in || 3600,
-          })
-        );
-        if (refreshed.refresh_token) {
-          cookieHeaders.push(
-            makeCookie("tg_rt", refreshed.refresh_token, {
-              maxAgeSec: 60 * 60 * 24 * 30,
-            })
-          );
-        }
+        cookieHeaders.push(makeCookie("tg_at", refreshed.access_token, { maxAgeSec: refreshed.expires_in || 3600 }));
+        if (refreshed.refresh_token) cookieHeaders.push(makeCookie("tg_rt", refreshed.refresh_token, { maxAgeSec: 60 * 60 * 24 * 30 }));
         res.setHeader("Set-Cookie", cookieHeaders);
 
         const d2 = tryDecodeJwt(refreshed.access_token);
         const p2 = d2.ok ? d2.payload : null;
-        const diag_refreshed = {
-          iss: p2?.iss || null,
-          aud: p2?.aud || null,
-          exp: p2?.exp || null,
-          now: nowUnix(),
-        };
+        const diag_refreshed = { iss: p2?.iss || null, aud: p2?.aud || null, exp: p2?.exp || null, now: nowUnix() };
 
-        // Re-intentar la misma fn primero
-        const second = await callEdge({
-          supabaseUrl,
-          anonKey,
-          userJwt: refreshed.access_token,
-          fnName,
-          body: edgeBody,
-        });
+        // Retry Mode B first (most standard)
+        let rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
 
-        if (second.ok) {
+        // If B returns missing-sub (rare), try A
+        if (!rr.ok && isMissingSubClaim401(rr.status, rr.json)) {
+          rr = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
+        }
+
+        if (rr.ok) {
           return res.status(200).json({
             build_tag: BUILD_TAG,
             edge_fn: fnName,
+            auth_mode: rr.mode,
             refreshed: true,
-            diag: { ...diagBase, edge_fn: fnName },
+            diag: { ...diagBase, edge_fn: fnName, auth_mode: rr.mode },
             diag_refreshed,
-            ...second.json,
+            ...rr.json,
           });
         }
 
-        // Si sigue 404 notfound, seguimos con otras functions (con token refrescado)
-        if (isFunctionNotFound(second.status, second.json)) {
-          // recorrer restantes con token refrescado
-          for (const fnName2 of candidates) {
-            const rr = await callEdge({
-              supabaseUrl,
-              anonKey,
-              userJwt: refreshed.access_token,
-              fnName: fnName2,
-              body: edgeBody,
-            });
+        // Not found after refresh -> continue with next fn
+        if (isFunctionNotFound(rr.status, rr.json)) continue;
 
-            last = rr;
-            usedFn = fnName2;
-
-            if (rr.ok) {
-              return res.status(200).json({
-                build_tag: BUILD_TAG,
-                edge_fn: fnName2,
-                refreshed: true,
-                diag: { ...diagBase, edge_fn: fnName2 },
-                diag_refreshed,
-                ...rr.json,
-              });
-            }
-
-            if (isFunctionNotFound(rr.status, rr.json)) continue;
-
-            return res.status(rr.status).json({
-              ok: false,
-              build_tag: BUILD_TAG,
-              error: "UPSTREAM_ERROR_AFTER_REFRESH",
-              refreshed: true,
-              edge_fn: fnName2,
-              upstream_status: rr.status,
-              upstream: rr.json,
-              diag: { ...diagBase, edge_fn: fnName2 },
-              diag_refreshed,
-            });
-          }
-
-          // Ninguna existió
-          return res.status(404).json({
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "EDGE_FUNCTION_NOT_FOUND",
-            refreshed: true,
-            diag: { ...diagBase, edge_fn: null },
-            diag_refreshed,
-          });
-        }
-
-        // Error distinto de notfound
-        return res.status(second.status).json({
+        return res.status(rr.status).json({
           ok: false,
           build_tag: BUILD_TAG,
           error: "UPSTREAM_ERROR_AFTER_REFRESH",
-          refreshed: true,
           edge_fn: fnName,
-          upstream_status: second.status,
-          upstream: second.json,
-          diag: { ...diagBase, edge_fn: fnName },
+          auth_mode: rr.mode,
+          refreshed: true,
+          upstream_status: rr.status,
+          upstream: rr.json,
+          diag: { ...diagBase, edge_fn: fnName, auth_mode: rr.mode },
           diag_refreshed,
         });
       }
 
-      // Error distinto de notfound/401invalidjwt => devolvemos
+      // Other errors -> stop
       return res.status(r.status).json({
         ok: false,
         build_tag: BUILD_TAG,
         error: "UPSTREAM_ERROR",
         edge_fn: fnName,
+        auth_mode: r.mode,
         upstream_status: r.status,
         upstream: r.json,
-        diag: { ...diagBase, edge_fn: fnName },
+        diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
       });
     }
 
-    // Si llegamos aquí, ninguna function existía
     return res.status(404).json({
       ok: false,
       build_tag: BUILD_TAG,
       error: "EDGE_FUNCTION_NOT_FOUND",
-      diag: { ...diagBase, last_edge_fn: usedFn, last_upstream_status: last?.status, last_upstream: last?.json },
+      diag: diagBase,
     });
   } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) });
+    return res.status(500).json({ ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) });
   }
 }
