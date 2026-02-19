@@ -4,11 +4,16 @@
 // - fallback de AUTH MODE:
 //   A) Authorization: Bearer ANON + x-user-jwt: USER_JWT
 //   B) Authorization: Bearer USER_JWT (standard Supabase)
-// - En PRODUCCIÓN: forzamos MODO B primero (muchas edge functions no aceptan modo A)
+// - En PRODUCCIÓN: forzamos MODO B primero
 // - Retry si upstream dice "Invalid token" (400) -> probar MODO B
 // - Refresh tg_rt si upstream devuelve 401 invalid jwt
+//
+// ✅ PERMANENTE:
+// - baseUrl canónica desde el REQUEST (x-forwarded-host/proto)
+// - inyecta redirect_to y next absolutos (coherentes con el host que recibió la petición)
+//   => evita access_denied por mismatch de dominio/alias
 
-const BUILD_TAG = "invite-proxy-v10-force-modeB-in-prod-20260219";
+const BUILD_TAG = "invite-proxy-v11-universal-baseurl-redirect-next-20260219";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
 const DEFAULT_EDGE_FN_CANDIDATES = [
@@ -152,6 +157,36 @@ function parseEdgeFnCandidates() {
     }
   }
   return out;
+}
+
+// ✅ baseUrl universal por request (Vercel / proxies)
+function getBaseUrlFromRequest(req) {
+  const xfProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const xfHost = String(req?.headers?.["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = xfHost || String(req?.headers?.host || "").trim();
+  const proto = xfProto || (host.includes("localhost") ? "http" : "https");
+  if (!host) return "";
+  return `${proto}://${host}`;
+}
+
+// ✅ arma next absoluto seguro (mantiene path relativo)
+function buildAbsoluteNext(baseUrl, nextPathOrUrl) {
+  const base = String(baseUrl || "").replace(/\/+$/, "");
+  const raw = String(nextPathOrUrl || "").trim();
+
+  // si ya es URL absoluta, la dejamos, pero SOLO si coincide host con base (seguridad)
+  try {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      const u = new URL(raw);
+      const b = new URL(base);
+      if (u.host === b.host) return u.toString();
+      // si no coincide host, degradamos a /inicio
+      return `${base}/inicio`;
+    }
+  } catch {}
+
+  const path = raw.startsWith("/") ? raw : "/inicio";
+  return `${base}${path}`;
 }
 
 async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
@@ -313,10 +348,21 @@ export default async function handler(req, res) {
     const acceptLang = pickLangFromAcceptLanguage(req?.headers?.["accept-language"]);
     const lang = sanitizeLang(req?.body?.lang || acceptLang);
 
+    // ✅ baseUrl universal para armar redirect_to y next absolutos
+    const baseUrl = getBaseUrlFromRequest(req);
+    const redirectTo = baseUrl ? `${String(baseUrl).replace(/\/+$/, "")}/auth/callback` : "";
+    const incomingNext = String(req?.body?.next || "").trim();
+    const nextAbs = baseUrl ? buildAbsoluteNext(baseUrl, incomingNext || "/inicio") : "";
+
     const edgeBody = {
       ...(req.body || {}),
       lang,
       email_copy: emailCopyFor(lang),
+
+      // ✅ PERMANENTE: estos 3 campos fuerzan coherencia dominio/redirect
+      base_url: baseUrl || undefined,
+      redirect_to: redirectTo || undefined,
+      next_url: nextAbs || undefined,
     };
 
     const candidates = parseEdgeFnCandidates();
@@ -324,6 +370,9 @@ export default async function handler(req, res) {
     const diagBase = {
       vercelEnv,
       supabaseUrl,
+      baseUrl: baseUrl || null,
+      redirectTo: redirectTo || null,
+      nextAbs: nextAbs || null,
       iss: p1?.iss || null,
       aud: p1?.aud || null,
       exp: p1?.exp || null,
@@ -347,7 +396,7 @@ export default async function handler(req, res) {
           continue;
         }
         // si dio 401 invalid jwt, seguimos al bloque refresh abajo
-        // si dio otro error, intentamos A como fallback final (por si alguna edge exige x-user-jwt)
+        // si dio otro error, intentamos A como fallback final
       }
 
       // ===== Intento A =====

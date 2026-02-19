@@ -33,16 +33,15 @@ const storage = getLocalStorage();
 let client = null;
 
 if (url && anon) {
-  // ✅ Singleton global: misma instancia en TODO el frontend
   const g = globalThis;
   if (!g.__SUPABASE_TRACKER__) {
     g.__SUPABASE_TRACKER__ = createClient(url, anon, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false, // 👈 callback hace setSession desde hash
+        detectSessionInUrl: false,
         storageKey: "sb-tracker-auth",
-        storage, // localStorage real
+        storage,
       },
     });
   }
@@ -52,14 +51,12 @@ if (url && anon) {
 export const supabaseTracker = client;
 
 if (!url || !anon) {
-  // eslint-disable-next-line no-console
   console.error("[supabaseTrackerClient] INVALID/MISSING config:", {
     trackerUrlRaw,
     hasTrackerUrl: !!url,
     hasTrackerAnon: !!anon,
   });
 } else {
-  // eslint-disable-next-line no-console
   console.log("[supabaseTrackerClient] tracker client ready:", {
     url,
     storageKey: "sb-tracker-auth",

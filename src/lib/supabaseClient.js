@@ -4,11 +4,8 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * Supabase client — FRONTEND (Vite)
  * Arquitectura universal (Preview/Prod):
- * - Auth de Supabase sí debe persistir sesión en browser para:
- *   - Password login (getSession inmediato)
- *   - Reset/OTP callbacks que requieren hidratar session
- * - El backend (cookie tg_at) sigue siendo la "fuente de verdad" para la app,
- *   pero el frontend necesita tokens para bootstrap y compatibilidad.
+ * - El backend (cookie tg_at) es fuente de verdad
+ * - El frontend mantiene sesión Supabase para bootstrap/callbacks
  */
 
 const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260219_LOGIN_PASSWORD_FIX_A";
@@ -42,14 +39,10 @@ function normRef(r) {
 }
 
 function expectedRefFromEnvOrMode() {
-  // ✅ Preferencia: variable explícita por ambiente (universal)
   const fromEnv = normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
   if (fromEnv) return fromEnv;
 
-  // ✅ Fallback seguro si olvidan setear la env
   const isProdBuild = Boolean(import.meta.env.PROD);
-
-  // Defaults conocidos de tu arquitectura (preview/prod separados en Supabase)
   return isProdBuild ? "wpaixkvokdkudymgjoua" : "mujwsfhkocsuuahlrssn";
 }
 
@@ -60,9 +53,7 @@ export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    "[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build."
-  );
+  throw new Error("[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build.");
 }
 
 if (!isSupabaseUrl(SUPABASE_URL)) {
@@ -73,9 +64,7 @@ const EXPECTED_PROJECT_REF = expectedRefFromEnvOrMode();
 const currentRef = projectRefFromUrl(SUPABASE_URL);
 
 if (EXPECTED_PROJECT_REF && currentRef !== EXPECTED_PROJECT_REF) {
-  throw new Error(
-    `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
-  );
+  throw new Error(`[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`);
 }
 
 // ✅ Token en memoria (para adjuntar Bearer al backend si hace falta)
@@ -106,7 +95,7 @@ const wrappedFetch = async (url, options = {}) => {
   return fetch(url, { ...options, headers });
 };
 
-// ✅ Storage universal para browser (necesario para password + getSession)
+// ✅ Storage universal para browser
 const browserStorage =
   typeof window !== "undefined" && window?.localStorage
     ? window.localStorage
@@ -114,20 +103,12 @@ const browserStorage =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    // ⚠️ Supabase recomienda PKCE, pero tu app usa callback + bootstrap.
-    // Mantengo implicit para no romper recovery/legacy. (Universal y estable en tu base)
+    // Mantengo implicit para no romper flows existentes.
     flowType: "implicit",
 
-    // ✅ Captura sesión desde URL hash en callbacks
     detectSessionInUrl: true,
-
-    // ✅ CLAVE: ahora sí persistimos sesión en browser
     persistSession: true,
-
-    // ✅ Mantener sesión viva (evita que desaparezca en medio del flujo)
     autoRefreshToken: true,
-
-    // ✅ Storage real en navegador
     storage: browserStorage,
   },
   global: { fetch: wrappedFetch },
@@ -135,7 +116,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 // ✅ Mantener __memoryAccessToken sincronizado automáticamente
 if (typeof window !== "undefined") {
-  // Cargar token inicial si existe session
   supabase.auth
     .getSession()
     .then(({ data }) => {
@@ -144,7 +124,6 @@ if (typeof window !== "undefined") {
     })
     .catch(() => {});
 
-  // Escuchar cambios de auth
   supabase.auth.onAuthStateChange((_event, session) => {
     setMemoryAccessToken(session?.access_token || null);
   });
