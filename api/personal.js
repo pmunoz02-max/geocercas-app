@@ -1,6 +1,7 @@
+// api/personal.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v18-memberships-canonical";
+const VERSION = "personal-api-v19-memberships-canonical-server-owned-universal";
 
 /* =========================
    Utils
@@ -14,10 +15,21 @@ function getCookie(req, name) {
   return decodeURIComponent(found.split("=").slice(1).join("="));
 }
 
-function json(res, status, payload) {
-  res.statusCode = status;
+function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("X-Api-Version", VERSION);
+
+  res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("CDN-Cache-Control", "no-store");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.setHeader("Vary", "Cookie");
+}
+
+function json(res, status, payload) {
+  setHeaders(res);
+  res.statusCode = status;
   res.end(JSON.stringify({ ...payload, version: VERSION }));
 }
 
@@ -35,7 +47,6 @@ function requireWriteRole(role) {
 }
 
 async function readBody(req) {
-  // soporta body ya parseado (por middleware) o stream
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") {
     try {
@@ -59,7 +70,6 @@ function onlyDigits(s) {
   return String(s || "").replace(/[^\d]/g, "");
 }
 
-// Ecuador friendly E.164 (solo si se puede asegurar)
 function toE164(rawPhone) {
   const p = String(rawPhone || "").trim();
   if (!p) return null;
@@ -73,15 +83,21 @@ function toE164(rawPhone) {
   const d = onlyDigits(p);
   if (d.length >= 11 && d.length <= 15) return `+${d}`;
 
-  // Ecuador: 0XXXXXXXXX (10) => +593XXXXXXXXX
   if (d.length === 10 && d.startsWith("0")) return `+593${d.slice(1)}`;
 
   return null;
 }
 
+function normEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
 /* =========================
-   Context Resolver (CANONICAL)
-   memberships es fuente única
+   Context Resolver (UNIVERSAL)
+   - tg_at valida user (anon)
+   - org: user_current_org (si existe) -> memberships de esa org
+   - fallback: memberships default/first
+   - supaSrv: service role para TODA tabla (bypass RLS)
 ========================= */
 
 async function resolveContext(req) {
@@ -97,7 +113,7 @@ async function resolveContext(req) {
     return {
       ok: false,
       status: 500,
-      error: "Configuración incompleta del servidor (Supabase)",
+      error: "Server misconfigured",
       details: {
         has: {
           SUPABASE_URL: Boolean(SUPABASE_URL),
@@ -109,109 +125,121 @@ async function resolveContext(req) {
   }
 
   const jwt = getCookie(req, "tg_at");
-  if (!jwt) {
-    return { ok: false, status: 401, error: "No autenticado", details: "Falta cookie tg_at" };
-  }
+  if (!jwt) return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
 
-  // Cliente “usuario” solo para validar JWT (getUser)
+  // validar usuario con anon + bearer
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
   const { data: userData, error: userErr } = await supaUser.auth.getUser();
-  if (userErr || !userData?.user) {
-    return { ok: false, status: 401, error: "Sesión inválida", details: userErr?.message || "No user" };
+  if (userErr || !userData?.user?.id) {
+    return { ok: false, status: 401, error: "Invalid session", details: userErr?.message || "No user" };
   }
 
-  // Cliente service role (sin RLS) para queries canónicas
+  const user = userData.user;
+
+  // service role (server-owned)
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const user = userData.user;
+  // 1) user_current_org (si existe)
+  let currentOrgId = null;
+  try {
+    const { data: uco, error: ucoErr } = await supaSrv
+      .from("user_current_org")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
+  } catch {}
 
-  // memberships canonical:
-  // 1) is_default = true
-  // 2) fallback: primer membership
-  const { data: mDefault, error: mErr } = await supaSrv
-    .from("memberships")
-    .select("org_id, role, is_default")
-    .eq("user_id", user.id)
-    .eq("is_default", true)
-    .maybeSingle();
+  // 2) membership preferida: org activa
+  let mRow = null;
 
-  if (mErr) {
-    return { ok: false, status: 500, error: "No se pudo leer memberships (default)", details: mErr.message };
+  if (currentOrgId) {
+    const { data, error } = await supaSrv
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at, created_at")
+      .eq("user_id", user.id)
+      .eq("org_id", currentOrgId)
+      .is("revoked_at", null)
+      .maybeSingle();
+
+    if (!error && data?.org_id && data?.role) mRow = data;
   }
 
-  let ctx = mDefault;
-
-  if (!ctx?.org_id || !ctx?.role) {
-    const { data: mAny, error: anyErr } = await supaSrv
+  // 3) fallback: default o primera (revoked_at tolerante)
+  if (!mRow) {
+    // intento con revoked_at
+    let r = await supaSrv
       .from("memberships")
-      .select("org_id, role, is_default")
+      .select("org_id, role, is_default, revoked_at, created_at")
       .eq("user_id", user.id)
+      .is("revoked_at", null)
       .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1);
 
-    if (anyErr) {
-      return { ok: false, status: 500, error: "No se pudo leer memberships", details: anyErr.message };
+    if (r.error) {
+      // fallback sin revoked_at (por si algún entorno no tiene esa col)
+      r = await supaSrv
+        .from("memberships")
+        .select("org_id, role, is_default, created_at")
+        .eq("user_id", user.id)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1);
     }
 
-    ctx = Array.isArray(mAny) ? mAny[0] : null;
+    const row = Array.isArray(r.data) && r.data.length ? r.data[0] : null;
+    if (row?.org_id && row?.role) mRow = row;
   }
 
-  if (!ctx?.org_id || !ctx?.role) {
-    return {
-      ok: false,
-      status: 403,
-      error: "Contexto no inicializado (org/rol)",
-      details: "No hay memberships para este usuario. Verifica tabla memberships.",
-    };
+  if (!mRow?.org_id || !mRow?.role) {
+    return { ok: false, status: 403, error: "Missing org/role context", details: "No active membership found" };
   }
 
-  return { ok: true, user, ctx: { org_id: ctx.org_id, role: ctx.role }, supaSrv };
+  return { ok: true, user, ctx: { org_id: String(mRow.org_id), role: String(mRow.role) }, supaSrv };
 }
 
 /* =========================
    Helpers universales
 ========================= */
 
-// ✅ UNIVERSAL: nunca .single() / .maybeSingle() para “duplicados”
-// Retorna el “mejor candidato” (activo primero, más reciente después)
-async function findExistingByEmail({ supaSrv, orgId, email }) {
-  const emailLc = String(email || "").trim().toLowerCase();
-  if (!emailLc) return { row: null, error: null };
+// ✅ Universal: dedupe por email_norm / lower(email) sin maybeSingle
+async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
+  if (!emailNorm) return { row: null, error: null };
 
-  // 1) Preferir NO borrados (is_deleted=false), más recientes primero
-  let q1 = supaSrv
+  // 1) preferir NO borrados
+  let r = await supaSrv
     .from("personal")
-    .select("id,is_deleted,updated_at,created_at")
+    .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
     .eq("org_id", orgId)
-    .eq("email", emailLc)
     .eq("is_deleted", false)
+    .or(`email_norm.eq.${emailNorm},email.ilike.${emailNorm}`) // compat
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
-    .limit(1);
+    .limit(5);
 
-  const { data: d1, error: e1 } = await q1;
-  if (e1) return { row: null, error: e1 };
-  if (Array.isArray(d1) && d1.length) return { row: d1[0], error: null };
+  if (r.error) return { row: null, error: r.error };
 
-  // 2) Si no hay activos, buscar entre borrados (para “revive”), más recientes primero
-  let q2 = supaSrv
+  if (Array.isArray(r.data) && r.data.length) return { row: r.data[0], error: null };
+
+  // 2) fallback: incluye deleted (revive)
+  r = await supaSrv
     .from("personal")
-    .select("id,is_deleted,updated_at,created_at")
+    .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
     .eq("org_id", orgId)
-    .eq("email", emailLc)
+    .or(`email_norm.eq.${emailNorm},email.ilike.${emailNorm}`)
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
-    .limit(1);
+    .limit(5);
 
-  const { data: d2, error: e2 } = await q2;
-  if (e2) return { row: null, error: e2 };
-  if (Array.isArray(d2) && d2.length) return { row: d2[0], error: null };
+  if (r.error) return { row: null, error: r.error };
+  if (Array.isArray(r.data) && r.data.length) return { row: r.data[0], error: null };
 
   return { row: null, error: null };
 }
@@ -222,7 +250,7 @@ async function findExistingByEmail({ supaSrv, orgId, email }) {
 
 async function handleList(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
 
@@ -255,19 +283,19 @@ async function handleList(req, res) {
   }
 
   const { data, error } = await query;
-  if (error) return json(res, 500, { error: "No se pudo listar personal", details: error.message });
+  if (error) return json(res, 500, { ok: false, error: "No se pudo listar personal", details: error.message });
 
-  return json(res, 200, { items: data || [] });
+  return json(res, 200, { ok: true, items: data || [] });
 }
 
 async function handlePost(req, res) {
   const ctxRes = await resolveContext(req);
-  if (!ctxRes.ok) return json(res, ctxRes.status, { error: ctxRes.error, details: ctxRes.details });
+  if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
 
   if (!requireWriteRole(ctx.role)) {
-    return json(res, 403, { error: "Sin permisos", details: "Requiere rol admin u owner" });
+    return json(res, 403, { ok: false, error: "Sin permisos", details: "Requiere rol admin u owner" });
   }
 
   const payload = (await readBody(req)) || {};
@@ -276,9 +304,9 @@ async function handlePost(req, res) {
   const action = String(payload.action || "").toLowerCase();
   const id = payload.id ? String(payload.id) : null;
 
-  // ===== ACTION: TOGGLE =====
+  // TOGGLE
   if (action === "toggle") {
-    if (!id) return json(res, 400, { error: "Falta id" });
+    if (!id) return json(res, 400, { ok: false, error: "Falta id" });
 
     const { data: curArr, error: curErr } = await supaSrv
       .from("personal")
@@ -287,10 +315,10 @@ async function handlePost(req, res) {
       .eq("org_id", ctx.org_id)
       .limit(1);
 
-    if (curErr) return json(res, 500, { error: "No se pudo leer registro", details: curErr.message });
+    if (curErr) return json(res, 500, { ok: false, error: "No se pudo leer registro", details: curErr.message });
 
     const cur = Array.isArray(curArr) && curArr.length ? curArr[0] : null;
-    if (!cur || cur.is_deleted) return json(res, 404, { error: "No encontrado" });
+    if (!cur || cur.is_deleted) return json(res, 404, { ok: false, error: "No encontrado" });
 
     const nextVigente = !cur.vigente;
 
@@ -302,15 +330,14 @@ async function handlePost(req, res) {
       .select("*")
       .limit(1);
 
-    if (updErr) return json(res, 500, { error: "No se pudo cambiar estado", details: updErr.message });
+    if (updErr) return json(res, 500, { ok: false, error: "No se pudo cambiar estado", details: updErr.message });
 
-    const upd = Array.isArray(updArr) && updArr.length ? updArr[0] : null;
-    return json(res, 200, { item: upd, toggled: true });
+    return json(res, 200, { ok: true, item: (updArr || [])[0] || null, toggled: true });
   }
 
-  // ===== ACTION: DELETE (soft) =====
+  // DELETE (soft)
   if (action === "delete") {
-    if (!id) return json(res, 400, { error: "Falta id" });
+    if (!id) return json(res, 400, { ok: false, error: "Falta id" });
 
     const { data: delArr, error: delErr } = await supaSrv
       .from("personal")
@@ -320,80 +347,89 @@ async function handlePost(req, res) {
       .select("*")
       .limit(1);
 
-    if (delErr) return json(res, 500, { error: "No se pudo eliminar", details: delErr.message });
+    if (delErr) return json(res, 500, { ok: false, error: "No se pudo eliminar", details: delErr.message });
 
     const del = Array.isArray(delArr) && delArr.length ? delArr[0] : null;
-    if (!del) return json(res, 404, { error: "No encontrado" });
+    if (!del) return json(res, 404, { ok: false, error: "No encontrado" });
 
-    return json(res, 200, { item: del, deleted: true });
+    return json(res, 200, { ok: true, item: del, deleted: true });
   }
 
-  // ===== UPSERT CREATE/REVIVE =====
-  const nombre = (payload.nombre || "").trim();
-  const apellido = (payload.apellido || "").trim();
-  const email = (payload.email || "").trim().toLowerCase();
-  const documento = (payload.documento || "").trim() || null;
+  // UPSERT CREATE/REVIVE
+  const nombre = String(payload.nombre || "").trim();
+  const apellido = String(payload.apellido || "").trim();
+  const emailNorm = normEmail(payload.email);
+  const documento = String(payload.documento || "").trim() || null;
 
-  const telefonoRaw = (payload.telefono || "").trim();
+  const telefonoRaw = String(payload.telefono || "").trim();
   const telefonoE164 = toE164(telefonoRaw);
 
-  if (!nombre) return json(res, 400, { error: "Nombre es obligatorio" });
-  if (!email) return json(res, 400, { error: "Email es obligatorio" });
+  if (!nombre) return json(res, 400, { ok: false, error: "Nombre es obligatorio" });
+  if (!emailNorm) return json(res, 400, { ok: false, error: "Email es obligatorio" });
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
+
+  // ✅ UNIVERSAL: identity_key requerido por constraint
+  const identity_key = String(payload.identity_key || "").trim() || emailNorm;
 
   const baseRow = {
     nombre,
     apellido: apellido || null,
-    email,
+    email: emailNorm,
     documento,
     telefono: telefonoE164 || null,
     telefono_raw: telefonoRaw || null,
     vigente,
+    identity_key,
+    email_norm: emailNorm, // existe en tu schema
     updated_at: nowIso,
   };
 
-  // ✅ DEDUPE UNIVERSAL (sin maybeSingle)
+  // ✅ DEDUPE UNIVERSAL
   const { row: existing, error: findErr } = await findExistingByEmail({
     supaSrv,
     orgId: ctx.org_id,
-    email,
+    emailNorm,
   });
 
-  if (findErr) {
-    return json(res, 500, { error: "No se pudo validar duplicado", details: findErr.message });
-  }
+  if (findErr) return json(res, 500, { ok: false, error: "No se pudo validar duplicado", details: findErr.message });
 
+  // REVIVE/UPDATE
   if (existing?.id) {
+    const ensureUserCols = {
+      // ✅ universal: si user_id/owner_id están null, sincronízalos
+      user_id: existing.user_id || user.id,
+      owner_id: existing.owner_id || user.id,
+    };
+
     const { data: updArr, error } = await supaSrv
       .from("personal")
-      .update({ ...baseRow, is_deleted: false, deleted_at: null })
+      .update({ ...baseRow, ...ensureUserCols, is_deleted: false, deleted_at: null })
       .eq("id", existing.id)
       .eq("org_id", ctx.org_id)
       .select("*")
       .limit(1);
 
-    if (error) return json(res, 500, { error: "No se pudo actualizar personal", details: error.message });
+    if (error) return json(res, 500, { ok: false, error: "No se pudo actualizar personal", details: error.message });
 
-    const upd = Array.isArray(updArr) && updArr.length ? updArr[0] : null;
-    return json(res, 200, { item: upd, revived: true });
+    return json(res, 200, { ok: true, item: (updArr || [])[0] || null, revived: true });
   }
 
+  // INSERT
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
     owner_id: user.id,
+    user_id: user.id, // ✅ universal: mantener user_id sincronizado
     created_at: nowIso,
     is_deleted: false,
     position_interval_sec: 300,
   };
 
   const { data: insArr, error } = await supaSrv.from("personal").insert(insertRow).select("*").limit(1);
+  if (error) return json(res, 500, { ok: false, error: "No se pudo crear personal", details: error.message });
 
-  if (error) return json(res, 500, { error: "No se pudo crear personal", details: error.message });
-
-  const created = Array.isArray(insArr) && insArr.length ? insArr[0] : null;
-  return json(res, 200, { item: created, created: true });
+  return json(res, 200, { ok: true, item: (insArr || [])[0] || null, created: true });
 }
 
 export default async function handler(req, res) {
@@ -405,13 +441,19 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
 
-    if (req.method === "OPTIONS") return json(res, 200, { ok: true });
+    if (req.method === "OPTIONS") {
+      setHeaders(res);
+      res.statusCode = 204;
+      return res.end();
+    }
+
     if (req.method === "GET") return await handleList(req, res);
     if (req.method === "POST") return await handlePost(req, res);
 
-    return json(res, 405, { error: "Method not allowed" });
+    res.setHeader("Allow", "GET,POST,OPTIONS");
+    return json(res, 405, { ok: false, error: "Method not allowed" });
   } catch (e) {
     console.error("[api/personal] fatal:", e);
-    return json(res, 500, { error: "Unexpected error", details: e?.message || String(e) });
+    return json(res, 500, { ok: false, error: "Unexpected error", details: e?.message || String(e) });
   }
 }
