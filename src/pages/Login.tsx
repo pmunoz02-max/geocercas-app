@@ -48,13 +48,20 @@ function hostFromUrl(u?: string) {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
   // ====== MODO (universal) ======
-  const hasModeInUrl = useMemo(() => hasQueryParam(location.search, "mode"), [location.search]);
+  const hasModeInUrl = useMemo(
+    () => hasQueryParam(location.search, "mode"),
+    [location.search]
+  );
 
   const modeFromUrl = useMemo(
     () => normalizeMode(getQueryParam(location.search, "mode")),
@@ -132,7 +139,10 @@ export default function Login() {
   }
 
   // ====== ENV (debug + UX universal) ======
-  const supabaseUrlHost = useMemo(() => hostFromUrl(import.meta.env.VITE_SUPABASE_URL), []);
+  const supabaseUrlHost = useMemo(
+    () => hostFromUrl(import.meta.env.VITE_SUPABASE_URL),
+    []
+  );
   const siteUrl = useMemo(() => {
     const envUrl = (import.meta.env.VITE_SITE_URL || "").trim();
     if (envUrl) return envUrl;
@@ -154,7 +164,11 @@ export default function Login() {
     return url.toString();
   }, [siteUrl, nextInput]);
 
-  async function bootstrapCookie(accessToken: string, refreshToken: string, expiresIn?: number) {
+  async function bootstrapCookie(
+    accessToken: string,
+    refreshToken: string,
+    expiresIn?: number
+  ) {
     const res = await fetch("/api/auth/bootstrap", {
       method: "POST",
       headers: {
@@ -182,7 +196,6 @@ export default function Login() {
   }
 
   function prettyErr(e2: any) {
-    // Supabase suele devolver message
     const m = e2?.message || "";
     const code = e2?.code ? ` [${e2.code}]` : "";
     const status = e2?.status ? ` (HTTP ${e2.status})` : "";
@@ -218,41 +231,47 @@ export default function Login() {
         return;
       }
 
-      // 2) PASSWORD
+      // 2) PASSWORD (FIX UNIVERSAL: session hydration robusta + bootstrap siempre)
       if (mode === "password") {
         if (!password || password.length < 6) {
           setErr(t("login.errorMissingCredentials"));
           return;
         }
 
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password,
         });
         if (error) throw error;
 
-        const session = data?.session || (await supabase.auth.getSession()).data.session;
-
-        const accessToken = session?.access_token || "";
-        const refreshToken = session?.refresh_token || "";
-        const expiresIn =
-          typeof session?.expires_in === "number" ? session.expires_in : undefined;
-
-        if (!accessToken) {
-          setErr(t("login.errors.noAccessToken", { defaultValue: "Could not get access token." }));
-          return;
+        // Supabase v2 puede tardar milisegundos en hidratar la session.
+        let session = (await supabase.auth.getSession()).data.session;
+        if (!session) {
+          for (let i = 0; i < 4; i++) {
+            await sleep(200);
+            session = (await supabase.auth.getSession()).data.session;
+            if (session) break;
+          }
         }
-        if (!refreshToken) {
-          setErr(
-            t("login.errors.noRefreshToken", { defaultValue: "Could not get refresh token." })
+
+        if (!session?.access_token || !session?.refresh_token) {
+          throw new Error(
+            "Session not established after password login (missing access/refresh token)."
           );
-          return;
         }
 
-        // 🔒 Cookie tg_at (fuente real de sesión)
+        const accessToken = session.access_token;
+        const refreshToken = session.refresh_token;
+        const expiresIn =
+          typeof session.expires_in === "number" ? session.expires_in : undefined;
+
         await bootstrapCookie(accessToken, refreshToken, expiresIn);
 
-        setMsg(t("login.sessionStarted", { defaultValue: "✅ Session started. Entering…" }));
+        setMsg(
+          t("login.sessionStarted", {
+            defaultValue: "✅ Session started. Entering…",
+          })
+        );
         navigate(safeNextPath(nextInput), { replace: true });
         return;
       }
@@ -277,7 +296,8 @@ export default function Login() {
   const tabBase =
     "flex-1 rounded-xl px-3 py-2 text-sm font-semibold border transition select-none";
   const tabOn = "bg-white/10 text-white border-white/20 shadow-sm";
-  const tabOff = "bg-white/[0.03] text-slate-200 border-white/10 hover:bg-white/[0.06]";
+  const tabOff =
+    "bg-white/[0.03] text-slate-200 border-white/10 hover:bg-white/[0.06]";
 
   const primaryText =
     mode === "magic"
@@ -298,7 +318,8 @@ export default function Login() {
     defaultValue: t("login.goToDashboard", { defaultValue: "Go to" }),
   });
   const nextHint = t("login.nextHint", {
-    defaultValue: "Useful for tests in PREVIEW. In production, normally you don’t change it.",
+    defaultValue:
+      "Useful for tests in PREVIEW. In production, normally you don’t change it.",
   });
 
   const resetTabLabel = t("login.modeReset", {
@@ -317,16 +338,22 @@ export default function Login() {
 
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-white">
             {t("landing.heroTitlePrefix")}{" "}
-            <span className="text-emerald-300">{t("landing.heroTitleHighlight")}</span>
+            <span className="text-emerald-300">
+              {t("landing.heroTitleHighlight")}
+            </span>
           </h1>
 
-          <p className="mt-2 text-sm text-slate-300">{t("landing.heroSubtitle")}</p>
+          <p className="mt-2 text-sm text-slate-300">
+            {t("landing.heroSubtitle")}
+          </p>
         </div>
 
         <div className="auth-card">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">{t("login.title")}</h2>
+              <h2 className="text-lg font-semibold text-white">
+                {t("login.title")}
+              </h2>
               <p className="mt-1 text-sm text-slate-300">{modeHint}</p>
             </div>
 
@@ -447,7 +474,11 @@ export default function Login() {
               {busy ? t("common.actions.loading") : primaryText}
             </button>
 
-            <button type="button" className="btn-outline w-full" onClick={() => navigate("/")}>
+            <button
+              type="button"
+              className="btn-outline w-full"
+              onClick={() => navigate("/")}
+            >
               {t("common.actions.back")}
             </button>
           </form>
@@ -456,7 +487,8 @@ export default function Login() {
             <summary className="cursor-pointer select-none">{debugLabel}</summary>
             <div className="mt-2 space-y-2">
               <div>
-                Supabase: <span className="break-all text-slate-300">{supabaseUrlHost}</span>
+                Supabase:{" "}
+                <span className="break-all text-slate-300">{supabaseUrlHost}</span>
               </div>
               <div>
                 Redirect Magic Link:{" "}
@@ -477,7 +509,9 @@ export default function Login() {
           </details>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-400">{t("landing.privacyMiniNote")}</p>
+        <p className="mt-6 text-center text-xs text-slate-400">
+          {t("landing.privacyMiniNote")}
+        </p>
       </div>
     </div>
   );
