@@ -10,6 +10,10 @@ function getQueryParam(search: string, key: string) {
   return v ?? "";
 }
 
+function hasQueryParam(search: string, key: string) {
+  return new URLSearchParams(search).has(key);
+}
+
 function safeNextPath(next: string) {
   if (!next) return "/inicio";
   if (next.startsWith("/")) return next;
@@ -40,12 +44,19 @@ export default function Login() {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  // ✅ Modo persistente (universal): URL ?mode= + fallback localStorage
+  // ✅ Detectar si el modo viene explícito por URL (universal)
+  const hasModeInUrl = useMemo(
+    () => hasQueryParam(location.search, "mode"),
+    [location.search]
+  );
+
+  // ✅ Modo desde URL (si existe)
   const modeFromUrl = useMemo(
     () => normalizeMode(getQueryParam(location.search, "mode")),
     [location.search]
   );
 
+  // ✅ Modo desde storage (fallback universal)
   const modeFromStorage = useMemo(() => {
     try {
       return normalizeMode(localStorage.getItem(MODE_LS_KEY) || "");
@@ -54,9 +65,10 @@ export default function Login() {
     }
   }, []);
 
+  // ✅ Inicial: si URL trae mode => usarlo, si no => storage
   const initialMode = useMemo<Mode>(() => {
-    return modeFromUrl !== "magic" ? modeFromUrl : modeFromStorage;
-  }, [modeFromUrl, modeFromStorage]);
+    return hasModeInUrl ? modeFromUrl : modeFromStorage;
+  }, [hasModeInUrl, modeFromUrl, modeFromStorage]);
 
   const [mode, setMode] = useState<Mode>(initialMode);
 
@@ -87,13 +99,13 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
-  // ✅ Mantener el modo sincronizado con URL si viene explícito
+  // ✅ SOLO si la URL trae `mode=` explícito, sincronizar.
+  // Evita que el default "magic" (por normalizeMode("")) te pise el modo real.
   useEffect(() => {
-    if (modeFromUrl && modeFromUrl !== mode) {
-      setMode(modeFromUrl);
-    }
+    if (!hasModeInUrl) return;
+    if (modeFromUrl !== mode) setMode(modeFromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modeFromUrl]);
+  }, [hasModeInUrl, modeFromUrl]);
 
   // ✅ Guardar modo en localStorage (persistente ante remount)
   useEffect(() => {
@@ -138,25 +150,34 @@ export default function Login() {
     return url.toString();
   }, [siteUrl, nextInput]);
 
-  async function bootstrapCookie(accessToken: string, refreshToken: string, expiresIn?: number) {
+  async function bootstrapCookie(
+    accessToken: string,
+    refreshToken: string,
+    expiresIn?: number
+  ) {
     const res = await fetch("/api/auth/bootstrap", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       credentials: "include",
       body: JSON.stringify({
         refresh_token: refreshToken,
-        expires_in: typeof expiresIn === "number" ? expiresIn : undefined
-      })
+        expires_in: typeof expiresIn === "number" ? expiresIn : undefined,
+      }),
     });
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      // i18n-friendly message (fallback)
       const fallback = `Bootstrap failed (HTTP ${res.status}). ${txt || ""}`.trim();
-      throw new Error(t("login.errors.bootstrapFailed", { defaultValue: fallback, status: res.status, details: txt || "" }));
+      throw new Error(
+        t("login.errors.bootstrapFailed", {
+          defaultValue: fallback,
+          status: res.status,
+          details: txt || "",
+        })
+      );
     }
   }
 
@@ -178,7 +199,7 @@ export default function Login() {
       if (mode === "magic") {
         const { error } = await supabase.auth.signInWithOtp({
           email: cleanEmail,
-          options: { emailRedirectTo: redirectTo }
+          options: { emailRedirectTo: redirectTo },
         });
         if (error) throw error;
         setMsg(t("login.infoMagicLinkSent"));
@@ -194,7 +215,7 @@ export default function Login() {
 
         const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
-          password
+          password,
         });
         if (error) throw error;
 
@@ -202,14 +223,19 @@ export default function Login() {
 
         const accessToken = session?.access_token || "";
         const refreshToken = session?.refresh_token || "";
-        const expiresIn = typeof session?.expires_in === "number" ? session.expires_in : undefined;
+        const expiresIn =
+          typeof session?.expires_in === "number" ? session.expires_in : undefined;
 
         if (!accessToken) {
-          setErr(t("login.errors.noAccessToken", { defaultValue: "Could not get access token." }));
+          setErr(
+            t("login.errors.noAccessToken", { defaultValue: "Could not get access token." })
+          );
           return;
         }
         if (!refreshToken) {
-          setErr(t("login.errors.noRefreshToken", { defaultValue: "Could not get refresh token." }));
+          setErr(
+            t("login.errors.noRefreshToken", { defaultValue: "Could not get refresh token." })
+          );
           return;
         }
 
@@ -223,7 +249,7 @@ export default function Login() {
       // 3) RESET PASSWORD (ENVIAR EMAIL)
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: resetRedirectTo
+          redirectTo: resetRedirectTo,
         });
         if (error) throw error;
 
@@ -256,18 +282,18 @@ export default function Login() {
       ? t("login.subtitle")
       : t("resetPassword.subtitle");
 
-  // Keys nuevas (nota técnica)
   const advTitle = t("login.advancedOptions");
-  const goToNextLabel = t("login.goToNext", { defaultValue: t("login.goToDashboard", { defaultValue: "Go to" }) });
-  const nextHint = t(
-    "login.nextHint",
-    {
-      defaultValue:
-        "Useful for tests in PREVIEW. In production, normally you don’t change it."
-    }
-  );
+  const goToNextLabel = t("login.goToNext", {
+    defaultValue: t("login.goToDashboard", { defaultValue: "Go to" }),
+  });
+  const nextHint = t("login.nextHint", {
+    defaultValue:
+      "Useful for tests in PREVIEW. In production, normally you don’t change it.",
+  });
 
-  const resetTabLabel = t("login.modeReset", { defaultValue: t("resetPassword.title", { defaultValue: "Reset" }) });
+  const resetTabLabel = t("login.modeReset", {
+    defaultValue: t("resetPassword.title", { defaultValue: "Reset" }),
+  });
   const okLabel = t("common.ok", { defaultValue: "OK" });
   const debugLabel = t("common.debug", { defaultValue: "Debug" });
 
@@ -410,19 +436,27 @@ export default function Login() {
             <summary className="cursor-pointer select-none">{debugLabel}</summary>
             <div className="mt-2 space-y-2">
               <div>
-                Redirect Magic Link: <span className="break-all text-slate-300">{redirectTo}</span>
+                Redirect Magic Link:{" "}
+                <span className="break-all text-slate-300">{redirectTo}</span>
               </div>
               <div>
-                Redirect Reset: <span className="break-all text-slate-300">{resetRedirectTo}</span>
+                Redirect Reset:{" "}
+                <span className="break-all text-slate-300">{resetRedirectTo}</span>
               </div>
               <div>
                 Mode persistente: <span className="break-all text-slate-300">{mode}</span>
+              </div>
+              <div>
+                hasModeInUrl:{" "}
+                <span className="break-all text-slate-300">{String(hasModeInUrl)}</span>
               </div>
             </div>
           </details>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-400">{t("landing.privacyMiniNote")}</p>
+        <p className="mt-6 text-center text-xs text-slate-400">
+          {t("landing.privacyMiniNote")}
+        </p>
       </div>
     </div>
   );
