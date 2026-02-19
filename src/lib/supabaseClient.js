@@ -36,6 +36,24 @@ function projectRefFromUrl(u) {
   }
 }
 
+function normRef(r) {
+  return String(r || "").trim();
+}
+
+function expectedRefFromEnvOrMode() {
+  // ✅ Preferencia: variable explícita por ambiente (universal y permanente)
+  const fromEnv = normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
+  if (fromEnv) return fromEnv;
+
+  // ✅ Fallback seguro por modo/ambiente (evita que producción se rompa si faltó la env)
+  // Nota: Vercel define import.meta.env.PROD=true en builds de producción.
+  const isProdBuild = Boolean(import.meta.env.PROD);
+
+  // Si no existe VITE_SUPABASE_PROJECT_REF, usamos defaults conocidos del proyecto
+  // (mantén estos dos valores alineados con tus proyectos Supabase)
+  return isProdBuild ? "wpaixkvokdkudymgjoua" : "mujwsfhkocsuuahlrssn";
+}
+
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -52,10 +70,10 @@ if (!isSupabaseUrl(SUPABASE_URL)) {
   throw new Error(`[supabaseClient] Supabase URL inválida: ${SUPABASE_URL}`);
 }
 
-const EXPECTED_PROJECT_REF = "mujwsfhkocsuuahlrssn";
+const EXPECTED_PROJECT_REF = expectedRefFromEnvOrMode();
 const currentRef = projectRefFromUrl(SUPABASE_URL);
 
-if (currentRef !== EXPECTED_PROJECT_REF) {
+if (EXPECTED_PROJECT_REF && currentRef !== EXPECTED_PROJECT_REF) {
   throw new Error(
     `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
   );
@@ -121,9 +139,11 @@ if (typeof window !== "undefined") {
   const info = {
     BUILD_MARKER,
     MODE: import.meta.env.MODE,
+    PROD_BUILD: Boolean(import.meta.env.PROD),
     ORIGIN: window.location.origin,
     SUPABASE_URL,
     PROJECT_REF: currentRef,
+    EXPECTED_PROJECT_REF,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
     FLOW: "implicit",
     PERSIST_SESSION: false,
@@ -140,7 +160,7 @@ if (typeof window !== "undefined") {
 
   if (!window.__TG_SUPABASE_ENV_LOGGED__) {
     window.__TG_SUPABASE_ENV_LOGGED__ = true;
-    console.info(`[${BUILD_MARKER}] [ENV CHECK v3 - AUTH FINAL]`, info);
+    console.info(`[${BUILD_MARKER}] [ENV CHECK v4 - REF BY ENV]`, info);
     console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
