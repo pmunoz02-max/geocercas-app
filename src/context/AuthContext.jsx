@@ -14,11 +14,35 @@ import React, {
  * Fuente: /api/auth/session (cookie HttpOnly tg_at)
  * Auto-cura contexto multi-tenant llamando /api/auth/ensure-context (server-side),
  * y aplica el resultado inmediatamente.
+ *
+ * FIX UNIVERSAL (Reset Password / Auth public routes):
+ * - En rutas públicas de auth (reset-password, auth callback, login, etc.)
+ *   NO debemos llamar /api/auth/session ni ensure-context porque esas rutas pueden
+ *   tener sesión Supabase (local) sin cookie tg_at, y el server responderá
+ *   authenticated:false (rompe el flujo de recovery).
  */
 
 const AuthContext = createContext(null);
 
 const LS_ORG_KEY = "tg_current_org_id";
+
+/** Rutas donde NO se debe bootstraper por cookie server-side */
+function isPublicAuthPath(pathname) {
+  const p = String(pathname || "/").toLowerCase();
+
+  // OJO: mantenemos prefijos y rutas exactas comunes
+  if (p === "/login") return true;
+  if (p === "/reset-password") return true;
+
+  // callbacks / auth flows
+  if (p.startsWith("/auth/")) return true; // /auth/callback, /auth/invite, etc.
+
+  // tracker (si tu flujo requiere entrar sin cookie server-side)
+  if (p === "/tracker-gps" || p.startsWith("/tracker-gps")) return true;
+
+  // Por seguridad: si agregas nuevas rutas públicas, ponlas aquí.
+  return false;
+}
 
 async function fetchJson(url, opts = {}) {
   const res = await fetch(url, {
@@ -108,6 +132,32 @@ export function AuthProvider({ children }) {
 
   const didBootstrapOnceRef = useRef(false);
   const didEnsureContextThisRunRef = useRef(false);
+
+  // ✅ Ruta actual (para decidir si bootstrapeamos o no)
+  const [path, setPath] = useState(() => {
+    try {
+      return typeof window !== "undefined" ? window.location.pathname : "/";
+    } catch {
+      return "/";
+    }
+  });
+
+  // Mantén path actualizado si navegan por SPA (back/forward)
+  useEffect(() => {
+    function onNav() {
+      try {
+        setPath(window.location.pathname || "/");
+      } catch {}
+    }
+    try {
+      window.addEventListener("popstate", onNav);
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener("popstate", onNav);
+      } catch {}
+    };
+  }, []);
 
   const selectOrg = useCallback(
     (orgIdToSelect) => {
@@ -207,6 +257,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   const bootstrap = useCallback(async () => {
+    // ✅ Si estamos en rutas públicas de auth, NO hacemos bootstrap server-side
+    if (isPublicAuthPath(path)) {
+      setLoading(false);
+
+      // Marca ready una sola vez para que UI no se quede colgada
+      if (!didBootstrapOnceRef.current) {
+        didBootstrapOnceRef.current = true;
+        setReady(true);
+      }
+
+      // No toques user/role/org aquí: /reset-password debe funcionar
+      return;
+    }
+
     setLoading(true);
     didEnsureContextThisRunRef.current = false;
 
@@ -256,8 +320,9 @@ export function AuthProvider({ children }) {
         setReady(true);
       }
     }
-  }, [applySessionData, applyEnsureContext]);
+  }, [applySessionData, applyEnsureContext, path]);
 
+  // Bootstrap al montar y cuando cambia la ruta (para entrar/salir de rutas públicas)
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
