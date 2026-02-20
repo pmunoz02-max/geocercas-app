@@ -438,6 +438,8 @@ export default function TrackerDashboard() {
   const [orgId, setOrgId] = useState(null);
   const [orgResolveError, setOrgResolveError] = useState("");
 
+  const [hasSession, setHasSession] = useState(null); // null=unknown, true/false definido
+
   const mapRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
@@ -488,11 +490,38 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
+  // Mantener hasSession actualizado (y evita “error rojo” cuando estás deslogueado)
+  useEffect(() => {
+    let alive = true;
+
+    const refresh = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!alive) return;
+        const ok = Boolean(data?.session);
+        setHasSession(ok);
+      } catch {
+        if (!alive) return;
+        setHasSession(false);
+      }
+    };
+
+    refresh();
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      refresh();
+    });
+
+    return () => {
+      alive = false;
+      try { sub?.subscription?.unsubscribe?.(); } catch {}
+    };
+  }, []);
+
   /**
    * PREVIEW FIX:
-   * Resolver org para Tracker Dashboard debe priorizar org con tracker_assignments activos.
-   * RPC nuevo: resolve_org_for_tracker_dashboard()
-   * Fallback seguro: get_current_org_id()
+   * - Si hay sesión: intentar resolve_org_for_tracker_dashboard()
+   * - Si no hay sesión: NO mostrar error rojo (esperado), usar fallback get_current_org_id()
    */
   const resolveOrgId = useCallback(async () => {
     setOrgResolveError("");
@@ -506,22 +535,43 @@ export default function TrackerDashboard() {
       return String(data);
     };
 
-    try {
-      // 1) Nuevo RPC (correcto para modo tracker)
-      const org = await tryRpc("resolve_org_for_tracker_dashboard");
-      if (!org) throw new Error("resolve_org_for_tracker_dashboard() devolvió null");
+    const sessionOk = Boolean((await supabase.auth.getSession())?.data?.session);
+    setHasSession(sessionOk);
+
+    // 1) Si no hay sesión, saltar RPC “tracker” (auth.uid() será null)
+    if (!sessionOk) {
+      const org = await tryRpc("get_current_org_id");
+      if (!org) {
+        setOrgId(null);
+        setOrgResolveError("get_current_org_id() devolvió null (sin sesión)");
+        return null;
+      }
       setOrgId(org);
+      // nota informativa (no error rojo)
+      setOrgResolveError(""); 
       return org;
+    }
+
+    // 2) Con sesión: usar RPC nuevo
+    try {
+      const org = await tryRpc("resolve_org_for_tracker_dashboard");
+      if (org) {
+        setOrgId(org);
+        return org;
+      }
+      // si devuelve null con sesión, sí avisamos
+      const fallbackOrg = await tryRpc("get_current_org_id");
+      setOrgId(fallbackOrg || null);
+      setOrgResolveError("Fallback activado. resolve_org_for_tracker_dashboard() devolvió null (con sesión).");
+      return fallbackOrg || null;
     } catch (e1) {
-      // 2) Fallback al RPC viejo para no romper navegación en caso de despliegue parcial
+      // 3) Si el RPC nuevo falla (permiso/etc.), fallback
       try {
         const org = await tryRpc("get_current_org_id");
-        if (!org) throw new Error("get_current_org_id() devolvió null");
-        setOrgId(org);
-
+        setOrgId(org || null);
         const msg1 = e1?.message || String(e1);
         setOrgResolveError(`Fallback activado. Error en resolve_org_for_tracker_dashboard(): ${msg1}`);
-        return org;
+        return org || null;
       } catch (e2) {
         const msg2 = e2?.message || String(e2);
         setOrgId(null);
@@ -836,7 +886,6 @@ export default function TrackerDashboard() {
   const effectiveOrgText = orgId ? String(orgId) : "—";
   const showEmptyGeofencesNotice = orgId && diag.assignmentsRows > 0 && diag.geofencesFound === 0;
 
-  // ✅ helper: geocercas solo tiene sentido cuando hay asignaciones
   const geofencesMeaningful = diag.assignmentsRows > 0;
 
   return (
@@ -856,6 +905,8 @@ export default function TrackerDashboard() {
               <Badge>polys: {diag.geofencePolys}</Badge>
               <Badge>circles: {diag.geofenceCircles}</Badge>
               <Badge>posiciones: {diag.positionsFound}</Badge>
+
+              <Badge>session: {hasSession === null ? "…" : (hasSession ? "yes" : "no")}</Badge>
             </div>
 
             {orgResolveError && (
