@@ -438,8 +438,6 @@ export default function TrackerDashboard() {
   const [orgId, setOrgId] = useState(null);
   const [orgResolveError, setOrgResolveError] = useState("");
 
-  const [hasSession, setHasSession] = useState(null); // null=unknown, true/false definido
-
   const mapRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
@@ -490,94 +488,29 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // Mantener hasSession actualizado (y evita “error rojo” cuando estás deslogueado)
-  useEffect(() => {
-    let alive = true;
-
-    const refresh = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!alive) return;
-        const ok = Boolean(data?.session);
-        setHasSession(ok);
-      } catch {
-        if (!alive) return;
-        setHasSession(false);
-      }
-    };
-
-    refresh();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      refresh();
-    });
-
-    return () => {
-      alive = false;
-      try { sub?.subscription?.unsubscribe?.(); } catch {}
-    };
-  }, []);
-
-  /**
-   * PREVIEW FIX:
-   * - Si hay sesión: intentar resolve_org_for_tracker_dashboard()
-   * - Si no hay sesión: NO mostrar error rojo (esperado), usar fallback get_current_org_id()
-   */
+  // ✅ UNIVERSAL: primero resolver org para tracker dashboard; fallback a get_current_org_id()
   const resolveOrgId = useCallback(async () => {
     setOrgResolveError("");
-    setErrorMsg("");
-    setInfoMsg("");
-
-    const tryRpc = async (rpcName) => {
-      const { data, error } = await supabase.rpc(rpcName);
-      if (error) throw error;
-      if (!data) return null;
-      return String(data);
-    };
-
-    const sessionOk = Boolean((await supabase.auth.getSession())?.data?.session);
-    setHasSession(sessionOk);
-
-    // 1) Si no hay sesión, saltar RPC “tracker” (auth.uid() será null)
-    if (!sessionOk) {
-      const org = await tryRpc("get_current_org_id");
-      if (!org) {
-        setOrgId(null);
-        setOrgResolveError("get_current_org_id() devolvió null (sin sesión)");
-        return null;
-      }
-      setOrgId(org);
-      // nota informativa (no error rojo)
-      setOrgResolveError(""); 
-      return org;
-    }
-
-    // 2) Con sesión: usar RPC nuevo
     try {
-      const org = await tryRpc("resolve_org_for_tracker_dashboard");
-      if (org) {
-        setOrgId(org);
-        return org;
+      // 1) RPC específico del dashboard
+      const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
+      if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
+      if (r1?.data) {
+        setOrgId(String(r1.data));
+        return String(r1.data);
       }
-      // si devuelve null con sesión, sí avisamos
-      const fallbackOrg = await tryRpc("get_current_org_id");
-      setOrgId(fallbackOrg || null);
-      setOrgResolveError("Fallback activado. resolve_org_for_tracker_dashboard() devolvió null (con sesión).");
-      return fallbackOrg || null;
-    } catch (e1) {
-      // 3) Si el RPC nuevo falla (permiso/etc.), fallback
-      try {
-        const org = await tryRpc("get_current_org_id");
-        setOrgId(org || null);
-        const msg1 = e1?.message || String(e1);
-        setOrgResolveError(`Fallback activado. Error en resolve_org_for_tracker_dashboard(): ${msg1}`);
-        return org || null;
-      } catch (e2) {
-        const msg2 = e2?.message || String(e2);
-        setOrgId(null);
-        setOrgResolveError(msg2);
-        return null;
-      }
+
+      // 2) Fallback universal
+      const r2 = await supabase.rpc("get_current_org_id");
+      if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
+      if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
+      setOrgId(String(r2.data));
+      return String(r2.data);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setOrgId(null);
+      setOrgResolveError(msg);
+      return null;
     }
   }, []);
 
@@ -886,6 +819,7 @@ export default function TrackerDashboard() {
   const effectiveOrgText = orgId ? String(orgId) : "—";
   const showEmptyGeofencesNotice = orgId && diag.assignmentsRows > 0 && diag.geofencesFound === 0;
 
+  // ✅ helper: geocercas solo tiene sentido cuando hay asignaciones
   const geofencesMeaningful = diag.assignmentsRows > 0;
 
   return (
@@ -905,8 +839,6 @@ export default function TrackerDashboard() {
               <Badge>polys: {diag.geofencePolys}</Badge>
               <Badge>circles: {diag.geofenceCircles}</Badge>
               <Badge>posiciones: {diag.positionsFound}</Badge>
-
-              <Badge>session: {hasSession === null ? "…" : (hasSession ? "yes" : "no")}</Badge>
             </div>
 
             {orgResolveError && (
