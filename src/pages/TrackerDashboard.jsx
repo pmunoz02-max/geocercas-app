@@ -488,19 +488,46 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
+  /**
+   * PREVIEW FIX:
+   * Resolver org para Tracker Dashboard debe priorizar org con tracker_assignments activos.
+   * RPC nuevo: resolve_org_for_tracker_dashboard()
+   * Fallback seguro: get_current_org_id()
+   */
   const resolveOrgId = useCallback(async () => {
     setOrgResolveError("");
-    try {
-      const { data, error } = await supabase.rpc("get_current_org_id");
+    setErrorMsg("");
+    setInfoMsg("");
+
+    const tryRpc = async (rpcName) => {
+      const { data, error } = await supabase.rpc(rpcName);
       if (error) throw error;
-      if (!data) throw new Error("get_current_org_id() devolvió null");
-      setOrgId(String(data));
+      if (!data) return null;
       return String(data);
-    } catch (e) {
-      const msg = e?.message || String(e);
-      setOrgId(null);
-      setOrgResolveError(msg);
-      return null;
+    };
+
+    try {
+      // 1) Nuevo RPC (correcto para modo tracker)
+      const org = await tryRpc("resolve_org_for_tracker_dashboard");
+      if (!org) throw new Error("resolve_org_for_tracker_dashboard() devolvió null");
+      setOrgId(org);
+      return org;
+    } catch (e1) {
+      // 2) Fallback al RPC viejo para no romper navegación en caso de despliegue parcial
+      try {
+        const org = await tryRpc("get_current_org_id");
+        if (!org) throw new Error("get_current_org_id() devolvió null");
+        setOrgId(org);
+
+        const msg1 = e1?.message || String(e1);
+        setOrgResolveError(`Fallback activado. Error en resolve_org_for_tracker_dashboard(): ${msg1}`);
+        return org;
+      } catch (e2) {
+        const msg2 = e2?.message || String(e2);
+        setOrgId(null);
+        setOrgResolveError(msg2);
+        return null;
+      }
     }
   }, []);
 
