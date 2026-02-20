@@ -1,79 +1,120 @@
-// api/auth/bootstrap.ts
-// ✅ Sin dependencia @vercel/node
-// Endpoint: POST /api/auth/bootstrap
-// Crea cookies tg_at/tg_rt desde Authorization Bearer + refresh_token en body
+// api/tracker-proxy.js
+// Proxy universal para Tracker (PROD/PREVIEW):
+// - Evita CORS (browser -> same-origin /api)
+// - Forward a Supabase Functions con apikey server-side
+// - Authorization: Bearer USER_JWT (desde el frontend)
+// - Soporta múltiples funciones via ?fn=send_position | accept-tracker-invite
+//
+// POST /api/tracker-proxy?fn=send_position
+// POST /api/tracker-proxy?fn=accept-tracker-invite
 
-type ReqLike = {
-  method?: string;
-  headers?: Record<string, string | string[] | undefined>;
-  body?: any;
-};
+const BUILD_TAG = "tracker-proxy-v1-universal-corsfix-20260219";
 
-type ResLike = {
-  status: (code: number) => ResLike;
-  json: (obj: any) => void;
-  setHeader: (name: string, value: any) => void;
-  end: (txt?: string) => void;
-};
+function toStr(v) {
+  return String(v ?? "");
+}
 
-function getHeader(req: ReqLike, name: string) {
-  const h = req.headers || {};
-  const v = h[name] ?? h[name.toLowerCase()];
+function getHeader(req, name) {
+  const h = req?.headers || {};
+  const key = String(name || "").toLowerCase();
+  const v = h[name] ?? h[key];
   if (Array.isArray(v)) return v[0] || "";
   return String(v || "");
 }
 
-function normalizeToken(maybeToken: string) {
+function normalizeToken(maybeToken) {
   let t = String(maybeToken || "").trim();
   if (!t) return "";
   if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) t = t.slice(1, -1).trim();
   if (/^bearer\s+/i.test(t)) t = t.replace(/^bearer\s+/i, "").trim();
-  t = t.replace(/\s+/g, "");
-  return t;
+  return t.replace(/\s+/g, "");
 }
 
-function makeCookie(
-  name: string,
-  value: string,
-  opts: { maxAgeSec?: number; httpOnly?: boolean; secure?: boolean; sameSite?: "Lax" | "Strict" | "None"; path?: string } = {}
-) {
-  const { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" } = opts;
-  const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`, `SameSite=${sameSite}`];
-  if (httpOnly) parts.push("HttpOnly");
-  if (secure) parts.push("Secure");
-  if (typeof maxAgeSec === "number") parts.push(`Max-Age=${Math.max(0, Math.floor(maxAgeSec))}`);
-  return parts.join("; ");
+function isAllowedFn(fnName) {
+  // ✅ whitelist (seguro y universal)
+  return fnName === "send_position" || fnName === "accept-tracker-invite";
 }
 
-export default async function handler(req: ReqLike, res: ResLike) {
+export default async function handler(req, res) {
   try {
+    // CORS for safety (same-origin normally; this is just harmless)
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-      return res.status(200).end("ok");
+      return res.status(200).send("ok");
     }
 
     if (req.method !== "POST") {
-      return res.status(405).json({ ok: false, error: "Method not allowed" });
+      return res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
     }
 
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !anonKey) {
+      return res.status(500).json({
+        ok: false,
+        build_tag: BUILD_TAG,
+        error: "Server missing SUPABASE env",
+        diag: { hasUrl: !!supabaseUrl, hasAnon: !!anonKey },
+      });
+    }
+
+    const fnName = toStr(req.query?.fn || "").trim();
+    if (!isAllowedFn(fnName)) {
+      return res.status(400).json({
+        ok: false,
+        build_tag: BUILD_TAG,
+        error: "FN_NOT_ALLOWED",
+        got: fnName,
+        allowed: ["send_position", "accept-tracker-invite"],
+      });
+    }
+
+    // ✅ Token del usuario viene desde el frontend (Supabase session access_token)
     const auth = getHeader(req, "authorization");
-    const accessToken = normalizeToken(auth);
-    const refreshToken = normalizeToken(String(req.body?.refresh_token || ""));
-    const expiresIn = Number(req.body?.expires_in || 3600);
+    const userJwt = normalizeToken(auth);
 
-    if (!accessToken || !refreshToken) {
-      return res.status(400).json({ ok: false, error: "Missing access_token or refresh_token" });
+    if (!userJwt) {
+      return res.status(401).json({
+        ok: false,
+        build_tag: BUILD_TAG,
+        error: "Missing Authorization Bearer",
+      });
     }
 
-    const cookies: string[] = [];
-    cookies.push(makeCookie("tg_at", accessToken, { maxAgeSec: Number.isFinite(expiresIn) ? expiresIn : 3600 }));
-    cookies.push(makeCookie("tg_rt", refreshToken, { maxAgeSec: 60 * 60 * 24 * 30 }));
+    const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
-    res.setHeader("Set-Cookie", cookies);
-    return res.status(200).json({ ok: true });
-  } catch (e: any) {
-    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    const upstream = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${userJwt}`, // ✅ MODO B (universal)
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(req.body || {}),
+    });
+
+    const text = await upstream.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
+
+    return res.status(upstream.status).json({
+      build_tag: BUILD_TAG,
+      fn: fnName,
+      upstream_status: upstream.status,
+      ...json,
+    });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      build_tag: BUILD_TAG,
+      error: String(e?.message || e),
+    });
   }
 }
