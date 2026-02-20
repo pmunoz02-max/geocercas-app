@@ -442,7 +442,12 @@ export default function TrackerDashboard() {
   const mapRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
+
+  // Solo errores reales (red/perm/sql)
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Mensajes informativos (vacío esperado en preview)
+  const [infoMsg, setInfoMsg] = useState("");
 
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
@@ -454,8 +459,6 @@ export default function TrackerDashboard() {
 
   const [geofenceRows, setGeofenceRows] = useState([]);
   const [selectedGeofenceIds, setSelectedGeofenceIds] = useState([]);
-
-  const [showAllGeofences, setShowAllGeofences] = useState(false);
 
   const [diag, setDiag] = useState({
     mapCreated: false,
@@ -513,6 +516,9 @@ export default function TrackerDashboard() {
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
+
+    setErrorMsg("");
+    setInfoMsg("");
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
     const orVigencia =
@@ -538,6 +544,8 @@ export default function TrackerDashboard() {
       }));
       setAssignments([]);
       setAssignmentTrackers([]);
+      setInfoMsg("");
+      setErrorMsg("Error cargando asignaciones (tracker_assignments).");
       return;
     }
 
@@ -556,36 +564,41 @@ export default function TrackerDashboard() {
       trackersFound: uniqTrackers.length,
       assignedGeofenceIds: uniqGeof.length,
     }));
+
+    if (rows.length === 0) {
+      setInfoMsg("No hay asignaciones activas en tracker_assignments para esta org. (Modo tracker)");
+    }
   }, [todayStrUtc]);
 
   /**
-   * ✅ Geocercas canónicas para Tracker Dashboard
-   * Lee desde public.v_geocercas_tracker_ui (no desde tabla/view geocercas directa).
+   * ✅ Preview limpio:
+   * - Solo cargamos geocercas si hay asignaciones activas.
+   * - Nada de "mostrar todas".
    */
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
+
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
 
-    const assignedIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
-    const shouldLoadAll = assignedIds.length === 0 && showAllGeofences;
+    const assignedIds = Array.from(
+      new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
+    );
 
-    // Si no hay asignaciones y no está el modo "mostrar todas", no cargamos geocercas.
-    if (assignedIds.length === 0 && !shouldLoadAll) {
+    // Si no hay asignaciones, en modo tracker no cargamos geocercas (no es error).
+    if (assignedIds.length === 0) {
       setGeofenceRows([]);
       setSelectedGeofenceIds([]);
       setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, geofenceCircles: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
-      setErrorMsg("No hay asignaciones activas en tracker_assignments para esta org. (Modo tracker)");
       return;
     }
 
-    // Vista canónica para tracker
-    const base = supabase
+    // Vista canónica para tracker (select SOLO columnas existentes en la vista)
+    const res = await supabase
       .from("v_geocercas_tracker_ui")
-      .select("id, org_id, name, nombre, geojson, geom, polygon, geometry, lat, lng, radius_m, active, activo, activa, visible, is_deleted")
-      .eq("org_id", currentOrgId);
-
-    const res = shouldLoadAll ? await base : await base.in("id", assignedIds);
+      .select("id, org_id, name, geojson, geom, polygon, geometry, lat, lng, radius_m, active, visible")
+      .eq("org_id", currentOrgId)
+      .in("id", assignedIds);
 
     if (res.error) {
       setDiag((d) => ({
@@ -598,21 +611,20 @@ export default function TrackerDashboard() {
         selectedGeofences: 0,
       }));
       setGeofenceRows([]);
+      setSelectedGeofenceIds([]);
       setErrorMsg("Error al cargar geocercas (v_geocercas_tracker_ui).");
       return;
     }
 
     const rows = Array.isArray(res.data) ? res.data : [];
 
-    // Normaliza y aplica flags (activa/active + visible + no deleted)
     const normalized = rows
-      .filter((r) => (r.is_deleted ?? false) === false)
-      .filter((r) => (r.activo ?? r.active ?? r.activa ?? true) === true)
+      .filter((r) => (r.active ?? true) === true)
       .filter((r) => (r.visible ?? true) === true)
       .map((r) => ({
         id: r.id,
         org_id: r.org_id,
-        name: r.name || r.nombre || r.id,
+        name: r.name || r.id,
         geojson: r.geojson,
         geom: r.geom,
         polygon: r.polygon,
@@ -637,19 +649,13 @@ export default function TrackerDashboard() {
       skippedZeroZero: skipped,
     }));
 
-    // Mensaje claro cuando no hay geocercas activas/visibles en la org
+    // Si hay asignaciones pero las geocercas no aparecen (por flags/datos), es informativo.
     if (normalized.length === 0) {
-      setErrorMsg(
-        shouldLoadAll
-          ? `Esta org (${currentOrgId}) no tiene geocercas activas/visibles en v_geocercas_tracker_ui.`
-          : `Asignaciones encontradas, pero ninguna geocerca activa/visible en la org (${currentOrgId}).`
-      );
-    } else {
-      setErrorMsg(shouldLoadAll ? "No hay asignaciones: mostrando TODAS las geocercas de la org (modo visual)." : "");
+      setInfoMsg(`Hay asignaciones, pero esta org (${currentOrgId}) no tiene geocercas activas/visibles para esas asignaciones.`);
     }
 
     setFitSignal((x) => x + 1);
-  }, [showAllGeofences]);
+  }, []);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
@@ -712,6 +718,7 @@ export default function TrackerDashboard() {
         setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
         setPositions([]);
         setDiag((d) => ({ ...d, positionsFound: 0 }));
+        setErrorMsg("Error al cargar posiciones (tracker_positions).");
         return;
       }
 
@@ -751,6 +758,7 @@ export default function TrackerDashboard() {
     })();
   }, [orgId, fetchAssignments, fetchPersonalCatalog]);
 
+  // Geocercas solo si hay assignments (modo tracker real)
   useEffect(() => {
     if (!orgId) return;
     fetchGeofences(orgId, assignments);
@@ -819,7 +827,7 @@ export default function TrackerDashboard() {
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
-  const showEmptyGeofencesNotice = orgId && diag.geofencesFound === 0;
+  const showEmptyGeofencesNotice = orgId && diag.assignmentsRows > 0 && diag.geofencesFound === 0;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
@@ -848,8 +856,7 @@ export default function TrackerDashboard() {
 
             {showEmptyGeofencesNotice && (
               <div className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <b>Sin geocercas para esta org.</b> La organización activa (RPC) no tiene geocercas activas/visibles en{" "}
-                <span className="font-mono">v_geocercas_tracker_ui</span>.
+                <b>Sin geocercas para esta org.</b> Hay asignaciones, pero no hay geocercas activas/visibles asociadas a esas asignaciones.
               </div>
             )}
           </div>
@@ -883,24 +890,18 @@ export default function TrackerDashboard() {
             >
               Centrar geocerca
             </button>
-
-            {diag.assignmentsRows === 0 && (
-              <button
-                type="button"
-                onClick={() => setShowAllGeofences(true)}
-                className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
-                           border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={!orgId}
-              >
-                Mostrar todas (org)
-              </button>
-            )}
           </div>
         </div>
 
         {errorMsg && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
             {errorMsg}
+          </div>
+        )}
+
+        {infoMsg && !errorMsg && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+            {infoMsg}
           </div>
         )}
 
