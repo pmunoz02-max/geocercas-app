@@ -1,3 +1,4 @@
+// src/pages/InvitarTracker.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -8,30 +9,33 @@ function normalizeEmail(v) {
   return String(v || "").trim().toLowerCase();
 }
 
-// Heurística para mostrar nombre si existe
-function pickLabel(row) {
-  const email = row?.email || row?.person_email || row?.user_email || "";
-  const name =
-    row?.full_name ||
-    row?.name ||
-    row?.display_name ||
-    row?.person_name ||
-    row?.user_name ||
-    "";
-  if (name && email) return `${name} — ${email}`;
-  return email || name || "(sin datos)";
+function isTruthy(v) {
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
+// ✅ Label consistente desde Personal
+function pickPersonalLabel(row) {
+  const nombre = String(row?.nombre || "").trim();
+  const apellido = String(row?.apellido || "").trim();
+  const email = String(row?.email || "").trim();
+
+  const fullName = [nombre, apellido].filter(Boolean).join(" ").trim();
+
+  if (fullName && email) return `${fullName} — ${email}`;
+  return email || fullName || "(sin datos)";
 }
 
 export default function InvitarTracker() {
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation(); // usa i18n runtime
+  const { t, i18n } = useTranslation();
   const auth = useAuthSafe();
 
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
 
-  const [people, setPeople] = useState([]); // rows from view
-  const [selectedKey, setSelectedKey] = useState(""); // selected email (normalized)
+  // ✅ ahora son rows desde public.personal
+  const [people, setPeople] = useState([]);
+  const [selectedKey, setSelectedKey] = useState("");
   const [emailInput, setEmailInput] = useState("");
 
   const [okMsg, setOkMsg] = useState(null);
@@ -55,30 +59,32 @@ export default function InvitarTracker() {
     };
   }, [auth, orgId]);
 
-  
+  // Idioma para emails (prioridad: ?lang= -> i18n -> fallback 'es')
+  const lang = useMemo(() => {
+    try {
+      const qp = new URLSearchParams(window.location.search);
+      const qlang = String(qp.get("lang") || "").trim().toLowerCase();
+      if (qlang === "es" || qlang === "en" || qlang === "fr") return qlang;
+    } catch {}
+    const l = String(i18n?.resolvedLanguage || i18n?.language || "es")
+      .trim()
+      .toLowerCase();
+    if (l.startsWith("en")) return "en";
+    if (l.startsWith("fr")) return "fr";
+    return "es";
+  }, [i18n]);
 
-// Idioma actual para emails (prioridad: ?lang= -> i18n -> fallback 'es')
-const lang = useMemo(() => {
-  try {
-    const qp = new URLSearchParams(window.location.search);
-    const qlang = String(qp.get("lang") || "").trim().toLowerCase();
-    if (qlang === "es" || qlang === "en" || qlang === "fr") return qlang;
-  } catch {}
-  const l = String(i18n?.resolvedLanguage || i18n?.language || "es").trim().toLowerCase();
-  if (l.startsWith("en")) return "en";
-  if (l.startsWith("fr")) return "fr";
-  return "es";
-}, [i18n]);// Mapa de emails permitidos (solo miembros de org)
+  // ✅ Mapa de emails permitidos: SOLO Personal vigente/activo
   const allowedEmails = useMemo(() => {
     const set = new Set();
     for (const r of people) {
-      const e = normalizeEmail(r?.email || r?.person_email || r?.user_email || "");
+      const e = normalizeEmail(r?.email || "");
       if (e) set.add(e);
     }
     return set;
   }, [people]);
 
-  // 1) Cargar people de la org (solo existentes)
+  // 1) Cargar People desde PERSONAL (no desde memberships)
   useEffect(() => {
     let cancelled = false;
 
@@ -89,23 +95,42 @@ const lang = useMemo(() => {
       if (!orgId) {
         setPeople([]);
         setLoadingPeople(false);
-        setErrMsg(t("inviteTracker.errors.noOrg"));
+        setErrMsg(
+          t("inviteTracker.errors.noOrg", {
+            defaultValue: "No se pudo determinar la organización activa.",
+          })
+        );
         return;
       }
 
       try {
         const { data, error } = await supabase
-          .from("v_org_people_ui_all")
-          .select("*")
+          .from("personal")
+          .select("id, org_id, nombre, apellido, email, vigente, activo, activo_bool, is_deleted")
           .eq("org_id", orgId)
+          .eq("is_deleted", false)
           .limit(500);
 
         if (cancelled) return;
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
-        rows.sort((a, b) => pickLabel(a).localeCompare(pickLabel(b)));
-        setPeople(rows);
+
+        // ✅ Filtrado “activo/vigente” robusto
+        const filtered = rows.filter((r) => {
+          // prioridad: activo_bool -> activo -> vigente -> true
+          const ab = r?.activo_bool;
+          const a = r?.activo;
+          const v = r?.vigente;
+
+          if (ab !== null && ab !== undefined) return isTruthy(ab);
+          if (a !== null && a !== undefined) return isTruthy(a);
+          if (v !== null && v !== undefined) return isTruthy(v);
+          return true;
+        });
+
+        filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
+        setPeople(filtered);
       } catch (e) {
         if (cancelled) return;
         setPeople([]);
@@ -135,18 +160,30 @@ const lang = useMemo(() => {
     const cleanEmail = normalizeEmail(emailInput);
 
     if (!orgId) {
-      setErrMsg(t("inviteTracker.errors.noOrg"));
+      setErrMsg(
+        t("inviteTracker.errors.noOrg", {
+          defaultValue: "No se pudo determinar la organización activa.",
+        })
+      );
       return;
     }
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setErrMsg(t("inviteTracker.errors.invalidEmail"));
+      setErrMsg(
+        t("inviteTracker.errors.invalidEmail", {
+          defaultValue: "Email inválido.",
+        })
+      );
       return;
     }
 
-    // ✅ REGLA: solo miembros existentes
+    // ✅ REGLA: solo personas existentes en PERSONAL
     if (!allowedEmails.has(cleanEmail)) {
-      setErrMsg(t("inviteTracker.errors.notInOrg"));
+      setErrMsg(
+        t("inviteTracker.errors.notInOrg", {
+          defaultValue: "Ese email no existe en Personal de esta organización.",
+        })
+      );
       return;
     }
 
@@ -175,24 +212,39 @@ const lang = useMemo(() => {
 
       if (!res.ok) {
         const msg = body?.error || body?.message || body?.raw || `HTTP ${res.status}`;
-        setErrMsg(`${t("inviteTracker.errors.inviteErrorPrefix")} (${res.status}): ${msg}`);
+        setErrMsg(
+          `${t("inviteTracker.errors.inviteErrorPrefix", {
+            defaultValue: "Error invitando",
+          })} (${res.status}): ${msg}`
+        );
         return;
       }
 
       if (body && body.ok === false) {
         const upstreamStatus = body?.upstream_status || "?";
-        const upstreamMsg =
-          body?.upstream?.error || body?.error || body?.message || "UPSTREAM_ERROR";
-        setErrMsg(`${t("inviteTracker.errors.inviteErrorPrefix")} (${upstreamStatus}): ${upstreamMsg}`);
+        const upstreamMsg = body?.upstream?.error || body?.error || body?.message || "UPSTREAM_ERROR";
+        setErrMsg(
+          `${t("inviteTracker.errors.inviteErrorPrefix", {
+            defaultValue: "Error invitando",
+          })} (${upstreamStatus}): ${upstreamMsg}`
+        );
         return;
       }
 
       const actionLink = body?.action_link || "";
       const emailSent = body?.email_sent;
 
-      let msg = t("inviteTracker.ok.generated", { email: cleanEmail });
-      if (emailSent === true) msg += ` ${t("inviteTracker.ok.emailSent")}`;
-      if (emailSent === false && actionLink) msg += ` ${t("inviteTracker.ok.fallbackLink")}`;
+      let msg = t("inviteTracker.ok.generated", {
+        defaultValue: "Invitación generada para {{email}}.",
+        email: cleanEmail,
+      });
+
+      if (emailSent === true) {
+        msg += ` ${t("inviteTracker.ok.emailSent", { defaultValue: "Email enviado." })}`;
+      }
+      if (emailSent === false && actionLink) {
+        msg += ` ${t("inviteTracker.ok.fallbackLink", { defaultValue: "Copia el enlace manualmente." })}`;
+      }
 
       setOkMsg({ msg, actionLink, diag: body?.diag || null });
     } catch (e2) {
@@ -203,36 +255,41 @@ const lang = useMemo(() => {
   }
 
   const selectPlaceholder = loadingPeople
-    ? t("common.loading")
+    ? t("common.loading", { defaultValue: "Cargando…" })
     : people.length === 0
-      ? t("inviteTracker.empty.noMembers")
-      : t("common.select");
+      ? t("inviteTracker.empty.noMembers", { defaultValue: "Sin personal disponible" })
+      : t("common.select", { defaultValue: "— Selecciona —" });
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
       <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold text-gray-900">{t("inviteTracker.title")}</h1>
+          <h1 className="text-xl font-semibold text-gray-900">
+            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
+          </h1>
+
           <button
             type="button"
             onClick={() => navigate("/tracker")}
             className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
           >
-            {t("inviteTracker.backToTracker")}
+            {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
           </button>
         </div>
 
         {/* Diagnóstico */}
         <div className="mt-4 rounded-xl border bg-slate-50 p-3 text-xs text-slate-700">
           <div>
-            <b>{t("inviteTracker.diag.orgUsed")}:</b> {who.org_id || "—"}
+            <b>{t("inviteTracker.diag.orgUsed", { defaultValue: "Org usada" })}:</b>{" "}
+            {who.org_id || "—"}
           </div>
           <div>
-            <b>{t("inviteTracker.diag.user")}:</b> {who.email || "—"} ({who.user_id || "—"})
+            <b>{t("inviteTracker.diag.user", { defaultValue: "Usuario" })}:</b>{" "}
+            {who.email || "—"} ({who.user_id || "—"})
           </div>
           <div className="mt-1">
-            <b>{t("inviteTracker.diag.membersLoaded")}:</b>{" "}
-            {loadingPeople ? t("common.loading") : String(people.length)}
+            <b>{t("inviteTracker.diag.membersLoaded", { defaultValue: "Personal cargado" })}:</b>{" "}
+            {loadingPeople ? t("common.loading", { defaultValue: "Cargando…" }) : String(people.length)}
           </div>
         </div>
 
@@ -247,7 +304,9 @@ const lang = useMemo(() => {
             <div>{okMsg.msg}</div>
             {okMsg.actionLink ? (
               <div className="mt-2 text-xs text-slate-700">
-                <div className="font-semibold">{t("inviteTracker.ok.magicLinkFallback")}:</div>
+                <div className="font-semibold">
+                  {t("inviteTracker.ok.magicLinkFallback", { defaultValue: "Enlace alterno (manual)" })}:
+                </div>
                 <div className="mt-1 break-all rounded-lg border bg-white p-2">
                   {okMsg.actionLink}
                 </div>
@@ -259,7 +318,7 @@ const lang = useMemo(() => {
         <form onSubmit={onSendInvite} className="mt-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-900">
-              {t("inviteTracker.selectPersonLabel")}
+              {t("inviteTracker.selectPersonLabel", { defaultValue: "Selecciona una persona" })}
             </label>
 
             <select
@@ -276,26 +335,30 @@ const lang = useMemo(() => {
             >
               <option value="">{selectPlaceholder}</option>
 
-              {people.map((p, idx) => {
-                const email = normalizeEmail(p?.email || p?.person_email || p?.user_email || "");
+              {people.map((p) => {
+                const email = normalizeEmail(p?.email || "");
                 if (!email) return null;
                 return (
-                  <option key={`${email}-${idx}`} value={email}>
-                    {pickLabel(p)}
+                  <option key={p.id} value={email}>
+                    {pickPersonalLabel(p)}
                   </option>
                 );
               })}
             </select>
 
             <p className="mt-2 text-xs text-slate-600">
-              {t("inviteTracker.onlyExistingNote")} <b>{t("app.tabs.personal", { defaultValue: "Personal" })}</b>.
+              {t("inviteTracker.onlyExistingNote", {
+                defaultValue: "Solo aparecen personas existentes en",
+              })}{" "}
+              <b>{t("app.tabs.personal", { defaultValue: "Personal" })}</b>.
             </p>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-900">
-              {t("inviteTracker.emailLabel")}
+              {t("inviteTracker.emailLabel", { defaultValue: "Email" })}
             </label>
+
             <input
               className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring bg-white text-gray-900"
               type="email"
@@ -305,16 +368,24 @@ const lang = useMemo(() => {
                 setOkMsg(null);
                 setErrMsg(null);
               }}
-              placeholder={t("inviteTracker.emailPlaceholder")}
+              placeholder={t("inviteTracker.emailPlaceholder", { defaultValue: "tracker@ejemplo.com" })}
+              autoComplete="email"
             />
           </div>
 
           <button
             type="submit"
-            disabled={busy || loadingPeople}
-            className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-60"
+            disabled={busy || loadingPeople || !orgId}
+            className={[
+              "w-full rounded-xl px-4 py-3 text-sm font-semibold",
+              busy || loadingPeople || !orgId
+                ? "bg-slate-300 text-slate-600 cursor-not-allowed"
+                : "bg-black text-white hover:bg-slate-900",
+            ].join(" ")}
           >
-            {busy ? t("common.sending") : t("inviteTracker.sendInvite")}
+            {busy
+              ? t("common.sending", { defaultValue: "Enviando…" })
+              : t("inviteTracker.sendInvite", { defaultValue: "Enviar invitación" })}
           </button>
         </form>
       </div>
