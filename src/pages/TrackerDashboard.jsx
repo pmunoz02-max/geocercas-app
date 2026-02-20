@@ -435,7 +435,6 @@ export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
 
-  // ✅ Fuente única y canónica de org (server-owned)
   const [orgId, setOrgId] = useState(null);
   const [orgResolveError, setOrgResolveError] = useState("");
 
@@ -443,10 +442,7 @@ export default function TrackerDashboard() {
 
   const [loading, setLoading] = useState(false);
 
-  // Solo errores reales (red/perm/sql)
   const [errorMsg, setErrorMsg] = useState("");
-
-  // Mensajes informativos (vacío esperado en preview)
   const [infoMsg, setInfoMsg] = useState("");
 
   const [timeWindowId, setTimeWindowId] = useState("6h");
@@ -492,7 +488,6 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // ✅ Resolver org de forma canónica (RPC)
   const resolveOrgId = useCallback(async () => {
     setOrgResolveError("");
     try {
@@ -509,7 +504,6 @@ export default function TrackerDashboard() {
     }
   }, []);
 
-  // 1) Resolver org al entrar
   useEffect(() => {
     resolveOrgId();
   }, [resolveOrgId]);
@@ -570,11 +564,6 @@ export default function TrackerDashboard() {
     }
   }, [todayStrUtc]);
 
-  /**
-   * ✅ Preview limpio:
-   * - Solo cargamos geocercas si hay asignaciones activas.
-   * - Nada de "mostrar todas".
-   */
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
 
@@ -585,7 +574,6 @@ export default function TrackerDashboard() {
       new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
     );
 
-    // Si no hay asignaciones, en modo tracker no cargamos geocercas (no es error).
     if (assignedIds.length === 0) {
       setGeofenceRows([]);
       setSelectedGeofenceIds([]);
@@ -593,7 +581,6 @@ export default function TrackerDashboard() {
       return;
     }
 
-    // Vista canónica para tracker (select SOLO columnas existentes en la vista)
     const res = await supabase
       .from("v_geocercas_tracker_ui")
       .select("id, org_id, name, geojson, geom, polygon, geometry, lat, lng, radius_m, active, visible")
@@ -649,7 +636,6 @@ export default function TrackerDashboard() {
       skippedZeroZero: skipped,
     }));
 
-    // Si hay asignaciones pero las geocercas no aparecen (por flags/datos), es informativo.
     if (normalized.length === 0) {
       setInfoMsg(`Hay asignaciones, pero esta org (${currentOrgId}) no tiene geocercas activas/visibles para esas asignaciones.`);
     }
@@ -672,9 +658,6 @@ export default function TrackerDashboard() {
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
-  /**
-   * Lee desde public.tracker_positions (multi-tenant real)
-   */
   const fetchPositions = useCallback(async (currentOrgId, options = { showSpinner: true }) => {
     if (!currentOrgId) return;
     const { showSpinner } = options;
@@ -686,7 +669,6 @@ export default function TrackerDashboard() {
       const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
       const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
-      // Si hay assignments, limita a trackers asignados. Si no, muestra por org (modo visual).
       const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
 
       let targetIds = null;
@@ -750,7 +732,6 @@ export default function TrackerDashboard() {
     }
   }, [assignmentTrackers, selectedTrackerId, timeWindowId]);
 
-  // 2) Cargar data usando orgId canónico
   useEffect(() => {
     if (!orgId) return;
     (async () => {
@@ -758,7 +739,6 @@ export default function TrackerDashboard() {
     })();
   }, [orgId, fetchAssignments, fetchPersonalCatalog]);
 
-  // Geocercas solo si hay assignments (modo tracker real)
   useEffect(() => {
     if (!orgId) return;
     fetchGeofences(orgId, assignments);
@@ -828,6 +808,9 @@ export default function TrackerDashboard() {
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
   const showEmptyGeofencesNotice = orgId && diag.assignmentsRows > 0 && diag.geofencesFound === 0;
+
+  // ✅ helper: geocercas solo tiene sentido cuando hay asignaciones
+  const geofencesMeaningful = diag.assignmentsRows > 0;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
@@ -960,8 +943,13 @@ export default function TrackerDashboard() {
                     geofences={geofenceRows.map((g) => ({ id: g.id, name: g.name }))}
                     selectedIds={selectedGeofenceIds}
                     setSelectedIds={setSelectedGeofenceIds}
-                    disabled={!geofenceRows?.length || !orgId}
+                    disabled={!geofencesMeaningful || !geofenceRows?.length || !orgId}
                   />
+                  {!geofencesMeaningful && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Disponible cuando existan asignaciones activas.
+                    </div>
+                  )}
                 </div>
               </div>
 
