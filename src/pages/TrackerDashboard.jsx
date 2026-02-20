@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext.jsx";
 
 import {
   MapContainer,
@@ -39,7 +38,11 @@ function isValidLatLng(lat, lng) {
 
 function formatTime(dtString) {
   if (!dtString) return "-";
-  try { return new Date(dtString).toLocaleTimeString(); } catch { return dtString; }
+  try {
+    return new Date(dtString).toLocaleTimeString();
+  } catch {
+    return dtString;
+  }
 }
 
 function resolveTrackerAuthIdFromPersonal(row) {
@@ -247,7 +250,9 @@ function buildGeofenceLayerItems(geofenceRows) {
       if (isProbablyZeroZeroBounds(b)) {
         skipped += 1;
       } else {
-        polys.forEach((p, idx) => items.push({ type: "polygon", geofenceId: g.id, name: g.name || g.id, positions: p, idx }));
+        polys.forEach((p, idx) =>
+          items.push({ type: "polygon", geofenceId: g.id, name: g.name || g.id, positions: p, idx })
+        );
       }
     }
 
@@ -279,7 +284,10 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
     });
   }, [geofences, q]);
 
-  const isNoneMode = useMemo(() => Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__", [selectedIds]);
+  const isNoneMode = useMemo(
+    () => Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__",
+    [selectedIds]
+  );
 
   const effectiveSelectedCount = useMemo(() => {
     if (!geofences?.length) return 0;
@@ -396,7 +404,10 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
 
           <div className="max-h-[280px] overflow-auto border border-gray-200 rounded-lg">
             {filtered.map((g) => (
-              <label key={g.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+              <label
+                key={g.id}
+                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+              >
                 <input type="checkbox" className="h-4 w-4" checked={isChecked(g.id)} onChange={() => toggle(g.id)} />
                 <span className="truncate text-gray-900">{g.name || g.id}</span>
               </label>
@@ -423,10 +434,6 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
-
-  // ⚠️ Para debug visual únicamente. NO se usa como fuente de org.
-  const { currentOrg } = useAuth();
-  const authOrgId = typeof currentOrg === "string" ? currentOrg : currentOrg?.id || currentOrg?.org_id || null;
 
   // ✅ Fuente única y canónica de org (server-owned)
   const [orgId, setOrgId] = useState(null);
@@ -551,26 +558,32 @@ export default function TrackerDashboard() {
     }));
   }, [todayStrUtc]);
 
+  /**
+   * ✅ Geocercas canónicas para Tracker Dashboard
+   * Lee desde public.v_geocercas_tracker_ui (no desde tabla/view geocercas directa).
+   */
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
+    setErrorMsg("");
 
     const assignedIds = Array.from(new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String)));
     const shouldLoadAll = assignedIds.length === 0 && showAllGeofences;
 
+    // Si no hay asignaciones y no está el modo "mostrar todas", no cargamos geocercas.
     if (assignedIds.length === 0 && !shouldLoadAll) {
       setGeofenceRows([]);
       setSelectedGeofenceIds([]);
       setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, geofenceCircles: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
-      setErrorMsg("No hay asignaciones activas en tracker_assignments para esta org.");
+      setErrorMsg("No hay asignaciones activas en tracker_assignments para esta org. (Modo tracker)");
       return;
     }
 
+    // Vista canónica para tracker
     const base = supabase
-      .from("geocercas")
-      .select("id, org_id, nombre, name, geojson, geom, polygon, geometry, lat, lng, radius_m, active, activo, activa, visible, is_deleted")
-      .eq("org_id", currentOrgId)
-      .eq("is_deleted", false);
+      .from("v_geocercas_tracker_ui")
+      .select("id, org_id, name, nombre, geojson, geom, polygon, geometry, lat, lng, radius_m, active, activo, activa, visible, is_deleted")
+      .eq("org_id", currentOrgId);
 
     const res = shouldLoadAll ? await base : await base.in("id", assignedIds);
 
@@ -585,13 +598,15 @@ export default function TrackerDashboard() {
         selectedGeofences: 0,
       }));
       setGeofenceRows([]);
-      setErrorMsg("Error al cargar geocercas (geocercas).");
+      setErrorMsg("Error al cargar geocercas (v_geocercas_tracker_ui).");
       return;
     }
 
     const rows = Array.isArray(res.data) ? res.data : [];
 
+    // Normaliza y aplica flags (activa/active + visible + no deleted)
     const normalized = rows
+      .filter((r) => (r.is_deleted ?? false) === false)
       .filter((r) => (r.activo ?? r.active ?? r.activa ?? true) === true)
       .filter((r) => (r.visible ?? true) === true)
       .map((r) => ({
@@ -622,7 +637,17 @@ export default function TrackerDashboard() {
       skippedZeroZero: skipped,
     }));
 
-    setErrorMsg(shouldLoadAll ? "No hay asignaciones: mostrando TODAS las geocercas de la org (modo visual)." : "");
+    // Mensaje claro cuando no hay geocercas activas/visibles en la org
+    if (normalized.length === 0) {
+      setErrorMsg(
+        shouldLoadAll
+          ? `Esta org (${currentOrgId}) no tiene geocercas activas/visibles en v_geocercas_tracker_ui.`
+          : `Asignaciones encontradas, pero ninguna geocerca activa/visible en la org (${currentOrgId}).`
+      );
+    } else {
+      setErrorMsg(shouldLoadAll ? "No hay asignaciones: mostrando TODAS las geocercas de la org (modo visual)." : "");
+    }
+
     setFitSignal((x) => x + 1);
   }, [showAllGeofences]);
 
@@ -642,7 +667,7 @@ export default function TrackerDashboard() {
   }, []);
 
   /**
-   * Lee desde public.positions (multi-tenant real)
+   * Lee desde public.tracker_positions (multi-tenant real)
    */
   const fetchPositions = useCallback(async (currentOrgId, options = { showSpinner: true }) => {
     if (!currentOrgId) return;
@@ -650,7 +675,6 @@ export default function TrackerDashboard() {
 
     try {
       if (showSpinner) setLoading(true);
-      setErrorMsg("");
       setDiag((d) => ({ ...d, lastPositionsError: null }));
 
       const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
@@ -686,7 +710,6 @@ export default function TrackerDashboard() {
 
       if (error) {
         setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
-        setErrorMsg("Error al cargar posiciones (positions).");
         setPositions([]);
         setDiag((d) => ({ ...d, positionsFound: 0 }));
         return;
@@ -796,6 +819,7 @@ export default function TrackerDashboard() {
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
+  const showEmptyGeofencesNotice = orgId && diag.geofencesFound === 0;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
@@ -808,9 +832,6 @@ export default function TrackerDashboard() {
               <span>
                 Org (RPC): <span className="font-mono text-gray-800">{effectiveOrgText}</span>
               </span>
-              <span>
-                Org (Auth debug): <span className="font-mono text-gray-500">{String(authOrgId || "—")}</span>
-              </span>
 
               <Badge>assignments: {diag.assignmentsRows}</Badge>
               <Badge>geocercas: {diag.geofencesFound}</Badge>
@@ -822,6 +843,13 @@ export default function TrackerDashboard() {
             {orgResolveError && (
               <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 Error resolviendo org por RPC: <span className="font-mono">{orgResolveError}</span>
+              </div>
+            )}
+
+            {showEmptyGeofencesNotice && (
+              <div className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <b>Sin geocercas para esta org.</b> La organización activa (RPC) no tiene geocercas activas/visibles en{" "}
+                <span className="font-mono">v_geocercas_tracker_ui</span>.
               </div>
             )}
           </div>
@@ -869,7 +897,8 @@ export default function TrackerDashboard() {
             )}
           </div>
         </div>
-        {errorMsg && (positions?.length ?? 0) === 0 && (
+
+        {errorMsg && (
           <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
             {errorMsg}
           </div>
@@ -950,7 +979,10 @@ export default function TrackerDashboard() {
 
                 <div className="mt-2 text-[11px] text-gray-600 space-y-1">
                   <div><b>bounds</b>: <span className="font-mono">{geofenceBoundsText}</span></div>
-                  <div><b>viewport</b>: <span className="font-mono">{viewportText}</span> | <b>intersects</b>: <span className="font-mono">{intersectsText}</span></div>
+                  <div>
+                    <b>viewport</b>: <span className="font-mono">{viewportText}</span> |{" "}
+                    <b>intersects</b>: <span className="font-mono">{intersectsText}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -988,14 +1020,18 @@ export default function TrackerDashboard() {
                         setGeofenceBoundsText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
                         const v = mapRef.current?.getBounds?.();
                         if (v?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
-                      } catch { setGeofenceBoundsText("—"); }
+                      } catch {
+                        setGeofenceBoundsText("—");
+                      }
                     }}
                     onViewportComputed={(v) => {
                       try {
                         const sw = v.getSouthWest();
                         const ne = v.getNorthEast();
                         setViewportText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
-                      } catch { setViewportText("—"); }
+                      } catch {
+                        setViewportText("—");
+                      }
                     }}
                   />
 
@@ -1074,4 +1110,3 @@ export default function TrackerDashboard() {
     </div>
   );
 }
-
