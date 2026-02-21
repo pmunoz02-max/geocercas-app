@@ -1,7 +1,21 @@
-// api/invite-tracker/index.js
-// invite-proxy (folder/index.js) para que Vercel lo publique SIEMPRE.
+// api/invite-tracker.js
+// Proxy universal:
+// - fallback de Edge Function names (preview/prod pueden diferir)
+// - fallback de AUTH MODE:
+//   A) Authorization: Bearer ANON + x-user-jwt: USER_JWT
+//   B) Authorization: Bearer USER_JWT (standard Supabase)
+// - En PRODUCCIÓN: forzamos MODO B primero
+// - Retry si upstream dice "Invalid token" (400) -> probar MODO B
+// - Refresh tg_rt si upstream devuelve 401 invalid jwt
+//
+// ✅ PERMANENTE:
+// - baseUrl canónica desde el REQUEST (x-forwarded-host/proto)
+// - inyecta redirect_to y next absolutos (coherentes con el host que recibió la petición)
+//   => evita access_denied por mismatch de dominio/alias
 
-const BUILD_TAG = "invite-proxy-v12-folderindex-20260220";
+const { Buffer } = require("node:buffer");
+
+const BUILD_TAG = "invite-proxy-v12_1-bufferfix-20260220";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
 const DEFAULT_EDGE_FN_CANDIDATES = [
@@ -18,12 +32,14 @@ function pickLangFromAcceptLanguage(h) {
   if (!s) return "";
   return s.split(",")[0].trim().slice(0, 2);
 }
+
 function sanitizeLang(v) {
   const raw = String(v || "").trim().toLowerCase();
   if (!raw) return "es";
   const two = raw.slice(0, 2);
   return SUPPORTED_LANGS.has(two) ? two : "es";
 }
+
 function emailCopyFor(lang) {
   if (lang === "en") {
     return {
@@ -145,6 +161,7 @@ function parseEdgeFnCandidates() {
   return out;
 }
 
+// ✅ baseUrl universal por request (Vercel / proxies)
 function getBaseUrlFromRequest(req) {
   const xfProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
   const xfHost = String(req?.headers?.["x-forwarded-host"] || "").split(",")[0].trim();
@@ -154,6 +171,7 @@ function getBaseUrlFromRequest(req) {
   return `${proto}://${host}`;
 }
 
+// ✅ arma next absoluto seguro
 function buildAbsoluteNext(baseUrl, nextPathOrUrl) {
   const base = String(baseUrl || "").replace(/\/+$/, "");
   const raw = String(nextPathOrUrl || "").trim();
@@ -209,6 +227,7 @@ function isFunctionNotFound(upstreamStatus, upstreamJson) {
   const code = String(upstreamJson?.code || "").toUpperCase();
   return code === "NOT_FOUND" || msg.includes("requested function was not found");
 }
+
 function isInvalidJwt401(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 401) return false;
   const msg = String(upstreamJson?.message || "").toLowerCase();
@@ -216,11 +235,13 @@ function isInvalidJwt401(upstreamStatus, upstreamJson) {
   const det = String(upstreamJson?.detail || "").toLowerCase();
   return msg.includes("invalid jwt") || err.includes("invalid jwt") || det.includes("invalid jwt");
 }
+
 function isMissingSubClaim401(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 401) return false;
   const det = String(upstreamJson?.detail || "").toLowerCase();
   return det.includes("missing sub claim");
 }
+
 function isInvalidToken400(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 400) return false;
   const msg = String(upstreamJson?.message || upstreamJson?.error || "").toLowerCase();
@@ -230,6 +251,7 @@ function isInvalidToken400(upstreamStatus, upstreamJson) {
 // MODE A
 async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
+
   const upstream = await fetch(url, {
     method: "POST",
     headers: {
@@ -240,6 +262,7 @@ async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
     },
     body: JSON.stringify(body || {}),
   });
+
   const text = await upstream.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
@@ -249,6 +272,7 @@ async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
 // MODE B
 async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
+
   const upstream = await fetch(url, {
     method: "POST",
     headers: {
@@ -258,6 +282,7 @@ async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
     },
     body: JSON.stringify(body || {}),
   });
+
   const text = await upstream.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
@@ -269,27 +294,8 @@ module.exports = async function handler(req, res) {
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type, x-user-jwt");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       return res.status(200).send("ok");
-    }
-
-    // ✅ PING para confirmar que Vercel publicó esta function
-    if (req.method === "GET") {
-      const vercelEnv = String(process.env.VERCEL_ENV || "").toLowerCase();
-      const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-      const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-      const baseUrl = getBaseUrlFromRequest(req);
-      return res.status(200).json({
-        ok: true,
-        build_tag: BUILD_TAG,
-        route: "/api/invite-tracker",
-        diag: {
-          vercelEnv,
-          hasSupabaseUrl: !!supabaseUrl,
-          hasAnonKey: !!anonKey,
-          baseUrl: baseUrl || null
-        }
-      });
     }
 
     if (req.method !== "POST") {
@@ -386,7 +392,10 @@ module.exports = async function handler(req, res) {
         r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
       }
 
-      if (r.ok) return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
+      if (r.ok) {
+        return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
+      }
+
       if (isFunctionNotFound(r.status, r.json)) continue;
 
       if (isInvalidJwt401(r.status, r.json)) {
@@ -433,7 +442,13 @@ module.exports = async function handler(req, res) {
         }
 
         if (rr.ok) {
-          return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: rr.mode, refreshed: true, ...rr.json });
+          return res.status(200).json({
+            build_tag: BUILD_TAG,
+            edge_fn: fnName,
+            auth_mode: rr.mode,
+            refreshed: true,
+            ...rr.json,
+          });
         }
 
         if (isFunctionNotFound(rr.status, rr.json)) continue;
