@@ -3,10 +3,13 @@
 
   "builds": [
     { "src": "api/**/*.js", "use": "@vercel/node" },
-    { "src": "api/**/*.mjs", "use": "@vercel/node" },
-    { "src": "api/**/*.ts", "use": "@vercel/node" },
-
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+  ],
+
+  "routes": [
+    { "src": "^/api/(.*)$", "dest": "/api/$1" },
+    { "handle": "filesystem" },
+    { "src": "^(.*)$", "dest": "/index.html" }
   ],
 
   "redirects": [
@@ -16,17 +19,6 @@
       "destination": "https://tugeocercas.com/$1",
       "permanent": true
     }
-  ],
-
-  "rewrites": [
-    { "source": "/api/auth/bootstrap", "destination": "/api/auth?route=bootstrap" },
-    { "source": "/api/auth/ensure-context", "destination": "/api/auth?route=ensure-context" },
-    { "source": "/api/auth/magic", "destination": "/api/auth?route=magic" },
-    { "source": "/api/auth/password", "destination": "/api/auth?route=password" },
-    { "source": "/api/auth/recover", "destination": "/api/auth?route=recover" },
-    { "source": "/api/auth/session", "destination": "/api/auth?route=session" },
-
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
 
   "headers": [
