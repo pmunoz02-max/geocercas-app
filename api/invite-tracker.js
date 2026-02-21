@@ -1,21 +1,14 @@
 // api/invite-tracker.js
-// Proxy universal:
-// - fallback de Edge Function names (preview/prod pueden diferir)
-// - fallback de AUTH MODE:
-//   A) Authorization: Bearer ANON + x-user-jwt: USER_JWT
-//   B) Authorization: Bearer USER_JWT (standard Supabase)
-// - En PRODUCCIÓN: forzamos MODO B primero
-// - Retry si upstream dice "Invalid token" (400) -> probar MODO B
-// - Refresh tg_rt si upstream devuelve 401 invalid jwt
-//
-// ✅ PERMANENTE:
-// - baseUrl canónica desde el REQUEST (x-forwarded-host/proto)
-// - inyecta redirect_to y next absolutos (coherentes con el host que recibió la petición)
-//   => evita access_denied por mismatch de dominio/alias
+// Invite proxy universal (Node Function Vercel)
+// - GET /api/invite-tracker => ping diagnóstico (para aislar crashes)
+// - POST => lógica existente
+// Fixes:
+// - Buffer import universal: require("buffer") (evita issues con node:buffer bundling)
+// - fetch fallback: usa global fetch si existe, si no usa undici (si está disponible)
 
-const { Buffer } = require("node:buffer");
+const { Buffer } = require("buffer");
 
-const BUILD_TAG = "invite-proxy-v12_1-bufferfix-20260220";
+const BUILD_TAG = "invite-proxy-v12_2-ping-buffer-fetchfix-20260221";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
 const DEFAULT_EDGE_FN_CANDIDATES = [
@@ -26,6 +19,19 @@ const DEFAULT_EDGE_FN_CANDIDATES = [
 ];
 
 const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
+
+function getFetch() {
+  if (typeof globalThis.fetch === "function") return globalThis.fetch.bind(globalThis);
+  try {
+    // En Node 18/20 suele estar disponible
+    // Si no existe, caerá al catch y devolvemos null
+    const u = require("undici");
+    if (u && typeof u.fetch === "function") return u.fetch;
+  } catch {}
+  return null;
+}
+
+const fetchFn = getFetch();
 
 function pickLangFromAcceptLanguage(h) {
   const s = String(h || "").toLowerCase();
@@ -161,7 +167,6 @@ function parseEdgeFnCandidates() {
   return out;
 }
 
-// ✅ baseUrl universal por request (Vercel / proxies)
 function getBaseUrlFromRequest(req) {
   const xfProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
   const xfHost = String(req?.headers?.["x-forwarded-host"] || "").split(",")[0].trim();
@@ -171,7 +176,6 @@ function getBaseUrlFromRequest(req) {
   return `${proto}://${host}`;
 }
 
-// ✅ arma next absoluto seguro
 function buildAbsoluteNext(baseUrl, nextPathOrUrl) {
   const base = String(baseUrl || "").replace(/\/+$/, "");
   const raw = String(nextPathOrUrl || "").trim();
@@ -190,11 +194,13 @@ function buildAbsoluteNext(baseUrl, nextPathOrUrl) {
 }
 
 async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
+  if (!fetchFn) return { ok: false, status: 500, body: { error: "NO_FETCH_AVAILABLE" } };
+
   const url =
     String(supabaseUrl).replace(/\/$/, "") +
     "/auth/v1/token?grant_type=refresh_token";
 
-  const r = await fetch(url, {
+  const r = await fetchFn(url, {
     method: "POST",
     headers: {
       apikey: anonKey,
@@ -248,11 +254,11 @@ function isInvalidToken400(upstreamStatus, upstreamJson) {
   return msg.includes("invalid token");
 }
 
-// MODE A
 async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
+  if (!fetchFn) return { status: 500, ok: false, json: { error: "NO_FETCH_AVAILABLE" }, mode: "A" };
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
-  const upstream = await fetch(url, {
+  const upstream = await fetchFn(url, {
     method: "POST",
     headers: {
       apikey: anonKey,
@@ -269,11 +275,11 @@ async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   return { status: upstream.status, ok: upstream.ok, json, mode: "A" };
 }
 
-// MODE B
 async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
+  if (!fetchFn) return { status: 500, ok: false, json: { error: "NO_FETCH_AVAILABLE" }, mode: "B" };
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
-  const upstream = await fetch(url, {
+  const upstream = await fetchFn(url, {
     method: "POST",
     headers: {
       apikey: anonKey,
@@ -290,14 +296,35 @@ async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
 }
 
 module.exports = async function handler(req, res) {
-  try {
-    if (req.method === "OPTIONS") {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type, x-user-jwt");
-      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-      return res.status(200).send("ok");
-    }
+  // CORS
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type, x-user-jwt");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    return res.status(200).send("ok");
+  }
 
+  // ✅ PING: si esto falla, el crash es al cargar/rutear la Function (no en el POST)
+  if (req.method === "GET") {
+    const vercelEnv = String(process.env.VERCEL_ENV || "").toLowerCase();
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const baseUrl = getBaseUrlFromRequest(req);
+    return res.status(200).json({
+      ok: true,
+      build_tag: BUILD_TAG,
+      route: "/api/invite-tracker",
+      diag: {
+        vercelEnv,
+        baseUrl: baseUrl || null,
+        hasSupabaseUrl: !!supabaseUrl,
+        hasAnonKey: !!anonKey,
+        hasFetch: !!fetchFn,
+      },
+    });
+  }
+
+  try {
     if (req.method !== "POST") {
       return res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
     }
@@ -311,7 +338,7 @@ module.exports = async function handler(req, res) {
         ok: false,
         build_tag: BUILD_TAG,
         error: "Server missing SUPABASE env",
-        diag: { vercelEnv, supabaseUrl, hasAnonKey: !!anonKey },
+        diag: { vercelEnv, hasSupabaseUrl: !!supabaseUrl, hasAnonKey: !!anonKey },
       });
     }
 
@@ -320,7 +347,7 @@ module.exports = async function handler(req, res) {
         ok: false,
         build_tag: BUILD_TAG,
         error: "PREVIEW_ENV_MISMATCH",
-        diag: { vercelEnv, expected_ref: PREVIEW_REF, supabaseUrl },
+        diag: { vercelEnv, expected_ref: PREVIEW_REF },
       });
     }
 
@@ -332,7 +359,7 @@ module.exports = async function handler(req, res) {
         ok: false,
         build_tag: BUILD_TAG,
         error: "Missing tg_at cookie",
-        diag: { vercelEnv, has_tg_rt: !!tgRt, supabaseUrl },
+        diag: { vercelEnv, has_tg_rt: !!tgRt },
       });
     }
 
@@ -360,7 +387,6 @@ module.exports = async function handler(req, res) {
 
     const diagBase = {
       vercelEnv,
-      supabaseUrl,
       baseUrl: baseUrl || null,
       redirectTo: redirectTo || null,
       nextAbs: nextAbs || null,
@@ -369,6 +395,7 @@ module.exports = async function handler(req, res) {
       exp: p1?.exp || null,
       now: nowUnix(),
       has_tg_rt: !!tgRt,
+      hasFetch: !!fetchFn,
       build_tag: BUILD_TAG,
       edge_fn_candidates: candidates,
     };
@@ -377,7 +404,7 @@ module.exports = async function handler(req, res) {
 
     for (const fnName of candidates) {
       if (prodPreferB) {
-        let rb = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
+        const rb = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
         if (rb.ok) return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: rb.mode, ...rb.json });
         if (isFunctionNotFound(rb.status, rb.json)) continue;
       }
@@ -392,38 +419,17 @@ module.exports = async function handler(req, res) {
         r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
       }
 
-      if (r.ok) {
-        return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
-      }
-
+      if (r.ok) return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
       if (isFunctionNotFound(r.status, r.json)) continue;
 
       if (isInvalidJwt401(r.status, r.json)) {
         if (!tgRt) {
-          return res.status(401).json({
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "UPSTREAM_401_NO_REFRESH_TOKEN",
-            edge_fn: fnName,
-            auth_mode: r.mode,
-            upstream: r.json,
-            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-          });
+          return res.status(401).json({ ok: false, build_tag: BUILD_TAG, error: "UPSTREAM_401_NO_REFRESH_TOKEN", diag: diagBase });
         }
 
         const refreshed = await refreshAccessToken({ supabaseUrl, anonKey, refreshToken: tgRt });
         if (!refreshed.ok) {
-          return res.status(401).json({
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "REFRESH_FAILED",
-            refresh_status: refreshed.status,
-            refresh_body: refreshed.body,
-            edge_fn: fnName,
-            auth_mode: r.mode,
-            upstream: r.json,
-            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-          });
+          return res.status(401).json({ ok: false, build_tag: BUILD_TAG, error: "REFRESH_FAILED", diag: diagBase, refresh: refreshed });
         }
 
         const cookieHeaders = [];
@@ -441,49 +447,17 @@ module.exports = async function handler(req, res) {
           rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
         }
 
-        if (rr.ok) {
-          return res.status(200).json({
-            build_tag: BUILD_TAG,
-            edge_fn: fnName,
-            auth_mode: rr.mode,
-            refreshed: true,
-            ...rr.json,
-          });
-        }
+        if (rr.ok) return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: rr.mode, refreshed: true, ...rr.json });
 
         if (isFunctionNotFound(rr.status, rr.json)) continue;
 
-        return res.status(rr.status).json({
-          ok: false,
-          build_tag: BUILD_TAG,
-          error: "UPSTREAM_ERROR_AFTER_REFRESH",
-          edge_fn: fnName,
-          auth_mode: rr.mode,
-          refreshed: true,
-          upstream_status: rr.status,
-          upstream: rr.json,
-          diag: { ...diagBase, edge_fn: fnName, auth_mode: rr.mode },
-        });
+        return res.status(rr.status).json({ ok: false, build_tag: BUILD_TAG, error: "UPSTREAM_ERROR_AFTER_REFRESH", upstream: rr.json, diag: diagBase });
       }
 
-      return res.status(r.status).json({
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "UPSTREAM_ERROR",
-        edge_fn: fnName,
-        auth_mode: r.mode,
-        upstream_status: r.status,
-        upstream: r.json,
-        diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-      });
+      return res.status(r.status).json({ ok: false, build_tag: BUILD_TAG, error: "UPSTREAM_ERROR", upstream: r.json, diag: diagBase });
     }
 
-    return res.status(404).json({
-      ok: false,
-      build_tag: BUILD_TAG,
-      error: "EDGE_FUNCTION_NOT_FOUND",
-      diag: diagBase,
-    });
+    return res.status(404).json({ ok: false, build_tag: BUILD_TAG, error: "EDGE_FUNCTION_NOT_FOUND", diag: diagBase });
   } catch (e) {
     return res.status(500).json({ ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) });
   }
