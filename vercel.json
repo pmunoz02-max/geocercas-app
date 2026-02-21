@@ -1,4 +1,12 @@
 {
+  "version": 2,
+
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs20.x"
+    }
+  },
+
   "redirects": [
     {
       "source": "/(.*)",
@@ -7,6 +15,7 @@
       "permanent": true
     }
   ],
+
   "rewrites": [
     { "source": "/api/auth/bootstrap", "destination": "/api/auth?route=bootstrap" },
     { "source": "/api/auth/ensure-context", "destination": "/api/auth?route=ensure-context" },
@@ -17,6 +26,7 @@
 
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
+
   "headers": [
     {
       "source": "/(.*)",
