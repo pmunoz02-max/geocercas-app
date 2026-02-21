@@ -1,28 +1,21 @@
 /**
  * App Geocercas — Invite Tracker (Preview)
- * Build tag: invite-proxy-v13_1_cosmetic-bump_20260221
+ * Build tag: invite-proxy-v14_esm_fix_require_20260221
  *
- * Cambio cosmético:
- * - BUILD_TAG nuevo
- * - Header "X-Build-Tag" en las respuestas
+ * FIX: correr en entorno ESM (require no existe)
+ * - Sin require()
+ * - Sin module.exports
+ * - Export default handler(req,res)
  */
 
-const BUILD_TAG = "invite-proxy-v13_1_cosmetic-bump_20260221";
+const BUILD_TAG = "invite-proxy-v14_esm_fix_require_20260221";
 
 function sendJson(res, status, payload) {
-  try {
-    res.statusCode = status;
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.setHeader("Cache-Control", "no-store, max-age=0");
-    res.setHeader("X-Build-Tag", BUILD_TAG); // cosmético para ver qué versión corre
-    res.end(JSON.stringify(payload));
-  } catch (e) {
-    try {
-      res.statusCode = 500;
-      res.setHeader("X-Build-Tag", BUILD_TAG);
-      res.end('{"ok":false,"error":"UNHANDLED_RESPONSE_FAILURE"}');
-    } catch (_) {}
-  }
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("X-Build-Tag", BUILD_TAG);
+  res.end(JSON.stringify(payload));
 }
 
 function getRequestBody(req) {
@@ -35,14 +28,14 @@ function getRequestBody(req) {
 }
 
 function safeEnv(name) {
-  const v = process.env[name];
-  return v ? "[set]" : "[missing]";
+  return process.env[name] ? "[set]" : "[missing]";
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     const method = (req.method || "GET").toUpperCase();
 
+    // Ping diagnóstico
     if (method === "GET") {
       return sendJson(res, 200, {
         ok: true,
@@ -64,12 +57,16 @@ module.exports = async (req, res) => {
     }
 
     if (method !== "POST") {
-      return sendJson(res, 405, { ok: false, error: "METHOD_NOT_ALLOWED", build: BUILD_TAG });
+      return sendJson(res, 405, {
+        ok: false,
+        error: "METHOD_NOT_ALLOWED",
+        build: BUILD_TAG
+      });
     }
 
+    // POST diagnóstico (sin upstream)
     const raw = await getRequestBody(req);
-    let body = null;
-
+    let body = {};
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch (e) {
@@ -77,7 +74,7 @@ module.exports = async (req, res) => {
         ok: false,
         error: "INVALID_JSON",
         build: BUILD_TAG,
-        details: String(e && e.message ? e.message : e)
+        details: String(e?.message || e)
       });
     }
 
@@ -91,14 +88,16 @@ module.exports = async (req, res) => {
         keys: Object.keys(body || {}),
         emailPresent: !!email,
         orgIdPresent: !!orgId
-      }
+      },
+      next:
+        "Si esto ya funciona, reintroducimos la lógica real de invite (por capas) sin JWT hacia Supabase Functions."
     });
   } catch (err) {
     return sendJson(res, 500, {
       ok: false,
       error: "UNCAUGHT_EXCEPTION",
       build: BUILD_TAG,
-      details: String(err && err.stack ? err.stack : err)
+      details: String(err?.stack || err)
     });
   }
-};
+}
