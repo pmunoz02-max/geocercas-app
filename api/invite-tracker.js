@@ -13,7 +13,7 @@
 // - inyecta redirect_to y next absolutos (coherentes con el host que recibió la petición)
 //   => evita access_denied por mismatch de dominio/alias
 
-const BUILD_TAG = "invite-proxy-v11-universal-baseurl-redirect-next-20260219";
+const BUILD_TAG = "invite-proxy-v12-ping-routefix-20260220";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
 const DEFAULT_EDGE_FN_CANDIDATES = [
@@ -174,13 +174,11 @@ function buildAbsoluteNext(baseUrl, nextPathOrUrl) {
   const base = String(baseUrl || "").replace(/\/+$/, "");
   const raw = String(nextPathOrUrl || "").trim();
 
-  // si ya es URL absoluta, la dejamos, pero SOLO si coincide host con base (seguridad)
   try {
     if (raw.startsWith("http://") || raw.startsWith("https://")) {
       const u = new URL(raw);
       const b = new URL(base);
       if (u.host === b.host) return u.toString();
-      // si no coincide host, degradamos a /inicio
       return `${base}/inicio`;
     }
   } catch {}
@@ -246,14 +244,13 @@ function isMissingSubClaim401(upstreamStatus, upstreamJson) {
   return det.includes("missing sub claim");
 }
 
-// ✅ producción suele devolver 400 Invalid token si se llama con auth modo A
 function isInvalidToken400(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 400) return false;
   const msg = String(upstreamJson?.message || upstreamJson?.error || "").toLowerCase();
   return msg.includes("invalid token");
 }
 
-// MODE A: Authorization=ANON, x-user-jwt=USER
+// MODE A
 async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
@@ -274,7 +271,7 @@ async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   return { status: upstream.status, ok: upstream.ok, json, mode: "A" };
 }
 
-// MODE B: Authorization=USER (standard), sin x-user-jwt
+// MODE B
 async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
@@ -299,8 +296,28 @@ export default async function handler(req, res) {
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type, x-user-jwt");
-      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
       return res.status(200).send("ok");
+    }
+
+    // ✅ PING para verificar despliegue real
+    if (req.method === "GET") {
+      const vercelEnv = String(process.env.VERCEL_ENV || "").toLowerCase();
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+      const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+      const baseUrl = getBaseUrlFromRequest(req);
+      return res.status(200).json({
+        ok: true,
+        build_tag: BUILD_TAG,
+        route: "/api/invite-tracker",
+        diag: {
+          vercelEnv,
+          hasSupabaseUrl: !!supabaseUrl,
+          hasAnonKey: !!anonKey,
+          supabaseUrlHost: (() => { try { return supabaseUrl ? new URL(supabaseUrl).host : null; } catch { return null; } })(),
+          baseUrl: baseUrl || null
+        }
+      });
     }
 
     if (req.method !== "POST") {
@@ -320,7 +337,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Preview debe apuntar a su proyecto
     if (vercelEnv === "preview" && !String(supabaseUrl).includes(PREVIEW_REF)) {
       return res.status(401).json({
         ok: false,
@@ -348,7 +364,6 @@ export default async function handler(req, res) {
     const acceptLang = pickLangFromAcceptLanguage(req?.headers?.["accept-language"]);
     const lang = sanitizeLang(req?.body?.lang || acceptLang);
 
-    // ✅ baseUrl universal para armar redirect_to y next absolutos
     const baseUrl = getBaseUrlFromRequest(req);
     const redirectTo = baseUrl ? `${String(baseUrl).replace(/\/+$/, "")}/auth/callback` : "";
     const incomingNext = String(req?.body?.next || "").trim();
@@ -358,8 +373,6 @@ export default async function handler(req, res) {
       ...(req.body || {}),
       lang,
       email_copy: emailCopyFor(lang),
-
-      // ✅ PERMANENTE: estos 3 campos fuerzan coherencia dominio/redirect
       base_url: baseUrl || undefined,
       redirect_to: redirectTo || undefined,
       next_url: nextAbs || undefined,
@@ -386,39 +399,26 @@ export default async function handler(req, res) {
     const prodPreferB = vercelEnv === "production";
 
     for (const fnName of candidates) {
-      // ===== PRODUCCIÓN: B primero =====
       if (prodPreferB) {
         let rb = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-        if (rb.ok) {
-          return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: rb.mode, ...rb.json });
-        }
-        if (isFunctionNotFound(rb.status, rb.json)) {
-          continue;
-        }
-        // si dio 401 invalid jwt, seguimos al bloque refresh abajo
-        // si dio otro error, intentamos A como fallback final
+        if (rb.ok) return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: rb.mode, ...rb.json });
+        if (isFunctionNotFound(rb.status, rb.json)) continue;
       }
 
-      // ===== Intento A =====
       let r = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
 
-      // Missing sub -> B
       if (!r.ok && isMissingSubClaim401(r.status, r.json)) {
         r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
       }
 
-      // Invalid token 400 en A -> B
       if (!r.ok && isInvalidToken400(r.status, r.json)) {
         r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
       }
 
-      if (r.ok) {
-        return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
-      }
+      if (r.ok) return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
 
       if (isFunctionNotFound(r.status, r.json)) continue;
 
-      // ===== Refresh token si 401 invalid jwt =====
       if (isInvalidJwt401(r.status, r.json)) {
         if (!tgRt) {
           return res.status(401).json({
@@ -452,27 +452,18 @@ export default async function handler(req, res) {
         if (refreshed.refresh_token) cookieHeaders.push(makeCookie("tg_rt", refreshed.refresh_token, { maxAgeSec: 60 * 60 * 24 * 30 }));
         res.setHeader("Set-Cookie", cookieHeaders);
 
-        // retry B first
         let rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
 
-        // missing-sub -> A
         if (!rr.ok && isMissingSubClaim401(rr.status, rr.json)) {
           rr = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
         }
 
-        // invalid token 400 -> B
         if (!rr.ok && isInvalidToken400(rr.status, rr.json)) {
           rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
         }
 
         if (rr.ok) {
-          return res.status(200).json({
-            build_tag: BUILD_TAG,
-            edge_fn: fnName,
-            auth_mode: rr.mode,
-            refreshed: true,
-            ...rr.json,
-          });
+          return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: rr.mode, refreshed: true, ...rr.json });
         }
 
         if (isFunctionNotFound(rr.status, rr.json)) continue;
@@ -490,7 +481,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // otros errores -> stop
       return res.status(r.status).json({
         ok: false,
         build_tag: BUILD_TAG,
