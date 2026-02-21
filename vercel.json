@@ -26,7 +26,10 @@
   ],
   "redirects": [
     {
-      "source": "https://www.tugeocercas.com/:path*",
+      "source": "/:path*",
+      "has": [
+        { "type": "host", "value": "www.tugeocercas.com" }
+      ],
       "destination": "https://tugeocercas.com/:path*",
       "permanent": true
     }
