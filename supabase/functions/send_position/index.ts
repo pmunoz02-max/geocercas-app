@@ -1,3 +1,5 @@
+// supabase/functions/send_position/index.ts
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getAdminClient } from "../_shared/supabaseAdmin.ts";
 
 type Payload = {
@@ -17,6 +19,8 @@ type Payload = {
   is_mock?: boolean | null;
 };
 
+const BUILD_TAG = "send_position-v3-universal-getclaims-novfyjwt-20260220";
+
 function cors(origin: string | null) {
   const o = origin ?? "*";
   return {
@@ -27,34 +31,6 @@ function cors(origin: string | null) {
       "authorization, apikey, x-api-key, content-type, x-client-info, accept, accept-language",
     "Access-Control-Expose-Headers": "content-length, content-type",
   };
-}
-
-function getBearer(req: Request) {
-  const h = req.headers.get("authorization") || req.headers.get("Authorization") || "";
-  const m = h.match(/^Bearer\s+(.+)$/i);
-  return m?.[1] || "";
-}
-
-async function requireUserViaAuthAPI(req: Request): Promise<{ id: string; email?: string }> {
-  const token = getBearer(req);
-  if (!token) throw new Error("Missing Authorization Bearer token");
-
-  const url = Deno.env.get("SUPABASE_URL");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!url || !anon) throw new Error("Missing SUPABASE_URL / SUPABASE_ANON_KEY");
-
-  const r = await fetch(`${url}/auth/v1/user`, {
-    headers: { apikey: anon, Authorization: `Bearer ${token}` },
-  });
-
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`Auth user lookup failed (${r.status}): ${txt || r.statusText}`);
-  }
-
-  const u = await r.json();
-  if (!u?.id) throw new Error("Auth user lookup returned no id");
-  return { id: String(u.id), email: u.email ? String(u.email) : undefined };
 }
 
 function num(v: unknown, name: string) {
@@ -86,100 +62,65 @@ function parseRecordedAt(body: Payload): string {
     return d.toISOString();
   }
 
-  const d = new Date(raw);
+  const d = new Date(String(raw));
   if (!Number.isFinite(d.getTime())) throw new Error("Invalid timestamp (iso)");
   return d.toISOString();
 }
 
+function extractBearer(req: Request): { token: string; authHeader: string } | null {
+  const h = req.headers.get("authorization") || req.headers.get("Authorization") || "";
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+  const token = m[1].trim();
+  if (!token) return null;
+  return { token, authHeader: `Bearer ${token}` };
+}
+
 /**
- * ✅ Resolver canónico (universal y consistente con Tracker Dashboard):
- * 1) tracker_assignments activos del usuario => org_id más reciente
- * 2) app_user_roles del usuario => org_id más reciente
- * 3) user_current_org (si existe) => org_id
- * 4) memberships + org_members (legacy)
- *
- * - Si en (4) encuentra exactamente 1 org => persiste en user_current_org
- * - Si en (4) hay 2+ orgs => ERROR (no adivina)
+ * ✅ Resolver canónico (universal):
+ * - Fuente: user_current_org
+ * - Fallback: memberships + org_members
+ * - Si encuentra exactamente 1 org => la persiste en user_current_org
+ * - Si encuentra 2+ orgs => ERROR (no elige "min uuid", no persiste nada)
  */
 async function resolveOrgIdServerOwned(
   admin: ReturnType<typeof getAdminClient>,
   userId: string
 ): Promise<string> {
-  // 1) tracker_assignments activos (real para tracker)
-  {
-    const ta = await admin
-      .from("tracker_assignments")
-      .select("org_id, updated_at, created_at")
-      .eq("tracker_user_id", userId)
-      .eq("active", true)
-      .not("org_id", "is", null)
-      .order("updated_at", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const uco = await admin
+    .from("user_current_org")
+    .select("org_id")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-    // si tabla no existe / permisos, sigue; si hay otro error real, también seguimos como fallback universal
-    if (!ta.error && ta.data?.org_id) return String(ta.data.org_id);
-  }
+  if (uco.error) throw new Error(`user_current_org read failed: ${uco.error.message}`);
+  if (uco.data?.org_id) return String(uco.data.org_id);
 
-  // 2) app_user_roles (real para tu preview / fuente de usuarios)
-  {
-    const aur = await admin
-      .from("app_user_roles")
-      .select("org_id, role, created_at")
-      .eq("user_id", userId)
-      .not("org_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!aur.error && aur.data?.org_id) return String(aur.data.org_id);
-  }
-
-  // 3) user_current_org (si existe)
-  {
-    const uco = await admin
-      .from("user_current_org")
-      .select("org_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (!uco.error && uco.data?.org_id) return String(uco.data.org_id);
-  }
-
-  // 4) legacy: memberships + org_members
   const orgs = new Set<string>();
 
   const m = await admin.from("memberships").select("org_id").eq("user_id", userId);
-  if (!m.error) (m.data || []).forEach((r: any) => r?.org_id && orgs.add(String(r.org_id)));
+  if (m.error) throw new Error(`memberships read failed: ${m.error.message}`);
+  (m.data || []).forEach((r: any) => r?.org_id && orgs.add(String(r.org_id)));
 
   const om = await admin.from("org_members").select("org_id").eq("user_id", userId);
-  if (!om.error) (om.data || []).forEach((r: any) => r?.org_id && orgs.add(String(r.org_id)));
+  if (om.error) throw new Error(`org_members read failed: ${om.error.message}`);
+  (om.data || []).forEach((r: any) => r?.org_id && orgs.add(String(r.org_id)));
 
   const arr = Array.from(orgs);
-
-  if (arr.length === 0) {
-    throw new Error(
-      "No org found for user (tracker_assignments/app_user_roles/user_current_org/memberships/org_members)."
-    );
-  }
+  if (arr.length === 0) throw new Error("No org membership found for user.");
 
   if (arr.length === 1) {
     const orgId = arr[0];
-    // persistimos para que próximos envíos sean estables
     const up = await admin.from("user_current_org").upsert(
       { user_id: userId, org_id: orgId, updated_at: new Date().toISOString() },
       { onConflict: "user_id" }
     );
-    // si falla persistencia no bloquea el envío (pero lo reportamos en logs del error si quieres)
-    if (up.error) {
-      // no lanzamos, solo dejamos pasar: preferimos no perder posiciones
-    }
+    if (up.error) throw new Error(`user_current_org upsert failed: ${up.error.message}`);
     return orgId;
   }
 
   throw new Error(
-    `Multiple org memberships found for user. Please set current org (set_current_org) before sending positions. orgs=${arr.join(
+    `Multiple org memberships found for user. Please select current org (set_current_org) before sending positions. orgs=${arr.join(
       ","
     )}`
   );
@@ -192,29 +133,77 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: C });
 
   try {
-    const user = await requireUserViaAuthAPI(req);
+    const url = Deno.env.get("SUPABASE_URL");
+    const anon = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!url || !anon) throw new Error("Missing SUPABASE_URL / SUPABASE_ANON_KEY");
+
+    const bearer = extractBearer(req);
+    if (!bearer) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          build_tag: BUILD_TAG,
+          error: "Missing Authorization Bearer token",
+        }),
+        { status: 401, headers: { ...C, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ✅ Universal: validar JWT dentro del handler (NO gateway)
+    // getClaims verifica firma + exp y devuelve claims (sub = user id)
+    const supabaseAuthClient = createClient(url, anon, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          // no es estrictamente necesario para getClaims, pero mantiene consistencia
+          Authorization: bearer.authHeader,
+          apikey: anon,
+        },
+      },
+    });
+
+    const { data: claimsData, error: claimsError } =
+      await supabaseAuthClient.auth.getClaims(bearer.token);
+
+    const userId = claimsData?.claims?.sub ? String(claimsData.claims.sub) : null;
+
+    if (claimsError || !userId) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          build_tag: BUILD_TAG,
+          error: "Invalid JWT",
+          diag: claimsError?.message || null,
+        }),
+        { status: 401, headers: { ...C, "Content-Type": "application/json" } }
+      );
+    }
+
     const body: Payload = await req.json();
 
     const lat = num(body.lat, "lat");
     const lng = num(body.lng, "lng");
     if (!isValidLatLng(lat, lng)) {
-      return new Response(JSON.stringify({ ok: false, error: "Invalid lat/lng range" }), {
-        status: 400,
-        headers: { ...C, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ ok: false, build_tag: BUILD_TAG, error: "Invalid lat/lng range" }),
+        { status: 400, headers: { ...C, "Content-Type": "application/json" } }
+      );
     }
 
     const recorded_at = parseRecordedAt(body);
 
     const admin = getAdminClient();
-    const orgId = await resolveOrgIdServerOwned(admin, user.id);
+    const orgId = await resolveOrgIdServerOwned(admin, userId);
 
-    // ✅ CANÓNICO por defecto
     const positionsTable = Deno.env.get("POSITIONS_TABLE") ?? "tracker_positions";
 
     const row: Record<string, unknown> = {
-      org_id: orgId, // ✅ SERVER-OWNED (consistente con dashboard)
-      user_id: user.id,
+      org_id: orgId,
+      user_id: userId,
       personal_id: body.personal_id ?? null,
       asignacion_id: body.asignacion_id ?? null,
       lat,
@@ -230,39 +219,38 @@ Deno.serve(async (req) => {
 
     const ins = await admin.from(positionsTable).insert(row);
     if (ins.error) {
-      return new Response(JSON.stringify({ ok: false, error: `Insert failed: ${ins.error.message}` }), {
-        status: 500,
-        headers: { ...C, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          build_tag: BUILD_TAG,
+          error: `Insert failed: ${ins.error.message}`,
+        }),
+        { status: 500, headers: { ...C, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(
       JSON.stringify({
         ok: true,
+        build_tag: BUILD_TAG,
         org_id: orgId,
+        user_id: userId,
         recorded_at,
         table: positionsTable,
       }),
       { headers: { ...C, "Content-Type": "application/json" } }
     );
   } catch (e) {
-    const msg = String(e?.message || e);
+    const msg = String((e as any)?.message || e);
 
-    if (msg.includes("Multiple org memberships") || msg.includes("No org found")) {
-      return new Response(JSON.stringify({ ok: false, error: msg }), {
+    if (msg.includes("Multiple org memberships") || msg.includes("No org membership")) {
+      return new Response(JSON.stringify({ ok: false, build_tag: BUILD_TAG, error: msg }), {
         status: 400,
         headers: { ...C, "Content-Type": "application/json" },
       });
     }
 
-    if (msg.includes("Missing Authorization") || msg.includes("Auth user lookup failed")) {
-      return new Response(JSON.stringify({ ok: false, error: msg }), {
-        status: 401,
-        headers: { ...C, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ ok: false, error: msg }), {
+    return new Response(JSON.stringify({ ok: false, build_tag: BUILD_TAG, error: msg }), {
       status: 500,
       headers: { ...C, "Content-Type": "application/json" },
     });
