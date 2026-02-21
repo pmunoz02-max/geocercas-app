@@ -1,22 +1,4 @@
 {
-  "version": 2,
-
-  "builds": [
-    { "src": "api/**/*.js", "use": "@vercel/node" },
-    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
-  ],
-
-  "routes": [
-    { "src": "^/api/invite-tracker$", "dest": "/api/invite-tracker.js" },
-    { "src": "^/api/tracker-proxy$", "dest": "/api/tracker-proxy.js" },
-    { "src": "^/api/auth$", "dest": "/api/auth/index.js" },
-
-    { "src": "^/api/(.*)$", "dest": "/api/$1.js" },
-
-    { "handle": "filesystem" },
-    { "src": "^(.*)$", "dest": "/index.html" }
-  ],
-
   "redirects": [
     {
       "source": "/(.*)",
@@ -25,7 +7,9 @@
       "permanent": true
     }
   ],
-
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
