@@ -1,14 +1,14 @@
 // api/tracker-proxy.js
-// Proxy universal para Tracker (PROD/PREVIEW):
+// Proxy universal para Tracker (PREVIEW/PROD):
 // - Evita CORS (browser -> same-origin /api)
 // - Forward a Supabase Functions con apikey server-side
-// - Authorization: Bearer USER_JWT (desde el frontend)
+// - Authorization: Bearer USER_ACCESS_TOKEN (desde el frontend)
 // - Soporta múltiples funciones via ?fn=send_position | accept-tracker-invite
 //
 // POST /api/tracker-proxy?fn=send_position
 // POST /api/tracker-proxy?fn=accept-tracker-invite
 
-const BUILD_TAG = "tracker-proxy-v1-universal-corsfix-20260219";
+const BUILD_TAG = "tracker-proxy-v2-forward-auth-robust-20260220";
 
 function toStr(v) {
   return String(v ?? "");
@@ -35,9 +35,38 @@ function isAllowedFn(fnName) {
   return fnName === "send_position" || fnName === "accept-tracker-invite";
 }
 
+// No exponer token; solo fingerprint determinístico corto
+function tokenFingerprint(jwt) {
+  try {
+    const t = String(jwt || "");
+    if (!t.includes(".")) return "no-dots";
+    const parts = t.split(".");
+    const p2 = parts[1] || "";
+    // fingerprint corto estable: len + first/last chars
+    return `len${t.length}:${p2.slice(0, 6)}..${p2.slice(-6)}`;
+  } catch {
+    return "fp-error";
+  }
+}
+
+// Decodifica payload sin verificar firma (solo diagnóstico)
+function decodeJwtPayload(jwt) {
+  try {
+    const t = String(jwt || "");
+    const parts = t.split(".");
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const json = Buffer.from(b64 + pad, "base64").toString("utf8");
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   try {
-    // CORS for safety (same-origin normally; this is just harmless)
+    // CORS (same-origin normally; harmless)
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
@@ -84,13 +113,34 @@ export default async function handler(req, res) {
       });
     }
 
+    // Diagnóstico: exp/iss/sub sin exponer el token
+    const payload = decodeJwtPayload(userJwt);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const exp = payload?.exp ? Number(payload.exp) : null;
+    const expInSec = exp && Number.isFinite(exp) ? exp - nowSec : null;
+
+    // Si el token está expirado, devolvemos 401 claro (esto evita “Invalid JWT” opaco)
+    if (expInSec !== null && expInSec <= 0) {
+      return res.status(401).json({
+        ok: false,
+        build_tag: BUILD_TAG,
+        error: "JWT_EXPIRED",
+        diag: {
+          fp: tokenFingerprint(userJwt),
+          iss: payload?.iss ?? null,
+          sub: payload?.sub ?? null,
+          exp_in_sec: expInSec,
+        },
+      });
+    }
+
     const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
     const upstream = await fetch(url, {
       method: "POST",
       headers: {
         apikey: anonKey,
-        Authorization: `Bearer ${userJwt}`, // ✅ MODO B (universal)
+        Authorization: `Bearer ${userJwt}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(req.body || {}),
@@ -108,6 +158,13 @@ export default async function handler(req, res) {
       build_tag: BUILD_TAG,
       fn: fnName,
       upstream_status: upstream.status,
+      // diag no sensible (no token)
+      diag: {
+        fp: tokenFingerprint(userJwt),
+        iss: payload?.iss ?? null,
+        sub: payload?.sub ?? null,
+        exp_in_sec: expInSec,
+      },
       ...json,
     });
   } catch (e) {
