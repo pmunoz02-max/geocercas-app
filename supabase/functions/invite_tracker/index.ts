@@ -1,440 +1,218 @@
-// api/invite-tracker.js
-// Universal Proxy:
-// - fallback de Edge Function names (preview/prod pueden diferir)
-// - AUTH MODE:
-//   A) Authorization: Bearer ANON + x-user-jwt: USER_JWT
-//   B) Authorization: Bearer USER_JWT (standard Supabase)
-// - En PRODUCCIÓN: forzamos MODO B primero (muchas edge functions no aceptan A)
-// - Retry si upstream dice "Invalid token" con status 400/401
+/**
+ * App Geocercas — Vercel API: /api/invite-tracker (Preview)
+ * Build tag: invite-proxy-v15_1_esm_hmac_edge_debug_20260221
+ *
+ * - ESM puro (NO require / NO module.exports)
+ * - Obtiene caller_jwt llamando a /api/auth/session usando cookies del request
+ * - Firma HMAC (x-edge-ts, x-edge-sig)
+ * - Llama a Supabase Edge Function invite_tracker SIN Authorization
+ * - Devuelve diagnóstico del edge (status/build_tag) para verificar versión y errores
+ */
 
-const BUILD_TAG = "invite-proxy-v10-force-modeB-in-prod-20260219";
-const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
+import crypto from "node:crypto";
 
-const DEFAULT_EDGE_FN_CANDIDATES = [
-  "invite_tracker",
-  "send-tracker-invite-brevo",
-  "send-invite-or-magic",
-  "invite-user",
-];
+const BUILD_TAG = "invite-proxy-v15_1_esm_hmac_edge_debug_20260221";
 
-const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
-
-function pickLangFromAcceptLanguage(h) {
-  const s = String(h || "").toLowerCase();
-  if (!s) return "";
-  return s.split(",")[0].trim().slice(0, 2);
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("X-Build-Tag", BUILD_TAG);
+  res.end(JSON.stringify(payload));
 }
 
-function sanitizeLang(v) {
-  const raw = String(v || "").trim().toLowerCase();
-  if (!raw) return "es";
-  const two = raw.slice(0, 2);
-  return SUPPORTED_LANGS.has(two) ? two : "es";
+function getRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => (data += chunk));
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
+  });
 }
 
-function emailCopyFor(lang) {
-  if (lang === "en") {
-    return {
-      subject: "Invitation: GPS Tracker – App Geofences",
-      title: "Invitation to GPS Tracker",
-      intro1: "You have been invited to use the GPS Tracker for App Geofences.",
-      intro2: "This link will open the Tracker in the correct organization.",
-      expires: "This link expires in 7 days.",
-      cta: "Open GPS Tracker",
-      copyLink: "If you can't click, copy and paste this link:",
-    };
-  }
-  if (lang === "fr") {
-    return {
-      subject: "Invitation : GPS Tracker – App Geocercas",
-      title: "Invitation au GPS Tracker",
-      intro1: "Vous avez été invité à utiliser le GPS Tracker d’App Geocercas.",
-      intro2: "Ce lien ouvrira le Tracker dans la bonne organisation.",
-      expires: "Ce lien expire dans 7 jours.",
-      cta: "Ouvrir le GPS Tracker",
-      copyLink: "Si vous ne pouvez pas cliquer, copiez et collez ce lien :",
-    };
-  }
-  return {
-    subject: "Invitación: Tracker GPS – App Geocercas",
-    title: "Invitación a Tracker GPS",
-    intro1: "Has sido invitado a usar el Tracker GPS de App Geocercas.",
-    intro2: "Este enlace abrirá el Tracker en la organización correcta.",
-    expires: "Este enlace expira en 7 días.",
-    cta: "Abrir Tracker GPS",
-    copyLink: "Si no puedes hacer clic, copia y pega este enlace:",
-  };
+function normEmail(email) {
+  return String(email || "").trim().toLowerCase();
 }
 
-function getCookie(req, name) {
-  const raw = req?.headers?.cookie || "";
-  const parts = raw.split(";").map((s) => s.trim()).filter(Boolean);
-  const hit = parts.find((p) => p.startsWith(name + "="));
-  if (!hit) return "";
-  const value = hit.split("=").slice(1).join("=");
+function hmacSha256Hex(secret, message) {
+  return crypto.createHmac("sha256", secret).update(message, "utf8").digest("hex");
+}
+
+function safeEnv(name) {
+  return process.env[name] ? "[set]" : "[missing]";
+}
+
+async function fetchWithTimeout(url, init, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return decodeURIComponent(value);
+    const resp = await fetch(url, { ...init, signal: controller.signal });
+    return resp;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function getCallerJwtFromSession(req) {
+  const cookie = req.headers?.cookie || req.headers?.Cookie || "";
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+
+  if (!host) return { ok: false, error: "Missing host header for auth/session" };
+
+  const url = `${proto}://${host}/api/auth/session`;
+
+  const r = await fetchWithTimeout(
+    url,
+    {
+      method: "GET",
+      headers: {
+        cookie,
+        accept: "application/json",
+      },
+    },
+    10000
+  );
+
+  const text = await r.text().catch(() => "");
+  if (!r.ok) {
+    return { ok: false, error: `auth/session failed ${r.status}`, detail: text.slice(0, 400) };
+  }
+
+  let j = {};
+  try {
+    j = text ? JSON.parse(text) : {};
   } catch {
-    return value;
+    return { ok: false, error: "auth/session returned non-JSON", detail: text.slice(0, 400) };
   }
-}
 
-function normalizeToken(maybeToken) {
-  let t = String(maybeToken || "").trim();
-  if (!t) return "";
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) t = t.slice(1, -1).trim();
-  if (t.startsWith("s:")) t = t.slice(2).trim();
-  if (/^bearer\s+/i.test(t)) t = t.replace(/^bearer\s+/i, "").trim();
-  t = t.replace(/\s+/g, "");
-  return t;
-}
+  const token =
+    j?.session?.access_token ||
+    j?.access_token ||
+    j?.data?.session?.access_token ||
+    null;
 
-function base64UrlDecode(str) {
-  let s = String(str || "").replace(/-/g, "+").replace(/_/g, "/");
-  while (s.length % 4 !== 0) s += "=";
-  return Buffer.from(s, "base64").toString("utf8");
-}
-
-function tryDecodeJwt(token) {
-  const parts = String(token || "").split(".");
-  if (parts.length !== 3) return { ok: false, error: "JWT_NOT_3_PARTS" };
-  try {
-    const payload = JSON.parse(base64UrlDecode(parts[1]));
-    return { ok: true, payload };
-  } catch (e) {
-    return { ok: false, error: "JWT_DECODE_FAILED", details: String(e?.message || e) };
+  if (!token) {
+    return {
+      ok: false,
+      error: "No access_token in auth/session response",
+      detail: JSON.stringify(j).slice(0, 400),
+    };
   }
-}
 
-function nowUnix() {
-  return Math.floor(Date.now() / 1000);
-}
-
-function makeCookie(name, value, { maxAgeSec, httpOnly = true, secure = true, sameSite = "Lax", path = "/" }) {
-  const parts = [
-    `${name}=${encodeURIComponent(value)}`,
-    `Path=${path}`,
-    `SameSite=${sameSite}`,
-  ];
-  if (httpOnly) parts.push("HttpOnly");
-  if (secure) parts.push("Secure");
-  if (typeof maxAgeSec === "number") parts.push(`Max-Age=${Math.max(0, Math.floor(maxAgeSec))}`);
-  return parts.join("; ");
-}
-
-function parseEdgeFnCandidates() {
-  const raw = process.env.INVITE_TRACKER_EDGE_FNS || process.env.NEXT_PUBLIC_INVITE_TRACKER_EDGE_FNS || "";
-  const list = String(raw).split(",").map((s) => s.trim()).filter(Boolean);
-
-  const seen = new Set();
-  const out = [];
-  for (const x of list) {
-    if (!seen.has(x)) {
-      seen.add(x);
-      out.push(x);
-    }
-  }
-  for (const d of DEFAULT_EDGE_FN_CANDIDATES) {
-    if (!seen.has(d)) {
-      seen.add(d);
-      out.push(d);
-    }
-  }
-  return out;
-}
-
-async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
-  const url = String(supabaseUrl).replace(/\/$/, "") + "/auth/v1/token?grant_type=refresh_token";
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-
-  const text = await r.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
-
-  if (!r.ok) return { ok: false, status: r.status, body: json };
-
-  const access_token = String(json?.access_token || "");
-  const refresh_token = String(json?.refresh_token || "");
-  const expires_in = typeof json?.expires_in === "number" ? json.expires_in : null;
-
-  if (!access_token) return { ok: false, status: 500, body: { error: "NO_ACCESS_TOKEN_RETURNED", raw: json } };
-  return { ok: true, access_token, refresh_token, expires_in };
-}
-
-function isFunctionNotFound(upstreamStatus, upstreamJson) {
-  if (upstreamStatus !== 404) return false;
-  const msg = String(upstreamJson?.message || "").toLowerCase();
-  const code = String(upstreamJson?.code || "").toUpperCase();
-  return code === "NOT_FOUND" || msg.includes("requested function was not found");
-}
-
-function isInvalidJwt401(upstreamStatus, upstreamJson) {
-  if (upstreamStatus !== 401) return false;
-  const msg = String(upstreamJson?.message || "").toLowerCase();
-  const err = String(upstreamJson?.error || "").toLowerCase();
-  const det = String(upstreamJson?.detail || "").toLowerCase();
-  return msg.includes("invalid jwt") || err.includes("invalid jwt") || det.includes("invalid jwt");
-}
-
-function isMissingSubClaim401(upstreamStatus, upstreamJson) {
-  if (upstreamStatus !== 401) return false;
-  const det = String(upstreamJson?.detail || "").toLowerCase();
-  return det.includes("missing sub claim");
-}
-
-// ✅ Producción: también tratamos 400 Invalid token como señal de "modo A no sirve"
-function isInvalidToken400(upstreamStatus, upstreamJson) {
-  if (upstreamStatus !== 400) return false;
-  const msg = String(upstreamJson?.message || upstreamJson?.error || "").toLowerCase();
-  return msg.includes("invalid token");
-}
-
-// MODE A
-async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
-  const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
-  const upstream = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      "x-user-jwt": userJwt,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body || {}),
-  });
-
-  const text = await upstream.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
-  return { status: upstream.status, ok: upstream.ok, json, mode: "A" };
-}
-
-// MODE B
-async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
-  const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
-  const upstream = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${userJwt}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body || {}),
-  });
-
-  const text = await upstream.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
-  return { status: upstream.status, ok: upstream.ok, json, mode: "B" };
+  return { ok: true, token };
 }
 
 export default async function handler(req, res) {
   try {
-    if (req.method === "OPTIONS") {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type, x-user-jwt");
-      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-      return res.status(200).send("ok");
-    }
+    const method = (req.method || "GET").toUpperCase();
 
-    if (req.method !== "POST") {
-      return res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
-    }
-
-    const vercelEnv = String(process.env.VERCEL_ENV || "").toLowerCase();
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !anonKey) {
-      return res.status(500).json({
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "Server missing SUPABASE env",
-        diag: { vercelEnv, supabaseUrl, hasAnonKey: !!anonKey },
+    if (method === "GET") {
+      return sendJson(res, 200, {
+        ok: true,
+        build: BUILD_TAG,
+        runtime: { node: process.version, platform: process.platform },
+        env: {
+          SUPABASE_FUNCTIONS_URL: safeEnv("SUPABASE_FUNCTIONS_URL"),
+          INVITE_HMAC_SECRET: safeEnv("INVITE_HMAC_SECRET"),
+        },
       });
     }
 
-    // Regla: en preview debe apuntar al proyecto preview
-    if (vercelEnv === "preview" && !String(supabaseUrl).includes(PREVIEW_REF)) {
-      return res.status(401).json({
+    if (method !== "POST") {
+      return sendJson(res, 405, { ok: false, error: "METHOD_NOT_ALLOWED", build: BUILD_TAG });
+    }
+
+    const SUPABASE_FUNCTIONS_URL = (process.env.SUPABASE_FUNCTIONS_URL || "").replace(/\/$/, "");
+    const INVITE_HMAC_SECRET = process.env.INVITE_HMAC_SECRET || "";
+
+    if (!SUPABASE_FUNCTIONS_URL)
+      return sendJson(res, 500, { ok: false, error: "Missing SUPABASE_FUNCTIONS_URL", build: BUILD_TAG });
+    if (!INVITE_HMAC_SECRET)
+      return sendJson(res, 500, { ok: false, error: "Missing INVITE_HMAC_SECRET", build: BUILD_TAG });
+
+    const raw = await getRequestBody(req);
+    let body = {};
+    try {
+      body = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return sendJson(res, 400, {
         ok: false,
-        build_tag: BUILD_TAG,
-        error: "PREVIEW_ENV_MISMATCH",
-        diag: { vercelEnv, expected_ref: PREVIEW_REF, supabaseUrl },
+        error: "INVALID_JSON",
+        build: BUILD_TAG,
+        detail: String(e?.message || e),
       });
     }
 
-    const tgAt = normalizeToken(getCookie(req, "tg_at"));
-    const tgRt = normalizeToken(getCookie(req, "tg_rt"));
+    const org_id = String(body?.org_id || "").trim();
+    const emailNorm = normEmail(body?.email || "");
+    const name = String(body?.name || body?.to_name || body?.toName || "").trim() || "";
 
-    if (!tgAt) {
-      return res.status(401).json({
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "Missing tg_at cookie",
-        diag: { vercelEnv, has_tg_rt: !!tgRt, supabaseUrl },
-      });
+    if (!org_id) return sendJson(res, 400, { ok: false, error: "Missing org_id", build: BUILD_TAG });
+    if (!emailNorm || !emailNorm.includes("@"))
+      return sendJson(res, 400, { ok: false, error: "Invalid email", build: BUILD_TAG });
+
+    const s = await getCallerJwtFromSession(req);
+    if (!s.ok) {
+      return sendJson(res, 401, { ok: false, error: "NO_SESSION", build: BUILD_TAG, detail: s.error, more: s.detail });
     }
 
-    const d1 = tryDecodeJwt(tgAt);
-    const p1 = d1.ok ? d1.payload : null;
+    const caller_jwt = s.token;
 
-    const acceptLang = pickLangFromAcceptLanguage(req?.headers?.["accept-language"]);
-    const lang = sanitizeLang(req?.body?.lang || acceptLang);
+    const ts = Date.now().toString();
+    const msg = `${ts}\n${org_id}\n${emailNorm}`;
+    const sig = hmacSha256Hex(INVITE_HMAC_SECRET, msg);
 
-    const edgeBody = {
-      ...(req.body || {}),
-      lang,
-      email_copy: emailCopyFor(lang),
-    };
+    const edgeUrl = `${SUPABASE_FUNCTIONS_URL}/functions/v1/invite_tracker`;
 
-    const candidates = parseEdgeFnCandidates();
+    const edgeResp = await fetchWithTimeout(
+      edgeUrl,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-edge-ts": ts,
+          "x-edge-sig": sig,
+        },
+        body: JSON.stringify({ org_id, email: emailNorm, name, caller_jwt }),
+      },
+      20000
+    );
 
-    const diagBase = {
-      vercelEnv,
-      supabaseUrl,
-      iss: p1?.iss || null,
-      aud: p1?.aud || null,
-      exp: p1?.exp || null,
-      now: nowUnix(),
-      has_tg_rt: !!tgRt,
-      has_service_role: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      build_tag: BUILD_TAG,
-      edge_fn_candidates: candidates,
-    };
+    const edgeText = await edgeResp.text().catch(() => "");
 
-    // PRODUCCIÓN: B primero
-    const prodPreferB = vercelEnv === "production";
-
-    for (const fnName of candidates) {
-      let r;
-
-      if (prodPreferB) {
-        // 1) Try Mode B first
-        r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-        if (r.ok) {
-          return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
-        }
-      }
-
-      // 2) Try Mode A (solo si no es production o B falló)
-      r = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-
-      // missing sub -> try B
-      if (!r.ok && isMissingSubClaim401(r.status, r.json)) {
-        r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-      }
-
-      // Invalid token 400 en A -> try B
-      if (!r.ok && isInvalidToken400(r.status, r.json)) {
-        r = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: tgAt, fnName, body: edgeBody });
-      }
-
-      if (r.ok) {
-        return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
-      }
-
-      if (isFunctionNotFound(r.status, r.json)) continue;
-
-      // invalid jwt 401 -> refresh then retry (B first)
-      if (isInvalidJwt401(r.status, r.json)) {
-        if (!tgRt) {
-          return res.status(401).json({
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "UPSTREAM_401_NO_REFRESH_TOKEN",
-            edge_fn: fnName,
-            auth_mode: r.mode,
-            upstream: r.json,
-            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-          });
-        }
-
-        const refreshed = await refreshAccessToken({ supabaseUrl, anonKey, refreshToken: tgRt });
-        if (!refreshed.ok) {
-          return res.status(401).json({
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "REFRESH_FAILED",
-            refresh_status: refreshed.status,
-            refresh_body: refreshed.body,
-            edge_fn: fnName,
-            auth_mode: r.mode,
-            upstream: r.json,
-            diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-          });
-        }
-
-        const cookieHeaders = [];
-        cookieHeaders.push(makeCookie("tg_at", refreshed.access_token, { maxAgeSec: refreshed.expires_in || 3600 }));
-        if (refreshed.refresh_token) cookieHeaders.push(makeCookie("tg_rt", refreshed.refresh_token, { maxAgeSec: 60 * 60 * 24 * 30 }));
-        res.setHeader("Set-Cookie", cookieHeaders);
-
-        // retry B first
-        let rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
-
-        // missing-sub -> A
-        if (!rr.ok && isMissingSubClaim401(rr.status, rr.json)) {
-          rr = await callEdgeModeA({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
-        }
-
-        // invalid token 400 in A -> B
-        if (!rr.ok && isInvalidToken400(rr.status, rr.json)) {
-          rr = await callEdgeModeB({ supabaseUrl, anonKey, userJwt: refreshed.access_token, fnName, body: edgeBody });
-        }
-
-        if (rr.ok) {
-          return res.status(200).json({
-            build_tag: BUILD_TAG,
-            edge_fn: fnName,
-            auth_mode: rr.mode,
-            refreshed: true,
-            ...rr.json,
-          });
-        }
-
-        if (isFunctionNotFound(rr.status, rr.json)) continue;
-
-        return res.status(rr.status).json({
-          ok: false,
-          build_tag: BUILD_TAG,
-          error: "UPSTREAM_ERROR_AFTER_REFRESH",
-          edge_fn: fnName,
-          auth_mode: rr.mode,
-          refreshed: true,
-          upstream_status: rr.status,
-          upstream: rr.json,
-          diag: { ...diagBase, edge_fn: fnName, auth_mode: rr.mode },
-        });
-      }
-
-      return res.status(r.status).json({
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "UPSTREAM_ERROR",
-        edge_fn: fnName,
-        auth_mode: r.mode,
-        upstream_status: r.status,
-        upstream: r.json,
-        diag: { ...diagBase, edge_fn: fnName, auth_mode: r.mode },
-      });
+    let edgeJson = null;
+    let edgeParseError = null;
+    try {
+      edgeJson = edgeText ? JSON.parse(edgeText) : null;
+    } catch (e) {
+      edgeParseError = String(e?.message || e);
+      edgeJson = null;
     }
 
-    return res.status(404).json({
-      ok: false,
-      build_tag: BUILD_TAG,
-      error: "EDGE_FUNCTION_NOT_FOUND",
-      diag: diagBase,
+    const edgeBuildTag =
+      (edgeJson && (edgeJson.build_tag || edgeJson.build || edgeJson.BUILD_TAG)) ||
+      null;
+
+    const edgeRawSample = !edgeJson ? edgeText.slice(0, 500) : undefined;
+
+    return sendJson(res, edgeResp.status, {
+      ...(edgeJson || {}),
+      _proxy: {
+        ok: edgeResp.ok,
+        build: BUILD_TAG,
+        edge_status: edgeResp.status,
+        edge_build_tag: edgeBuildTag,
+        edge_parse_error: edgeParseError,
+        edge_raw_sample: edgeRawSample,
+      },
     });
-  } catch (e) {
-    return res.status(500).json({ ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) });
+  } catch (err) {
+    return sendJson(res, 500, {
+      ok: false,
+      error: "UNCAUGHT_EXCEPTION",
+      build: BUILD_TAG,
+      detail: String(err?.stack || err),
+    });
   }
 }
