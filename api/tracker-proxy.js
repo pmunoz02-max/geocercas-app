@@ -5,9 +5,10 @@
 // - Authorization: Bearer USER_ACCESS_TOKEN (desde el frontend)
 // - Whitelist de funciones
 // - Diagnóstico seguro (sin exponer JWT)
-// - Validación universal: token.iss debe coincidir con SUPABASE_URL/auth/v1
+// - Guard universal: token.iss debe coincidir con SUPABASE_URL/auth/v1
+// - Health-check cuando upstream devuelve 401 (para detectar mismatch SUPABASE_URL vs ANON_KEY)
 
-const BUILD_TAG = "tracker-proxy-v3-iss-guard-20260220";
+const BUILD_TAG = "tracker-proxy-v4-healthcheck-20260220";
 
 function toStr(v) {
   return String(v ?? "");
@@ -26,6 +27,7 @@ function normalizeToken(maybeToken) {
   if (!t) return "";
   if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) t = t.slice(1, -1).trim();
   if (/^bearer\s+/i.test(t)) t = t.replace(/^bearer\s+/i, "").trim();
+  // no alteramos puntos ni caracteres base64url; solo removemos whitespace
   return t.replace(/\s+/g, "");
 }
 
@@ -69,6 +71,63 @@ function safeHost(url) {
   }
 }
 
+function anonFingerprint(anonKey) {
+  try {
+    const a = String(anonKey || "");
+    if (!a) return null;
+    if (a.length <= 10) return `len${a.length}`;
+    return `len${a.length}:${a.slice(0, 4)}..${a.slice(-4)}`;
+  } catch {
+    return null;
+  }
+}
+
+// Detecta si el body upstream parece ser el error de gateway
+function looksLikeGatewayInvalidJwt(textOrJson) {
+  try {
+    if (!textOrJson) return false;
+    if (typeof textOrJson === "string") return textOrJson.includes("Invalid JWT");
+    const msg = textOrJson?.message || textOrJson?.error || "";
+    return String(msg).includes("Invalid JWT");
+  } catch {
+    return false;
+  }
+}
+
+// Health-check para validar que apikey corresponde al SUPABASE_URL
+async function authHealthCheck(supabaseUrl, anonKey) {
+  const base = String(supabaseUrl || "").replace(/\/$/, "");
+  if (!base || !anonKey) return { ok: false, status: null, error: "missing_url_or_anon" };
+
+  const healthUrl = `${base}/auth/v1/health`;
+  try {
+    const r = await fetch(healthUrl, {
+      method: "GET",
+      headers: {
+        apikey: String(anonKey),
+        // sin Authorization de usuario
+      },
+    });
+
+    // Supabase suele responder 200 con payload json; si apikey/host no coincide,
+    // puede dar 401/403 o incluso fallo de DNS/SSL según el caso.
+    let body = null;
+    try {
+      body = await r.json();
+    } catch {
+      body = null;
+    }
+
+    return {
+      ok: r.ok,
+      status: r.status,
+      body,
+    };
+  } catch (e) {
+    return { ok: false, status: null, error: String(e?.message || e) };
+  }
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method === "OPTIONS") {
@@ -82,15 +141,28 @@ export default async function handler(req, res) {
       return res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    // ✅ Preferir env server-side. Mantengo fallback VITE_* pero reporto source para detectar mismatch en Vercel.
+    const supabaseUrl =
+      process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const anonKey =
+      process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    const envSource = {
+      url: process.env.SUPABASE_URL ? "SUPABASE_URL" : process.env.VITE_SUPABASE_URL ? "VITE_SUPABASE_URL" : process.env.NEXT_PUBLIC_SUPABASE_URL ? "NEXT_PUBLIC_SUPABASE_URL" : "missing",
+      anon: process.env.SUPABASE_ANON_KEY ? "SUPABASE_ANON_KEY" : process.env.VITE_SUPABASE_ANON_KEY ? "VITE_SUPABASE_ANON_KEY" : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "NEXT_PUBLIC_SUPABASE_ANON_KEY" : "missing",
+    };
 
     if (!supabaseUrl || !anonKey) {
       return res.status(500).json({
         ok: false,
         build_tag: BUILD_TAG,
         error: "Server missing SUPABASE env",
-        diag: { hasUrl: !!supabaseUrl, hasAnon: !!anonKey },
+        diag: {
+          hasUrl: !!supabaseUrl,
+          hasAnon: !!anonKey,
+          envSource,
+        },
       });
     }
 
@@ -138,6 +210,7 @@ export default async function handler(req, res) {
           iss_host: safeHost(gotIss),
           sub: payload?.sub ?? null,
           exp_in_sec: expInSec,
+          envSource,
         },
       });
     }
@@ -153,6 +226,7 @@ export default async function handler(req, res) {
           sub: payload?.sub ?? null,
           exp_in_sec: expInSec,
           supabase_host: safeHost(supabaseUrl),
+          envSource,
         },
       });
     }
@@ -162,7 +236,7 @@ export default async function handler(req, res) {
     const upstream = await fetch(url, {
       method: "POST",
       headers: {
-        apikey: anonKey,
+        apikey: String(anonKey),
         Authorization: `Bearer ${userJwt}`,
         "Content-Type": "application/json",
       },
@@ -177,6 +251,12 @@ export default async function handler(req, res) {
       json = { raw: text };
     }
 
+    // ✅ Si es 401, hacemos health-check para detectar mismatch url/anon en Vercel
+    let health = null;
+    if (upstream.status === 401 && looksLikeGatewayInvalidJwt(json?.message || text)) {
+      health = await authHealthCheck(supabaseUrl, anonKey);
+    }
+
     return res.status(upstream.status).json({
       build_tag: BUILD_TAG,
       fn: fnName,
@@ -187,6 +267,9 @@ export default async function handler(req, res) {
         sub: payload?.sub ?? null,
         exp_in_sec: expInSec,
         supabase_host: safeHost(supabaseUrl),
+        anon_fp: anonFingerprint(anonKey), // NO revela el key completo
+        envSource,
+        auth_health: health, // solo presente en 401 invalid jwt
       },
       ...json,
     });
