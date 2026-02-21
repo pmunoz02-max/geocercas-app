@@ -1,19 +1,7 @@
-// api/invite-tracker.js
-// Proxy universal:
-// - fallback de Edge Function names (preview/prod pueden diferir)
-// - fallback de AUTH MODE:
-//   A) Authorization: Bearer ANON + x-user-jwt: USER_JWT
-//   B) Authorization: Bearer USER_JWT (standard Supabase)
-// - En PRODUCCIÓN: forzamos MODO B primero
-// - Retry si upstream dice "Invalid token" (400) -> probar MODO B
-// - Refresh tg_rt si upstream devuelve 401 invalid jwt
-//
-// ✅ PERMANENTE:
-// - baseUrl canónica desde el REQUEST (x-forwarded-host/proto)
-// - inyecta redirect_to y next absolutos (coherentes con el host que recibió la petición)
-//   => evita access_denied por mismatch de dominio/alias
+// api/invite-tracker/index.js
+// invite-proxy (folder/index.js) para que Vercel lo publique SIEMPRE.
 
-const BUILD_TAG = "invite-proxy-v12-ping-routefix-20260220";
+const BUILD_TAG = "invite-proxy-v12-folderindex-20260220";
 const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 
 const DEFAULT_EDGE_FN_CANDIDATES = [
@@ -30,14 +18,12 @@ function pickLangFromAcceptLanguage(h) {
   if (!s) return "";
   return s.split(",")[0].trim().slice(0, 2);
 }
-
 function sanitizeLang(v) {
   const raw = String(v || "").trim().toLowerCase();
   if (!raw) return "es";
   const two = raw.slice(0, 2);
   return SUPPORTED_LANGS.has(two) ? two : "es";
 }
-
 function emailCopyFor(lang) {
   if (lang === "en") {
     return {
@@ -159,7 +145,6 @@ function parseEdgeFnCandidates() {
   return out;
 }
 
-// ✅ baseUrl universal por request (Vercel / proxies)
 function getBaseUrlFromRequest(req) {
   const xfProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
   const xfHost = String(req?.headers?.["x-forwarded-host"] || "").split(",")[0].trim();
@@ -169,7 +154,6 @@ function getBaseUrlFromRequest(req) {
   return `${proto}://${host}`;
 }
 
-// ✅ arma next absoluto seguro (mantiene path relativo)
 function buildAbsoluteNext(baseUrl, nextPathOrUrl) {
   const base = String(baseUrl || "").replace(/\/+$/, "");
   const raw = String(nextPathOrUrl || "").trim();
@@ -204,11 +188,7 @@ async function refreshAccessToken({ supabaseUrl, anonKey, refreshToken }) {
 
   const text = await r.text();
   let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
+  try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
 
   if (!r.ok) return { ok: false, status: r.status, body: json };
 
@@ -229,7 +209,6 @@ function isFunctionNotFound(upstreamStatus, upstreamJson) {
   const code = String(upstreamJson?.code || "").toUpperCase();
   return code === "NOT_FOUND" || msg.includes("requested function was not found");
 }
-
 function isInvalidJwt401(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 401) return false;
   const msg = String(upstreamJson?.message || "").toLowerCase();
@@ -237,13 +216,11 @@ function isInvalidJwt401(upstreamStatus, upstreamJson) {
   const det = String(upstreamJson?.detail || "").toLowerCase();
   return msg.includes("invalid jwt") || err.includes("invalid jwt") || det.includes("invalid jwt");
 }
-
 function isMissingSubClaim401(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 401) return false;
   const det = String(upstreamJson?.detail || "").toLowerCase();
   return det.includes("missing sub claim");
 }
-
 function isInvalidToken400(upstreamStatus, upstreamJson) {
   if (upstreamStatus !== 400) return false;
   const msg = String(upstreamJson?.message || upstreamJson?.error || "").toLowerCase();
@@ -253,7 +230,6 @@ function isInvalidToken400(upstreamStatus, upstreamJson) {
 // MODE A
 async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
-
   const upstream = await fetch(url, {
     method: "POST",
     headers: {
@@ -264,7 +240,6 @@ async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
     },
     body: JSON.stringify(body || {}),
   });
-
   const text = await upstream.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
@@ -274,7 +249,6 @@ async function callEdgeModeA({ supabaseUrl, anonKey, userJwt, fnName, body }) {
 // MODE B
 async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
   const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
-
   const upstream = await fetch(url, {
     method: "POST",
     headers: {
@@ -284,14 +258,13 @@ async function callEdgeModeB({ supabaseUrl, anonKey, userJwt, fnName, body }) {
     },
     body: JSON.stringify(body || {}),
   });
-
   const text = await upstream.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
   return { status: upstream.status, ok: upstream.ok, json, mode: "B" };
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   try {
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
@@ -300,7 +273,7 @@ export default async function handler(req, res) {
       return res.status(200).send("ok");
     }
 
-    // ✅ PING para verificar despliegue real
+    // ✅ PING para confirmar que Vercel publicó esta function
     if (req.method === "GET") {
       const vercelEnv = String(process.env.VERCEL_ENV || "").toLowerCase();
       const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -314,7 +287,6 @@ export default async function handler(req, res) {
           vercelEnv,
           hasSupabaseUrl: !!supabaseUrl,
           hasAnonKey: !!anonKey,
-          supabaseUrlHost: (() => { try { return supabaseUrl ? new URL(supabaseUrl).host : null; } catch { return null; } })(),
           baseUrl: baseUrl || null
         }
       });
@@ -391,7 +363,6 @@ export default async function handler(req, res) {
       exp: p1?.exp || null,
       now: nowUnix(),
       has_tg_rt: !!tgRt,
-      has_service_role: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
       build_tag: BUILD_TAG,
       edge_fn_candidates: candidates,
     };
@@ -416,7 +387,6 @@ export default async function handler(req, res) {
       }
 
       if (r.ok) return res.status(200).json({ build_tag: BUILD_TAG, edge_fn: fnName, auth_mode: r.mode, ...r.json });
-
       if (isFunctionNotFound(r.status, r.json)) continue;
 
       if (isInvalidJwt401(r.status, r.json)) {
@@ -502,4 +472,4 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(500).json({ ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) });
   }
-}
+};
