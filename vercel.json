@@ -19,7 +19,8 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Preview-Build", "value": "preview-20260221b" }
       ]
     }
   ],
