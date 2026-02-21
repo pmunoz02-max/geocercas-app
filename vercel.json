@@ -8,6 +8,13 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/auth/bootstrap", "destination": "/api/auth?route=bootstrap" },
+    { "source": "/api/auth/ensure-context", "destination": "/api/auth?route=ensure-context" },
+    { "source": "/api/auth/magic", "destination": "/api/auth?route=magic" },
+    { "source": "/api/auth/password", "destination": "/api/auth?route=password" },
+    { "source": "/api/auth/recover", "destination": "/api/auth?route=recover" },
+    { "source": "/api/auth/session", "destination": "/api/auth?route=session" },
+
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
