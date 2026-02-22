@@ -84,6 +84,14 @@ export default function InvitarTracker() {
     return set;
   }, [people]);
 
+  // ✅ Utilidad: obtiene JWT (access_token) desde el cliente
+  async function getCallerJwt() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const token = data?.session?.access_token || "";
+    return String(token || "").trim();
+  }
+
   // 1) Cargar People desde PERSONAL (no desde memberships)
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +160,13 @@ export default function InvitarTracker() {
     setEmailInput(selectedKey);
   }, [selectedKey]);
 
+  // ✅ Nombre (opcional) tomado de la persona seleccionada (para email más bonito)
+  const selectedPerson = useMemo(() => {
+    const key = normalizeEmail(selectedKey);
+    if (!key) return null;
+    return people.find((p) => normalizeEmail(p?.email) === key) || null;
+  }, [people, selectedKey]);
+
   async function onSendInvite(e) {
     e.preventDefault();
     setOkMsg(null);
@@ -190,6 +205,24 @@ export default function InvitarTracker() {
     try {
       setBusy(true);
 
+      // ✅ JWT desde el cliente (NO depende de /api/auth/session)
+      const caller_jwt = await getCallerJwt();
+      if (!caller_jwt) {
+        setErrMsg(
+          `${t("inviteTracker.errors.inviteErrorPrefix", {
+            defaultValue: "Error invitando",
+          })} (401): NO_SESSION (client)`
+        );
+        return;
+      }
+
+      const name = selectedPerson
+        ? [String(selectedPerson?.nombre || "").trim(), String(selectedPerson?.apellido || "").trim()]
+            .filter(Boolean)
+            .join(" ")
+            .trim()
+        : "";
+
       const res = await fetch("/api/invite-tracker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -199,6 +232,8 @@ export default function InvitarTracker() {
           org_id: orgId,
           role: "tracker",
           lang,
+          name,
+          caller_jwt, // ✅ clave para evitar NO_SESSION por /api/auth/session
         }),
       });
 
@@ -221,8 +256,13 @@ export default function InvitarTracker() {
       }
 
       if (body && body.ok === false) {
-        const upstreamStatus = body?.upstream_status || "?";
-        const upstreamMsg = body?.upstream?.error || body?.error || body?.message || "UPSTREAM_ERROR";
+        const upstreamStatus = body?.upstream_status || body?._proxy?.edge_status || "?";
+        const upstreamMsg =
+          body?.upstream?.error ||
+          body?.error ||
+          body?.message ||
+          body?._proxy?.edge_raw_sample ||
+          "UPSTREAM_ERROR";
         setErrMsg(
           `${t("inviteTracker.errors.inviteErrorPrefix", {
             defaultValue: "Error invitando",
@@ -246,7 +286,7 @@ export default function InvitarTracker() {
         msg += ` ${t("inviteTracker.ok.fallbackLink", { defaultValue: "Copia el enlace manualmente." })}`;
       }
 
-      setOkMsg({ msg, actionLink, diag: body?.diag || null });
+      setOkMsg({ msg, actionLink, diag: body?._proxy || body?.diag || null });
     } catch (e2) {
       setErrMsg(String(e2?.message || e2));
     } finally {
