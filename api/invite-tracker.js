@@ -1,17 +1,19 @@
 /**
  * App Geocercas — Vercel API: /api/invite-tracker (Preview)
- * Build tag: invite-proxy-v15_1_esm_hmac_edge_debug_20260221
+ * Build tag: invite-proxy-v15_2_client_or_session_jwt_hmac_edge_diag_20260221
  *
- * - ESM puro (NO require / NO module.exports)
- * - Obtiene caller_jwt llamando a /api/auth/session usando cookies del request
+ * - ESM puro
+ * - caller_jwt puede venir:
+ *    A) desde el cliente (body.caller_jwt) ✅ recomendado
+ *    B) fallback: /api/auth/session (solo si ese endpoint expone access_token)
  * - Firma HMAC (x-edge-ts, x-edge-sig)
  * - Llama a Supabase Edge Function invite_tracker SIN Authorization
- * - Devuelve diagnóstico del edge (status/build_tag) para verificar versión y errores
+ * - Devuelve diagnóstico del edge (status/build_tag)
  */
 
 import crypto from "node:crypto";
 
-const BUILD_TAG = "invite-proxy-v15_1_esm_hmac_edge_debug_20260221";
+const BUILD_TAG = "invite-proxy-v15_2_client_or_session_jwt_hmac_edge_diag_20260221";
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -46,13 +48,13 @@ async function fetchWithTimeout(url, init, timeoutMs = 15000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const resp = await fetch(url, { ...init, signal: controller.signal });
-    return resp;
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(t);
   }
 }
 
+// Fallback opcional (solo sirve si /api/auth/session expone access_token)
 async function getCallerJwtFromSession(req) {
   const cookie = req.headers?.cookie || req.headers?.Cookie || "";
   const proto = req.headers["x-forwarded-proto"] || "https";
@@ -66,10 +68,7 @@ async function getCallerJwtFromSession(req) {
     url,
     {
       method: "GET",
-      headers: {
-        cookie,
-        accept: "application/json",
-      },
+      headers: { cookie, accept: "application/json" },
     },
     10000
   );
@@ -96,7 +95,7 @@ async function getCallerJwtFromSession(req) {
     return {
       ok: false,
       error: "No access_token in auth/session response",
-      detail: JSON.stringify(j).slice(0, 400),
+      detail: JSON.stringify(j).slice(0, 500),
     };
   }
 
@@ -111,8 +110,11 @@ export default async function handler(req, res) {
       return sendJson(res, 200, {
         ok: true,
         build: BUILD_TAG,
+        accepts_caller_jwt: true,
         runtime: { node: process.version, platform: process.platform },
         env: {
+          // Ojo: el proxy usa SUPABASE_FUNCTIONS_URL (NO VITE_*).
+          // Vercel expone VITE_* al build del frontend, pero NO es lo ideal para serverless.
           SUPABASE_FUNCTIONS_URL: safeEnv("SUPABASE_FUNCTIONS_URL"),
           INVITE_HMAC_SECRET: safeEnv("INVITE_HMAC_SECRET"),
         },
@@ -123,13 +125,15 @@ export default async function handler(req, res) {
       return sendJson(res, 405, { ok: false, error: "METHOD_NOT_ALLOWED", build: BUILD_TAG });
     }
 
-    const SUPABASE_FUNCTIONS_URL = (process.env.SUPABASE_FUNCTIONS_URL || "").replace(/\/$/, "");
-    const INVITE_HMAC_SECRET = process.env.INVITE_HMAC_SECRET || "";
+    const SUPABASE_FUNCTIONS_URL = String(process.env.SUPABASE_FUNCTIONS_URL || "").replace(/\/$/, "");
+    const INVITE_HMAC_SECRET = String(process.env.INVITE_HMAC_SECRET || "");
 
-    if (!SUPABASE_FUNCTIONS_URL)
+    if (!SUPABASE_FUNCTIONS_URL) {
       return sendJson(res, 500, { ok: false, error: "Missing SUPABASE_FUNCTIONS_URL", build: BUILD_TAG });
-    if (!INVITE_HMAC_SECRET)
+    }
+    if (!INVITE_HMAC_SECRET) {
       return sendJson(res, 500, { ok: false, error: "Missing INVITE_HMAC_SECRET", build: BUILD_TAG });
+    }
 
     const raw = await getRequestBody(req);
     let body = {};
@@ -149,15 +153,30 @@ export default async function handler(req, res) {
     const name = String(body?.name || body?.to_name || body?.toName || "").trim() || "";
 
     if (!org_id) return sendJson(res, 400, { ok: false, error: "Missing org_id", build: BUILD_TAG });
-    if (!emailNorm || !emailNorm.includes("@"))
+    if (!emailNorm || !emailNorm.includes("@")) {
       return sendJson(res, 400, { ok: false, error: "Invalid email", build: BUILD_TAG });
-
-    const s = await getCallerJwtFromSession(req);
-    if (!s.ok) {
-      return sendJson(res, 401, { ok: false, error: "NO_SESSION", build: BUILD_TAG, detail: s.error, more: s.detail });
     }
 
-    const caller_jwt = s.token;
+    // ✅ MODO A: si viene caller_jwt desde el cliente, úsalo
+    let caller_jwt = String(body?.caller_jwt || "").trim();
+    let jwt_source = caller_jwt ? "client" : "auth/session";
+
+    // 🔁 MODO B fallback: intenta /api/auth/session
+    if (!caller_jwt) {
+      const s = await getCallerJwtFromSession(req);
+      if (!s.ok) {
+        return sendJson(res, 401, {
+          ok: false,
+          error: "NO_SESSION",
+          build: BUILD_TAG,
+          detail: s.error,
+          more: s.detail,
+          jwt_source,
+          got_caller_jwt_in_body: false,
+        });
+      }
+      caller_jwt = s.token;
+    }
 
     const ts = Date.now().toString();
     const msg = `${ts}\n${org_id}\n${emailNorm}`;
@@ -191,8 +210,7 @@ export default async function handler(req, res) {
     }
 
     const edgeBuildTag =
-      (edgeJson && (edgeJson.build_tag || edgeJson.build || edgeJson.BUILD_TAG)) ||
-      null;
+      (edgeJson && (edgeJson.build_tag || edgeJson.build || edgeJson.BUILD_TAG)) || null;
 
     const edgeRawSample = !edgeJson ? edgeText.slice(0, 500) : undefined;
 
@@ -201,6 +219,8 @@ export default async function handler(req, res) {
       _proxy: {
         ok: edgeResp.ok,
         build: BUILD_TAG,
+        jwt_source,
+        got_caller_jwt_in_body: Boolean(String(body?.caller_jwt || "").trim()),
         edge_status: edgeResp.status,
         edge_build_tag: edgeBuildTag,
         edge_parse_error: edgeParseError,
