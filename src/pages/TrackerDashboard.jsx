@@ -572,13 +572,20 @@ export default function TrackerDashboard() {
           return setActiveOrg(fromUrl, "url:?org_id", { persist: true, updateUrl: true });
         }
 
+                // 2) LocalStorage (UNIVERSAL + backward compatible)
+        //    - Acepta múltiples keys legacy usadas por otros módulos/versiones
+        //    - Si encuentra una legacy, "normaliza" guardando también la key canónica
         const fromLs = getOrgFromLocalStorage();
         if (fromLs) {
+          // normaliza: siempre persistir en la key canónica sin depender del nombre legacy
+          try { localStorage.setItem("gc_active_org_id", String(fromLs)); } catch {}
           return setActiveOrg(fromLs, "localStorage", { persist: true, updateUrl: true });
         }
 
+        // 3) Personal.user_current_org (si existe) como fuente del backend
         const fromPersonal = await getOrgFromPersonalCurrentOrg();
         if (fromPersonal) {
+          try { localStorage.setItem("gc_active_org_id", String(fromPersonal)); } catch {}
           return setActiveOrg(fromPersonal, "personal.user_current_org", { persist: true, updateUrl: true });
         }
       }
@@ -587,6 +594,7 @@ export default function TrackerDashboard() {
       const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
       if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
       if (r1?.data) {
+        try { localStorage.setItem("gc_active_org_id", String(r1.data)); } catch {}
         return setActiveOrg(String(r1.data), "rpc:resolve_org_for_tracker_dashboard", { persist: true, updateUrl: true });
       }
 
@@ -594,53 +602,8 @@ export default function TrackerDashboard() {
       const r2 = await supabase.rpc("get_current_org_id");
       if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
       if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
+      try { localStorage.setItem("gc_active_org_id", String(r2.data)); } catch {}
       return setActiveOrg(String(r2.data), "rpc:get_current_org_id", { persist: true, updateUrl: true });
-    } catch (e) {
-      const msg = e?.message || String(e);
-      setActiveOrg(null, "error", { persist: false, updateUrl: false });
-      setOrgResolveError(msg);
-      return null;
-    }
-  }, [getOrgFromUrl, getOrgFromLocalStorage, getOrgFromPersonalCurrentOrg, setActiveOrg]);
-
-  useEffect(() => {
-    resolveOrgId({ forceRpc: false });
-  }, [resolveOrgId]);
-
-  const fetchAssignments = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
-
-    setErrorMsg("");
-    setInfoMsg("");
-    setDiag((d) => ({ ...d, lastAssignmentsError: null }));
-
-    const orVigencia =
-      `and(start_date.is.null,end_date.is.null),` +
-      `and(start_date.is.null,end_date.gte.${todayStrUtc}),` +
-      `and(start_date.lte.${todayStrUtc},end_date.is.null),` +
-      `and(start_date.lte.${todayStrUtc},end_date.gte.${todayStrUtc})`;
-
-    const { data, error } = await supabase
-      .from("tracker_assignments")
-      .select("tracker_user_id, geofence_id, org_id, active, start_date, end_date")
-      .eq("org_id", currentOrgId)
-      .eq("active", true)
-      .or(orVigencia);
-
-    if (error) {
-      setDiag((d) => ({
-        ...d,
-        lastAssignmentsError: error.message || String(error),
-        assignmentsRows: 0,
-        trackersFound: 0,
-        assignedGeofenceIds: 0,
-      }));
-      setAssignments([]);
-      setAssignmentTrackers([]);
-      setInfoMsg("");
-      setErrorMsg("Error cargando asignaciones (tracker_assignments).");
-      return;
-    }
 
     const rows = Array.isArray(data) ? data : [];
     setAssignments(rows);
