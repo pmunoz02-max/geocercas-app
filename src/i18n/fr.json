@@ -58,7 +58,8 @@
       "invitarTracker": "Inviter un traceur",
       "admins": "Admins",
       "home": "Accueil",
-      "invitar_tracker": "Suivi des invitations"
+      "invitar_tracker": "Suivi des invitations",
+      "geocercas": "Géofences"
     }
   },
   "landing": {
@@ -707,7 +708,6 @@
       "checkConsole": "Vérifiez la console si le problème persiste."
     }
   },
-
   "trackerGps": {
     "title": "Traceur GPS",
     "lastSend": "Dernier envoi",
@@ -759,7 +759,6 @@
       "acc": "acc"
     }
   },
-
   "inviteTracker": {
     "orgFallback": "votre organisation",
     "title": "Suivi des invitations",

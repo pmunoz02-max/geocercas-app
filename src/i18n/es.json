@@ -58,7 +58,10 @@
       "dashboardCostos": "Dashboard Costos",
       "tracker": "Tracker",
       "invitarTracker": "Invitar tracker",
-      "admins": "Administrador"
+      "admins": "Administrador",
+      "geocerca": "Geocerca",
+      "home": "Inicio",
+      "invitar_tracker": "Invitar tracker"
     }
   },
   "landing": {
