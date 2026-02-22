@@ -26,12 +26,6 @@ const TIME_WINDOWS = [
 
 const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
 
-// ✅ UNIVERSAL: clave única para org activa (cliente)
-const ACTIVE_ORG_LS_KEY = "gc_active_org_id";
-
-// ✅ (opcional) legacy keys que pudieron existir en builds anteriores
-const LEGACY_ORG_KEYS = ["active_org_id", "current_org_id", "tg_current_org", "gc_current_org_id"];
-
 function toNum(v) {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
@@ -494,154 +488,40 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // ✅ UNIVERSAL: setters consistentes (persist + url)
-  const setActiveOrg = useCallback((nextOrgId, source = "unknown", opts = { persist: true, updateUrl: true }) => {
-    const v = nextOrgId ? String(nextOrgId) : null;
-    setOrgId(v);
-    setOrgIdSource(source);
-
-    if (opts?.persist) {
-      try {
-        if (v) localStorage.setItem(ACTIVE_ORG_LS_KEY, v);
-        else localStorage.removeItem(ACTIVE_ORG_LS_KEY);
-      } catch {}
-    }
-
-    if (opts?.updateUrl) {
-      try {
-        const url = new URL(window.location.href);
-        if (v) url.searchParams.set("org_id", v);
-        else url.searchParams.delete("org_id");
-        window.history.replaceState({}, "", url.toString());
-      } catch {}
-    }
-
-    return v;
-  }, []);
-
-  const getOrgFromUrl = useCallback(() => {
-    try {
-      const url = new URL(window.location.href);
-      const q = url.searchParams.get("org_id");
-      return q ? String(q) : null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const getOrgFromLocalStorage = useCallback(() => {
-    try {
-      const v = localStorage.getItem(ACTIVE_ORG_LS_KEY);
-      if (v) return String(v);
-
-      // fallback legacy keys (si existen)
-      for (const k of LEGACY_ORG_KEYS) {
-        const vv = localStorage.getItem(k);
-        if (vv) return String(vv);
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // ✅ UNIVERSAL: validar si org pertenece al usuario (evita LS stale)
-  const isOrgInUserMemberships = useCallback(async (candidateOrgId) => {
-    try {
-      if (!candidateOrgId) return false;
-      const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id ? String(auth.user.id) : null;
-      if (!uid) return false;
-
-      const { data, error } = await supabase
-        .from("memberships")
-        .select("org_id")
-        .eq("user_id", uid)
-        .eq("org_id", String(candidateOrgId))
-        .is("revoked_at", null)
-        .maybeSingle();
-
-      if (error) return false;
-      return !!data?.org_id;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  // ✅ UNIVERSAL: intentar leer user_current_org (si existe) sin romper si no existe
-  const getOrgFromPersonalCurrentOrg = useCallback(async () => {
-    try {
-      const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id ? String(auth.user.id) : null;
-      if (!uid) return null;
-
-      const { data, error } = await supabase
-        .from("personal")
-        .select("user_current_org, user_id, owner_id")
-        .or(`user_id.eq.${uid},owner_id.eq.${uid}`)
-        .limit(1);
-
-      if (error) return null;
-      const row = Array.isArray(data) ? data[0] : null;
-      const org = row?.user_current_org ? String(row.user_current_org) : null;
-      return org || null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // ✅ UNIVERSAL: resolver org activa con prioridad (URL -> LS(validada) -> personal.user_current_org -> RPCs)
+  // ✅ 100% UNIVERSAL SaaS: org activa SIEMPRE viene del backend (RPC)
   const resolveOrgId = useCallback(async ({ forceRpc = false } = {}) => {
     setOrgResolveError("");
     setErrorMsg("");
     setInfoMsg("");
 
     try {
-      if (!forceRpc) {
-        // 1) URL ?org_id=
-        const fromUrl = getOrgFromUrl();
-        if (fromUrl) {
-          const ok = await isOrgInUserMemberships(fromUrl);
-          if (ok) return setActiveOrg(fromUrl, "url:?org_id", { persist: true, updateUrl: true });
-          // si no pertenece, no lo usamos
-        }
-
-        // 2) LocalStorage (pero VALIDADA)
-        const fromLs = getOrgFromLocalStorage();
-        if (fromLs) {
-          const ok = await isOrgInUserMemberships(fromLs);
-          if (ok) return setActiveOrg(fromLs, "localStorage", { persist: true, updateUrl: true });
-          // stale => limpiar para no quedar pegado
-          try { localStorage.removeItem(ACTIVE_ORG_LS_KEY); } catch {}
-        }
-
-        // 3) Personal.user_current_org (si existe) como fuente persistente
-        const fromPersonal = await getOrgFromPersonalCurrentOrg();
-        if (fromPersonal) {
-          const ok = await isOrgInUserMemberships(fromPersonal);
-          if (ok) return setActiveOrg(fromPersonal, "personal.user_current_org", { persist: true, updateUrl: true });
-        }
-      }
-
-      // 4) RPC específico del dashboard
+      // En tu SQL, resolve_org_for_tracker_dashboard() y get_current_org_id() devuelven lo mismo.
+      // Igual mantenemos ambos por compatibilidad si uno fallara por permisos en algún tenant.
       const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
-      if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
-      if (r1?.data) {
-        return setActiveOrg(String(r1.data), "rpc:resolve_org_for_tracker_dashboard", { persist: true, updateUrl: true });
+      if (r1?.error) {
+        // solo fallback, no rompemos
+      } else if (r1?.data) {
+        const v = String(r1.data);
+        setOrgId(v);
+        setOrgIdSource("rpc:resolve_org_for_tracker_dashboard");
+        return v;
       }
 
-      // 5) Fallback universal
       const r2 = await supabase.rpc("get_current_org_id");
       if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
-      if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
-      return setActiveOrg(String(r2.data), "rpc:get_current_org_id", { persist: true, updateUrl: true });
+      if (!r2?.data) throw new Error("RPC devolvió null (usuario sin org activa).");
+      const v = String(r2.data);
+      setOrgId(v);
+      setOrgIdSource("rpc:get_current_org_id");
+      return v;
     } catch (e) {
       const msg = e?.message || String(e);
-      setActiveOrg(null, "error", { persist: false, updateUrl: false });
+      setOrgId(null);
+      setOrgIdSource("error");
       setOrgResolveError(msg);
       return null;
     }
-  }, [getOrgFromUrl, getOrgFromLocalStorage, getOrgFromPersonalCurrentOrg, setActiveOrg, isOrgInUserMemberships]);
+  }, []);
 
   useEffect(() => {
     resolveOrgId({ forceRpc: false });
@@ -716,7 +596,14 @@ export default function TrackerDashboard() {
     if (assignedIds.length === 0) {
       setGeofenceRows([]);
       setSelectedGeofenceIds([]);
-      setDiag((d) => ({ ...d, geofencesFound: 0, geofencePolys: 0, geofenceCircles: 0, skippedZeroZero: 0, selectedGeofences: 0 }));
+      setDiag((d) => ({
+        ...d,
+        geofencesFound: 0,
+        geofencePolys: 0,
+        geofenceCircles: 0,
+        skippedZeroZero: 0,
+        selectedGeofences: 0
+      }));
       return;
     }
 
@@ -942,13 +829,13 @@ export default function TrackerDashboard() {
   }, [positions]);
 
   const Badge = ({ children }) => (
-    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
+    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">
+      {children}
+    </span>
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
   const showEmptyGeofencesNotice = orgId && diag.assignmentsRows > 0 && diag.geofencesFound === 0;
-
-  // ✅ helper: geocercas solo tiene sentido cuando hay asignaciones
   const geofencesMeaningful = diag.assignmentsRows > 0;
 
   return (
