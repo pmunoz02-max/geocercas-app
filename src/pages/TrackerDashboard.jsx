@@ -26,6 +26,9 @@ const TIME_WINDOWS = [
 
 const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
 
+// ✅ UNIVERSAL: clave única para org activa (cliente)
+const ACTIVE_ORG_LS_KEY = "gc_active_org_id";
+
 function toNum(v) {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
@@ -436,10 +439,10 @@ export default function TrackerDashboard() {
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
 
   const [orgId, setOrgId] = useState(null);
+  const [orgIdSource, setOrgIdSource] = useState("—");
   const [orgResolveError, setOrgResolveError] = useState("");
 
   const mapRef = useRef(null);
-
   const [loading, setLoading] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -488,34 +491,120 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // ✅ UNIVERSAL: primero resolver org para tracker dashboard; fallback a get_current_org_id()
-  const resolveOrgId = useCallback(async () => {
-    setOrgResolveError("");
-    try {
-      // 1) RPC específico del dashboard
-      const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
-      if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
-      if (r1?.data) {
-        setOrgId(String(r1.data));
-        return String(r1.data);
-      }
+  // ✅ UNIVERSAL: setters consistentes (persist + url)
+  const setActiveOrg = useCallback((nextOrgId, source = "unknown", opts = { persist: true, updateUrl: true }) => {
+    const v = nextOrgId ? String(nextOrgId) : null;
+    setOrgId(v);
+    setOrgIdSource(source);
 
-      // 2) Fallback universal
-      const r2 = await supabase.rpc("get_current_org_id");
-      if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
-      if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
-      setOrgId(String(r2.data));
-      return String(r2.data);
-    } catch (e) {
-      const msg = e?.message || String(e);
-      setOrgId(null);
-      setOrgResolveError(msg);
+    if (opts?.persist) {
+      try {
+        if (v) localStorage.setItem(ACTIVE_ORG_LS_KEY, v);
+        else localStorage.removeItem(ACTIVE_ORG_LS_KEY);
+      } catch {}
+    }
+
+    if (opts?.updateUrl) {
+      try {
+        const url = new URL(window.location.href);
+        if (v) url.searchParams.set("org_id", v);
+        else url.searchParams.delete("org_id");
+        window.history.replaceState({}, "", url.toString());
+      } catch {}
+    }
+
+    return v;
+  }, []);
+
+  const getOrgFromUrl = useCallback(() => {
+    try {
+      const url = new URL(window.location.href);
+      const q = url.searchParams.get("org_id");
+      return q ? String(q) : null;
+    } catch {
       return null;
     }
   }, []);
 
+  const getOrgFromLocalStorage = useCallback(() => {
+    try {
+      const v = localStorage.getItem(ACTIVE_ORG_LS_KEY);
+      return v ? String(v) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // ✅ UNIVERSAL: intentar leer user_current_org (si existe) sin romper si no existe
+  const getOrgFromPersonalCurrentOrg = useCallback(async () => {
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id ? String(auth.user.id) : null;
+      if (!uid) return null;
+
+      // Intenta por user_id u owner_id (universal), y lee user_current_org (si existe).
+      // Si la columna o tabla difiere, caerá al catch y seguimos con RPC.
+      const { data, error } = await supabase
+        .from("personal")
+        .select("user_current_org, user_id, owner_id")
+        .or(`user_id.eq.${uid},owner_id.eq.${uid}`)
+        .limit(1);
+
+      if (error) return null;
+      const row = Array.isArray(data) ? data[0] : null;
+      const org = row?.user_current_org ? String(row.user_current_org) : null;
+      return org || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // ✅ UNIVERSAL: resolver org activa con prioridad (URL -> LS -> personal.user_current_org -> RPCs)
+  const resolveOrgId = useCallback(async ({ forceRpc = false } = {}) => {
+    setOrgResolveError("");
+    setErrorMsg("");
+    setInfoMsg("");
+
+    try {
+      if (!forceRpc) {
+        const fromUrl = getOrgFromUrl();
+        if (fromUrl) {
+          return setActiveOrg(fromUrl, "url:?org_id", { persist: true, updateUrl: true });
+        }
+
+        const fromLs = getOrgFromLocalStorage();
+        if (fromLs) {
+          return setActiveOrg(fromLs, "localStorage", { persist: true, updateUrl: true });
+        }
+
+        const fromPersonal = await getOrgFromPersonalCurrentOrg();
+        if (fromPersonal) {
+          return setActiveOrg(fromPersonal, "personal.user_current_org", { persist: true, updateUrl: true });
+        }
+      }
+
+      // 4) RPC específico del dashboard
+      const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
+      if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
+      if (r1?.data) {
+        return setActiveOrg(String(r1.data), "rpc:resolve_org_for_tracker_dashboard", { persist: true, updateUrl: true });
+      }
+
+      // 5) Fallback universal
+      const r2 = await supabase.rpc("get_current_org_id");
+      if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
+      if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
+      return setActiveOrg(String(r2.data), "rpc:get_current_org_id", { persist: true, updateUrl: true });
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setActiveOrg(null, "error", { persist: false, updateUrl: false });
+      setOrgResolveError(msg);
+      return null;
+    }
+  }, [getOrgFromUrl, getOrgFromLocalStorage, getOrgFromPersonalCurrentOrg, setActiveOrg]);
+
   useEffect(() => {
-    resolveOrgId();
+    resolveOrgId({ forceRpc: false });
   }, [resolveOrgId]);
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
@@ -831,7 +920,8 @@ export default function TrackerDashboard() {
 
             <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600">
               <span>
-                Org (RPC): <span className="font-mono text-gray-800">{effectiveOrgText}</span>
+                Org (Active): <span className="font-mono text-gray-800">{effectiveOrgText}</span>{" "}
+                <span className="text-xs text-gray-500">[{orgIdSource}]</span>
               </span>
 
               <Badge>assignments: {diag.assignmentsRows}</Badge>
@@ -843,7 +933,7 @@ export default function TrackerDashboard() {
 
             {orgResolveError && (
               <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                Error resolviendo org por RPC: <span className="font-mono">{orgResolveError}</span>
+                Error resolviendo org: <span className="font-mono">{orgResolveError}</span>
               </div>
             )}
 
@@ -857,7 +947,7 @@ export default function TrackerDashboard() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => resolveOrgId()}
+              onClick={() => resolveOrgId({ forceRpc: true })}
               className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             >
@@ -900,7 +990,7 @@ export default function TrackerDashboard() {
 
         {!orgId && !orgResolveError && (
           <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
-            Resolviendo organización activa por RPC…
+            Resolviendo organización activa…
           </div>
         )}
 
