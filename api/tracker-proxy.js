@@ -1,17 +1,22 @@
 // api/tracker-proxy.js
-// Proxy universal Tracker (PREVIEW/PROD):
-// - Forward a Supabase Functions con apikey server-side
-// - NO reenvía JWT (evita 401 Invalid JWT del gateway)
-// - Server->Edge auth con HMAC (X-Proxy-Signature)
+// Proxy universal Tracker (PREVIEW):
+// - Firma HMAC server->edge (X-Proxy-*)
+// - NO reenvía Authorization al gateway
+// - Para send_position: asegura org_id y (si viene Authorization) obtiene user_id validando token
 // - Whitelist de funciones
-// - Ping por GET para confirmar despliegue real
+// - Ping GET para diagnosticar
 
 import crypto from "crypto";
 
-const BUILD_TAG = "tracker-proxy-v5_1-hmac-nojwt-ping-20260220b";
+const BUILD_TAG = "tracker-proxy-v5_2-hmac-orgid-userid-20260222";
 
 function toStr(v) {
   return String(v ?? "");
+}
+
+function isUuid(v) {
+  const s = toStr(v).trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
 function isAllowedFn(fnName) {
@@ -30,9 +35,30 @@ function hmacHex(secret, msg) {
   return crypto.createHmac("sha256", secret).update(msg).digest("hex");
 }
 
+function getBearer(req) {
+  const h = req.headers?.authorization || req.headers?.Authorization || "";
+  const m = String(h).match(/^Bearer\s+(.+)$/i);
+  return (m?.[1] || "").trim();
+}
+
+// Valida token contra el MISMO proyecto (sin usar SDK)
+async function getUserIdFromToken({ supabaseUrl, anonKey, jwt }) {
+  const r = await fetch(`${String(supabaseUrl).replace(/\/$/, "")}/auth/v1/user`, {
+    method: "GET",
+    headers: {
+      apikey: String(anonKey),
+      Authorization: `Bearer ${jwt}`,
+    },
+  });
+
+  if (!r.ok) return { ok: false, status: r.status };
+  const j = await r.json().catch(() => null);
+  const userId = j?.id || null;
+  return userId ? { ok: true, userId } : { ok: false, status: 500 };
+}
+
 export default async function handler(req, res) {
   try {
-    // CORS básico
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader(
@@ -43,7 +69,6 @@ export default async function handler(req, res) {
       return res.status(200).send("ok");
     }
 
-    // ✅ PING: esto nos confirma qué build está sirviendo Vercel (sin depender del frontend)
     if (req.method === "GET") {
       const supabaseUrl =
         process.env.SUPABASE_URL ||
@@ -71,9 +96,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method !== "POST") {
-      return res
-        .status(405)
-        .json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
+      return res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" });
     }
 
     const supabaseUrl =
@@ -113,16 +136,42 @@ export default async function handler(req, res) {
       });
     }
 
+    // Body base
+    let body = req.body || {};
+
+    // ✅ Para send_position: asegurar org_id (query > body)
+    if (fnName === "send_position") {
+      const qOrg = toStr(req.query?.org_id || req.query?.orgId || req.query?.org || "").trim();
+      const bOrg = toStr(body?.org_id || body?.orgId || body?.org || "").trim();
+      const org_id = isUuid(qOrg) ? qOrg : (isUuid(bOrg) ? bOrg : "");
+
+      if (!org_id) {
+        return res.status(400).json({
+          ok: false,
+          build_tag: BUILD_TAG,
+          error: "org_id is required",
+          hint: "Send org_id in query (?org_id=) or JSON body {org_id}",
+        });
+      }
+
+      body = { ...body, org_id };
+
+      // ✅ user_id opcional: si viene Authorization, lo validamos y lo inyectamos al body
+      const jwt = getBearer(req);
+      if (jwt) {
+        const u = await getUserIdFromToken({ supabaseUrl, anonKey, jwt });
+        if (u.ok) body = { ...body, user_id: u.userId };
+      }
+    }
+
     // Mensaje canónico a firmar
     const ts = String(Date.now());
-    const bodyStr = JSON.stringify(req.body || {});
+    const bodyStr = JSON.stringify(body);
     const msg = `${fnName}.${ts}.${bodyStr}`;
     const sig = hmacHex(proxySecret, msg);
 
-    const url =
-      String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
+    const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
 
-    // 👇 CRÍTICO: NO reenviamos Authorization al gateway (ni aunque venga del cliente)
     const upstream = await fetch(url, {
       method: "POST",
       headers: {
@@ -148,14 +197,11 @@ export default async function handler(req, res) {
       upstream_status: upstream.status,
       diag: {
         supabase_host: safeHost(supabaseUrl),
-        // solo booleans (no filtramos tokens)
         client_sent_auth: !!req.headers?.authorization,
       },
       ...json,
     });
   } catch (e) {
-    return res
-      .status(500)
-      .json({ ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) });
+    return res.status(500).json({ ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) });
   }
 }
