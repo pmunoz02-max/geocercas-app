@@ -1,6 +1,6 @@
 /**
  * App Geocercas — Vercel API: /api/invite-tracker (Preview)
- * Build tag: invite-proxy-v15_3_timeout_diag_edge_ping_20260221
+ * Build tag: invite-proxy-v15_4_universal_base_detect_noabort_20260221
  *
  * - ESM puro
  * - caller_jwt puede venir:
@@ -8,15 +8,16 @@
  *    B) fallback: /api/auth/session (solo si ese endpoint expone access_token)
  * - Firma HMAC (x-edge-ts, x-edge-sig)
  * - Llama a Supabase Edge Function invite_tracker SIN Authorization
- * - Diagnóstico fuerte: timeouts, dns/network, y muestra parcial del body de error
+ * - UNIVERSAL: detecta si SUPABASE_FUNCTIONS_URL es .supabase.co o .functions.supabase.co
+ * - Diagnóstico fuerte: edgeUrl final + ping real del edgeUrl final
  */
 
 import crypto from "node:crypto";
 
-const BUILD_TAG = "invite-proxy-v15_3_timeout_diag_edge_ping_20260221";
+const BUILD_TAG = "invite-proxy-v15_4_universal_base_detect_noabort_20260221";
 
-// ⏱️ tiempo realista para Edge + DB + Brevo
 const EDGE_TIMEOUT_MS = 45000;
+const EDGE_PING_TIMEOUT_MS = 8000;
 const AUTH_SESSION_TIMEOUT_MS = 12000;
 
 function sendJson(res, status, payload) {
@@ -53,6 +54,37 @@ function redact(v) {
   if (!s) return "";
   if (s.length <= 10) return "***";
   return `${s.slice(0, 4)}***${s.slice(-4)}`;
+}
+
+function safeUrlParts(u) {
+  try {
+    const x = new URL(u);
+    return { ok: true, host: x.host, origin: x.origin, pathname: x.pathname };
+  } catch {
+    return { ok: false, host: "", origin: "", pathname: "" };
+  }
+}
+
+/**
+ * UNIVERSAL: arma el URL final del Edge según el dominio base
+ * - Si base es *.functions.supabase.co => /<function_name>
+ * - Si base es *.supabase.co          => /functions/v1/<function_name>
+ */
+function buildEdgeUrl(base, fnName) {
+  const clean = String(base || "").trim().replace(/\/$/, "");
+  if (!clean) return { ok: false, edgeUrl: "", mode: "missing_base" };
+
+  const parts = safeUrlParts(clean);
+  const host = parts.ok ? parts.host : "";
+
+  // Si el host contiene ".functions.supabase.co" => modo functions-domain
+  const isFunctionsDomain = host.endsWith(".functions.supabase.co") || clean.includes(".functions.supabase.co");
+
+  const edgeUrl = isFunctionsDomain
+    ? `${clean}/${fnName}`
+    : `${clean}/functions/v1/${fnName}`;
+
+  return { ok: true, edgeUrl, mode: isFunctionsDomain ? "functions-domain" : "supabase-domain" };
 }
 
 async function fetchWithTimeout(url, init, timeoutMs = 15000) {
@@ -119,24 +151,22 @@ async function getCallerJwtFromSession(req) {
 export default async function handler(req, res) {
   const method = (req.method || "GET").toUpperCase();
 
-  const SUPABASE_FUNCTIONS_URL = String(process.env.SUPABASE_FUNCTIONS_URL || "").replace(/\/$/, "");
-  const INVITE_HMAC_SECRET = String(process.env.INVITE_HMAC_SECRET || "");
+  const SUPABASE_FUNCTIONS_URL = String(process.env.SUPABASE_FUNCTIONS_URL || "").trim().replace(/\/$/, "");
+  const INVITE_HMAC_SECRET = String(process.env.INVITE_HMAC_SECRET || "").trim();
 
-  // URL de la function
-  const edgeUrl = SUPABASE_FUNCTIONS_URL
-    ? `${SUPABASE_FUNCTIONS_URL}/functions/v1/invite_tracker`
-    : "";
+  const fnName = "invite_tracker";
+  const edge = buildEdgeUrl(SUPABASE_FUNCTIONS_URL, fnName);
 
   try {
     if (method === "GET") {
-      // ✅ Ping + edge ping (sin HMAC) solo para saber si responde algo
+      // Ping real al EDGE URL final calculado (para confirmar que NO aborta)
       let edgePing = null;
-      if (edgeUrl) {
+      if (edge.ok && edge.edgeUrl) {
         try {
           const { resp, ms } = await fetchWithTimeout(
-            edgeUrl,
+            edge.edgeUrl,
             { method: "GET", headers: { accept: "application/json" } },
-            8000
+            EDGE_PING_TIMEOUT_MS
           );
           const txt = await resp.text().catch(() => "");
           edgePing = {
@@ -160,7 +190,9 @@ export default async function handler(req, res) {
           INVITE_HMAC_SECRET: safeEnv("INVITE_HMAC_SECRET"),
         },
         edge: {
-          url: edgeUrl ? edgeUrl.replace(INVITE_HMAC_SECRET, "[redacted]") : "",
+          base_mode: edge.mode,
+          base_host: safeUrlParts(SUPABASE_FUNCTIONS_URL).host || "",
+          edge_url: edge.edgeUrl || "",
           ping: edgePing,
         },
       });
@@ -176,13 +208,21 @@ export default async function handler(req, res) {
     if (!INVITE_HMAC_SECRET) {
       return sendJson(res, 500, { ok: false, error: "Missing INVITE_HMAC_SECRET", build: BUILD_TAG });
     }
+    if (!edge.ok || !edge.edgeUrl) {
+      return sendJson(res, 500, { ok: false, error: "Invalid SUPABASE_FUNCTIONS_URL", build: BUILD_TAG });
+    }
 
     const raw = await getRequestBody(req);
     let body = {};
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch (e) {
-      return sendJson(res, 400, { ok: false, error: "INVALID_JSON", build: BUILD_TAG, detail: String(e?.message || e) });
+      return sendJson(res, 400, {
+        ok: false,
+        error: "INVALID_JSON",
+        build: BUILD_TAG,
+        detail: String(e?.message || e),
+      });
     }
 
     const org_id = String(body?.org_id || "").trim();
@@ -219,14 +259,9 @@ export default async function handler(req, res) {
     const msg = `${ts}\n${org_id}\n${emailNorm}`;
     const sig = hmacSha256Hex(INVITE_HMAC_SECRET, msg);
 
-    // ✅ llamada a edge con timeout largo
-    let edgeTimingMs = null;
-    let edgeText = "";
-    let edgeStatus = 0;
-
     try {
       const { resp: edgeResp, ms } = await fetchWithTimeout(
-        edgeUrl,
+        edge.edgeUrl,
         {
           method: "POST",
           headers: {
@@ -239,9 +274,7 @@ export default async function handler(req, res) {
         EDGE_TIMEOUT_MS
       );
 
-      edgeTimingMs = ms;
-      edgeStatus = edgeResp.status;
-      edgeText = await edgeResp.text().catch(() => "");
+      const edgeText = await edgeResp.text().catch(() => "");
 
       let edgeJson = null;
       let edgeParseError = null;
@@ -257,22 +290,23 @@ export default async function handler(req, res) {
 
       const edgeRawSample = !edgeJson ? edgeText.slice(0, 500) : undefined;
 
-      return sendJson(res, edgeStatus || 200, {
+      return sendJson(res, edgeResp.status, {
         ...(edgeJson || {}),
         _proxy: {
           ok: edgeResp.ok,
           build: BUILD_TAG,
           jwt_source,
           got_caller_jwt_in_body: Boolean(String(body?.caller_jwt || "").trim()),
-          edge_status: edgeStatus,
-          edge_ms: edgeTimingMs,
+          edge_mode: edge.mode,
+          edge_url: edge.edgeUrl,
+          edge_status: edgeResp.status,
+          edge_ms: ms,
           edge_build_tag: edgeBuildTag,
           edge_parse_error: edgeParseError,
           edge_raw_sample: edgeRawSample,
         },
       });
     } catch (e) {
-      // ✅ caso AbortError u otro error de red
       return sendJson(res, 504, {
         ok: false,
         error: "EDGE_FETCH_FAILED",
@@ -280,7 +314,8 @@ export default async function handler(req, res) {
         detail: String(e?.name || "ERR"),
         message: String(e?.message || e),
         diag: {
-          edge_url: edgeUrl,
+          edge_mode: edge.mode,
+          edge_url: edge.edgeUrl,
           edge_timeout_ms: EDGE_TIMEOUT_MS,
           jwt_source,
           got_caller_jwt_in_body: Boolean(String(body?.caller_jwt || "").trim()),
@@ -296,7 +331,6 @@ export default async function handler(req, res) {
       build: BUILD_TAG,
       detail: String(err?.stack || err),
       diag: {
-        edge_url: edgeUrl,
         env: {
           SUPABASE_FUNCTIONS_URL: safeEnv("SUPABASE_FUNCTIONS_URL"),
           INVITE_HMAC_SECRET: safeEnv("INVITE_HMAC_SECRET"),
