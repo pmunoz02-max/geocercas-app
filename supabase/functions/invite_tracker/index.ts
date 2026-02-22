@@ -1,218 +1,218 @@
-/**
- * App Geocercas — Vercel API: /api/invite-tracker (Preview)
- * Build tag: invite-proxy-v15_1_esm_hmac_edge_debug_20260221
- *
- * - ESM puro (NO require / NO module.exports)
- * - Obtiene caller_jwt llamando a /api/auth/session usando cookies del request
- * - Firma HMAC (x-edge-ts, x-edge-sig)
- * - Llama a Supabase Edge Function invite_tracker SIN Authorization
- * - Devuelve diagnóstico del edge (status/build_tag) para verificar versión y errores
- */
+// supabase/functions/invite_tracker/index.ts
 
-import crypto from "node:crypto";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const BUILD_TAG = "invite-proxy-v15_1_esm_hmac_edge_debug_20260221";
+const BUILD_TAG = "invite-edge-v3_reuse_invite_preview_20260222";
 
-function sendJson(res, status, payload) {
-  res.statusCode = status;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Cache-Control", "no-store, max-age=0");
-  res.setHeader("X-Build-Tag", BUILD_TAG);
-  res.end(JSON.stringify(payload));
-}
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const HMAC_SECRET = Deno.env.get("INVITE_HMAC_SECRET")!;
+const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY")!;
+const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL")!;
+const BREVO_SENDER_NAME = Deno.env.get("BREVO_SENDER_NAME")!;
 
-function getRequestBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    req.on("data", (chunk) => (data += chunk));
-    req.on("end", () => resolve(data));
-    req.on("error", reject);
+function json(status: number, body: any) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
   });
 }
 
-function normEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
+async function verifyHmac(req: Request, body: any) {
+  const ts = req.headers.get("x-edge-ts");
+  const sig = req.headers.get("x-edge-sig");
 
-function hmacSha256Hex(secret, message) {
-  return crypto.createHmac("sha256", secret).update(message, "utf8").digest("hex");
-}
+  if (!ts || !sig) return false;
 
-function safeEnv(name) {
-  return process.env[name] ? "[set]" : "[missing]";
-}
+  const msg = `${ts}\n${body.org_id}\n${body.email}`;
+  const enc = new TextEncoder();
 
-async function fetchWithTimeout(url, init, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const resp = await fetch(url, { ...init, signal: controller.signal });
-    return resp;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function getCallerJwtFromSession(req) {
-  const cookie = req.headers?.cookie || req.headers?.Cookie || "";
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-
-  if (!host) return { ok: false, error: "Missing host header for auth/session" };
-
-  const url = `${proto}://${host}/api/auth/session`;
-
-  const r = await fetchWithTimeout(
-    url,
-    {
-      method: "GET",
-      headers: {
-        cookie,
-        accept: "application/json",
-      },
-    },
-    10000
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(HMAC_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
   );
 
-  const text = await r.text().catch(() => "");
-  if (!r.ok) {
-    return { ok: false, error: `auth/session failed ${r.status}`, detail: text.slice(0, 400) };
-  }
+  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(msg));
 
-  let j = {};
-  try {
-    j = text ? JSON.parse(text) : {};
-  } catch {
-    return { ok: false, error: "auth/session returned non-JSON", detail: text.slice(0, 400) };
-  }
+  const expected = Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
 
-  const token =
-    j?.session?.access_token ||
-    j?.access_token ||
-    j?.data?.session?.access_token ||
-    null;
-
-  if (!token) {
-    return {
-      ok: false,
-      error: "No access_token in auth/session response",
-      detail: JSON.stringify(j).slice(0, 400),
-    };
-  }
-
-  return { ok: true, token };
+  return expected === sig;
 }
 
-export default async function handler(req, res) {
+serve(async (req: Request) => {
   try {
-    const method = (req.method || "GET").toUpperCase();
-
-    if (method === "GET") {
-      return sendJson(res, 200, {
-        ok: true,
-        build: BUILD_TAG,
-        runtime: { node: process.version, platform: process.platform },
-        env: {
-          SUPABASE_FUNCTIONS_URL: safeEnv("SUPABASE_FUNCTIONS_URL"),
-          INVITE_HMAC_SECRET: safeEnv("INVITE_HMAC_SECRET"),
-        },
+    if (req.method !== "POST") {
+      return json(405, {
+        ok: false,
+        error: "METHOD_NOT_ALLOWED",
+        build_tag: BUILD_TAG,
       });
     }
 
-    if (method !== "POST") {
-      return sendJson(res, 405, { ok: false, error: "METHOD_NOT_ALLOWED", build: BUILD_TAG });
-    }
-
-    const SUPABASE_FUNCTIONS_URL = (process.env.SUPABASE_FUNCTIONS_URL || "").replace(/\/$/, "");
-    const INVITE_HMAC_SECRET = process.env.INVITE_HMAC_SECRET || "";
-
-    if (!SUPABASE_FUNCTIONS_URL)
-      return sendJson(res, 500, { ok: false, error: "Missing SUPABASE_FUNCTIONS_URL", build: BUILD_TAG });
-    if (!INVITE_HMAC_SECRET)
-      return sendJson(res, 500, { ok: false, error: "Missing INVITE_HMAC_SECRET", build: BUILD_TAG });
-
-    const raw = await getRequestBody(req);
-    let body = {};
-    try {
-      body = raw ? JSON.parse(raw) : {};
-    } catch (e) {
-      return sendJson(res, 400, {
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return json(400, {
         ok: false,
         error: "INVALID_JSON",
-        build: BUILD_TAG,
-        detail: String(e?.message || e),
+        build_tag: BUILD_TAG,
       });
     }
 
-    const org_id = String(body?.org_id || "").trim();
-    const emailNorm = normEmail(body?.email || "");
-    const name = String(body?.name || body?.to_name || body?.toName || "").trim() || "";
+    const { org_id, email, name, caller_jwt } = body;
 
-    if (!org_id) return sendJson(res, 400, { ok: false, error: "Missing org_id", build: BUILD_TAG });
-    if (!emailNorm || !emailNorm.includes("@"))
-      return sendJson(res, 400, { ok: false, error: "Invalid email", build: BUILD_TAG });
-
-    const s = await getCallerJwtFromSession(req);
-    if (!s.ok) {
-      return sendJson(res, 401, { ok: false, error: "NO_SESSION", build: BUILD_TAG, detail: s.error, more: s.detail });
+    if (!org_id || !email || !caller_jwt) {
+      return json(400, {
+        ok: false,
+        error: "MISSING_FIELDS",
+        build_tag: BUILD_TAG,
+      });
     }
 
-    const caller_jwt = s.token;
+    const hmacOk = await verifyHmac(req, body);
+    if (!hmacOk) {
+      return json(401, {
+        ok: false,
+        error: "INVALID_HMAC",
+        build_tag: BUILD_TAG,
+      });
+    }
 
-    const ts = Date.now().toString();
-    const msg = `${ts}\n${org_id}\n${emailNorm}`;
-    const sig = hmacSha256Hex(INVITE_HMAC_SECRET, msg);
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const edgeUrl = `${SUPABASE_FUNCTIONS_URL}/functions/v1/invite_tracker`;
+    // Validar caller
+    const { data: userData, error: userError } =
+      await supabase.auth.getUser(caller_jwt);
 
-    const edgeResp = await fetchWithTimeout(
-      edgeUrl,
-      {
+    if (userError || !userData?.user) {
+      return json(401, {
+        ok: false,
+        error: "INVALID_CALLER",
+        build_tag: BUILD_TAG,
+      });
+    }
+
+    const callerId = userData.user.id;
+
+    // Verificar rol admin/owner
+    const { data: member } = await supabase
+      .from("org_members")
+      .select("role")
+      .eq("org_id", org_id)
+      .eq("user_id", callerId)
+      .single();
+
+    if (!member || (member.role !== "admin" && member.role !== "owner")) {
+      return json(403, {
+        ok: false,
+        error: "NOT_ORG_ADMIN",
+        build_tag: BUILD_TAG,
+      });
+    }
+
+    const emailNorm = email.trim().toLowerCase();
+
+    // 🔎 Buscar invitación activa existente
+    const { data: existingInvite } = await supabase
+      .from("tracker_invites")
+      .select("*")
+      .eq("org_id", org_id)
+      .eq("email_norm", emailNorm)
+      .eq("is_active", true)
+      .is("used_at", null)
+      .maybeSingle();
+
+    let invite = existingInvite;
+
+    if (!invite) {
+      const { data: newInvite, error: inviteError } =
+        await supabase
+          .from("tracker_invites")
+          .insert({
+            org_id,
+            email_norm: emailNorm,
+            email,
+            created_by_user_id: callerId,
+            expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000),
+            is_active: true,
+            role: "tracker",
+          })
+          .select()
+          .single();
+
+      if (inviteError || !newInvite) {
+        return json(500, {
+          ok: false,
+          error: "INVITE_INSERT_FAILED",
+          detail: inviteError?.message,
+          build_tag: BUILD_TAG,
+        });
+      }
+
+      invite = newInvite;
+    } else {
+      // Extender expiración
+      await supabase
+        .from("tracker_invites")
+        .update({
+          expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        })
+        .eq("id", invite.id);
+    }
+
+    const acceptUrl =
+      `https://preview.tugeocercas.com/tracker-accept?invite_id=${invite.id}`;
+
+    // 📧 Enviar email Brevo con timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: {
+          "api-key": BREVO_API_KEY,
           "content-type": "application/json",
-          "x-edge-ts": ts,
-          "x-edge-sig": sig,
         },
-        body: JSON.stringify({ org_id, email: emailNorm, name, caller_jwt }),
-      },
-      20000
-    );
-
-    const edgeText = await edgeResp.text().catch(() => "");
-
-    let edgeJson = null;
-    let edgeParseError = null;
-    try {
-      edgeJson = edgeText ? JSON.parse(edgeText) : null;
-    } catch (e) {
-      edgeParseError = String(e?.message || e);
-      edgeJson = null;
+        body: JSON.stringify({
+          sender: {
+            email: BREVO_SENDER_EMAIL,
+            name: BREVO_SENDER_NAME,
+          },
+          to: [{ email }],
+          subject: "Invitación a App Geocercas",
+          htmlContent: `
+            <p>Hola ${name || ""},</p>
+            <p>Has sido invitado como tracker.</p>
+            <p><a href="${acceptUrl}">Aceptar invitación</a></p>
+          `,
+        }),
+        signal: controller.signal,
+      });
+    } catch (_) {
+      // No bloqueamos por fallo de email
+    } finally {
+      clearTimeout(timeout);
     }
 
-    const edgeBuildTag =
-      (edgeJson && (edgeJson.build_tag || edgeJson.build || edgeJson.BUILD_TAG)) ||
-      null;
-
-    const edgeRawSample = !edgeJson ? edgeText.slice(0, 500) : undefined;
-
-    return sendJson(res, edgeResp.status, {
-      ...(edgeJson || {}),
-      _proxy: {
-        ok: edgeResp.ok,
-        build: BUILD_TAG,
-        edge_status: edgeResp.status,
-        edge_build_tag: edgeBuildTag,
-        edge_parse_error: edgeParseError,
-        edge_raw_sample: edgeRawSample,
-      },
+    return json(200, {
+      ok: true,
+      invite_id: invite.id,
+      reused_existing: !!existingInvite,
+      build_tag: BUILD_TAG,
     });
+
   } catch (err) {
-    return sendJson(res, 500, {
+    return json(500, {
       ok: false,
       error: "UNCAUGHT_EXCEPTION",
-      build: BUILD_TAG,
-      detail: String(err?.stack || err),
+      detail: String(err),
+      build_tag: BUILD_TAG,
     });
   }
-}
+});
