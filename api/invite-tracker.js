@@ -1,20 +1,16 @@
 /**
  * App Geocercas — Vercel API: /api/invite-tracker (Preview)
- * Build tag: invite-proxy-v15_4_universal_base_detect_noabort_20260221
+ * Build tag: invite-proxy-v15_5_force_supabase_domain_by_ref_20260221
  *
- * - ESM puro
- * - caller_jwt puede venir:
- *    A) desde el cliente (body.caller_jwt) ✅ recomendado
- *    B) fallback: /api/auth/session (solo si ese endpoint expone access_token)
- * - Firma HMAC (x-edge-ts, x-edge-sig)
- * - Llama a Supabase Edge Function invite_tracker SIN Authorization
- * - UNIVERSAL: detecta si SUPABASE_FUNCTIONS_URL es .supabase.co o .functions.supabase.co
- * - Diagnóstico fuerte: edgeUrl final + ping real del edgeUrl final
+ * UNIVERSAL DEFINITIVO:
+ * - Si existe SUPABASE_PROJECT_REF => usa SIEMPRE:
+ *   https://<ref>.supabase.co/functions/v1/<fn>
+ * - Si no existe => fallback al modo auto-detect anterior.
  */
 
 import crypto from "node:crypto";
 
-const BUILD_TAG = "invite-proxy-v15_4_universal_base_detect_noabort_20260221";
+const BUILD_TAG = "invite-proxy-v15_5_force_supabase_domain_by_ref_20260221";
 
 const EDGE_TIMEOUT_MS = 45000;
 const EDGE_PING_TIMEOUT_MS = 8000;
@@ -65,19 +61,12 @@ function safeUrlParts(u) {
   }
 }
 
-/**
- * UNIVERSAL: arma el URL final del Edge según el dominio base
- * - Si base es *.functions.supabase.co => /<function_name>
- * - Si base es *.supabase.co          => /functions/v1/<function_name>
- */
-function buildEdgeUrl(base, fnName) {
+function buildEdgeUrlFromBase(base, fnName) {
   const clean = String(base || "").trim().replace(/\/$/, "");
   if (!clean) return { ok: false, edgeUrl: "", mode: "missing_base" };
 
   const parts = safeUrlParts(clean);
   const host = parts.ok ? parts.host : "";
-
-  // Si el host contiene ".functions.supabase.co" => modo functions-domain
   const isFunctionsDomain = host.endsWith(".functions.supabase.co") || clean.includes(".functions.supabase.co");
 
   const edgeUrl = isFunctionsDomain
@@ -85,6 +74,17 @@ function buildEdgeUrl(base, fnName) {
     : `${clean}/functions/v1/${fnName}`;
 
   return { ok: true, edgeUrl, mode: isFunctionsDomain ? "functions-domain" : "supabase-domain" };
+}
+
+// ✅ modo fuerte: por ref => supabase-domain SIEMPRE
+function buildEdgeUrlByRef(projectRef, fnName) {
+  const ref = String(projectRef || "").trim();
+  if (!ref) return { ok: false, edgeUrl: "", mode: "missing_ref" };
+  return {
+    ok: true,
+    mode: "forced-by-ref",
+    edgeUrl: `https://${ref}.supabase.co/functions/v1/${fnName}`,
+  };
 }
 
 async function fetchWithTimeout(url, init, timeoutMs = 15000) {
@@ -111,17 +111,12 @@ async function getCallerJwtFromSession(req) {
 
   const { resp: r, ms } = await fetchWithTimeout(
     url,
-    {
-      method: "GET",
-      headers: { cookie, accept: "application/json" },
-    },
+    { method: "GET", headers: { cookie, accept: "application/json" } },
     AUTH_SESSION_TIMEOUT_MS
   );
 
   const text = await r.text().catch(() => "");
-  if (!r.ok) {
-    return { ok: false, error: `auth/session failed ${r.status}`, detail: text.slice(0, 400), ms };
-  }
+  if (!r.ok) return { ok: false, error: `auth/session failed ${r.status}`, detail: text.slice(0, 400), ms };
 
   let j = {};
   try {
@@ -137,12 +132,7 @@ async function getCallerJwtFromSession(req) {
     null;
 
   if (!token) {
-    return {
-      ok: false,
-      error: "No access_token in auth/session response",
-      detail: JSON.stringify(j).slice(0, 500),
-      ms,
-    };
+    return { ok: false, error: "No access_token in auth/session response", detail: JSON.stringify(j).slice(0, 500), ms };
   }
 
   return { ok: true, token, ms };
@@ -152,14 +142,19 @@ export default async function handler(req, res) {
   const method = (req.method || "GET").toUpperCase();
 
   const SUPABASE_FUNCTIONS_URL = String(process.env.SUPABASE_FUNCTIONS_URL || "").trim().replace(/\/$/, "");
+  const SUPABASE_PROJECT_REF = String(process.env.SUPABASE_PROJECT_REF || "").trim();
   const INVITE_HMAC_SECRET = String(process.env.INVITE_HMAC_SECRET || "").trim();
 
   const fnName = "invite_tracker";
-  const edge = buildEdgeUrl(SUPABASE_FUNCTIONS_URL, fnName);
+
+  // ✅ preferimos ref (forced) y si no hay, auto-detect
+  const edge =
+    SUPABASE_PROJECT_REF
+      ? buildEdgeUrlByRef(SUPABASE_PROJECT_REF, fnName)
+      : buildEdgeUrlFromBase(SUPABASE_FUNCTIONS_URL, fnName);
 
   try {
     if (method === "GET") {
-      // Ping real al EDGE URL final calculado (para confirmar que NO aborta)
       let edgePing = null;
       if (edge.ok && edge.edgeUrl) {
         try {
@@ -169,12 +164,7 @@ export default async function handler(req, res) {
             EDGE_PING_TIMEOUT_MS
           );
           const txt = await resp.text().catch(() => "");
-          edgePing = {
-            ok: resp.ok,
-            status: resp.status,
-            ms,
-            sample: txt.slice(0, 200),
-          };
+          edgePing = { ok: resp.ok, status: resp.status, ms, sample: txt.slice(0, 200) };
         } catch (e) {
           edgePing = { ok: false, error: String(e?.name || "ERR"), detail: String(e?.message || e) };
         }
@@ -186,13 +176,15 @@ export default async function handler(req, res) {
         accepts_caller_jwt: true,
         runtime: { node: process.version, platform: process.platform },
         env: {
+          SUPABASE_PROJECT_REF: safeEnv("SUPABASE_PROJECT_REF"),
           SUPABASE_FUNCTIONS_URL: safeEnv("SUPABASE_FUNCTIONS_URL"),
           INVITE_HMAC_SECRET: safeEnv("INVITE_HMAC_SECRET"),
         },
         edge: {
-          base_mode: edge.mode,
-          base_host: safeUrlParts(SUPABASE_FUNCTIONS_URL).host || "",
+          mode: edge.mode,
           edge_url: edge.edgeUrl || "",
+          base_host: safeUrlParts(SUPABASE_FUNCTIONS_URL).host || "",
+          ref: SUPABASE_PROJECT_REF || "",
           ping: edgePing,
         },
       });
@@ -202,14 +194,11 @@ export default async function handler(req, res) {
       return sendJson(res, 405, { ok: false, error: "METHOD_NOT_ALLOWED", build: BUILD_TAG });
     }
 
-    if (!SUPABASE_FUNCTIONS_URL) {
-      return sendJson(res, 500, { ok: false, error: "Missing SUPABASE_FUNCTIONS_URL", build: BUILD_TAG });
-    }
     if (!INVITE_HMAC_SECRET) {
       return sendJson(res, 500, { ok: false, error: "Missing INVITE_HMAC_SECRET", build: BUILD_TAG });
     }
     if (!edge.ok || !edge.edgeUrl) {
-      return sendJson(res, 500, { ok: false, error: "Invalid SUPABASE_FUNCTIONS_URL", build: BUILD_TAG });
+      return sendJson(res, 500, { ok: false, error: "Missing/Invalid Edge URL config", build: BUILD_TAG });
     }
 
     const raw = await getRequestBody(req);
@@ -217,12 +206,7 @@ export default async function handler(req, res) {
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch (e) {
-      return sendJson(res, 400, {
-        ok: false,
-        error: "INVALID_JSON",
-        build: BUILD_TAG,
-        detail: String(e?.message || e),
-      });
+      return sendJson(res, 400, { ok: false, error: "INVALID_JSON", build: BUILD_TAG, detail: String(e?.message || e) });
     }
 
     const org_id = String(body?.org_id || "").trim();
@@ -230,11 +214,8 @@ export default async function handler(req, res) {
     const name = String(body?.name || body?.to_name || body?.toName || "").trim() || "";
 
     if (!org_id) return sendJson(res, 400, { ok: false, error: "Missing org_id", build: BUILD_TAG });
-    if (!emailNorm || !emailNorm.includes("@")) {
-      return sendJson(res, 400, { ok: false, error: "Invalid email", build: BUILD_TAG });
-    }
+    if (!emailNorm || !emailNorm.includes("@")) return sendJson(res, 400, { ok: false, error: "Invalid email", build: BUILD_TAG });
 
-    // ✅ MODO A: si viene caller_jwt desde el cliente, úsalo
     let caller_jwt = String(body?.caller_jwt || "").trim();
     let jwt_source = caller_jwt ? "client" : "auth/session";
 
@@ -264,11 +245,7 @@ export default async function handler(req, res) {
         edge.edgeUrl,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-edge-ts": ts,
-            "x-edge-sig": sig,
-          },
+          headers: { "content-type": "application/json", "x-edge-ts": ts, "x-edge-sig": sig },
           body: JSON.stringify({ org_id, email: emailNorm, name, caller_jwt }),
         },
         EDGE_TIMEOUT_MS
@@ -330,12 +307,6 @@ export default async function handler(req, res) {
       error: "UNCAUGHT_EXCEPTION",
       build: BUILD_TAG,
       detail: String(err?.stack || err),
-      diag: {
-        env: {
-          SUPABASE_FUNCTIONS_URL: safeEnv("SUPABASE_FUNCTIONS_URL"),
-          INVITE_HMAC_SECRET: safeEnv("INVITE_HMAC_SECRET"),
-        },
-      },
     });
   }
 }
