@@ -26,8 +26,18 @@ const TIME_WINDOWS = [
 
 const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
 
-// ✅ UNIVERSAL: clave única para org activa (cliente)
+// ✅ UNIVERSAL: clave canónica para org activa
 const ACTIVE_ORG_LS_KEY = "gc_active_org_id";
+
+// ✅ UNIVERSAL: keys legacy que pueden existir en otros módulos/versiones
+const LEGACY_ORG_KEYS = [
+  "gc_active_org_id",
+  "active_org_id",
+  "current_org_id",
+  "org_id",
+  "tracker_org_id",
+  "user_current_org",
+];
 
 function toNum(v) {
   if (v === null || v === undefined) return null;
@@ -57,7 +67,11 @@ function parseMaybeJson(input) {
   if (!input) return null;
   if (typeof input === "object") return input;
   if (typeof input === "string") {
-    try { return JSON.parse(input); } catch { return null; }
+    try {
+      return JSON.parse(input);
+    } catch {
+      return null;
+    }
   }
   return null;
 }
@@ -146,7 +160,9 @@ function MapDiagnostics({ setDiag }) {
       }));
     };
     const doInvalidate = () => {
-      try { map.invalidateSize(); } catch {}
+      try {
+        map.invalidateSize();
+      } catch {}
       updateSize();
     };
     doInvalidate();
@@ -161,8 +177,12 @@ function MapDiagnostics({ setDiag }) {
     } catch {}
 
     return () => {
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
-      try { ro?.disconnect?.(); } catch {}
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      try {
+        ro?.disconnect?.();
+      } catch {}
     };
   }, [map, setDiag]);
 
@@ -260,7 +280,15 @@ function buildGeofenceLayerItems(geofenceRows) {
     }
 
     const circle = inferCircleFromRow(g);
-    if (circle) items.push({ type: "circle", geofenceId: g.id, name: g.name || g.id, center: circle.center, radius_m: circle.radius_m, idx: "c" });
+    if (circle)
+      items.push({
+        type: "circle",
+        geofenceId: g.id,
+        name: g.name || g.id,
+        center: circle.center,
+        radius_m: circle.radius_m,
+        idx: "c",
+      });
   }
 
   return { items, skipped };
@@ -491,7 +519,7 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // ✅ UNIVERSAL: setters consistentes (persist + url)
+  // ✅ setter universal: persiste + actualiza URL sin recargar
   const setActiveOrg = useCallback((nextOrgId, source = "unknown", opts = { persist: true, updateUrl: true }) => {
     const v = nextOrgId ? String(nextOrgId) : null;
     setOrgId(v);
@@ -526,24 +554,26 @@ export default function TrackerDashboard() {
     }
   }, []);
 
+  // ✅ UNIVERSAL: lee org desde múltiples keys legacy (y la canónica)
   const getOrgFromLocalStorage = useCallback(() => {
     try {
-      const v = localStorage.getItem(ACTIVE_ORG_LS_KEY);
-      return v ? String(v) : null;
+      for (const k of LEGACY_ORG_KEYS) {
+        const v = localStorage.getItem(k);
+        if (v && String(v).trim()) return String(v).trim();
+      }
+      return null;
     } catch {
       return null;
     }
   }, []);
 
-  // ✅ UNIVERSAL: intentar leer user_current_org (si existe) sin romper si no existe
+  // ✅ UNIVERSAL: intenta leer personal.user_current_org sin romper si no existe
   const getOrgFromPersonalCurrentOrg = useCallback(async () => {
     try {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth?.user?.id ? String(auth.user.id) : null;
       if (!uid) return null;
 
-      // Intenta por user_id u owner_id (universal), y lee user_current_org (si existe).
-      // Si la columna o tabla difiere, caerá al catch y seguimos con RPC.
       const { data, error } = await supabase
         .from("personal")
         .select("user_current_org, user_id, owner_id")
@@ -559,7 +589,7 @@ export default function TrackerDashboard() {
     }
   }, []);
 
-  // ✅ UNIVERSAL: resolver org activa con prioridad (URL -> LS -> personal.user_current_org -> RPCs)
+  // ✅ Resolver universal (URL -> LS legacy -> personal -> RPC -> fallback RPC)
   const resolveOrgId = useCallback(async ({ forceRpc = false } = {}) => {
     setOrgResolveError("");
     setErrorMsg("");
@@ -569,41 +599,81 @@ export default function TrackerDashboard() {
       if (!forceRpc) {
         const fromUrl = getOrgFromUrl();
         if (fromUrl) {
+          try { localStorage.setItem(ACTIVE_ORG_LS_KEY, String(fromUrl)); } catch {}
           return setActiveOrg(fromUrl, "url:?org_id", { persist: true, updateUrl: true });
         }
 
-                // 2) LocalStorage (UNIVERSAL + backward compatible)
-        //    - Acepta múltiples keys legacy usadas por otros módulos/versiones
-        //    - Si encuentra una legacy, "normaliza" guardando también la key canónica
         const fromLs = getOrgFromLocalStorage();
         if (fromLs) {
-          // normaliza: siempre persistir en la key canónica sin depender del nombre legacy
-          try { localStorage.setItem("gc_active_org_id", String(fromLs)); } catch {}
+          try { localStorage.setItem(ACTIVE_ORG_LS_KEY, String(fromLs)); } catch {}
           return setActiveOrg(fromLs, "localStorage", { persist: true, updateUrl: true });
         }
 
-        // 3) Personal.user_current_org (si existe) como fuente del backend
         const fromPersonal = await getOrgFromPersonalCurrentOrg();
         if (fromPersonal) {
-          try { localStorage.setItem("gc_active_org_id", String(fromPersonal)); } catch {}
+          try { localStorage.setItem(ACTIVE_ORG_LS_KEY, String(fromPersonal)); } catch {}
           return setActiveOrg(fromPersonal, "personal.user_current_org", { persist: true, updateUrl: true });
         }
       }
 
-      // 4) RPC específico del dashboard
       const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
       if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
       if (r1?.data) {
-        try { localStorage.setItem("gc_active_org_id", String(r1.data)); } catch {}
+        try { localStorage.setItem(ACTIVE_ORG_LS_KEY, String(r1.data)); } catch {}
         return setActiveOrg(String(r1.data), "rpc:resolve_org_for_tracker_dashboard", { persist: true, updateUrl: true });
       }
 
-      // 5) Fallback universal
       const r2 = await supabase.rpc("get_current_org_id");
       if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
       if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
-      try { localStorage.setItem("gc_active_org_id", String(r2.data)); } catch {}
+      try { localStorage.setItem(ACTIVE_ORG_LS_KEY, String(r2.data)); } catch {}
       return setActiveOrg(String(r2.data), "rpc:get_current_org_id", { persist: true, updateUrl: true });
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setActiveOrg(null, "error", { persist: false, updateUrl: false });
+      setOrgResolveError(msg);
+      return null;
+    }
+  }, [getOrgFromUrl, getOrgFromLocalStorage, getOrgFromPersonalCurrentOrg, setActiveOrg]);
+
+  useEffect(() => {
+    resolveOrgId({ forceRpc: false });
+  }, [resolveOrgId]);
+
+  const fetchAssignments = useCallback(async (currentOrgId) => {
+    if (!currentOrgId) return;
+
+    setErrorMsg("");
+    setInfoMsg("");
+    setDiag((d) => ({ ...d, lastAssignmentsError: null }));
+
+    const orVigencia =
+      `and(start_date.is.null,end_date.is.null),` +
+      `and(start_date.is.null,end_date.gte.${todayStrUtc}),` +
+      `and(start_date.lte.${todayStrUtc},end_date.is.null),` +
+      `and(start_date.lte.${todayStrUtc},end_date.gte.${todayStrUtc})`;
+
+    const { data, error } = await supabase
+      .from("tracker_assignments")
+      .select("tracker_user_id, geofence_id, org_id, active, start_date, end_date")
+      .eq("org_id", currentOrgId)
+      .eq("active", true)
+      .or(orVigencia);
+
+    if (error) {
+      setDiag((d) => ({
+        ...d,
+        lastAssignmentsError: error.message || String(error),
+        assignmentsRows: 0,
+        trackersFound: 0,
+        assignedGeofenceIds: 0,
+      }));
+      setAssignments([]);
+      setAssignmentTrackers([]);
+      setInfoMsg("");
+      setErrorMsg("Error cargando asignaciones (tracker_assignments).");
+      return;
+    }
 
     const rows = Array.isArray(data) ? data : [];
     setAssignments(rows);
@@ -699,7 +769,7 @@ export default function TrackerDashboard() {
     }));
 
     if (normalized.length === 0) {
-      setInfoMsg(`Hay asignaciones, pero esta org (${currentOrgId}) no tiene geocercas activas/visibles para esas asignaciones.`);
+      setInfoMsg(`Hay asignaciones, pero esta org (${currentOrgId}) no tiene geocercas activas/visibles asociadas.`);
     }
 
     setFitSignal((x) => x + 1);
@@ -865,13 +935,14 @@ export default function TrackerDashboard() {
   }, [positions]);
 
   const Badge = ({ children }) => (
-    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
+    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">
+      {children}
+    </span>
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
   const showEmptyGeofencesNotice = orgId && diag.assignmentsRows > 0 && diag.geofencesFound === 0;
 
-  // ✅ helper: geocercas solo tiene sentido cuando hay asignaciones
   const geofencesMeaningful = diag.assignmentsRows > 0;
 
   return (
@@ -902,7 +973,7 @@ export default function TrackerDashboard() {
 
             {showEmptyGeofencesNotice && (
               <div className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <b>Sin geocercas para esta org.</b> Hay asignaciones, pero no hay geocercas activas/visibles asociadas a esas asignaciones.
+                <b>Sin geocercas para esta org.</b> Hay asignaciones, pero no hay geocercas activas/visibles asociadas.
               </div>
             )}
           </div>
