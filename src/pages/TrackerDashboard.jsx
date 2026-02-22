@@ -488,29 +488,32 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // ✅ 100% SaaS: org activa solo por RPC (sin URL/LS)
+  // ✅ 100% SaaS: NO URL / NO LocalStorage. Solo backend (RPC).
   const resolveOrgId = useCallback(async ({ forceRpc = true } = {}) => {
     setOrgResolveError("");
     setErrorMsg("");
     setInfoMsg("");
 
     try {
-      // 1) RPC específico del dashboard
+      // 1) RPC específico dashboard
       const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
       if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
       if (r1?.data) {
-        setOrgId(String(r1.data));
+        const v = String(r1.data);
+        setOrgId(v);
         setOrgIdSource("rpc:resolve_org_for_tracker_dashboard");
-        return String(r1.data);
+        return v;
       }
 
       // 2) Fallback universal
       const r2 = await supabase.rpc("get_current_org_id");
       if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
       if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
-      setOrgId(String(r2.data));
+
+      const v = String(r2.data);
+      setOrgId(v);
       setOrgIdSource("rpc:get_current_org_id");
-      return String(r2.data);
+      return v;
     } catch (e) {
       const msg = e?.message || String(e);
       setOrgId(null);
@@ -527,8 +530,9 @@ export default function TrackerDashboard() {
   const fetchAssignments = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
 
-    setDiag((d) => ({ ...d, lastAssignmentsError: null }));
     setErrorMsg("");
+    setInfoMsg("");
+    setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
     const orVigencia =
       `and(start_date.is.null,end_date.is.null),` +
@@ -553,6 +557,7 @@ export default function TrackerDashboard() {
       }));
       setAssignments([]);
       setAssignmentTrackers([]);
+      setErrorMsg("Error cargando asignaciones (tracker_assignments).");
       return;
     }
 
@@ -572,31 +577,37 @@ export default function TrackerDashboard() {
       assignedGeofenceIds: uniqGeof.length,
     }));
 
-    // ✅ Universal: si no hay asignaciones, NO es error: solo informativo
+    // Nota: universal SaaS -> NO bloquear geocercas si no hay asignaciones.
     if (rows.length === 0) {
-      setInfoMsg("No hay asignaciones activas en tracker_assignments. Se mostrarán geocercas por org (si existen) y posiciones disponibles.");
-    } else {
-      setInfoMsg("");
+      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando geocercas de la organización.");
     }
   }, [todayStrUtc]);
 
-  // ✅ Universal: geocercas NO dependen de assignments.
-  // - Si hay assignments, puedes filtrar; si no, igual cargamos por org.
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
 
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
 
+    // Si hay asignaciones, filtramos por las geocercas asignadas.
+    // Si NO hay asignaciones, mostramos TODAS las geocercas activas/visibles de la org (universal SaaS).
     const assignedIds = Array.from(
       new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
     );
 
-    const res = await supabase
+    let q = supabase
       .from("v_geocercas_tracker_ui")
       .select("id, org_id, name, geojson, geom, polygon, geometry, lat, lng, radius_m, active, visible")
-      .eq("org_id", currentOrgId)
-      .order("name", { ascending: true });
+      .eq("org_id", currentOrgId);
+
+    if (assignedIds.length > 0) {
+      q = q.in("id", assignedIds);
+    } else {
+      // límite razonable para dashboard (evita cargar miles)
+      q = q.limit(500);
+    }
+
+    const res = await q;
 
     if (res.error) {
       setDiag((d) => ({
@@ -615,7 +626,8 @@ export default function TrackerDashboard() {
     }
 
     const rows = Array.isArray(res.data) ? res.data : [];
-    const normalizedAll = rows
+
+    const normalized = rows
       .filter((r) => (r.active ?? true) === true)
       .filter((r) => (r.visible ?? true) === true)
       .map((r) => ({
@@ -631,28 +643,28 @@ export default function TrackerDashboard() {
         radius_m: r.radius_m,
       }));
 
-    // Si hay asignaciones: por defecto selecciona solo asignadas.
-    // Si no hay asignaciones: por defecto muestra todas.
-    if (assignedIds.length > 0) {
-      // default UX: mostrar asignadas si existen, pero permitiendo “todas” con el multiselect
-      setSelectedGeofenceIds(assignedIds);
-    } else {
-      setSelectedGeofenceIds([]); // [] = todas
-    }
-
-    const { items, skipped } = buildGeofenceLayerItems(normalizedAll);
+    const { items, skipped } = buildGeofenceLayerItems(normalized);
     const polysCount = items.filter((x) => x.type === "polygon").length;
     const circlesCount = items.filter((x) => x.type === "circle").length;
 
-    setGeofenceRows(normalizedAll);
+    setGeofenceRows(normalized);
+    setSelectedGeofenceIds([]); // default: mostrar todas
 
     setDiag((d) => ({
       ...d,
-      geofencesFound: normalizedAll.length,
+      geofencesFound: normalized.length,
       geofencePolys: polysCount,
       geofenceCircles: circlesCount,
       skippedZeroZero: skipped,
     }));
+
+    if (normalized.length === 0) {
+      if (assignedIds.length > 0) {
+        setInfoMsg(`Hay asignaciones, pero no hay geocercas activas/visibles para esas asignaciones en la org (${currentOrgId}).`);
+      } else {
+        setInfoMsg(`Esta org (${currentOrgId}) no tiene geocercas activas/visibles (o no tienes permiso de verlas).`);
+      }
+    }
 
     setFitSignal((x) => x + 1);
   }, []);
@@ -679,12 +691,10 @@ export default function TrackerDashboard() {
     try {
       if (showSpinner) setLoading(true);
       setDiag((d) => ({ ...d, lastPositionsError: null }));
-      setErrorMsg("");
 
       const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
       const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
-      // Universal: si hay trackers asignados los usa; si no, permite "all" y filtrar por dropdown (cuando haya)
       const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
 
       let targetIds = null;
@@ -713,8 +723,9 @@ export default function TrackerDashboard() {
       const { data, error } = await q;
 
       if (error) {
-        setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error), positionsFound: 0 }));
+        setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
         setPositions([]);
+        setDiag((d) => ({ ...d, positionsFound: 0 }));
         setErrorMsg("Error al cargar posiciones (tracker_positions).");
         return;
       }
@@ -747,24 +758,18 @@ export default function TrackerDashboard() {
     }
   }, [assignmentTrackers, selectedTrackerId, timeWindowId]);
 
-  // Carga base
   useEffect(() => {
     if (!orgId) return;
     (async () => {
-      await Promise.all([
-        fetchAssignments(orgId),
-        fetchPersonalCatalog(orgId),
-      ]);
+      await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
     })();
   }, [orgId, fetchAssignments, fetchPersonalCatalog]);
 
-  // Geofences: universal (por org), con info de assignments para default selection
   useEffect(() => {
     if (!orgId) return;
     fetchGeofences(orgId, assignments);
   }, [orgId, assignments, fetchGeofences]);
 
-  // Positions
   useEffect(() => {
     if (!orgId) return;
     fetchPositions(orgId, { showSpinner: true });
@@ -779,24 +784,20 @@ export default function TrackerDashboard() {
     return m;
   }, [personalRows]);
 
-  // Universal: opciones de tracker = asignados OR vistos en posiciones
   const trackersUi = useMemo(() => {
-    const fromAssignments = (assignmentTrackers || []).map((tRow) => String(tRow.user_id)).filter(Boolean);
-    const fromPositions = Array.from(new Set((positions || []).map((p) => p.user_id).filter(Boolean)));
-
-    const ids = Array.from(new Set([...fromAssignments, ...fromPositions]));
-    return ids.map((user_id) => {
+    return (assignmentTrackers || []).map((tRow) => {
+      const user_id = String(tRow.user_id);
       const p = personalByUserId.get(user_id) || null;
       const label = p?.nombre || p?.email || user_id;
       return { user_id, label };
     });
-  }, [assignmentTrackers, positions, personalByUserId]);
+  }, [assignmentTrackers, personalByUserId]);
 
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
     if (!all.length) return [];
     if (Array.isArray(selectedGeofenceIds) && selectedGeofenceIds.length === 1 && selectedGeofenceIds[0] === "__none__") return [];
-    if (!selectedGeofenceIds?.length) return all; // [] = todas
+    if (!selectedGeofenceIds?.length) return all;
     const set = new Set(selectedGeofenceIds.map(String));
     return all.filter((g) => set.has(String(g.id)));
   }, [geofenceRows, selectedGeofenceIds]);
@@ -832,9 +833,6 @@ export default function TrackerDashboard() {
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
-
-  // Universal: geocercas son “meaningful” si existen filas
-  const geofencesMeaningful = (geofenceRows?.length || 0) > 0;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
@@ -888,7 +886,7 @@ export default function TrackerDashboard() {
               onClick={() => setFitSignal((x) => x + 1)}
               className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-              disabled={layerItems.length === 0 && positions.length === 0}
+              disabled={layerItems.length === 0}
             >
               Centrar geocerca
             </button>
@@ -962,9 +960,9 @@ export default function TrackerDashboard() {
                     geofences={geofenceRows.map((g) => ({ id: g.id, name: g.name }))}
                     selectedIds={selectedGeofenceIds}
                     setSelectedIds={setSelectedGeofenceIds}
-                    disabled={!geofencesMeaningful || !orgId}
+                    disabled={!orgId || !geofenceRows?.length}
                   />
-                  {!geofencesMeaningful && (
+                  {!geofenceRows?.length && (
                     <div className="mt-1 text-xs text-gray-500">
                       No hay geocercas disponibles para esta org (o no tienes permiso de verlas).
                     </div>
@@ -1019,10 +1017,7 @@ export default function TrackerDashboard() {
                   <MapDiagnostics setDiag={setDiag} />
 
                   <FitIfOutOfView
-                    layerItems={[
-                      ...layerItems,
-                      ...(positions?.[0] ? [{ type: "circle", center: [positions[0].lat, positions[0].lng], radius_m: 1, idx: "pos" }] : [])
-                    ]}
+                    layerItems={layerItems}
                     fitSignal={fitSignal}
                     onBoundsComputed={(b) => {
                       try {
