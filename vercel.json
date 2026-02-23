@@ -1,29 +1,14 @@
 {
   "version": 2,
-  "redirects": [
+  "rewrites": [
     {
       "source": "/tracker-accept",
-      "destination": "/tracker-gps",
-      "permanent": false
-    },
-    {
-      "source": "/tracker-accept/",
-      "destination": "/tracker-gps",
-      "permanent": false
+      "destination": "/tracker-gps"
     },
     {
       "source": "/tracker-accept/:path*",
-      "destination": "/tracker-gps",
-      "permanent": false
+      "destination": "/tracker-gps"
     },
-    {
-      "source": "/:path*",
-      "has": [{ "type": "host", "value": "www.tugeocercas.com" }],
-      "destination": "https://tugeocercas.com/:path*",
-      "permanent": true
-    }
-  ],
-  "rewrites": [
     {
       "source": "/api/auth/:path*",
       "destination": "/api/auth?route=:path*"
@@ -35,18 +20,9 @@
   ],
   "headers": [
     {
-      "source": "/tracker-accept(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
-      "source": "/tracker-gps(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
       "source": "/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" },
-        { "key": "X-Preview-Build", "value": "preview-redirect-accept-v1" }
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
       ]
     }
   ]
