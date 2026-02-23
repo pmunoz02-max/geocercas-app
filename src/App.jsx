@@ -36,14 +36,10 @@ import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
-/**
- * ✅ Public entry:
- * - Si cae un #access_token legacy, lo mandamos a /auth/callback (compat).
- * - Si cae ?code= (PKCE), también lo mandamos a /auth/callback.
- */
 function RootEntry() {
   const location = useLocation();
 
+  // Compat: implicit hash tokens (si aún llega alguno viejo)
   const hash = typeof location.hash === "string" ? location.hash : "";
   const hasAccessToken = hash.includes("access_token=");
   if (hasAccessToken) {
@@ -51,6 +47,7 @@ function RootEntry() {
     return <Navigate to={target} replace />;
   }
 
+  // PKCE: si por alguna razón cae /?code=..., lo manda al callback
   const sp = new URLSearchParams(location.search || "");
   const code = sp.get("code");
   if (code) {
@@ -64,13 +61,9 @@ function RootEntry() {
 }
 
 /**
- * ✅ NUEVO (sin archivo extra):
- * /tracker-accept?invite_id=...&org_id=...&lang=en
- *
- * Como tu TrackerGpsPage trabaja con org_id, aquí hacemos redirect a:
- * /tracker-gps?org_id=...&lang=...
- *
- * (invite_id lo dejamos pasar por compatibilidad, aunque hoy TrackerGpsPage no lo usa)
+ * ✅ RUTA PUBLICA /tracker-accept
+ * Recibe: /tracker-accept?invite_id=...&org_id=...&lang=en
+ * Redirige a: /tracker-gps?org_id=...&lang=en&invite_id=...
  */
 function TrackerAcceptRedirect() {
   const location = useLocation();
