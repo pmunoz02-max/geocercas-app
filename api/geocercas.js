@@ -1,7 +1,7 @@
 // api/geocercas.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "geocercas-api-v10-memberships-canonical";
+const VERSION = "geocercas-api-v11-memberships-canonical-userjwt-fallback";
 
 /* =========================
    Cookies + Headers
@@ -123,9 +123,15 @@ function stripServerOwned(payload) {
 
 /* =========================
    Context Resolver (CANÓNICO)
-   - auth: cookie tg_at
-   - user: supabase auth.getUser() con anon key
-   - org/role: memberships (y opcional user_current_org)
+   Objetivo:
+   - Validar usuario con cookie tg_at
+   - Resolver org/role por memberships
+   - NO depender obligatoriamente de Service Role (evita mismatch prod/preview)
+
+   Estrategia:
+   - sbUser: anon key + Authorization: Bearer tg_at
+   - sbSrv: (opcional) service role key
+   - Resolver memberships intentando primero con sbSrv; si falla, caer a sbUser (RLS)
 ========================= */
 
 async function resolveContext(req) {
@@ -135,9 +141,11 @@ async function resolveContext(req) {
     "VITE_SUPABASE_ANON_KEY",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   ]);
+
+  // OJO: Service role es útil, pero NO obligatorio
   const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
 
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return {
       ok: false,
       status: 500,
@@ -157,7 +165,7 @@ async function resolveContext(req) {
     return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
   }
 
-  // Cliente para validar usuario (usa anon + bearer)
+  // Cliente usuario (anon + bearer)
   const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -169,38 +177,52 @@ async function resolveContext(req) {
     return { ok: false, status: 401, error: "Invalid session", details: uerr?.message || "No user" };
   }
 
-  // Cliente service role (server-owned)
-  const sbSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
+  // Cliente service role (opcional)
+  const sbSrv = SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      })
+    : null;
+
+  // Helper: intenta consultar con client y si falla retorna null
+  async function tryMaybeSingle(client, builderFn) {
+    try {
+      const { data, error } = await builderFn(client);
+      if (error) return { ok: false, error };
+      return { ok: true, data };
+    } catch (e) {
+      return { ok: false, error: { message: String(e?.message || e) } };
+    }
+  }
 
   // 1) Intentar org activa persistida (si existe tabla user_current_org)
   let currentOrgId = null;
-  try {
-    const { data: uco, error: ucoErr } = await sbSrv
-      .from("user_current_org")
-      .select("org_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
-  } catch {}
+  const ucoQuery = (c) => c.from("user_current_org").select("org_id").eq("user_id", user.id).maybeSingle();
 
-  // 2) Resolver membership: preferimos org activa si existe, si no, default
+  // Preferimos service role si existe, pero si falla, intentamos con user JWT
+  if (sbSrv) {
+    const r1 = await tryMaybeSingle(sbSrv, ucoQuery);
+    if (r1.ok && r1.data?.org_id) currentOrgId = String(r1.data.org_id);
+  }
+  if (!currentOrgId) {
+    const r2 = await tryMaybeSingle(sbUser, ucoQuery);
+    if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
+  }
+
+  // 2) Resolver membership: org activa si existe, si no default
   let mRow = null;
 
-  if (currentOrgId) {
-    const { data, error } = await sbSrv
+  const membershipForOrg = (orgId) => (c) =>
+    c
       .from("memberships")
       .select("org_id, role, is_default, revoked_at")
       .eq("user_id", user.id)
-      .eq("org_id", currentOrgId)
+      .eq("org_id", orgId)
       .is("revoked_at", null)
       .maybeSingle();
-    if (!error && data?.org_id && data?.role) mRow = data;
-  }
 
-  if (!mRow) {
-    const { data, error } = await sbSrv
+  const membershipDefault = (c) =>
+    c
       .from("memberships")
       .select("org_id, role, is_default, revoked_at")
       .eq("user_id", user.id)
@@ -209,10 +231,34 @@ async function resolveContext(req) {
       .limit(1)
       .maybeSingle();
 
-    if (!error && data?.org_id && data?.role) mRow = data;
+  async function resolveMembership() {
+    // A) org activa
+    if (currentOrgId) {
+      if (sbSrv) {
+        const r = await tryMaybeSingle(sbSrv, membershipForOrg(currentOrgId));
+        if (r.ok && r.data?.org_id && r.data?.role) return { row: r.data, client: sbSrv };
+      }
+      {
+        const r = await tryMaybeSingle(sbUser, membershipForOrg(currentOrgId));
+        if (r.ok && r.data?.org_id && r.data?.role) return { row: r.data, client: sbUser };
+      }
+    }
+
+    // B) default
+    if (sbSrv) {
+      const r = await tryMaybeSingle(sbSrv, membershipDefault);
+      if (r.ok && r.data?.org_id && r.data?.role) return { row: r.data, client: sbSrv };
+    }
+
+    const r2 = await tryMaybeSingle(sbUser, membershipDefault);
+    if (r2.ok && r2.data?.org_id && r2.data?.role) return { row: r2.data, client: sbUser };
+
+    return { row: null, client: sbUser };
   }
 
-  if (!mRow?.org_id || !mRow?.role) {
+  const { row: mResolved, client: dbClient } = await resolveMembership();
+
+  if (!mResolved?.org_id || !mResolved?.role) {
     return {
       ok: false,
       status: 403,
@@ -222,12 +268,13 @@ async function resolveContext(req) {
   }
 
   const ctx = {
-    org_id: String(mRow.org_id),
-    role: String(mRow.role),
-    tenant_id: String(mRow.org_id), // canónico: tenant == org
+    org_id: String(mResolved.org_id),
+    role: String(mResolved.role),
+    tenant_id: String(mResolved.org_id), // canónico: tenant == org
   };
 
-  return { ok: true, user, ctx, sbSrv };
+  // Usaremos dbClient para TODAS las operaciones (service role si está sano; si no, user JWT)
+  return { ok: true, user, ctx, sbDb: dbClient };
 }
 
 /* =========================
@@ -252,7 +299,7 @@ export default async function handler(req, res) {
       return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
     }
 
-    const { ctx, sbSrv, user } = ctxRes;
+    const { ctx, sbDb, user } = ctxRes;
     const org_id = String(ctx.org_id);
     const tenant_id = String(ctx.tenant_id || ctx.org_id);
     const user_id = String(user.id);
@@ -266,7 +313,7 @@ export default async function handler(req, res) {
         const onlyActive = normalizeBoolFlag(q.onlyActive, true);
         const limit = Math.min(Number(q.limit || 2000), 2000);
 
-        let query = sbSrv
+        let query = sbDb
           .from("geocercas")
           .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,updated_at")
           .eq("org_id", org_id)
@@ -287,7 +334,7 @@ export default async function handler(req, res) {
         const id = q.id ? String(q.id) : null;
         if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
-        const { data, error } = await sbSrv
+        const { data, error } = await sbDb
           .from("geocercas")
           .select("*")
           .eq("org_id", org_id)
@@ -331,7 +378,6 @@ export default async function handler(req, res) {
             : true;
 
         // --- AUDIT HARDENING (CRÍTICO PARA PRODUCCIÓN)
-        // updated_by SIEMPRE, created_by solo si inserción (o si no existe)
         const incomingId = payload?.id ? String(payload.id) : null;
 
         let createdByToUse = user_id;
@@ -339,7 +385,7 @@ export default async function handler(req, res) {
         // Si parece UPDATE por id, intentamos conservar created_by existente
         if (incomingId) {
           try {
-            const { data: prev, error: prevErr } = await sbSrv
+            const { data: prev, error: prevErr } = await sbDb
               .from("geocercas")
               .select("created_by")
               .eq("org_id", org_id)
@@ -350,7 +396,6 @@ export default async function handler(req, res) {
               createdByToUse = String(prev.created_by);
             }
           } catch {
-            // si falla, no rompemos: usamos user_id
             createdByToUse = user_id;
           }
         }
@@ -388,7 +433,7 @@ export default async function handler(req, res) {
           updated_at: nowIso,
         };
 
-        const { data, error } = await sbSrv
+        const { data, error } = await sbDb
           .from("geocercas")
           .upsert(row, { onConflict: "org_id,nombre_ci" })
           .select("*")
@@ -412,12 +457,12 @@ export default async function handler(req, res) {
           return ok(res, { ok: true, deleted: 0, skipped: true, reason: "delete called without targets" });
         }
 
-        let q = sbSrv
+        let q = sbDb
           .from("geocercas")
           .update({
             activo: false,
             updated_at: new Date().toISOString(),
-            updated_by: user_id, // audit hardening
+            updated_by: user_id,
           })
           .eq("org_id", org_id)
           .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,updated_at");
