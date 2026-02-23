@@ -1,16 +1,20 @@
 /**
  * App Geocercas — Vercel API: /api/invite-tracker (Preview)
- * Build tag: invite-proxy-v15_6_lang_forward_20260222
+ *
+ * FIX (PKCE canonical): call Edge Function `send-tracker-invite-brevo`
+ * which sends the Supabase verify link (action_link) with redirectTo -> /auth/callback (PKCE).
+ *
+ * Build tag: invite-proxy-v16_PKCE_VERIFYLINK_20260223
  *
  * UNIVERSAL DEFINITIVO:
  * - Si existe SUPABASE_PROJECT_REF => usa SIEMPRE:
  *   https://<ref>.supabase.co/functions/v1/<fn>
- * - Si no existe => fallback al modo auto-detect anterior.
+ * - Si no existe => fallback auto-detect.
  */
 
 import crypto from "node:crypto";
 
-const BUILD_TAG = "invite-proxy-v15_6_lang_forward_20260222";
+const BUILD_TAG = "invite-proxy-v16_PKCE_VERIFYLINK_20260223";
 
 const EDGE_TIMEOUT_MS = 45000;
 const EDGE_PING_TIMEOUT_MS = 8000;
@@ -83,7 +87,6 @@ function buildEdgeUrlFromBase(base, fnName) {
   return { ok: true, edgeUrl, mode: isFunctionsDomain ? "functions-domain" : "supabase-domain" };
 }
 
-// ✅ modo fuerte: por ref => supabase-domain SIEMPRE
 function buildEdgeUrlByRef(projectRef, fnName) {
   const ref = String(projectRef || "").trim();
   if (!ref) return { ok: false, edgeUrl: "", mode: "missing_ref" };
@@ -106,7 +109,7 @@ async function fetchWithTimeout(url, init, timeoutMs = 15000) {
   }
 }
 
-// Fallback opcional (solo sirve si /api/auth/session expone access_token)
+// Fallback: obtener access_token desde /api/auth/session
 async function getCallerJwtFromSession(req) {
   const cookie = req.headers?.cookie || req.headers?.Cookie || "";
   const proto = req.headers["x-forwarded-proto"] || "https";
@@ -119,7 +122,7 @@ async function getCallerJwtFromSession(req) {
   const { resp: r, ms } = await fetchWithTimeout(
     url,
     { method: "GET", headers: { cookie, accept: "application/json" } },
-    AUTH_SESSION_TIMEOUT_MS
+    AUTH_SESSION_TIMEOUT_MS,
   );
 
   const text = await r.text().catch(() => "");
@@ -132,14 +135,15 @@ async function getCallerJwtFromSession(req) {
     return { ok: false, error: "auth/session returned non-JSON", detail: text.slice(0, 400), ms };
   }
 
-  const token =
-    j?.session?.access_token ||
-    j?.access_token ||
-    j?.data?.session?.access_token ||
-    null;
+  const token = j?.session?.access_token || j?.access_token || j?.data?.session?.access_token || null;
 
   if (!token) {
-    return { ok: false, error: "No access_token in auth/session response", detail: JSON.stringify(j).slice(0, 500), ms };
+    return {
+      ok: false,
+      error: "No access_token in auth/session response",
+      detail: JSON.stringify(j).slice(0, 500),
+      ms,
+    };
   }
 
   return { ok: true, token, ms };
@@ -152,13 +156,12 @@ export default async function handler(req, res) {
   const SUPABASE_PROJECT_REF = String(process.env.SUPABASE_PROJECT_REF || "").trim();
   const INVITE_HMAC_SECRET = String(process.env.INVITE_HMAC_SECRET || "").trim();
 
-  const fnName = "invite_tracker";
+  // ✅ IMPORTANT: Now we call the correct Edge function
+  const fnName = "send-tracker-invite-brevo";
 
-  // ✅ preferimos ref (forced) y si no hay, auto-detect
-  const edge =
-    SUPABASE_PROJECT_REF
-      ? buildEdgeUrlByRef(SUPABASE_PROJECT_REF, fnName)
-      : buildEdgeUrlFromBase(SUPABASE_FUNCTIONS_URL, fnName);
+  const edge = SUPABASE_PROJECT_REF
+    ? buildEdgeUrlByRef(SUPABASE_PROJECT_REF, fnName)
+    : buildEdgeUrlFromBase(SUPABASE_FUNCTIONS_URL, fnName);
 
   try {
     if (method === "GET") {
@@ -168,7 +171,7 @@ export default async function handler(req, res) {
           const { resp, ms } = await fetchWithTimeout(
             edge.edgeUrl,
             { method: "GET", headers: { accept: "application/json" } },
-            EDGE_PING_TIMEOUT_MS
+            EDGE_PING_TIMEOUT_MS,
           );
           const txt = await resp.text().catch(() => "");
           edgePing = { ok: resp.ok, status: resp.status, ms, sample: txt.slice(0, 200) };
@@ -213,15 +216,19 @@ export default async function handler(req, res) {
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch (e) {
-      return sendJson(res, 400, { ok: false, error: "INVALID_JSON", build: BUILD_TAG, detail: String(e?.message || e) });
+      return sendJson(res, 400, {
+        ok: false,
+        error: "INVALID_JSON",
+        build: BUILD_TAG,
+        detail: String(e?.message || e),
+      });
     }
 
     const org_id = String(body?.org_id || "").trim();
     const emailNorm = normEmail(body?.email || "");
     const name = String(body?.name || body?.to_name || body?.toName || "").trim() || "";
 
-    // Language forwarding (ES/EN/FR) for localized tracker invite emails
-    // Priority: body.lang -> ?lang= -> null (edge will fallback)
+    // Language forwarding (ES/EN/FR)
     let lang = normLang(body?.lang);
     if (!lang) {
       try {
@@ -253,6 +260,7 @@ export default async function handler(req, res) {
       caller_jwt = s.token;
     }
 
+    // HMAC for proxy->edge integrity
     const ts = Date.now().toString();
     const msg = `${ts}\n${org_id}\n${emailNorm}`;
     const sig = hmacSha256Hex(INVITE_HMAC_SECRET, msg);
@@ -262,10 +270,16 @@ export default async function handler(req, res) {
         edge.edgeUrl,
         {
           method: "POST",
-          headers: { "content-type": "application/json", "x-edge-ts": ts, "x-edge-sig": sig },
-          body: JSON.stringify({ org_id, email: emailNorm, name, caller_jwt, ...(lang ? { lang } : {}) }),
+          headers: {
+            "content-type": "application/json",
+            "x-edge-ts": ts,
+            "x-edge-sig": sig,
+            "x-user-jwt": caller_jwt,
+            ...(lang ? { "x-app-lang": lang } : {}),
+          },
+          body: JSON.stringify({ org_id, email: emailNorm, name, ...(lang ? { lang } : {}) }),
         },
-        EDGE_TIMEOUT_MS
+        EDGE_TIMEOUT_MS,
       );
 
       const edgeText = await edgeResp.text().catch(() => "");
@@ -279,9 +293,7 @@ export default async function handler(req, res) {
         edgeJson = null;
       }
 
-      const edgeBuildTag =
-        (edgeJson && (edgeJson.build_tag || edgeJson.build || edgeJson.BUILD_TAG)) || null;
-
+      const edgeBuildTag = (edgeJson && (edgeJson.build_tag || edgeJson.build || edgeJson.BUILD_TAG)) || null;
       const edgeRawSample = !edgeJson ? edgeText.slice(0, 500) : undefined;
 
       return sendJson(res, edgeResp.status, {
@@ -299,6 +311,8 @@ export default async function handler(req, res) {
           edge_build_tag: edgeBuildTag,
           edge_parse_error: edgeParseError,
           edge_raw_sample: edgeRawSample,
+          ts,
+          sig: redact(sig),
         },
       });
     } catch (e) {

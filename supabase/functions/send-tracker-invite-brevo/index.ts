@@ -1,12 +1,21 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-v25_LANG_RESOLUTION_FIX_20260223";
+/**
+ * App Geocercas — Edge Function (Preview)
+ * Function: send-tracker-invite-brevo
+ *
+ * FIX (PKCE canonical): email MUST send Supabase verify link (action_link) with redirectTo:
+ *   <APP>/auth/callback?next=/tracker-gps?...  (so it ends with ?code=... and exchangeCodeForSession runs)
+ *
+ * Build tag: send-tracker-invite-brevo-v26_PKCE_VERIFYLINK_INVITEID_20260223
+ */
+const BUILD_TAG = "send-tracker-invite-brevo-v26_PKCE_VERIFYLINK_INVITEID_20260223";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt, x-app-lang",
+    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt, x-app-lang, x-edge-ts, x-edge-sig",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
@@ -20,9 +29,7 @@ function jsonResponse(status: number, body: unknown) {
 
 function isUuid(v: unknown) {
   const s = String(v ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    s,
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
 function normEmail(email: string) {
@@ -118,12 +125,32 @@ function defaultEmailCopy(lang: string): EmailCopy {
   };
 }
 
-// ✅ CANÓNICO: callback existente + preserva idioma
-function buildRedirectTo(appPreviewUrl: string, orgId: string, lang: string) {
-  const base = appPreviewUrl.replace(/\/$/, "");
-  // preserva lang también dentro de next para que la app continúe en ese idioma
-  const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(lang)}`;
-  return `${base}/auth/callback?lang=${encodeURIComponent(lang)}&next=${encodeURIComponent(next)}`;
+/**
+ * ✅ Canonical redirect for PKCE:
+ *   <APP>/auth/callback?next=<encoded("/tracker-gps?...&invite_id=...")>&lang=...
+ */
+function buildRedirectTo(params: {
+  appBaseUrl: string;
+  orgId: string;
+  inviteId: string;
+  lang: string;
+}) {
+  const base = params.appBaseUrl.replace(/\/$/, "");
+
+  const nextUrl = new URL(`${base}/tracker-gps`);
+  nextUrl.searchParams.set("org_id", params.orgId);
+  nextUrl.searchParams.set("invite_id", params.inviteId);
+  nextUrl.searchParams.set("lang", params.lang);
+
+  const cb = new URL(`${base}/auth/callback`);
+  cb.searchParams.set("lang", params.lang);
+  cb.searchParams.set("next", `${nextUrl.pathname}${nextUrl.search}`);
+
+  // Opcional (útil para diagnóstico / lectura en callback):
+  cb.searchParams.set("org_id", params.orgId);
+  cb.searchParams.set("invite_id", params.inviteId);
+
+  return cb.toString();
 }
 
 // escape simple para HTML
@@ -132,7 +159,7 @@ function escHtml(s: string) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/\"/g, "&quot;");
 }
 
 async function brevoSendEmail(opts: {
@@ -178,8 +205,7 @@ async function brevoSendEmail(opts: {
 }
 
 /**
- * ✅ Validación robusta del JWT del usuario usando /auth/v1/user
- * NOTA: aquí jwt es el x-user-jwt (NO Authorization de gateway)
+ * ✅ Validate the caller JWT (x-user-jwt) via /auth/v1/user
  */
 async function authUserIdFromJwt(params: {
   supabaseUrl: string;
@@ -279,18 +305,23 @@ serve(async (req) => {
       });
     }
 
-    // ✅ 100% x-user-jwt
-    const userJwt = (req.headers.get("x-user-jwt") || "").trim();
+    const body = await req.json().catch(() => ({} as any));
+
+    // ✅ Accept JWT from header (preferred) OR body.caller_jwt (proxy legacy)
+    const headerJwt = (req.headers.get("x-user-jwt") || "").trim();
+    const bodyJwt = String(body?.caller_jwt || "").trim();
+    const userJwt = headerJwt || bodyJwt;
+
     if (!userJwt) return jsonResponse(401, { ok: false, error: "Missing x-user-jwt", build_tag: BUILD_TAG });
     if (!looksLikeJwt(userJwt)) {
-      return jsonResponse(401, { ok: false, error: "Invalid x-user-jwt format", build_tag: BUILD_TAG });
+      return jsonResponse(401, { ok: false, error: "Invalid JWT format", build_tag: BUILD_TAG });
     }
 
     const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ✅ validar caller
+    // ✅ validate caller
     const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt: userJwt });
     if (!u.ok) {
       return jsonResponse(401, {
@@ -303,14 +334,12 @@ serve(async (req) => {
     }
     const callerUserId = u.user_id;
 
-    const body = await req.json().catch(() => ({} as any));
     const org_id = String(body?.org_id || "").trim();
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
 
-    // ✅ idioma correcto (NO forzar "es" antes de evaluar headers)
+    // ✅ language
     let lang = "es";
-
     const bodyLangRaw = body?.lang;
     const headerLangRaw = req.headers.get("x-app-lang");
     const acceptLangRaw = pickLangFromAcceptLanguage(req.headers.get("accept-language"));
@@ -323,7 +352,7 @@ serve(async (req) => {
       lang = sanitizeLang(acceptLangRaw);
     }
 
-    // ✅ copy: si viene desde el proxy, úsalo; si no, default
+    // ✅ email copy override (optional)
     const copyFromBody = body?.email_copy && typeof body.email_copy === "object" ? body.email_copy : null;
     const copy: EmailCopy = {
       ...defaultEmailCopy(lang),
@@ -331,9 +360,11 @@ serve(async (req) => {
     };
 
     if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
-    if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
+    if (!email || !email.includes("@")) {
+      return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
+    }
 
-    // ✅ Caller debe ser owner de esa org (ROLE NORMALIZED)
+    // ✅ Caller must be OWNER of org
     const { data: ownerRow, error: ownerErr } = await sbAdmin
       .from("memberships")
       .select("role, revoked_at")
@@ -370,9 +401,6 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
-
-    // ✅ redirect preserva lang
-    const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang);
 
     // ✅ DB idempotente + retry por carreras
     let trackerInviteId: string | null = null;
@@ -439,7 +467,15 @@ serve(async (req) => {
       });
     }
 
-    // ✅ generar magic link con redirect
+    // ✅ PKCE canonical redirect includes invite_id
+    const redirectTo = buildRedirectTo({
+      appBaseUrl: APP_PREVIEW_URL,
+      orgId: org_id,
+      inviteId: trackerInviteId,
+      lang,
+    });
+
+    // ✅ Generate Supabase verify link (action_link)
     const { data: linkData, error: linkErr } = await sbAdmin.auth.admin.generateLink({
       type: "magiclink",
       email,
@@ -458,7 +494,6 @@ serve(async (req) => {
     const actionLink = String(linkData.properties.action_link);
     const safeAction = escHtml(actionLink);
 
-    // ✅ email traducido
     const subject = copy.subject;
 
     const html = `
