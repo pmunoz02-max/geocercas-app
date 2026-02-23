@@ -46,3 +46,4 @@ prod_backup.sql
 
 # accidental zips in src
 src/**/*.zip
+tools/_archive/
