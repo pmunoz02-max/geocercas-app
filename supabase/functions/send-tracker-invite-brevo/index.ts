@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-auth-subdomain-20260218_LANG_I18N_EMAIL_FIX";
+const BUILD_TAG = "send-tracker-invite-brevo-v25_LANG_RESOLUTION_FIX_20260223";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -308,12 +308,20 @@ serve(async (req) => {
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
 
-    // ✅ idioma: body.lang -> header x-app-lang -> Accept-Language -> es
-    const lang =
-      sanitizeLang(body?.lang) ||
-      sanitizeLang(req.headers.get("x-app-lang")) ||
-      sanitizeLang(pickLangFromAcceptLanguage(req.headers.get("accept-language"))) ||
-      "es";
+    // ✅ idioma correcto (NO forzar "es" antes de evaluar headers)
+    let lang = "es";
+
+    const bodyLangRaw = body?.lang;
+    const headerLangRaw = req.headers.get("x-app-lang");
+    const acceptLangRaw = pickLangFromAcceptLanguage(req.headers.get("accept-language"));
+
+    if (bodyLangRaw && String(bodyLangRaw).trim()) {
+      lang = sanitizeLang(bodyLangRaw);
+    } else if (headerLangRaw && String(headerLangRaw).trim()) {
+      lang = sanitizeLang(headerLangRaw);
+    } else if (acceptLangRaw && String(acceptLangRaw).trim()) {
+      lang = sanitizeLang(acceptLangRaw);
+    }
 
     // ✅ copy: si viene desde el proxy, úsalo; si no, default
     const copyFromBody = body?.email_copy && typeof body.email_copy === "object" ? body.email_copy : null;
