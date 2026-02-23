@@ -24,8 +24,20 @@ function getLocalStorage() {
   return undefined;
 }
 
-const trackerUrlRaw = (import.meta.env.VITE_SUPABASE_TRACKER_URL || "").trim();
-const trackerAnonRaw = (import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY || "").trim();
+// ✅ Universal:
+// - Si defines VITE_SUPABASE_TRACKER_* se usan.
+// - Si no, hacemos fallback a VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+//   para que el tracker viaje al mismo proyecto que el client principal.
+const trackerUrlRaw = (
+  import.meta.env.VITE_SUPABASE_TRACKER_URL ||
+  import.meta.env.VITE_SUPABASE_URL ||
+  ""
+).trim();
+const trackerAnonRaw = (
+  import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  ""
+).trim();
 
 const url = mustBeSupabaseUrl(trackerUrlRaw);
 const anon = String(trackerAnonRaw || "").trim();

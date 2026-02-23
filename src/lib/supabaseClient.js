@@ -42,11 +42,11 @@ function normRef(r) {
 }
 
 function expectedRefFromEnvOrMode() {
-  const fromEnv = normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
-  if (fromEnv) return fromEnv;
-
-  const isProdBuild = Boolean(import.meta.env.PROD);
-  return isProdBuild ? "wpaixkvokdkudymgjoua" : "mujwsfhkocsuuahlrssn";
+  // ✅ Universal y permanente:
+  // NO hardcodeamos project refs.
+  // Si quieres validar que el build apunta al proyecto correcto,
+  // define VITE_SUPABASE_PROJECT_REF en el entorno (Vercel/Local).
+  return normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
 }
 
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
