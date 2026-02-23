@@ -1,161 +1,38 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import AuthGuard from "./components/AuthGuard";
+import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
+import TrackerGpsPage from "./pages/TrackerGpsPage";
+import TrackerAccept from "./pages/TrackerAccept";
+import Inicio from "./pages/Inicio";
+import NotFound from "./pages/NotFound";
 
-import { useAuthSafe } from "./context/AuthContext.jsx";
-
-import ProtectedShell from "./layouts/ProtectedShell.jsx";
-import RequireOrg from "./components/RequireOrg.jsx";
-import AuthGuard from "./components/AuthGuard.jsx";
-
-// Public pages
-import Landing from "./pages/Landing.jsx";
-import Login from "./pages/Login.tsx";
-import AuthCallback from "./pages/AuthCallback.tsx";
-import ForgotPassword from "./pages/ForgotPassword.jsx";
-import UpdatePassword from "./pages/UpdatePassword.jsx";
-
-// ✅ Tracker GPS public page
-import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
-
-// App pages
-import Inicio from "./pages/Inicio.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx";
-import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";
-import Personal from "./pages/Personal.jsx";
-import ActividadesPage from "./pages/ActividadesPage.jsx";
-import AsignacionesPage from "./pages/AsignacionesPage.jsx";
-import Reports from "./pages/Reports.jsx";
-import TrackerDashboard from "./pages/TrackerDashboard.jsx";
-import InvitarTracker from "./pages/InvitarTracker.jsx";
-import InvitarAdmin from "./pages/InvitarAdmin.jsx";
-import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
-
-// Help pages
-import InstructionsPage from "./pages/help/InstructionsPage.jsx";
-import FaqPage from "./pages/help/FaqPage.jsx";
-import SupportPage from "./pages/help/SupportPage.jsx";
-import ChangelogPage from "./pages/help/ChangelogPage.jsx";
-
-function RootEntry() {
-  const location = useLocation();
-
-  const hash = typeof location.hash === "string" ? location.hash : "";
-  const hasAccessToken = hash.includes("access_token=");
-  if (hasAccessToken) {
-    const target = `/auth/callback${location.search || ""}${hash || ""}`;
-    return <Navigate to={target} replace />;
-  }
-
-  const sp = new URLSearchParams(location.search || "");
-  const code = sp.get("code");
-  if (code) {
-    const next = sp.get("next") || "/inicio";
-    sp.set("next", next);
-    const target = `/auth/callback?${sp.toString()}`;
-    return <Navigate to={target} replace />;
-  }
-
-  return <Landing />;
-}
-
-function AdminRoute({ children }) {
-  const auth = useAuthSafe();
-  const location = useLocation();
-
-  if (!auth) {
-    return (
-      <Navigate
-        to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}&err=${encodeURIComponent(
-          "auth_provider_missing"
-        )}`}
-        replace
-      />
-    );
-  }
-
-  const { loading, user, isAppRoot } = auth;
-  if (loading) return null;
-
-  if (!user) {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
-  }
-
-  if (!isAppRoot) return <Navigate to="/inicio" replace />;
-
-  return children;
-}
-
-function AppRoutes() {
+function App() {
   return (
-    <Routes>
-      {/* 🌐 Public */}
-      <Route path="/" element={<RootEntry />} />
-      <Route path="/login" element={<Login />} />
+    <Router>
+      <Routes>
 
-      {/* ✅ App callback */}
-      <Route path="/auth/callback" element={<AuthCallback />} />
+        {/* ===== RUTAS PUBLICAS ===== */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/tracker-accept" element={<TrackerAccept />} />
+        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
 
-      {/* ✅ Tracker GPS (PUBLIC) */}
-      <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-      <Route path="/tracker-gps/:orgId" element={<TrackerGpsPage />} />
-
-      {/* 🔐 Password flows */}
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<UpdatePassword />} />
-
-      {/* Legacy redirects */}
-      <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
-      <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
-      <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
-      <Route path="/admin" element={<Navigate to="/admins" replace />} />
-      <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
-
-      {/* 🔒 Protected */}
-      <Route
-        element={
-          <AuthGuard>
-            <ProtectedShell />
-          </AuthGuard>
-        }
-      >
-        <Route path="/inicio" element={<Inicio />} />
-        <Route path="/geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
-        <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-        <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
-        <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
-        <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
-        <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
-        <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-        <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-        <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
-
-        {/* Help */}
-        <Route path="/help/instructions" element={<InstructionsPage />} />
-        <Route path="/help/faq" element={<FaqPage />} />
-        <Route path="/help/support" element={<SupportPage />} />
-        <Route path="/help/changelog" element={<ChangelogPage />} />
-
+        {/* ===== RUTAS PRIVADAS ===== */}
         <Route
-          path="/admins"
+          path="/inicio"
           element={
-            <AdminRoute>
-              <InvitarAdmin />
-            </AdminRoute>
+            <AuthGuard>
+              <Inicio />
+            </AuthGuard>
           }
         />
-      </Route>
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* ===== 404 ===== */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Router>
   );
 }
 
-export default function App() {
-  return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
-  );
-}
+export default App;
