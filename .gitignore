@@ -37,3 +37,12 @@ pnpm-debug.log*
 # Supabase local
 # =========================
 .supabase/
+# local dumps / backups (root)
+preview_schema.sql
+prod_backup.sql
+
+# windows shortcuts
+*.lnk
+
+# accidental zips in src
+src/**/*.zip
