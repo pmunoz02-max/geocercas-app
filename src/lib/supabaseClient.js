@@ -5,10 +5,13 @@ import { createClient } from "@supabase/supabase-js";
  * Supabase client — FRONTEND (Vite)
  * Arquitectura universal (Preview/Prod):
  * - El backend (cookie tg_at) es fuente de verdad
- * - El frontend mantiene sesión Supabase para bootstrap/callbacks
+ * - El frontend mantiene sesión Supabase para callbacks / flujos UX
+ *
+ * ✅ Migrado a PKCE para que Magic Links funcionen en móvil/WebView
+ *    (ya no dependemos de #access_token en la URL)
  */
 
-const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260219_LOGIN_PASSWORD_FIX_A";
+const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260223_PKCE_MIGRATION_A";
 
 function normUrl(u) {
   return String(u || "")
@@ -53,7 +56,9 @@ export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build.");
+  throw new Error(
+    "[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build."
+  );
 }
 
 if (!isSupabaseUrl(SUPABASE_URL)) {
@@ -64,7 +69,9 @@ const EXPECTED_PROJECT_REF = expectedRefFromEnvOrMode();
 const currentRef = projectRefFromUrl(SUPABASE_URL);
 
 if (EXPECTED_PROJECT_REF && currentRef !== EXPECTED_PROJECT_REF) {
-  throw new Error(`[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`);
+  throw new Error(
+    `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
+  );
 }
 
 // ✅ Token en memoria (para adjuntar Bearer al backend si hace falta)
@@ -103,10 +110,23 @@ const browserStorage =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    // Mantengo implicit para no romper flows existentes.
-    flowType: "implicit",
+    /**
+     * ✅ PKCE: elimina dependencia del hash (#access_token)
+     *    El callback llega con ?code=... y lo canjeamos en AuthCallback.
+     */
+    flowType: "pkce",
 
-    detectSessionInUrl: true,
+    /**
+     * Importante: nosotros manejamos el callback en /auth/callback
+     * con exchangeCodeForSession(). Evita doble-proceso automático.
+     */
+    detectSessionInUrl: false,
+
+    /**
+     * Mantengo persistSession/autoRefresh como venían (estables).
+     * Si en el futuro quieres 100% tokens sólo en memoria, lo cambiamos
+     * en un paso separado.
+     */
     persistSession: true,
     autoRefreshToken: true,
     storage: browserStorage,
@@ -139,7 +159,8 @@ if (typeof window !== "undefined") {
     PROJECT_REF: currentRef,
     EXPECTED_PROJECT_REF,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-    FLOW: "implicit",
+    FLOW: "pkce",
+    DETECT_SESSION_IN_URL: false,
     PERSIST_SESSION: true,
     AUTO_REFRESH: true,
     STORAGE: browserStorage ? "localStorage" : "none",
@@ -155,9 +176,10 @@ if (typeof window !== "undefined") {
 
   if (!window.__TG_SUPABASE_ENV_LOGGED__) {
     window.__TG_SUPABASE_ENV_LOGGED__ = true;
-    console.info(`[${BUILD_MARKER}] [ENV CHECK v5 - SESSION PERSIST ENABLED]`, info);
+    console.info(`[${BUILD_MARKER}] [ENV CHECK v6 - PKCE]`, info);
     console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
+  // debug: NO usar en producción, pero útil en preview
   window.__supabase__ = supabase;
 }

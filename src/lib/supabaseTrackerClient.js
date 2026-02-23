@@ -1,11 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Preview ONLY - Universal / permanente:
+ * Preview ONLY - Tracker client
+ *
+ * ✅ Migrado a PKCE (consistente con el client principal)
  * - Singleton global: globalThis.__SUPABASE_TRACKER__
  * - StorageKey fijo: sb-tracker-auth
  * - Storage real: localStorage
- * - detectSessionInUrl: false (porque el callback usa setSession desde hash)
+ * - detectSessionInUrl: false (callback controlado por nuestra app)
  */
 
 function mustBeSupabaseUrl(url) {
@@ -37,6 +39,7 @@ if (url && anon) {
   if (!g.__SUPABASE_TRACKER__) {
     g.__SUPABASE_TRACKER__ = createClient(url, anon, {
       auth: {
+        flowType: "pkce",
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
@@ -62,5 +65,6 @@ if (!url || !anon) {
     storageKey: "sb-tracker-auth",
     hasLocalStorage: !!storage,
     singleton: true,
+    flowType: "pkce",
   });
 }
