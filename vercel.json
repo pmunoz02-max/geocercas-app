@@ -1,20 +1,35 @@
 {
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "/api/auth?route=:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Preview-Build", "value": "preview-20260221b" }
+      ]
+    }
+  ],
   "redirects": [
     {
       "source": "/tracker-accept",
       "destination": "/tracker-gps",
       "permanent": false
-    }
-  ],
-  "headers": [
+    },
     {
-      "source": "/tracker-accept",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.tugeocercas.com" }],
+      "destination": "https://tugeocercas.com/:path*",
+      "permanent": true
     }
   ]
 }
