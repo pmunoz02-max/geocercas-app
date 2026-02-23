@@ -1,6 +1,6 @@
 /**
  * App Geocercas — Vercel API: /api/invite-tracker (Preview)
- * Build tag: invite-proxy-v15_5_force_supabase_domain_by_ref_20260221
+ * Build tag: invite-proxy-v15_6_lang_forward_20260222
  *
  * UNIVERSAL DEFINITIVO:
  * - Si existe SUPABASE_PROJECT_REF => usa SIEMPRE:
@@ -10,11 +10,13 @@
 
 import crypto from "node:crypto";
 
-const BUILD_TAG = "invite-proxy-v15_5_force_supabase_domain_by_ref_20260221";
+const BUILD_TAG = "invite-proxy-v15_6_lang_forward_20260222";
 
 const EDGE_TIMEOUT_MS = 45000;
 const EDGE_PING_TIMEOUT_MS = 8000;
 const AUTH_SESSION_TIMEOUT_MS = 12000;
+
+const SUPPORTED_LANGS = ["es", "en", "fr"];
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -35,6 +37,11 @@ function getRequestBody(req) {
 
 function normEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function normLang(v) {
+  const code = String(v || "").trim().toLowerCase().slice(0, 2);
+  return SUPPORTED_LANGS.includes(code) ? code : null;
 }
 
 function hmacSha256Hex(secret, message) {
@@ -213,6 +220,16 @@ export default async function handler(req, res) {
     const emailNorm = normEmail(body?.email || "");
     const name = String(body?.name || body?.to_name || body?.toName || "").trim() || "";
 
+    // Language forwarding (ES/EN/FR) for localized tracker invite emails
+    // Priority: body.lang -> ?lang= -> null (edge will fallback)
+    let lang = normLang(body?.lang);
+    if (!lang) {
+      try {
+        const u = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
+        lang = normLang(u.searchParams.get("lang"));
+      } catch {}
+    }
+
     if (!org_id) return sendJson(res, 400, { ok: false, error: "Missing org_id", build: BUILD_TAG });
     if (!emailNorm || !emailNorm.includes("@")) return sendJson(res, 400, { ok: false, error: "Invalid email", build: BUILD_TAG });
 
@@ -246,7 +263,7 @@ export default async function handler(req, res) {
         {
           method: "POST",
           headers: { "content-type": "application/json", "x-edge-ts": ts, "x-edge-sig": sig },
-          body: JSON.stringify({ org_id, email: emailNorm, name, caller_jwt }),
+          body: JSON.stringify({ org_id, email: emailNorm, name, caller_jwt, ...(lang ? { lang } : {}) }),
         },
         EDGE_TIMEOUT_MS
       );
@@ -274,6 +291,7 @@ export default async function handler(req, res) {
           build: BUILD_TAG,
           jwt_source,
           got_caller_jwt_in_body: Boolean(String(body?.caller_jwt || "").trim()),
+          lang: lang || null,
           edge_mode: edge.mode,
           edge_url: edge.edgeUrl,
           edge_status: edgeResp.status,
@@ -296,6 +314,7 @@ export default async function handler(req, res) {
           edge_timeout_ms: EDGE_TIMEOUT_MS,
           jwt_source,
           got_caller_jwt_in_body: Boolean(String(body?.caller_jwt || "").trim()),
+          lang: lang || null,
           ts,
           sig: redact(sig),
         },
