@@ -1,9 +1,10 @@
+
 // supabase/functions/invite_tracker/index.ts
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const BUILD_TAG = "invite-edge-v3_reuse_invite_preview_20260222";
+const BUILD_TAG = "invite-edge-v4_i18n_preview_20260222";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -11,6 +12,40 @@ const HMAC_SECRET = Deno.env.get("INVITE_HMAC_SECRET")!;
 const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY")!;
 const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL")!;
 const BREVO_SENDER_NAME = Deno.env.get("BREVO_SENDER_NAME")!;
+
+const SUPPORTED = ["es","en","fr"];
+
+function pickLang(v?: string) {
+  const l = String(v || "").toLowerCase().slice(0,2);
+  return SUPPORTED.includes(l) ? l : "es";
+}
+
+const I18N = {
+  es: {
+    subject: "Invitación a Tracker GPS",
+    title: "Invitación a Tracker GPS",
+    intro: "Has sido invitado a usar el Tracker GPS de App Geocercas.",
+    hint: "Este enlace abrirá el Tracker en la organización correcta.",
+    cta: "Aceptar invitación",
+    greeting: "Hola",
+  },
+  en: {
+    subject: "GPS Tracker Invitation",
+    title: "GPS Tracker Invitation",
+    intro: "You have been invited to use the GPS Tracker for App Geocercas.",
+    hint: "This link will open the Tracker in the correct organization.",
+    cta: "Accept invitation",
+    greeting: "Hello",
+  },
+  fr: {
+    subject: "Invitation au Traceur GPS",
+    title: "Invitation au Traceur GPS",
+    intro: "Vous avez été invité à utiliser le Traceur GPS de App Geocercas.",
+    hint: "Ce lien ouvrira le Traceur dans la bonne organisation.",
+    cta: "Accepter l'invitation",
+    greeting: "Bonjour",
+  }
+};
 
 function json(status: number, body: any) {
   return new Response(JSON.stringify(body), {
@@ -47,59 +82,41 @@ async function verifyHmac(req: Request, body: any) {
 
 serve(async (req: Request) => {
   try {
+
     if (req.method !== "POST") {
-      return json(405, {
-        ok: false,
-        error: "METHOD_NOT_ALLOWED",
-        build_tag: BUILD_TAG,
-      });
+      return json(405, { ok: false, error: "METHOD_NOT_ALLOWED", build_tag: BUILD_TAG });
     }
 
     const body = await req.json().catch(() => null);
     if (!body) {
-      return json(400, {
-        ok: false,
-        error: "INVALID_JSON",
-        build_tag: BUILD_TAG,
-      });
+      return json(400, { ok: false, error: "INVALID_JSON", build_tag: BUILD_TAG });
     }
 
-    const { org_id, email, name, caller_jwt } = body;
+    const { org_id, email, name, caller_jwt, lang } = body;
 
     if (!org_id || !email || !caller_jwt) {
-      return json(400, {
-        ok: false,
-        error: "MISSING_FIELDS",
-        build_tag: BUILD_TAG,
-      });
+      return json(400, { ok: false, error: "MISSING_FIELDS", build_tag: BUILD_TAG });
     }
 
     const hmacOk = await verifyHmac(req, body);
     if (!hmacOk) {
-      return json(401, {
-        ok: false,
-        error: "INVALID_HMAC",
-        build_tag: BUILD_TAG,
-      });
+      return json(401, { ok: false, error: "INVALID_HMAC", build_tag: BUILD_TAG });
     }
+
+    const langFinal = pickLang(lang);
+    const T = I18N[langFinal];
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    // Validar caller
     const { data: userData, error: userError } =
       await supabase.auth.getUser(caller_jwt);
 
     if (userError || !userData?.user) {
-      return json(401, {
-        ok: false,
-        error: "INVALID_CALLER",
-        build_tag: BUILD_TAG,
-      });
+      return json(401, { ok: false, error: "INVALID_CALLER", build_tag: BUILD_TAG });
     }
 
     const callerId = userData.user.id;
 
-    // Verificar rol admin/owner
     const { data: member } = await supabase
       .from("org_members")
       .select("role")
@@ -108,16 +125,11 @@ serve(async (req: Request) => {
       .single();
 
     if (!member || (member.role !== "admin" && member.role !== "owner")) {
-      return json(403, {
-        ok: false,
-        error: "NOT_ORG_ADMIN",
-        build_tag: BUILD_TAG,
-      });
+      return json(403, { ok: false, error: "NOT_ORG_ADMIN", build_tag: BUILD_TAG });
     }
 
     const emailNorm = email.trim().toLowerCase();
 
-    // 🔎 Buscar invitación activa existente
     const { data: existingInvite } = await supabase
       .from("tracker_invites")
       .select("*")
@@ -156,7 +168,6 @@ serve(async (req: Request) => {
 
       invite = newInvite;
     } else {
-      // Extender expiración
       await supabase
         .from("tracker_invites")
         .update({
@@ -166,9 +177,8 @@ serve(async (req: Request) => {
     }
 
     const acceptUrl =
-      `https://preview.tugeocercas.com/tracker-accept?invite_id=${invite.id}`;
+      `https://preview.tugeocercas.com/tracker-accept?invite_id=${invite.id}&org_id=${org_id}&lang=${langFinal}`;
 
-    // 📧 Enviar email Brevo con timeout
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
 
@@ -185,17 +195,23 @@ serve(async (req: Request) => {
             name: BREVO_SENDER_NAME,
           },
           to: [{ email }],
-          subject: "Invitación a App Geocercas",
+          subject: T.subject,
           htmlContent: `
-            <p>Hola ${name || ""},</p>
-            <p>Has sido invitado como tracker.</p>
-            <p><a href="${acceptUrl}">Aceptar invitación</a></p>
+            <h2>${T.title}</h2>
+            <p>${T.greeting} ${name || ""},</p>
+            <p>${T.intro}</p>
+            <p>${T.hint}</p>
+            <p>
+              <a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#111;color:#fff;text-decoration:none;border-radius:6px;">
+                ${T.cta}
+              </a>
+            </p>
+            <p>${acceptUrl}</p>
           `,
         }),
         signal: controller.signal,
       });
     } catch (_) {
-      // No bloqueamos por fallo de email
     } finally {
       clearTimeout(timeout);
     }
@@ -204,6 +220,7 @@ serve(async (req: Request) => {
       ok: true,
       invite_id: invite.id,
       reused_existing: !!existingInvite,
+      lang_used: langFinal,
       build_tag: BUILD_TAG,
     });
 
