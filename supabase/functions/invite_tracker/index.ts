@@ -1,234 +1,207 @@
-
 // supabase/functions/invite_tracker/index.ts
-
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const BUILD_TAG = "invite-edge-v4_i18n_preview_20260222";
+/**
+ * App Geocercas — Edge Function (Preview)
+ * Function: invite_tracker
+ *
+ * Role: Secure proxy that validates HMAC and forwards to:
+ *   send-tracker-invite-brevo
+ *
+ * FIX: When calling another Supabase Edge Function you MUST send:
+ *   - apikey: SUPABASE_ANON_KEY
+ *   - Authorization: Bearer SUPABASE_ANON_KEY
+ *
+ * Otherwise Supabase gateway returns:
+ *   401 Missing authorization header
+ *
+ * Build tag: invite_tracker_v31_AUTH_HEADERS_20260223
+ */
+const BUILD_TAG = "invite_tracker_v31_AUTH_HEADERS_20260223";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const HMAC_SECRET = Deno.env.get("INVITE_HMAC_SECRET")!;
-const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY")!;
-const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL")!;
-const BREVO_SENDER_NAME = Deno.env.get("BREVO_SENDER_NAME")!;
-
-const SUPPORTED = ["es","en","fr"];
-
-function pickLang(v?: string) {
-  const l = String(v || "").toLowerCase().slice(0,2);
-  return SUPPORTED.includes(l) ? l : "es";
-}
-
-const I18N = {
-  es: {
-    subject: "Invitación a Tracker GPS",
-    title: "Invitación a Tracker GPS",
-    intro: "Has sido invitado a usar el Tracker GPS de App Geocercas.",
-    hint: "Este enlace abrirá el Tracker en la organización correcta.",
-    cta: "Aceptar invitación",
-    greeting: "Hola",
-  },
-  en: {
-    subject: "GPS Tracker Invitation",
-    title: "GPS Tracker Invitation",
-    intro: "You have been invited to use the GPS Tracker for App Geocercas.",
-    hint: "This link will open the Tracker in the correct organization.",
-    cta: "Accept invitation",
-    greeting: "Hello",
-  },
-  fr: {
-    subject: "Invitation au Traceur GPS",
-    title: "Invitation au Traceur GPS",
-    intro: "Vous avez été invité à utiliser le Traceur GPS de App Geocercas.",
-    hint: "Ce lien ouvrira le Traceur dans la bonne organisation.",
-    cta: "Accepter l'invitation",
-    greeting: "Bonjour",
-  }
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-edge-ts, x-edge-sig, x-user-jwt, x-app-lang",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+  "Access-Control-Max-Age": "86400",
 };
 
-function json(status: number, body: any) {
+function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
-async function verifyHmac(req: Request, body: any) {
-  const ts = req.headers.get("x-edge-ts");
-  const sig = req.headers.get("x-edge-sig");
-
-  if (!ts || !sig) return false;
-
-  const msg = `${ts}\n${body.org_id}\n${body.email}`;
-  const enc = new TextEncoder();
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(HMAC_SECRET),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(msg));
-
-  const expected = Array.from(new Uint8Array(signature))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-
-  return expected === sig;
+function normEmail(email: unknown) {
+  return String(email ?? "").trim().toLowerCase();
 }
 
-serve(async (req: Request) => {
+function isUuid(v: unknown) {
+  const s = String(v ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+function toHex(buf: ArrayBuffer) {
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSha256Hex(secret: string, msg: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(msg));
+  return toHex(sig);
+}
+
+function timingSafeEqualHex(a: string, b: string) {
+  const aa = a.toLowerCase();
+  const bb = b.toLowerCase();
+  if (aa.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aa.length; i++) diff |= aa.charCodeAt(i) ^ bb.charCodeAt(i);
+  return diff === 0;
+}
+
+function buildFnUrl(params: { supabaseUrl: string; fnName: string }) {
+  const base = params.supabaseUrl.replace(/\/$/, "");
+  return `${base}/functions/v1/${params.fnName}`;
+}
+
+function sanitizeLang(v: unknown) {
+  const raw = String(v ?? "").trim().toLowerCase().slice(0, 2);
+  return ["es", "en", "fr"].includes(raw) ? raw : "es";
+}
+
+serve(async (req) => {
   try {
+    if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const INVITE_HMAC_SECRET = Deno.env.get("INVITE_HMAC_SECRET") || "";
+
+    // Target function (the one that sends Brevo email + generates PKCE verify link)
+    const TARGET_FN = "send-tracker-invite-brevo";
+
+    if (!SUPABASE_URL) return jsonResponse(500, { ok: false, error: "Missing SUPABASE_URL", build_tag: BUILD_TAG });
+    if (!SUPABASE_ANON_KEY) {
+      return jsonResponse(500, {
+        ok: false,
+        error: "Missing SUPABASE_ANON_KEY",
+        build_tag: BUILD_TAG,
+        hint: "Required to call Supabase Edge Functions (Authorization/apikey).",
+      });
+    }
+    if (!INVITE_HMAC_SECRET) {
+      return jsonResponse(500, { ok: false, error: "Missing INVITE_HMAC_SECRET", build_tag: BUILD_TAG });
+    }
+
+    const fnUrl = buildFnUrl({ supabaseUrl: SUPABASE_URL, fnName: TARGET_FN });
+
+    // Health GET (optional)
+    if (req.method === "GET") {
+      return jsonResponse(200, {
+        ok: true,
+        build_tag: BUILD_TAG,
+        target_fn: TARGET_FN,
+        target_url: fnUrl,
+      });
+    }
 
     if (req.method !== "POST") {
-      return json(405, { ok: false, error: "METHOD_NOT_ALLOWED", build_tag: BUILD_TAG });
+      return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
     }
 
-    const body = await req.json().catch(() => null);
-    if (!body) {
-      return json(400, { ok: false, error: "INVALID_JSON", build_tag: BUILD_TAG });
+    const body = await req.json().catch(() => ({} as any));
+
+    const org_id = String(body?.org_id || "").trim();
+    const email = normEmail(body?.email);
+    const name = String(body?.name || "").trim();
+    const lang = sanitizeLang(body?.lang || req.headers.get("x-app-lang") || "es");
+    const caller_jwt = String(body?.caller_jwt || "").trim();
+
+    if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
+    if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
+    if (!caller_jwt) return jsonResponse(401, { ok: false, error: "Missing caller_jwt", build_tag: BUILD_TAG });
+
+    // ---------- HMAC validation ----------
+    const ts = String(req.headers.get("x-edge-ts") || "").trim();
+    const sig = String(req.headers.get("x-edge-sig") || "").trim();
+
+    if (!ts || !sig) {
+      return jsonResponse(401, { ok: false, error: "Missing x-edge-ts/x-edge-sig", build_tag: BUILD_TAG });
     }
 
-    const { org_id, email, name, caller_jwt, lang } = body;
-
-    if (!org_id || !email || !caller_jwt) {
-      return json(400, { ok: false, error: "MISSING_FIELDS", build_tag: BUILD_TAG });
+    const tsNum = Number(ts);
+    if (!Number.isFinite(tsNum)) {
+      return jsonResponse(401, { ok: false, error: "Invalid x-edge-ts", build_tag: BUILD_TAG });
     }
 
-    const hmacOk = await verifyHmac(req, body);
-    if (!hmacOk) {
-      return json(401, { ok: false, error: "INVALID_HMAC", build_tag: BUILD_TAG });
+    // 5 minutes window
+    const drift = Math.abs(Date.now() - tsNum);
+    if (drift > 5 * 60 * 1000) {
+      return jsonResponse(401, { ok: false, error: "Expired x-edge-ts", build_tag: BUILD_TAG, drift_ms: drift });
     }
 
-    const langFinal = pickLang(lang);
-    const T = I18N[langFinal];
-
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
-    const { data: userData, error: userError } =
-      await supabase.auth.getUser(caller_jwt);
-
-    if (userError || !userData?.user) {
-      return json(401, { ok: false, error: "INVALID_CALLER", build_tag: BUILD_TAG });
+    const msg = `${ts}\n${org_id}\n${email}`;
+    const expected = await hmacSha256Hex(INVITE_HMAC_SECRET, msg);
+    if (!timingSafeEqualHex(expected, sig)) {
+      return jsonResponse(401, { ok: false, error: "Invalid signature", build_tag: BUILD_TAG });
     }
 
-    const callerId = userData.user.id;
+    // ---------- Forward to send-tracker-invite-brevo ----------
+    const started = Date.now();
+    const forwardResp = await fetch(fnUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
 
-    const { data: member } = await supabase
-      .from("org_members")
-      .select("role")
-      .eq("org_id", org_id)
-      .eq("user_id", callerId)
-      .single();
+        // ✅ CRITICAL FIX (gateway auth):
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
 
-    if (!member || (member.role !== "admin" && member.role !== "owner")) {
-      return json(403, { ok: false, error: "NOT_ORG_ADMIN", build_tag: BUILD_TAG });
-    }
-
-    const emailNorm = email.trim().toLowerCase();
-
-    const { data: existingInvite } = await supabase
-      .from("tracker_invites")
-      .select("*")
-      .eq("org_id", org_id)
-      .eq("email_norm", emailNorm)
-      .eq("is_active", true)
-      .is("used_at", null)
-      .maybeSingle();
-
-    let invite = existingInvite;
-
-    if (!invite) {
-      const { data: newInvite, error: inviteError } =
-        await supabase
-          .from("tracker_invites")
-          .insert({
-            org_id,
-            email_norm: emailNorm,
-            email,
-            created_by_user_id: callerId,
-            expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000),
-            is_active: true,
-            role: "tracker",
-          })
-          .select()
-          .single();
-
-      if (inviteError || !newInvite) {
-        return json(500, {
-          ok: false,
-          error: "INVITE_INSERT_FAILED",
-          detail: inviteError?.message,
-          build_tag: BUILD_TAG,
-        });
-      }
-
-      invite = newInvite;
-    } else {
-      await supabase
-        .from("tracker_invites")
-        .update({
-          expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000),
-        })
-        .eq("id", invite.id);
-    }
-
-    const acceptUrl =
-      `https://preview.tugeocercas.com/tracker-accept?invite_id=${invite.id}&org_id=${org_id}&lang=${langFinal}`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "api-key": BREVO_API_KEY,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          sender: {
-            email: BREVO_SENDER_EMAIL,
-            name: BREVO_SENDER_NAME,
-          },
-          to: [{ email }],
-          subject: T.subject,
-          htmlContent: `
-            <h2>${T.title}</h2>
-            <p>${T.greeting} ${name || ""},</p>
-            <p>${T.intro}</p>
-            <p>${T.hint}</p>
-            <p>
-              <a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#111;color:#fff;text-decoration:none;border-radius:6px;">
-                ${T.cta}
-              </a>
-            </p>
-            <p>${acceptUrl}</p>
-          `,
-        }),
-        signal: controller.signal,
-      });
-    } catch (_) {
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    return json(200, {
-      ok: true,
-      invite_id: invite.id,
-      reused_existing: !!existingInvite,
-      lang_used: langFinal,
-      build_tag: BUILD_TAG,
+        // business auth:
+        "x-user-jwt": caller_jwt,
+        "x-app-lang": lang,
+        "x-edge-ts": ts,
+        "x-edge-sig": sig,
+      },
+      body: JSON.stringify({ org_id, email, name, lang }),
     });
 
-  } catch (err) {
-    return json(500, {
+    const ms = Date.now() - started;
+    const text = await forwardResp.text().catch(() => "");
+    let json: any = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+
+    // pass-through with proxy diagnostics
+    return jsonResponse(forwardResp.status, {
+      ...(json || { raw: text }),
+      _proxy: {
+        ok: forwardResp.ok,
+        build: BUILD_TAG,
+        target_fn: TARGET_FN,
+        target_url: fnUrl,
+        edge_status: forwardResp.status,
+        edge_ms: ms,
+        lang,
+      },
+    });
+  } catch (e) {
+    return jsonResponse(500, {
       ok: false,
-      error: "UNCAUGHT_EXCEPTION",
-      detail: String(err),
+      error: "Unhandled",
+      detail: String((e as any)?.message || e),
       build_tag: BUILD_TAG,
     });
   }
