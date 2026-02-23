@@ -1,0 +1,5 @@
+-- Baseline (no-op)
+-- Fecha: 2026-02-23
+-- Motivo: Activar flujo formal de migraciones.
+-- Estado: Preview y Producción están alineados (tablas, funciones, policies).
+-- Regla: A partir de aquí TODO cambio estructural va por migración versionada.

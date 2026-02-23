@@ -1,21 +1,16 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-/**
- * App Geocercas — Edge Function (Preview)
- * Function: send-tracker-invite-brevo
- *
- * FIX (PKCE canonical): email MUST send Supabase verify link (action_link) with redirectTo:
- *   <APP>/auth/callback?next=/tracker-gps?...  (so it ends with ?code=... and exchangeCodeForSession runs)
- *
- * Build tag: send-tracker-invite-brevo-v26_PKCE_VERIFYLINK_INVITEID_20260223
- */
-const BUILD_TAG = "send-tracker-invite-brevo-v26_PKCE_VERIFYLINK_INVITEID_20260223";
+const BUILD_TAG = "send-tracker-invite-brevo-v27_DELIVERY_STATE_RATE_LIMIT_20260223";
+
+// Anti-spam / cooldown: evita enviar correos repetidos en ráfaga.
+// (El owner aún puede copiar el action_link manual si lo necesita.)
+const SEND_COOLDOWN_SECONDS = 180; // 3 minutos
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt, x-app-lang, x-edge-ts, x-edge-sig",
+    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt, x-app-lang",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Max-Age": "86400",
 };
@@ -50,7 +45,7 @@ function normRole(role: unknown) {
   return String(role ?? "").trim().toLowerCase();
 }
 
-// ---------- i18n helpers (email + redirect) ----------
+// ---------- i18n ----------
 const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
 
 function sanitizeLang(v: unknown) {
@@ -109,7 +104,6 @@ function defaultEmailCopy(lang: string): EmailCopy {
         "Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce message ou répondre pour le signaler.",
     };
   }
-  // es default
   return {
     subject: "Invitación: Tracker GPS – App Geocercas",
     title: "Invitación a Tracker GPS",
@@ -125,32 +119,11 @@ function defaultEmailCopy(lang: string): EmailCopy {
   };
 }
 
-/**
- * ✅ Canonical redirect for PKCE:
- *   <APP>/auth/callback?next=<encoded("/tracker-gps?...&invite_id=...")>&lang=...
- */
-function buildRedirectTo(params: {
-  appBaseUrl: string;
-  orgId: string;
-  inviteId: string;
-  lang: string;
-}) {
-  const base = params.appBaseUrl.replace(/\/$/, "");
-
-  const nextUrl = new URL(`${base}/tracker-gps`);
-  nextUrl.searchParams.set("org_id", params.orgId);
-  nextUrl.searchParams.set("invite_id", params.inviteId);
-  nextUrl.searchParams.set("lang", params.lang);
-
-  const cb = new URL(`${base}/auth/callback`);
-  cb.searchParams.set("lang", params.lang);
-  cb.searchParams.set("next", `${nextUrl.pathname}${nextUrl.search}`);
-
-  // Opcional (útil para diagnóstico / lectura en callback):
-  cb.searchParams.set("org_id", params.orgId);
-  cb.searchParams.set("invite_id", params.inviteId);
-
-  return cb.toString();
+// ✅ CANÓNICO: callback existente + preserva idioma
+function buildRedirectTo(appPreviewUrl: string, orgId: string, lang: string) {
+  const base = appPreviewUrl.replace(/\/$/, "");
+  const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(lang)}`;
+  return `${base}/auth/callback?lang=${encodeURIComponent(lang)}&next=${encodeURIComponent(next)}`;
 }
 
 // escape simple para HTML
@@ -159,7 +132,24 @@ function escHtml(s: string) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;");
+    .replace(/"/g, "&quot;");
+}
+
+function safeJsonParse(s: string) {
+  try {
+    return { ok: true as const, json: JSON.parse(s) };
+  } catch {
+    return { ok: false as const, json: null };
+  }
+}
+
+function extractBrevoMessageId(raw: string): string {
+  const parsed = safeJsonParse(raw);
+  const mid = parsed.ok ? (parsed.json?.messageId ?? "") : "";
+  if (mid) return String(mid);
+  // fallback regex
+  const m = String(raw || "").match(/\"messageId\"\s*:\s*\"([^\"]+)\"/i);
+  return m?.[1] ? String(m[1]) : "";
 }
 
 async function brevoSendEmail(opts: {
@@ -205,20 +195,13 @@ async function brevoSendEmail(opts: {
 }
 
 /**
- * ✅ Validate the caller JWT (x-user-jwt) via /auth/v1/user
+ * ✅ Validación robusta del JWT del usuario usando /auth/v1/user
  */
-async function authUserIdFromJwt(params: {
-  supabaseUrl: string;
-  anonKey: string;
-  jwt: string;
-}) {
+async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string; jwt: string }) {
   const url = `${params.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`;
   const r = await fetch(url, {
     method: "GET",
-    headers: {
-      apikey: params.anonKey,
-      Authorization: `Bearer ${params.jwt}`,
-    },
+    headers: { apikey: params.anonKey, Authorization: `Bearer ${params.jwt}` },
   });
 
   const text = await r.text();
@@ -239,7 +222,9 @@ async function authUserIdFromJwt(params: {
 async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) {
   const { data, error } = await sbAdmin
     .from("tracker_invites")
-    .select("id, org_id, email, email_norm, is_active, used_at, accepted_at, created_at")
+    .select(
+      "id, org_id, email, email_norm, is_active, used_at, accepted_at, created_at, expires_at, brevo_sent_at, brevo_message_id, brevo_last_status"
+    )
     .eq("org_id", org_id)
     .eq("email_norm", email_norm)
     .or("accepted_at.is.null,used_at.is.null,is_active.eq.true")
@@ -251,12 +236,22 @@ async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) 
   return data || null;
 }
 
-async function deactivateOtherActives(
-  sbAdmin: any,
-  org_id: string,
-  email_norm: string,
-  keepId: string,
-) {
+function secondsSince(ts: string | null | undefined) {
+  if (!ts) return Number.POSITIVE_INFINITY;
+  const ms = Date.parse(ts);
+  if (!Number.isFinite(ms)) return Number.POSITIVE_INFINITY;
+  return (Date.now() - ms) / 1000;
+}
+
+async function updateInviteBrevoState(sbAdmin: any, inviteId: string, patch: Record<string, unknown>) {
+  const { error } = await sbAdmin
+    .from("tracker_invites")
+    .update({ ...(patch as any) })
+    .eq("id", inviteId);
+  if (error) throw error;
+}
+
+async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: string, keepId: string) {
   const { error } = await sbAdmin
     .from("tracker_invites")
     .update({ is_active: false } as any)
@@ -274,97 +269,70 @@ serve(async (req) => {
     return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
   }
 
+  const t0 = Date.now();
+
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
-    const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") || "";
-    const BREVO_SENDER_EMAIL = Deno.env.get("BREVO_SENDER_EMAIL") || "";
-    const BREVO_SENDER_NAME = Deno.env.get("BREVO_SENDER_NAME") || "App Geocercas";
+    const BREVO_API_KEY = (Deno.env.get("BREVO_API_KEY") || "").trim();
+    const BREVO_SENDER_EMAIL = (Deno.env.get("BREVO_SENDER_EMAIL") || "").trim();
+    const BREVO_SENDER_NAME = (Deno.env.get("BREVO_SENDER_NAME") || "App Geocercas").trim();
     const BREVO_REPLYTO_EMAIL = (Deno.env.get("BREVO_REPLYTO_EMAIL") || "").trim();
 
-    const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com")
-      .replace(/\/$/, "");
+    const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com").replace(/\/$/, "");
+
+    // Logs seguros (sin secretos)
+    console.log("[invite] start", { build: BUILD_TAG, ms0: Date.now() - t0 });
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY",
-        build_tag: BUILD_TAG,
-      });
+      return jsonResponse(500, { ok: false, error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY", build_tag: BUILD_TAG });
     }
     if (!SUPABASE_ANON_KEY) {
       return jsonResponse(500, { ok: false, error: "Missing SUPABASE_ANON_KEY", build_tag: BUILD_TAG });
     }
-    if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "Missing BREVO_API_KEY / BREVO_SENDER_EMAIL",
-        build_tag: BUILD_TAG,
-      });
-    }
 
-    const body = await req.json().catch(() => ({} as any));
-
-    // ✅ Accept JWT from header (preferred) OR body.caller_jwt (proxy legacy)
-    const headerJwt = (req.headers.get("x-user-jwt") || "").trim();
-    const bodyJwt = String(body?.caller_jwt || "").trim();
-    const userJwt = headerJwt || bodyJwt;
-
+    // ✅ x-user-jwt
+    const userJwt = (req.headers.get("x-user-jwt") || "").trim();
     if (!userJwt) return jsonResponse(401, { ok: false, error: "Missing x-user-jwt", build_tag: BUILD_TAG });
-    if (!looksLikeJwt(userJwt)) {
-      return jsonResponse(401, { ok: false, error: "Invalid JWT format", build_tag: BUILD_TAG });
-    }
+    if (!looksLikeJwt(userJwt)) return jsonResponse(401, { ok: false, error: "Invalid x-user-jwt format", build_tag: BUILD_TAG });
 
     const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ✅ validate caller
+    // ✅ validar caller
     const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt: userJwt });
     if (!u.ok) {
-      return jsonResponse(401, {
-        ok: false,
-        error: "Invalid JWT",
-        detail: u.body,
-        status: u.status,
-        build_tag: BUILD_TAG,
-      });
+      return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status, build_tag: BUILD_TAG });
     }
     const callerUserId = u.user_id;
 
+    const body = await req.json().catch(() => ({} as any));
     const org_id = String(body?.org_id || "").trim();
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
 
-    // ✅ language
+    // idioma (prioridad body -> x-app-lang -> accept-language)
     let lang = "es";
     const bodyLangRaw = body?.lang;
     const headerLangRaw = req.headers.get("x-app-lang");
     const acceptLangRaw = pickLangFromAcceptLanguage(req.headers.get("accept-language"));
 
-    if (bodyLangRaw && String(bodyLangRaw).trim()) {
-      lang = sanitizeLang(bodyLangRaw);
-    } else if (headerLangRaw && String(headerLangRaw).trim()) {
-      lang = sanitizeLang(headerLangRaw);
-    } else if (acceptLangRaw && String(acceptLangRaw).trim()) {
-      lang = sanitizeLang(acceptLangRaw);
-    }
+    if (bodyLangRaw && String(bodyLangRaw).trim()) lang = sanitizeLang(bodyLangRaw);
+    else if (headerLangRaw && String(headerLangRaw).trim()) lang = sanitizeLang(headerLangRaw);
+    else if (acceptLangRaw && String(acceptLangRaw).trim()) lang = sanitizeLang(acceptLangRaw);
 
-    // ✅ email copy override (optional)
     const copyFromBody = body?.email_copy && typeof body.email_copy === "object" ? body.email_copy : null;
-    const copy: EmailCopy = {
-      ...defaultEmailCopy(lang),
-      ...(copyFromBody || {}),
-    };
+    const copy: EmailCopy = { ...defaultEmailCopy(lang), ...(copyFromBody || {}) };
 
     if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
-    if (!email || !email.includes("@")) {
-      return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
-    }
+    if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
 
-    // ✅ Caller must be OWNER of org
+    console.log("[invite] input", { org_id, email, lang, callerUserId, hasBrevoKey: !!BREVO_API_KEY, hasSender: !!BREVO_SENDER_EMAIL });
+
+    // ✅ owner check
     const { data: ownerRow, error: ownerErr } = await sbAdmin
       .from("memberships")
       .select("role, revoked_at")
@@ -375,12 +343,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (ownerErr) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "DB error checking owner",
-        detail: ownerErr.message,
-        build_tag: BUILD_TAG,
-      });
+      return jsonResponse(500, { ok: false, error: "DB error checking owner", detail: ownerErr.message, build_tag: BUILD_TAG });
     }
 
     const roleNorm = normRole(ownerRow?.role);
@@ -389,36 +352,30 @@ serve(async (req) => {
         ok: false,
         error: "Not allowed (must be owner of org)",
         build_tag: BUILD_TAG,
-        diag: {
-          callerUserId,
-          org_id,
-          role_raw: ownerRow?.role ?? null,
-          role_norm: roleNorm || null,
-          revoked_at: ownerRow?.revoked_at ?? null,
-        },
+        diag: { callerUserId, org_id, role_raw: ownerRow?.role ?? null, role_norm: roleNorm || null, revoked_at: ownerRow?.revoked_at ?? null },
       });
     }
 
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
 
-    // ✅ DB idempotente + retry por carreras
+    const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang);
+    console.log("[invite] redirect", { redirectTo });
+
+    // upsert invite
     let trackerInviteId: string | null = null;
-    let mode: "updated" | "inserted" | null = null;
+    let mode: "updated" | "inserted" | "cooldown" | null = null;
+    let openInvite: any | null = null;
 
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const open = await findOpenInvite(sbAdmin, org_id, email);
+        openInvite = open;
 
         if (open?.id) {
           const { error: updErr } = await sbAdmin
             .from("tracker_invites")
-            .update({
-              email,
-              email_norm: email,
-              is_active: true,
-              expires_at: expiresAt,
-            } as any)
+            .update({ email, email_norm: email, is_active: true, expires_at: expiresAt } as any)
             .eq("id", open.id);
 
           if (updErr) throw updErr;
@@ -450,7 +407,6 @@ serve(async (req) => {
           trackerInviteId = invRow?.id || null;
           mode = "inserted";
         }
-
         break;
       } catch (err) {
         if (attempt === 1 && isPgUniqueViolation(err)) continue;
@@ -459,23 +415,15 @@ serve(async (req) => {
     }
 
     if (!trackerInviteId) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "Failed upserting invite",
-        detail: "No invite id returned",
-        build_tag: BUILD_TAG,
-      });
+      return jsonResponse(500, { ok: false, error: "Failed upserting invite", detail: "No invite id returned", build_tag: BUILD_TAG });
     }
 
-    // ✅ PKCE canonical redirect includes invite_id
-    const redirectTo = buildRedirectTo({
-      appBaseUrl: APP_PREVIEW_URL,
-      orgId: org_id,
-      inviteId: trackerInviteId,
-      lang,
-    });
+    // cooldown check (si ya enviamos hace poco, evitamos re-enviar email)
+    const sentSecondsAgo = secondsSince(openInvite?.brevo_sent_at);
+    const cooldownRemaining = Math.max(0, Math.ceil(SEND_COOLDOWN_SECONDS - sentSecondsAgo));
+    const withinCooldown = Number.isFinite(sentSecondsAgo) && sentSecondsAgo < SEND_COOLDOWN_SECONDS;
 
-    // ✅ Generate Supabase verify link (action_link)
+    // generateLink
     const { data: linkData, error: linkErr } = await sbAdmin.auth.admin.generateLink({
       type: "magiclink",
       email,
@@ -483,17 +431,66 @@ serve(async (req) => {
     });
 
     if (linkErr || !linkData?.properties?.action_link) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "generateLink failed",
-        detail: linkErr?.message || "no action_link",
-        build_tag: BUILD_TAG,
-      });
+      return jsonResponse(500, { ok: false, error: "generateLink failed", detail: linkErr?.message || "no action_link", build_tag: BUILD_TAG });
     }
 
     const actionLink = String(linkData.properties.action_link);
-    const safeAction = escHtml(actionLink);
 
+    // Si estamos dentro del cooldown, NO enviamos por Brevo. Devolvemos el link para uso manual.
+    if (withinCooldown) {
+      console.log("[invite] cooldown", { secondsAgo: Math.round(sentSecondsAgo), remaining: cooldownRemaining, inviteId: trackerInviteId });
+      try {
+        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
+          brevo_last_status: "cooldown",
+          brevo_last_event_at: nowIso,
+        });
+      } catch (e) {
+        console.log("[invite] cooldown state update failed", { msg: String(e?.message || e) });
+      }
+      return jsonResponse(200, {
+        ok: true,
+        build_tag: BUILD_TAG,
+        mode: "cooldown",
+        lang,
+        org_id,
+        email,
+        tracker_invite_id: trackerInviteId,
+        redirect_to: redirectTo,
+        action_link: actionLink,
+        delivery_hint: "Email delivery may take a few minutes depending on the provider. Recent invite was already sent.",
+        cooldown_seconds: cooldownRemaining,
+      });
+    }
+
+    // Si falta Brevo env, NO rompemos flujo: devolvemos link manual + warning
+    if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
+      console.log("[invite] brevo disabled (missing env)", { hasBrevoKey: !!BREVO_API_KEY, hasSender: !!BREVO_SENDER_EMAIL });
+      try {
+        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
+          brevo_last_status: "disabled",
+          brevo_last_event_at: nowIso,
+          brevo_last_error: "BREVO_DISABLED_MISSING_ENV",
+        });
+      } catch (e) {
+        console.log("[invite] brevo disabled state update failed", { msg: String(e?.message || e) });
+      }
+      return jsonResponse(200, {
+        ok: true,
+        build_tag: BUILD_TAG,
+        mode,
+        lang,
+        org_id,
+        email,
+        tracker_invite_id: trackerInviteId,
+        redirect_to: redirectTo,
+        action_link: actionLink,
+        warning: "BREVO_DISABLED_MISSING_ENV",
+        diag: { hasBrevoKey: !!BREVO_API_KEY, hasSender: !!BREVO_SENDER_EMAIL, senderName: BREVO_SENDER_NAME },
+      });
+    }
+
+    // email content
+    const safeAction = escHtml(actionLink);
     const subject = copy.subject;
 
     const html = `
@@ -526,18 +523,65 @@ serve(async (req) => {
       `${actionLink}\n\n` +
       `${copy.footer2}\n`;
 
-    await brevoSendEmail({
-      apiKey: BREVO_API_KEY,
-      senderEmail: BREVO_SENDER_EMAIL,
-      senderName: BREVO_SENDER_NAME,
-      toEmail: email,
-      toName: to_name,
-      subject,
-      html,
-      text,
-      replyToEmail: BREVO_REPLYTO_EMAIL || BREVO_SENDER_EMAIL,
-      replyToName: BREVO_SENDER_NAME,
-    });
+    console.log("[invite] brevo send start", { to: email, subject });
+
+    let brevoResp = "";
+    let brevoMessageId = "";
+    try {
+      brevoResp = await brevoSendEmail({
+        apiKey: BREVO_API_KEY,
+        senderEmail: BREVO_SENDER_EMAIL,
+        senderName: BREVO_SENDER_NAME,
+        toEmail: email,
+        toName: to_name,
+        subject,
+        html,
+        text,
+        replyToEmail: BREVO_REPLYTO_EMAIL || BREVO_SENDER_EMAIL,
+        replyToName: BREVO_SENDER_NAME,
+      });
+      brevoMessageId = extractBrevoMessageId(brevoResp);
+      console.log("[invite] brevo send ok", { messageId: brevoMessageId || null, sample: String(brevoResp).slice(0, 120) });
+
+      try {
+        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
+          brevo_message_id: brevoMessageId || null,
+          brevo_sent_at: nowIso,
+          brevo_last_status: "sent",
+          brevo_last_event_at: nowIso,
+          brevo_last_response: String(brevoResp).slice(0, 500),
+          brevo_last_error: null,
+        });
+      } catch (e) {
+        console.log("[invite] brevo state update failed", { msg: String(e?.message || e) });
+      }
+    } catch (e) {
+      console.log("[invite] brevo send error", { msg: String(e?.message || e) });
+      try {
+        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
+          brevo_sent_at: nowIso,
+          brevo_last_status: "error",
+          brevo_last_event_at: nowIso,
+          brevo_last_error: String(e?.message || e).slice(0, 500),
+        });
+      } catch (e2) {
+        console.log("[invite] brevo error state update failed", { msg: String(e2?.message || e2) });
+      }
+      // No rompemos el flujo: devolvemos action_link para uso manual
+      return jsonResponse(200, {
+        ok: true,
+        build_tag: BUILD_TAG,
+        mode,
+        lang,
+        org_id,
+        email,
+        tracker_invite_id: trackerInviteId,
+        redirect_to: redirectTo,
+        action_link: actionLink,
+        warning: "BREVO_SEND_FAILED_RETURNING_MANUAL_LINK",
+        error: String(e?.message || e),
+      });
+    }
 
     return jsonResponse(200, {
       ok: true,
@@ -549,13 +593,11 @@ serve(async (req) => {
       tracker_invite_id: trackerInviteId,
       redirect_to: redirectTo,
       action_link: actionLink,
+      delivery_hint: "Email delivery may take a few minutes depending on the provider.",
+      brevo: { ok: true, messageId: brevoMessageId || null, sample: String(brevoResp).slice(0, 160) },
     });
   } catch (e) {
-    return jsonResponse(500, {
-      ok: false,
-      error: "Unhandled",
-      detail: String((e as any)?.message || e),
-      build_tag: BUILD_TAG,
-    });
+    console.log("[invite] error", { msg: String(e?.message || e) });
+    return jsonResponse(500, { ok: false, error: String(e?.message || e), build_tag: BUILD_TAG });
   }
 });
