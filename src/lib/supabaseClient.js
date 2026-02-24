@@ -4,11 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * Supabase client — FRONTEND (Vite)
  * Arquitectura universal (Preview/Prod):
- * - El backend (cookie tg_at) es fuente de verdad
- * - El frontend mantiene sesión Supabase para callbacks / flujos UX
+ * - Preview debe apuntar SIEMPRE a Supabase Preview
+ * - Producción debe apuntar SIEMPRE a Supabase Prod
  *
- * ✅ Migrado a PKCE para que Magic Links funcionen en móvil/WebView
- *    (ya no dependemos de #access_token en la URL)
+ * ✅ PKCE para Magic Links (móvil/WebView)
  */
 
 const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260223_PKCE_MIGRATION_A";
@@ -41,11 +40,52 @@ function normRef(r) {
   return String(r || "").trim();
 }
 
-function expectedRefFromEnvOrMode() {
-  // ✅ Universal y permanente:
-  // NO hardcodeamos project refs.
-  // Si quieres validar que el build apunta al proyecto correcto,
-  // define VITE_SUPABASE_PROJECT_REF en el entorno (Vercel/Local).
+/**
+ * Determina el "tipo de entorno" por hostname (fuente de verdad).
+ * Esto evita depender de import.meta.env.PROD (que puede ser true en preview).
+ */
+function detectEnvKind() {
+  if (typeof window === "undefined") return "unknown";
+  const h = String(window.location.hostname || "").toLowerCase();
+
+  // ✅ Canon: preview.tugeocercas.com
+  if (h === "preview.tugeocercas.com" || h.startsWith("preview.")) return "preview";
+
+  // Opcional: staging si lo usas
+  if (h === "staging.tugeocercas.com" || h.startsWith("staging.")) return "staging";
+
+  // ✅ Canon prod: app.tugeocercas.com
+  if (h === "app.tugeocercas.com" || h === "tugeocercas.com") return "production";
+
+  // vercel.app: normalmente preview
+  if (h.endsWith(".vercel.app")) return "preview";
+
+  return "unknown";
+}
+
+/**
+ * Refs esperados por entorno:
+ * - Preferimos variables explícitas por entorno (recomendado)
+ * - Si no están, caemos a defaults del proyecto (permanece estable)
+ */
+function expectedRefByHostname() {
+  const envKind = detectEnvKind();
+
+  const fromEnvPreview = normRef(import.meta.env.VITE_SUPABASE_PREVIEW_PROJECT_REF);
+  const fromEnvProd = normRef(import.meta.env.VITE_SUPABASE_PROD_PROJECT_REF);
+
+  // Defaults del proyecto (para no depender de VITE_SUPABASE_PROJECT_REF y evitar bloqueos)
+  const DEFAULT_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
+  const DEFAULT_PROD_REF = "wpaixkvokdkudymgjoua";
+
+  if (envKind === "preview" || envKind === "staging") {
+    return fromEnvPreview || DEFAULT_PREVIEW_REF;
+  }
+  if (envKind === "production") {
+    return fromEnvProd || DEFAULT_PROD_REF;
+  }
+
+  // unknown: usar legacy si existe
   return normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
 }
 
@@ -56,23 +96,57 @@ export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    "[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build."
-  );
+  throw new Error("[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build.");
 }
 
 if (!isSupabaseUrl(SUPABASE_URL)) {
   throw new Error(`[supabaseClient] Supabase URL inválida: ${SUPABASE_URL}`);
 }
 
-const EXPECTED_PROJECT_REF = expectedRefFromEnvOrMode();
 const currentRef = projectRefFromUrl(SUPABASE_URL);
+const envKind = detectEnvKind();
+const EXPECTED_PROJECT_REF = expectedRefByHostname();
 
-if (EXPECTED_PROJECT_REF && currentRef !== EXPECTED_PROJECT_REF) {
-  throw new Error(
-    `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
-  );
+// ✅ Política de seguridad:
+// - En preview/staging: si apunta a PROD => BLOQUEAR
+// - En prod: si apunta a PREVIEW => BLOQUEAR
+// - Si hay mismatch solo por legacy env var, NO bloquear preview (solo warn)
+function assertRefSafety() {
+  // Si por alguna razón no podemos inferir, usamos la validación clásica
+  if (!EXPECTED_PROJECT_REF) return;
+
+  if (currentRef !== EXPECTED_PROJECT_REF) {
+    // Preview/staging: si el expected es preview y llegó algo distinto => bloquear (evita mezclar con prod)
+    if (envKind === "preview" || envKind === "staging") {
+      throw new Error(
+        `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
+      );
+    }
+
+    // Production: bloquear siempre
+    if (envKind === "production") {
+      throw new Error(
+        `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
+      );
+    }
+
+    // unknown: mantener comportamiento estricto (seguro)
+    throw new Error(
+      `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
+    );
+  }
+
+  // Extra: si legacy VITE_SUPABASE_PROJECT_REF existe y es distinto, solo advertimos (no rompemos)
+  const legacy = normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
+  if (legacy && legacy !== currentRef) {
+    console.warn(
+      `[supabaseClient] Warning: VITE_SUPABASE_PROJECT_REF=${legacy} no coincide con URL ref=${currentRef}. ` +
+        `Recomendado: remover legacy o setear VITE_SUPABASE_PREVIEW_PROJECT_REF / VITE_SUPABASE_PROD_PROJECT_REF.`
+    );
+  }
 }
+
+assertRefSafety();
 
 // ✅ Token en memoria (para adjuntar Bearer al backend si hace falta)
 let __memoryAccessToken = null;
@@ -104,29 +178,12 @@ const wrappedFetch = async (url, options = {}) => {
 
 // ✅ Storage universal para browser
 const browserStorage =
-  typeof window !== "undefined" && window?.localStorage
-    ? window.localStorage
-    : undefined;
+  typeof window !== "undefined" && window?.localStorage ? window.localStorage : undefined;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    /**
-     * ✅ PKCE: elimina dependencia del hash (#access_token)
-     *    El callback llega con ?code=... y lo canjeamos en AuthCallback.
-     */
     flowType: "pkce",
-
-    /**
-     * Importante: nosotros manejamos el callback en /auth/callback
-     * con exchangeCodeForSession(). Evita doble-proceso automático.
-     */
     detectSessionInUrl: false,
-
-    /**
-     * Mantengo persistSession/autoRefresh como venían (estables).
-     * Si en el futuro quieres 100% tokens sólo en memoria, lo cambiamos
-     * en un paso separado.
-     */
     persistSession: true,
     autoRefreshToken: true,
     storage: browserStorage,
@@ -152,6 +209,7 @@ if (typeof window !== "undefined") {
 
   const info = {
     BUILD_MARKER,
+    ENV_KIND: envKind,
     MODE: import.meta.env.MODE,
     PROD_BUILD: Boolean(import.meta.env.PROD),
     ORIGIN: window.location.origin,
@@ -176,10 +234,10 @@ if (typeof window !== "undefined") {
 
   if (!window.__TG_SUPABASE_ENV_LOGGED__) {
     window.__TG_SUPABASE_ENV_LOGGED__ = true;
-    console.info(`[${BUILD_MARKER}] [ENV CHECK v6 - PKCE]`, info);
+    console.info(`[${BUILD_MARKER}] [ENV CHECK v7 - PKCE + ENV_KIND]`, info);
     console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
-  // debug: NO usar en producción, pero útil en preview
+  // debug: útil en preview
   window.__supabase__ = supabase;
 }
