@@ -14,7 +14,9 @@ import "leaflet/dist/leaflet.css";
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import { useAuth } from "../@/context/auth.js";
+// ✅ ÚNICO punto oficial de Auth
+import { useAuthSafe } from "@/auth/AuthProvider.jsx";
+
 import { useTranslation } from "react-i18next";
 
 import {
@@ -108,7 +110,8 @@ function parseCSV(text) {
 
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
   const latKey = headers.find((h) => ["lat", "latitude", "y"].includes(h)) || "lat";
-  const lonKey = headers.find((h) => ["lon", "lng", "long", "longitude", "x"].includes(h)) || "lon";
+  const lonKey =
+    headers.find((h) => ["lon", "lng", "long", "longitude", "x"].includes(h)) || "lon";
 
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
@@ -171,9 +174,11 @@ function ensureFeatureCollection(geo) {
   if (!geo) return null;
   if (geo.type === "FeatureCollection") return geo;
   if (geo.type === "Feature") return { type: "FeatureCollection", features: [geo] };
-  // geometry suelta (Polygon/Point/etc)
   if (geo.type && geo.coordinates) {
-    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: geo }] };
+    return {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: geo }],
+    };
   }
   return null;
 }
@@ -296,7 +301,7 @@ function featureFromCoords(pairs) {
 
 /* ================================ Component =============================== */
 export default function NuevaGeocerca() {
-  const { currentOrg } = useAuth();
+  const { currentOrg } = useAuthSafe();
   const { t } = useTranslation();
 
   const mapRef = useRef(null);
@@ -398,7 +403,7 @@ export default function NuevaGeocerca() {
     };
   }, []);
 
-  // âœ… FitBounds estable: espera render de React-Leaflet (doble RAF)
+  // ✅ FitBounds estable: espera render de React-Leaflet (doble RAF)
   const scheduleFitToGeo = useCallback((geo) => {
     const map = mapRef.current;
     if (!map || !geo) return;
@@ -441,7 +446,7 @@ export default function NuevaGeocerca() {
     if (!pairs.length) {
       showErr(
         t("geocercas.errorCoordsInvalid", {
-          defaultValue: "Coordenadas invÃ¡lidas. Usa formato: lat,lng (una por lÃ­nea).",
+          defaultValue: "Coordenadas inválidas. Usa formato: lat,lng (una por línea).",
         })
       );
       return;
@@ -546,7 +551,7 @@ export default function NuevaGeocerca() {
     }
 
     const confirmed = window.confirm(
-      t("geocercas.deleteConfirm", { defaultValue: "Â¿Eliminar las geocercas seleccionadas?" })
+      t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
     );
     if (!confirmed) return;
 
@@ -570,26 +575,22 @@ export default function NuevaGeocerca() {
       clearCanvas();
       setDraftFeature(null);
 
-      showOk(
-        t("geocercas.deletedCount", { count: names.length, defaultValue: `Eliminadas: ${names.length}` })
-      );
+      showOk(t("geocercas.deletedCount", { count: names.length, defaultValue: `Eliminadas: ${names.length}` }));
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
     }
   }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
 
-  // âœ… Mostrar en mapa AHORA soporta mÃºltiples seleccionadas
+  // ✅ Mostrar en mapa AHORA soporta múltiples seleccionadas
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
     try {
       const orgId = currentOrg?.id || null;
 
-      // si hay seleccionadas -> mostrar todas
       const selected = Array.from(selectedNames || [])
         .map((x) => String(x || "").trim())
         .filter(Boolean);
 
-      // fallback: si no hay seleccionadas, muestra la Ãºltima o la primera de la lista
       let namesToShow = selected;
       if (namesToShow.length === 0) {
         let one = lastSelectedName || geofenceList?.[0]?.nombre || null;
@@ -600,14 +601,12 @@ export default function NuevaGeocerca() {
         namesToShow = [one];
       }
 
-      // map nombre -> item
       const items = namesToShow
         .map((nm) => geofenceList.find((g) => g.nombre === nm))
         .filter(Boolean);
 
       if (!items.length) return;
 
-      // fetch cada geojson por API
       const geos = [];
       for (const item of items) {
         if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
@@ -618,7 +617,7 @@ export default function NuevaGeocerca() {
 
       const combined = combineFeatureCollections(geos);
       if (!combined) {
-        showErr(t("geocercas.errorNoGeojson", { defaultValue: "No se encontrÃ³ el GeoJSON." }));
+        showErr(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON." }));
         return;
       }
 
@@ -626,10 +625,9 @@ export default function NuevaGeocerca() {
       setDraftFeature(null);
 
       setViewFeature(combined);
-      setViewCentroid(centroidFeatureFromGeojson(combined)); // centroid del conjunto
+      setViewCentroid(centroidFeatureFromGeojson(combined));
       setViewId((x) => x + 1);
 
-      // opcional UX: mensaje si son mÃºltiples
       if (items.length > 1) {
         showOk(t("geocercas.showManyOk", { defaultValue: `Mostrando ${items.length} geocercas.` }));
       }
@@ -730,10 +728,15 @@ export default function NuevaGeocerca() {
           <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle")}</h2>
 
           <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
-            {geofenceList.length === 0 && <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>}
+            {geofenceList.length === 0 && (
+              <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>
+            )}
 
             {geofenceList.map((g) => (
-              <label key={`api-${g.id || ""}-${g.nombre}`} className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5">
+              <label
+                key={`api-${g.id || ""}-${g.nombre}`}
+                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
+              >
                 <input
                   type="checkbox"
                   checked={selectedNames.has(g.nombre)}
@@ -758,7 +761,9 @@ export default function NuevaGeocerca() {
               className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
               type="button"
             >
-              {showLoading ? t("common.actions.loading", { defaultValue: "Cargando..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
+              {showLoading
+                ? t("common.actions.loading", { defaultValue: "Cargando..." })
+                : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
             <button
@@ -825,7 +830,9 @@ export default function NuevaGeocerca() {
                     <GeoJSON
                       key={`view-marker-${viewId}`}
                       data={viewCentroid}
-                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                      pointToLayer={(_f, latlng) =>
+                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
+                      }
                     />
                   )}
                 </>
@@ -890,7 +897,7 @@ export default function NuevaGeocerca() {
             </div>
 
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
-              Draft: {draftFeature ? "sÃ­" : "no"} | Pts: {draftPointsCount}
+              Draft: {draftFeature ? "sí" : "no"} | Pts: {draftPointsCount}
             </div>
           </div>
         </div>
@@ -904,11 +911,13 @@ export default function NuevaGeocerca() {
             </h2>
 
             <p className="text-xs text-slate-400">
-              {t("geocercas.modalHintRule", { defaultValue: "1 punto = cuadrado pequeÃ±o | 2 puntos = rectÃ¡ngulo | 3+ = polÃ­gono" })}
+              {t("geocercas.modalHintRule", {
+                defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
+              })}
               <br />
               {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
               <span className="font-mono text-[11px]">lat,lng</span>{" "}
-              {t("geocercas.modalOnePerLine", { defaultValue: "(uno por lÃ­nea)" })}
+              {t("geocercas.modalOnePerLine", { defaultValue: "(uno por línea)" })}
             </p>
 
             <textarea
@@ -942,4 +951,3 @@ export default function NuevaGeocerca() {
     </div>
   );
 }
-
