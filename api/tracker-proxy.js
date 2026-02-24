@@ -1,64 +1,143 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+// api/tracker-proxy.js
+// Proxy universal Tracker (PROD/PREVIEW)
+// v7: forward real user JWT; fallback to service role if missing; safe text/json handling
 
-const SUPABASE_URL = process.env.SUPABASE_URL
-const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY
-const PROXY_SECRET = process.env.TRACKER_PROXY_SECRET
+import crypto from "crypto";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const build_tag = 'tracker-proxy-v7_prod_jwt_forward_20260224'
-  const fn = req.query.fn as string
+const BUILD_TAG = "tracker-proxy-v7_forward_jwt_service_fallback_20260224";
 
-  if (!SUPABASE_URL || !SERVICE_ROLE || !PROXY_SECRET) {
-    return res.status(500).json({
-      ok: false,
-      build_tag,
-      error: 'Missing env'
-    })
-  }
+function toStr(v) {
+  return String(v ?? "");
+}
 
-  if (!fn) {
-    return res.status(400).json({
-      ok: false,
-      build_tag,
-      error: 'Missing fn'
-    })
-  }
-
+function safeHost(url) {
   try {
-    // 🔐 Forward JWT correctly
-    const incomingAuth = req.headers.authorization
+    return new URL(String(url)).host;
+  } catch {
+    return "";
+  }
+}
 
-    const authHeader =
-      incomingAuth && incomingAuth.startsWith('Bearer ')
-        ? incomingAuth
-        : `Bearer ${SERVICE_ROLE}`
+function hmacHex(secret, msg) {
+  return crypto.createHmac("sha256", secret).update(msg).digest("hex");
+}
 
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/${fn}`,
-      {
-        method: req.method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: authHeader,
-          'x-proxy-secret': PROXY_SECRET
+function getBearer(req) {
+  const h = req.headers?.authorization || req.headers?.Authorization || "";
+  const m = String(h).match(/^Bearer\s+(.+)$/i);
+  return (m?.[1] || "").trim();
+}
+
+function isAllowedFn(fnName) {
+  // solo lo estrictamente necesario
+  return fnName === "send_position" || fnName === "accept-tracker-invite";
+}
+
+async function readUpstreamBody(upstream) {
+  const text = await upstream.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+}
+
+export default async function handler(req, res) {
+  try {
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "content-type, authorization, x-proxy-ts, x-proxy-signature"
+      );
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      return res.status(200).send("ok");
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
+    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const proxySecret = process.env.TRACKER_PROXY_SECRET || process.env.PROXY_SECRET;
+
+    if (req.method === "GET") {
+      return res.status(200).json({
+        ok: true,
+        build_tag: BUILD_TAG,
+        diag: {
+          hasUrl: !!supabaseUrl,
+          hasAnon: !!anonKey,
+          hasServiceRole: !!serviceRole,
+          hasProxySecret: !!proxySecret,
+          supabase_host: safeHost(supabaseUrl),
         },
-        body: req.method !== 'GET' ? JSON.stringify(req.body) : undefined
-      }
-    )
+      });
+    }
 
-    const data = await response.json()
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, build_tag: BUILD_TAG });
+    }
 
-    return res.status(response.status).json({
-      build_tag,
-      fn,
-      upstream_status: response.status,
-      ...data
-    })
-  } catch (err: any) {
+    if (!supabaseUrl || !anonKey || !proxySecret) {
+      return res.status(500).json({ ok: false, build_tag: BUILD_TAG, error: "Missing env" });
+    }
+
+    const fnName = toStr(req.query?.fn || "").trim();
+    if (!isAllowedFn(fnName)) {
+      return res.status(400).json({ ok: false, build_tag: BUILD_TAG, error: "FN_NOT_ALLOWED" });
+    }
+
+    const body = req.body || {};
+
+    // ✅ JWT real del usuario (lo que evita issuer mismatch / invalid jwt)
+    const userJwt = getBearer(req);
+
+    // Fallback: si no viene JWT del usuario, usamos service role (solo si existe)
+    const bearer =
+      userJwt
+        ? `Bearer ${userJwt}`
+        : (serviceRole ? `Bearer ${serviceRole}` : null);
+
+    if (!bearer) {
+      return res.status(401).json({
+        ok: false,
+        build_tag: BUILD_TAG,
+        error: "Missing Authorization and no service role fallback",
+      });
+    }
+
+    const ts = String(Date.now());
+    const bodyStr = JSON.stringify(body);
+    const msg = `${fnName}.${ts}.${bodyStr}`;
+    const sig = hmacHex(proxySecret, msg);
+
+    const url = String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${fnName}`;
+
+    const upstream = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: String(anonKey),
+        Authorization: bearer,
+        "Content-Type": "application/json",
+        "X-Proxy-Ts": ts,
+        "X-Proxy-Signature": sig,
+      },
+      body: bodyStr,
+    });
+
+    const payload = await readUpstreamBody(upstream);
+
+    return res.status(upstream.status).json({
+      build_tag: BUILD_TAG,
+      fn: fnName,
+      upstream_status: upstream.status,
+      ...(payload ?? {}),
+    });
+  } catch (e) {
     return res.status(500).json({
       ok: false,
-      build_tag,
-      error: err.message
-    })
+      build_tag: BUILD_TAG,
+      error: String(e?.message || e),
+    });
   }
 }
