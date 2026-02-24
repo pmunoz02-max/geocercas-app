@@ -1,20 +1,20 @@
-import React from "react";
+﻿import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../auth/AuthProvider";
+import { useAuth } from "@/context/auth.js";
 
 /**
  * RouteGuard
  * - Protege rutas privadas por rol.
- * - IMPORTANTE: NO usar para /auth/callback (debe ser pública).
+ * - IMPORTANTE: NO usar para /auth/callback (debe ser pÃºblica).
  */
 export default function RouteGuard({ allow, children }) {
   const { session, role, loading } = useAuth();
   const location = useLocation();
 
-  // Mientras AuthProvider resuelve sesión/rol, NO redirigir (evita loops)
+  // Mientras AuthProvider resuelve sesiÃ³n/rol, NO redirigir (evita loops)
   if (loading) return null;
 
-  // Si NO hay sesión -> login (guardando returnTo)
+  // Si NO hay sesiÃ³n -> login (guardando returnTo)
   if (!session) {
     const returnTo = location.pathname + location.search + location.hash;
     return (
@@ -25,7 +25,7 @@ export default function RouteGuard({ allow, children }) {
     );
   }
 
-  // Hay sesión pero rol todavía no llegó -> espera (muy común post-callback)
+  // Hay sesiÃ³n pero rol todavÃ­a no llegÃ³ -> espera (muy comÃºn post-callback)
   if (!role) return null;
 
   // Si se especifica allow, validar rol
@@ -35,3 +35,4 @@ export default function RouteGuard({ allow, children }) {
 
   return children;
 }
+

@@ -1,6 +1,6 @@
-// src/components/HeaderUser.jsx
+﻿// src/components/HeaderUser.jsx
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../auth/AuthProvider";
+import { useAuth } from "@/context/auth.js";
 import { useUserProfile } from "../hooks/useUserProfile";
 
 export default function HeaderUser() {
@@ -35,7 +35,7 @@ export default function HeaderUser() {
                   {profile.org_id && (
                     <span className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-gray-50 border">
                       {t("app.header.organizationLabel", { defaultValue: "Org" })}:{" "}
-                      {String(profile.org_id).slice(0, 8)}…
+                      {String(profile.org_id).slice(0, 8)}â€¦
                     </span>
                   )}
                 </div>
@@ -64,3 +64,4 @@ export default function HeaderUser() {
     </header>
   );
 }
+

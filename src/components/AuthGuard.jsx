@@ -1,40 +1,14 @@
-﻿// src/components/AuthGuard.jsx
-import React from "react";
-import { Navigate, useLocation } from "react-router-dom";
+﻿import React from "react";
 import { useAuthSafe } from "@/context/auth.js";
 
-export default function AuthGuard({ children }) {
-  const auth = useAuthSafe();
-  const location = useLocation();
+export default function AuthGuard({ children, fallback = null }) {
+  const auth = useAuthSafe?.() || null;
+  if (!auth) return fallback;
 
-  // âœ… Si NO hay provider, no crasheamos
-  if (!auth) {
-    const p = location.pathname || "/";
-    if (p.startsWith("/login") || p.startsWith("/auth/callback")) return children;
+  const { loading, session, authReady } = auth;
 
-    return (
-      <Navigate
-        to={`/login?next=${encodeURIComponent(p || "/inicio")}&err=${encodeURIComponent(
-          "auth_provider_missing"
-        )}`}
-        replace
-      />
-    );
-  }
+  if (loading || authReady === false) return fallback;
+  if (!session) return fallback;
 
-  const { loading, user } = auth;
-
-  if (loading) return null;
-
-  if (!user) {
-    return (
-      <Navigate
-        to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}`}
-        replace
-      />
-    );
-  }
-
-  return children;
+  return <>{children}</>;
 }
-
