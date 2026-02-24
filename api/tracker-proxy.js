@@ -1,181 +1,193 @@
-// pages/api/tracker-proxy.js
-// Next.js Pages Router API Route
-// tracker-proxy v9.1 (NodeJS runtime, no-crash diagnostic, strict allowlist, raw-body forward)
+/* api/tracker-proxy.js
+ * tracker-proxy v9.2 (CJS, Node, no-crash)
+ * - GET diagnostic always returns JSON
+ * - POST allowlist + raw-body forward (HMAC ready)
+ */
 
-export const config = {
-  api: {
-    bodyParser: false, // necesitamos raw body
-    externalResolver: true,
-  },
+const crypto = require("crypto");
+
+// Next.js (si aplica): desactiva bodyParser para poder leer raw body
+// En Vercel "api/" functions esto simplemente se ignora (no hace daño).
+module.exports.config = {
+  api: { bodyParser: false },
 };
 
-const crypto = require('crypto');
+const BUILD_TAG = "tracker-proxy-v9.2";
+const ALLOW_FN = new Set(["accept-tracker-invite", "send_position"]);
 
-const BUILD_TAG = 'tracker-proxy-v9.1_pages_api_nodejs_20260224';
-
-function sendJson(res, status, obj, extraHeaders = {}) {
+function json(res, status, obj) {
   res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  Object.entries(extraHeaders).forEach(([k, v]) => res.setHeader(k, v));
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(obj));
 }
 
-function hostOf(url) {
-  try { return new URL(String(url)).host; } catch { return ''; }
+function getQuery(req) {
+  // soporta Next (req.query) y Node (req.url)
+  if (req.query && typeof req.query === "object") return req.query;
+  try {
+    const u = new URL(req.url, "http://localhost");
+    const q = {};
+    u.searchParams.forEach((v, k) => (q[k] = v));
+    return q;
+  } catch {
+    return {};
+  }
 }
 
-function hmacHex(secret, msg) {
-  return crypto.createHmac('sha256', secret).update(msg).digest('hex');
-}
+async function readRawBody(req) {
+  // Si alguien metió bodyParser, puede existir req.body (objeto). Igual lo convertimos a string estable.
+  if (req.body != null) {
+    if (Buffer.isBuffer(req.body)) return req.body.toString("utf8");
+    if (typeof req.body === "string") return req.body;
+    try {
+      return JSON.stringify(req.body);
+    } catch {
+      return String(req.body);
+    }
+  }
 
-const ALLOW = new Set(['send_position', 'accept-tracker-invite']);
-
-function normalizeFn(fn) {
-  const raw = String(fn || '').trim();
-  const map = {
-    'accept-tracker-invite': 'accept-tracker-invite',
-    'accept_tracker_invite': 'accept-tracker-invite',
-    'acceptTrackerInvite': 'accept-tracker-invite',
-    'send_position': 'send_position',
-    'send-position': 'send_position',
-  };
-  return map[raw] || raw;
-}
-
-function corsHeaders(origin) {
-  return {
-    'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type, authorization, x-tracker-ts, x-tracker-nonce, x-tracker-sig',
-  };
-}
-
-function readRawBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.setEncoding('utf8');
-    req.on('data', (chunk) => (data += chunk));
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
+  return await new Promise((resolve, reject) => {
+    let data = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => (data += chunk));
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
   });
 }
 
-export default async function handler(req, res) {
-  const origin = req.headers.origin;
+function hmacHex(secret, payload) {
+  return crypto.createHmac("sha256", secret).update(payload, "utf8").digest("hex");
+}
+
+function timingSafeEqHex(a, b) {
   try {
-    if (req.method === 'OPTIONS') {
-      Object.entries(corsHeaders(origin)).forEach(([k, v]) => res.setHeader(k, v));
-      res.statusCode = 200;
-      return res.end('ok');
-    }
+    const ab = Buffer.from(String(a || ""), "hex");
+    const bb = Buffer.from(String(b || ""), "hex");
+    if (ab.length !== bb.length) return false;
+    return crypto.timingSafeEqual(ab, bb);
+  } catch {
+    return false;
+  }
+}
 
-    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.SB_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-    const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SB_SERVICE_ROLE;
-    const PROXY_SECRET = process.env.TRACKER_PROXY_SECRET || process.env.PROXY_SECRET || '';
+module.exports = async function handler(req, res) {
+  try {
+    const method = (req.method || "GET").toUpperCase();
+    const q = getQuery(req);
 
-    if (req.method === 'GET') {
-      return sendJson(
-        res,
-        200,
-        {
-          ok: true,
-          build_tag: BUILD_TAG,
-          diag: {
-            hasUrl: !!SUPABASE_URL,
-            hasAnon: !!SUPABASE_ANON_KEY,
-            hasProxySecret: !!PROXY_SECRET,
-            hasServiceRole: !!SERVICE_ROLE,
-            supabase_host: hostOf(SUPABASE_URL),
-            node: process.version,
-          },
+    // ✅ Diagnóstico que NO debe crashear nunca
+    if (method === "GET") {
+      return json(res, 200, {
+        ok: true,
+        build_tag: BUILD_TAG,
+        now: new Date().toISOString(),
+        env: {
+          has_TRACKER_PROXY_SECRET: !!process.env.TRACKER_PROXY_SECRET,
+          has_SB_URL: !!process.env.SB_URL,
+          has_SB_SERVICE_ROLE: !!process.env.SB_SERVICE_ROLE,
         },
-        corsHeaders(origin),
-      );
+        hint: "POST /api/tracker-proxy?fn=accept-tracker-invite | send_position",
+      });
     }
 
-    if (req.method !== 'POST') {
-      return sendJson(res, 405, { ok: false, build_tag: BUILD_TAG, error: 'METHOD_NOT_ALLOWED' }, corsHeaders(origin));
+    if (method !== "POST") {
+      return json(res, 405, { ok: false, error: "method_not_allowed", build_tag: BUILD_TAG });
     }
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !PROXY_SECRET) {
-      return sendJson(
-        res,
-        500,
-        {
-          ok: false,
-          build_tag: BUILD_TAG,
-          error: 'MISSING_ENV',
-          diag: {
-            hasUrl: !!SUPABASE_URL,
-            hasAnon: !!SUPABASE_ANON_KEY,
-            hasProxySecret: !!PROXY_SECRET,
-            hasServiceRole: !!SERVICE_ROLE,
-          },
-        },
-        corsHeaders(origin),
-      );
+    // Solo aceptamos fn=...
+    const fn = q.fn || null;
+    if (!fn) {
+      return json(res, 400, {
+        ok: false,
+        error: "missing_fn",
+        expected: "POST /api/tracker-proxy?fn=accept-tracker-invite|send_position",
+        got: q,
+        build_tag: BUILD_TAG,
+      });
+    }
+    if (!ALLOW_FN.has(fn)) {
+      return json(res, 403, { ok: false, error: "fn_not_allowed", fn, build_tag: BUILD_TAG });
     }
 
-    const fnRaw = req.query?.fn;
-    if (!fnRaw) {
-      return sendJson(res, 400, { ok: false, build_tag: BUILD_TAG, error: 'MISSING_FN' }, corsHeaders(origin));
-    }
-
-    const fn = normalizeFn(fnRaw);
-    if (!ALLOW.has(fn)) {
-      return sendJson(res, 400, { ok: false, build_tag: BUILD_TAG, error: 'FN_NOT_ALLOWED', fn_in: fnRaw, fn_canon: fn }, corsHeaders(origin));
-    }
-
+    // Lee RAW body
     const rawBody = await readRawBody(req);
 
-    const ts = String(Math.floor(Date.now() / 1000));
-    const nonce = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
-    const msg = `${ts}.${nonce}.${rawBody}`;
-    const sig = hmacHex(PROXY_SECRET, msg);
+    // (Opcional) Validación HMAC entrante desde el tracker (si ya lo estás enviando)
+    // Firma = HMAC(secret, `${ts}.${nonce}.${rawBody}`)
+    const secret = process.env.TRACKER_PROXY_SECRET || "";
+    const ts = req.headers["x-tracker-ts"] || "";
+    const nonce = req.headers["x-tracker-nonce"] || "";
+    const sig = req.headers["x-tracker-sig"] || "";
 
-    const auth = req.headers.authorization;
-    let upstreamAuth = auth;
-    if (!upstreamAuth) {
-      if (!SERVICE_ROLE) {
-        return sendJson(res, 401, { ok: false, build_tag: BUILD_TAG, error: 'NO_AUTH_AND_NO_SERVICE_ROLE' }, corsHeaders(origin));
+    if (secret && ts && nonce && sig) {
+      const payload = `${ts}.${nonce}.${rawBody}`;
+      const expected = hmacHex(secret, payload);
+      if (!timingSafeEqHex(expected, sig)) {
+        return json(res, 401, { ok: false, error: "invalid_signature", build_tag: BUILD_TAG });
       }
-      upstreamAuth = `Bearer ${SERVICE_ROLE}`;
     }
 
-    const upstreamUrl = String(SUPABASE_URL).replace(/\/$/, '') + `/functions/v1/${fn}`;
+    // Forward a Supabase Edge Function via fetch
+    const SB_URL = process.env.SB_URL;
+    const SRK = process.env.SB_SERVICE_ROLE;
 
-    const upstreamResp = await fetch(upstreamUrl, {
-      method: 'POST',
-      headers: {
-        apikey: String(SUPABASE_ANON_KEY),
-        authorization: upstreamAuth,
-        'content-type': 'application/json',
-        'x-tracker-ts': ts,
-        'x-tracker-nonce': nonce,
-        'x-tracker-sig': sig,
-      },
+    if (!SB_URL || !SRK) {
+      return json(res, 500, {
+        ok: false,
+        error: "missing_env",
+        build_tag: BUILD_TAG,
+        missing: {
+          SB_URL: !SB_URL,
+          SB_SERVICE_ROLE: !SRK,
+        },
+      });
+    }
+
+    // Endpoint de edge functions
+    const target = `${SB_URL}/functions/v1/${fn}`;
+
+    // Forward headers controlado
+    const headers = {
+      "Content-Type": req.headers["content-type"] || "application/json",
+      Authorization: `Bearer ${SRK}`,
+      "x-proxy-build-tag": BUILD_TAG,
+    };
+
+    // Forward HMAC headers (para que la Edge valide el mismo rawBody)
+    if (ts) headers["x-tracker-ts"] = String(ts);
+    if (nonce) headers["x-tracker-nonce"] = String(nonce);
+    if (sig) headers["x-tracker-sig"] = String(sig);
+
+    const resp = await fetch(target, {
+      method: "POST",
+      headers,
       body: rawBody,
     });
 
-    const text = await upstreamResp.text();
-    let payload;
-    try { payload = text ? JSON.parse(text) : null; } catch { payload = text ? { raw: text } : null; }
+    const text = await resp.text();
+    // Siempre devolvemos JSON al cliente (tracker UI)
+    // Si la edge devolvió JSON, lo pasamos; si no, lo envolvemos.
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { ok: resp.ok, raw: text };
+    }
 
-    return sendJson(
-      res,
-      upstreamResp.status,
-      {
-        build_tag: BUILD_TAG,
-        fn_in: String(fnRaw),
-        fn,
-        upstream_status: upstreamResp.status,
-        ...(payload || {}),
-      },
-      corsHeaders(origin),
-    );
+    return json(res, resp.status, {
+      ...data,
+      proxied: true,
+      fn,
+      build_tag: BUILD_TAG,
+      edge_status: resp.status,
+    });
   } catch (e) {
-    return sendJson(res, 500, { ok: false, build_tag: BUILD_TAG, error: String(e?.message || e) }, corsHeaders(origin));
+    // Si algo explota, devolvemos JSON (para no tener 500 silencioso)
+    return json(res, 500, {
+      ok: false,
+      error: "proxy_crash",
+      build_tag: BUILD_TAG,
+      message: e && e.message ? e.message : String(e),
+    });
   }
-}
+};
