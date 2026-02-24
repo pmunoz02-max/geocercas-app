@@ -9,3 +9,7 @@ tools/_archive/
 !api/
 !api/**
 node_modules
+
+# Build output
+dist/
+
