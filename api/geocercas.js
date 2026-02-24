@@ -236,45 +236,52 @@ async function resolveContext(req) {
     if (currentOrgId) {
       if (sbSrv) {
         const r = await tryMaybeSingle(sbSrv, membershipForOrg(currentOrgId));
-        if (r.ok && r.data?.org_id && r.data?.role) return { row: r.data, client: sbSrv };
+        if (r.ok && r.data?.org_id) return r.data;
       }
-      {
-        const r = await tryMaybeSingle(sbUser, membershipForOrg(currentOrgId));
-        if (r.ok && r.data?.org_id && r.data?.role) return { row: r.data, client: sbUser };
-      }
+      const r2 = await tryMaybeSingle(sbUser, membershipForOrg(currentOrgId));
+      if (r2.ok && r2.data?.org_id) return r2.data;
     }
 
     // B) default
     if (sbSrv) {
       const r = await tryMaybeSingle(sbSrv, membershipDefault);
-      if (r.ok && r.data?.org_id && r.data?.role) return { row: r.data, client: sbSrv };
+      if (r.ok && r.data?.org_id) return r.data;
     }
-
     const r2 = await tryMaybeSingle(sbUser, membershipDefault);
-    if (r2.ok && r2.data?.org_id && r2.data?.role) return { row: r2.data, client: sbUser };
+    if (r2.ok && r2.data?.org_id) return r2.data;
 
-    return { row: null, client: sbUser };
+    return null;
   }
 
-  const { row: mResolved, client: dbClient } = await resolveMembership();
-
-  if (!mResolved?.org_id || !mResolved?.role) {
+  mRow = await resolveMembership();
+  if (!mRow?.org_id) {
     return {
       ok: false,
       status: 403,
-      error: "Missing org/role context",
-      details: "No active membership found for user",
+      error: "No membership",
+      details: "User has no active membership",
     };
   }
 
   const ctx = {
-    org_id: String(mResolved.org_id),
-    role: String(mResolved.role),
-    tenant_id: String(mResolved.org_id), // canónico: tenant == org
+    org_id: String(mRow.org_id),
+    tenant_id: String(mRow.org_id), // tenant = org (modelo actual)
+    role: String(mRow.role || "member"),
   };
 
-  // Usaremos dbClient para TODAS las operaciones (service role si está sano; si no, user JWT)
-  return { ok: true, user, ctx, sbDb: dbClient };
+  // sbDb: preferimos service role para operaciones internas si existe, si no user
+  const sbDb = sbSrv || sbUser;
+
+  return {
+    ok: true,
+    ctx,
+    user,
+    sbDb,
+    env: {
+      supabase_url: SUPABASE_URL,
+      has_service_role: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+    },
+  };
 }
 
 /* =========================
@@ -283,6 +290,7 @@ async function resolveContext(req) {
 
 export default async function handler(req, res) {
   try {
+    // CORS preflight / OPTIONS
     if (req.method === "OPTIONS") {
       setHeaders(res);
       res.statusCode = 204;
@@ -299,7 +307,7 @@ export default async function handler(req, res) {
       return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
     }
 
-    const { ctx, sbDb, user } = ctxRes;
+    const { ctx, sbDb, user, env } = ctxRes;
     const org_id = String(ctx.org_id);
     const tenant_id = String(ctx.tenant_id || ctx.org_id);
     const user_id = String(user.id);
@@ -308,6 +316,49 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       const q = getQuery(req);
       const action = String(q.action || "list");
+
+      // =========================
+      // ENV CHECK (SAFE) - Preview only
+      // =========================
+      if (action === "env") {
+        const token = String(req.headers["x-envcheck-token"] || "");
+        const expected = getEnv(["ENVCHECK_TOKEN"]);
+        if (!expected || token !== expected) {
+          return send(res, 401, { ok: false, error: "Unauthorized env check" });
+        }
+
+        // Read marker from app_settings (json/jsonb)
+        const { data: markerRow, error: markerErr } = await sbDb
+          .from("app_settings")
+          .select("key,value")
+          .eq("key", "env_marker")
+          .maybeSingle();
+
+        const supabaseHost = (() => {
+          try {
+            return new URL(env?.supabase_url || "").host || null;
+          } catch {
+            return null;
+          }
+        })();
+
+        const guess =
+          supabaseHost && supabaseHost.includes("mujwsfhkocsuuahlrssn")
+            ? "mujwsfhkocsuuahlrssn"
+            : supabaseHost && supabaseHost.includes("wpaixkvokdkudymgjoua")
+            ? "wpaixkvokdkudymgjoua"
+            : null;
+
+        return ok(res, {
+          ok: true,
+          supabase_url_host: supabaseHost,
+          project_ref_guess: guess,
+          has_service_role: Boolean(env?.has_service_role),
+          env_marker: markerErr ? null : markerRow?.value ?? null,
+          vercel_env: process.env.VERCEL_ENV || null,
+          node_env: process.env.NODE_ENV || null,
+        });
+      }
 
       if (action === "list") {
         const onlyActive = normalizeBoolFlag(q.onlyActive, true);
@@ -355,123 +406,40 @@ export default async function handler(req, res) {
       const payload = stripServerOwned(rawPayload);
       const action = String(payload?.action || "upsert").toLowerCase();
 
+      // ==========
+      // Writes require role
+      // ==========
       if (!requireWriteRole(ctx.role)) {
-        return send(res, 403, { ok: false, error: "Forbidden", details: "Requires owner/admin" });
+        return send(res, 403, { ok: false, error: "Forbidden", details: "Requires owner/admin role" });
       }
 
       if (action === "upsert") {
-        const nombreIn = String(payload?.nombre || "").trim();
-        const nameIn = String(payload?.name || "").trim();
-        const finalName = nombreIn || nameIn;
-
-        if (!finalName) {
-          return send(res, 400, { ok: false, error: "nombre (or name) is required" });
-        }
-
-        const finalActivo =
-          payload?.activo !== undefined
-            ? Boolean(payload.activo)
-            : payload?.active !== undefined
-            ? Boolean(payload.active)
-            : payload?.activa !== undefined
-            ? Boolean(payload.activa)
-            : true;
-
-        // --- AUDIT HARDENING (CRÍTICO PARA PRODUCCIÓN)
-        const incomingId = payload?.id ? String(payload.id) : null;
-
-        let createdByToUse = user_id;
-
-        // Si parece UPDATE por id, intentamos conservar created_by existente
-        if (incomingId) {
-          try {
-            const { data: prev, error: prevErr } = await sbDb
-              .from("geocercas")
-              .select("created_by")
-              .eq("org_id", org_id)
-              .eq("id", incomingId)
-              .maybeSingle();
-
-            if (!prevErr && prev?.created_by) {
-              createdByToUse = String(prev.created_by);
-            }
-          } catch {
-            createdByToUse = user_id;
-          }
-        }
-
-        const nowIso = new Date().toISOString();
+        const item = payload?.item && typeof payload.item === "object" ? payload.item : payload;
 
         const row = {
-          id: incomingId || undefined,
+          ...item,
           org_id,
           tenant_id,
-
-          // canonical names
-          nombre: finalName,
-          name: finalName,
-
-          descripcion: payload?.descripcion ?? undefined,
-          geojson: payload?.geojson ?? undefined,
-          geometry: payload?.geometry ?? undefined,
-          polygon: payload?.polygon ?? undefined,
-          geom: payload?.geom ?? undefined,
-          lat: payload?.lat ?? undefined,
-          lng: payload?.lng ?? undefined,
-          radius_m: payload?.radius_m ?? undefined,
-          visible: payload?.visible ?? undefined,
-          bbox: payload?.bbox ?? undefined,
-          personal_ids: payload?.personal_ids ?? undefined,
-          asignacion_ids: payload?.asignacion_ids ?? undefined,
-          activo: finalActivo,
-
-          // audit fields (FIX)
-          created_by: incomingId ? createdByToUse : user_id,
+          updated_at: new Date().toISOString(),
           updated_by: user_id,
-
-          // timestamps
-          updated_at: nowIso,
         };
 
-        const { data, error } = await sbDb
-          .from("geocercas")
-          .upsert(row, { onConflict: "org_id,nombre_ci" })
-          .select("*")
-          .maybeSingle();
+        // IMPORTANT: nombre_ci is server-owned (if you use it)
+        if (row.nombre) row.nombre_ci = String(row.nombre).toLowerCase().trim();
 
+        const { data, error } = await sbDb.from("geocercas").upsert(row).select("*");
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
-        return ok(res, { ok: true, item: data || null });
+        const arr = Array.isArray(data) ? data : data ? [data] : [];
+        return ok(res, { ok: true, saved: arr.length, items: arr });
       }
 
       if (action === "delete") {
         const id = payload?.id ? String(payload.id) : null;
+        if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
-        const nombres_ci = Array.isArray(payload?.nombres_ci)
-          ? payload.nombres_ci.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
-          : [];
+        const { data, error } = await sbDb.from("geocercas").delete().eq("org_id", org_id).eq("id", id).select("*");
 
-        const nombre_ci_single = payload?.nombre_ci ? String(payload.nombre_ci).trim().toLowerCase() : null;
-
-        if (!id && !nombres_ci.length && !nombre_ci_single) {
-          return ok(res, { ok: true, deleted: 0, skipped: true, reason: "delete called without targets" });
-        }
-
-        let q = sbDb
-          .from("geocercas")
-          .update({
-            activo: false,
-            updated_at: new Date().toISOString(),
-            updated_by: user_id,
-          })
-          .eq("org_id", org_id)
-          .select("id,nombre,name,nombre_ci,org_id,tenant_id,activo,updated_at");
-
-        if (id) q = q.eq("id", id);
-        else if (nombres_ci.length) q = q.in("nombre_ci", nombres_ci);
-        else if (nombre_ci_single) q = q.eq("nombre_ci", nombre_ci_single);
-
-        const { data, error } = await q;
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
         const arr = Array.isArray(data) ? data : data ? [data] : [];
