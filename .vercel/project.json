@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_XAitX89OyfR7Jh79yZw4Mi1O3TmM",
+  "orgId": "team_WWqEDULVcCwuYh8xIaIu0vOV",
+  "projectName": "geocercas-app-v3",
+  "settings": {
+    "createdAt": 1767535884909,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
