@@ -114,9 +114,10 @@ export default function TrackerGpsPage() {
   const PRIMARY = supabase;
 
   // ✅ URLs via proxy (same-origin) => CORS universal
+  // NOTE: Supabase Production function slug is: accept-tracker-invite
   const acceptUrl = useMemo(() => {
-    if (!orgId || !isUuid(orgId)) return `/api/tracker-proxy?fn=accept-tracker-invite;
-    return `/api/tracker-proxy?fn=accept-tracker-invite;
+    if (!orgId || !isUuid(orgId)) return null;
+    return `/api/tracker-proxy?fn=accept-tracker-invite`;
   }, [orgId]);
 
   const sendUrl = useMemo(() => `/api/tracker-proxy?fn=send_position`, []);
@@ -276,6 +277,7 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
     if (!orgId || !isUuid(orgId)) return;
+    if (!acceptUrl) return;
 
     if (onboardingLockRef.current) return;
     onboardingLockRef.current = true;
@@ -323,7 +325,9 @@ export default function TrackerGpsPage() {
           setMembershipDetail(
             t("trackerGps.membership.alreadyExists", { defaultValue: "Membership already exists: role={{role}}", role: m.role })
           );
-          try { sessionStorage.setItem(ssKey, "1"); } catch {}
+          try {
+            sessionStorage.setItem(ssKey, "1");
+          } catch {}
           return;
         }
 
@@ -364,7 +368,9 @@ export default function TrackerGpsPage() {
           setMembershipDetail(t("trackerGps.membership.acceptOk", { defaultValue: "accept-tracker-invite OK: {{text}}", text: text || "ok" }));
         }
 
-        try { sessionStorage.setItem(ssKey, "1"); } catch {}
+        try {
+          sessionStorage.setItem(ssKey, "1");
+        } catch {}
       } catch (e) {
         setMembershipStatus("failed");
         setMembershipDetail(`onboarding exception: ${String(e?.message || e)}`);
@@ -492,15 +498,15 @@ export default function TrackerGpsPage() {
         {trackerReady && hasSession && (
           <>
             <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
-              <div>{t("trackerGps.lastSend", { defaultValue: "Last send" })}: {formattedLastSend}</div>
+              <div>
+                {t("trackerGps.lastSend", { defaultValue: "Last send" })}: {formattedLastSend}
+              </div>
 
               <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
 
-              {tokenIss ? (
-                <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div>
-              ) : null}
+              {tokenIss ? <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div> : null}
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
@@ -527,9 +533,7 @@ export default function TrackerGpsPage() {
             ) : null}
 
             {lastError ? (
-              <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
-                {lastError}
-              </div>
+              <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">{lastError}</div>
             ) : null}
           </>
         )}
@@ -538,9 +542,7 @@ export default function TrackerGpsPage() {
           <div className="mt-4 text-center">
             <p className="text-sm text-slate-300 mb-3">{t("trackerGps.onlyInvited", { defaultValue: "This page is only for invited trackers." })}</p>
             {lastError ? (
-              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
-                {lastError}
-              </div>
+              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">{lastError}</div>
             ) : null}
             <button onClick={() => navigate("/")} className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold">
               {t("trackerGps.goHome", { defaultValue: "Go to home" })}
@@ -552,9 +554,7 @@ export default function TrackerGpsPage() {
           <div className="mt-4 text-center">
             <p className="text-sm text-slate-300 mb-3">{t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." })}</p>
             {lastError ? (
-              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
-                {lastError}
-              </div>
+              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">{lastError}</div>
             ) : null}
             <button onClick={() => navigate("/")} className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold">
               {t("trackerGps.goHome", { defaultValue: "Go to home" })}
