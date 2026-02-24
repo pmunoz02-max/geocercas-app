@@ -115,8 +115,8 @@ export default function TrackerGpsPage() {
 
   // ✅ URLs via proxy (same-origin) => CORS universal
   const acceptUrl = useMemo(() => {
-    if (!orgId || !isUuid(orgId)) return `/api/tracker-proxy?fn=accept-tracker-invite`;
-    return `/api/tracker-proxy?fn=accept-tracker-invite`;
+    if (!orgId || !isUuid(orgId)) return `/api/tracker-proxy?fn=accept-tracker-invite;
+    return `/api/tracker-proxy?fn=accept-tracker-invite;
   }, [orgId]);
 
   const sendUrl = useMemo(() => `/api/tracker-proxy?fn=send_position`, []);
@@ -327,7 +327,7 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        setMembershipDetail(t("trackerGps.membership.runningAccept", { defaultValue: "No membership. Running accept-tracker-invite…" }));
+        setMembershipDetail(t("trackerGps.membership.runningAccept", { defaultValue: "No membership. Running accept-tracker-invite" }));
 
         // ✅ proxy call (no apikey headers)
         const resp = await fetch(acceptUrl, {
