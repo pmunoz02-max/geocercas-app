@@ -14,15 +14,33 @@
       "destination": "/api/auth?route=:path*"
     },
     {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*?)$",
+      "destination": "/"
     }
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/$",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.html$",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/(service-worker\\.js|sw\\.js)$",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
   ]
