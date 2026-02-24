@@ -1,139 +1,95 @@
-// supabase/functions/send_position/index.ts
-import { getAdminClient } from "../_shared/supabaseAdmin.ts";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
+import { createClient } from "npm:@supabase/supabase-js@2"
 
-const BUILD_TAG = "send_position-v6-hmac-orgid-required-20260222";
-
-function cors(origin: string | null) {
-  const o = origin ?? "*";
-  return {
-    "Access-Control-Allow-Origin": o,
-    Vary: "Origin",
-    "Access-Control-Allow-Methods": "POST,OPTIONS",
-    "Access-Control-Allow-Headers": "content-type, x-proxy-ts, x-proxy-signature",
-  };
-}
-
-function j(C: Record<string, string>, status: number, body: any) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...C, "Content-Type": "application/json" },
-  });
-}
-
-function isUuid(v: unknown) {
-  const s = String(v ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
-async function hmacHex(secret: string, msg: string) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(msg));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-Deno.serve(async (req) => {
-  const origin = req.headers.get("origin");
-  const C = cors(origin);
-
-  if (req.method === "OPTIONS") return new Response("ok", { headers: C });
-  if (req.method !== "POST") {
-    return j(C, 405, { ok: false, build_tag: BUILD_TAG, error: "METHOD_NOT_ALLOWED" });
-  }
+serve(async (req) => {
+  const build_tag = "send_position-v7_hmac_stable_20260224"
 
   try {
-    const proxySecret = (Deno.env.get("TRACKER_PROXY_SECRET") || "").trim();
-    if (!proxySecret) {
-      return j(C, 500, { ok: false, build_tag: BUILD_TAG, error: "Missing TRACKER_PROXY_SECRET" });
+    const SB_URL = Deno.env.get("SB_URL")
+    const SB_SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE")
+    const TRACKER_PROXY_SECRET = Deno.env.get("TRACKER_PROXY_SECRET")
+
+    if (!SB_URL || !SB_SERVICE_ROLE || !TRACKER_PROXY_SECRET) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          build_tag,
+          error: "Missing required env vars"
+        }),
+        { status: 500 }
+      )
     }
 
-    const ts = (req.headers.get("x-proxy-ts") || "").trim();
-    const sig = (req.headers.get("x-proxy-signature") || "").trim();
-    if (!ts || !sig) {
-      return j(C, 401, { ok: false, build_tag: BUILD_TAG, error: "Missing proxy signature" });
+    const ts = req.headers.get("X-Proxy-Ts")
+    const signature = req.headers.get("X-Proxy-Signature")
+    const fn = "send_position"
+
+    const rawBody = await req.text()
+
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(TRACKER_PROXY_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    )
+
+    const data = encoder.encode(`${fn}.${ts}.${rawBody}`)
+    const sigBuf = await crypto.subtle.sign("HMAC", key, data)
+    const expected = Array.from(new Uint8Array(sigBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+
+    if (expected !== signature) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          build_tag,
+          error: "Invalid proxy signature"
+        }),
+        { status: 401 }
+      )
     }
 
-    const now = Date.now();
-    const tsNum = Number(ts);
-    if (!Number.isFinite(tsNum) || Math.abs(now - tsNum) > 5 * 60 * 1000) {
-      return j(C, 401, { ok: false, build_tag: BUILD_TAG, error: "Expired proxy timestamp" });
-    }
+    const body = JSON.parse(rawBody)
+    const { user_id, org_id, lat, lng } = body
 
-    const bodyText = await req.text();
-    const msg = `send_position.${ts}.${bodyText}`;
-    const expectedSig = await hmacHex(proxySecret, msg);
-    if (expectedSig !== sig) {
-      return j(C, 401, { ok: false, build_tag: BUILD_TAG, error: "Invalid proxy signature" });
-    }
+    const admin = createClient(SB_URL, SB_SERVICE_ROLE)
 
-    let body: any = {};
-    try {
-      body = bodyText ? JSON.parse(bodyText) : {};
-    } catch {
-      return j(C, 400, { ok: false, build_tag: BUILD_TAG, error: "INVALID_JSON" });
-    }
-
-    const org_id = String(body.org_id || "").trim();
-    if (!isUuid(org_id)) {
-      return j(C, 400, { ok: false, build_tag: BUILD_TAG, error: "org_id is required" });
-    }
-
-    const lat = Number(body.lat);
-    const lng = Number(body.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return j(C, 400, { ok: false, build_tag: BUILD_TAG, error: "Invalid lat/lng" });
-    }
-
-    // user_id opcional (si el proxy lo manda, lo guardamos; si no, no)
-    const user_id = body.user_id && isUuid(body.user_id) ? String(body.user_id) : null;
-
-    let admin;
-    try {
-      admin = getAdminClient();
-    } catch (e) {
-      return j(C, 500, {
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "ADMIN_CLIENT_INIT_FAILED",
-        detail: String((e as any)?.message || e),
-      });
-    }
-
-    const payload: Record<string, any> = {
+    const { error } = await admin.from("positions").insert({
+      user_id,
       org_id,
       lat,
-      lng,
-      recorded_at: new Date().toISOString(),
-      source: "tracker-gps-web",
-    };
-    if (user_id) payload.user_id = user_id;
+      lng
+    })
 
-    const insert = await admin.from("tracker_positions").insert(payload);
-
-    if (insert.error) {
-      return j(C, 500, {
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "DB_INSERT_FAILED",
-        detail: insert.error.message,
-      });
+    if (error) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          build_tag,
+          error: error.message
+        }),
+        { status: 500 }
+      )
     }
 
-    return j(C, 200, { ok: true, build_tag: BUILD_TAG });
-  } catch (e) {
-    return j(C, 500, {
-      ok: false,
-      build_tag: BUILD_TAG,
-      error: "Unhandled",
-      detail: String((e as any)?.message || e),
-    });
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        build_tag
+      }),
+      { status: 200 }
+    )
+  } catch (err: any) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        build_tag,
+        error: err.message
+      }),
+      { status: 500 }
+    )
   }
-});
+})
