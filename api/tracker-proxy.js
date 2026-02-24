@@ -1,200 +1,184 @@
 // api/tracker-proxy.js
-// Universal Tracker proxy for Vercel -> Supabase Edge Functions
-// v8: fn alias mapping + strict allowlist + always-forward user Authorization + stable HMAC payload
-//
-// Goals:
-// - Never call arbitrary edge functions (allowlist only)
-// - Support legacy/typo fn names from older frontends (alias map)
-// - Forward the browser user's JWT if present (Authorization: Bearer <access_token>)
-// - Optionally fall back to Service Role ONLY when explicitly allowed (send_position can work without user session)
-// - Produce consistent HMAC signature based on the exact JSON payload we send upstream
+// Vercel Serverless (Node) - CommonJS safe
+// v9: no ESM imports, no edge-only APIs, always returns JSON, strict allowlist + alias map,
+//     forward user JWT when present, service-role fallback ONLY for send_position,
+//     stable HMAC signature on exact body string sent upstream.
 
-import crypto from "crypto";
+const crypto = require("crypto");
 
-const BUILD_TAG = "tracker-proxy-v8_fnmap_auth_forward_20260224";
+const BUILD_TAG = "tracker-proxy-v9_cjs_no_crash_20260224";
 
-// ---- helpers ----
-const toStr = (v) => String(v ?? "");
-const safeHost = (url) => {
+function safeJson(res, status, obj) {
+  try {
+    res.status(status).json(obj);
+  } catch (e) {
+    // last resort
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(obj));
+  }
+}
+
+function hostOf(url) {
   try {
     return new URL(String(url)).host;
   } catch {
     return "";
   }
-};
-const hmacHex = (secret, msg) =>
-  crypto.createHmac("sha256", secret).update(msg).digest("hex");
-
-function getAuthorizationHeader(req) {
-  // Preserve original header value if present
-  return (
-    req.headers?.authorization ||
-    req.headers?.Authorization ||
-    req.headers?.AUTHORIZATION ||
-    ""
-  );
 }
 
 function getBearerToken(req) {
-  const h = getAuthorizationHeader(req);
+  const h = req.headers?.authorization || req.headers?.Authorization || "";
   const m = String(h).match(/^Bearer\s+(.+)$/i);
   return (m?.[1] || "").trim();
 }
 
-// ---- fn allowlist + alias mapping ----
-// Canonical function names (as deployed in Supabase)
-const FN_CANON = {
-  SEND_POSITION: "send_position",
-  ACCEPT_TRACKER_INVITE: "accept-tracker-invite", // <-- canonical in your PROD list
-};
-
-// Accept legacy names from older builds and map them to canonical slugs
-const FN_MAP = {
-  // canonical passthrough
-  [FN_CANON.SEND_POSITION]: FN_CANON.SEND_POSITION,
-  [FN_CANON.ACCEPT_TRACKER_INVITE]: FN_CANON.ACCEPT_TRACKER_INVITE,
-
-  // common legacy/typo variants observed in this project
-  "accept-tracker-invite": FN_CANON.ACCEPT_TRACKER_INVITE,
-  "accept_tracker_invite": FN_CANON.ACCEPT_TRACKER_INVITE,
-  "accept-tracker-invite": FN_CANON.ACCEPT_TRACKER_INVITE,
-};
-
-function normalizeFn(fnInput) {
-  const raw = toStr(fnInput).trim();
-  return FN_MAP[raw] || null;
+function hmacHex(secret, msg) {
+  return crypto.createHmac("sha256", secret).update(msg).digest("hex");
 }
 
-// For safety: only these canonical slugs can be called
-const ALLOWED_CANON = new Set([FN_CANON.SEND_POSITION, FN_CANON.ACCEPT_TRACKER_INVITE]);
+// Only allow required fns (hardening)
+const ALLOW = new Set(["send_position", "accept-tracker-invite"]);
 
-// Whether service-role fallback is allowed when browser has no Bearer JWT
-// - send_position: allowed (tracker may be a public page with no supabase session)
-// - accept-tracker-invite: NOT allowed (must come from a real signed-in user)
-function serviceFallbackAllowed(canonFn) {
-  return canonFn === FN_CANON.SEND_POSITION;
+// Map any incoming fn aliases to canonical Supabase function slugs
+function normalizeFn(fn) {
+  const raw = String(fn || "").trim();
+
+  // common variants we saw in chat
+  const map = {
+    "accept-tracker-invite": "accept-tracker-invite",
+    "accept-tracker-invite": "accept-tracker-invite", // tolerate old wrong name
+    "accept-tracker-invite": "accept-tracker-invite",
+    "send_position": "send_position",
+  };
+
+  return map[raw] || raw;
 }
 
-async function readUpstream(upstream) {
-  const text = await upstream.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
+// Stable stringify (sorted keys) to avoid accidental reordering.
+// NOTE: This is only for creating bodyStr we send upstream; function will see exactly this rawBody.
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+
+  if (Array.isArray(value)) {
+    return "[" + value.map((v) => stableStringify(v)).join(",") + "]";
   }
+
+  const keys = Object.keys(value).sort();
+  const parts = keys.map((k) => JSON.stringify(k) + ":" + stableStringify(value[k]));
+  return "{" + parts.join(",") + "}";
 }
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   try {
     // CORS preflight
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        "content-type, authorization, x-proxy-ts, x-proxy-signature"
-      );
+      res.setHeader("Access-Control-Allow-Headers", "content-type, authorization, x-proxy-ts, x-proxy-signature");
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
       return res.status(200).send("ok");
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY;
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const proxySecret =
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    // Unify: prefer TRACKER_PROXY_SECRET; fall back to PROXY_SECRET only
+    const PROXY_SECRET =
       process.env.TRACKER_PROXY_SECRET ||
       process.env.PROXY_SECRET ||
-      process.env.INVITE_PROXY_SECRET; // tolerate env naming drift
+      "";
 
-    // Simple health/diag endpoint
+    // Diagnostics endpoint (GET)
     if (req.method === "GET") {
-      const fnIn = req.query?.fn;
-      const canon = normalizeFn(fnIn);
-      return res.status(200).json({
+      return safeJson(res, 200, {
         ok: true,
         build_tag: BUILD_TAG,
         diag: {
-          hasUrl: !!supabaseUrl,
-          hasAnon: !!anonKey,
-          hasServiceRole: !!serviceRole,
-          hasProxySecret: !!proxySecret,
-          supabase_host: safeHost(supabaseUrl),
-          auth_header_present: !!getAuthorizationHeader(req),
-          bearer_present: !!getBearerToken(req),
-          fn_in: fnIn ?? null,
-          fn_canon: canon,
-          fn_allowed: canon ? ALLOWED_CANON.has(canon) : false,
+          hasUrl: !!SUPABASE_URL,
+          hasAnon: !!SUPABASE_ANON_KEY,
+          hasServiceRole: !!SUPABASE_SERVICE_ROLE_KEY,
+          hasProxySecret: !!PROXY_SECRET,
+          supabase_host: hostOf(SUPABASE_URL),
+          node: process.version,
         },
       });
     }
 
     if (req.method !== "POST") {
-      return res.status(405).json({ ok: false, build_tag: BUILD_TAG, error: "METHOD_NOT_ALLOWED" });
+      return safeJson(res, 405, { ok: false, build_tag: BUILD_TAG, error: "METHOD_NOT_ALLOWED" });
     }
 
-    if (!supabaseUrl || !anonKey || !proxySecret) {
-      return res.status(500).json({
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !PROXY_SECRET) {
+      return safeJson(res, 500, {
         ok: false,
         build_tag: BUILD_TAG,
         error: "Missing env",
-        diag: { hasUrl: !!supabaseUrl, hasAnon: !!anonKey, hasProxySecret: !!proxySecret },
-      });
-    }
-
-    // Normalize / validate fn
-    const canonFn = normalizeFn(req.query?.fn);
-    if (!canonFn || !ALLOWED_CANON.has(canonFn)) {
-      return res.status(400).json({
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "FN_NOT_ALLOWED",
-        fn_in: req.query?.fn ?? null,
-        fn_canon: canonFn,
-      });
-    }
-
-    // Body: Vercel already parsed JSON for us (for content-type application/json).
-    // We'll re-stringify to a deterministic payload we send upstream,
-    // and we will sign EXACTLY that string.
-    const bodyObj = req.body ?? {};
-    const bodyStr = JSON.stringify(bodyObj);
-
-    // Authorization: ALWAYS prefer the incoming browser JWT (if any)
-    const incomingAuth = getAuthorizationHeader(req);
-    const bearerToken = getBearerToken(req);
-
-    let upstreamAuth = "";
-    if (bearerToken) {
-      upstreamAuth = incomingAuth; // keep the original 'Bearer <jwt>'
-    } else if (serviceRole && serviceFallbackAllowed(canonFn)) {
-      // Only allowed for certain functions
-      upstreamAuth = `Bearer ${serviceRole}`;
-    } else {
-      return res.status(401).json({
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "Missing Authorization",
-        hint: {
-          required: "Authorization: Bearer <access_token>",
-          fn: canonFn,
-          service_fallback_allowed: serviceFallbackAllowed(canonFn),
+        diag: {
+          hasUrl: !!SUPABASE_URL,
+          hasAnon: !!SUPABASE_ANON_KEY,
+          hasServiceRole: !!SUPABASE_SERVICE_ROLE_KEY,
+          hasProxySecret: !!PROXY_SECRET,
         },
       });
     }
 
-    // HMAC signature header (used by send_position hardening)
+    const fnIn = req.query?.fn;
+    const fn = normalizeFn(fnIn);
+
+    if (!ALLOW.has(fn)) {
+      return safeJson(res, 400, {
+        ok: false,
+        build_tag: BUILD_TAG,
+        error: "FN_NOT_ALLOWED",
+        fn_in: String(fnIn || ""),
+        fn_canon: fn,
+      });
+    }
+
+    // Body string we will send upstream AND sign (must match rawBody in Edge Function)
+    const bodyObj = req.body ?? {};
+    const bodyStr = stableStringify(bodyObj);
+
+    // Decide authorization for upstream
+    // - accept-tracker-invite: REQUIRE user JWT (avoid ghost onboarding)
+    // - send_position: allow service fallback (tracker can operate without session)
+    const userJwt = getBearerToken(req);
+
+    let bearer;
+    if (fn === "accept-tracker-invite") {
+      if (!userJwt) {
+        return safeJson(res, 401, {
+          ok: false,
+          build_tag: BUILD_TAG,
+          error: "Missing Authorization for accept-tracker-invite",
+        });
+      }
+      bearer = `Bearer ${userJwt}`;
+    } else {
+      // send_position
+      bearer = userJwt ? `Bearer ${userJwt}` : (SUPABASE_SERVICE_ROLE_KEY ? `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` : null);
+      if (!bearer) {
+        return safeJson(res, 401, {
+          ok: false,
+          build_tag: BUILD_TAG,
+          error: "Missing Authorization and no service role fallback",
+        });
+      }
+    }
+
+    // HMAC signature
     const ts = String(Date.now());
-    const msg = `${canonFn}.${ts}.${bodyStr}`;
-    const sig = hmacHex(proxySecret, msg);
+    const msg = `${fn}.${ts}.${bodyStr}`;
+    const sig = hmacHex(PROXY_SECRET, msg);
 
-    const url =
-      String(supabaseUrl).replace(/\/$/, "") + `/functions/v1/${canonFn}`;
+    const upstreamUrl = String(SUPABASE_URL).replace(/\/$/, "") + `/functions/v1/${fn}`;
 
-    const upstream = await fetch(url, {
+    const upstreamResp = await fetch(upstreamUrl, {
       method: "POST",
       headers: {
-        apikey: String(anonKey),
-        Authorization: upstreamAuth,
+        apikey: String(SUPABASE_ANON_KEY),
+        Authorization: bearer,
         "Content-Type": "application/json",
         "X-Proxy-Ts": ts,
         "X-Proxy-Signature": sig,
@@ -202,19 +186,26 @@ export default async function handler(req, res) {
       body: bodyStr,
     });
 
-    const payload = await readUpstream(upstream);
+    const text = await upstreamResp.text();
+    let payload = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = text ? { raw: text } : null;
+    }
 
-    return res.status(upstream.status).json({
+    return safeJson(res, upstreamResp.status, {
       build_tag: BUILD_TAG,
-      fn: canonFn,
-      upstream_status: upstream.status,
-      ...(payload ?? {}),
+      fn_in: String(fnIn || ""),
+      fn: fn,
+      upstream_status: upstreamResp.status,
+      ...(payload || {}),
     });
   } catch (e) {
-    return res.status(500).json({
+    return safeJson(res, 500, {
       ok: false,
       build_tag: BUILD_TAG,
-      error: String(e?.message || e),
+      error: String(e && e.message ? e.message : e),
     });
   }
-}
+};
