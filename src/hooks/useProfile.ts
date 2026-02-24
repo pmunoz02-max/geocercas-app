@@ -1,7 +1,7 @@
 // src/hooks/useProfile.ts
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "@/context/AuthProvider";
+import { useAuth } from "@/auth/AuthProvider.jsx";
 
 // Define los posibles roles de tu app
 export type AppRoleSlug = "owner" | "admin" | "tracker";

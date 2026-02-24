@@ -1,8 +1,7 @@
 // src/modules/personal/PersonalTable.jsx
 import { useEffect, useMemo, useState } from "react";
 import { listPersonal, deletePersonal } from "../../lib/personalApi.js";
-import { useAuth } from "../../context/AuthProvider.tsx";
-
+import { useAuth } from "@/auth/AuthProvider.jsx";
 export default function PersonalTable() {
   const { loading: authLoading, user, session } = useAuth();
 
