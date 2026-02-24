@@ -12,35 +12,26 @@ import React, {
 /**
  * AuthContext UNIVERSAL (TWA/WebView safe)
  * Fuente: /api/auth/session (cookie HttpOnly tg_at)
- * Auto-cura contexto multi-tenant llamando /api/auth/ensure-context (server-side),
- * y aplica el resultado inmediatamente.
- *
- * FIX UNIVERSAL (Reset Password / Auth public routes):
- * - En rutas públicas de auth (reset-password, auth callback, login, etc.)
- *   NO debemos llamar /api/auth/session ni ensure-context porque esas rutas pueden
- *   tener sesión Supabase (local) sin cookie tg_at, y el server responderá
- *   authenticated:false (rompe el flujo de recovery).
+ * Multi-tenant safe
+ * Reset-password safe
  */
 
 const AuthContext = createContext(null);
 
 const LS_ORG_KEY = "tg_current_org_id";
 
-/** Rutas donde NO se debe bootstraper por cookie server-side */
+/* =========================
+   UTILIDADES
+========================= */
+
 function isPublicAuthPath(pathname) {
   const p = String(pathname || "/").toLowerCase();
 
-  // OJO: mantenemos prefijos y rutas exactas comunes
   if (p === "/login") return true;
   if (p === "/reset-password") return true;
-
-  // callbacks / auth flows
-  if (p.startsWith("/auth/")) return true; // /auth/callback, /auth/invite, etc.
-
-  // tracker (si tu flujo requiere entrar sin cookie server-side)
+  if (p.startsWith("/auth/")) return true;
   if (p === "/tracker-gps" || p.startsWith("/tracker-gps")) return true;
 
-  // Por seguridad: si agregas nuevas rutas públicas, ponlas aquí.
   return false;
 }
 
@@ -50,13 +41,16 @@ async function fetchJson(url, opts = {}) {
     headers: { "cache-control": "no-cache", pragma: "no-cache" },
     ...opts,
   });
+
   const raw = await res.text();
+
   let data = null;
   try {
     data = raw ? JSON.parse(raw) : null;
   } catch {
     data = null;
   }
+
   return { ok: res.ok, status: res.status, data, raw };
 }
 
@@ -77,7 +71,6 @@ function extractServerOrgId(data) {
   return (
     data?.current_org_id ??
     data?.currentOrgId ??
-    data?.current_orgId ??
     data?.org_id ??
     data?.orgId ??
     null
@@ -86,7 +79,11 @@ function extractServerOrgId(data) {
 
 function extractServerRole(data) {
   return normalizeRole(
-    data?.currentRole ?? data?.current_role ?? data?.role ?? data?.app_role ?? null
+    data?.currentRole ??
+      data?.current_role ??
+      data?.role ??
+      data?.app_role ??
+      null
   );
 }
 
@@ -103,6 +100,7 @@ function extractOrganizations(data) {
     .map((o) => {
       const id = o?.id ?? o?.org_id ?? null;
       if (!id) return null;
+
       return {
         ...o,
         id,
@@ -113,27 +111,24 @@ function extractOrganizations(data) {
     .filter(Boolean);
 }
 
+/* =========================
+   PROVIDER
+========================= */
+
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const [ready, setReady] = useState(false);
 
+  const [user, setUser] = useState(null);
   const [currentRole, setCurrentRole] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
 
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
 
-  const role = currentRole;
-  const currentOrgId = currentOrg?.id || null;
-  const orgId = currentOrgId;
-
-  const authenticated = Boolean(user);
-  const [ready, setReady] = useState(false);
-
   const didBootstrapOnceRef = useRef(false);
   const didEnsureContextThisRunRef = useRef(false);
 
-  // ✅ Ruta actual (para decidir si bootstrapeamos o no)
   const [path, setPath] = useState(() => {
     try {
       return typeof window !== "undefined" ? window.location.pathname : "/";
@@ -142,21 +137,15 @@ export function AuthProvider({ children }) {
     }
   });
 
-  // Mantén path actualizado si navegan por SPA (back/forward)
   useEffect(() => {
     function onNav() {
       try {
         setPath(window.location.pathname || "/");
       } catch {}
     }
-    try {
-      window.addEventListener("popstate", onNav);
-    } catch {}
-    return () => {
-      try {
-        window.removeEventListener("popstate", onNav);
-      } catch {}
-    };
+
+    window.addEventListener("popstate", onNav);
+    return () => window.removeEventListener("popstate", onNav);
   }, []);
 
   const selectOrg = useCallback(
@@ -167,18 +156,13 @@ export function AuthProvider({ children }) {
         localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
       } catch {}
 
-      setCurrentOrg((prev) => {
-        if (prev?.id === orgIdToSelect) return prev;
-        const found = Array.isArray(organizations)
-          ? organizations.find((o) => o?.id === orgIdToSelect)
-          : null;
-        return found || { id: orgIdToSelect };
-      });
+      const found = organizations.find((o) => o?.id === orgIdToSelect);
+
+      setCurrentOrg(found || { id: orgIdToSelect });
 
       setOrganizations((prev) => {
-        const arr = Array.isArray(prev) ? prev : [];
-        if (arr.some((o) => o?.id === orgIdToSelect)) return arr;
-        return [{ id: orgIdToSelect }, ...arr];
+        if (prev.some((o) => o?.id === orgIdToSelect)) return prev;
+        return [{ id: orgIdToSelect }, ...prev];
       });
     },
     [organizations]
@@ -203,10 +187,13 @@ export function AuthProvider({ children }) {
 
       const pickedId =
         (finalOrgId && orgs.find((o) => o?.id === finalOrgId)?.id) ||
-        orgs.find((o) => o?.id)?.id ||
+        orgs[0]?.id ||
         null;
 
-      const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
+      const orgObj = pickedId
+        ? orgs.find((o) => o?.id === pickedId)
+        : null;
+
       setCurrentOrg(orgObj || null);
 
       if (pickedId) {
@@ -215,18 +202,16 @@ export function AuthProvider({ children }) {
         } catch {}
       }
 
-      const resolvedRole = extractServerRole(data) || normalizeRole(orgObj?.role);
-      setCurrentRole(resolvedRole);
+      setCurrentRole(
+        extractServerRole(data) || normalizeRole(orgObj?.role)
+      );
+
       return;
     }
 
-    // Sin org list del server
     if (finalOrgId) {
       setOrganizations([{ id: finalOrgId }]);
       setCurrentOrg({ id: finalOrgId });
-      try {
-        localStorage.setItem(LS_ORG_KEY, finalOrgId);
-      } catch {}
     } else {
       setOrganizations([]);
       setCurrentOrg(null);
@@ -235,39 +220,34 @@ export function AuthProvider({ children }) {
     setCurrentRole(extractServerRole(data));
   }, []);
 
-  // ✅ Aplica el resultado del ensure-context aunque session no lo devuelva todavía
   const applyEnsureContext = useCallback((payload) => {
     const org_id = payload?.data?.org_id ?? payload?.org_id ?? null;
     const roleRaw = payload?.data?.role ?? payload?.role ?? null;
-    const roleNorm = normalizeRole(roleRaw);
 
     if (org_id) {
       setCurrentOrg({ id: org_id });
       setOrganizations((prev) => {
-        const arr = Array.isArray(prev) ? prev : [];
-        if (arr.some((o) => o?.id === org_id)) return arr;
-        return [{ id: org_id }, ...arr];
+        if (prev.some((o) => o?.id === org_id)) return prev;
+        return [{ id: org_id }, ...prev];
       });
+
       try {
         localStorage.setItem(LS_ORG_KEY, org_id);
       } catch {}
     }
 
-    if (roleNorm) setCurrentRole(roleNorm);
+    if (roleRaw) {
+      setCurrentRole(normalizeRole(roleRaw));
+    }
   }, []);
 
   const bootstrap = useCallback(async () => {
-    // ✅ Si estamos en rutas públicas de auth, NO hacemos bootstrap server-side
     if (isPublicAuthPath(path)) {
       setLoading(false);
-
-      // Marca ready una sola vez para que UI no se quede colgada
       if (!didBootstrapOnceRef.current) {
         didBootstrapOnceRef.current = true;
         setReady(true);
       }
-
-      // No toques user/role/org aquí: /reset-password debe funcionar
       return;
     }
 
@@ -292,7 +272,7 @@ export function AuthProvider({ children }) {
       const role1 = extractServerRole(s1.data);
       const orgs1 = extractOrganizations(s1.data);
 
-      const missingOrg = !orgId1 && (!orgs1 || orgs1.length === 0);
+      const missingOrg = !orgId1 && orgs1.length === 0;
       const missingRole = !role1;
 
       if ((missingOrg || missingRole) && !didEnsureContextThisRunRef.current) {
@@ -300,16 +280,12 @@ export function AuthProvider({ children }) {
 
         const e1 = await ensureContextServerSide();
 
-        if (!e1.ok) {
-          console.warn("[AuthContext] ensure-context failed:", e1.data || e1.raw);
-        } else {
-          // ✅ llena contexto inmediatamente
+        if (e1.ok) {
           applyEnsureContext(e1.data);
         }
 
-        // re-leer session para quedar consistente si el server ya sabe devolver orgs/role
         const s2 = await fetchSession();
-        if (s2.ok && s2.data && s2.data.authenticated === true) {
+        if (s2.ok && s2.data?.authenticated === true) {
           applySessionData(s2.data);
         }
       }
@@ -322,14 +298,16 @@ export function AuthProvider({ children }) {
     }
   }, [applySessionData, applyEnsureContext, path]);
 
-  // Bootstrap al montar y cuando cambia la ruta (para entrar/salir de rutas públicas)
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
     } catch {}
 
     try {
@@ -349,7 +327,7 @@ export function AuthProvider({ children }) {
     () => ({
       loading,
       ready,
-      authenticated,
+      authenticated: Boolean(user),
       user,
       isLoggedIn: Boolean(user),
 
@@ -359,9 +337,9 @@ export function AuthProvider({ children }) {
       currentOrg,
       selectOrg,
 
-      role,
-      currentOrgId,
-      orgId,
+      role: currentRole,
+      currentOrgId: currentOrg?.id || null,
+      orgId: currentOrg?.id || null,
 
       refreshSession: bootstrap,
       logout,
@@ -369,23 +347,48 @@ export function AuthProvider({ children }) {
     [
       loading,
       ready,
-      authenticated,
       user,
       currentRole,
       isAppRoot,
       organizations,
       currentOrg,
       selectOrg,
-      role,
-      currentOrgId,
-      orgId,
       bootstrap,
       logout,
     ]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
+
+/* =========================
+   HOOKS
+========================= */
+
+const SAFE_FALLBACK = {
+  loading: true,
+  ready: false,
+  authenticated: false,
+  user: null,
+  isLoggedIn: false,
+
+  currentRole: null,
+  isAppRoot: false,
+  organizations: [],
+  currentOrg: null,
+  selectOrg: () => {},
+
+  role: null,
+  currentOrgId: null,
+  orgId: null,
+
+  refreshSession: async () => {},
+  logout: async () => {},
+};
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
@@ -394,5 +397,6 @@ export function useAuth() {
 }
 
 export function useAuthSafe() {
-  return useContext(AuthContext);
+  const ctx = useContext(AuthContext);
+  return ctx ?? SAFE_FALLBACK;
 }
