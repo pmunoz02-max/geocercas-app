@@ -1,13 +1,10 @@
 {
   "version": 2,
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "@vercel/node"
-    },
-    "api/**/*.cjs": {
-      "runtime": "@vercel/node"
-    }
-  },
+  "builds": [
+    { "src": "api/**/*.js", "use": "@vercel/node@3.2.25" },
+    { "src": "api/**/*.cjs", "use": "@vercel/node@3.2.25" },
+    { "src": "package.json", "use": "@vercel/static-build@2.7.3" }
+  ],
   "rewrites": [
     {
       "source": "/tracker-accept",
