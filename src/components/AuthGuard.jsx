@@ -1,7 +1,7 @@
 ﻿// src/components/AuthGuard.jsx
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import * as Auth from "../context/AuthContext.jsx";
+import { useAuthSafe } from "../auth/AuthProvider.jsx";
 
 function FullScreenLoader({ text = "Cargando…" }) {
   return (
@@ -14,18 +14,14 @@ function FullScreenLoader({ text = "Cargando…" }) {
 }
 
 /**
- * AuthGuard estable (anti-crash):
- * - usa useAuthSafe si existe (preferido)
- * - fallback a useAuth si no existe
+ * AuthGuard estable:
+ * - usa hook safe (nunca lanza)
  * - espera loading
- * - valida por user (NO session)
+ * - valida por user
  * - redirige a /login con next
  */
 export default function AuthGuard({ children }) {
-  // Selección segura del hook (siempre se llama 1 hook, sin condicionales)
-  const useAuthHook = Auth.useAuthSafe ?? Auth.useAuth;
-
-  const { loading = false, user = null } = useAuthHook();
+  const { loading, user } = useAuthSafe();
   const location = useLocation();
 
   if (loading) return <FullScreenLoader text="Cargando sesión…" />;
