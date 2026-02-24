@@ -101,6 +101,9 @@ export default function TrackerGpsPage() {
     path_orgId: "",
     client_used: "supabase",
     supabase_url: "",
+    send_mode: "supabase.functions.invoke",
+    send_fn: "send_position",
+    accept_fn: "accept-tracker-invite",
   });
 
   const watchIdRef = useRef(null);
@@ -113,14 +116,22 @@ export default function TrackerGpsPage() {
 
   const PRIMARY = supabase;
 
-  // ✅ URLs via proxy (same-origin) => CORS universal
-  // NOTE: Supabase Production function slug is: accept-tracker-invite
-  const acceptUrl = useMemo(() => {
-    if (!orgId || !isUuid(orgId)) return null;
-    return `/api/tracker-proxy?fn=accept-tracker-invite`;
-  }, [orgId]);
-
-  const sendUrl = useMemo(() => `/api/tracker-proxy?fn=send_position`, []);
+  // Helper robusto para invocar Edge Functions
+  async function invokeFn(fnName, body) {
+    if (!PRIMARY?.functions?.invoke) {
+      throw new Error("Supabase functions client not available");
+    }
+    const { data, error } = await PRIMARY.functions.invoke(fnName, { body });
+    if (error) {
+      const msg = error.message || "Edge function error";
+      const e = new Error(msg);
+      // opcional: adjuntar detalles si existen
+      // @ts-ignore
+      e.details = error;
+      throw e;
+    }
+    return data;
+  }
 
   // 0) Config
   useEffect(() => {
@@ -273,11 +284,10 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, PRIMARY, t]);
 
-  // 1.5) Onboarding
+  // 1.5) Onboarding (sin proxy): accept-tracker-invite via functions.invoke
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
     if (!orgId || !isUuid(orgId)) return;
-    if (!acceptUrl) return;
 
     if (onboardingLockRef.current) return;
     onboardingLockRef.current = true;
@@ -333,20 +343,13 @@ export default function TrackerGpsPage() {
 
         setMembershipDetail(t("trackerGps.membership.runningAccept", { defaultValue: "No membership. Running accept-tracker-invite" }));
 
-        // ✅ proxy call (no apikey headers)
-        const resp = await fetch(acceptUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokenB}`,
-          },
-          body: JSON.stringify({ org_id: orgId }),
-        });
-
-        const text = await resp.text();
-        if (!resp.ok) {
+        // ✅ Llamada directa a Edge Function (sin proxy)
+        let acceptResp = null;
+        try {
+          acceptResp = await invokeFn("accept-tracker-invite", { org_id: orgId });
+        } catch (e) {
           setMembershipStatus("failed");
-          setMembershipDetail(`accept-tracker-invite status=${resp.status} body=${text}`);
+          setMembershipDetail(`accept-tracker-invite error: ${String(e?.message || e)}`);
           return;
         }
 
@@ -365,7 +368,12 @@ export default function TrackerGpsPage() {
           );
         } else {
           setMembershipStatus("ok");
-          setMembershipDetail(t("trackerGps.membership.acceptOk", { defaultValue: "accept-tracker-invite OK: {{text}}", text: text || "ok" }));
+          setMembershipDetail(
+            t("trackerGps.membership.acceptOk", {
+              defaultValue: "accept-tracker-invite OK: {{text}}",
+              text: acceptResp ? JSON.stringify(acceptResp) : "ok",
+            })
+          );
         }
 
         try {
@@ -378,7 +386,7 @@ export default function TrackerGpsPage() {
         onboardingLockRef.current = false;
       }
     })();
-  }, [trackerReady, hasSession, acceptUrl, orgId, PRIMARY, t]);
+  }, [trackerReady, hasSession, orgId, PRIMARY, t]); // acceptUrl removido
 
   // 2) GPS
   useEffect(() => {
@@ -422,7 +430,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, membershipStatus, t]);
 
-  // 3) Envío
+  // 3) Envío (sin proxy): send_position via functions.invoke
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (membershipStatus !== "ok") return;
@@ -447,34 +455,33 @@ export default function TrackerGpsPage() {
           return;
         }
 
+        // ✅ Contrato unificado: usar "at" (compat con trackerApi.js)
         const payload = {
-          org_id: orgId,
+          org_id: orgId, // server-owned (puede ignorarlo)
           lat: c.lat,
           lng: c.lng,
           accuracy: c.accuracy,
-          recorded_at: new Date().toISOString(),
+          at: new Date().toISOString(),
           source: "tracker-gps-web",
         };
 
-        // ✅ proxy call (no apikey headers)
-        const resp = await fetch(sendUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokenB}`,
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const text = await resp.text();
-        if (!resp.ok) {
-          setLastError(`send_position ${resp.status}: ${text}`);
+        let sendResp = null;
+        try {
+          sendResp = await invokeFn("send_position", payload);
+        } catch (e) {
+          setLastError(`send_position error: ${String(e?.message || e)}`);
           return;
         }
 
         lastSentAtRef.current = Date.now();
         setLastSend(new Date());
         setLastError(null);
+
+        // debug opcional: podrías guardar algo del response
+        if (sendResp) {
+          // no sobreescribir todo, solo si quieres inspección rápida
+          // setDebug((d) => ({ ...d, last_send_resp: sendResp }));
+        }
       } finally {
         isSendingRef.current = false;
       }
@@ -486,7 +493,7 @@ export default function TrackerGpsPage() {
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [trackerReady, hasSession, sendUrl, orgId, membershipStatus, PRIMARY, t]);
+  }, [trackerReady, hasSession, orgId, membershipStatus, PRIMARY, t]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
@@ -502,7 +509,13 @@ export default function TrackerGpsPage() {
                 {t("trackerGps.lastSend", { defaultValue: "Last send" })}: {formattedLastSend}
               </div>
 
-              <div className="mt-2 text-[11px] text-slate-400 break-all">send_url: {sendUrl}</div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">
+                send: {debug.send_mode}({debug.send_fn})
+              </div>
+              <div className="mt-2 text-[11px] text-slate-400 break-all">
+                accept: {debug.send_mode}({debug.accept_fn})
+              </div>
+
               <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
 
@@ -518,7 +531,9 @@ export default function TrackerGpsPage() {
             </div>
 
             <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
-              <summary className="cursor-pointer text-sm text-slate-200">{t("trackerGps.debugCopyPaste", { defaultValue: "Debug (copy/paste)" })}</summary>
+              <summary className="cursor-pointer text-sm text-slate-200">
+                {t("trackerGps.debugCopyPaste", { defaultValue: "Debug (copy/paste)" })}
+              </summary>
               <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">{JSON.stringify(debug, null, 2)}</pre>
             </details>
 
@@ -552,7 +567,9 @@ export default function TrackerGpsPage() {
 
         {!trackerReady && (
           <div className="mt-4 text-center">
-            <p className="text-sm text-slate-300 mb-3">{t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." })}</p>
+            <p className="text-sm text-slate-300 mb-3">
+              {t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." })}
+            </p>
             {lastError ? (
               <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">{lastError}</div>
             ) : null}
