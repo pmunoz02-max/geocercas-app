@@ -1,109 +1,87 @@
 // src/auth/AuthProvider.jsx
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { supabase } from "../supabaseClient.js";
+import React from "react";
+import { AuthProvider as CoreAuthProvider, useAuth as coreUseAuth } from "../context/AuthContext.jsx";
 
-const AuthContext = createContext(null);
+/**
+ * AuthProvider ÚNICO (API público del proyecto)
+ * ------------------------------------------------
+ * Todo el proyecto debe importar SIEMPRE desde:
+ *   - "@/auth/AuthProvider.jsx"
+ *
+ * Internamente delega al AuthContext canónico (../context/AuthContext.jsx).
+ */
 
+// Provider único
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // ===== BOOTSTRAP INICIAL =====
-  useEffect(() => {
-    let mounted = true;
-
-    const bootstrap = async () => {
-      setLoading(true);
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-
-      setSession(data?.session ?? null);
-
-      if (data?.session?.user) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", data.session.user.id)
-          .maybeSingle();
-        if (mounted) setProfile(prof ?? null);
-      } else {
-        setProfile(null);
-      }
-
-      setLoading(false);
-    };
-
-    bootstrap();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // ===== LISTENER AUTH =====
-  useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, s) => {
-      setSession(s ?? null);
-
-      if (s?.user) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", s.user.id)
-          .maybeSingle();
-        setProfile(prof ?? null);
-      } else {
-        setProfile(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const role = useMemo(() => profile?.role ?? null, [profile]);
-  const isRootOwner = role === "root_owner";
-
-  const value = useMemo(
-    () => ({
-      session,
-      user: session?.user ?? null,
-      profile,
-      role,
-      isRootOwner,
-      loading,
-      supabase,
-      reloadAuth: async () => {
-        const { data } = await supabase.auth.getSession();
-        setSession(data?.session ?? null);
-      },
-      signOut: async () => {
-        await supabase.auth.signOut();
-      },
-    }),
-    [session, profile, role, isRootOwner, loading]
-  );
-
-  if (loading) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center text-gray-600">
-        Verificando sesión…
-      </div>
-    );
-  }
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <CoreAuthProvider>{children}</CoreAuthProvider>;
 }
 
+/**
+ * Normaliza el shape del contexto para compatibilidad con pantallas viejas.
+ */
+function normalizeAuth(ctx) {
+  return {
+    ...ctx,
+
+    // compat: muchos componentes usan "session" y "profile"
+    session: ctx?.user ?? null,
+    profile: ctx?.user ?? null,
+
+    // compat: muchos usan signOut()
+    signOut: ctx?.logout,
+
+    // compat: isAdmin
+    isAdmin: String(ctx?.currentRole || "").toLowerCase() === "admin",
+
+    // compat: reloadAuth/reloadSession
+    reloadAuth: ctx?.refreshSession,
+    reloadSession: ctx?.refreshSession,
+
+    // compat: orgs / setters
+    setCurrentOrg: (orgId) => ctx?.selectOrg?.(orgId),
+    orgs: ctx?.organizations ?? [],
+    orgsReady: Boolean(ctx?.ready),
+    authReady: Boolean(ctx?.ready),
+  };
+}
+
+/**
+ * Hook estricto (mantiene throw si NO hay Provider)
+ */
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within <AuthProvider>");
-  return ctx;
+  const ctx = coreUseAuth();
+  return normalizeAuth(ctx);
 }
+
+/**
+ * Hook seguro (NUNCA lanza)
+ * - Si no hay Provider, devuelve un objeto seguro.
+ * Ideal para guards/layouts tempranos.
+ */
+export function useAuthSafe() {
+  try {
+    const ctx = coreUseAuth();
+    return normalizeAuth(ctx);
+  } catch {
+    // Fallback seguro cuando no hay Provider (o hay mismatch temporal)
+    return normalizeAuth({
+      user: null,
+      ready: false,
+      loading: true,
+
+      currentOrg: null,
+      organizations: [],
+
+      currentRole: null,
+
+      // no-ops seguros
+      login: async () => ({ ok: false }),
+      logout: async () => {},
+      refreshSession: async () => {},
+      selectOrg: () => {},
+    });
+  }
+}
+
+// Default export por si en algún lugar lo usan así
+export default AuthProvider;
