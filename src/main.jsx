@@ -2,20 +2,25 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import "./i18n/i18n"; // ✅ Inicializa i18next ANTES de usar la app
+import "./i18n/i18n";
 import "./index.css";
 
 import { AuthProvider } from "@/context/auth.js";
 import App from "./App.jsx";
 
-// ✅ Build stamp (cache-bust y verificación en consola)
-console.log("[BUILD]", {
+// 🔥 FORCE UNREGISTER OLD SERVICE WORKERS (PREVIEW SAFE)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    registrations.forEach((r) => r.unregister());
+  });
+}
+
+// 🔎 BUILD STAMP
+console.log("[BUILD PREVIEW]", {
   mode: import.meta.env.MODE,
   time: new Date().toISOString(),
-  commit: "preview",
 });
 
-// ✅ Guard-rail: si por alguna razón llega /?code=..., lo empujamos a /auth/callback
 (function () {
   try {
     const url = new URL(window.location.href);
