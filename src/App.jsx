@@ -1,7 +1,8 @@
+// src/App.jsx
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
-import { useAuthSafe } from "./context/AuthContext.jsx";
+import { useAuthSafe } from "@/context/auth.js";
 
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
@@ -146,15 +147,78 @@ function AppRoutes() {
         }
       >
         <Route path="/inicio" element={<Inicio />} />
-        <Route path="/geocerca" element={<RequireOrg><NuevaGeocerca /></RequireOrg>} />
-        <Route path="/geocercas" element={<RequireOrg><GeocercasPage /></RequireOrg>} />
-        <Route path="/personal" element={<RequireOrg><Personal /></RequireOrg>} />
-        <Route path="/actividades" element={<RequireOrg><ActividadesPage /></RequireOrg>} />
-        <Route path="/asignaciones" element={<RequireOrg><AsignacionesPage /></RequireOrg>} />
-        <Route path="/reportes" element={<RequireOrg><Reports /></RequireOrg>} />
-        <Route path="/dashboard" element={<RequireOrg><CostosDashboardPage /></RequireOrg>} />
-        <Route path="/tracker" element={<RequireOrg><TrackerDashboard /></RequireOrg>} />
-        <Route path="/invitar-tracker" element={<RequireOrg><InvitarTracker /></RequireOrg>} />
+        <Route
+          path="/geocerca"
+          element={
+            <RequireOrg>
+              <NuevaGeocerca />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/geocercas"
+          element={
+            <RequireOrg>
+              <GeocercasPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/personal"
+          element={
+            <RequireOrg>
+              <Personal />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/actividades"
+          element={
+            <RequireOrg>
+              <ActividadesPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/asignaciones"
+          element={
+            <RequireOrg>
+              <AsignacionesPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/reportes"
+          element={
+            <RequireOrg>
+              <Reports />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <RequireOrg>
+              <CostosDashboardPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/tracker"
+          element={
+            <RequireOrg>
+              <TrackerDashboard />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/invitar-tracker"
+          element={
+            <RequireOrg>
+              <InvitarTracker />
+            </RequireOrg>
+          }
+        />
 
         {/* Help */}
         <Route path="/help/instructions" element={<InstructionsPage />} />
