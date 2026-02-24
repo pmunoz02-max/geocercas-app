@@ -1,5 +1,5 @@
-// src/pages/ActividadesPage.jsx
-// Gestión de catálogo de actividades (con costos) por organización
+﻿// src/pages/ActividadesPage.jsx
+// GestiÃ³n de catÃ¡logo de actividades (con costos) por organizaciÃ³n
 
 import { useEffect, useState } from "react";
 import {
@@ -10,7 +10,7 @@ import {
   deleteActividad,
 } from "../lib/actividadesApi";
 
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 import { useTranslation } from "react-i18next";
 
 // Lista de monedas
@@ -46,7 +46,7 @@ export default function ActividadesPage() {
   const [currency, setCurrency] = useState("USD");
   const [hourlyRate, setHourlyRate] = useState("");
 
-  // ✅ Estilos de inputs con alto contraste (universal dentro de esta pantalla)
+  // âœ… Estilos de inputs con alto contraste (universal dentro de esta pantalla)
   const inputClass =
     "border rounded px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
   const selectClass =
@@ -230,7 +230,7 @@ export default function ActividadesPage() {
               <div>
                 <div className="font-medium">{a.name}</div>
                 <div className="text-xs text-gray-500">
-                  {a.currency_code} · {a.hourly_rate} ·{" "}
+                  {a.currency_code} Â· {a.hourly_rate} Â·{" "}
                   {a.active ? t("actividades.statusActive") : t("actividades.statusInactive")}
                 </div>
                 {a.description && <div className="text-sm text-gray-600">{a.description}</div>}
@@ -270,3 +270,4 @@ export default function ActividadesPage() {
     </div>
   );
 }
+

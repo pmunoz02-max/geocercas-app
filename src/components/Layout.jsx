@@ -1,7 +1,7 @@
-// src/components/Layout.jsx
+﻿// src/components/Layout.jsx
 import { Outlet, Link } from "react-router-dom";
 import MainNav from "@/components/MainNav";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 
 export default function Layout() {
   const { user, loading, currentOrg, currentRole, isAppRoot } = useAuth();
@@ -18,7 +18,7 @@ export default function Layout() {
       <header className="sticky top-0 z-50 border-b bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <Link to="/inicio" className="font-semibold text-lg whitespace-nowrap">
-            🛰️ App Geocercas
+            ðŸ›°ï¸ App Geocercas
           </Link>
 
           {/* CONTEXTO + NAV */}
@@ -27,12 +27,12 @@ export default function Layout() {
               {/* Org + Rol */}
               <div className="hidden sm:flex flex-col text-right text-xs px-2 py-1 rounded bg-gray-100">
                 <span className="font-medium text-gray-800">
-                  {currentOrg?.name ?? "Sin organización"}
+                  {currentOrg?.name ?? "Sin organizaciÃ³n"}
                 </span>
                 <span className="text-gray-600">{roleLabel}</span>
               </div>
 
-              {/* Menú según rol (si tu MainNav lo usa) */}
+              {/* MenÃº segÃºn rol (si tu MainNav lo usa) */}
               <MainNav role={isAppRoot ? "root" : currentRole} />
             </div>
           ) : (
@@ -50,8 +50,9 @@ export default function Layout() {
 
       {/* FOOTER */}
       <footer className="border-t text-xs text-slate-600 text-center py-3 bg-white">
-        © {new Date().getFullYear()} App Geocercas — Todos los derechos reservados.
+        Â© {new Date().getFullYear()} App Geocercas â€” Todos los derechos reservados.
       </footer>
     </div>
   );
 }
+

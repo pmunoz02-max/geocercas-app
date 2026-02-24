@@ -1,8 +1,8 @@
-import React, { useMemo } from "react";
-import { useAuth } from "../context/AuthContext.jsx";
+﻿import React, { useMemo } from "react";
+import { useAuth } from "@/context/auth.js";
 
 /**
- * OrgSelector — vOrgStable-1
+ * OrgSelector â€” vOrgStable-1
  * - Usa organizations/currentOrg/selectOrg desde AuthContext
  * - Visible para owner/admin/root (isAdmin)
  * - Nunca renderiza objetos en JSX
@@ -34,7 +34,7 @@ export default function OrgSelector({ className = "" }) {
       .map((o) => {
         const id = safeText(o?.id, "");
         const name = safeText(o?.name, "");
-        const label = name || "Organización";
+        const label = name || "OrganizaciÃ³n";
         return { id, label };
       })
       .filter((o) => !!o.id);
@@ -46,7 +46,7 @@ export default function OrgSelector({ className = "" }) {
     return (
       <div className={safeText(className)}>
         <select className="border rounded px-2 py-1 text-xs opacity-70" disabled value="">
-          <option value="">Cargando…</option>
+          <option value="">Cargandoâ€¦</option>
         </select>
       </div>
     );
@@ -63,11 +63,11 @@ export default function OrgSelector({ className = "" }) {
         onChange={(e) => selectOrg(e.target.value)}
       >
         {orgOptions.length === 0 ? (
-          <option value="">Organización</option>
+          <option value="">OrganizaciÃ³n</option>
         ) : (
           orgOptions.map(({ id, label }) => (
             <option key={id} value={id}>
-              {safeText(label, "Organización")}
+              {safeText(label, "OrganizaciÃ³n")}
             </option>
           ))
         )}
@@ -75,3 +75,4 @@ export default function OrgSelector({ className = "" }) {
     </div>
   );
 }
+

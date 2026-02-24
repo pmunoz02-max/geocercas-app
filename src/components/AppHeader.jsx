@@ -1,6 +1,6 @@
-// src/components/AppHeader.jsx
+﻿// src/components/AppHeader.jsx
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 import { supabase } from "../supabaseClient";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
@@ -32,14 +32,14 @@ export default function AppHeader() {
     try {
       await supabase.auth.signOut();
     } catch (err) {
-      console.error("[AppHeader] Error al cerrar sesión:", err);
+      console.error("[AppHeader] Error al cerrar sesiÃ³n:", err);
     } finally {
       // AuthContext al recibir session=null ya limpia orgs, etc.
       navigate("/", { replace: true });
     }
   };
 
-  // Traducción básica de roles (fallback al valor original si no matchea)
+  // TraducciÃ³n bÃ¡sica de roles (fallback al valor original si no matchea)
   let roleLabel = rawRole;
   if (rawRole === "owner") roleLabel = t("app.header.roleOwner", { defaultValue: "Propietario" });
   if (rawRole === "admin") roleLabel = t("app.header.roleAdmin", { defaultValue: "Administrador" });
@@ -80,7 +80,7 @@ export default function AppHeader() {
                 )}
               </div>
 
-              {/* Botón Administrador solo para owner */}
+              {/* BotÃ³n Administrador solo para owner */}
               {rawRole === "owner" && (
                 <Link
                   to="/admins"
@@ -90,7 +90,7 @@ export default function AppHeader() {
                 </Link>
               )}
 
-              {/* Botón Salir */}
+              {/* BotÃ³n Salir */}
               <button
                 type="button"
                 onClick={handleLogout}
@@ -114,3 +114,4 @@ export default function AppHeader() {
     </header>
   );
 }
+

@@ -1,8 +1,8 @@
-// src/pages/Geocercas.jsx
+﻿// src/pages/Geocercas.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 import GeoMap from "@/components/GeoMap";
 import OrgSelector from "@/components/OrgSelector";
 import { listGeocercas } from "@/lib/geocercasApi";
@@ -35,7 +35,7 @@ export default function GeocercasPage() {
     const load = async () => {
       console.info(DBG, "load()", { orgId, user: user?.email, role });
 
-      // ✅ reset duro cada cambio de org
+      // âœ… reset duro cada cambio de org
       setGeocercas([]);
       setSelectedGeocercaIdsUI([]);
       setSelectedGeocercaIdsApplied([]);
@@ -92,7 +92,7 @@ export default function GeocercasPage() {
         </h2>
         <p className="text-sm">
           {t("geocercas.manage.noOrgBody", {
-            defaultValue: "Selecciona una organización para gestionar geocercas.",
+            defaultValue: "Selecciona una organizaciÃ³n para gestionar geocercas.",
           })}
         </p>
         <button
@@ -100,7 +100,7 @@ export default function GeocercasPage() {
           className="rounded-lg bg-emerald-600 px-4 py-2 text-white"
         >
           {t("geocercas.manage.selectOrgButton", {
-            defaultValue: "Seleccionar organización",
+            defaultValue: "Seleccionar organizaciÃ³n",
           })}
         </button>
       </div>
@@ -118,7 +118,7 @@ export default function GeocercasPage() {
       ? geocercas
       : geocercas.filter((g) => selectedGeocercaIdsApplied.includes(String(g.id)));
 
-  // ✅ Si API devuelve vacío, el mapa debe recibir vacío SIEMPRE
+  // âœ… Si API devuelve vacÃ­o, el mapa debe recibir vacÃ­o SIEMPRE
   const geocercasForMapSafe = Array.isArray(geocercasForMap) ? geocercasForMap : [];
 
   return (
@@ -127,7 +127,7 @@ export default function GeocercasPage() {
         <h2 className="text-lg font-semibold">
           {t("geocercas.manage.headerTitle", {
             orgName: currentOrgName,
-            defaultValue: `Geocercas · ${currentOrgName}`,
+            defaultValue: `Geocercas Â· ${currentOrgName}`,
           })}
         </h2>
         <OrgSelector />
@@ -150,12 +150,12 @@ export default function GeocercasPage() {
           disabled={loadingGeocercas}
           type="button"
         >
-          {loadingGeocercas ? "Cargando…" : "Mostrar"}
+          {loadingGeocercas ? "Cargandoâ€¦" : "Mostrar"}
         </button>
       </div>
 
       <div className="text-xs text-slate-500">
-        {DBG} orgId=<span className="font-mono">{orgId}</span> · items=<span className="font-mono">{String(geocercas.length)}</span>
+        {DBG} orgId=<span className="font-mono">{orgId}</span> Â· items=<span className="font-mono">{String(geocercas.length)}</span>
       </div>
 
       <GeoMap
@@ -172,3 +172,4 @@ export default function GeocercasPage() {
     </div>
   );
 }
+

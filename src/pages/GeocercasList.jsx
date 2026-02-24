@@ -1,7 +1,7 @@
-import React from "react";
+﻿import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient.js";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 import { useTranslation } from "react-i18next";
 
 function downloadJSON(filename, data) {
@@ -33,7 +33,7 @@ export default function GeocercasList() {
   React.useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (id) => {
-    if (!confirm(t("geocercas.list.confirmDelete", { defaultValue: "¿Eliminar esta geocerca?" }))) return;
+    if (!confirm(t("geocercas.list.confirmDelete", { defaultValue: "Â¿Eliminar esta geocerca?" }))) return;
     const { error } = await supabase.from("geofences").delete().eq("id", id);
     if (error) alert(t("geocercas.list.deleteError", { defaultValue: "Error eliminando geocerca" })); else setItems((p) => p.filter((x) => x.id !== id));
   };

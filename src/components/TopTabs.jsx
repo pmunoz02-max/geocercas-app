@@ -1,9 +1,9 @@
-// src/components/TopTabs.jsx
+﻿// src/components/TopTabs.jsx
 import React, { useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import OrgSelector from "./OrgSelector";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 
 function safeText(v) {
   if (v == null) return "";
@@ -152,3 +152,4 @@ export default function TopTabs({ tabs = [] }) {
     </div>
   );
 }
+

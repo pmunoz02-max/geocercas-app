@@ -1,9 +1,9 @@
-// src/pages/ActivityAssignments.jsx
-// Asignación de actividades a trackers/personas
+﻿// src/pages/ActivityAssignments.jsx
+// AsignaciÃ³n de actividades a trackers/personas
 // Evita que la misma persona tenga dos actividades al mismo tiempo.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 import { listActivities } from "../lib/activitiesApi";
 import { listTrackers } from "../lib/trackersApi";
 import {
@@ -13,7 +13,7 @@ import {
   deleteActivityAssignment,
 } from "../lib/activityAssignmentsApi";
 
-// Form vacío
+// Form vacÃ­o
 const initialForm = {
   id: null,
   tracker_user_id: "",
@@ -185,7 +185,7 @@ export default function ActivityAssignmentsPage() {
 
     const conflict = rows.find((r) => {
       if (r.tracker_user_id !== tracker_user_id) return false;
-      if (id && r.id === id) return false; // ignoramos la misma fila en edición
+      if (id && r.id === id) return false; // ignoramos la misma fila en ediciÃ³n
       return rangesOverlap(start_date, end_date, r.start_date, r.end_date);
     });
 
@@ -206,7 +206,7 @@ export default function ActivityAssignmentsPage() {
         return;
       }
 
-      // Validación local
+      // ValidaciÃ³n local
       const overlap = checkOverlapLocal(form);
       if (overlap) {
         const t = trackersById.get(overlap.tracker_user_id);
@@ -238,9 +238,9 @@ export default function ActivityAssignmentsPage() {
           start_date: form.start_date,
           end_date: form.end_date || null,
         });
-        setSuccessMsg("Asignación actualizada correctamente");
+        setSuccessMsg("AsignaciÃ³n actualizada correctamente");
       } else {
-        setErrorMsg("Modo de formulario inválido");
+        setErrorMsg("Modo de formulario invÃ¡lido");
         return;
       }
 
@@ -258,7 +258,7 @@ export default function ActivityAssignmentsPage() {
       } else {
         setErrorMsg(
           err.message ||
-            "Error al guardar la asignación de actividad"
+            "Error al guardar la asignaciÃ³n de actividad"
         );
       }
       console.error("Error al guardar ActivityAssignment:", err);
@@ -272,13 +272,13 @@ export default function ActivityAssignmentsPage() {
     const a = activitiesById.get(row.activity_id);
 
     const ok = window.confirm(
-      `¿Seguro que deseas eliminar la asignación de "${a?.name || "actividad"}" para "${t?.full_name || t?.email || "tracker"}"?`
+      `Â¿Seguro que deseas eliminar la asignaciÃ³n de "${a?.name || "actividad"}" para "${t?.full_name || t?.email || "tracker"}"?`
     );
     if (!ok) return;
 
     try {
       await deleteActivityAssignment(row.id);
-      setSuccessMsg("Asignación eliminada correctamente");
+      setSuccessMsg("AsignaciÃ³n eliminada correctamente");
       if (selectedId === row.id) {
         resetForm();
       }
@@ -286,7 +286,7 @@ export default function ActivityAssignmentsPage() {
     } catch (err) {
       console.error("Error al eliminar ActivityAssignment:", err);
       setErrorMsg(
-        err.message || "No se pudo eliminar la asignación de actividad"
+        err.message || "No se pudo eliminar la asignaciÃ³n de actividad"
       );
     }
   }
@@ -295,14 +295,14 @@ export default function ActivityAssignmentsPage() {
     <div className="p-4 space-y-4">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Asignación de actividades</h1>
+          <h1 className="text-xl font-semibold">AsignaciÃ³n de actividades</h1>
           <p className="text-sm text-gray-600">
-            Define qué actividad realiza cada persona en un rango de fechas.
+            Define quÃ© actividad realiza cada persona en un rango de fechas.
             La misma persona no puede tener dos actividades al mismo tiempo.
           </p>
           {user && (
             <p className="text-xs text-gray-500 mt-1">
-              Sesión: <span className="font-mono">{user.email}</span>
+              SesiÃ³n: <span className="font-mono">{user.email}</span>
             </p>
           )}
         </div>
@@ -313,7 +313,7 @@ export default function ActivityAssignmentsPage() {
             onClick={handleNueva}
             className="px-3 py-1 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
           >
-            + Nueva asignación
+            + Nueva asignaciÃ³n
           </button>
           <button
             type="button"
@@ -497,10 +497,10 @@ export default function ActivityAssignmentsPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-medium text-sm">
               {mode === "create"
-                ? "Nueva asignación"
+                ? "Nueva asignaciÃ³n"
                 : mode === "edit"
-                ? "Editar asignación"
-                : "Detalles / nueva asignación"}
+                ? "Editar asignaciÃ³n"
+                : "Detalles / nueva asignaciÃ³n"}
             </h2>
             <button
               type="button"
@@ -600,7 +600,7 @@ export default function ActivityAssignmentsPage() {
                   ? "Guardando..."
                   : mode === "edit"
                   ? "Guardar cambios"
-                  : "Crear asignación"}
+                  : "Crear asignaciÃ³n"}
               </button>
             </div>
           </form>
@@ -609,3 +609,4 @@ export default function ActivityAssignmentsPage() {
     </div>
   );
 }
+

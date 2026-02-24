@@ -1,9 +1,9 @@
-// src/pages/Organizations.jsx
+﻿// src/pages/Organizations.jsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createOrganization, listMyOrganizations } from "@/services/orgs";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 
 export default function Organizations() {
   const { user, loading } = useAuth();
@@ -43,7 +43,7 @@ export default function Organizations() {
       await load();
     } catch (err) {
       console.error(err);
-      alert("No se pudo crear la organización: " + err.message);
+      alert("No se pudo crear la organizaciÃ³n: " + err.message);
     }
   };
 
@@ -61,11 +61,11 @@ export default function Organizations() {
   }
 
   if (!user) {
-    // Si alguien entra aquí sin sesión, mostramos un mensaje simple.
+    // Si alguien entra aquÃ­ sin sesiÃ³n, mostramos un mensaje simple.
     return (
       <div className="max-w-5xl mx-auto p-6">
         <p className="text-sm text-slate-700">
-          Debes iniciar sesión para administrar tus organizaciones.
+          Debes iniciar sesiÃ³n para administrar tus organizaciones.
         </p>
       </div>
     );
@@ -79,7 +79,7 @@ export default function Organizations() {
           onClick={onLogout}
           className="px-3 py-2 rounded-xl shadow border hover:bg-gray-50"
         >
-          Cerrar sesión
+          Cerrar sesiÃ³n
         </button>
       </div>
 
@@ -89,7 +89,7 @@ export default function Organizations() {
       >
         <input
           className="border rounded-xl px-3 py-2"
-          placeholder="Nombre de la organización (ej. Finca Norte)"
+          placeholder="Nombre de la organizaciÃ³n (ej. Finca Norte)"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
@@ -108,15 +108,15 @@ export default function Organizations() {
       </form>
 
       {loadingOrgs ? (
-        <div className="p-4">Cargando…</div>
+        <div className="p-4">Cargandoâ€¦</div>
       ) : orgs.length === 0 ? (
         <div className="p-4 border rounded-2xl">
-          No tienes organizaciones aún.
+          No tienes organizaciones aÃºn.
         </div>
       ) : (
         <div className="grid gap-3">
           {orgs.map((o) => {
-            // Validación defensiva: necesitamos un UUID real
+            // ValidaciÃ³n defensiva: necesitamos un UUID real
             const id = o.org_id || o.id; // por si la vista cambia a id
             const name = o.org_name || o.name || "(sin nombre)";
 
@@ -129,7 +129,7 @@ export default function Organizations() {
                   <div className="text-lg font-semibold">{name}</div>
                   <div className="text-sm text-gray-600">
                     Rol: <span className="font-medium">{o.role}</span>
-                    {o.slug ? ` · slug: ${o.slug}` : ""}
+                    {o.slug ? ` Â· slug: ${o.slug}` : ""}
                   </div>
                   <div className="text-xs text-gray-400 mt-1 break-all">
                     Org ID: {id}
@@ -159,3 +159,4 @@ export default function Organizations() {
     </div>
   );
 }
+

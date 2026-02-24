@@ -1,7 +1,7 @@
-// src/pages/Tracker.jsx
+﻿// src/pages/Tracker.jsx
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 
 import {
   enqueuePosition,
@@ -79,7 +79,7 @@ export default function Tracker() {
     try {
       if (!isOnline) {
         setStatusMessage(
-          `Sin conexión. Cola pendiente: ${queueInfo.pending} (motivo: ${reason})`
+          `Sin conexiÃ³n. Cola pendiente: ${queueInfo.pending} (motivo: ${reason})`
         );
         return;
       }
@@ -102,7 +102,7 @@ export default function Tracker() {
       );
     } catch (err) {
       console.error("Error enviando cola:", err);
-      setStatusMessage("Error al enviar cola. Se reintentará automáticamente.");
+      setStatusMessage("Error al enviar cola. Se reintentarÃ¡ automÃ¡ticamente.");
     }
   }
 
@@ -142,7 +142,7 @@ export default function Tracker() {
       console.error("Error leyendo intervalo:", err);
       setIntervalSec(MIN_INTERVAL_SEC);
       setStatusMessage(
-        "No se pudo leer configuración. Usando 5 min por defecto."
+        "No se pudo leer configuraciÃ³n. Usando 5 min por defecto."
       );
     } finally {
       setIsReady(true);
@@ -150,11 +150,11 @@ export default function Tracker() {
   }
 
   // ==============================
-  // Geolocalización
+  // GeolocalizaciÃ³n
   // ==============================
   function startWatch() {
     if (!("geolocation" in navigator)) {
-      setStatusMessage("Geolocalización no soportada.");
+      setStatusMessage("GeolocalizaciÃ³n no soportada.");
       return;
     }
 
@@ -172,7 +172,7 @@ export default function Tracker() {
           await updateQueueInfo();
 
           setStatusMessage(
-            `Posición encolada: ${payload.lat.toFixed(
+            `PosiciÃ³n encolada: ${payload.lat.toFixed(
               6
             )}, ${payload.lng.toFixed(6)}`
           );
@@ -191,7 +191,7 @@ export default function Tracker() {
       watchIdRef.current = id;
     } catch (err) {
       console.error("Error iniciando watchPosition:", err);
-      setStatusMessage("No se pudo iniciar la geolocalización.");
+      setStatusMessage("No se pudo iniciar la geolocalizaciÃ³n.");
     }
   }
 
@@ -216,7 +216,7 @@ export default function Tracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Activar tracking automático cuando está listo
+  // Activar tracking automÃ¡tico cuando estÃ¡ listo
   useEffect(() => {
     if (!isReady) return;
     if (!user) {
@@ -226,7 +226,7 @@ export default function Tracker() {
     setIsTracking(true);
   }, [isReady, user]);
 
-  // Cuando tracking está activo: GPS + timer de flush
+  // Cuando tracking estÃ¡ activo: GPS + timer de flush
   useEffect(() => {
     if (!isTracking) {
       stopWatch();
@@ -266,13 +266,13 @@ export default function Tracker() {
   useEffect(() => {
     function handleOnline() {
       setIsOnline(true);
-      setStatusMessage("Conexión restaurada. Enviando cola...");
+      setStatusMessage("ConexiÃ³n restaurada. Enviando cola...");
       flushQueue("online");
     }
 
     function handleOffline() {
       setIsOnline(false);
-      setStatusMessage("Sin conexión. Encolando posiciones...");
+      setStatusMessage("Sin conexiÃ³n. Encolando posiciones...");
     }
 
     window.addEventListener("online", handleOnline);
@@ -311,7 +311,7 @@ export default function Tracker() {
             {onlineLabel}
           </span>
           <span className="text-xs text-gray-500">
-            Intervalo: {Math.round(intervalSec / 60)} min (mín. 5 min)
+            Intervalo: {Math.round(intervalSec / 60)} min (mÃ­n. 5 min)
           </span>
         </div>
 
@@ -323,13 +323,13 @@ export default function Tracker() {
           </p>
           {queueInfo.lastSentAt && (
             <p>
-              <strong>Último envío:</strong>{" "}
+              <strong>Ãšltimo envÃ­o:</strong>{" "}
               {new Date(queueInfo.lastSentAt).toLocaleString()}
             </p>
           )}
           <p className="mt-2">
-            Tracking automático. Las posiciones se envían al servidor cuando hay
-            señal. El backend solo guarda los puntos que caen dentro de tus
+            Tracking automÃ¡tico. Las posiciones se envÃ­an al servidor cuando hay
+            seÃ±al. El backend solo guarda los puntos que caen dentro de tus
             geocercas asignadas.
           </p>
         </div>
@@ -337,3 +337,4 @@ export default function Tracker() {
     </div>
   );
 }
+

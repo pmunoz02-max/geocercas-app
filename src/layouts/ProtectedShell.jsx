@@ -1,11 +1,11 @@
-// src/layouts/ProtectedShell.jsx
+﻿// src/layouts/ProtectedShell.jsx
 import { Outlet } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
 /**
- * ProtectedShell — Tabs
+ * ProtectedShell â€” Tabs
  * - Tab "Geocerca" abre el MAPA (ruta /geocerca)
  * - La pantalla hub/listado queda en /geocercas (sin tab)
  */
@@ -28,7 +28,7 @@ function buildTabs({ role, isAppRoot }) {
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
 
-    // ✅ MAPA / CONSTRUCTOR
+    // âœ… MAPA / CONSTRUCTOR
     { path: "/geocerca", labelKey: "app.tabs.geocerca" },
 
     { path: "/personal", labelKey: "app.tabs.personal" },
@@ -69,3 +69,4 @@ export default function ProtectedShell() {
     </div>
   );
 }
+

@@ -1,13 +1,13 @@
-// src/components/AuthGuard.jsx
+﻿// src/components/AuthGuard.jsx
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuthSafe } from "../context/AuthContext.jsx";
+import { useAuthSafe } from "@/context/auth.js";
 
 export default function AuthGuard({ children }) {
   const auth = useAuthSafe();
   const location = useLocation();
 
-  // ✅ Si NO hay provider, no crasheamos
+  // âœ… Si NO hay provider, no crasheamos
   if (!auth) {
     const p = location.pathname || "/";
     if (p.startsWith("/login") || p.startsWith("/auth/callback")) return children;
@@ -37,3 +37,4 @@ export default function AuthGuard({ children }) {
 
   return children;
 }
+

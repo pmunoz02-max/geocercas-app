@@ -1,8 +1,8 @@
-import React, { useEffect } from "react";
+﻿import React, { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 
-function FullScreenLoader({ text = "Cargando tu sesión y organización actual…" }) {
+function FullScreenLoader({ text = "Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦" }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
       <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70">
@@ -33,7 +33,7 @@ export default function RequireOrg({ children }) {
 
   const location = useLocation();
 
-  // Autocuración: si está logueado y hay orgs pero falta currentOrg, selecciona la primera
+  // AutocuraciÃ³n: si estÃ¡ logueado y hay orgs pero falta currentOrg, selecciona la primera
   useEffect(() => {
     if (loading || !ready) return;
     if (!isLoggedIn) return;
@@ -47,15 +47,15 @@ export default function RequireOrg({ children }) {
   // 1) Mientras se hidrata el contexto
   if (loading || !ready) return <FullScreenLoader />;
 
-  // 2) Sin sesión -> login
+  // 2) Sin sesiÃ³n -> login
   if (!isLoggedIn) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  // 3) Tiene orgs pero todavía no se asentó currentOrg (1 render)
+  // 3) Tiene orgs pero todavÃ­a no se asentÃ³ currentOrg (1 render)
   if (!currentOrg?.id && Array.isArray(organizations) && organizations.length > 0) {
-    return <FullScreenLoader text="Resolviendo tu organización…" />;
+    return <FullScreenLoader text="Resolviendo tu organizaciÃ³nâ€¦" />;
   }
 
   // 4) Logueado pero sin organizaciones -> onboarding
@@ -66,3 +66,4 @@ export default function RequireOrg({ children }) {
 
   return children;
 }
+

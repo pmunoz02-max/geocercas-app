@@ -1,7 +1,7 @@
-// src/components/Header.jsx
+﻿// src/components/Header.jsx
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 
 function NavItem({ to, children }) {
   const base =
@@ -104,3 +104,4 @@ export default function Header() {
     </header>
   );
 }
+

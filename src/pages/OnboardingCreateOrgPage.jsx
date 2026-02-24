@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 
 export default function OnboardingCreateOrgPage() {
   const { user, currentOrg, reloadAuth, setCurrentOrg } = useAuth();
@@ -9,19 +9,19 @@ export default function OnboardingCreateOrgPage() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    // Si ya tiene org, no debería estar aquí (tu router lo redirigirá; igual protegemos)
-    if (currentOrg?.id) setMsg("Ya tienes una organización activa.");
+    // Si ya tiene org, no deberÃ­a estar aquÃ­ (tu router lo redirigirÃ¡; igual protegemos)
+    if (currentOrg?.id) setMsg("Ya tienes una organizaciÃ³n activa.");
   }, [currentOrg]);
 
   async function createOrg() {
     try {
       setMsg("");
       if (!user) {
-        setMsg("Debes iniciar sesión.");
+        setMsg("Debes iniciar sesiÃ³n.");
         return;
       }
       if (!name.trim()) {
-        setMsg("Escribe el nombre de tu organización.");
+        setMsg("Escribe el nombre de tu organizaciÃ³n.");
         return;
       }
 
@@ -34,17 +34,17 @@ export default function OnboardingCreateOrgPage() {
 
       if (error) throw error;
 
-      // data devuelve org_id (uuid) en la mayoría de implementaciones.
-      // Pero el estado canónico debe venir de org_members + organizations.
+      // data devuelve org_id (uuid) en la mayorÃ­a de implementaciones.
+      // Pero el estado canÃ³nico debe venir de org_members + organizations.
       // 1) refrescamos AuthContext
       if (typeof reloadAuth === "function") {
         await reloadAuth();
       } else if (typeof setCurrentOrg === "function" && data) {
-        // Fallback (si reloadAuth no existe por alguna razón)
+        // Fallback (si reloadAuth no existe por alguna razÃ³n)
         setCurrentOrg({ id: data, name: name.trim() });
       }
 
-      setMsg("Organización creada. Redirigiendo…");
+      setMsg("OrganizaciÃ³n creada. Redirigiendoâ€¦");
       window.location.replace("/app");
     } catch (e) {
       console.error("[OnboardingCreateOrgPage] createOrg error:", e);
@@ -53,7 +53,7 @@ export default function OnboardingCreateOrgPage() {
         e?.message ||
         e?.details ||
         (typeof e === "string" ? e : null) ||
-        "No se pudo crear la organización.";
+        "No se pudo crear la organizaciÃ³n.";
       setMsg(friendly);
     } finally {
       setBusy(false);
@@ -63,23 +63,23 @@ export default function OnboardingCreateOrgPage() {
   return (
     <div style={styles.screen}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Crea tu organización</h1>
+        <h1 style={styles.title}>Crea tu organizaciÃ³n</h1>
         <p style={styles.text}>
-          Para usar App Geocercas necesitas una organización. Esto habilita el
-          modelo multi-tenant y la seguridad por organización.
+          Para usar App Geocercas necesitas una organizaciÃ³n. Esto habilita el
+          modelo multi-tenant y la seguridad por organizaciÃ³n.
         </p>
 
-        <label style={styles.label}>Nombre de la organización</label>
+        <label style={styles.label}>Nombre de la organizaciÃ³n</label>
         <input
           style={styles.input}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej: Org de Pietro (producción)"
+          placeholder="Ej: Org de Pietro (producciÃ³n)"
           disabled={busy}
         />
 
         <button style={styles.btn} onClick={createOrg} disabled={busy}>
-          {busy ? "Creando…" : "Crear mi organización"}
+          {busy ? "Creandoâ€¦" : "Crear mi organizaciÃ³n"}
         </button>
 
         {msg && <div style={styles.msg}>{msg}</div>}
@@ -133,3 +133,4 @@ const styles = {
   },
   msg: { marginTop: 12, color: "#e2e8f0" },
 };
+

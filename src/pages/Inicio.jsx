@@ -1,8 +1,8 @@
-// src/pages/Inicio.jsx
+﻿// src/pages/Inicio.jsx
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 
 function HelpCard({ title, description, to }) {
@@ -26,7 +26,7 @@ function HelpCard({ title, description, to }) {
       <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       <div className="mt-4 text-sm font-medium text-blue-700">
-        {t("home.open", { defaultValue: "Abrir →" })}
+        {t("home.open", { defaultValue: "Abrir â†’" })}
       </div>
     </div>
   );
@@ -74,12 +74,12 @@ export default function Inicio() {
   if (loading || !ready) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
-        {t("home.loadingPermissions", { defaultValue: "Resolviendo permisos…" })}
+        {t("home.loadingPermissions", { defaultValue: "Resolviendo permisosâ€¦" })}
       </div>
     );
   }
 
-  // 2) No autenticado → login (botón legible)
+  // 2) No autenticado â†’ login (botÃ³n legible)
   if (!authenticated || !user) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center px-6">
@@ -89,7 +89,7 @@ export default function Inicio() {
           </h1>
 
           <p className="mt-2 text-slate-600">
-            {t("home.loginToContinue", { defaultValue: "Inicia sesión para continuar." })}
+            {t("home.loginToContinue", { defaultValue: "Inicia sesiÃ³n para continuar." })}
           </p>
 
           <div className="mt-5 flex flex-col sm:flex-row gap-3">
@@ -107,7 +107,7 @@ export default function Inicio() {
               onClick={() => navigate("/login")}
               type="button"
             >
-              {t("home.goToLogin", { defaultValue: "Iniciar sesión" })}
+              {t("home.goToLogin", { defaultValue: "Iniciar sesiÃ³n" })}
             </button>
 
             <button
@@ -123,7 +123,7 @@ export default function Inicio() {
               onClick={() => navigate("/help/instructions")}
               type="button"
             >
-              {t("home.quickStart", { defaultValue: "Ver guía rápida" })}
+              {t("home.quickStart", { defaultValue: "Ver guÃ­a rÃ¡pida" })}
             </button>
           </div>
         </div>
@@ -134,7 +134,7 @@ export default function Inicio() {
   // 3) Rol efectivo
   const roleLower = useMemo(() => String(role || "").toLowerCase().trim(), [role]);
 
-  // 4) Estado anómalo (sesión sin rol u org)
+  // 4) Estado anÃ³malo (sesiÃ³n sin rol u org)
   if (!roleLower || !currentOrgId) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-10">
@@ -142,7 +142,7 @@ export default function Inicio() {
           <div className="flex items-start justify-between gap-3">
             <h1 className="text-xl font-semibold text-slate-900">
               {t("home.missingContextTitle", {
-                defaultValue: "Sesión iniciada, pero falta contexto",
+                defaultValue: "SesiÃ³n iniciada, pero falta contexto",
               })}
             </h1>
 
@@ -158,18 +158,18 @@ export default function Inicio() {
               onClick={onLogout}
               disabled={signingOut}
               type="button"
-              title={t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
+              title={t("common.actions.logout", { defaultValue: "Cerrar sesiÃ³n" })}
             >
               {signingOut
-                ? t("common.actions.processing", { defaultValue: "Saliendo…" })
-                : t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
+                ? t("common.actions.processing", { defaultValue: "Saliendoâ€¦" })
+                : t("common.actions.logout", { defaultValue: "Cerrar sesiÃ³n" })}
             </button>
           </div>
 
           <p className="text-sm text-slate-600">
             {t("home.missingContextBody", {
               defaultValue:
-                "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
+                "La sesiÃ³n existe ({{email}}), pero aÃºn no se pudo determinar tu rol u organizaciÃ³n activa.",
               email: user.email,
             })}
           </p>
@@ -179,12 +179,12 @@ export default function Inicio() {
               <b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}
             </div>
             <div>
-              <b>{t("home.labels.organization", { defaultValue: "Organización:" })}</b>{" "}
+              <b>{t("home.labels.organization", { defaultValue: "OrganizaciÃ³n:" })}</b>{" "}
               {t("home.orgNotResolved", { defaultValue: "(no resuelta)" })}
             </div>
             <div>
               <b>{t("home.labels.role", { defaultValue: "Rol:" })}</b>{" "}
-              {t("home.roleEmpty", { defaultValue: "(vacío)" })}
+              {t("home.roleEmpty", { defaultValue: "(vacÃ­o)" })}
             </div>
           </div>
 
@@ -214,7 +214,7 @@ export default function Inicio() {
             </h1>
 
             <p className="text-slate-600 mt-2">
-              {t("home.sessionAs", { defaultValue: "Sesión iniciada como" })}{" "}
+              {t("home.sessionAs", { defaultValue: "SesiÃ³n iniciada como" })}{" "}
               <b>{roleLower}</b>
             </p>
 
@@ -223,7 +223,7 @@ export default function Inicio() {
                 <b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}
               </div>
               <div>
-                <b>{t("home.labels.orgId", { defaultValue: "Organización ID:" })}</b>{" "}
+                <b>{t("home.labels.orgId", { defaultValue: "OrganizaciÃ³n ID:" })}</b>{" "}
                 {currentOrgId}
               </div>
             </div>
@@ -259,8 +259,8 @@ export default function Inicio() {
               type="button"
             >
               {signingOut
-                ? t("common.actions.processing", { defaultValue: "Saliendo…" })
-                : t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
+                ? t("common.actions.processing", { defaultValue: "Saliendoâ€¦" })
+                : t("common.actions.logout", { defaultValue: "Cerrar sesiÃ³n" })}
             </button>
           </div>
         </div>
@@ -274,9 +274,9 @@ export default function Inicio() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <HelpCard
-            title={t("home.help.quick", { defaultValue: "Guía rápida" })}
+            title={t("home.help.quick", { defaultValue: "GuÃ­a rÃ¡pida" })}
             description={t("home.help.quickDesc", {
-              defaultValue: "Aprende cómo usar la app paso a paso.",
+              defaultValue: "Aprende cÃ³mo usar la app paso a paso.",
             })}
             to="/help/instructions"
           />
@@ -284,7 +284,7 @@ export default function Inicio() {
           <HelpCard
             title={t("home.help.faq", { defaultValue: "Preguntas frecuentes" })}
             description={t("home.help.faqDesc", {
-              defaultValue: "Respuestas a las dudas más comunes.",
+              defaultValue: "Respuestas a las dudas mÃ¡s comunes.",
             })}
             to="/help/faq"
           />
@@ -292,7 +292,7 @@ export default function Inicio() {
           <HelpCard
             title={t("home.help.support", { defaultValue: "Soporte" })}
             description={t("home.help.supportDesc", {
-              defaultValue: "¿Tienes un problema o consulta? Contáctanos.",
+              defaultValue: "Â¿Tienes un problema o consulta? ContÃ¡ctanos.",
             })}
             to="/help/support"
           />
@@ -309,3 +309,4 @@ export default function Inicio() {
     </div>
   );
 }
+

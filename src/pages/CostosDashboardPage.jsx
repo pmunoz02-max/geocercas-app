@@ -1,11 +1,11 @@
-// src/pages/CostosDashboardPage.jsx
-// Dashboard de Costos — Versión PRO (roles centralizados + más métricas + export)
-// ✅ Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id
-// ✅ FIX: activities por org_id (fallback legacy tenant_id)
+﻿// src/pages/CostosDashboardPage.jsx
+// Dashboard de Costos â€” VersiÃ³n PRO (roles centralizados + mÃ¡s mÃ©tricas + export)
+// âœ… Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id
+// âœ… FIX: activities por org_id (fallback legacy tenant_id)
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 import { useModuleAccess } from "../hooks/useModuleAccess";
 import { MODULE_KEYS } from "../lib/permissions";
 import { useTranslation } from "react-i18next";
@@ -110,7 +110,7 @@ const DIMENSIONS = {
 };
 
 /* -----------------------------------------
-   TIPOS DE GRÁFICO Y MÉTRICAS
+   TIPOS DE GRÃFICO Y MÃ‰TRICAS
 ----------------------------------------- */
 
 const CHART_TYPES = {
@@ -160,7 +160,7 @@ const COLOR_PALETTE = [
 ];
 
 /* -----------------------------------------
-   AGREGACIÓN
+   AGREGACIÃ“N
 ----------------------------------------- */
 
 function aggregateBy(rows, { groupKey, labelField }) {
@@ -285,7 +285,7 @@ function ChartRenderer({ chartType, data, metricKey, valueLabel }) {
 async function loadActivitiesForOrg(orgId) {
   if (!orgId) return [];
 
-  // ✅ Intento 1: org_id (modelo actual)
+  // âœ… Intento 1: org_id (modelo actual)
   const q1 = await supabase
     .from("activities")
     .select("id, name, org_id")
@@ -295,7 +295,7 @@ async function loadActivitiesForOrg(orgId) {
 
   if (!q1.error && Array.isArray(q1.data) && q1.data.length > 0) return q1.data;
 
-  // 🟡 Fallback legacy: tenant_id (por compatibilidad)
+  // ðŸŸ¡ Fallback legacy: tenant_id (por compatibilidad)
   const q2 = await supabase
     .from("activities")
     .select("id, name, tenant_id")
@@ -308,14 +308,14 @@ async function loadActivitiesForOrg(orgId) {
 }
 
 /* -----------------------------------------
-   PÁGINA PRINCIPAL
+   PÃGINA PRINCIPAL
 ----------------------------------------- */
 
 const CostosDashboardPage = () => {
   const { t } = useTranslation();
   const chartRef = useRef(null);
 
-  // ✅ Nuevo contrato
+  // âœ… Nuevo contrato
   const { loading: authLoading, ready, currentOrg } = useAuth();
 
   // Permisos (se mantiene tu hook)
@@ -340,11 +340,11 @@ const CostosDashboardPage = () => {
   const [selectedChartType, setSelectedChartType] = useState("bar");
   const [selectedMetric, setSelectedMetric] = useState("cost");
 
-  // ✅ Loading correcto del contexto (antes de decidir nada)
+  // âœ… Loading correcto del contexto (antes de decidir nada)
   if (authLoading || !ready) {
     return (
       <div className="p-4 text-sm text-gray-600">
-        {t("dashboardCostos.loadingAuth", "Cargando tu sesión y organización actual…")}
+        {t("dashboardCostos.loadingAuth", "Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦")}
       </div>
     );
   }
@@ -352,7 +352,7 @@ const CostosDashboardPage = () => {
   if (!currentOrg?.id) {
     return (
       <div className="p-4 text-sm text-red-600">
-        {t("dashboardCostos.noOrgAssigned", "No hay organización activa para este usuario.")}
+        {t("dashboardCostos.noOrgAssigned", "No hay organizaciÃ³n activa para este usuario.")}
       </div>
     );
   }
@@ -360,7 +360,7 @@ const CostosDashboardPage = () => {
   if (loadingAccess) {
     return (
       <div className="p-4 text-sm text-gray-600">
-        {t("dashboardCostos.loadingPermissions") || "Cargando permisos…"}
+        {t("dashboardCostos.loadingPermissions") || "Cargando permisosâ€¦"}
       </div>
     );
   }
@@ -512,7 +512,7 @@ const CostosDashboardPage = () => {
   const handleExportChartPNG = async () => {
     if (!chartRef.current) {
       alert(
-        t("dashboardCostos.exportChartError") || "No se encontró el contenedor de la gráfica."
+        t("dashboardCostos.exportChartError") || "No se encontrÃ³ el contenedor de la grÃ¡fica."
       );
       return;
     }
@@ -533,7 +533,7 @@ const CostosDashboardPage = () => {
       document.body.removeChild(link);
     } catch (e) {
       console.error("[CostosDashboard] exportChart error:", e);
-      alert(t("dashboardCostos.exportChartError") || "No se pudo exportar la gráfica.");
+      alert(t("dashboardCostos.exportChartError") || "No se pudo exportar la grÃ¡fica.");
     }
   };
 
@@ -548,8 +548,8 @@ const CostosDashboardPage = () => {
           <h1 className="text-2xl font-bold">{t("dashboardCostos.title")}</h1>
           <p className="text-sm text-gray-600">{t("dashboardCostos.subtitle")}</p>
           <p className="text-xs text-gray-500 mt-1">
-            {t("dashboardCostos.currentOrgLabel", "Organización actual")}:{" "}
-            <span className="font-medium">{currentOrg?.name || "—"}</span>
+            {t("dashboardCostos.currentOrgLabel", "OrganizaciÃ³n actual")}:{" "}
+            <span className="font-medium">{currentOrg?.name || "â€”"}</span>
           </p>
         </div>
 
@@ -559,7 +559,7 @@ const CostosDashboardPage = () => {
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700"
             disabled={loading}
           >
-            {loading ? t("dashboardCostos.refreshing") || "Actualizando…" : t("dashboardCostos.refreshButton")}
+            {loading ? t("dashboardCostos.refreshing") || "Actualizandoâ€¦" : t("dashboardCostos.refreshButton")}
           </button>
 
           <button
@@ -573,7 +573,7 @@ const CostosDashboardPage = () => {
             onClick={handleExportChartPNG}
             className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
           >
-            {t("dashboardCostos.exportChartButton") || "Exportar gráfica (PNG)"}
+            {t("dashboardCostos.exportChartButton") || "Exportar grÃ¡fica (PNG)"}
           </button>
         </div>
       </div>
@@ -727,7 +727,7 @@ const CostosDashboardPage = () => {
         </div>
       </div>
 
-      {/* Gráfico principal */}
+      {/* GrÃ¡fico principal */}
       <div className="bg-white rounded-xl p-4 shadow space-y-3">
         <div className="flex flex-wrap items-end gap-3 justify-between">
           <h2 className="text-sm font-semibold text-gray-700">{t("dashboardCostos.chartTitle")}</h2>
@@ -834,3 +834,4 @@ const CostosDashboardPage = () => {
 };
 
 export default CostosDashboardPage;
+

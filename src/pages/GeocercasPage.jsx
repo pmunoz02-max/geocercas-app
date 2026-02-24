@@ -1,7 +1,7 @@
-import React from "react";
+﻿import React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 
 export default function GeocercasPage() {
   const { t } = useTranslation();
@@ -24,14 +24,14 @@ export default function GeocercasPage() {
               {t("geocercas.currentOrgLabel")}
             </span>{" "}
             {currentOrg?.name ||
-              t("geocercas.noOrgFallback", "— (no organization selected)")}
+              t("geocercas.noOrgFallback", "â€” (no organization selected)")}
           </p>
 
           <p>
             <span className="font-semibold">
               {t("geocercas.currentUserLabel")}
             </span>{" "}
-            <span className="font-mono">{user?.email || "—"}</span>
+            <span className="font-mono">{user?.email || "â€”"}</span>
           </p>
         </div>
       </header>
@@ -73,3 +73,4 @@ export default function GeocercasPage() {
     </div>
   );
 }
+

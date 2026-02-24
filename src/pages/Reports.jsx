@@ -1,6 +1,6 @@
-// src/pages/Reports.jsx
+﻿// src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 
 function toCsvValue(v) {
   const s = v === null || v === undefined ? "" : String(v);
@@ -102,7 +102,7 @@ export default function Reports() {
     setLoadingFilters(true);
     setErrorMsg("");
     try {
-            // ✅ modo canónico: org activa se resuelve con get_current_org_id() en backend
+            // âœ… modo canÃ³nico: org activa se resuelve con get_current_org_id() en backend
       const url = "/api/reportes?action=filters";
 
       const json = await apiGet(url);
@@ -130,7 +130,7 @@ export default function Reports() {
 
     try {
       if (!canRun) {
-        setErrorMsg("No hay organización activa o la sesión no está lista.");
+        setErrorMsg("No hay organizaciÃ³n activa o la sesiÃ³n no estÃ¡ lista.");
         return;
       }
       if (start && end && start > end) {
@@ -179,7 +179,7 @@ export default function Reports() {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
-          Cargando tu sesión…
+          Cargando tu sesiÃ³nâ€¦
         </div>
       </div>
     );
@@ -189,7 +189,7 @@ export default function Reports() {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          No hay sesión activa. Inicia sesión nuevamente.
+          No hay sesiÃ³n activa. Inicia sesiÃ³n nuevamente.
         </div>
       </div>
     );
@@ -199,7 +199,7 @@ export default function Reports() {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          No hay organización activa para este usuario.
+          No hay organizaciÃ³n activa para este usuario.
         </div>
       </div>
     );
@@ -244,7 +244,7 @@ export default function Reports() {
                   className={buttonSecondary}
                   title="Recargar listas"
                 >
-                  {loadingFilters ? "Cargando…" : "Recargar filtros"}
+                  {loadingFilters ? "Cargandoâ€¦" : "Recargar filtros"}
                 </button>
 
                 <button
@@ -285,7 +285,7 @@ export default function Reports() {
 
               <div className="md:col-span-6 flex flex-wrap gap-2 md:justify-end">
                 <button onClick={loadReport} disabled={loadingReport} className={buttonPrimary}>
-                  {loadingReport ? "Generando…" : "Generar"}
+                  {loadingReport ? "Generandoâ€¦" : "Generar"}
                 </button>
 
                 <button
@@ -301,7 +301,7 @@ export default function Reports() {
                 <div className="text-xs text-gray-600">
                   <span className="font-medium text-gray-900">Tip:</span> En listas multi-select usa{" "}
                   <span className="font-medium text-gray-900">Ctrl</span> (Windows) /{" "}
-                  <span className="font-medium text-gray-900">Command</span> (Mac) para seleccionar múltiples.
+                  <span className="font-medium text-gray-900">Command</span> (Mac) para seleccionar mÃºltiples.
                 </div>
               </div>
             </div>
@@ -381,13 +381,13 @@ export default function Reports() {
                 >
                   {filters.asignaciones.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {(a.status || a.estado || "asignación")} — {String(a.id).slice(0, 8)}
+                      {(a.status || a.estado || "asignaciÃ³n")} â€” {String(a.id).slice(0, 8)}
                     </option>
                   ))}
                 </select>
                 <p className="mt-1 text-[11px] text-gray-600">
                   Nota: si tus asignaciones no tienen{" "}
-                  <span className="font-medium">personal_id</span>, el cruce con marcajes puede salir vacío.
+                  <span className="font-medium">personal_id</span>, el cruce con marcajes puede salir vacÃ­o.
                 </p>
               </div>
             </div>
@@ -400,29 +400,29 @@ export default function Reports() {
               <h2 className="text-sm font-semibold text-gray-900">Resultados</h2>
               <p className="text-xs text-gray-600">
                 {loadingReport
-                  ? "Generando reporte…"
+                  ? "Generando reporteâ€¦"
                   : rows.length
                     ? `Filas: ${rows.length}`
-                    : "Aún no hay datos. Ajusta filtros y genera."}
+                    : "AÃºn no hay datos. Ajusta filtros y genera."}
               </p>
             </div>
           </div>
 
           <div className="overflow-x-auto">
             {loadingReport ? (
-              <p className="p-4 text-sm text-gray-700">Cargando…</p>
+              <p className="p-4 text-sm text-gray-700">Cargandoâ€¦</p>
             ) : rows.length === 0 ? (
               <p className="p-4 text-sm text-gray-700">No hay datos con los filtros seleccionados.</p>
             ) : (
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-gray-900">
                   <tr className="border-b border-gray-200">
-                    <th className="p-2 text-left font-semibold">Día</th>
+                    <th className="p-2 text-left font-semibold">DÃ­a</th>
                     <th className="p-2 text-left font-semibold">Persona</th>
                     <th className="p-2 text-left font-semibold">Email</th>
                     <th className="p-2 text-left font-semibold">Geocerca</th>
                     <th className="p-2 text-left font-semibold">Actividad</th>
-                    <th className="p-2 text-left font-semibold">Asignación</th>
+                    <th className="p-2 text-left font-semibold">AsignaciÃ³n</th>
                     <th className="p-2 text-left font-semibold">Entrada</th>
                     <th className="p-2 text-left font-semibold">Salida</th>
                     <th className="p-2 text-center font-semibold">Marcajes</th>
@@ -439,23 +439,23 @@ export default function Reports() {
                         i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
                       }`}
                     >
-                      <td className="p-2 text-gray-900">{r.work_day || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.personal_nombre || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.email || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.geofence_name || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.activity_name || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.work_day || "â€”"}</td>
+                      <td className="p-2 text-gray-900">{r.personal_nombre || "â€”"}</td>
+                      <td className="p-2 text-gray-900">{r.email || "â€”"}</td>
+                      <td className="p-2 text-gray-900">{r.geofence_name || "â€”"}</td>
+                      <td className="p-2 text-gray-900">{r.activity_name || "â€”"}</td>
                       <td className="p-2 text-gray-900">
                         {r.asignacion_id
-                          ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})`
-                          : "—"}
+                          ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "â€”"})`
+                          : "â€”"}
                       </td>
-                      <td className="p-2 text-gray-900">{r.first_check_in || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.last_check_out || "—"}</td>
-                      <td className="p-2 text-center text-gray-900">{r.total_marks ?? "—"}</td>
-                      <td className="p-2 text-center text-gray-900">{r.inside_count ?? "—"}</td>
-                      <td className="p-2 text-center text-gray-900">{r.avg_distance_m ?? "—"}</td>
+                      <td className="p-2 text-gray-900">{r.first_check_in || "â€”"}</td>
+                      <td className="p-2 text-gray-900">{r.last_check_out || "â€”"}</td>
+                      <td className="p-2 text-center text-gray-900">{r.total_marks ?? "â€”"}</td>
+                      <td className="p-2 text-center text-gray-900">{r.inside_count ?? "â€”"}</td>
+                      <td className="p-2 text-center text-gray-900">{r.avg_distance_m ?? "â€”"}</td>
                       <td className="p-2 text-gray-900">
-                        {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
+                        {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "â€”"}
                       </td>
                     </tr>
                   ))}
@@ -468,3 +468,4 @@ export default function Reports() {
     </div>
   );
 }
+

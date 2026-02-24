@@ -1,10 +1,10 @@
-// src/pages/AsignacionesPage.jsx
+﻿// src/pages/AsignacionesPage.jsx
 // DEFINITIVO: Asignaciones usa personal (personal_id) + /api/asignaciones
 // UI REHECHA: layout dashboard (form lateral + listado grande con scroll)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 import {
   getAsignacionesBundle,
   createAsignacion,
@@ -25,7 +25,7 @@ function localDateTimeToISO(localDateTime) {
 // Importante: valores internos siguen siendo "activa/inactiva" (compat backend).
 const ESTADOS = ["todos", "activa", "inactiva"];
 
-// ✅ Clases UI (alto contraste)
+// âœ… Clases UI (alto contraste)
 const inputBase =
   "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
   "placeholder:text-gray-400 shadow-sm " +
@@ -229,7 +229,7 @@ export default function AsignacionesPage() {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
         <div className={`${cardBase} px-4 py-3 text-sm text-gray-700`}>
-          {t("asignaciones.messages.loadingData", { defaultValue: "Loading assignment data…" })}
+          {t("asignaciones.messages.loadingData", { defaultValue: "Loading assignment dataâ€¦" })}
         </div>
       </div>
     );
@@ -262,7 +262,7 @@ export default function AsignacionesPage() {
           </h1>
           <p className="text-xs text-gray-600 mt-1">
             {t("asignaciones.currentOrgLabel", { defaultValue: "Current organization" })}:{" "}
-            <span className="font-medium text-gray-900">{currentOrg?.name || "—"}</span>
+            <span className="font-medium text-gray-900">{currentOrg?.name || "â€”"}</span>
           </p>
         </div>
 
@@ -301,10 +301,10 @@ export default function AsignacionesPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-semibold text-gray-900">
                 {editingId
-                  ? t("asignaciones.form.editTitle", { defaultValue: "Editar asignación" })
-                  : t("asignaciones.form.newTitle", { defaultValue: "Nueva asignación" })}
+                  ? t("asignaciones.form.editTitle", { defaultValue: "Editar asignaciÃ³n" })
+                  : t("asignaciones.form.newTitle", { defaultValue: "Nueva asignaciÃ³n" })}
               </h2>
-              {loading && <span className="text-xs text-gray-500">Loading…</span>}
+              {loading && <span className="text-xs text-gray-500">Loadingâ€¦</span>}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
@@ -417,7 +417,7 @@ export default function AsignacionesPage() {
                     onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
                   />
                   <p className="mt-1 text-[11px] text-gray-500">
-                    {t("asignaciones.form.frequencyHint", { defaultValue: "Mínimo: 5 minutos." })}
+                    {t("asignaciones.form.frequencyHint", { defaultValue: "MÃ­nimo: 5 minutos." })}
                   </p>
                 </div>
               </div>
@@ -461,7 +461,7 @@ export default function AsignacionesPage() {
               {t("asignaciones.list.title", { defaultValue: "Listado de asignaciones" })}
             </h2>
             <span className="text-xs text-gray-500">
-              {loading ? "Loading…" : `${filteredAsignaciones.length} items`}
+              {loading ? "Loadingâ€¦" : `${filteredAsignaciones.length} items`}
             </span>
           </div>
 
@@ -506,3 +506,4 @@ export default function AsignacionesPage() {
     </div>
   );
 }
+

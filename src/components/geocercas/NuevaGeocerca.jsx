@@ -1,4 +1,4 @@
-// src/components/geocercas/NuevaGeocerca.jsx
+﻿// src/components/geocercas/NuevaGeocerca.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
@@ -14,7 +14,7 @@ import "leaflet/dist/leaflet.css";
 import { GeomanControls } from "react-leaflet-geoman-v2";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import { useAuth } from "../../context/AuthContext.jsx";
+import { useAuth } from "../@/context/auth.js";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -398,7 +398,7 @@ export default function NuevaGeocerca() {
     };
   }, []);
 
-  // ✅ FitBounds estable: espera render de React-Leaflet (doble RAF)
+  // âœ… FitBounds estable: espera render de React-Leaflet (doble RAF)
   const scheduleFitToGeo = useCallback((geo) => {
     const map = mapRef.current;
     if (!map || !geo) return;
@@ -441,7 +441,7 @@ export default function NuevaGeocerca() {
     if (!pairs.length) {
       showErr(
         t("geocercas.errorCoordsInvalid", {
-          defaultValue: "Coordenadas inválidas. Usa formato: lat,lng (una por línea).",
+          defaultValue: "Coordenadas invÃ¡lidas. Usa formato: lat,lng (una por lÃ­nea).",
         })
       );
       return;
@@ -546,7 +546,7 @@ export default function NuevaGeocerca() {
     }
 
     const confirmed = window.confirm(
-      t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
+      t("geocercas.deleteConfirm", { defaultValue: "Â¿Eliminar las geocercas seleccionadas?" })
     );
     if (!confirmed) return;
 
@@ -578,7 +578,7 @@ export default function NuevaGeocerca() {
     }
   }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk]);
 
-  // ✅ Mostrar en mapa AHORA soporta múltiples seleccionadas
+  // âœ… Mostrar en mapa AHORA soporta mÃºltiples seleccionadas
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
     try {
@@ -589,7 +589,7 @@ export default function NuevaGeocerca() {
         .map((x) => String(x || "").trim())
         .filter(Boolean);
 
-      // fallback: si no hay seleccionadas, muestra la última o la primera de la lista
+      // fallback: si no hay seleccionadas, muestra la Ãºltima o la primera de la lista
       let namesToShow = selected;
       if (namesToShow.length === 0) {
         let one = lastSelectedName || geofenceList?.[0]?.nombre || null;
@@ -618,7 +618,7 @@ export default function NuevaGeocerca() {
 
       const combined = combineFeatureCollections(geos);
       if (!combined) {
-        showErr(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON." }));
+        showErr(t("geocercas.errorNoGeojson", { defaultValue: "No se encontrÃ³ el GeoJSON." }));
         return;
       }
 
@@ -629,7 +629,7 @@ export default function NuevaGeocerca() {
       setViewCentroid(centroidFeatureFromGeojson(combined)); // centroid del conjunto
       setViewId((x) => x + 1);
 
-      // opcional UX: mensaje si son múltiples
+      // opcional UX: mensaje si son mÃºltiples
       if (items.length > 1) {
         showOk(t("geocercas.showManyOk", { defaultValue: `Mostrando ${items.length} geocercas.` }));
       }
@@ -890,7 +890,7 @@ export default function NuevaGeocerca() {
             </div>
 
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
-              Draft: {draftFeature ? "sí" : "no"} | Pts: {draftPointsCount}
+              Draft: {draftFeature ? "sÃ­" : "no"} | Pts: {draftPointsCount}
             </div>
           </div>
         </div>
@@ -904,11 +904,11 @@ export default function NuevaGeocerca() {
             </h2>
 
             <p className="text-xs text-slate-400">
-              {t("geocercas.modalHintRule", { defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono" })}
+              {t("geocercas.modalHintRule", { defaultValue: "1 punto = cuadrado pequeÃ±o | 2 puntos = rectÃ¡ngulo | 3+ = polÃ­gono" })}
               <br />
               {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
               <span className="font-mono text-[11px]">lat,lng</span>{" "}
-              {t("geocercas.modalOnePerLine", { defaultValue: "(uno por línea)" })}
+              {t("geocercas.modalOnePerLine", { defaultValue: "(uno por lÃ­nea)" })}
             </p>
 
             <textarea
@@ -942,3 +942,4 @@ export default function NuevaGeocerca() {
     </div>
   );
 }
+

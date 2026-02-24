@@ -1,11 +1,11 @@
-// src/hooks/useModuleAccess.js
-import { useAuth } from "../context/AuthContext.jsx";
+﻿// src/hooks/useModuleAccess.js
+import { useAuth } from "@/context/auth.js";
 import { canAccessModule, normalizeRole } from "../lib/permissions";
 
 export function useModuleAccess(moduleKey) {
   const { role: rawRole, loading } = useAuth();
 
-  // Mientras AuthContext está cargando, NO bloquear nada
+  // Mientras AuthContext estÃ¡ cargando, NO bloquear nada
   if (loading) {
     return {
       role: null,
@@ -22,3 +22,4 @@ export function useModuleAccess(moduleKey) {
 
   return { role, canView, loading: false };
 }
+

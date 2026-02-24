@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useAuth } from "../../context/AuthContext";
+﻿import React, { useState } from "react";
+import { useAuth } from "../@/context/auth.js";
 import { supabase } from "../../supabaseClient";
 import { useTranslation } from "react-i18next";
 
@@ -14,7 +14,7 @@ export default function NoOrgSelected() {
   const canSelect = Array.isArray(orgs) && orgs.length > 0;
 
   async function refreshHard() {
-    // AuthContext actual no expone refreshContext, así que forzamos recarga:
+    // AuthContext actual no expone refreshContext, asÃ­ que forzamos recarga:
     window.location.reload();
   }
 
@@ -113,3 +113,4 @@ export default function NoOrgSelected() {
     </div>
   );
 }
+

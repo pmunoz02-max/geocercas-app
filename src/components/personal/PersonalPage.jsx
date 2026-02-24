@@ -1,7 +1,7 @@
-// src/components/persona/PersonalPage.jsx
+﻿// src/components/persona/PersonalPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { useAuth } from "../@/context/auth.js";
 import { useTranslation } from "react-i18next";
 
 const emptyForm = () => ({
@@ -67,17 +67,17 @@ function isUniqueViolation(err) {
 }
 
 /**
- * Detecta cuando el error de unique corresponde al límite de 1 tracker por organización.
- * Esto depende del nombre real del constraint/índice en tu BD, por eso usamos varias heurísticas.
+ * Detecta cuando el error de unique corresponde al lÃ­mite de 1 tracker por organizaciÃ³n.
+ * Esto depende del nombre real del constraint/Ã­ndice en tu BD, por eso usamos varias heurÃ­sticas.
  */
 function isTrackerLimitViolation(err) {
   if (!isUniqueViolation(err)) return false;
   const msg = (err?.message || "").toLowerCase();
   const details = (err?.details || "").toLowerCase();
-  // Si tu índice se llama parecido a esto, lo capturamos
+  // Si tu Ã­ndice se llama parecido a esto, lo capturamos
   if (msg.includes("one_active") || msg.includes("tracker_limit") || msg.includes("max_trackers")) return true;
   if (msg.includes("org_people") && msg.includes("org_id") && msg.includes("unique")) return true;
-  // Heurística: duplicates por org_id solamente (sin mencionar person_id) suele ser el limit por org
+  // HeurÃ­stica: duplicates por org_id solamente (sin mencionar person_id) suele ser el limit por org
   if (details.includes("(org_id)") && details.includes("already exists") && !details.includes("(person_id)")) return true;
   return false;
 }
@@ -288,7 +288,7 @@ export default function PersonalPage() {
 
     if (findErr) throw findErr;
 
-    // 2) si existe -> update (para mantener datos al día)
+    // 2) si existe -> update (para mantener datos al dÃ­a)
     if (found?.id) {
       const { data: upd, error: updErr } = await supabase
         .from("people")
@@ -310,7 +310,7 @@ export default function PersonalPage() {
       .maybeSingle();
 
     if (insErr) {
-      // 4) si chocó unique, re-intenta buscar (condición de carrera)
+      // 4) si chocÃ³ unique, re-intenta buscar (condiciÃ³n de carrera)
       if (isUniqueViolation(insErr)) {
         const { data: found2, error: findErr2 } = await supabase
           .from("people")
@@ -348,7 +348,7 @@ export default function PersonalPage() {
       if (!nombre) throw new Error(t("personal.errorMissingName"));
       if (!email) throw new Error(t("personal.errorMissingEmail"));
 
-      // ✅ Reemplazo universal: sin on_conflict (evita 400)
+      // âœ… Reemplazo universal: sin on_conflict (evita 400)
       const person = await getOrCreatePersonByEmail({ nombre, apellido, email, telefono });
       const personId = person?.id;
       if (!personId) throw new Error(t("personal.errorSave"));
@@ -380,14 +380,14 @@ export default function PersonalPage() {
           if (isTrackerLimitViolation(insErr)) {
             throw new Error(
               t("personal.errorPlanLimitReached", {
-                defaultValue: "Has alcanzado el límite del plan Starter (1 tracker).",
+                defaultValue: "Has alcanzado el lÃ­mite del plan Starter (1 tracker).",
               })
             );
           }
           if (isUniqueViolation(insErr)) {
             // ya existe (por ejemplo: mismo person_id en esa org o duplicado de email en people)
             throw new Error(
-              t("personal.errorDuplicate", { defaultValue: "Este tracker ya existe en tu organización." })
+              t("personal.errorDuplicate", { defaultValue: "Este tracker ya existe en tu organizaciÃ³n." })
             );
           }
           throw insErr;
@@ -402,7 +402,7 @@ export default function PersonalPage() {
       await loadPersonal();
     } catch (err) {
       console.error("[PersonalPage] Error onGuardar:", err);
-      // Aquí dejamos el mensaje del error real si viene del backend; si no, cae a i18n
+      // AquÃ­ dejamos el mensaje del error real si viene del backend; si no, cae a i18n
       {
         const rawMsg = (err?.message || "").toString();
         const msg =
@@ -505,7 +505,7 @@ export default function PersonalPage() {
 
       {banner.msg && (
         <div className={`pg-banner ${banner.type === "ok" ? "pg-ok" : "pg-err"}`}>
-          {banner.type === "ok" ? "✔ " : "✖ "}
+          {banner.type === "ok" ? "âœ” " : "âœ– "}
           {banner.msg}
         </div>
       )}
@@ -516,9 +516,9 @@ export default function PersonalPage() {
             <h1 className="pg-title">{t("personal.title")}</h1>
             <p className="pg-muted">
               {t("personal.orgInfoLabel")}{" "}
-              <strong>{currentOrg?.name || t("personal.orgFallback")}</strong> ·{" "}
-              {t("personal.roleLabel")} <strong>{effectiveRole}</strong> · OrgID:{" "}
-              <strong>{orgId || "—"}</strong>
+              <strong>{currentOrg?.name || t("personal.orgFallback")}</strong> Â·{" "}
+              {t("personal.roleLabel")} <strong>{effectiveRole}</strong> Â· OrgID:{" "}
+              <strong>{orgId || "â€”"}</strong>
             </p>
           </div>
           {canEdit ? (

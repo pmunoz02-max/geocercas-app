@@ -1,6 +1,6 @@
-// src/pages/InvitarAdmin.jsx
+﻿// src/pages/InvitarAdmin.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 import { supabase } from "../supabaseClient.js";
 import { useTranslation } from "react-i18next";
 
@@ -65,7 +65,7 @@ export default function InvitarAdmin() {
 
   // INVITE ADMIN/OWNER
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("owner"); // ✅ default: owner (nace con org propia)
+  const [role, setRole] = useState("owner"); // âœ… default: owner (nace con org propia)
   const [orgName, setOrgName] = useState("");
 
   const [sending, setSending] = useState(false);
@@ -83,7 +83,7 @@ export default function InvitarAdmin() {
   const [recoveryMsg, setRecoveryMsg] = useState(null); // { type, text }
   const [recoveryLink, setRecoveryLink] = useState("");
 
-  // ✅ Reuse existing i18n placeholder (fixes FR/ES issue centrally)
+  // âœ… Reuse existing i18n placeholder (fixes FR/ES issue centrally)
   const emailPh = t?.("login.emailPlaceholder") || "tu@email.com";
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function InvitarAdmin() {
     if (!cleanEmail || !cleanEmail.includes("@")) {
       setMessage({
         type: "error",
-        text: t?.("inviteAdmin.errors.emailInvalid") || "Email inválido",
+        text: t?.("inviteAdmin.errors.emailInvalid") || "Email invÃ¡lido",
       });
       return;
     }
@@ -128,7 +128,7 @@ export default function InvitarAdmin() {
     if (cleanRole === "admin" && !currentOrg?.id) {
       setMessage({
         type: "error",
-        text: t?.("inviteAdmin.errors.noOrg") || "No hay organización activa (currentOrg).",
+        text: t?.("inviteAdmin.errors.noOrg") || "No hay organizaciÃ³n activa (currentOrg).",
       });
       return;
     }
@@ -152,8 +152,8 @@ export default function InvitarAdmin() {
       }
 
       if (resp.data?.ok !== true) {
-        const msg = resp.data?.message || "No se pudo generar la invitación.";
-        setMessage({ type: "error", text: `❌ ${msg}` });
+        const msg = resp.data?.message || "No se pudo generar la invitaciÃ³n.";
+        setMessage({ type: "error", text: `âŒ ${msg}` });
         return;
       }
 
@@ -161,7 +161,7 @@ export default function InvitarAdmin() {
       if (!link) {
         setMessage({
           type: "error",
-          text: t?.("inviteAdmin.messages.noLink") || "Se generó respuesta pero no llegó action_link.",
+          text: t?.("inviteAdmin.messages.noLink") || "Se generÃ³ respuesta pero no llegÃ³ action_link.",
         });
         return;
       }
@@ -174,8 +174,8 @@ export default function InvitarAdmin() {
       setMessage({
         type: sent ? "success" : "warn",
         text: sent
-          ? `✅ Email enviado a ${cleanEmail} con el Magic Link (${cleanRole.toUpperCase()}).`
-          : `✅ Magic Link generado para ${cleanRole.toUpperCase()}: ${cleanEmail}. Cópialo y envíalo por tu canal.`,
+          ? `âœ… Email enviado a ${cleanEmail} con el Magic Link (${cleanRole.toUpperCase()}).`
+          : `âœ… Magic Link generado para ${cleanRole.toUpperCase()}: ${cleanEmail}. CÃ³pialo y envÃ­alo por tu canal.`,
       });
 
       setEmail("");
@@ -205,11 +205,11 @@ export default function InvitarAdmin() {
     if (!link) return;
     const r = await copyToClipboard(link);
     if (r.ok) {
-      setMessage({ type: "success", text: "✅ Copiado al portapapeles." });
+      setMessage({ type: "success", text: "âœ… Copiado al portapapeles." });
     } else {
       setMessage({
         type: "warn",
-        text: "⚠️ El navegador bloqueó el copiado automático. Selecciona el link (abajo) y copia manualmente (Ctrl+C).",
+        text: "âš ï¸ El navegador bloqueÃ³ el copiado automÃ¡tico. Selecciona el link (abajo) y copia manualmente (Ctrl+C).",
       });
     }
   }
@@ -221,12 +221,12 @@ export default function InvitarAdmin() {
 
     const cleanEmail = String(recoveryEmail || "").trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setRecoveryMsg({ type: "error", text: "Email inválido." });
+      setRecoveryMsg({ type: "error", text: "Email invÃ¡lido." });
       return;
     }
 
     if (!isAppRoot) {
-      setRecoveryMsg({ type: "error", text: "Solo App Root puede generar links de recuperación." });
+      setRecoveryMsg({ type: "error", text: "Solo App Root puede generar links de recuperaciÃ³n." });
       return;
     }
 
@@ -246,7 +246,7 @@ export default function InvitarAdmin() {
       }
 
       if (resp.data?.ok !== true) {
-        setRecoveryMsg({ type: "error", text: `❌ ${resp.data?.message || "No se pudo generar el link."}` });
+        setRecoveryMsg({ type: "error", text: `âŒ ${resp.data?.message || "No se pudo generar el link."}` });
         return;
       }
 
@@ -259,7 +259,7 @@ export default function InvitarAdmin() {
       setRecoveryLink(link);
       setRecoveryMsg({
         type: "warn",
-        text: `✅ Link de recuperación generado para ${cleanEmail}. Cópialo y envíalo por tu canal.`,
+        text: `âœ… Link de recuperaciÃ³n generado para ${cleanEmail}. CÃ³pialo y envÃ­alo por tu canal.`,
       });
       setRecoveryEmail("");
     } catch (e2) {
@@ -342,12 +342,12 @@ export default function InvitarAdmin() {
               >
                 <option value="">
                   {currentOrg?.id
-                    ? t?.("inviteAdmin.form.selectPlaceholder") || "— Elegir de la organización —"
-                    : t?.("inviteAdmin.form.noOrg") || "— No hay org activa —"}
+                    ? t?.("inviteAdmin.form.selectPlaceholder") || "â€” Elegir de la organizaciÃ³n â€”"
+                    : t?.("inviteAdmin.form.noOrg") || "â€” No hay org activa â€”"}
                 </option>
                 {peopleList.map((p) => (
                   <option key={p.org_people_id} value={p.org_people_id}>
-                    {`${p.nombre || ""} ${p.apellido || ""}`} — {p.email}
+                    {`${p.nombre || ""} ${p.apellido || ""}`} â€” {p.email}
                   </option>
                 ))}
               </select>
@@ -377,24 +377,24 @@ export default function InvitarAdmin() {
           {role === "owner" ? (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {t?.("inviteAdmin.form.orgName") || "Nombre de la nueva organización (opcional)"}
+                {t?.("inviteAdmin.form.orgName") || "Nombre de la nueva organizaciÃ³n (opcional)"}
               </label>
               <input
                 type="text"
                 className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Mi nueva organización"
+                placeholder="Mi nueva organizaciÃ³n"
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 autoComplete="organization"
               />
               <div className="text-[11px] text-slate-500 mt-2">
-                {t?.("inviteAdmin.form.orgNameHelp") || "Si lo dejas vacío, se usa el email por defecto."}
+                {t?.("inviteAdmin.form.orgNameHelp") || "Si lo dejas vacÃ­o, se usa el email por defecto."}
               </div>
             </div>
           ) : (
             <div className="text-xs text-slate-600 bg-slate-50 border rounded p-3">
               <span className="font-semibold">Org destino:</span>{" "}
-              {currentOrg?.name || currentOrg?.org_name || currentOrg?.id || "—"}
+              {currentOrg?.name || currentOrg?.org_name || currentOrg?.id || "â€”"}
             </div>
           )}
 
@@ -434,7 +434,7 @@ export default function InvitarAdmin() {
               <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
               <div className="text-[11px] text-slate-500 mt-2">
                 {t?.("inviteAdmin.hints.bestPractice") ||
-                  "Tip: si el copiado automático falla, selecciona el link y copia manualmente (Ctrl+C)."}
+                  "Tip: si el copiado automÃ¡tico falla, selecciona el link y copia manualmente (Ctrl+C)."}
               </div>
             </div>
           ) : null}
@@ -444,8 +444,8 @@ export default function InvitarAdmin() {
           <div className="text-sm text-slate-700">
             <div className="font-semibold mb-1">Reset password (fallback universal)</div>
             <div className="text-slate-600 text-xs">
-              Genera un <span className="font-semibold">Recovery Link</span> sin depender del correo. Copia y envía por tu canal.
-              El usuario abrirá el link, pasará por <span className="font-mono">/auth/callback</span> y luego llegará a{" "}
+              Genera un <span className="font-semibold">Recovery Link</span> sin depender del correo. Copia y envÃ­a por tu canal.
+              El usuario abrirÃ¡ el link, pasarÃ¡ por <span className="font-mono">/auth/callback</span> y luego llegarÃ¡ a{" "}
               <span className="font-mono">/reset-password</span>.
             </div>
           </div>
@@ -487,8 +487,8 @@ export default function InvitarAdmin() {
                     const r = await copyToClipboard(recoveryLink);
                     setRecoveryMsg(
                       r.ok
-                        ? { type: "success", text: "✅ Copiado al portapapeles." }
-                        : { type: "warn", text: "⚠️ Copia manualmente (Ctrl+C)." }
+                        ? { type: "success", text: "âœ… Copiado al portapapeles." }
+                        : { type: "warn", text: "âš ï¸ Copia manualmente (Ctrl+C)." }
                     );
                   }}
                   className="bg-blue-600 text-white rounded px-3 py-2 text-xs"
@@ -507,7 +507,7 @@ export default function InvitarAdmin() {
 
               <div className="bg-white border rounded p-2 select-all">{recoveryLink}</div>
               <div className="text-[11px] text-slate-500 mt-2">
-                Tip: si el usuario no puede abrir el link, que pruebe en incógnito o en otro navegador.
+                Tip: si el usuario no puede abrir el link, que pruebe en incÃ³gnito o en otro navegador.
               </div>
             </div>
           ) : null}
@@ -516,3 +516,4 @@ export default function InvitarAdmin() {
     </div>
   );
 }
+

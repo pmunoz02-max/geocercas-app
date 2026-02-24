@@ -1,8 +1,8 @@
-// src/pages/Dashboard.jsx
+﻿// src/pages/Dashboard.jsx
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import WelcomeBanner from "../components/WelcomeBanner";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 
 function roleRank(r) {
   const s = String(r || "").toLowerCase();
@@ -27,13 +27,13 @@ export default function Dashboard() {
   const isAdmin = effectiveRole === "admin" || effectiveRole === "owner";
   const isTracker = trackerDomain || effectiveRole === "tracker";
 
-  // ✅ Loading correcto del contexto
+  // âœ… Loading correcto del contexto
   if (!authReady || !orgsReady) {
     return (
       <div className="min-h-screen bg-white">
         <div className="max-w-6xl mx-auto px-4 py-6">
           <section className="rounded-xl border p-6">
-            <p className="text-sm text-gray-600">Cargando tu sesión y organización actual…</p>
+            <p className="text-sm text-gray-600">Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦</p>
           </section>
         </div>
       </div>
@@ -51,7 +51,7 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold mb-2">Acciones del tracker</h2>
               <div className="flex flex-wrap gap-3">
                 <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/tracker/enviar-ubicacion">
-                  Enviar ubicación
+                  Enviar ubicaciÃ³n
                 </Link>
                 <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/tracker/historial">
                   Ver historial
@@ -64,7 +64,7 @@ export default function Dashboard() {
     );
   }
 
-  // Panel normal: aquí sí exigimos org (caso real)
+  // Panel normal: aquÃ­ sÃ­ exigimos org (caso real)
   if (!currentOrg) {
     return (
       <div className="min-h-screen bg-white">
@@ -72,9 +72,9 @@ export default function Dashboard() {
           <WelcomeBanner />
           <main className="mt-6">
             <section className="rounded-xl border border-red-200 bg-red-50 p-6">
-              <h2 className="text-lg font-semibold mb-2 text-red-700">No hay organización activa</h2>
+              <h2 className="text-lg font-semibold mb-2 text-red-700">No hay organizaciÃ³n activa</h2>
               <p className="text-sm text-red-700">
-                Tu usuario no tiene una organización asignada. Contacta al administrador o vuelve a iniciar sesión.
+                Tu usuario no tiene una organizaciÃ³n asignada. Contacta al administrador o vuelve a iniciar sesiÃ³n.
               </p>
             </section>
           </main>
@@ -89,10 +89,10 @@ export default function Dashboard() {
         <WelcomeBanner />
 
         <div className="mt-2 text-xs text-gray-500">
-          Organización actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
+          OrganizaciÃ³n actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
           {effectiveRole ? (
             <>
-              {" "}· Rol: <span className="font-medium">{effectiveRole.toUpperCase()}</span>
+              {" "}Â· Rol: <span className="font-medium">{effectiveRole.toUpperCase()}</span>
             </>
           ) : null}
         </div>
@@ -102,11 +102,11 @@ export default function Dashboard() {
         <section className="rounded-xl border p-6 mb-6">
           <h2 className="text-lg font-semibold mb-2">Acceso general</h2>
           <p className="text-sm text-gray-600">
-            Bienvenido al panel principal. Aquí tienes accesos rápidos y diagnóstico.
+            Bienvenido al panel principal. AquÃ­ tienes accesos rÃ¡pidos y diagnÃ³stico.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/whoami">
-              Diagnóstico (WhoAmI)
+              DiagnÃ³stico (WhoAmI)
             </Link>
             <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/mapa">
               Ir al Mapa
@@ -119,11 +119,11 @@ export default function Dashboard() {
             <h2 className="text-lg font-semibold mb-2">Herramientas de administrador</h2>
             <ul className="list-disc pl-5 text-sm leading-6">
               <li>
-                Gestión de usuarios y roles &nbsp;
+                GestiÃ³n de usuarios y roles &nbsp;
                 <Link className="underline" to="/admin/usuarios">Abrir</Link>
               </li>
               <li>
-                Políticas y auditoría &nbsp;
+                PolÃ­ticas y auditorÃ­a &nbsp;
                 <Link className="underline" to="/admin/politicas">Abrir</Link>
               </li>
               <li>
@@ -139,7 +139,7 @@ export default function Dashboard() {
             <h2 className="text-lg font-semibold mb-2">Tu acceso</h2>
             <p className="text-sm text-gray-600">
               Tu rol actual es <span className="font-medium">{effectiveRole ? effectiveRole.toUpperCase() : "SIN ROL"}</span>.
-              Si necesitas acceso a módulos adicionales, contacta al administrador de tu organización.
+              Si necesitas acceso a mÃ³dulos adicionales, contacta al administrador de tu organizaciÃ³n.
             </p>
           </section>
         )}
@@ -147,3 +147,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

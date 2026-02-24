@@ -1,8 +1,8 @@
-// src/components/MainNav.jsx
+﻿// src/components/MainNav.jsx
 import { NavLink, useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "@/context/auth.js";
 
 export default function MainNav({ role }) {
   const { t } = useTranslation();
@@ -65,3 +65,4 @@ export default function MainNav({ role }) {
     </div>
   );
 }
+

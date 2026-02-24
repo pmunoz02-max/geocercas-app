@@ -1,27 +1,27 @@
-// src/pages/SeleccionarOrganizacion.jsx
-// Pantalla para elegir organización después del login.
+﻿// src/pages/SeleccionarOrganizacion.jsx
+// Pantalla para elegir organizaciÃ³n despuÃ©s del login.
 //
-// Lógica universal:
+// LÃ³gica universal:
 //  - Las organizaciones se obtienen SIEMPRE del AuthContext (orgs).
-//  - Si ya existe currentOrg, se redirige automáticamente:
-//      * TRACKER  → /tracker
-//      * OWNER/ADMIN (u otros) → /inicio
-//  - Si el usuario tiene una sola organización, se autoselecciona.
+//  - Si ya existe currentOrg, se redirige automÃ¡ticamente:
+//      * TRACKER  â†’ /tracker
+//      * OWNER/ADMIN (u otros) â†’ /inicio
+//  - Si el usuario tiene una sola organizaciÃ³n, se autoselecciona.
 //  - Si tiene varias, elige manualmente tocando la tarjeta.
 //
 // Esto evita rebotes tipo: /inicio se ve un instante y luego va a
-// /seleccionar-organizacion, porque la decisión depende de loading
+// /seleccionar-organizacion, porque la decisiÃ³n depende de loading
 // y del estado real de currentOrg en AuthContext.
 
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 
 function SeleccionarOrganizacion() {
   const navigate = useNavigate();
   const {
     user,
-    loading,       // loading global del AuthContext (sesión + datos)
+    loading,       // loading global del AuthContext (sesiÃ³n + datos)
     orgs,          // organizaciones normalizadas
     currentOrg,
     currentRole,
@@ -42,7 +42,7 @@ function SeleccionarOrganizacion() {
   };
 
   // ------------------------------------------------------------
-  // 1) Si no hay usuario y ya no estamos cargando → a /login
+  // 1) Si no hay usuario y ya no estamos cargando â†’ a /login
   // ------------------------------------------------------------
   useEffect(() => {
     if (loading) return;
@@ -50,8 +50,8 @@ function SeleccionarOrganizacion() {
   }, [loading, user, navigate]);
 
   // ------------------------------------------------------------
-  // 2) Si YA hay currentOrg, no tiene sentido estar aquí
-  //    → redirigir directo según el rol
+  // 2) Si YA hay currentOrg, no tiene sentido estar aquÃ­
+  //    â†’ redirigir directo segÃºn el rol
   // ------------------------------------------------------------
   useEffect(() => {
     if (loading) return;
@@ -64,8 +64,8 @@ function SeleccionarOrganizacion() {
   }, [loading, user, currentOrg, currentRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------
-  // 3) Si no hay currentOrg pero sólo hay una organización,
-  //    autoseleccionarla y redirigir automáticamente.
+  // 3) Si no hay currentOrg pero sÃ³lo hay una organizaciÃ³n,
+  //    autoseleccionarla y redirigir automÃ¡ticamente.
   // ------------------------------------------------------------
   useEffect(() => {
     if (loading) return;
@@ -80,7 +80,7 @@ function SeleccionarOrganizacion() {
   }, [loading, user, currentOrg, orgs, setCurrentOrg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------
-  // 4) Selección manual de organización (card click)
+  // 4) SelecciÃ³n manual de organizaciÃ³n (card click)
   // ------------------------------------------------------------
   const handleSelectOrg = (org) => {
     if (!org) return;
@@ -90,16 +90,16 @@ function SeleccionarOrganizacion() {
   };
 
   // ------------------------------------------------------------
-  // 5) Render según estado
+  // 5) Render segÃºn estado
   // ------------------------------------------------------------
   if (loading) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold mb-2">
-          Seleccionar organización
+          Seleccionar organizaciÃ³n
         </h1>
         <p className="text-gray-600 text-sm">
-          Cargando organizaciones asociadas a tu usuario…
+          Cargando organizaciones asociadas a tu usuarioâ€¦
         </p>
       </div>
     );
@@ -108,9 +108,9 @@ function SeleccionarOrganizacion() {
   if (!user) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Sesión no válida</h1>
+        <h1 className="text-2xl font-semibold mb-2">SesiÃ³n no vÃ¡lida</h1>
         <p className="text-gray-600 text-sm">
-          No hay sesión activa. Inicia sesión nuevamente.
+          No hay sesiÃ³n activa. Inicia sesiÃ³n nuevamente.
         </p>
       </div>
     );
@@ -122,30 +122,30 @@ function SeleccionarOrganizacion() {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold mb-2">
-          Seleccionar organización
+          Seleccionar organizaciÃ³n
         </h1>
         <p className="text-gray-600 text-sm mb-4">
-          Has iniciado sesión correctamente, pero no encontramos
+          Has iniciado sesiÃ³n correctamente, pero no encontramos
           organizaciones asociadas a tu usuario.
         </p>
         <div className="border border-yellow-300 bg-yellow-50 text-yellow-800 rounded px-4 py-3 text-sm">
-          Contacta al administrador para que te asigne una organización
-          o crea una nueva desde el panel de administración.
+          Contacta al administrador para que te asigne una organizaciÃ³n
+          o crea una nueva desde el panel de administraciÃ³n.
         </div>
       </div>
     );
   }
 
-  // Si llegamos aquí:
+  // Si llegamos aquÃ­:
   // - hay usuario
   // - hay organizaciones
-  // - currentOrg es null (o la autoselección aún no ha corrido)
+  // - currentOrg es null (o la autoselecciÃ³n aÃºn no ha corrido)
   // Mostramos la lista para que el usuario escoja.
   return (
     <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-2">Seleccionar organización</h1>
+      <h1 className="text-2xl font-semibold mb-2">Seleccionar organizaciÃ³n</h1>
       <p className="text-gray-600 text-sm mb-4">
-        Has iniciado sesión correctamente. Ahora elige la organización con la
+        Has iniciado sesiÃ³n correctamente. Ahora elige la organizaciÃ³n con la
         que deseas trabajar en este momento.
       </p>
 
@@ -160,7 +160,7 @@ function SeleccionarOrganizacion() {
             <div>
               <div className="font-medium">{org.name || "(sin nombre)"}</div>
               <div className="text-xs text-gray-500">
-                {org.code ? `Código: ${org.code}` : "Sin código definido"}
+                {org.code ? `CÃ³digo: ${org.code}` : "Sin cÃ³digo definido"}
               </div>
             </div>
             {org.role && (
@@ -176,3 +176,4 @@ function SeleccionarOrganizacion() {
 }
 
 export default SeleccionarOrganizacion;
+

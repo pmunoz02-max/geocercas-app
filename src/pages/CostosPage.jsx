@@ -1,7 +1,7 @@
-// src/pages/CostosPage.jsx
+﻿// src/pages/CostosPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "@/context/auth.js";
 import { useTranslation } from "react-i18next";
 import { useModuleAccess } from "../hooks/useModuleAccess";
 import { MODULE_KEYS } from "../lib/permissions";
@@ -51,14 +51,14 @@ function formatDateTime(value) {
  * Normaliza las fechas de filtro (inputs type="date") a un rango de
  * timestamptz ISO listo para enviar a Supabase.
  *
- * - fromDateStr → YYYY-MM-DD → fromIso = ese día a las 00:00:00
- * - toDateStr   → YYYY-MM-DD → toIsoExclusive = día siguiente a las 00:00:00
+ * - fromDateStr â†’ YYYY-MM-DD â†’ fromIso = ese dÃ­a a las 00:00:00
+ * - toDateStr   â†’ YYYY-MM-DD â†’ toIsoExclusive = dÃ­a siguiente a las 00:00:00
  *
  * El rango se aplica como:
  *   start_time >= fromIso
  *   start_time  < toIsoExclusive
  *
- * De esta forma se incluye TODO el día "Hasta" completo.
+ * De esta forma se incluye TODO el dÃ­a "Hasta" completo.
  */
 function buildDateRange(fromDateStr, toDateStr) {
   let fromIso = null;
@@ -74,7 +74,7 @@ function buildDateRange(fromDateStr, toDateStr) {
   if (toDateStr) {
     const d = new Date(toDateStr + "T00:00:00");
     if (!Number.isNaN(d.getTime())) {
-      d.setDate(d.getDate() + 1); // día siguiente a las 00:00
+      d.setDate(d.getDate() + 1); // dÃ­a siguiente a las 00:00
       toIsoExclusive = d.toISOString();
     }
   }
@@ -87,8 +87,8 @@ const CostosPage = () => {
   const { t } = useTranslation();
 
   /**
-   * ✅ FIX PERMANENTE
-   * La fuente canónica del rol es AuthContext (lo mismo que el header).
+   * âœ… FIX PERMANENTE
+   * La fuente canÃ³nica del rol es AuthContext (lo mismo que el header).
    * useModuleAccess queda como "fallback" por compatibilidad,
    * pero nunca debe bloquear a un owner/admin si AuthContext ya lo sabe.
    */
@@ -173,7 +173,7 @@ const CostosPage = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Cargar combos básicos (personas, actividades, geocercas)
+  // Cargar combos bÃ¡sicos (personas, actividades, geocercas)
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
 
@@ -233,7 +233,7 @@ const CostosPage = () => {
     setError("");
 
     try {
-      // Validación sencilla de rango
+      // ValidaciÃ³n sencilla de rango
       if (fromDate && toDate && fromDate > toDate) {
         setRows([]);
         setError(t("reportes.errorRangeInvalid"));
@@ -289,7 +289,7 @@ const CostosPage = () => {
       if (dataErr) {
         if (status === 404) {
           console.warn(
-            "[CostosPage] La vista v_costos_detalle no existe aún en Supabase."
+            "[CostosPage] La vista v_costos_detalle no existe aÃºn en Supabase."
           );
           setRows([]);
           setError(t("reportes.errorViewMissing"));
@@ -307,14 +307,14 @@ const CostosPage = () => {
     }
   };
 
-  // Carga inicial automática
+  // Carga inicial automÃ¡tica
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
     fetchReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id, canView]);
 
-  // === RESÚMENES NUMÉRICOS ===
+  // === RESÃšMENES NUMÃ‰RICOS ===
   const resumenMoneda = useMemo(() => summarizeByCurrency(rows || []), [rows]);
 
   const totalGlobal = useMemo(() => {
@@ -329,7 +329,7 @@ const CostosPage = () => {
     return { totalCost, totalHours };
   }, [rows]);
 
-  // Si el hook aún está resolviendo el rol (fallback), mostramos un estado de carga
+  // Si el hook aÃºn estÃ¡ resolviendo el rol (fallback), mostramos un estado de carga
   // OJO: si AuthContext ya trae role owner/admin, NO esperamos este loading.
   const shouldShowLoadingPermissions =
     Boolean(loadingAccess) && !authRole && !moduleRole;
@@ -339,7 +339,7 @@ const CostosPage = () => {
       <div className="p-4">
         <h1 className="text-xl font-semibold mb-2">{t("reportes.title")}</h1>
         <p className="text-sm text-gray-600">
-          {t("reportes.loadingPermissions") || "Cargando permisos…"}
+          {t("reportes.loadingPermissions") || "Cargando permisosâ€¦"}
         </p>
       </div>
     );
@@ -538,7 +538,7 @@ const CostosPage = () => {
         </div>
       </div>
 
-      {/* Tabla detallada + botón exportar */}
+      {/* Tabla detallada + botÃ³n exportar */}
       <div className="bg-white rounded-xl shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700">
@@ -654,3 +654,4 @@ const CostosPage = () => {
 };
 
 export default CostosPage;
+
