@@ -1,18 +1,11 @@
 {
   "version": 2,
   "rewrites": [
-    {
-      "source": "/tracker-accept",
-      "destination": "/tracker-gps"
-    },
-    {
-      "source": "/tracker-accept/:path*",
-      "destination": "/tracker-gps"
-    },
-    {
-      "source": "/api/auth/:path*",
-      "destination": "/api/auth?route=:path*"
-    },
+    { "source": "/tracker-accept", "destination": "/tracker-gps" },
+    { "source": "/tracker-accept/:path*", "destination": "/tracker-gps" },
+
+    { "source": "/api/auth/:path*", "destination": "/api/auth?route=:path*" },
+
     {
       "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*?)$",
       "destination": "/"
@@ -21,21 +14,27 @@
   "headers": [
     {
       "source": "/$",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
+      "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
     {
       "source": "/(.*)\\.html$",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
+      "source": "/(manifest\\.webmanifest|site\\.webmanifest)$",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
     {
       "source": "/(service-worker\\.js|sw\\.js)$",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
+      "source": "/workbox-(.*)\\.js$",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
     {
       "source": "/assets/(.*)",
