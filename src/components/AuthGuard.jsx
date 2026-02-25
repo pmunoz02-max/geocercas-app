@@ -1,16 +1,12 @@
-﻿// src/routes/AuthGuard.jsx
+﻿// src/components/AuthGuard.jsx
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-
-// IMPORT ÚNICO (universal): siempre desde el shim
 import { useAuth } from "@/auth/AuthProvider.jsx";
 
 function FullScreenLoader({ text = "Cargando..." }) {
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="px-4 py-3 rounded-xl bg-white/5">
-        {text}
-      </div>
+      <div className="px-4 py-3 rounded-xl bg-white/5">{text}</div>
     </div>
   );
 }
@@ -18,7 +14,7 @@ function FullScreenLoader({ text = "Cargando..." }) {
 /**
  * AuthGuard estable:
  * - espera loading
- * - valida por user (NO session)
+ * - valida user
  * - redirige a /login con next
  */
 export default function AuthGuard({ children }) {
