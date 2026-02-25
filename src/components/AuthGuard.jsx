@@ -1,12 +1,14 @@
-﻿// src/components/AuthGuard.jsx
+﻿// src/routes/AuthGuard.jsx
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuthSafe } from "../auth/AuthProvider.jsx";
 
-function FullScreenLoader({ text = "Cargando…" }) {
+// IMPORT ÚNICO (universal): siempre desde el shim
+import { useAuth } from "@/auth/AuthProvider.jsx";
+
+function FullScreenLoader({ text = "Cargando..." }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
-      <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70">
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="px-4 py-3 rounded-xl bg-white/5">
         {text}
       </div>
     </div>
@@ -15,16 +17,15 @@ function FullScreenLoader({ text = "Cargando…" }) {
 
 /**
  * AuthGuard estable:
- * - usa hook safe (nunca lanza)
  * - espera loading
- * - valida por user
+ * - valida por user (NO session)
  * - redirige a /login con next
  */
 export default function AuthGuard({ children }) {
-  const { loading, user } = useAuthSafe();
+  const { loading, user } = useAuth();
   const location = useLocation();
 
-  if (loading) return <FullScreenLoader text="Cargando sesión…" />;
+  if (loading) return <FullScreenLoader text="Cargando..." />;
 
   if (!user) {
     const next = encodeURIComponent(location.pathname + location.search);
