@@ -1,87 +1,91 @@
 // src/auth/AuthProvider.jsx
 import React from "react";
-import { AuthProvider as CoreAuthProvider, useAuth as coreUseAuth } from "../context/AuthContext.jsx";
+import {
+  AuthProvider as CoreAuthProvider,
+  useAuth as coreUseAuth,
+} from "../context/AuthContext.jsx";
 
 /**
- * AuthProvider ÚNICO (API público del proyecto)
- * ------------------------------------------------
- * Todo el proyecto debe importar SIEMPRE desde:
- *   - "@/auth/AuthProvider.jsx"
+ * API pública ÚNICA de Auth del proyecto
+ * -------------------------------------
+ * TODO el proyecto debe importar Auth desde:
+ *   "@/auth/AuthProvider.jsx"
  *
- * Internamente delega al AuthContext canónico (../context/AuthContext.jsx).
+ * Este wrapper:
+ * - expone AuthProvider
+ * - expone useAuth (estricto, puede lanzar si no hay provider)
+ * - expone useAuthSafe (NUNCA lanza; try/catch + fallback)
+ * - normaliza el shape (aliases: session, profile, signOut, etc.)
  */
 
-// Provider único
 export function AuthProvider({ children }) {
   return <CoreAuthProvider>{children}</CoreAuthProvider>;
 }
 
-/**
- * Normaliza el shape del contexto para compatibilidad con pantallas viejas.
- */
-function normalizeAuth(ctx) {
+function normalize(ctx) {
+  const safe = ctx || {};
+
   return {
-    ...ctx,
+    ...safe,
 
-    // compat: muchos componentes usan "session" y "profile"
-    session: ctx?.user ?? null,
-    profile: ctx?.user ?? null,
+    // Aliases compat
+    session: safe.user ?? null,
+    profile: safe.user ?? null,
 
-    // compat: muchos usan signOut()
-    signOut: ctx?.logout,
+    // signOut alias
+    signOut: safe.logout,
 
-    // compat: isAdmin
-    isAdmin: String(ctx?.currentRole || "").toLowerCase() === "admin",
+    // isAdmin compat
+    isAdmin: String(safe.currentRole || "").toLowerCase() === "admin",
 
-    // compat: reloadAuth/reloadSession
-    reloadAuth: ctx?.refreshSession,
-    reloadSession: ctx?.refreshSession,
+    // reload compat
+    reloadAuth: safe.refreshSession,
+    reloadSession: safe.refreshSession,
 
-    // compat: orgs / setters
-    setCurrentOrg: (orgId) => ctx?.selectOrg?.(orgId),
-    orgs: ctx?.organizations ?? [],
-    orgsReady: Boolean(ctx?.ready),
-    authReady: Boolean(ctx?.ready),
+    // org compat
+    setCurrentOrg: (orgId) => safe.selectOrg?.(orgId),
+    orgs: safe.organizations ?? [],
+    orgsReady: Boolean(safe.ready),
+    authReady: Boolean(safe.ready),
   };
 }
 
 /**
- * Hook estricto (mantiene throw si NO hay Provider)
+ * Hook estricto: mantiene el throw si NO hay Provider
+ * (úsalo donde estés seguro que estás dentro del árbol con AuthProvider)
  */
 export function useAuth() {
   const ctx = coreUseAuth();
-  return normalizeAuth(ctx);
+  return normalize(ctx);
 }
 
 /**
- * Hook seguro (NUNCA lanza)
- * - Si no hay Provider, devuelve un objeto seguro.
+ * Hook seguro: NUNCA lanza
  * Ideal para guards/layouts tempranos.
  */
 export function useAuthSafe() {
   try {
+    // Usamos el hook estricto y lo protegemos aquí,
+    // en vez de depender de un coreUseAuthSafe que podría no ser safe.
     const ctx = coreUseAuth();
-    return normalizeAuth(ctx);
-  } catch {
-    // Fallback seguro cuando no hay Provider (o hay mismatch temporal)
-    return normalizeAuth({
-      user: null,
-      ready: false,
+    return normalize(ctx);
+  } catch (e) {
+    // Fallback universal (sin provider o init parcial)
+    return normalize({
       loading: true,
-
+      ready: false,
+      user: null,
       currentOrg: null,
-      organizations: [],
-
+      currentOrgId: null,
       currentRole: null,
-
-      // no-ops seguros
-      login: async () => ({ ok: false }),
+      role: null,
+      authenticated: false,
+      organizations: [],
+      selectOrg: () => {},
       logout: async () => {},
       refreshSession: async () => {},
-      selectOrg: () => {},
     });
   }
 }
 
-// Default export por si en algún lugar lo usan así
 export default AuthProvider;
