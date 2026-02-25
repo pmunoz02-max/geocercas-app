@@ -5,6 +5,12 @@ import path from "path";
 export default defineConfig(() => {
   const DEBUG_BUILD = process.env.VITE_DEBUG_BUILD === "1";
 
+  const BUILD_SHA =
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.VERCEL_GITHUB_COMMIT_SHA ||
+    process.env.VERCEL_GITLAB_COMMIT_SHA ||
+    "local";
+
   return {
     plugins: [react()],
 
@@ -13,14 +19,13 @@ export default defineConfig(() => {
         "@": path.resolve(__dirname, "./src"),
         process: "process/browser",
       },
-
-      // 🔥 EVITA duplicación de React/Context por resolver copias distintas
       dedupe: ["react", "react-dom", "react-router-dom"],
     },
 
     define: {
       "process.env": {},
       global: "window",
+      __TG_BUILD_SHA__: JSON.stringify(BUILD_SHA),
     },
 
     build: {

@@ -12,6 +12,11 @@ import "./index.css";
 import { AuthProvider } from "@/auth/AuthProvider.jsx";
 import App from "./App.jsx";
 
+console.log(
+  "[TG BUILD SHA]",
+  typeof __TG_BUILD_SHA__ !== "undefined" ? __TG_BUILD_SHA__ : "NO_SHA"
+);
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <I18nextProvider i18n={i18n}>
