@@ -13,6 +13,9 @@ export default defineConfig(() => {
         "@": path.resolve(__dirname, "./src"),
         process: "process/browser",
       },
+
+      // 🔥 EVITA duplicación de React/Context por resolver copias distintas
+      dedupe: ["react", "react-dom", "react-router-dom"],
     },
 
     define: {
@@ -22,16 +25,11 @@ export default defineConfig(() => {
 
     build: {
       sourcemap: true,
-
-      // 🔥 CLAVE: para un deploy diagnóstico
       minify: DEBUG_BUILD ? false : "esbuild",
-
-      // ayuda a que nombres sobrevivan un poco más
       target: "es2020",
     },
 
     esbuild: {
-      // mantiene nombres de funciones/clases en debug
       keepNames: DEBUG_BUILD,
     },
   };
