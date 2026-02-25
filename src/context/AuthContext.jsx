@@ -21,6 +21,22 @@ const AuthContext = createContext(null);
 const LS_ORG_KEY = "tg_current_org_id";
 
 /* =========================
+   FINGERPRINT (diagnóstico)
+========================= */
+
+const AUTH_CTX_INSTANCE_ID = `AUTHCTX_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+
+try {
+  if (typeof window !== "undefined") {
+    window.__TG_AUTHCTX_IDS = window.__TG_AUTHCTX_IDS || [];
+    window.__TG_AUTHCTX_IDS.push(AUTH_CTX_INSTANCE_ID);
+    window.__TG_AUTHCTX_LAST = AUTH_CTX_INSTANCE_ID;
+    // eslint-disable-next-line no-console
+    console.log("[AUTHCTX] module instance:", AUTH_CTX_INSTANCE_ID);
+  }
+} catch {}
+
+/* =========================
    UTILIDADES
 ========================= */
 
@@ -137,6 +153,17 @@ export function AuthProvider({ children }) {
     }
   });
 
+  // FINGERPRINT: marca que el provider de ESTA instancia se montó
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.__TG_AUTH_PROVIDER_MOUNTED = AUTH_CTX_INSTANCE_ID;
+        // eslint-disable-next-line no-console
+        console.log("[AUTHCTX] provider mounted for:", AUTH_CTX_INSTANCE_ID);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     function onNav() {
       try {
@@ -190,9 +217,7 @@ export function AuthProvider({ children }) {
         orgs[0]?.id ||
         null;
 
-      const orgObj = pickedId
-        ? orgs.find((o) => o?.id === pickedId)
-        : null;
+      const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
 
       setCurrentOrg(orgObj || null);
 
@@ -202,9 +227,7 @@ export function AuthProvider({ children }) {
         } catch {}
       }
 
-      setCurrentRole(
-        extractServerRole(data) || normalizeRole(orgObj?.role)
-      );
+      setCurrentRole(extractServerRole(data) || normalizeRole(orgObj?.role));
 
       return;
     }
@@ -358,11 +381,7 @@ export function AuthProvider({ children }) {
     ]
   );
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 /* =========================
@@ -390,9 +409,24 @@ const SAFE_FALLBACK = {
   logout: async () => {},
 };
 
+// 🔥 CAMBIO UNIVERSAL:
+// NO tiramos throw (evita pantalla negra). Logueamos fingerprint para detectar duplicación.
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+
+  if (!ctx) {
+    try {
+      // eslint-disable-next-line no-console
+      console.error("[AUTHCTX] useAuth() without provider!", {
+        instance: AUTH_CTX_INSTANCE_ID,
+        mountedProviderFor: typeof window !== "undefined" ? window.__TG_AUTH_PROVIDER_MOUNTED : null,
+        seenInstances: typeof window !== "undefined" ? window.__TG_AUTHCTX_IDS : null,
+        path: typeof window !== "undefined" ? window.location?.pathname : null,
+      });
+    } catch {}
+    return SAFE_FALLBACK;
+  }
+
   return ctx;
 }
 
