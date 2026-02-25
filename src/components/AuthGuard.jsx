@@ -13,12 +13,6 @@ function FullScreenLoader({ text = "Cargando…" }) {
   );
 }
 
-/**
- * AuthGuard estable:
- * - espera loading
- * - valida por user (NO session)
- * - redirige a /login con next
- */
 export default function AuthGuard({ children }) {
   const { loading, user } = useAuth();
   const location = useLocation();
