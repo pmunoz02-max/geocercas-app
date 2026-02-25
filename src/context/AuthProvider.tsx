@@ -1,19 +1,6 @@
 // src/context/AuthProvider.tsx
-// COMPAT SHIM (no usar en imports nuevos)
-// ------------------------------------------------------------
-// Este archivo existe SOLO para no romper imports viejos.
-// La fuente única y canónica de Auth en TODO el proyecto es:
-//   "@/auth/AuthProvider.jsx"
-//
-// Regla del proyecto:
-//   ✅ Importar SIEMPRE desde "@/auth/AuthProvider.jsx"
-//   ❌ NO importar desde "@/context/*"
-//
-// Cuando ya no existan imports a este archivo, se puede eliminar.
+// COMPAT SHIM (único y universal)
+// Si algún import antiguo apunta a "@/context/AuthProvider", re-enrutamos al Auth real.
+// Fuente de verdad: src/context/AuthContext.jsx (vía src/auth/AuthProvider.jsx)
 
-export {
-  AuthProvider,
-  useAuth,
-  useAuthSafe,
-  default,
-} from "@/auth/AuthProvider.jsx";
+export { AuthProvider, useAuth, useAuthSafe } from "@/auth/AuthProvider.jsx";
