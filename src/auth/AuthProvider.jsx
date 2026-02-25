@@ -1,5 +1,4 @@
 // src/auth/AuthProvider.jsx
-// SHIM ÚNICO (Preview): toda la app importa Auth desde aquí.
-// Fuente de verdad: src/context/AuthContext.jsx (el que aparece en el stack trace)
-
+// SHIM ÚNICO: toda la app debe importar Auth desde aquí.
+// Fuente de verdad: src/context/AuthContext.jsx
 export { AuthProvider, useAuth } from "@/context/AuthContext.jsx";
