@@ -15,26 +15,23 @@ import App from "./App.jsx";
 /**
  * DIAGNÓSTICO UNIVERSAL "PANTALLA BLANCA"
  *
- * Uso (en Preview):
- *  - /inicio?diag=1&stage=react   -> solo React (sin providers)
- *  - /inicio?diag=1&stage=i18n    -> React + I18n
- *  - /inicio?diag=1&stage=auth    -> React + I18n + AuthProvider
- *  - /inicio?diag=1&stage=router  -> React + I18n + AuthProvider + Router (sin App)
- *  - /inicio?diag=1&stage=app     -> Todo normal (equivalente al render actual)
+ * Uso (Preview):
+ *  - /inicio?diag=1&stage=react
+ *  - /inicio?diag=1&stage=i18n
+ *  - /inicio?diag=1&stage=auth
+ *  - /inicio?diag=1&stage=router
+ *  - /inicio?diag=1&stage=app
  *
- * Si no pones ?diag=1, corre normal (sin afectar uso normal).
+ * Si no pones ?diag=1, corre normal.
  */
 
-// 1) “Prueba de vida” del JS + marcador en DOM
+// Marcador temprano (antes de React)
 try {
-  // Log muy temprano (antes de React)
   console.log("BOOT_MAIN", new Date().toISOString());
   document.documentElement.setAttribute("data-boot-main", "1");
-} catch (_) {
-  // Nada: si esto falla, el DOM está muy raro.
-}
+} catch (_) {}
 
-// 2) Captura de errores globales (runtime silencioso)
+// Captura de errores globales (runtime silencioso)
 window.addEventListener("error", (e) => {
   // eslint-disable-next-line no-console
   console.error("GLOBAL_ERROR", e?.error || e?.message, e);
@@ -44,7 +41,7 @@ window.addEventListener("unhandledrejection", (e) => {
   console.error("UNHANDLED_REJECTION", e?.reason, e);
 });
 
-// 3) Root check (si #root no existe, mostramos FATAL visible)
+// Root check
 const rootEl = document.getElementById("root");
 if (!rootEl) {
   document.body.innerHTML = `<pre style="padding:16px;font-size:14px">
@@ -54,32 +51,65 @@ Ruta: ${location.pathname}
   throw new Error("FATAL: #root not found");
 }
 
-// Helpers diagnóstico
+// Params
 const params = new URLSearchParams(window.location.search);
 const diag = params.get("diag") === "1";
 const stage = (params.get("stage") || "").toLowerCase();
 
-// Render mínimo (no depende de CSS/app)
+// En modo diag: forzar fondo blanco (para que no “parezca” blanco por CSS oscuro)
+if (diag) {
+  try {
+    document.documentElement.style.background = "#ffffff";
+    document.body.style.background = "#ffffff";
+    document.body.style.margin = "0";
+  } catch (_) {}
+}
+
+// UI diag 100% visible (no depende de index.css)
 const DiagBox = ({ title, extra }) => (
-  <div style={{ padding: 24, fontFamily: "system-ui, Arial", lineHeight: 1.4 }}>
-    <div style={{ fontSize: 20, fontWeight: 700 }}>{title}</div>
-    <div style={{ marginTop: 8, fontSize: 14 }}>
-      <div>
-        <b>path:</b> {location.pathname}
+  <div
+    style={{
+      padding: 24,
+      fontFamily: "system-ui, Arial",
+      lineHeight: 1.4,
+      background: "#ffffff",
+      color: "#111111",
+      minHeight: "100vh",
+      boxSizing: "border-box",
+    }}
+  >
+    <div
+      style={{
+        maxWidth: 900,
+        margin: "0 auto",
+        border: "2px solid #111",
+        borderRadius: 12,
+        padding: 18,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+      }}
+    >
+      <div style={{ fontSize: 20, fontWeight: 800 }}>{title}</div>
+      <div style={{ marginTop: 10, fontSize: 14 }}>
+        <div>
+          <b>path:</b> {location.pathname}
+        </div>
+        <div>
+          <b>search:</b> {location.search}
+        </div>
+        <div>
+          <b>time:</b> {new Date().toISOString()}
+        </div>
+        {extra ? <div style={{ marginTop: 10 }}>{extra}</div> : null}
       </div>
-      <div>
-        <b>search:</b> {location.search}
+      <div style={{ marginTop: 14, fontSize: 12, opacity: 0.75 }}>
+        Tip: cambia stage=react / i18n / auth / router / app
       </div>
-      <div>
-        <b>time:</b> {new Date().toISOString()}
-      </div>
-      {extra ? <div style={{ marginTop: 10 }}>{extra}</div> : null}
     </div>
   </div>
 );
 
 function buildTree() {
-  // Si no está en modo diag, comportamiento normal (tu árbol actual)
+  // Normal (sin diag): tu árbol original
   if (!diag) {
     return (
       <React.StrictMode>
@@ -94,17 +124,15 @@ function buildTree() {
     );
   }
 
-  // Modo diagnóstico: vamos encendiendo piezas según stage
-  // stage=react -> solo React
+  // Diagnóstico por etapas
   if (stage === "react") {
     return (
       <React.StrictMode>
-        <DiagBox title="DIAG OK: React está vivo" />
+        <DiagBox title="DIAG OK: React está vivo (solo React)" />
       </React.StrictMode>
     );
   }
 
-  // stage=i18n -> React + I18n
   if (stage === "i18n") {
     return (
       <React.StrictMode>
@@ -122,7 +150,6 @@ function buildTree() {
     );
   }
 
-  // stage=auth -> React + I18n + AuthProvider
   if (stage === "auth") {
     return (
       <React.StrictMode>
@@ -135,7 +162,6 @@ function buildTree() {
     );
   }
 
-  // stage=router -> React + I18n + AuthProvider + Router (sin App)
   if (stage === "router") {
     return (
       <React.StrictMode>
@@ -150,7 +176,7 @@ function buildTree() {
     );
   }
 
-  // stage=app o cualquier otro -> árbol completo (normal)
+  // stage=app (o cualquier otro): full app
   return (
     <React.StrictMode>
       <I18nextProvider i18n={i18n}>
@@ -164,5 +190,4 @@ function buildTree() {
   );
 }
 
-// Render final
 ReactDOM.createRoot(rootEl).render(buildTree());
