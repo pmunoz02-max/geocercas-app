@@ -1,6 +1,8 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/__probe", "destination": "/robots.txt" },
+
     { "source": "/tracker-accept", "destination": "/tracker-gps" },
     { "source": "/tracker-accept/:path*", "destination": "/tracker-gps" },
 
