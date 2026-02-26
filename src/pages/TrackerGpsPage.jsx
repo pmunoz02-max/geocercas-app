@@ -101,13 +101,13 @@ export default function TrackerGpsPage() {
     path_orgId: "",
     client_used: "supabase",
     supabase_url: "",
-    send_mode: "manual_fetch_edge",
+    send_mode: "gateway_proof_fetch",
     send_fn: "send_position",
     accept_fn: "accept-tracker-invite",
     // 🔎 extra debug (no secrets)
     last_invoke_fn: "",
-    last_invoke_auth: "unknown", // "forced_user_jwt" | "blocked_no_jwt" | "unknown"
-    last_invoke_token_len: 0,
+    last_invoke_auth: "unknown", // "anon_as_gateway_jwt" | "blocked_no_user_jwt" | "unknown"
+    last_user_token_len: 0,
     last_http_status: null,
   });
 
@@ -122,37 +122,37 @@ export default function TrackerGpsPage() {
   const PRIMARY = supabase;
 
   /**
-   * ✅ Helper universal para Edge Functions:
-   * - NO usa supabase.functions.invoke (porque a veces NO manda Authorization)
-   * - Usa fetch directo con:
-   *   - Authorization: Bearer <user_jwt>
-   *   - apikey: <anon_key>  (requerido por gateway)
+   * ✅ Gateway-proof invoke:
+   * - Authorization => ANON KEY (JWT) para que el gateway NO bloquee con "Invalid JWT"
+   * - x-user-jwt    => JWT real del usuario (lo validará tu Edge)
+   *
+   * ⚠️ Requiere que la Edge Function lea `x-user-jwt` (siguiente paso).
    */
   async function invokeFn(fnName, body) {
     if (!PRIMARY) throw new Error("Supabase client not available");
 
+    const baseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").trim().replace(/\/+$/, "");
+    const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+    if (!baseUrl || !anonKey || !looksLikeJwt(anonKey)) {
+      throw new Error("Missing/invalid VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY (anon must be JWT)");
+    }
+
+    // token fresco del usuario
     const { data: sData, error: sErr } = await PRIMARY.auth.getSession();
     if (sErr) throw new Error(`getSession error before invoke(${fnName}): ${sErr.message}`);
 
-    const token = sData?.session?.access_token || "";
+    const userToken = sData?.session?.access_token || "";
 
     setDebug((d) => ({
       ...d,
       last_invoke_fn: fnName,
-      last_invoke_token_len: token ? String(token).length : 0,
-      last_invoke_auth: token && looksLikeJwt(token) ? "forced_user_jwt" : "blocked_no_jwt",
-      send_mode: "manual_fetch_edge",
+      last_user_token_len: userToken ? String(userToken).length : 0,
+      last_invoke_auth: userToken && looksLikeJwt(userToken) ? "anon_as_gateway_jwt" : "blocked_no_user_jwt",
+      send_mode: "gateway_proof_fetch",
     }));
 
-    if (!token || !looksLikeJwt(token)) {
+    if (!userToken || !looksLikeJwt(userToken)) {
       throw new Error(`invoke(${fnName}) blocked: missing/invalid user JWT`);
-    }
-
-    const baseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").trim().replace(/\/+$/, "");
-    const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
-
-    if (!baseUrl || !anonKey) {
-      throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this build");
     }
 
     const url = `${baseUrl}/functions/v1/${fnName}`;
@@ -162,7 +162,10 @@ export default function TrackerGpsPage() {
       headers: {
         "Content-Type": "application/json",
         apikey: anonKey,
-        Authorization: `Bearer ${token}`,
+        // ✅ Esto satisface al gateway SI verify_jwt se activa (anon key es JWT)
+        Authorization: `Bearer ${anonKey}`,
+        // ✅ Aquí va el JWT real del usuario (Edge lo debe leer)
+        "x-user-jwt": `Bearer ${userToken}`,
       },
       body: JSON.stringify(body ?? {}),
     });
@@ -339,7 +342,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, PRIMARY, t]);
 
-  // 1.5) Onboarding (sin proxy): accept-tracker-invite via edge fetch
+  // 1.5) Onboarding
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
     if (!orgId || !isUuid(orgId)) return;
@@ -398,9 +401,8 @@ export default function TrackerGpsPage() {
 
         setMembershipDetail(t("trackerGps.membership.runningAccept", { defaultValue: "No membership. Running accept-tracker-invite" }));
 
-        let acceptResp = null;
         try {
-          acceptResp = await invokeFn("accept-tracker-invite", { org_id: orgId });
+          await invokeFn("accept-tracker-invite", { org_id: orgId });
         } catch (e) {
           setMembershipStatus("failed");
           setMembershipDetail(`accept-tracker-invite error: ${String(e?.message || e)}`);
@@ -422,12 +424,7 @@ export default function TrackerGpsPage() {
           );
         } else {
           setMembershipStatus("ok");
-          setMembershipDetail(
-            t("trackerGps.membership.acceptOk", {
-              defaultValue: "accept-tracker-invite OK: {{text}}",
-              text: acceptResp ? JSON.stringify(acceptResp) : "ok",
-            })
-          );
+          setMembershipDetail(t("trackerGps.membership.acceptOk", { defaultValue: "accept-tracker-invite OK" }));
         }
 
         try {
@@ -484,7 +481,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, membershipStatus, t]);
 
-  // 3) Envío (sin proxy): send_position via edge fetch
+  // 3) Envío
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (membershipStatus !== "ok") return;
