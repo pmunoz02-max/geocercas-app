@@ -592,7 +592,7 @@ export default function TrackerDashboard() {
     }));
 
     if (rows.length === 0) {
-      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando geocercas activas/visibles de la organización.");
+      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando solo la(s) geocerca(s) default (is_default).");
     }
   }, [todayStrUtc]);
 
@@ -602,32 +602,22 @@ export default function TrackerDashboard() {
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
 
+    // Si hay asignaciones activas, filtrar por esas geocercas.
+    // Si NO hay asignaciones, mostrar SOLO la(s) geocerca(s) default (is_default=true).
     const assignedIds = Array.from(
       new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
     );
 
-    // ✅ IMPORTANTÍSIMO: filtrar ACTIVE/ VISIBLE en el query (y NO tratar NULL como true)
-   let q = supabase
-  .from("geofences")
-  .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
-  .eq("org_id", currentOrgId)
-  .eq("active", true);
-
-if (assignedIds.length > 0) {
-  q = q.in("id", assignedIds);
-} else {
-  // ✅ SIN asignaciones => SOLO la default
-  q = q.eq("is_default", true);
-}
-
-    // visible puede existir en el view (según tu select actual). Si no existe, PostgREST dará error.
-    // Como YA estabas seleccionando 'visible', asumimos que el view lo tiene.
-    q = q.eq("visible", true);
+    let q = supabase
+      .from("geofences")
+      .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
+      .eq("org_id", currentOrgId)
+      .eq("active", true);
 
     if (assignedIds.length > 0) {
       q = q.in("id", assignedIds);
     } else {
-      q = q.limit(500);
+      q = q.eq("is_default", true);
     }
 
     const res = await q;
@@ -644,33 +634,32 @@ if (assignedIds.length > 0) {
       }));
       setGeofenceRows([]);
       setSelectedGeofenceIds([]);
-      setErrorMsg("Error al cargar geocercas (v_geocercas_tracker_ui).");
+      setErrorMsg("Error al cargar geocercas (geofences).");
       return;
     }
 
     const rows = Array.isArray(res.data) ? res.data : [];
 
-    // ✅ Extra seguridad: si por algún motivo llegara NULL, aquí se considera NO activo/NO visible.
- const normalized = rows
-  .filter((r) => r.active === true)
-  .map((r) => ({
-    id: r.id,
-    org_id: r.org_id,
-    name: r.name || r.id,
-    geojson: r.geojson,
-    geom: r.geom,
-    lat: r.lat,
-    lng: r.lng,
-    radius_m: r.radius_m,
-    is_default: r.is_default,
-  }));
+    const normalized = rows
+      .filter((r) => r.active === true)
+      .map((r) => ({
+        id: r.id,
+        org_id: r.org_id,
+        name: r.name || r.id,
+        geojson: r.geojson,
+        geom: r.geom,
+        lat: r.lat,
+        lng: r.lng,
+        radius_m: r.radius_m,
+        is_default: r.is_default,
+      }));
 
     const { items, skipped } = buildGeofenceLayerItems(normalized);
     const polysCount = items.filter((x) => x.type === "polygon").length;
     const circlesCount = items.filter((x) => x.type === "circle").length;
 
     setGeofenceRows(normalized);
-    setSelectedGeofenceIds([]); // default: mostrar todas (pero ya vienen filtradas)
+    setSelectedGeofenceIds([]); // default: mostrar todas (de la lista resultante)
 
     setDiag((d) => ({
       ...d,
@@ -682,9 +671,13 @@ if (assignedIds.length > 0) {
 
     if (normalized.length === 0) {
       if (assignedIds.length > 0) {
-        setInfoMsg(`Hay asignaciones, pero no hay geocercas activas/visibles para esas asignaciones en la org (${currentOrgId}).`);
+        setInfoMsg(
+          `Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org (${currentOrgId}).`
+        );
       } else {
-        setInfoMsg(`Esta org (${currentOrgId}) no tiene geocercas activas/visibles (o no tienes permiso de verlas).`);
+        setInfoMsg(
+          `No hay geocerca default (is_default=true) activa para esta org (${currentOrgId}).`
+        );
       }
     }
 
