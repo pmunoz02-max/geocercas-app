@@ -8,8 +8,25 @@ tools/_archive/
 # NEVER ignore api folder (Vercel functions)
 !api/
 !api/**
-node_modules
 
-# Build output
+# Dependencies
+node_modules/
+node_modules/**
+
+# Build output (Vite)
 dist/
+dist/**
+.vite/
+.vite/**
 
+# Vercel (CRÍTICO: evita Build Output API prebuilt artifacts)
+.vercel/
+.vercel/**
+.vercel/output/
+.vercel/output/**
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
