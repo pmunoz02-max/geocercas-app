@@ -101,13 +101,14 @@ export default function TrackerGpsPage() {
     path_orgId: "",
     client_used: "supabase",
     supabase_url: "",
-    send_mode: "supabase.functions.invoke",
+    send_mode: "send_position:fetch(anon)+x-user-jwt; accept:invoke",
     send_fn: "send_position",
     accept_fn: "accept-tracker-invite",
     last_invoke_fn: "",
     last_invoke_auth: "unknown",
     last_invoke_token_len: 0,
     last_token_ttl_sec: null,
+    last_http_status: null,
   });
 
   const watchIdRef = useRef(null);
@@ -120,7 +121,7 @@ export default function TrackerGpsPage() {
 
   const PRIMARY = supabase;
 
-  // ✅ Universal: devuelve JWT fresco (refresh si falta poco)
+  // ✅ token fresco (refresh si falta poco)
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
 
@@ -145,9 +146,20 @@ export default function TrackerGpsPage() {
     const ttl2 = exp ? exp - Math.floor(Date.now() / 1000) : null;
     setDebug((d) => ({ ...d, last_token_ttl_sec: ttl2 }));
 
+    const payload = decodeJwtPayload(token);
+    setTokenIss(payload?.iss ? String(payload.iss) : "");
+    setDebug((d) => ({
+      ...d,
+      token_looks_jwt: looksLikeJwt(token),
+      token_iss: payload?.iss ? String(payload.iss) : "",
+      token_sub: payload?.sub ? String(payload.sub) : "",
+      client_used: "supabase",
+    }));
+
     return token;
   }
 
+  // ✅ accept-tracker-invite: dejamos invoke normal (ya te funcionaba / no tocar más de lo necesario)
   async function invokeFn(fnName, body) {
     if (!PRIMARY?.functions?.invoke) throw new Error("Supabase functions client not available");
 
@@ -157,17 +169,11 @@ export default function TrackerGpsPage() {
       ...d,
       last_invoke_fn: fnName,
       last_invoke_token_len: tokenB.length,
-      // ✅ ya no usamos Authorization con el JWT del usuario (gateway lo puede tumbar)
-      last_invoke_auth: "x-user-jwt",
+      last_invoke_auth: "supabase.invoke(default)",
+      last_http_status: null,
     }));
 
-    const { data, error } = await PRIMARY.functions.invoke(fnName, {
-      body,
-      headers: {
-        // ✅ enviar JWT por header alterno, y validar dentro de la function
-        "x-user-jwt": tokenB, // raw token
-      },
-    });
+    const { data, error } = await PRIMARY.functions.invoke(fnName, { body });
 
     if (error) {
       const e = new Error(error.message || "Edge function error");
@@ -176,6 +182,55 @@ export default function TrackerGpsPage() {
       throw e;
     }
     return data;
+  }
+
+  // ✅ send_position: fetch directo con anon key en Authorization para no disparar gateway Invalid JWT
+  async function invokeSendPosition(body) {
+    const sbUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+    const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+
+    if (!sbUrl || !anon) throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this deployment");
+
+    const userJwt = await getFreshJwtOrThrow("send_position(fetch)");
+
+    setDebug((d) => ({
+      ...d,
+      last_invoke_fn: "send_position",
+      last_invoke_token_len: userJwt.length,
+      last_invoke_auth: "fetch:Authorization=anon; x-user-jwt=user",
+      last_http_status: null,
+    }));
+
+    const url = `${sbUrl.replace(/\/+$/, "")}/functions/v1/send_position`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        // ✅ pasa gateway
+        apikey: anon,
+        Authorization: `Bearer ${anon}`,
+        "Content-Type": "application/json",
+        // ✅ user jwt para que la function valide usuario
+        "x-user-jwt": userJwt,
+      },
+      body: JSON.stringify(body),
+    });
+
+    setDebug((d) => ({ ...d, last_http_status: res.status }));
+
+    let j = null;
+    try {
+      j = await res.json();
+    } catch {
+      // ignore
+    }
+
+    if (!res.ok) {
+      const msg = j?.error || j?.message || `HTTP ${res.status}`;
+      throw new Error(`send_position http ${res.status}: ${msg}`);
+    }
+
+    return j;
   }
 
   // 0) Config
@@ -448,7 +503,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, membershipStatus, t]);
 
-  // 3) Envío (NO mandar "at")
+  // 3) Envío
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (membershipStatus !== "ok") return;
@@ -474,7 +529,7 @@ export default function TrackerGpsPage() {
         };
 
         try {
-          await invokeFn("send_position", payload);
+          await invokeSendPosition(payload);
         } catch (e) {
           setLastError(`send_position error: ${String(e?.message || e)}`);
           return;
@@ -511,10 +566,10 @@ export default function TrackerGpsPage() {
               </div>
 
               <div className="mt-2 text-[11px] text-slate-400 break-all">
-                send: {debug.send_mode}({debug.send_fn})
+                send: fetch(anon)+x-user-jwt ({debug.send_fn})
               </div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">
-                accept: {debug.send_mode}({debug.accept_fn})
+                accept: invoke ({debug.accept_fn})
               </div>
 
               <div className="mt-2 text-[11px] text-slate-400 break-all">org_id: {orgId || "—"}</div>
@@ -523,6 +578,9 @@ export default function TrackerGpsPage() {
               {tokenIss ? <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div> : null}
               {debug.last_token_ttl_sec != null ? (
                 <div className="mt-2 text-[11px] text-slate-400 break-all">token_ttl_sec: {debug.last_token_ttl_sec}</div>
+              ) : null}
+              {debug.last_http_status != null ? (
+                <div className="mt-2 text-[11px] text-slate-400 break-all">last_http_status: {debug.last_http_status}</div>
               ) : null}
 
               {coords ? (
