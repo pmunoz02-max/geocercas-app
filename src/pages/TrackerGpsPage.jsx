@@ -107,6 +107,7 @@ export default function TrackerGpsPage() {
     last_invoke_fn: "",
     last_invoke_auth: "unknown",
     last_invoke_token_len: 0,
+    last_token_ttl_sec: null,
   });
 
   const watchIdRef = useRef(null);
@@ -119,12 +120,32 @@ export default function TrackerGpsPage() {
 
   const PRIMARY = supabase;
 
-  async function getFreshJwtOrThrow(label) {
-    const { data: sData, error: sErr } = await PRIMARY.auth.getSession();
-    if (sErr) throw new Error(`getSession error before ${label}: ${sErr.message}`);
-    const tokenB = sData?.session?.access_token || "";
-    if (!tokenB || !looksLikeJwt(tokenB)) throw new Error(`${label} blocked: missing/invalid user JWT`);
-    return tokenB;
+  // ✅ Universal: devuelve JWT fresco (refresh si falta poco)
+  async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
+    const now = Math.floor(Date.now() / 1000);
+
+    const { data: s1, error: e1 } = await PRIMARY.auth.getSession();
+    if (e1) throw new Error(`getSession error before ${label}: ${e1.message}`);
+
+    let token = s1?.session?.access_token || "";
+    let exp = s1?.session?.expires_at || 0;
+
+    if (!token || !looksLikeJwt(token)) throw new Error(`${label} blocked: missing/invalid user JWT`);
+
+    const ttl = exp ? exp - now : 0;
+
+    if (!exp || ttl < minTtlSeconds) {
+      const { data: s2, error: e2 } = await PRIMARY.auth.refreshSession();
+      if (e2) throw new Error(`refreshSession error before ${label}: ${e2.message}`);
+      token = s2?.session?.access_token || "";
+      exp = s2?.session?.expires_at || 0;
+      if (!token || !looksLikeJwt(token)) throw new Error(`${label} blocked: refresh returned invalid user JWT`);
+    }
+
+    const ttl2 = exp ? exp - Math.floor(Date.now() / 1000) : null;
+    setDebug((d) => ({ ...d, last_token_ttl_sec: ttl2 }));
+
+    return token;
   }
 
   async function invokeFn(fnName, body) {
@@ -136,12 +157,16 @@ export default function TrackerGpsPage() {
       ...d,
       last_invoke_fn: fnName,
       last_invoke_token_len: tokenB.length,
-      last_invoke_auth: "forced_authorization",
+      // ✅ ya no usamos Authorization con el JWT del usuario (gateway lo puede tumbar)
+      last_invoke_auth: "x-user-jwt",
     }));
 
     const { data, error } = await PRIMARY.functions.invoke(fnName, {
       body,
-      headers: { Authorization: `Bearer ${tokenB}` },
+      headers: {
+        // ✅ enviar JWT por header alterno, y validar dentro de la function
+        "x-user-jwt": tokenB, // raw token
+      },
     });
 
     if (error) {
@@ -496,6 +521,9 @@ export default function TrackerGpsPage() {
               <div className="mt-2 text-[11px] text-slate-400 break-all">membership: {membershipStatus}</div>
 
               {tokenIss ? <div className="mt-2 text-[11px] text-slate-400 break-all">token_iss: {tokenIss}</div> : null}
+              {debug.last_token_ttl_sec != null ? (
+                <div className="mt-2 text-[11px] text-slate-400 break-all">token_ttl_sec: {debug.last_token_ttl_sec}</div>
+              ) : null}
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">

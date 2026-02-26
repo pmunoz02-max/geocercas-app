@@ -2,14 +2,23 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const BUILD_TAG = "send_position-v11_env_fallback_20260226";
-const FN_NAME = "send_position";
+const build_tag = "send_position-v14_env_fallback_universal_20260226";
 
 function buildCorsHeaders(origin: string | null) {
   return {
     "Access-Control-Allow-Origin": origin ?? "*",
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-proxy-ts, x-proxy-signature, x-tracker-ts, x-tracker-nonce, x-tracker-sig",
+    "Access-Control-Allow-Headers": [
+      "authorization",
+      "x-client-info",
+      "apikey",
+      "content-type",
+      "x-proxy-ts",
+      "x-proxy-signature",
+      "x-tracker-ts",
+      "x-tracker-nonce",
+      "x-tracker-sig",
+      "x-user-jwt",
+    ].join(", "),
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
@@ -19,10 +28,7 @@ function buildCorsHeaders(origin: string | null) {
 function json(body: unknown, status: number, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json; charset=utf-8",
-    },
+    headers: { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" },
   });
 }
 
@@ -36,34 +42,34 @@ async function hmacHex(secret: string, msg: string) {
     ["sign"],
   );
   const sigBuf = await crypto.subtle.sign("HMAC", key, encoder.encode(msg));
-  return Array.from(new Uint8Array(sigBuf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(sigBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function looksLikeJwt(token: string | null) {
-  const t = String(token || "");
-  return t.split(".").length === 3;
+// ✅ No mutar token (NO toLowerCase del token completo)
+function pickBearer(h: string | null) {
+  const s = String(h || "").trim();
+  if (!s) return "";
+  return /^bearer\s+/i.test(s) ? s : `Bearer ${s}`;
 }
 
-/**
- * ✅ Universal: primero variables estándar de Supabase,
- * luego fallback a tus variables legacy (SB_URL / SB_SERVICE_ROLE).
- */
+// ✅ Universal env resolver (no depende de un solo nombre / scope)
 function getEnv() {
   const SB_URL =
-    Deno.env.get("SUPABASE_URL") ||
     Deno.env.get("SB_URL") ||
+    Deno.env.get("SUPABASE_URL") ||
+    Deno.env.get("API_URL") ||
     "";
 
   const SB_SERVICE_ROLE =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
-    Deno.env.get("SUPABASE_SERVICE_ROLE") ||
     Deno.env.get("SB_SERVICE_ROLE") ||
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+    Deno.env.get("SB_SERVICE_ROLE_KEY") ||
     "";
 
   const TRACKER_PROXY_SECRET =
     Deno.env.get("TRACKER_PROXY_SECRET") ||
+    Deno.env.get("PROXY_SECRET") ||
+    Deno.env.get("INVITE_PROXY_SECRET") ||
     "";
 
   return { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET };
@@ -73,55 +79,40 @@ serve(async (req) => {
   const origin = req.headers.get("origin");
   const CORS = buildCorsHeaders(origin);
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+
+  const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
 
   if (req.method === "GET") {
-    const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
     return json(
       {
         ok: true,
-        build_tag: BUILD_TAG,
+        build_tag,
         now: new Date().toISOString(),
         env: {
-          has_url: Boolean(SB_URL),
-          has_service_role: Boolean(SB_SERVICE_ROLE),
-          has_tracker_proxy_secret: Boolean(TRACKER_PROXY_SECRET),
-          url_source: Deno.env.get("SUPABASE_URL") ? "SUPABASE_URL" : Deno.env.get("SB_URL") ? "SB_URL" : "missing",
-          srk_source: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-            ? "SUPABASE_SERVICE_ROLE_KEY"
-            : Deno.env.get("SUPABASE_SERVICE_ROLE")
-              ? "SUPABASE_SERVICE_ROLE"
-              : Deno.env.get("SB_SERVICE_ROLE")
-                ? "SB_SERVICE_ROLE"
-                : "missing",
+          has_SB_URL: !!SB_URL,
+          has_SB_SERVICE_ROLE: !!SB_SERVICE_ROLE,
+          has_TRACKER_PROXY_SECRET: !!TRACKER_PROXY_SECRET,
         },
         headers_seen: {
-          has_authorization: Boolean(req.headers.get("authorization")),
-          has_x_proxy_ts: Boolean(req.headers.get("x-proxy-ts")),
-          has_x_proxy_signature: Boolean(req.headers.get("x-proxy-signature")),
-          has_x_tracker_ts: Boolean(req.headers.get("x-tracker-ts")),
-          has_x_tracker_nonce: Boolean(req.headers.get("x-tracker-nonce")),
-          has_x_tracker_sig: Boolean(req.headers.get("x-tracker-sig")),
+          has_authorization: !!req.headers.get("authorization"),
+          has_x_user_jwt: !!req.headers.get("x-user-jwt"),
+          has_x_proxy_ts: !!req.headers.get("x-proxy-ts"),
+          has_x_proxy_signature: !!req.headers.get("x-proxy-signature"),
         },
-        hint: "POST with either web auth (Authorization: Bearer <user_jwt>) OR proxy HMAC headers.",
+        hint: "POST web_auth: send x-user-jwt (raw jwt or Bearer <jwt>). Proxy mode requires x-proxy-* + a secret.",
       },
       200,
       CORS,
     );
   }
 
-  if (req.method !== "POST") {
-    return json({ ok: false, build_tag: BUILD_TAG, error: "Method not allowed" }, 405, CORS);
-  }
+  if (req.method !== "POST") return json({ ok: false, build_tag, error: "Method not allowed" }, 405, CORS);
 
   try {
-    const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
-
     if (!SB_URL || !SB_SERVICE_ROLE) {
       return json(
-        { ok: false, build_tag: BUILD_TAG, error: "Missing required env vars (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY) or (SB_URL/SB_SERVICE_ROLE)" },
+        { ok: false, build_tag, error: "Missing required env vars (SB_URL / SB_SERVICE_ROLE)" },
         500,
         CORS,
       );
@@ -132,122 +123,67 @@ serve(async (req) => {
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return json({ ok: false, build_tag: BUILD_TAG, error: "Invalid JSON body" }, 400, CORS);
+      return json({ ok: false, build_tag, error: "Invalid JSON body" }, 400, CORS);
     }
 
-    // ─────────────────────────────────────────────
-    // MODO PROXY (retrocompatible)
-    // ─────────────────────────────────────────────
-    const xTrackerTs = req.headers.get("x-tracker-ts") || "";
-    const xTrackerNonce = req.headers.get("x-tracker-nonce") || "";
-    const xTrackerSig = req.headers.get("x-tracker-sig") || "";
+    // Proxy HMAC mode
+    const ts = req.headers.get("x-proxy-ts");
+    const signature = req.headers.get("x-proxy-signature");
+    const hasProxyHeaders = Boolean(ts && signature);
 
-    const xProxyTs = req.headers.get("x-proxy-ts") || "";
-    const xProxySig = req.headers.get("x-proxy-signature") || "";
-
-    const hasTrackerHmac = Boolean(xTrackerTs && xTrackerNonce && xTrackerSig);
-    const hasProxyHmac = Boolean(xProxyTs && xProxySig);
-
-    if ((hasTrackerHmac || hasProxyHmac) && !TRACKER_PROXY_SECRET) {
-      return json(
-        { ok: false, build_tag: BUILD_TAG, error: "TRACKER_PROXY_SECRET not configured but proxy headers were provided" },
-        500,
-        CORS,
-      );
-    }
-
-    if (hasTrackerHmac || hasProxyHmac) {
-      let valid = false;
-
-      if (hasTrackerHmac) {
-        const expectedA = await hmacHex(TRACKER_PROXY_SECRET!, `${xTrackerTs}.${xTrackerNonce}.${rawBody}`);
-        valid = expectedA === xTrackerSig;
+    if (hasProxyHeaders) {
+      if (!TRACKER_PROXY_SECRET) {
+        return json({ ok: false, build_tag, error: "Proxy mode requires proxy secret" }, 500, CORS);
       }
 
-      if (!valid && hasProxyHmac) {
-        const expectedB = await hmacHex(TRACKER_PROXY_SECRET!, `${FN_NAME}.${xProxyTs}.${rawBody}`);
-        valid = expectedB === xProxySig;
+      const fn = "send_position";
+      const expected = await hmacHex(TRACKER_PROXY_SECRET, `${fn}.${ts}.${rawBody}`);
+      if (expected !== signature) {
+        return json({ ok: false, build_tag, error: "Invalid proxy signature" }, 401, CORS);
       }
 
-      if (!valid) {
-        return json(
-          { ok: false, build_tag: BUILD_TAG, error: "Invalid proxy signature" },
-          401,
-          CORS,
-        );
-      }
-
-      const { user_id, org_id, lat, lng, accuracy, at, source } = body ?? {};
+      const { user_id, org_id, lat, lng } = body ?? {};
       if (!user_id || !org_id || typeof lat !== "number" || typeof lng !== "number") {
-        return json(
-          { ok: false, build_tag: BUILD_TAG, error: "Missing/invalid fields (proxy mode)" },
-          400,
-          CORS,
-        );
+        return json({ ok: false, build_tag, error: "Missing/invalid fields (proxy mode)" }, 400, CORS);
       }
 
       const admin = createClient(SB_URL, SB_SERVICE_ROLE);
-
       const { error } = await admin.from("positions").insert({
         user_id,
         org_id,
         lat,
         lng,
-        accuracy: typeof accuracy === "number" ? accuracy : null,
-        at: typeof at === "string" ? at : new Date().toISOString(),
-        source: typeof source === "string" ? source : "tracker-proxy",
+        accuracy: body?.accuracy ?? null,
+        at: body?.at ?? null,
+        source: body?.source ?? "proxy_hmac",
       });
 
-      if (error) {
-        return json({ ok: false, build_tag: BUILD_TAG, error: error.message }, 500, CORS);
-      }
-
-      return json({ ok: true, build_tag: BUILD_TAG, mode: "proxy_hmac" }, 200, CORS);
+      if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
+      return json({ ok: true, build_tag, mode: "proxy_hmac" }, 200, CORS);
     }
 
-    // ─────────────────────────────────────────────
-    // MODO WEB AUTH (functions.invoke)
-    // ─────────────────────────────────────────────
+    // Web auth mode (prefer x-user-jwt)
+    const userJwtHeader = req.headers.get("x-user-jwt");
     const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
-      return json(
-        { ok: false, build_tag: BUILD_TAG, error: "Missing Authorization (web mode) or proxy HMAC headers" },
-        401,
-        CORS,
-      );
-    }
+    const effectiveUserAuth = pickBearer(userJwtHeader || authHeader);
 
-    const token = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
-    if (!looksLikeJwt(token)) {
-      return json(
-        { ok: false, build_tag: BUILD_TAG, error: "Authorization is not a JWT (web mode expects user JWT)" },
-        401,
-        CORS,
-      );
+    if (!effectiveUserAuth) {
+      return json({ ok: false, build_tag, error: "Missing x-user-jwt/Authorization (web mode)" }, 401, CORS);
     }
 
     const admin = createClient(SB_URL, SB_SERVICE_ROLE, {
-      global: { headers: { Authorization: authHeader } },
+      global: { headers: { Authorization: effectiveUserAuth } },
     });
 
     const { data: userData, error: userErr } = await admin.auth.getUser();
     if (userErr || !userData?.user?.id) {
-      return json(
-        { ok: false, build_tag: BUILD_TAG, error: "Invalid JWT (web mode user token)" },
-        401,
-        CORS,
-      );
+      return json({ ok: false, build_tag, error: "Invalid JWT", detail: userErr?.message ?? null }, 401, CORS);
     }
 
     const user_id = userData.user.id;
-    const { org_id, lat, lng, accuracy, at, source } = body ?? {};
-
+    const { org_id, lat, lng } = body ?? {};
     if (!org_id || typeof lat !== "number" || typeof lng !== "number") {
-      return json(
-        { ok: false, build_tag: BUILD_TAG, error: "Missing/invalid fields (web mode)" },
-        400,
-        CORS,
-      );
+      return json({ ok: false, build_tag, error: "Missing/invalid fields (web mode)" }, 400, CORS);
     }
 
     const { error } = await admin.from("positions").insert({
@@ -255,21 +191,14 @@ serve(async (req) => {
       org_id,
       lat,
       lng,
-      accuracy: typeof accuracy === "number" ? accuracy : null,
-      at: typeof at === "string" ? at : new Date().toISOString(),
-      source: typeof source === "string" ? source : "tracker-gps-web",
+      accuracy: body?.accuracy ?? null,
+      at: body?.at ?? null,
+      source: body?.source ?? "tracker-gps-web",
     });
 
-    if (error) {
-      return json({ ok: false, build_tag: BUILD_TAG, error: error.message }, 500, CORS);
-    }
-
-    return json({ ok: true, build_tag: BUILD_TAG, mode: "web_auth" }, 200, CORS);
+    if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
+    return json({ ok: true, build_tag, mode: "web_auth" }, 200, CORS);
   } catch (err: any) {
-    return json(
-      { ok: false, build_tag: BUILD_TAG, error: err?.message ?? String(err) },
-      500,
-      CORS,
-    );
+    return json({ ok: false, build_tag, error: err?.message ?? String(err) }, 500, CORS);
   }
 });
