@@ -104,6 +104,10 @@ export default function TrackerGpsPage() {
     send_mode: "supabase.functions.invoke",
     send_fn: "send_position",
     accept_fn: "accept-tracker-invite",
+    // 🔎 extra debug (no secrets)
+    last_invoke_fn: "",
+    last_invoke_auth: "unknown", // "forced_user_jwt" | "blocked_no_jwt" | "unknown"
+    last_invoke_token_len: 0,
   });
 
   const watchIdRef = useRef(null);
@@ -116,12 +120,38 @@ export default function TrackerGpsPage() {
 
   const PRIMARY = supabase;
 
-  // Helper robusto para invocar Edge Functions
+  // Helper robusto para invocar Edge Functions (✅ FORZAR JWT DE USUARIO)
   async function invokeFn(fnName, body) {
     if (!PRIMARY?.functions?.invoke) {
       throw new Error("Supabase functions client not available");
     }
-    const { data, error } = await PRIMARY.functions.invoke(fnName, { body });
+
+    // ✅ Token fresco SIEMPRE (no depender de __memoryAccessToken / carreras)
+    const { data: sData, error: sErr } = await PRIMARY.auth.getSession();
+    if (sErr) {
+      throw new Error(`getSession error before invoke(${fnName}): ${sErr.message}`);
+    }
+
+    const tokenB = sData?.session?.access_token || "";
+
+    setDebug((d) => ({
+      ...d,
+      last_invoke_fn: fnName,
+      last_invoke_token_len: tokenB ? String(tokenB).length : 0,
+      last_invoke_auth: tokenB && looksLikeJwt(tokenB) ? "forced_user_jwt" : "blocked_no_jwt",
+    }));
+
+    if (!tokenB || !looksLikeJwt(tokenB)) {
+      throw new Error(`invoke(${fnName}) blocked: missing/invalid user JWT`);
+    }
+
+    const { data, error } = await PRIMARY.functions.invoke(fnName, {
+      body,
+      headers: {
+        Authorization: `Bearer ${tokenB}`,
+      },
+    });
+
     if (error) {
       const msg = error.message || "Edge function error";
       const e = new Error(msg);
@@ -209,7 +239,9 @@ export default function TrackerGpsPage() {
         setLastError(null);
         setStatus(t("trackerGps.status.sessionOkPreparing", { defaultValue: "Session OK. Preparing tracker…" }));
       } catch (e) {
-        setLastError(t("trackerGps.errors.hashSession", { defaultValue: "hash session error:" }) + ` ${String(e?.message || e)}`);
+        setLastError(
+          t("trackerGps.errors.hashSession", { defaultValue: "hash session error:" }) + ` ${String(e?.message || e)}`
+        );
       }
     })();
   }, [trackerReady, PRIMARY, t]);
@@ -253,7 +285,9 @@ export default function TrackerGpsPage() {
       if (!ok) {
         setHasSession(false);
         setStatus(t("trackerGps.status.noSession", { defaultValue: "No active tracker session." }));
-        setLastError(t("trackerGps.errors.openFromMagicLinkOnly", { defaultValue: "Open this page only from your Tracker Magic Link." }));
+        setLastError(
+          t("trackerGps.errors.openFromMagicLinkOnly", { defaultValue: "Open this page only from your Tracker Magic Link." })
+        );
         return;
       }
 
@@ -343,7 +377,7 @@ export default function TrackerGpsPage() {
 
         setMembershipDetail(t("trackerGps.membership.runningAccept", { defaultValue: "No membership. Running accept-tracker-invite" }));
 
-        // ✅ Llamada directa a Edge Function (sin proxy)
+        // ✅ Llamada directa a Edge Function (sin proxy) — con Authorization forzada
         let acceptResp = null;
         try {
           acceptResp = await invokeFn("accept-tracker-invite", { org_id: orgId });
@@ -386,7 +420,7 @@ export default function TrackerGpsPage() {
         onboardingLockRef.current = false;
       }
     })();
-  }, [trackerReady, hasSession, orgId, PRIMARY, t]); // acceptUrl removido
+  }, [trackerReady, hasSession, orgId, PRIMARY, t]);
 
   // 2) GPS
   useEffect(() => {
@@ -455,9 +489,8 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        // ✅ Contrato unificado: usar "at" (compat con trackerApi.js)
         const payload = {
-          org_id: orgId, // server-owned (puede ignorarlo)
+          org_id: orgId,
           lat: c.lat,
           lng: c.lng,
           accuracy: c.accuracy,
@@ -467,6 +500,7 @@ export default function TrackerGpsPage() {
 
         let sendResp = null;
         try {
+          // ✅ invoke con Authorization forzada (token fresco)
           sendResp = await invokeFn("send_position", payload);
         } catch (e) {
           setLastError(`send_position error: ${String(e?.message || e)}`);
@@ -477,10 +511,8 @@ export default function TrackerGpsPage() {
         setLastSend(new Date());
         setLastError(null);
 
-        // debug opcional: podrías guardar algo del response
         if (sendResp) {
-          // no sobreescribir todo, solo si quieres inspección rápida
-          // setDebug((d) => ({ ...d, last_send_resp: sendResp }));
+          // opcional
         }
       } finally {
         isSendingRef.current = false;
