@@ -54,7 +54,11 @@ function parseMaybeJson(input) {
   if (!input) return null;
   if (typeof input === "object") return input;
   if (typeof input === "string") {
-    try { return JSON.parse(input); } catch { return null; }
+    try {
+      return JSON.parse(input);
+    } catch {
+      return null;
+    }
   }
   return null;
 }
@@ -143,7 +147,9 @@ function MapDiagnostics({ setDiag }) {
       }));
     };
     const doInvalidate = () => {
-      try { map.invalidateSize(); } catch {}
+      try {
+        map.invalidateSize();
+      } catch {}
       updateSize();
     };
     doInvalidate();
@@ -158,8 +164,12 @@ function MapDiagnostics({ setDiag }) {
     } catch {}
 
     return () => {
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
-      try { ro?.disconnect?.(); } catch {}
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      try {
+        ro?.disconnect?.();
+      } catch {}
     };
   }, [map, setDiag]);
 
@@ -257,7 +267,15 @@ function buildGeofenceLayerItems(geofenceRows) {
     }
 
     const circle = inferCircleFromRow(g);
-    if (circle) items.push({ type: "circle", geofenceId: g.id, name: g.name || g.id, center: circle.center, radius_m: circle.radius_m, idx: "c" });
+    if (circle)
+      items.push({
+        type: "circle",
+        geofenceId: g.id,
+        name: g.name || g.id,
+        center: circle.center,
+        radius_m: circle.radius_m,
+        idx: "c",
+      });
   }
 
   return { items, skipped };
@@ -495,7 +513,6 @@ export default function TrackerDashboard() {
     setInfoMsg("");
 
     try {
-      // 1) RPC específico dashboard
       const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
       if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
       if (r1?.data) {
@@ -505,7 +522,6 @@ export default function TrackerDashboard() {
         return v;
       }
 
-      // 2) Fallback universal
       const r2 = await supabase.rpc("get_current_org_id");
       if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
       if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
@@ -564,9 +580,7 @@ export default function TrackerDashboard() {
     const rows = Array.isArray(data) ? data : [];
     setAssignments(rows);
 
-    const uniqTrackers = Array.from(new Set(rows.map((r) => String(r.tracker_user_id)).filter(Boolean)))
-      .map((user_id) => ({ user_id }));
-
+    const uniqTrackers = Array.from(new Set(rows.map((r) => String(r.tracker_user_id)).filter(Boolean))).map((user_id) => ({ user_id }));
     const uniqGeof = Array.from(new Set(rows.map((r) => String(r.geofence_id)).filter(Boolean)));
 
     setAssignmentTrackers(uniqTrackers);
@@ -577,9 +591,8 @@ export default function TrackerDashboard() {
       assignedGeofenceIds: uniqGeof.length,
     }));
 
-    // Nota: universal SaaS -> NO bloquear geocercas si no hay asignaciones.
     if (rows.length === 0) {
-      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando geocercas de la organización.");
+      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando geocercas activas/visibles de la organización.");
     }
   }, [todayStrUtc]);
 
@@ -589,21 +602,24 @@ export default function TrackerDashboard() {
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
 
-    // Si hay asignaciones, filtramos por las geocercas asignadas.
-    // Si NO hay asignaciones, mostramos TODAS las geocercas activas/visibles de la org (universal SaaS).
     const assignedIds = Array.from(
       new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
     );
 
+    // ✅ IMPORTANTÍSIMO: filtrar ACTIVE/ VISIBLE en el query (y NO tratar NULL como true)
     let q = supabase
       .from("v_geocercas_tracker_ui")
       .select("id, org_id, name, geojson, geom, polygon, geometry, lat, lng, radius_m, active, visible")
-      .eq("org_id", currentOrgId);
+      .eq("org_id", currentOrgId)
+      .eq("active", true);
+
+    // visible puede existir en el view (según tu select actual). Si no existe, PostgREST dará error.
+    // Como YA estabas seleccionando 'visible', asumimos que el view lo tiene.
+    q = q.eq("visible", true);
 
     if (assignedIds.length > 0) {
       q = q.in("id", assignedIds);
     } else {
-      // límite razonable para dashboard (evita cargar miles)
       q = q.limit(500);
     }
 
@@ -627,9 +643,10 @@ export default function TrackerDashboard() {
 
     const rows = Array.isArray(res.data) ? res.data : [];
 
+    // ✅ Extra seguridad: si por algún motivo llegara NULL, aquí se considera NO activo/NO visible.
     const normalized = rows
-      .filter((r) => (r.active ?? true) === true)
-      .filter((r) => (r.visible ?? true) === true)
+      .filter((r) => r.active === true)
+      .filter((r) => r.visible === true)
       .map((r) => ({
         id: r.id,
         org_id: r.org_id,
@@ -648,7 +665,7 @@ export default function TrackerDashboard() {
     const circlesCount = items.filter((x) => x.type === "circle").length;
 
     setGeofenceRows(normalized);
-    setSelectedGeofenceIds([]); // default: mostrar todas
+    setSelectedGeofenceIds([]); // default: mostrar todas (pero ya vienen filtradas)
 
     setDiag((d) => ({
       ...d,
@@ -671,11 +688,7 @@ export default function TrackerDashboard() {
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
-    const { data, error } = await supabase
-      .from("personal")
-      .select("*")
-      .eq("org_id", currentOrgId)
-      .order("nombre", { ascending: true });
+    const { data, error } = await supabase.from("personal").select("*").eq("org_id", currentOrgId).order("nombre", { ascending: true });
 
     if (error) {
       setPersonalRows([]);
@@ -684,79 +697,82 @@ export default function TrackerDashboard() {
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
-  const fetchPositions = useCallback(async (currentOrgId, options = { showSpinner: true }) => {
-    if (!currentOrgId) return;
-    const { showSpinner } = options;
+  const fetchPositions = useCallback(
+    async (currentOrgId, options = { showSpinner: true }) => {
+      if (!currentOrgId) return;
+      const { showSpinner } = options;
 
-    try {
-      if (showSpinner) setLoading(true);
-      setDiag((d) => ({ ...d, lastPositionsError: null }));
+      try {
+        if (showSpinner) setLoading(true);
+        setDiag((d) => ({ ...d, lastPositionsError: null }));
 
-      const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
-      const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
+        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+        const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
-      const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
+        const allowedTrackerIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
 
-      let targetIds = null;
-      if (allowedTrackerIds.length) {
-        targetIds = allowedTrackerIds;
-        if (selectedTrackerId !== "all") {
-          const wanted = String(selectedTrackerId);
-          targetIds = allowedTrackerIds.includes(wanted) ? [wanted] : allowedTrackerIds;
+        let targetIds = null;
+        if (allowedTrackerIds.length) {
+          targetIds = allowedTrackerIds;
+          if (selectedTrackerId !== "all") {
+            const wanted = String(selectedTrackerId);
+            targetIds = allowedTrackerIds.includes(wanted) ? [wanted] : allowedTrackerIds;
+          }
+        } else {
+          if (selectedTrackerId !== "all") targetIds = [String(selectedTrackerId)];
         }
-      } else {
-        if (selectedTrackerId !== "all") targetIds = [String(selectedTrackerId)];
+
+        let q = supabase
+          .from("tracker_positions")
+          .select("id, org_id, user_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at")
+          .eq("org_id", currentOrgId)
+          .gte("recorded_at", fromIso)
+          .order("recorded_at", { ascending: false })
+          .limit(500);
+
+        if (Array.isArray(targetIds) && targetIds.length) {
+          q = q.in("user_id", targetIds);
+        }
+
+        const { data, error } = await q;
+
+        if (error) {
+          setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
+          setPositions([]);
+          setDiag((d) => ({ ...d, positionsFound: 0 }));
+          setErrorMsg("Error al cargar posiciones (tracker_positions).");
+          return;
+        }
+
+        const normalized = (data || [])
+          .map((r) => {
+            const lat = toNum(r.lat);
+            const lng = toNum(r.lng);
+            const ts = r.recorded_at || r.created_at || null;
+            return {
+              id: r.id,
+              user_id: r.user_id ? String(r.user_id) : null,
+              lat,
+              lng,
+              recorded_at: ts,
+              accuracy: r.accuracy ?? null,
+              speed: r.speed ?? null,
+              heading: r.heading ?? null,
+              battery: r.battery ?? null,
+              source: r.source ?? null,
+              _valid: isValidLatLng(lat, lng),
+            };
+          })
+          .filter((p) => p._valid);
+
+        setPositions(normalized);
+        setDiag((d) => ({ ...d, positionsFound: normalized.length }));
+      } finally {
+        if (showSpinner) setLoading(false);
       }
-
-      let q = supabase
-        .from("tracker_positions")
-        .select("id, org_id, user_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at")
-        .eq("org_id", currentOrgId)
-        .gte("recorded_at", fromIso)
-        .order("recorded_at", { ascending: false })
-        .limit(500);
-
-      if (Array.isArray(targetIds) && targetIds.length) {
-        q = q.in("user_id", targetIds);
-      }
-
-      const { data, error } = await q;
-
-      if (error) {
-        setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
-        setPositions([]);
-        setDiag((d) => ({ ...d, positionsFound: 0 }));
-        setErrorMsg("Error al cargar posiciones (tracker_positions).");
-        return;
-      }
-
-      const normalized = (data || [])
-        .map((r) => {
-          const lat = toNum(r.lat);
-          const lng = toNum(r.lng);
-          const ts = r.recorded_at || r.created_at || null;
-          return {
-            id: r.id,
-            user_id: r.user_id ? String(r.user_id) : null,
-            lat,
-            lng,
-            recorded_at: ts,
-            accuracy: r.accuracy ?? null,
-            speed: r.speed ?? null,
-            heading: r.heading ?? null,
-            battery: r.battery ?? null,
-            source: r.source ?? null,
-            _valid: isValidLatLng(lat, lng),
-          };
-        })
-        .filter((p) => p._valid);
-
-      setPositions(normalized);
-      setDiag((d) => ({ ...d, positionsFound: normalized.length }));
-    } finally {
-      if (showSpinner) setLoading(false);
-    }
-  }, [assignmentTrackers, selectedTrackerId, timeWindowId]);
+    },
+    [assignmentTrackers, selectedTrackerId, timeWindowId]
+  );
 
   useEffect(() => {
     if (!orgId) return;
@@ -964,7 +980,7 @@ export default function TrackerDashboard() {
                   />
                   {!geofenceRows?.length && (
                     <div className="mt-1 text-xs text-gray-500">
-                      No hay geocercas disponibles para esta org (o no tienes permiso de verlas).
+                      No hay geocercas activas/visibles disponibles para esta org (o no tienes permiso de verlas).
                     </div>
                   )}
                 </div>
