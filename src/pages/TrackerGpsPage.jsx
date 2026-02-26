@@ -119,11 +119,11 @@ export default function TrackerGpsPage() {
 
   const PRIMARY = supabase;
 
-  async function getFreshJwtOrThrow(fnName) {
+  async function getFreshJwtOrThrow(label) {
     const { data: sData, error: sErr } = await PRIMARY.auth.getSession();
-    if (sErr) throw new Error(`getSession error before ${fnName}: ${sErr.message}`);
+    if (sErr) throw new Error(`getSession error before ${label}: ${sErr.message}`);
     const tokenB = sData?.session?.access_token || "";
-    if (!tokenB || !looksLikeJwt(tokenB)) throw new Error(`${fnName} blocked: missing/invalid user JWT`);
+    if (!tokenB || !looksLikeJwt(tokenB)) throw new Error(`${label} blocked: missing/invalid user JWT`);
     return tokenB;
   }
 
@@ -350,9 +350,7 @@ export default function TrackerGpsPage() {
         const m = (mRows || [])[0];
         if (m && !m.revoked_at) {
           setMembershipStatus("ok");
-          setMembershipDetail(
-            t("trackerGps.membership.alreadyExists", { defaultValue: "Membership already exists: role={{role}}", role: m.role })
-          );
+          setMembershipDetail(t("trackerGps.membership.alreadyExists", { defaultValue: "Membership already exists: role={{role}}", role: m.role }));
           try {
             sessionStorage.setItem(ssKey, "1");
           } catch {}
@@ -425,7 +423,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, membershipStatus, t]);
 
-  // 3) Envío (sin "at" para evitar schema-cache error)
+  // 3) Envío (NO mandar "at")
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (membershipStatus !== "ok") return;
@@ -448,7 +446,6 @@ export default function TrackerGpsPage() {
           lng: c.lng,
           accuracy: c.accuracy,
           source: "tracker-gps-web",
-          // ❌ NO enviar "at" (tu tabla no tiene esa columna)
         };
 
         try {
@@ -510,9 +507,7 @@ export default function TrackerGpsPage() {
             </div>
 
             <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
-              <summary className="cursor-pointer text-sm text-slate-200">
-                {t("trackerGps.debugCopyPaste", { defaultValue: "Debug (copy/paste)" })}
-              </summary>
+              <summary className="cursor-pointer text-sm text-slate-200">{t("trackerGps.debugCopyPaste", { defaultValue: "Debug (copy/paste)" })}</summary>
               <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">{JSON.stringify(debug, null, 2)}</pre>
             </details>
 
@@ -558,4 +553,4 @@ export default function TrackerGpsPage() {
       </div>
     </div>
   );
-}}
+}
