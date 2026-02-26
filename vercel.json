@@ -1,15 +1,13 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/__probe", "destination": "/robots.txt" },
-
     { "source": "/tracker-accept", "destination": "/tracker-gps" },
-    { "source": "/tracker-accept/:path*", "destination": "/tracker-gps" },
+    { "source": "/tracker-accept/(.*)", "destination": "/tracker-gps" },
 
-    { "source": "/api/auth/:path*", "destination": "/api/auth?route=:path*" },
+    { "source": "/api/auth/(.*)", "destination": "/api/auth?route=$1" },
 
     {
-      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*?)$",
+      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*)",
       "destination": "/"
     }
   ],
@@ -20,39 +18,16 @@
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     },
-
     {
-      "source": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml)$",
+      "source": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|site\\.webmanifest)$",
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
     {
-      "source": "/(manifest\\.webmanifest|site\\.webmanifest)$",
+      "source": "/(service-worker\\.js|sw\\.js|workbox-.*\\.js)$",
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
     {
-      "source": "/(service-worker\\.js|sw\\.js)$",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
-      "source": "/workbox-(.*)\\.js$",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-
-    {
-      "source": "/$",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
-      "source": "/index.html",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
-      "source": "/(.*)\\.html$",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-
-    {
-      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*)",
+      "source": "/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     }
   ]
