@@ -101,14 +101,12 @@ export default function TrackerGpsPage() {
     path_orgId: "",
     client_used: "supabase",
     supabase_url: "",
-    send_mode: "gateway_proof_fetch",
+    send_mode: "supabase.functions.invoke",
     send_fn: "send_position",
     accept_fn: "accept-tracker-invite",
-    // 🔎 extra debug (no secrets)
     last_invoke_fn: "",
-    last_invoke_auth: "unknown", // "anon_as_gateway_jwt" | "blocked_no_user_jwt" | "unknown"
-    last_user_token_len: 0,
-    last_http_status: null,
+    last_invoke_auth: "unknown",
+    last_invoke_token_len: 0,
   });
 
   const watchIdRef = useRef(null);
@@ -121,70 +119,38 @@ export default function TrackerGpsPage() {
 
   const PRIMARY = supabase;
 
-  /**
-   * ✅ Gateway-proof invoke:
-   * - Authorization => ANON KEY (JWT) para que el gateway NO bloquee con "Invalid JWT"
-   * - x-user-jwt    => JWT real del usuario (lo validará tu Edge)
-   *
-   * ⚠️ Requiere que la Edge Function lea `x-user-jwt` (siguiente paso).
-   */
-  async function invokeFn(fnName, body) {
-    if (!PRIMARY) throw new Error("Supabase client not available");
-
-    const baseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").trim().replace(/\/+$/, "");
-    const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
-    if (!baseUrl || !anonKey || !looksLikeJwt(anonKey)) {
-      throw new Error("Missing/invalid VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY (anon must be JWT)");
-    }
-
-    // token fresco del usuario
+  async function getFreshJwtOrThrow(fnName) {
     const { data: sData, error: sErr } = await PRIMARY.auth.getSession();
-    if (sErr) throw new Error(`getSession error before invoke(${fnName}): ${sErr.message}`);
+    if (sErr) throw new Error(`getSession error before ${fnName}: ${sErr.message}`);
+    const tokenB = sData?.session?.access_token || "";
+    if (!tokenB || !looksLikeJwt(tokenB)) throw new Error(`${fnName} blocked: missing/invalid user JWT`);
+    return tokenB;
+  }
 
-    const userToken = sData?.session?.access_token || "";
+  async function invokeFn(fnName, body) {
+    if (!PRIMARY?.functions?.invoke) throw new Error("Supabase functions client not available");
+
+    const tokenB = await getFreshJwtOrThrow(`invoke(${fnName})`);
 
     setDebug((d) => ({
       ...d,
       last_invoke_fn: fnName,
-      last_user_token_len: userToken ? String(userToken).length : 0,
-      last_invoke_auth: userToken && looksLikeJwt(userToken) ? "anon_as_gateway_jwt" : "blocked_no_user_jwt",
-      send_mode: "gateway_proof_fetch",
+      last_invoke_token_len: tokenB.length,
+      last_invoke_auth: "forced_authorization",
     }));
 
-    if (!userToken || !looksLikeJwt(userToken)) {
-      throw new Error(`invoke(${fnName}) blocked: missing/invalid user JWT`);
-    }
-
-    const url = `${baseUrl}/functions/v1/${fnName}`;
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: anonKey,
-        // ✅ Esto satisface al gateway SI verify_jwt se activa (anon key es JWT)
-        Authorization: `Bearer ${anonKey}`,
-        // ✅ Aquí va el JWT real del usuario (Edge lo debe leer)
-        "x-user-jwt": `Bearer ${userToken}`,
-      },
-      body: JSON.stringify(body ?? {}),
+    const { data, error } = await PRIMARY.functions.invoke(fnName, {
+      body,
+      headers: { Authorization: `Bearer ${tokenB}` },
     });
 
-    setDebug((d) => ({ ...d, last_http_status: resp.status }));
-
-    const text = await resp.text();
-    let json;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      throw new Error(`Edge response is not JSON (status ${resp.status}): ${text}`);
+    if (error) {
+      const e = new Error(error.message || "Edge function error");
+      // @ts-ignore
+      e.details = error;
+      throw e;
     }
-
-    if (!resp.ok) {
-      throw new Error(json?.error || json?.message || `HTTP ${resp.status}`);
-    }
-
-    return json;
+    return data;
   }
 
   // 0) Config
@@ -263,9 +229,7 @@ export default function TrackerGpsPage() {
         setLastError(null);
         setStatus(t("trackerGps.status.sessionOkPreparing", { defaultValue: "Session OK. Preparing tracker…" }));
       } catch (e) {
-        setLastError(
-          t("trackerGps.errors.hashSession", { defaultValue: "hash session error:" }) + ` ${String(e?.message || e)}`
-        );
+        setLastError(t("trackerGps.errors.hashSession", { defaultValue: "hash session error:" }) + ` ${String(e?.message || e)}`);
       }
     })();
   }, [trackerReady, PRIMARY, t]);
@@ -292,7 +256,7 @@ export default function TrackerGpsPage() {
       setStatus(t("trackerGps.status.readingSession", { defaultValue: "Reading tracker session…" }));
 
       let session = null;
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 15; i++) {
         const { data } = await PRIMARY.auth.getSession();
         session = data?.session ?? null;
         if (session?.access_token) break;
@@ -309,9 +273,7 @@ export default function TrackerGpsPage() {
       if (!ok) {
         setHasSession(false);
         setStatus(t("trackerGps.status.noSession", { defaultValue: "No active tracker session." }));
-        setLastError(
-          t("trackerGps.errors.openFromMagicLinkOnly", { defaultValue: "Open this page only from your Tracker Magic Link." })
-        );
+        setLastError(t("trackerGps.errors.openFromMagicLinkOnly", { defaultValue: "Open this page only from your Tracker Magic Link." }));
         return;
       }
 
@@ -333,7 +295,6 @@ export default function TrackerGpsPage() {
     });
 
     const unsub = sub?.subscription;
-
     return () => {
       cancelled = true;
       try {
@@ -346,7 +307,6 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
     if (!orgId || !isUuid(orgId)) return;
-
     if (onboardingLockRef.current) return;
     onboardingLockRef.current = true;
 
@@ -409,24 +369,8 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        const { data: m2Rows } = await PRIMARY
-          .from("memberships")
-          .select("role, revoked_at")
-          .eq("org_id", orgId)
-          .eq("user_id", userId)
-          .limit(1);
-
-        const m2 = (m2Rows || [])[0];
-        if (m2 && !m2.revoked_at) {
-          setMembershipStatus("ok");
-          setMembershipDetail(
-            t("trackerGps.membership.acceptOkRole", { defaultValue: "accept-tracker-invite OK. role={{role}}", role: m2.role })
-          );
-        } else {
-          setMembershipStatus("ok");
-          setMembershipDetail(t("trackerGps.membership.acceptOk", { defaultValue: "accept-tracker-invite OK" }));
-        }
-
+        setMembershipStatus("ok");
+        setMembershipDetail(t("trackerGps.membership.acceptOk", { defaultValue: "accept-tracker-invite OK." }));
         try {
           sessionStorage.setItem(ssKey, "1");
         } catch {}
@@ -481,7 +425,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, membershipStatus, t]);
 
-  // 3) Envío
+  // 3) Envío (sin "at" para evitar schema-cache error)
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (membershipStatus !== "ok") return;
@@ -503,8 +447,8 @@ export default function TrackerGpsPage() {
           lat: c.lat,
           lng: c.lng,
           accuracy: c.accuracy,
-          at: new Date().toISOString(),
           source: "tracker-gps-web",
+          // ❌ NO enviar "at" (tu tabla no tiene esa columna)
         };
 
         try {
@@ -528,7 +472,7 @@ export default function TrackerGpsPage() {
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [trackerReady, hasSession, orgId, membershipStatus, PRIMARY, t]);
+  }, [trackerReady, hasSession, orgId, membershipStatus]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
@@ -602,9 +546,7 @@ export default function TrackerGpsPage() {
 
         {!trackerReady && (
           <div className="mt-4 text-center">
-            <p className="text-sm text-slate-300 mb-3">
-              {t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." })}
-            </p>
+            <p className="text-sm text-slate-300 mb-3">{t("trackerGps.errors.notConfigured", { defaultValue: "Tracker is not configured in this deployment." })}</p>
             {lastError ? (
               <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">{lastError}</div>
             ) : null}
@@ -616,4 +558,4 @@ export default function TrackerGpsPage() {
       </div>
     </div>
   );
-}
+}}
