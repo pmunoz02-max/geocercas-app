@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const BUILD_TAG = "send_position-v10_dual_hmac_diag_20260226";
+const BUILD_TAG = "send_position-v11_env_fallback_20260226";
 const FN_NAME = "send_position";
 
 function buildCorsHeaders(origin: string | null) {
@@ -46,22 +46,57 @@ function looksLikeJwt(token: string | null) {
   return t.split(".").length === 3;
 }
 
+/**
+ * ✅ Universal: primero variables estándar de Supabase,
+ * luego fallback a tus variables legacy (SB_URL / SB_SERVICE_ROLE).
+ */
+function getEnv() {
+  const SB_URL =
+    Deno.env.get("SUPABASE_URL") ||
+    Deno.env.get("SB_URL") ||
+    "";
+
+  const SB_SERVICE_ROLE =
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+    Deno.env.get("SUPABASE_SERVICE_ROLE") ||
+    Deno.env.get("SB_SERVICE_ROLE") ||
+    "";
+
+  const TRACKER_PROXY_SECRET =
+    Deno.env.get("TRACKER_PROXY_SECRET") ||
+    "";
+
+  return { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET };
+}
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   const CORS = buildCorsHeaders(origin);
 
-  // ✅ Preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
 
-  // ✅ GET diagnóstico (para confirmar build + headers presentes)
   if (req.method === "GET") {
+    const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
     return json(
       {
         ok: true,
         build_tag: BUILD_TAG,
         now: new Date().toISOString(),
+        env: {
+          has_url: Boolean(SB_URL),
+          has_service_role: Boolean(SB_SERVICE_ROLE),
+          has_tracker_proxy_secret: Boolean(TRACKER_PROXY_SECRET),
+          url_source: Deno.env.get("SUPABASE_URL") ? "SUPABASE_URL" : Deno.env.get("SB_URL") ? "SB_URL" : "missing",
+          srk_source: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+            ? "SUPABASE_SERVICE_ROLE_KEY"
+            : Deno.env.get("SUPABASE_SERVICE_ROLE")
+              ? "SUPABASE_SERVICE_ROLE"
+              : Deno.env.get("SB_SERVICE_ROLE")
+                ? "SB_SERVICE_ROLE"
+                : "missing",
+        },
         headers_seen: {
           has_authorization: Boolean(req.headers.get("authorization")),
           has_x_proxy_ts: Boolean(req.headers.get("x-proxy-ts")),
@@ -82,19 +117,16 @@ serve(async (req) => {
   }
 
   try {
-    const SB_URL = Deno.env.get("SB_URL");
-    const SB_SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE");
-    const TRACKER_PROXY_SECRET = Deno.env.get("TRACKER_PROXY_SECRET");
+    const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
 
     if (!SB_URL || !SB_SERVICE_ROLE) {
       return json(
-        { ok: false, build_tag: BUILD_TAG, error: "Missing required env vars (SB_URL / SB_SERVICE_ROLE)" },
+        { ok: false, build_tag: BUILD_TAG, error: "Missing required env vars (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY) or (SB_URL/SB_SERVICE_ROLE)" },
         500,
         CORS,
       );
     }
 
-    // Leemos body raw para HMAC exacto
     const rawBody = await req.text();
     let body: any;
     try {
@@ -104,9 +136,7 @@ serve(async (req) => {
     }
 
     // ─────────────────────────────────────────────
-    // MODO PROXY: aceptar 2 esquemas (retrocompatible)
-    //   A) x-tracker-ts / x-tracker-nonce / x-tracker-sig  => HMAC(secret, `${ts}.${nonce}.${rawBody}`)
-    //   B) x-proxy-ts / x-proxy-signature                 => HMAC(secret, `${fn}.${ts}.${rawBody}`)
+    // MODO PROXY (retrocompatible)
     // ─────────────────────────────────────────────
     const xTrackerTs = req.headers.get("x-tracker-ts") || "";
     const xTrackerNonce = req.headers.get("x-tracker-nonce") || "";
@@ -126,7 +156,6 @@ serve(async (req) => {
       );
     }
 
-    // Si llega HMAC, validamos y entramos a modo proxy
     if (hasTrackerHmac || hasProxyHmac) {
       let valid = false;
 
@@ -142,18 +171,12 @@ serve(async (req) => {
 
       if (!valid) {
         return json(
-          {
-            ok: false,
-            build_tag: BUILD_TAG,
-            error: "Invalid proxy signature",
-            scheme: hasTrackerHmac ? "tracker_hmac" : "proxy_hmac",
-          },
+          { ok: false, build_tag: BUILD_TAG, error: "Invalid proxy signature" },
           401,
           CORS,
         );
       }
 
-      // Proxy mode requiere user_id explícito
       const { user_id, org_id, lat, lng, accuracy, at, source } = body ?? {};
       if (!user_id || !org_id || typeof lat !== "number" || typeof lng !== "number") {
         return json(
@@ -183,37 +206,26 @@ serve(async (req) => {
     }
 
     // ─────────────────────────────────────────────
-    // MODO WEB AUTH: supabase.functions.invoke
-    // Requiere Authorization: Bearer <user_jwt>
+    // MODO WEB AUTH (functions.invoke)
     // ─────────────────────────────────────────────
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return json(
-        {
-          ok: false,
-          build_tag: BUILD_TAG,
-          error: "Missing Authorization (web mode) or proxy HMAC headers",
-        },
+        { ok: false, build_tag: BUILD_TAG, error: "Missing Authorization (web mode) or proxy HMAC headers" },
         401,
         CORS,
       );
     }
 
-    // Diagnóstico suave (sin exponer token)
     const token = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
     if (!looksLikeJwt(token)) {
       return json(
-        {
-          ok: false,
-          build_tag: BUILD_TAG,
-          error: "Authorization is not a JWT (web mode expects user JWT). Did you accidentally send service-role/anon?",
-        },
+        { ok: false, build_tag: BUILD_TAG, error: "Authorization is not a JWT (web mode expects user JWT)" },
         401,
         CORS,
       );
     }
 
-    // Service role para insertar, pero usamos Authorization del usuario para getUser()
     const admin = createClient(SB_URL, SB_SERVICE_ROLE, {
       global: { headers: { Authorization: authHeader } },
     });
