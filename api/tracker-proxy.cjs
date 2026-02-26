@@ -1,18 +1,17 @@
-/* api/tracker-proxy.js
- * tracker-proxy v9.2 (CJS, Node, no-crash)
+/* api/tracker-proxy.cjs
+ * tracker-proxy v10.0 (CJS, Node, no-crash)
  * - GET diagnostic always returns JSON
- * - POST allowlist + raw-body forward (HMAC ready)
+ * - POST allowlist + raw-body forward
+ * - Sends BOTH signature schemes:
+ *    A) x-tracker-ts / x-tracker-nonce / x-tracker-sig  => HMAC(secret, `${ts}.${nonce}.${rawBody}`)
+ *    B) x-proxy-ts / x-proxy-signature                 => HMAC(secret, `${fn}.${ts}.${rawBody}`)
  */
 
 const crypto = require("crypto");
 
-// Next.js (si aplica): desactiva bodyParser para poder leer raw body
-// En Vercel "api/" functions esto simplemente se ignora (no hace daño).
-module.exports.config = {
-  api: { bodyParser: false },
-};
+module.exports.config = { api: { bodyParser: false } };
 
-const BUILD_TAG = "tracker-proxy-v9.2";
+const BUILD_TAG = "tracker-proxy-v10.0";
 const ALLOW_FN = new Set(["accept-tracker-invite", "send_position"]);
 
 function json(res, status, obj) {
@@ -22,7 +21,6 @@ function json(res, status, obj) {
 }
 
 function getQuery(req) {
-  // soporta Next (req.query) y Node (req.url)
   if (req.query && typeof req.query === "object") return req.query;
   try {
     const u = new URL(req.url, "http://localhost");
@@ -35,7 +33,6 @@ function getQuery(req) {
 }
 
 async function readRawBody(req) {
-  // Si alguien metió bodyParser, puede existir req.body (objeto). Igual lo convertimos a string estable.
   if (req.body != null) {
     if (Buffer.isBuffer(req.body)) return req.body.toString("utf8");
     if (typeof req.body === "string") return req.body;
@@ -70,12 +67,15 @@ function timingSafeEqHex(a, b) {
   }
 }
 
+function randHex(nBytes = 12) {
+  return crypto.randomBytes(nBytes).toString("hex");
+}
+
 module.exports = async function handler(req, res) {
   try {
     const method = (req.method || "GET").toUpperCase();
     const q = getQuery(req);
 
-    // ✅ Diagnóstico que NO debe crashear nunca
     if (method === "GET") {
       return json(res, 200, {
         ok: true,
@@ -94,7 +94,6 @@ module.exports = async function handler(req, res) {
       return json(res, 405, { ok: false, error: "method_not_allowed", build_tag: BUILD_TAG });
     }
 
-    // Solo aceptamos fn=...
     const fn = q.fn || null;
     if (!fn) {
       return json(res, 400, {
@@ -109,42 +108,32 @@ module.exports = async function handler(req, res) {
       return json(res, 403, { ok: false, error: "fn_not_allowed", fn, build_tag: BUILD_TAG });
     }
 
-    // Lee RAW body
     const rawBody = await readRawBody(req);
 
-    // (Opcional) Validación HMAC entrante desde el tracker (si ya lo estás enviando)
-    // Firma = HMAC(secret, `${ts}.${nonce}.${rawBody}`)
-    const secret = process.env.TRACKER_PROXY_SECRET || "";
-    const ts = req.headers["x-tracker-ts"] || "";
-    const nonce = req.headers["x-tracker-nonce"] || "";
-    const sig = req.headers["x-tracker-sig"] || "";
-
-    if (secret && ts && nonce && sig) {
-      const payload = `${ts}.${nonce}.${rawBody}`;
-      const expected = hmacHex(secret, payload);
-      if (!timingSafeEqHex(expected, sig)) {
-        return json(res, 401, { ok: false, error: "invalid_signature", build_tag: BUILD_TAG });
-      }
-    }
-
-    // Forward a Supabase Edge Function via fetch
     const SB_URL = process.env.SB_URL;
     const SRK = process.env.SB_SERVICE_ROLE;
-
     if (!SB_URL || !SRK) {
       return json(res, 500, {
         ok: false,
         error: "missing_env",
         build_tag: BUILD_TAG,
-        missing: {
-          SB_URL: !SB_URL,
-          SB_SERVICE_ROLE: !SRK,
-        },
+        missing: { SB_URL: !SB_URL, SB_SERVICE_ROLE: !SRK },
       });
     }
 
-    // Endpoint de edge functions
     const target = `${SB_URL}/functions/v1/${fn}`;
+
+    // ---------- Outgoing signature headers (DUAL) ----------
+    const secret = process.env.TRACKER_PROXY_SECRET || "";
+
+    // Scheme A (tracker_hmac): ts + nonce + sig over `${ts}.${nonce}.${rawBody}`
+    const tsA = new Date().toISOString();
+    const nonceA = randHex(12);
+    const sigA = secret ? hmacHex(secret, `${tsA}.${nonceA}.${rawBody}`) : "";
+
+    // Scheme B (proxy_hmac): ts + sig over `${fn}.${ts}.${rawBody}`
+    const tsB = tsA;
+    const sigB = secret ? hmacHex(secret, `${fn}.${tsB}.${rawBody}`) : "";
 
     // Forward headers controlado
     const headers = {
@@ -153,20 +142,19 @@ module.exports = async function handler(req, res) {
       "x-proxy-build-tag": BUILD_TAG,
     };
 
-    // Forward HMAC headers (para que la Edge valide el mismo rawBody)
-    if (ts) headers["x-tracker-ts"] = String(ts);
-    if (nonce) headers["x-tracker-nonce"] = String(nonce);
-    if (sig) headers["x-tracker-sig"] = String(sig);
+    // Enviar ambos esquemas (edge v10 acepta cualquiera)
+    if (secret) {
+      headers["x-tracker-ts"] = tsA;
+      headers["x-tracker-nonce"] = nonceA;
+      headers["x-tracker-sig"] = sigA;
 
-    const resp = await fetch(target, {
-      method: "POST",
-      headers,
-      body: rawBody,
-    });
+      headers["x-proxy-ts"] = tsB;
+      headers["x-proxy-signature"] = sigB;
+    }
+
+    const resp = await fetch(target, { method: "POST", headers, body: rawBody });
 
     const text = await resp.text();
-    // Siempre devolvemos JSON al cliente (tracker UI)
-    // Si la edge devolvió JSON, lo pasamos; si no, lo envolvemos.
     let data;
     try {
       data = JSON.parse(text);
@@ -182,7 +170,6 @@ module.exports = async function handler(req, res) {
       edge_status: resp.status,
     });
   } catch (e) {
-    // Si algo explota, devolvemos JSON (para no tener 500 silencioso)
     return json(res, 500, {
       ok: false,
       error: "proxy_crash",
