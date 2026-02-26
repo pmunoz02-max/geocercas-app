@@ -607,11 +607,18 @@ export default function TrackerDashboard() {
     );
 
     // ✅ IMPORTANTÍSIMO: filtrar ACTIVE/ VISIBLE en el query (y NO tratar NULL como true)
-    let q = supabase
-      .from("v_geocercas_tracker_ui")
-      .select("id, org_id, name, geojson, geom, polygon, geometry, lat, lng, radius_m, active, visible")
-      .eq("org_id", currentOrgId)
-      .eq("active", true);
+   let q = supabase
+  .from("geofences")
+  .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
+  .eq("org_id", currentOrgId)
+  .eq("active", true);
+
+if (assignedIds.length > 0) {
+  q = q.in("id", assignedIds);
+} else {
+  // ✅ SIN asignaciones => SOLO la default
+  q = q.eq("is_default", true);
+}
 
     // visible puede existir en el view (según tu select actual). Si no existe, PostgREST dará error.
     // Como YA estabas seleccionando 'visible', asumimos que el view lo tiene.
@@ -644,21 +651,19 @@ export default function TrackerDashboard() {
     const rows = Array.isArray(res.data) ? res.data : [];
 
     // ✅ Extra seguridad: si por algún motivo llegara NULL, aquí se considera NO activo/NO visible.
-    const normalized = rows
-      .filter((r) => r.active === true)
-      .filter((r) => r.visible === true)
-      .map((r) => ({
-        id: r.id,
-        org_id: r.org_id,
-        name: r.name || r.id,
-        geojson: r.geojson,
-        geom: r.geom,
-        polygon: r.polygon,
-        geometry: r.geometry,
-        lat: r.lat,
-        lng: r.lng,
-        radius_m: r.radius_m,
-      }));
+ const normalized = rows
+  .filter((r) => r.active === true)
+  .map((r) => ({
+    id: r.id,
+    org_id: r.org_id,
+    name: r.name || r.id,
+    geojson: r.geojson,
+    geom: r.geom,
+    lat: r.lat,
+    lng: r.lng,
+    radius_m: r.radius_m,
+    is_default: r.is_default,
+  }));
 
     const { items, skipped } = buildGeofenceLayerItems(normalized);
     const polysCount = items.filter((x) => x.type === "polygon").length;
