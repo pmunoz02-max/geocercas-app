@@ -1,28 +1,36 @@
 ﻿// src/components/AuthGuard.jsx
 import React from "react";
-import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/auth/AuthProvider.jsx";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-function FullScreenLoader({ text = "Cargando…" }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
-      <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70">
-        {text}
-      </div>
-    </div>
-  );
-}
+// ✅ ÚNICA fuente de auth: shim
+import { useAuthSafe } from "@/auth/AuthProvider.jsx";
 
+/**
+ * AuthGuard (NO elimina guard, solo lo hace "no-crash")
+ * - Nunca debe lanzar si falta provider
+ * - Si no hay sesión/user -> redirect a /login?next=...
+ * - Si está loading -> null (o spinner)
+ */
 export default function AuthGuard({ children }) {
-  const { loading, user } = useAuth();
   const location = useLocation();
+  const auth = useAuthSafe(); // ✅ nunca lanza
 
-  if (loading) return <FullScreenLoader text="Cargando sesión…" />;
+  // Si por alguna razón el provider no existe, NO crashear la app:
+  if (!auth) {
+    const next = encodeURIComponent(location.pathname || "/inicio");
+    return <Navigate to={`/login?next=${next}&err=auth_provider_missing`} replace />;
+  }
+
+  const { loading, user } = auth;
+
+  if (loading) return null;
 
   if (!user) {
-    const next = encodeURIComponent(location.pathname + location.search);
+    const next = encodeURIComponent(location.pathname || "/inicio");
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  return children;
+  // Soporta ambos estilos: children wrapper o nested routes (<Outlet/>)
+  if (children) return children;
+  return <Outlet />;
 }
