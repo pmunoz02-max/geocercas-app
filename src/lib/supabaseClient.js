@@ -8,9 +8,11 @@ import { createClient } from "@supabase/supabase-js";
  * - Producción debe apuntar SIEMPRE a Supabase Prod
  *
  * ✅ PKCE para Magic Links (móvil/WebView)
+ *
+ * v8: Eliminación TOTAL de VITE_SUPABASE_PROJECT_REF (legacy) para evitar mezclas de JWT.
  */
 
-const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260223_PKCE_MIGRATION_A";
+const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260226_SUPABASE_ENV_V8";
 
 function normUrl(u) {
   return String(u || "")
@@ -67,14 +69,15 @@ function detectEnvKind() {
  * Refs esperados por entorno:
  * - Preferimos variables explícitas por entorno (recomendado)
  * - Si no están, caemos a defaults del proyecto (permanece estable)
+ * - En "unknown": NO inventamos ref ni leemos legacy; usamos el ref inferido de SUPABASE_URL.
  */
-function expectedRefByHostname() {
+function expectedRefByHostname(currentRef) {
   const envKind = detectEnvKind();
 
   const fromEnvPreview = normRef(import.meta.env.VITE_SUPABASE_PREVIEW_PROJECT_REF);
   const fromEnvProd = normRef(import.meta.env.VITE_SUPABASE_PROD_PROJECT_REF);
 
-  // Defaults del proyecto (para no depender de VITE_SUPABASE_PROJECT_REF y evitar bloqueos)
+  // Defaults estables del proyecto
   const DEFAULT_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
   const DEFAULT_PROD_REF = "wpaixkvokdkudymgjoua";
 
@@ -85,8 +88,8 @@ function expectedRefByHostname() {
     return fromEnvProd || DEFAULT_PROD_REF;
   }
 
-  // unknown: usar legacy si existe
-  return normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
+  // unknown: no bloquear por no saber el entorno; validamos solo si la URL es supabase válida.
+  return currentRef || "";
 }
 
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -105,43 +108,42 @@ if (!isSupabaseUrl(SUPABASE_URL)) {
 
 const currentRef = projectRefFromUrl(SUPABASE_URL);
 const envKind = detectEnvKind();
-const EXPECTED_PROJECT_REF = expectedRefByHostname();
+const EXPECTED_PROJECT_REF = expectedRefByHostname(currentRef);
 
-// ✅ Política de seguridad:
-// - En preview/staging: si apunta a PROD => BLOQUEAR
-// - En prod: si apunta a PREVIEW => BLOQUEAR
-// - Si hay mismatch solo por legacy env var, NO bloquear preview (solo warn)
+/**
+ * Política de seguridad anti-mezcla:
+ * - En preview/staging: si apunta a PROD => BLOQUEAR
+ * - En prod: si apunta a PREVIEW => BLOQUEAR
+ * - En unknown: no bloqueamos por ambiente, pero exigimos coherencia básica (URL válida => ref presente)
+ */
 function assertRefSafety() {
-  // Si por alguna razón no podemos inferir, usamos la validación clásica
+  if (!currentRef) {
+    throw new Error("[supabaseClient] No se pudo inferir project_ref desde VITE_SUPABASE_URL.");
+  }
+
+  // Si no hay expected (caso raro), no hacemos comparación estricta.
   if (!EXPECTED_PROJECT_REF) return;
 
   if (currentRef !== EXPECTED_PROJECT_REF) {
-    // Preview/staging: si el expected es preview y llegó algo distinto => bloquear (evita mezclar con prod)
+    // Preview/staging: bloquear si no coincide (evita mezclar con prod)
     if (envKind === "preview" || envKind === "staging") {
       throw new Error(
-        `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
+        `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`,
       );
     }
 
     // Production: bloquear siempre
     if (envKind === "production") {
       throw new Error(
-        `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
+        `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`,
       );
     }
 
-    // unknown: mantener comportamiento estricto (seguro)
-    throw new Error(
-      `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
-    );
-  }
-
-  // Extra: si legacy VITE_SUPABASE_PROJECT_REF existe y es distinto, solo advertimos (no rompemos)
-  const legacy = normRef(import.meta.env.VITE_SUPABASE_PROJECT_REF);
-  if (legacy && legacy !== currentRef) {
+    // unknown: comportamiento seguro pero no destructivo
+    // (no sabemos si es preview/prod, así que no forzamos bloqueo por mismatch)
     console.warn(
-      `[supabaseClient] Warning: VITE_SUPABASE_PROJECT_REF=${legacy} no coincide con URL ref=${currentRef}. ` +
-        `Recomendado: remover legacy o setear VITE_SUPABASE_PREVIEW_PROJECT_REF / VITE_SUPABASE_PROD_PROJECT_REF.`
+      `[supabaseClient] [unknown env] URL ref=${currentRef} no coincide con expected=${EXPECTED_PROJECT_REF}. ` +
+        `Revisa VITE_SUPABASE_URL / VITE_SUPABASE_PREVIEW_PROJECT_REF / VITE_SUPABASE_PROD_PROJECT_REF.`,
     );
   }
 }
@@ -234,7 +236,7 @@ if (typeof window !== "undefined") {
 
   if (!window.__TG_SUPABASE_ENV_LOGGED__) {
     window.__TG_SUPABASE_ENV_LOGGED__ = true;
-    console.info(`[${BUILD_MARKER}] [ENV CHECK v7 - PKCE + ENV_KIND]`, info);
+    console.info(`[${BUILD_MARKER}] [ENV CHECK v8 - NO LEGACY PROJECT_REF]`, info);
     console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
