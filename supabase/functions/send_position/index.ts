@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const build_tag = "send_position-v16_at_optional_fallback_20260226";
+const build_tag = "send_position-v17_recorded_at_created_at_20260226";
 
 function buildCorsHeaders(origin: string | null) {
   return {
@@ -45,14 +45,12 @@ async function hmacHex(secret: string, msg: string) {
   return Array.from(new Uint8Array(sigBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// ✅ No mutar token
 function pickBearer(h: string | null) {
   const s = String(h || "").trim();
   if (!s) return "";
   return /^bearer\s+/i.test(s) ? s : `Bearer ${s}`;
 }
 
-// ✅ Universal env resolver
 function getEnv() {
   const SB_URL =
     Deno.env.get("SB_URL") ||
@@ -75,31 +73,18 @@ function getEnv() {
   return { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET };
 }
 
-// ✅ Universal insert: si tabla no tiene columna 'at', reintenta sin 'at'
-async function insertPositionUniversal(
-  admin: any,
-  row: Record<string, unknown>,
-) {
-  // intento 1: tal cual (incluye at si viene)
-  const r1 = await admin.from("positions").insert(row);
-  if (!r1?.error) return { ok: true, attempted: "with_at_or_as_given", result: r1 };
+// recorded_at y created_at son NOT NULL en tu esquema.
+// - Si el cliente manda "recorded_at": lo respetamos (si es ISO válido)
+// - Si no manda: usamos now()
+// - created_at: usamos now() siempre (universal, sin depender de defaults)
+function pickTimestamps(body: any) {
+  const nowIso = new Date().toISOString();
 
-  const msg = String(r1.error?.message || "");
-  const isAtMissing =
-    msg.includes("Could not find the 'at' column") ||
-    msg.includes("Could not find the \"at\" column") ||
-    msg.toLowerCase().includes("could not find the 'at' column");
+  const rec = String(body?.recorded_at || "").trim();
+  const recorded_at = rec && !Number.isNaN(Date.parse(rec)) ? rec : nowIso;
 
-  if (!isAtMissing) {
-    return { ok: false, attempted: "with_at_or_as_given", error: r1.error };
-  }
-
-  // intento 2: sin 'at'
-  const { at, ...rowNoAt } = row as any;
-  const r2 = await admin.from("positions").insert(rowNoAt);
-  if (!r2?.error) return { ok: true, attempted: "without_at_fallback", result: r2 };
-
-  return { ok: false, attempted: "without_at_fallback", error: r2.error };
+  const created_at = nowIso;
+  return { recorded_at, created_at };
 }
 
 serve(async (req) => {
@@ -127,7 +112,9 @@ serve(async (req) => {
           has_x_proxy_ts: !!req.headers.get("x-proxy-ts"),
           has_x_proxy_signature: !!req.headers.get("x-proxy-signature"),
         },
-        hint: "POST web_auth: send x-user-jwt (raw jwt or Bearer <jwt>) OR Authorization. Proxy mode requires x-proxy-* + a secret.",
+        hint:
+          "POST web_auth: send x-user-jwt (raw jwt or Bearer <jwt>) OR Authorization. Proxy mode requires x-proxy-* + a secret.",
+        schema_note: "positions requires recorded_at + created_at (NOT NULL). Function sets them.",
       },
       200,
       CORS,
@@ -152,6 +139,8 @@ serve(async (req) => {
     } catch {
       return json({ ok: false, build_tag, error: "Invalid JSON body" }, 400, CORS);
     }
+
+    const { recorded_at, created_at } = pickTimestamps(body);
 
     // Proxy HMAC mode
     const ts = req.headers.get("x-proxy-ts");
@@ -179,18 +168,24 @@ serve(async (req) => {
       const row = {
         user_id,
         org_id,
+        personal_id: body?.personal_id ?? null,
+        asignacion_id: body?.asignacion_id ?? null,
         lat,
         lng,
         accuracy: body?.accuracy ?? null,
-        // 'at' opcional: si la tabla no tiene esa columna, hacemos fallback sin 'at'
-        at: body?.at ?? null,
+        speed: body?.speed ?? null,
+        heading: body?.heading ?? null,
+        battery: body?.battery ?? null,
+        is_mock: body?.is_mock ?? null,
         source: body?.source ?? "proxy_hmac",
+        recorded_at,
+        created_at,
       };
 
-      const ins = await insertPositionUniversal(admin, row);
-      if (!ins.ok) return json({ ok: false, build_tag, error: ins.error?.message ?? String(ins.error) }, 500, CORS);
+      const { error } = await admin.from("positions").insert(row);
+      if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
 
-      return json({ ok: true, build_tag, mode: "proxy_hmac", insert: ins.attempted }, 200, CORS);
+      return json({ ok: true, build_tag, mode: "proxy_hmac" }, 200, CORS);
     }
 
     // Web auth mode
@@ -220,18 +215,24 @@ serve(async (req) => {
     const row = {
       user_id,
       org_id,
+      personal_id: body?.personal_id ?? null,
+      asignacion_id: body?.asignacion_id ?? null,
       lat,
       lng,
       accuracy: body?.accuracy ?? null,
-      // 'at' opcional (fallback si no existe)
-      at: body?.at ?? null,
+      speed: body?.speed ?? null,
+      heading: body?.heading ?? null,
+      battery: body?.battery ?? null,
+      is_mock: body?.is_mock ?? null,
       source: body?.source ?? "tracker-gps-web",
+      recorded_at,
+      created_at,
     };
 
-    const ins = await insertPositionUniversal(admin, row);
-    if (!ins.ok) return json({ ok: false, build_tag, error: ins.error?.message ?? String(ins.error) }, 500, CORS);
+    const { error } = await admin.from("positions").insert(row);
+    if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
 
-    return json({ ok: true, build_tag, mode: "web_auth", insert: ins.attempted }, 200, CORS);
+    return json({ ok: true, build_tag, mode: "web_auth" }, 200, CORS);
   } catch (err: any) {
     return json({ ok: false, build_tag, error: err?.message ?? String(err) }, 500, CORS);
   }
