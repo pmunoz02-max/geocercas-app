@@ -13,15 +13,14 @@
   ],
   "headers": [
     {
-      "source": "/$",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
     },
+
     {
-      "source": "/index.html",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
-      "source": "/(.*)\\.html$",
+      "source": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml)$",
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
     {
@@ -36,11 +35,23 @@
       "source": "/workbox-(.*)\\.js$",
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     },
+
     {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
+      "source": "/$",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
+      "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
+      "source": "/(.*)\\.html$",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+
+    {
+      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     }
   ]
 }
