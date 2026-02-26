@@ -638,7 +638,28 @@ export default function TrackerDashboard() {
       return;
     }
 
-    const rows = Array.isArray(res.data) ? res.data : [];
+    let rows = Array.isArray(res.data) ? res.data : [];
+
+    // ✅ Universal fallback (permanent):
+    // If there are NO active assignments and there is NO default geofence for the org,
+    // pick ONE active geofence so the dashboard never stays empty.
+    let pickedFallbackFirstActive = false;
+    if (assignedIds.length === 0 && rows.length === 0) {
+      const fb = await supabase
+        .from("geofences")
+        .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
+        .eq("org_id", currentOrgId)
+        .eq("active", true)
+        .order("updated_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (!fb.error && Array.isArray(fb.data) && fb.data.length > 0) {
+        rows = fb.data;
+        pickedFallbackFirstActive = true;
+      }
+    }
+
 
     const normalized = rows
       .filter((r) => r.active === true)
@@ -675,9 +696,14 @@ export default function TrackerDashboard() {
           `Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org (${currentOrgId}).`
         );
       } else {
-        setInfoMsg(
-          `No hay geocerca default (is_default=true) activa para esta org (${currentOrgId}).`
-        );
+        if (pickedFallbackFirstActive) {
+          setInfoMsg(
+            `No hay geocerca default (is_default=true) activa para esta org (${currentOrgId}). ` +
+              `Se mostró 1 geocerca activa como fallback (configura un default para controlar cuál aparece).`
+          );
+        } else {
+          setInfoMsg(`No hay geocerca default (is_default=true) activa para esta org (${currentOrgId}).`);
+        }
       }
     }
 
