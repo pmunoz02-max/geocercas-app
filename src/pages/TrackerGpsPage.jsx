@@ -101,13 +101,14 @@ export default function TrackerGpsPage() {
     path_orgId: "",
     client_used: "supabase",
     supabase_url: "",
-    send_mode: "supabase.functions.invoke",
+    send_mode: "manual_fetch_edge",
     send_fn: "send_position",
     accept_fn: "accept-tracker-invite",
     // 🔎 extra debug (no secrets)
     last_invoke_fn: "",
     last_invoke_auth: "unknown", // "forced_user_jwt" | "blocked_no_jwt" | "unknown"
     last_invoke_token_len: 0,
+    last_http_status: null,
   });
 
   const watchIdRef = useRef(null);
@@ -120,47 +121,67 @@ export default function TrackerGpsPage() {
 
   const PRIMARY = supabase;
 
-  // Helper robusto para invocar Edge Functions (✅ FORZAR JWT DE USUARIO)
+  /**
+   * ✅ Helper universal para Edge Functions:
+   * - NO usa supabase.functions.invoke (porque a veces NO manda Authorization)
+   * - Usa fetch directo con:
+   *   - Authorization: Bearer <user_jwt>
+   *   - apikey: <anon_key>  (requerido por gateway)
+   */
   async function invokeFn(fnName, body) {
-    if (!PRIMARY?.functions?.invoke) {
-      throw new Error("Supabase functions client not available");
-    }
+    if (!PRIMARY) throw new Error("Supabase client not available");
 
-    // ✅ Token fresco SIEMPRE (no depender de __memoryAccessToken / carreras)
     const { data: sData, error: sErr } = await PRIMARY.auth.getSession();
-    if (sErr) {
-      throw new Error(`getSession error before invoke(${fnName}): ${sErr.message}`);
-    }
+    if (sErr) throw new Error(`getSession error before invoke(${fnName}): ${sErr.message}`);
 
-    const tokenB = sData?.session?.access_token || "";
+    const token = sData?.session?.access_token || "";
 
     setDebug((d) => ({
       ...d,
       last_invoke_fn: fnName,
-      last_invoke_token_len: tokenB ? String(tokenB).length : 0,
-      last_invoke_auth: tokenB && looksLikeJwt(tokenB) ? "forced_user_jwt" : "blocked_no_jwt",
+      last_invoke_token_len: token ? String(token).length : 0,
+      last_invoke_auth: token && looksLikeJwt(token) ? "forced_user_jwt" : "blocked_no_jwt",
+      send_mode: "manual_fetch_edge",
     }));
 
-    if (!tokenB || !looksLikeJwt(tokenB)) {
+    if (!token || !looksLikeJwt(token)) {
       throw new Error(`invoke(${fnName}) blocked: missing/invalid user JWT`);
     }
 
-    const { data, error } = await PRIMARY.functions.invoke(fnName, {
-      body,
+    const baseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").trim().replace(/\/+$/, "");
+    const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+
+    if (!baseUrl || !anonKey) {
+      throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this build");
+    }
+
+    const url = `${baseUrl}/functions/v1/${fnName}`;
+
+    const resp = await fetch(url, {
+      method: "POST",
       headers: {
-        Authorization: `Bearer ${tokenB}`,
+        "Content-Type": "application/json",
+        apikey: anonKey,
+        Authorization: `Bearer ${token}`,
       },
+      body: JSON.stringify(body ?? {}),
     });
 
-    if (error) {
-      const msg = error.message || "Edge function error";
-      const e = new Error(msg);
-      // opcional: adjuntar detalles si existen
-      // @ts-ignore
-      e.details = error;
-      throw e;
+    setDebug((d) => ({ ...d, last_http_status: resp.status }));
+
+    const text = await resp.text();
+    let json;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error(`Edge response is not JSON (status ${resp.status}): ${text}`);
     }
-    return data;
+
+    if (!resp.ok) {
+      throw new Error(json?.error || json?.message || `HTTP ${resp.status}`);
+    }
+
+    return json;
   }
 
   // 0) Config
@@ -318,7 +339,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, PRIMARY, t]);
 
-  // 1.5) Onboarding (sin proxy): accept-tracker-invite via functions.invoke
+  // 1.5) Onboarding (sin proxy): accept-tracker-invite via edge fetch
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
     if (!orgId || !isUuid(orgId)) return;
@@ -377,7 +398,6 @@ export default function TrackerGpsPage() {
 
         setMembershipDetail(t("trackerGps.membership.runningAccept", { defaultValue: "No membership. Running accept-tracker-invite" }));
 
-        // ✅ Llamada directa a Edge Function (sin proxy) — con Authorization forzada
         let acceptResp = null;
         try {
           acceptResp = await invokeFn("accept-tracker-invite", { org_id: orgId });
@@ -464,7 +484,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, membershipStatus, t]);
 
-  // 3) Envío (sin proxy): send_position via functions.invoke
+  // 3) Envío (sin proxy): send_position via edge fetch
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
     if (membershipStatus !== "ok") return;
@@ -481,14 +501,6 @@ export default function TrackerGpsPage() {
       isSendingRef.current = true;
 
       try {
-        const { data: sData } = await PRIMARY.auth.getSession();
-        const tokenB = sData?.session?.access_token || "";
-
-        if (!tokenB || !looksLikeJwt(tokenB)) {
-          setLastError(t("trackerGps.errors.sendNoValidToken", { defaultValue: "send_position: no valid token in /tracker-gps" }));
-          return;
-        }
-
         const payload = {
           org_id: orgId,
           lat: c.lat,
@@ -498,10 +510,8 @@ export default function TrackerGpsPage() {
           source: "tracker-gps-web",
         };
 
-        let sendResp = null;
         try {
-          // ✅ invoke con Authorization forzada (token fresco)
-          sendResp = await invokeFn("send_position", payload);
+          await invokeFn("send_position", payload);
         } catch (e) {
           setLastError(`send_position error: ${String(e?.message || e)}`);
           return;
@@ -510,10 +520,6 @@ export default function TrackerGpsPage() {
         lastSentAtRef.current = Date.now();
         setLastSend(new Date());
         setLastError(null);
-
-        if (sendResp) {
-          // opcional
-        }
       } finally {
         isSendingRef.current = false;
       }
