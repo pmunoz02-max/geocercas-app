@@ -1,6 +1,6 @@
 // src/App.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import { useAuthSafe } from "@/context/auth.js";
 
@@ -243,9 +243,6 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
-  );
+  // ✅ Router vive SOLO en src/main.jsx
+  return <AppRoutes />;
 }
