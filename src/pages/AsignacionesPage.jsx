@@ -39,6 +39,19 @@ const selectBase =
 
 const cardBase = "rounded-xl border border-gray-200 bg-white shadow-sm";
 
+
+async function fetchJsonSafe(url) {
+  const res = await fetch(url, { credentials: "include" });
+  const txt = await res.text();
+  let payload = null;
+  try { payload = txt ? JSON.parse(txt) : null; } catch { payload = null; }
+  if (!res.ok || payload?.ok === false) {
+    const msg = payload?.error || payload?.message || `HTTP ${res.status}`;
+    return { data: null, error: { message: msg } };
+  }
+  return { data: payload?.data ?? payload ?? null, error: null };
+}
+
 export default function AsignacionesPage() {
   const { t } = useTranslation();
   const { ready, currentOrg } = useAuth();
@@ -100,9 +113,26 @@ export default function AsignacionesPage() {
     const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
     const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
 
+    // Fallback táctico (nuevo): si el bundle no trae catálogos, los cargamos desde APIs canónicas
+    // - Personal: /api/personal
+    // - Geocercas: /api/geofences (mismas que /geocerca)
+    let personalFromApi = [];
+    if (personal.length === 0 && fallback.length === 0) {
+      const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
+      if (!rP.error && Array.isArray(rP.data)) personalFromApi = rP.data;
+    }
+
+    let geofencesFromApi = [];
+    if (!Array.isArray(catalogs.geocercas) || catalogs.geocercas.length === 0) {
+      const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
+      if (!rG.error && Array.isArray(rG.data)) geofencesFromApi = rG.data;
+    }
+
     const normalizedPersonal =
       personal.length > 0
         ? personal
+        : personalFromApi.length > 0
+        ? personalFromApi
         : fallback.map((p) => ({
             id: p.org_people_id,
             nombre: p.nombre,
@@ -111,7 +141,10 @@ export default function AsignacionesPage() {
           }));
 
     setPersonalOptions(normalizedPersonal);
-    setGeocercaOptions(Array.isArray(catalogs.geocercas) ? catalogs.geocercas : []);
+    const geoOpts = Array.isArray(catalogs.geocercas) && catalogs.geocercas.length > 0
+      ? catalogs.geocercas
+      : geofencesFromApi.map((g) => ({ id: g.id, nombre: g.name || g.nombre || "" }));
+    setGeocercaOptions(geoOpts);
     setActivityOptions(Array.isArray(catalogs.activities) ? catalogs.activities : []);
 
     if (!selectedActivityId && Array.isArray(catalogs.activities) && catalogs.activities.length === 1) {
