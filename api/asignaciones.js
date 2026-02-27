@@ -117,6 +117,49 @@ function toInt(v, fallback = null) {
   return Math.trunc(n);
 }
 
+
+/* =========================
+   Geofence/Geocerca compat
+   - UI legacy manda geocerca_id pero ahora es geofence_id (Opción 1)
+   - geocerca_id es legacy/trace (nullable)
+========================= */
+
+async function normalizeGeofenceIds(supaSrv, { orgId, payload }) {
+  const p = payload && typeof payload === "object" ? payload : {};
+
+  // Caso 1: UI manda geocerca_id con un id de geofences (por compat)
+  if (!p.geofence_id && p.geocerca_id) {
+    p.geofence_id = p.geocerca_id;
+    p.geocerca_id = null;
+  }
+
+  // Caso 2: tenemos geofence_id -> opcionalmente derivar geocerca_id desde source_geocerca_id
+  if (p.geofence_id && !p.geocerca_id) {
+    const gid = String(p.geofence_id);
+    const r = await supaSrv
+      .from("geofences")
+      .select("id, org_id, source_geocerca_id")
+      .eq("org_id", orgId)
+      .eq("id", gid)
+      .maybeSingle();
+
+    if (!r.error && r.data?.source_geocerca_id) {
+      p.geocerca_id = r.data.source_geocerca_id;
+    }
+  }
+
+  // Caso 3: si geocerca_id viene y es inválido, lo nulificamos para evitar FK
+  if (p.geocerca_id) {
+    const cid = String(p.geocerca_id);
+    const r2 = await supaSrv.from("geocercas").select("id").eq("org_id", orgId).eq("id", cid).maybeSingle();
+    if (r2.error || !r2.data?.id) {
+      p.geocerca_id = null;
+    }
+  }
+
+  return p;
+}
+
 /* =========================
    Supabase clients
 ========================= */
@@ -209,27 +252,40 @@ async function loadCatalogs(supaSrv, { orgId }) {
 
     if (!r.error) personal = r.data || [];
   }
-  // Geofences (CATÁLOGO CANÓNICO)
-  // Fuente única = public.geofences (igual que /geocerca)
+
+  // Geocercas (universal: intenta activo/active, si no, sin filtro)
   let geocercas = [];
   {
-    const r = await supaSrv
-      .from("geofences")
-      .select("id,name,org_id,active")
+    // 1) activo=true
+    let r = await supaSrv
+      .from("geocercas")
+      .select("id,nombre,org_id,activo")
       .eq("org_id", orgId)
-      .eq("active", true)
-      .order("name", { ascending: true });
+      .eq("activo", true)
+      .order("nombre", { ascending: true });
 
-    if (!r.error) {
-      // compat UI: AsignacionesPage espera { id, nombre }
-      geocercas = (r.data || []).map((g) => ({
-        id: g.id,
-        nombre: g.name,
-        org_id: g.org_id,
-        active: g.active,
-      }));
+    // 2) active=true
+    if (r.error) {
+      r = await supaSrv
+        .from("geocercas")
+        .select("id,nombre,org_id,active")
+        .eq("org_id", orgId)
+        .eq("active", true)
+        .order("nombre", { ascending: true });
     }
+
+    // 3) fallback sin filtro (no romper)
+    if (r.error) {
+      r = await supaSrv
+        .from("geocercas")
+        .select("id,nombre,org_id")
+        .eq("org_id", orgId)
+        .order("nombre", { ascending: true });
+    }
+
+    if (!r.error) geocercas = r.data || [];
   }
+
   // Activities
   let activities = [];
   {
@@ -396,6 +452,7 @@ export default async function handler(req, res) {
           org_id,
           personal_id,
           geocerca_id,
+          geofence_id,
           activity_id,
           start_time,
           end_time,
@@ -406,6 +463,7 @@ export default async function handler(req, res) {
           created_at,
           personal:personal_id ( id, nombre, apellido, email ),
           geocerca:geocerca_id ( id, nombre ),
+          geofence:geofence_id ( id, name ),
           activity:activity_id ( id, name )
         `
         )
@@ -428,7 +486,10 @@ export default async function handler(req, res) {
       const payload = { ...body, org_id: orgId };
 
       if (!payload.personal_id) return json(res, 400, { ok: false, error: "personal_id is required" });
-      if (!payload.geocerca_id) return json(res, 400, { ok: false, error: "geocerca_id is required" });
+      // Opción 1: geofence_id canónico. geocerca_id es legacy/trace (nullable)
+      if (!payload.geofence_id && !payload.geocerca_id) {
+        return json(res, 400, { ok: false, error: "geofence_id is required" });
+      }
 
       // normaliza frecuencia: UI suele mandar minutos -> segundos
       if (payload.frecuencia_envio_min !== undefined && payload.frecuencia_envio_sec === undefined) {
@@ -443,6 +504,8 @@ export default async function handler(req, res) {
 
       delete payload.tenant_id;
       delete payload.org_people_id;
+
+      await normalizeGeofenceIds(supaSrv, { orgId, payload });
 
       const ins = await supaSrv.from("asignaciones").insert(payload).select("*").limit(1);
       if (ins.error) return json(res, 400, { ok: false, error: ins.error.message });
@@ -471,7 +534,8 @@ export default async function handler(req, res) {
 
       const prevRes = await supaSrv
         .from("asignaciones")
-        .select("id, org_id, personal_id, geocerca_id, start_time, end_time, status, estado, is_deleted")
+        .select("id, org_id, personal_id, geocerca_id,
+          geofence_id, start_time, end_time, status, estado, is_deleted")
         .eq("id", id)
         .eq("org_id", orgId)
         .limit(1);
@@ -481,6 +545,7 @@ export default async function handler(req, res) {
       if (!prev) return json(res, 404, { ok: false, error: "asignacion not found" });
 
       const safe = { ...patch };
+      await normalizeGeofenceIds(supaSrv, { orgId, payload: safe });
       delete safe.org_id;
       delete safe.tenant_id;
       delete safe.org_people_id;
@@ -512,6 +577,7 @@ export default async function handler(req, res) {
               orgId,
               tracker_user_id: rPrev.tracker_user_id,
               geofence_id: prev.geocerca_id,
+          geofence_id,
             });
           }
         }
@@ -561,6 +627,7 @@ export default async function handler(req, res) {
             orgId,
             tracker_user_id: rPrev.tracker_user_id,
             geofence_id: prev.geocerca_id,
+          geofence_id,
           });
         }
       }
