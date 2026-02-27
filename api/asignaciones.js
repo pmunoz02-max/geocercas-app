@@ -1,4 +1,7 @@
 // api/asignaciones.js
+
+// Force Node.js runtime on Vercel (avoid Edge runtime incompatibilities)
+export const config = { runtime: "nodejs" };
 // CANÓNICO (memberships) + SERVER-OWNED (service_role):
 // - cookie HttpOnly tg_at
 // - valida JWT (supabase.auth.getUser()) con ANON
