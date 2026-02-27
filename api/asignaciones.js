@@ -1,7 +1,7 @@
 // api/asignaciones.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-api-v8-bundle-canonical-geofences";
+const VERSION = "asignaciones-api-v9-fix-geocercaid-notnull-client-compat";
 
 /* =========================
    Headers / Cookies / Query
@@ -10,6 +10,12 @@ const VERSION = "asignaciones-api-v8-bundle-canonical-geofences";
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("CDN-Cache-Control", "no-store");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.setHeader("Vary", "Cookie");
+
   res.setHeader("X-Api-Version", VERSION);
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS,HEAD");
@@ -38,7 +44,7 @@ function getCookie(req, name) {
 function getEnv(keys) {
   for (const k of keys) {
     const v = process.env[k];
-    if (v) return v;
+    if (v && String(v).trim()) return String(v).trim();
   }
   return null;
 }
@@ -75,8 +81,14 @@ async function readBody(req) {
   }
 }
 
+function stripUndefined(obj) {
+  const o = obj && typeof obj === "object" ? obj : {};
+  for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
+  return o;
+}
+
 /* =========================
-   Context Resolver (copy from geofences.js pattern)
+   Context Resolver
 ========================= */
 
 async function resolveContext(req) {
@@ -125,68 +137,21 @@ async function resolveContext(req) {
       })
     : null;
 
-  async function tryMaybeSingle(client, builderFn) {
-    try {
-      const { data, error } = await builderFn(client);
-      if (error) return { ok: false, error };
-      return { ok: true, data };
-    } catch (e) {
-      return { ok: false, error: { message: String(e?.message || e) } };
-    }
+  // Resolver org_id desde memberships (default primero)
+  const sbDb = sbSrv || sbUser;
+
+  const { data: mRow, error: mErr } = await sbDb
+    .from("memberships")
+    .select("org_id, role, is_default, revoked_at")
+    .eq("user_id", user.id)
+    .is("revoked_at", null)
+    .order("is_default", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (mErr) {
+    return { ok: false, status: 500, error: "Membership lookup failed", details: mErr.message };
   }
-
-  let currentOrgId = null;
-  const ucoQuery = (c) => c.from("user_current_org").select("org_id").eq("user_id", user.id).maybeSingle();
-
-  if (sbSrv) {
-    const r1 = await tryMaybeSingle(sbSrv, ucoQuery);
-    if (r1.ok && r1.data?.org_id) currentOrgId = String(r1.data.org_id);
-  }
-  if (!currentOrgId) {
-    const r2 = await tryMaybeSingle(sbUser, ucoQuery);
-    if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
-  }
-
-  const membershipForOrg = (orgId) => (c) =>
-    c
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", user.id)
-      .eq("org_id", orgId)
-      .is("revoked_at", null)
-      .maybeSingle();
-
-  const membershipDefault = (c) =>
-    c
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", user.id)
-      .is("revoked_at", null)
-      .order("is_default", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-  async function resolveMembership() {
-    if (currentOrgId) {
-      if (sbSrv) {
-        const r = await tryMaybeSingle(sbSrv, membershipForOrg(currentOrgId));
-        if (r.ok && r.data?.org_id) return r.data;
-      }
-      const r2 = await tryMaybeSingle(sbUser, membershipForOrg(currentOrgId));
-      if (r2.ok && r2.data?.org_id) return r2.data;
-    }
-
-    if (sbSrv) {
-      const r = await tryMaybeSingle(sbSrv, membershipDefault);
-      if (r.ok && r.data?.org_id) return r.data;
-    }
-    const r2 = await tryMaybeSingle(sbUser, membershipDefault);
-    if (r2.ok && r2.data?.org_id) return r2.data;
-
-    return null;
-  }
-
-  const mRow = await resolveMembership();
   if (!mRow?.org_id) {
     return { ok: false, status: 403, error: "No membership", details: "User has no active membership" };
   }
@@ -197,7 +162,6 @@ async function resolveContext(req) {
     role: String(mRow.role || "member"),
   };
 
-  const sbDb = sbSrv || sbUser;
   return { ok: true, ctx, user, sbDb };
 }
 
@@ -208,7 +172,7 @@ async function resolveContext(req) {
 async function loadCatalogs(sbDb, orgId) {
   const catalogs = { personal: [], geocercas: [], activities: [], people: [] };
 
-  // Personal (prefer 'personal' table)
+  // Personal
   try {
     const r = await sbDb
       .from("personal")
@@ -216,7 +180,6 @@ async function loadCatalogs(sbDb, orgId) {
       .eq("org_id", orgId)
       .order("nombre", { ascending: true })
       .limit(500);
-
     if (!r.error) {
       catalogs.personal = (r.data || []).map((p) => ({
         id: p.id,
@@ -226,35 +189,9 @@ async function loadCatalogs(sbDb, orgId) {
         active: p.active,
       }));
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 
-  // Fallback people (org_people) if needed by UI
-  if (!catalogs.personal.length) {
-    try {
-      const r = await sbDb
-        .from("org_people")
-        .select("id,nombre,apellido,email,org_id,active")
-        .eq("org_id", orgId)
-        .order("nombre", { ascending: true })
-        .limit(500);
-
-      if (!r.error) {
-        catalogs.people = (r.data || []).map((p) => ({
-          org_people_id: p.id,
-          nombre: p.nombre || "",
-          apellido: p.apellido || "",
-          email: p.email || "",
-          active: p.active,
-        }));
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Geofences (canonical) but return as catalogs.geocercas for UI compat
+  // Geofences → catalogs.geocercas (compat UI)
   try {
     const r = await sbDb
       .from("geofences")
@@ -263,19 +200,16 @@ async function loadCatalogs(sbDb, orgId) {
       .eq("active", true)
       .order("name", { ascending: true })
       .limit(500);
-
     if (!r.error) {
       catalogs.geocercas = (r.data || []).map((g) => ({
         id: g.id,
-        nombre: g.name, // UI uses nombre
+        nombre: g.name,
         active: g.active,
       }));
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 
-  // Activities (optional)
+  // Activities
   try {
     const r = await sbDb
       .from("activities")
@@ -283,7 +217,6 @@ async function loadCatalogs(sbDb, orgId) {
       .eq("org_id", orgId)
       .order("name", { ascending: true })
       .limit(500);
-
     if (!r.error) {
       catalogs.activities = (r.data || []).map((a) => ({
         id: a.id,
@@ -291,42 +224,38 @@ async function loadCatalogs(sbDb, orgId) {
         active: a.active,
       }));
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   return catalogs;
 }
 
 /* =========================
-   Geofence/Geocerca compat
+   Normalización IDs (CRÍTICO)
 ========================= */
 
-async function normalizeGeofenceIds(sbDb, orgId, payload) {
+/**
+ * Tabla asignaciones en tu DB exige:
+ * - geocerca_id NOT NULL
+ *
+ * Por compat:
+ * - la UI puede mandar geofence_id (id de geofences)
+ * - la UI puede mandar geocerca_id (legacy)
+ *
+ * Política segura:
+ * - nunca nullificamos geocerca_id
+ * - si viene geofence_id y no viene geocerca_id => geocerca_id = geofence_id
+ *   (porque la columna NOT NULL requiere un id; en tu modelo actual, el selector de geocerca usa geofences)
+ */
+function normalizeIds(payload) {
   const p = payload && typeof payload === "object" ? payload : {};
 
-  // UI legacy: manda geocerca_id pero ahora es geofence_id
-  if (!p.geofence_id && p.geocerca_id) {
-    p.geofence_id = p.geocerca_id;
-    p.geocerca_id = null;
-  }
+  // aceptar camelCase
+  if (p.geofenceId && !p.geofence_id) p.geofence_id = p.geofenceId;
+  if (p.geocercaId && !p.geocerca_id) p.geocerca_id = p.geocercaId;
 
-  // Derivar geocerca_id desde source_geocerca_id si existe (trace)
-  if (p.geofence_id && !p.geocerca_id) {
-    const r = await sbDb
-      .from("geofences")
-      .select("id,org_id,source_geocerca_id")
-      .eq("org_id", orgId)
-      .eq("id", p.geofence_id)
-      .maybeSingle();
-
-    if (!r.error && r.data?.source_geocerca_id) p.geocerca_id = r.data.source_geocerca_id;
-  }
-
-  // Si geocerca_id viene pero no existe, nulificar (evitar FK)
-  if (p.geocerca_id) {
-    const r2 = await sbDb.from("geocercas").select("id").eq("id", p.geocerca_id).maybeSingle();
-    if (r2.error || !r2.data?.id) p.geocerca_id = null;
+  // si solo viene geofence_id, úsalo para llenar geocerca_id (NOT NULL)
+  if (!p.geocerca_id && p.geofence_id) {
+    p.geocerca_id = p.geofence_id;
   }
 
   return p;
@@ -358,69 +287,98 @@ export default async function handler(req, res) {
     const orgId = rc.ctx.org_id;
     const sbDb = rc.sbDb;
 
-    if (req.method === "GET" && action === "ping") {
-      return ok(res, { ok: true, ping: true, org_id: orgId });
-    }
-
+    // GET bundle/list
     if (req.method === "GET" && (action === "bundle" || action === "list")) {
-      // asignaciones list (robust; no embeds)
       let asignaciones = [];
-      try {
-        const r = await sbDb
-          .from("asignaciones")
-          .select(
-            "id,org_id,personal_id,geocerca_id,geofence_id,activity_id,start_time,end_time,estado,status,frecuencia_envio_sec,is_deleted,created_at"
-          )
-          .eq("org_id", orgId)
-          .eq("is_deleted", false)
-          .order("created_at", { ascending: false })
-          .limit(500);
+      const r = await sbDb
+        .from("asignaciones")
+        .select(
+          "id,org_id,personal_id,geocerca_id,geofence_id,activity_id,start_time,end_time,estado,status,frecuencia_envio_sec,is_deleted,created_at"
+        )
+        .eq("org_id", orgId)
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-        if (!r.error) asignaciones = r.data || [];
-      } catch {
-        // ignore
-      }
+      if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+      asignaciones = r.data || [];
 
-      if (action === "list") return ok(res, { ok: true, asignaciones });
+      if (action === "list") return ok(res, { ok: true, data: asignaciones, asignaciones });
 
       const catalogs = await loadCatalogs(sbDb, orgId);
       return ok(res, { ok: true, data: { asignaciones, catalogs } });
     }
 
+    // POST create
     if (req.method === "POST") {
-      const payload = await readBody(req);
+      const payload0 = await readBody(req);
+      const payload = normalizeIds(payload0 || {});
+
       if (!payload.personal_id) return send(res, 400, { ok: false, error: "personal_id is required" });
-      if (!payload.geofence_id && !payload.geocerca_id)
-        return send(res, 400, { ok: false, error: "geofence_id is required" });
+      if (!payload.geocerca_id)
+        return send(res, 400, { ok: false, error: "geocerca_id is required (NOT NULL)" });
 
-      await normalizeGeofenceIds(sbDb, orgId, payload);
-
-      // enforce org_id from ctx
+      // enforce org_id
       payload.org_id = orgId;
 
-      const r = await sbDb.from("asignaciones").insert(payload).select("*").limit(1);
+      // blindaje: no aceptar is_deleted desde cliente
+      delete payload.is_deleted;
+
+      stripUndefined(payload);
+
+      const r = await sbDb.from("asignaciones").insert(payload).select("*").single();
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
 
-      return ok(res, { ok: true, item: (r.data || [])[0] || null });
+      // ✅ compat con cliente: responde en data
+      return ok(res, { ok: true, data: r.data, item: r.data });
     }
 
+    // PATCH update (cliente manda { id, patch })
     if (req.method === "PATCH") {
-      const payload = await readBody(req);
-      const id = String(q.id || payload.id || "");
+      const body = await readBody(req);
+      const id = String(body?.id || q.id || "");
+      const patch0 = body?.patch && typeof body.patch === "object" ? body.patch : body;
+
       if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
-      await normalizeGeofenceIds(sbDb, orgId, payload);
+      const patch = normalizeIds({ ...(patch0 || {}) });
+      delete patch.id;
+      delete patch.patch;
 
-      delete payload.id;
-      payload.org_id = orgId;
+      // enforce org_id
+      patch.org_id = orgId;
 
-      const r = await sbDb.from("asignaciones").update(payload).eq("id", id).eq("org_id", orgId).select("*").limit(1);
+      // no permitir soft-delete desde patch (solo DELETE)
+      delete patch.is_deleted;
+
+      stripUndefined(patch);
+
+      const r = await sbDb.from("asignaciones").update(patch).eq("id", id).eq("org_id", orgId).select("*").single();
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
 
-      return ok(res, { ok: true, item: (r.data || [])[0] || null });
+      return ok(res, { ok: true, data: r.data, item: r.data });
     }
 
-    return send(res, 400, { ok: false, error: "Unsupported action/method", action, method: req.method });
+    // DELETE (cliente manda { id }) → soft delete (is_deleted=true)
+    if (req.method === "DELETE") {
+      const body = await readBody(req);
+      const id = String(body?.id || q.id || "");
+      if (!id) return send(res, 400, { ok: false, error: "id is required" });
+
+      const r = await sbDb
+        .from("asignaciones")
+        .update({ is_deleted: true })
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .select("*")
+        .single();
+
+      if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+
+      return ok(res, { ok: true, data: r.data, item: r.data });
+    }
+
+    return send(res, 405, { ok: false, error: "Method not allowed", method: req.method });
   } catch (e) {
     return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
   }
