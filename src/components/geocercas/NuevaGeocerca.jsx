@@ -370,6 +370,7 @@ export default function NuevaGeocerca() {
       await upsertGeofence({
         name: nm,
         polygon_geojson: fc,
+        geojson: fc,
         radius_m: 0,
       });
 
