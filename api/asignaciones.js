@@ -151,7 +151,7 @@ async function normalizeGeofenceIds(supaSrv, { orgId, payload }) {
   // Caso 3: si geocerca_id viene y es inválido, lo nulificamos para evitar FK
   if (p.geocerca_id) {
     const cid = String(p.geocerca_id);
-    const r2 = await supaSrv.from("geocercas").select("id").eq("org_id", orgId).eq("id", cid).maybeSingle();
+    const r2 = await supaSrv.from("geocercas").select("id").eq("id", cid).maybeSingle();
     if (r2.error || !r2.data?.id) {
       p.geocerca_id = null;
     }
@@ -463,7 +463,7 @@ export default async function handler(req, res) {
           created_at,
           personal:personal_id ( id, nombre, apellido, email ),
           geocerca:geocerca_id ( id, nombre ),
-          geofence:geofence_id ( id, name ),
+          geofence:geofences!asignaciones_geofence_id_fkey ( id, name ),
           activity:activity_id ( id, name )
         `
         )
