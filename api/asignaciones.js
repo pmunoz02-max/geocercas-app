@@ -444,37 +444,57 @@ export default async function handler(req, res) {
     const { supaSrv, orgId, role } = ctxRes;
 
     if (req.method === "GET") {
-      const q = await supaSrv
-        .from("asignaciones")
-        .select(
+      // ⛑️  Bundle robusto: NO fallar 500 por joins/embeds. Siempre devolver catalogs.
+      let asignaciones = [];
+      let asignaciones_error = null;
+
+      try {
+        const q = await supaSrv
+          .from("asignaciones")
+          .select(
+            `
+            id,
+            org_id,
+            personal_id,
+            geocerca_id,
+            geofence_id,
+            activity_id,
+            start_time,
+            end_time,
+            estado,
+            status,
+            frecuencia_envio_sec,
+            is_deleted,
+            created_at
           `
-          id,
-          org_id,
-          personal_id,
-          geocerca_id,
-          geofence_id,
-          activity_id,
-          start_time,
-          end_time,
-          estado,
-          status,
-          frecuencia_envio_sec,
-          is_deleted,
-          created_at,
-          personal:personal_id ( id, nombre, apellido, email ),
-          geocerca:geocerca_id ( id, nombre ),
-          geofence:geofences!asignaciones_geofence_id_fkey ( id, name ),
-          activity:activity_id ( id, name )
-        `
-        )
-        .eq("org_id", orgId)
-        .eq("is_deleted", false)
-        .order("start_time", { ascending: true });
+          )
+          .eq("org_id", orgId)
+          .eq("is_deleted", false)
+          .order("start_time", { ascending: true });
 
-      if (q.error) return json(res, 500, { ok: false, error: q.error.message });
+        if (q.error) {
+          asignaciones_error = q.error.message;
+        } else {
+          asignaciones = q.data || [];
+        }
+      } catch (e) {
+        asignaciones_error = String(e?.message || e);
+      }
 
-      const catalogs = await loadCatalogs(supaSrv, { orgId });
-      return json(res, 200, { ok: true, data: { asignaciones: q.data || [], catalogs } });
+      let catalogs = null;
+      let catalogs_error = null;
+      try {
+        catalogs = await loadCatalogs(supaSrv, { orgId });
+      } catch (e) {
+        catalogs_error = String(e?.message || e);
+        catalogs = { personal: [], geocercas: [], activities: [], people: [] };
+      }
+
+      return json(res, 200, {
+        ok: true,
+        data: { asignaciones, catalogs },
+        warning: asignaciones_error || catalogs_error ? { asignaciones_error, catalogs_error } : undefined,
+      });
     }
 
     if (req.method === "POST") {
