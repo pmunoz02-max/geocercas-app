@@ -45,46 +45,51 @@ async function fetchJsonSafe(url) {
   const txt = await res.text();
   let payload = null;
   try { payload = txt ? JSON.parse(txt) : null; } catch { payload = null; }
-
-  // common shapes:
-  // - { ok:true, data:[...] }
-  // - { ok:true, data:{...} }
-  // - [...]
-  if (!res.ok) return { data: null, error: { message: `HTTP ${res.status}` } };
-  if (payload && typeof payload === "object" && payload.ok === false) {
-    return { data: null, error: { message: payload.error || payload.message || "API error" } };
+  if (!res.ok || payload?.ok === false) {
+    const msg = payload?.error || payload?.message || `HTTP ${res.status}`;
+    return { payload, error: { message: msg } };
   }
-  const data = (payload && typeof payload === "object" && "data" in payload) ? payload.data : payload;
-  return { data, error: null };
+  return { payload, error: null };
+}
+
+function extractArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  const keys = ["data", "rows", "items", "personal", "people", "geocercas", "geofences"];
+  for (const k of keys) {
+    if (Array.isArray(payload[k])) return payload[k];
+  }
+  // nested: payload.data may be object with arrays
+  if (payload.data && typeof payload.data === "object") {
+    for (const k of keys) {
+      if (Array.isArray(payload.data[k])) return payload.data[k];
+    }
+  }
+  return [];
 }
 
 function normalizePersonRow(p) {
-  if (!p || typeof p !== "object") return null;
-  const id = p.id || p.personal_id || p.org_people_id || p.user_id;
-  if (!id) return null;
+  const id = p?.id || p?.personal_id || p?.org_people_id || p?.user_id || "";
+  const nombre =
+    p?.nombre ||
+    p?.first_name ||
+    p?.firstname ||
+    (typeof p?.full_name === "string" ? p.full_name.split(" ")[0] : "") ||
+    "";
+  const apellido =
+    p?.apellido ||
+    p?.last_name ||
+    p?.lastname ||
+    (typeof p?.full_name === "string" ? p.full_name.split(" ").slice(1).join(" ") : "") ||
+    "";
+  const label = (p?.display_name || p?.full_name || `${nombre} ${apellido}`.trim() || p?.email || "").trim();
+  return { id, nombre, apellido, email: p?.email || "", label };
+}
 
-  const full =
-    p.full_name ||
-    p.display_name ||
-    p.nombre_completo ||
-    p.name ||
-    p.nombre;
-
-  let nombre = p.nombre || p.first_name || p.nombres || "";
-  let apellido = p.apellido || p.last_name || p.apellidos || "";
-
-  if ((!nombre || !apellido) && full && typeof full === "string") {
-    const parts = full.trim().split(/\s+/);
-    if (!nombre && parts.length) nombre = parts[0];
-    if (!apellido && parts.length > 1) apellido = parts.slice(1).join(" ");
-  }
-
-  return {
-    id: String(id),
-    nombre: String(nombre || ""),
-    apellido: String(apellido || ""),
-    email: p.email || p.correo || "",
-  };
+function normalizeGeofenceRow(g) {
+  const id = g?.id || "";
+  const nombre = (g?.name || g?.nombre || g?.label || "").trim();
+  return { id, nombre };
 }
 
 export default function AsignacionesPage() {
@@ -122,51 +127,71 @@ export default function AsignacionesPage() {
     setLoading(true);
     setError(null);
 
-    // 1) Bundle (asignaciones + catalogs) - NO bloquear UI si falla
-    let bundleRows = [];
-    let bundleCatalogs = {};
-    try {
-      const { data, error } = await getAsignacionesBundle();
-      if (!error) {
-        const bundle = data || {};
-        bundleRows = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
-        bundleCatalogs = bundle.catalogs || {};
-      } else {
-        console.error("[AsignacionesPage] bundle error:", error);
-      }
-    } catch (e) {
-      console.error("[AsignacionesPage] bundle exception:", e);
+    const { data, error } = await getAsignacionesBundle();
+    if (error) {
+      console.error("[AsignacionesPage] bundle error:", error);
+      setError(
+        error.message ||
+          t("asignaciones.messages.loadError", {
+            defaultValue: "Error loading assignments.",
+          })
+      );
+setAsignaciones(Array.isArray(rows) ? rows : []);
+
+// ✅ Catálogos canónicos (NO dependen del bundle)
+const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
+const personalRaw = extractArray(rP.payload);
+const personalNorm = personalRaw.map(normalizePersonRow).filter((p) => p.id);
+
+const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
+const geofencesRaw = extractArray(rG.payload);
+const geofencesNorm = geofencesRaw.map(normalizeGeofenceRow).filter((g) => g.id);
+
+// Activities: mantenemos lo que venga del bundle si existe
+const catalogs = bundle.catalogs || {};
+const activitiesRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
+setActivityOptions(activitiesRaw);
+
+setPersonalOptions(personalNorm);
+setGeocercaOptions(geofencesNorm);
+
+if (!selectedActivityId && activitiesRaw.length === 1) {
+  setSelectedActivityId(activitiesRaw[0].id);
+}
+
+setLoading(false);
+      return;
     }
-    setAsignaciones(bundleRows);
 
-    // 2) Personal: SIEMPRE desde /api/personal (fuente canónica para dropdown)
-    const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
-    const personalArr = Array.isArray(rP.data) ? rP.data : Array.isArray(rP.data?.personal) ? rP.data.personal : [];
-    const normalizedPersonal = personalArr.map(normalizePersonRow).filter(Boolean);
+    const bundle = data || {};
+    const rows = bundle.asignaciones || [];
+    const catalogs = bundle.catalogs || {};
+
+    setAsignaciones(Array.isArray(rows) ? rows : []);
+
+    const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
+    const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
+
+    const normalizedPersonal =
+      personal.length > 0
+        ? personal
+        : fallback.map((p) => ({
+            id: p.org_people_id,
+            nombre: p.nombre,
+            apellido: p.apellido,
+            email: p.email,
+          }));
+
     setPersonalOptions(normalizedPersonal);
+    setGeocercaOptions(Array.isArray(catalogs.geocercas) ? catalogs.geocercas : []);
+    setActivityOptions(Array.isArray(catalogs.activities) ? catalogs.activities : []);
 
-    // 3) Geocercas: SIEMPRE desde /api/geofences (mismas que /geocerca)
-    const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
-    const geoArr = Array.isArray(rG.data) ? rG.data : Array.isArray(rG.data?.geofences) ? rG.data.geofences : [];
-    const geoOpts = geoArr.map((g) => ({
-      id: g.id,
-      nombre: g.name || g.nombre || "",
-      active: g.active,
-      is_default: g.is_default,
-    }));
-    setGeocercaOptions(geoOpts);
-
-    // 4) Activities: usar bundle si viene (si no, vacío)
-    setActivityOptions(Array.isArray(bundleCatalogs.activities) ? bundleCatalogs.activities : []);
-
-    // default activity (si existe)
-    if (!selectedActivityId && Array.isArray(bundleCatalogs.activities) && bundleCatalogs.activities.length > 0) {
-      setSelectedActivityId(bundleCatalogs.activities[0].id);
+    if (!selectedActivityId && Array.isArray(catalogs.activities) && catalogs.activities.length === 1) {
+      setSelectedActivityId(catalogs.activities[0].id);
     }
 
     setLoading(false);
   }
-
 
   useEffect(() => {
     if (!ready || !orgId) return;
@@ -243,7 +268,9 @@ export default function AsignacionesPage() {
 
     const payload = {
       personal_id: selectedPersonalId,
-      geocerca_id: selectedGeocercaId,
+      geofence_id: selectedGeocercaId,
+      // legacy trace (nullable): geocerca_id is handled server-side
+      geocerca_id: null,
       activity_id: selectedActivityId,
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
