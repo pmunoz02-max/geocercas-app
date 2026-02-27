@@ -839,9 +839,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [assignmentTrackers, selectedTrackerId, timeWindowId]
-  );},
-    [assignmentTrackers, selectedTrackerId, timeWindowId]
+    [supabase, assignmentTrackers, selectedTrackerId, timeWindowId]
   );
 
   useEffect(() => {
