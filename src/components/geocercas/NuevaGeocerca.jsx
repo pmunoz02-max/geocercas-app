@@ -16,6 +16,7 @@ const DATA_SOURCE = null;
 const GEOJSON_URL = "/data/mapa_corto_214.geojson";
 const CSV_URL = "/data/mapa_corto_214.csv";
 
+/* ----------------------------- UI helpers ----------------------------- */
 function Banner({ banner, onClose }) {
   if (!banner) return null;
 
@@ -40,6 +41,7 @@ function Banner({ banner, onClose }) {
   );
 }
 
+/* ----------------------------- Cursor live ----------------------------- */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
     mousemove: (e) => setCursorLatLng(e.latlng),
@@ -48,6 +50,7 @@ function CursorPosLive({ setCursorLatLng }) {
   return null;
 }
 
+/* ----------------------------- GeoJSON utils ----------------------------- */
 function ensureFeatureCollection(input) {
   if (!input) return null;
   if (input.type === "FeatureCollection") return input;
@@ -101,7 +104,7 @@ function parsePairs(text) {
     const lat = Number(parts[0]);
     const lng = Number(parts[1]);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    out.push([lng, lat]);
+    out.push([lng, lat]); // GeoJSON expects [lng,lat]
   }
   return out;
 }
@@ -143,6 +146,7 @@ function getLastGeomanLayer(map) {
   return last;
 }
 
+/* ----------------------------- Component ----------------------------- */
 export default function NuevaGeocerca() {
   const { t } = useTranslation();
   const { currentOrg } = useAuthSafe();
@@ -342,6 +346,7 @@ export default function NuevaGeocerca() {
         fc = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
       }
 
+      // optimistic list (por nombre)
       setGeofenceList((prev) => {
         const optimistic = { id: `optim-${Date.now()}`, name: nm, _optimistic: true };
         const next = [optimistic, ...(prev || [])];
@@ -358,6 +363,10 @@ export default function NuevaGeocerca() {
         return unique;
       });
 
+      // ✅ Guardado en geofences (single source of truth)
+      // - polygon_geojson obligatorio
+      // - radius_m NOT NULL (aunque sea polígono)
+      // - NO enviamos "active" (por compat si la columna no existe)
       await upsertGeofence({
         name: nm,
         polygon_geojson: fc,
@@ -448,6 +457,7 @@ export default function NuevaGeocerca() {
       for (const item of items) {
         if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
         const row = await getGeofence({ id: item.id, orgId });
+
         const geo = normalizeGeojson(row?.polygon_geojson || row?.geojson || row?.geometry);
         if (geo) geos.push(geo);
       }
@@ -477,7 +487,8 @@ export default function NuevaGeocerca() {
 
   const pointStyle = useMemo(
     () => ({
-      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
+      pointToLayer: (_feature, latlng) =>
+        L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
     }),
     []
   );
@@ -521,8 +532,261 @@ export default function NuevaGeocerca() {
   return (
     <div className="flex flex-col gap-2 sm:gap-3 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
       <Banner banner={banner} onClose={() => setBanner(null)} />
-      {/* ... resto del JSX igual al tuyo (sin cambios) ... */}
-      {/* Para mantener este mensaje manejable, deja el resto exactamente como está en tu archivo actual. */}
+
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="space-y-0.5">
+          <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">
+            {t("geocercas.titleNew", { defaultValue: "New geofence" })}
+          </h1>
+          <p className="hidden md:block text-xs text-slate-300">
+            {t("geocercas.subtitleNew", { defaultValue: "Draw a geofence on the map and assign it to your personnel or activities." })}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
+          <input
+            type="text"
+            className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-2 text-xs md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
+            placeholder={t("geocercas.placeholderName", { defaultValue: "Geofence name" })}
+            value={geofenceName}
+            onChange={(e) => setGeofenceName(e.target.value)}
+          />
+
+          <button
+            onClick={() => {
+              setCoordText("");
+              setCoordModalOpen(true);
+            }}
+            className="rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600 px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
+            type="button"
+          >
+            {t("geocercas.buttonDrawByCoords", { defaultValue: "Draw by coordinates" })}
+          </button>
+
+          <button
+            onClick={handleSave}
+            className="rounded-lg font-semibold bg-emerald-600 text-white px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
+            type="button"
+          >
+            {t("geocercas.buttonSave", { defaultValue: "Save geofence" })}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
+        {/* Panel */}
+        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[42svh] md:max-h-[32svh] lg:max-h-none">
+          <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle", { defaultValue: "Geofences" })}</h2>
+
+          <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
+            {geofenceList.length === 0 && (
+              <div className="text-xs text-slate-400">{t("geocercas.noGeofences", { defaultValue: "No geofences" })}</div>
+            )}
+
+            {geofenceList.map((g) => (
+              <label
+                key={`api-${g.id || ""}-${g.name}`}
+                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedNames.has(g.name)}
+                  onChange={() => {
+                    setSelectedNames((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(g.name)) next.delete(g.name);
+                      else next.add(g.name);
+                      return next;
+                    });
+                    setLastSelectedName(g.name);
+                  }}
+                />
+                <span className="text-[11px] md:text-xs text-slate-100">{g.name}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-2 grid grid-cols-3 gap-2 md:mt-3 md:flex md:flex-col md:gap-2">
+            <button
+              onClick={handleShowSelected}
+              className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
+              type="button"
+            >
+              {showLoading ? t("common.actions.loading", { defaultValue: "Loading..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Show on map" })}
+            </button>
+
+            <button
+              onClick={handleDeleteSelected}
+              className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-red-600 text-white md:px-3 md:py-1.5 md:text-xs"
+              type="button"
+            >
+              {t("geocercas.buttonDeleteSelected", { defaultValue: "Delete selected" })}
+            </button>
+
+            <button
+              onClick={handleClearMap}
+              className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-200 md:px-3 md:py-1.5 md:text-xs"
+              type="button"
+            >
+              {t("geocercas.buttonClearCanvas", { defaultValue: "Clear canvas" })}
+            </button>
+          </div>
+
+          {loadingDataset && (
+            <div className="mt-2 md:mt-3 text-[11px] text-slate-400">
+              {t("geocercas.loadingDataset", { defaultValue: "Loading dataset..." })}
+            </div>
+          )}
+          {datasetError && <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>}
+        </div>
+
+        {/* Map */}
+        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
+          <MapContainer
+            center={[-0.2, -78.5]}
+            zoom={8}
+            scrollWheelZoom={true}
+            style={{ height: "100%", width: "100%" }}
+            whenCreated={(map) => (mapRef.current = map)}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+
+            {dataset && <GeoJSON data={dataset} {...pointStyle} />}
+            <CursorPosLive setCursorLatLng={setCursorLatLng} />
+
+            <Pane name="draftPane" style={{ zIndex: 650 }}>
+              {draftFeature && (
+                <GeoJSON
+                  key={`draft-${draftId}`}
+                  data={draftFeature}
+                  style={() => ({ color: "#22c55e", weight: 3, fillColor: "#22c55e", fillOpacity: 0.35 })}
+                />
+              )}
+            </Pane>
+
+            <Pane name="viewPane" style={{ zIndex: 640 }}>
+              {viewFeature && (
+                <>
+                  <GeoJSON
+                    key={`view-${viewId}`}
+                    data={viewFeature}
+                    style={() => ({ color: "#38bdf8", weight: 3, fillColor: "#38bdf8", fillOpacity: 0.15 })}
+                  />
+                  {viewCentroid && (
+                    <GeoJSON
+                      key={`view-marker-${viewId}`}
+                      data={viewCentroid}
+                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                    />
+                  )}
+                </>
+              )}
+            </Pane>
+
+            <FeatureGroup ref={featureGroupRef}>
+              <GeomanControls
+                options={{
+                  position: "topleft",
+                  drawMarker: false,
+                  drawCircleMarker: false,
+                  drawPolyline: false,
+                  drawText: false,
+                  drawRectangle: true,
+                  drawPolygon: true,
+                  drawCircle: true,
+                  editMode: true,
+                  dragMode: true,
+                  removalMode: true,
+                }}
+                globalOptions={{ continueDrawing: false, editable: true }}
+                onCreate={(e) => {
+                  selectedLayerRef.current = e.layer;
+                  lastCreatedLayerRef.current = e.layer;
+                  setDraftFeature(null);
+                  setViewFeature(null);
+                  setViewCentroid(null);
+                }}
+                onEdit={(e) => {
+                  if (e?.layer) {
+                    selectedLayerRef.current = e.layer;
+                    lastCreatedLayerRef.current = e.layer;
+                  }
+                }}
+                onUpdate={(e) => {
+                  if (e?.layer) {
+                    selectedLayerRef.current = e.layer;
+                    lastCreatedLayerRef.current = e.layer;
+                  }
+                }}
+              />
+            </FeatureGroup>
+          </MapContainer>
+
+          <div className="hidden md:block absolute right-3 top-3 z-[9999] space-y-2">
+            <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
+              {cursorLatLng ? (
+                <>
+                  <span>Lat: {cursorLatLng.lat.toFixed(6)}</span>
+                  <span className="ml-2">Lng: {cursorLatLng.lng.toFixed(6)}</span>
+                </>
+              ) : (
+                <span>{t("geocercas.cursorHint", { defaultValue: "Move the mouse over the map" })}</span>
+              )}
+            </div>
+
+            <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
+              Draft: {draftFeature ? "yes" : "no"} | Pts: {draftPointsCount}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {coordModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
+            <h2 className="text-sm font-semibold text-slate-100 mb-1">
+              {t("geocercas.modalTitle", { defaultValue: "Draw by coordinates" })}
+            </h2>
+
+            <p className="text-xs text-slate-400">
+              {t("geocercas.modalHintRule", { defaultValue: "1 point = small square | 2 points = rectangle | 3+ = polygon" })}
+              <br />
+              {t("geocercas.modalInstruction", { defaultValue: "Format:" })}{" "}
+              <span className="font-mono text-[11px]">lat,lng</span>{" "}
+              {t("geocercas.modalOnePerLine", { defaultValue: "(one per line)" })}
+            </p>
+
+            <textarea
+              rows={6}
+              className="w-full rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 px-2 py-1.5"
+              value={coordText}
+              onChange={(e) => setCoordText(e.target.value)}
+              placeholder={`-0.180653, -78.467838\n-0.181200, -78.466500\n-0.182000, -78.468200`}
+            />
+
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                onClick={() => setCoordModalOpen(false)}
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200"
+                type="button"
+              >
+                {t("common.actions.cancel", { defaultValue: "Cancel" })}
+              </button>
+
+              <button
+                onClick={handleDrawFromCoords}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white"
+                type="button"
+              >
+                {t("geocercas.modalDraw", { defaultValue: "Draw" })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
