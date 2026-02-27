@@ -592,7 +592,7 @@ export default function TrackerDashboard() {
     }));
 
     if (rows.length === 0) {
-      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando solo la(s) geocerca(s) default (is_default).");
+      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando todas las geocercas activas (la default queda preseleccionada).");
     }
   }, [todayStrUtc]);
 
@@ -615,9 +615,12 @@ export default function TrackerDashboard() {
       .eq("active", true);
 
     if (assignedIds.length > 0) {
+      // Con asignaciones activas: solo las geocercas asignadas.
       q = q.in("id", assignedIds);
     } else {
-      q = q.eq("is_default", true);
+      // ✅ Sin asignaciones: mostramos TODAS las geocercas activas,
+      // pero preseleccionamos la(s) default para una vista inicial coherente.
+      q = q.order("is_default", { ascending: false }).order("updated_at", { ascending: false }).order("created_at", { ascending: false });
     }
 
     const res = await q;
@@ -680,7 +683,16 @@ export default function TrackerDashboard() {
     const circlesCount = items.filter((x) => x.type === "circle").length;
 
     setGeofenceRows(normalized);
-    setSelectedGeofenceIds([]); // default: mostrar todas (de la lista resultante)
+
+    // ✅ Selección inicial:
+    // - Con asignaciones: por defecto mostramos todas las asignadas (selectedIds=[] => todas)
+    // - Sin asignaciones: preseleccionamos la(s) default (si existe), para que el mapa enfoque algo representativo.
+    if (assignedIds.length === 0) {
+      const defaultIds = normalized.filter((g) => g.is_default === true).map((g) => String(g.id));
+      setSelectedGeofenceIds(defaultIds.length ? defaultIds : []);
+    } else {
+      setSelectedGeofenceIds([]); // mostrar todas las asignadas
+    }
 
     setDiag((d) => ({
       ...d,
@@ -698,11 +710,10 @@ export default function TrackerDashboard() {
       } else {
         if (pickedFallbackFirstActive) {
           setInfoMsg(
-            `No hay geocerca default (is_default=true) activa para esta org (${currentOrgId}). ` +
-              `Se mostró 1 geocerca activa como fallback (configura un default para controlar cuál aparece).`
+            `No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el dashboard vacío.`
           );
         } else {
-          setInfoMsg(`No hay geocerca default (is_default=true) activa para esta org (${currentOrgId}).`);
+          setInfoMsg(`No hay geocercas activas disponibles para esta org (${currentOrgId}).`);
         }
       }
     }
