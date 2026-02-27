@@ -1,6 +1,8 @@
 ﻿// src/pages/AsignacionesPage.jsx
-// DEFINITIVO: Asignaciones usa personal (personal_id) + /api/asignaciones
-// UI REHECHA: layout dashboard (form lateral + listado grande con scroll)
+// DEFINITIVO (preview): catálogos canónicos para selects
+// - Personas: /api/personal
+// - Geocercas: /api/geofences?action=list&onlyActive=true  (misma fuente que /geocerca)
+// Bundle /api/asignaciones queda para listado + activities (si existe)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,7 +27,7 @@ function localDateTimeToISO(localDateTime) {
 // Importante: valores internos siguen siendo "activa/inactiva" (compat backend).
 const ESTADOS = ["todos", "activa", "inactiva"];
 
-// âœ… Clases UI (alto contraste)
+// ✅ Clases UI (alto contraste)
 const inputBase =
   "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
   "placeholder:text-gray-400 shadow-sm " +
@@ -39,15 +41,20 @@ const selectBase =
 
 const cardBase = "rounded-xl border border-gray-200 bg-white shadow-sm";
 
-
 async function fetchJsonSafe(url) {
   const res = await fetch(url, { credentials: "include" });
   const txt = await res.text();
   let payload = null;
-  try { payload = txt ? JSON.parse(txt) : null; } catch { payload = null; }
+  try {
+    payload = txt ? JSON.parse(txt) : null;
+  } catch {
+    payload = null;
+  }
+
+  // Soportar tanto {ok:true,data:...} como arrays planos
   if (!res.ok || payload?.ok === false) {
     const msg = payload?.error || payload?.message || `HTTP ${res.status}`;
-    return { payload, error: { message: msg } };
+    return { payload, error: { message: msg, status: res.status } };
   }
   return { payload, error: null };
 }
@@ -55,11 +62,11 @@ async function fetchJsonSafe(url) {
 function extractArray(payload) {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
+
   const keys = ["data", "rows", "items", "personal", "people", "geocercas", "geofences"];
   for (const k of keys) {
     if (Array.isArray(payload[k])) return payload[k];
   }
-  // nested: payload.data may be object with arrays
   if (payload.data && typeof payload.data === "object") {
     for (const k of keys) {
       if (Array.isArray(payload.data[k])) return payload.data[k];
@@ -69,27 +76,51 @@ function extractArray(payload) {
 }
 
 function normalizePersonRow(p) {
-  const id = p?.id || p?.personal_id || p?.org_people_id || p?.user_id || "";
+  const id =
+    p?.id ||
+    p?.personal_id ||
+    p?.org_people_id ||
+    p?.user_id ||
+    p?.uuid ||
+    "";
+
   const nombre =
     p?.nombre ||
     p?.first_name ||
     p?.firstname ||
     (typeof p?.full_name === "string" ? p.full_name.split(" ")[0] : "") ||
     "";
+
   const apellido =
     p?.apellido ||
     p?.last_name ||
     p?.lastname ||
-    (typeof p?.full_name === "string" ? p.full_name.split(" ").slice(1).join(" ") : "") ||
+    (typeof p?.full_name === "string"
+      ? p.full_name.split(" ").slice(1).join(" ")
+      : "") ||
     "";
-  const label = (p?.display_name || p?.full_name || `${nombre} ${apellido}`.trim() || p?.email || "").trim();
-  return { id, nombre, apellido, email: p?.email || "", label };
+
+  const label = String(
+    p?.display_name ||
+      p?.full_name ||
+      `${nombre} ${apellido}`.trim() ||
+      p?.email ||
+      id
+  ).trim();
+
+  return {
+    id,
+    nombre: String(nombre || "").trim(),
+    apellido: String(apellido || "").trim(),
+    email: String(p?.email || "").trim(),
+    label,
+  };
 }
 
 function normalizeGeofenceRow(g) {
   const id = g?.id || "";
-  const nombre = (g?.name || g?.nombre || g?.label || "").trim();
-  return { id, nombre };
+  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
+  return { id, nombre: nombre || id };
 }
 
 export default function AsignacionesPage() {
@@ -123,71 +154,63 @@ export default function AsignacionesPage() {
   // UI
   const [showForm, setShowForm] = useState(true);
 
+  async function loadCatalogsCanonical() {
+    // Personas
+    const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
+    const personalRaw = extractArray(rP.payload);
+    const personalNorm = personalRaw.map(normalizePersonRow).filter((p) => p.id);
+
+    // Geocercas (desde geofences)
+    const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
+    const geofencesRaw = extractArray(rG.payload);
+    const geofencesNorm = geofencesRaw.map(normalizeGeofenceRow).filter((g) => g.id);
+
+    // Setear aunque una falle (evita “no se puede seleccionar”)
+    setPersonalOptions(personalNorm);
+    setGeocercaOptions(geofencesNorm);
+  }
+
   async function loadAll() {
     setLoading(true);
     setError(null);
 
-    const { data, error } = await getAsignacionesBundle();
-    if (error) {
-      console.error("[AsignacionesPage] bundle error:", error);
+    // 1) Siempre cargar catálogos canónicos (esto NO depende del bundle)
+    try {
+      await loadCatalogsCanonical();
+    } catch (e) {
+      console.error("[AsignacionesPage] canonical catalogs crash:", e);
+      // No bloqueamos la página por catálogos
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
+    }
+
+    // 2) Cargar bundle (listado + activities si existen)
+    const { data, error: bundleError } = await getAsignacionesBundle();
+
+    if (bundleError) {
+      console.error("[AsignacionesPage] bundle error:", bundleError);
+      setAsignaciones([]); // listado vacío pero el form debe seguir usable
+      setActivityOptions([]); // si quieres, luego lo conectamos a /api/activities
       setError(
-        error.message ||
-          t("asignaciones.messages.loadError", {
-            defaultValue: "Error loading assignments.",
-          })
+        bundleError.message ||
+          t("asignaciones.messages.loadError", { defaultValue: "Error loading assignments." })
       );
-setAsignaciones(Array.isArray(rows) ? rows : []);
-
-// ✅ Catálogos canónicos (NO dependen del bundle)
-const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
-const personalRaw = extractArray(rP.payload);
-const personalNorm = personalRaw.map(normalizePersonRow).filter((p) => p.id);
-
-const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
-const geofencesRaw = extractArray(rG.payload);
-const geofencesNorm = geofencesRaw.map(normalizeGeofenceRow).filter((g) => g.id);
-
-// Activities: mantenemos lo que venga del bundle si existe
-const catalogs = bundle.catalogs || {};
-const activitiesRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
-setActivityOptions(activitiesRaw);
-
-setPersonalOptions(personalNorm);
-setGeocercaOptions(geofencesNorm);
-
-if (!selectedActivityId && activitiesRaw.length === 1) {
-  setSelectedActivityId(activitiesRaw[0].id);
-}
-
-setLoading(false);
+      setLoading(false);
       return;
     }
 
     const bundle = data || {};
-    const rows = bundle.asignaciones || [];
+    const rows = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
     const catalogs = bundle.catalogs || {};
 
-    setAsignaciones(Array.isArray(rows) ? rows : []);
+    setAsignaciones(rows);
 
-    const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
-    const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
+    // Activities: mantenemos lo que venga del bundle
+    const activitiesRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
+    setActivityOptions(activitiesRaw);
 
-    const normalizedPersonal =
-      personal.length > 0
-        ? personal
-        : fallback.map((p) => ({
-            id: p.org_people_id,
-            nombre: p.nombre,
-            apellido: p.apellido,
-            email: p.email,
-          }));
-
-    setPersonalOptions(normalizedPersonal);
-    setGeocercaOptions(Array.isArray(catalogs.geocercas) ? catalogs.geocercas : []);
-    setActivityOptions(Array.isArray(catalogs.activities) ? catalogs.activities : []);
-
-    if (!selectedActivityId && Array.isArray(catalogs.activities) && catalogs.activities.length === 1) {
-      setSelectedActivityId(catalogs.activities[0].id);
+    if (!selectedActivityId && activitiesRaw.length === 1) {
+      setSelectedActivityId(activitiesRaw[0].id);
     }
 
     setLoading(false);
@@ -268,9 +291,8 @@ setLoading(false);
 
     const payload = {
       personal_id: selectedPersonalId,
-      geofence_id: selectedGeocercaId,
-      // legacy trace (nullable): geocerca_id is handled server-side
-      geocerca_id: null,
+      geofence_id: selectedGeocercaId, // ✅ canónico
+      geocerca_id: null, // ✅ legacy trace nullable (evita FK vieja)
       activity_id: selectedActivityId,
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
@@ -278,7 +300,9 @@ setLoading(false);
       status,
     };
 
-    const resp = editingId ? await updateAsignacion(editingId, payload) : await createAsignacion(payload);
+    const resp = editingId
+      ? await updateAsignacion(editingId, payload)
+      : await createAsignacion(payload);
 
     if (resp.error) {
       console.error("[AsignacionesPage] save error:", resp.error);
@@ -303,7 +327,7 @@ setLoading(false);
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
         <div className={`${cardBase} px-4 py-3 text-sm text-gray-700`}>
-          {t("asignaciones.messages.loadingData", { defaultValue: "Loading assignment dataâ€¦" })}
+          {t("asignaciones.messages.loadingData", { defaultValue: "Loading assignment data…" })}
         </div>
       </div>
     );
@@ -336,7 +360,7 @@ setLoading(false);
           </h1>
           <p className="text-xs text-gray-600 mt-1">
             {t("asignaciones.currentOrgLabel", { defaultValue: "Current organization" })}:{" "}
-            <span className="font-medium text-gray-900">{currentOrg?.name || "â€”"}</span>
+            <span className="font-medium text-gray-900">{currentOrg?.name || "—"}</span>
           </p>
         </div>
 
@@ -375,10 +399,10 @@ setLoading(false);
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-semibold text-gray-900">
                 {editingId
-                  ? t("asignaciones.form.editTitle", { defaultValue: "Editar asignaciÃ³n" })
-                  : t("asignaciones.form.newTitle", { defaultValue: "Nueva asignaciÃ³n" })}
+                  ? t("asignaciones.form.editTitle", { defaultValue: "Editar asignación" })
+                  : t("asignaciones.form.newTitle", { defaultValue: "Nueva asignación" })}
               </h2>
-              {loading && <span className="text-xs text-gray-500">Loadingâ€¦</span>}
+              {loading && <span className="text-xs text-gray-500">Loading…</span>}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
@@ -392,10 +416,12 @@ setLoading(false);
                   onChange={(e) => setSelectedPersonalId(e.target.value)}
                   required
                 >
-                  <option value="">{t("asignaciones.form.personPlaceholder", { defaultValue: "Selecciona una persona" })}</option>
+                  <option value="">
+                    {t("asignaciones.form.personPlaceholder", { defaultValue: "Selecciona una persona" })}
+                  </option>
                   {personalOptions.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {`${p.nombre || ""} ${p.apellido || ""}`.trim()}
+                      {p.label || `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.id}
                     </option>
                   ))}
                 </select>
@@ -411,7 +437,9 @@ setLoading(false);
                   onChange={(e) => setSelectedGeocercaId(e.target.value)}
                   required
                 >
-                  <option value="">{t("asignaciones.form.geofencePlaceholder", { defaultValue: "Selecciona una geocerca" })}</option>
+                  <option value="">
+                    {t("asignaciones.form.geofencePlaceholder", { defaultValue: "Selecciona una geocerca" })}
+                  </option>
                   {geocercaOptions.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.nombre || g.id}
@@ -431,10 +459,12 @@ setLoading(false);
                   required
                   disabled={activityOptions.length === 0}
                 >
-                  <option value="">{t("asignaciones.form.activityPlaceholder", { defaultValue: "Selecciona una actividad" })}</option>
+                  <option value="">
+                    {t("asignaciones.form.activityPlaceholder", { defaultValue: "Selecciona una actividad" })}
+                  </option>
                   {activityOptions.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name || a.id}
+                      {a.name || a.nombre || a.id}
                     </option>
                   ))}
                 </select>
@@ -491,7 +521,7 @@ setLoading(false);
                     onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
                   />
                   <p className="mt-1 text-[11px] text-gray-500">
-                    {t("asignaciones.form.frequencyHint", { defaultValue: "MÃ­nimo: 5 minutos." })}
+                    {t("asignaciones.form.frequencyHint", { defaultValue: "Mínimo: 5 minutos." })}
                   </p>
                 </div>
               </div>
@@ -511,7 +541,12 @@ setLoading(false);
                 <button
                   type="submit"
                   className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  disabled={loading || activityOptions.length === 0 || personalOptions.length === 0}
+                  disabled={
+                    loading ||
+                    activityOptions.length === 0 ||
+                    personalOptions.length === 0 ||
+                    geocercaOptions.length === 0
+                  }
                 >
                   {editingId
                     ? t("asignaciones.form.updateButton", { defaultValue: "Actualizar" })
@@ -535,11 +570,10 @@ setLoading(false);
               {t("asignaciones.list.title", { defaultValue: "Listado de asignaciones" })}
             </h2>
             <span className="text-xs text-gray-500">
-              {loading ? "Loadingâ€¦" : `${filteredAsignaciones.length} items`}
+              {loading ? "Loading…" : `${filteredAsignaciones.length} items`}
             </span>
           </div>
 
-          {/* Altura: usa viewport para que el listado tenga espacio real */}
           <div className="px-2 pb-2 overflow-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
             <AsignacionesTable
               asignaciones={filteredAsignaciones}
@@ -547,7 +581,10 @@ setLoading(false);
               onEdit={(a) => {
                 setEditingId(a.id);
                 setSelectedPersonalId(a.personal_id || "");
-                setSelectedGeocercaId(a.geocerca_id || "");
+
+                // ✅ canónico: geofence_id, fallback legacy: geocerca_id
+                setSelectedGeocercaId(a.geofence_id || a.geocerca_id || "");
+
                 setSelectedActivityId(a.activity_id || "");
                 setStartTime(a.start_time?.slice(0, 16) || "");
                 setEndTime(a.end_time?.slice(0, 16) || "");
@@ -580,4 +617,3 @@ setLoading(false);
     </div>
   );
 }
-
