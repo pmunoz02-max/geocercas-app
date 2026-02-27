@@ -47,8 +47,7 @@ function normalizeAuthErrorMessage(raw: string) {
   const msg = String(raw || "").trim();
   const low = msg.toLowerCase();
 
-  // Caso típico post-invitación: el link fue consumido (por “link scanning” del mail),
-  // abierto 2 veces, o expiró.
+  // Caso típico: link consumido por “link scanning”, abierto 2 veces, o expiró.
   if (
     low.includes("email link is invalid") ||
     low.includes("has expired") ||
@@ -62,13 +61,43 @@ function normalizeAuthErrorMessage(raw: string) {
         "Esto pasa si el enlace expiró o si fue abierto/escaneado antes (por ejemplo, previsualización del correo, SafeLinks de Outlook, o abrirlo dos veces).",
       tips: [
         "Usa el correo más reciente (última invitación) y ábrelo solo una vez.",
-        "Evita abrirlo dentro de un navegador interno (in‑app browser). Si puedes, elige “Abrir en Chrome/Safari”.",
+        "Evita abrirlo dentro de un navegador interno (in-app browser). Si puedes, elige “Abrir en Chrome/Safari”.",
         "Si vuelve a fallar, pide al Owner que reenvíe la invitación.",
       ],
     };
   }
 
+  // Errores comunes de callback/session
+  if (low.includes("no se pudo establecer sesión") || low.includes("could not establish session")) {
+    return {
+      title: "No se pudo completar el login.",
+      detail:
+        "No se pudo establecer la sesión desde el callback. Esto suele ocurrir si el callback no procesa el tipo de enlace recibido o si el enlace fue consumido/expiró.",
+      tips: [
+        "Reintenta con un enlace nuevo (magic link más reciente).",
+        "Asegúrate de abrir el enlace en el mismo dispositivo/navegador donde lo solicitaste.",
+      ],
+    };
+  }
+
   return { title: "No se pudo completar el login.", detail: msg, tips: [] as string[] };
+}
+
+/**
+ * Tipos válidos para verifyOtp:
+ * - "magiclink" (caso actual)
+ * - "invite"
+ * - "recovery"
+ * - "email" (dependiendo de flujo)
+ *
+ * Nota: Supabase envía `type=magiclink` en tu caso.
+ */
+function normalizeOtpType(t: string) {
+  const v = String(t || "").toLowerCase().trim();
+  if (!v) return "magiclink";
+  if (v === "magiclink" || v === "invite" || v === "recovery" || v === "email") return v;
+  // fallback seguro
+  return "magiclink";
 }
 
 export default function AuthCallback() {
@@ -92,7 +121,7 @@ export default function AuthCallback() {
         setError(null);
         setErrorMeta(null);
 
-        // 0) Errores en hash o query (Supabase a veces devuelve error en #... o ?...)
+        // 0) Errores en hash o query
         const hash = typeof window !== "undefined" ? window.location.hash : "";
         const hp = parseHashParams(hash);
 
@@ -110,31 +139,45 @@ export default function AuthCallback() {
           throw new Error(msg);
         }
 
-        // 1) PKCE: ?code=...
-        const code = getQueryParam(location.search, "code");
-        if (code) {
-          setStatus("Confirmando sesión (code)…");
-          const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (exErr) throw exErr;
-        } else {
-          // 2) Implicit: #access_token=...&refresh_token=...
-          const access_token = hp.access_token || "";
-          const refresh_token = hp.refresh_token || "";
+        // 1) ✅ PKCE magiclink / invite / recovery vía query: token_hash + type
+        // Ejemplo: /auth/callback?next=...&token_hash=pkce_xxx&type=magiclink
+        const token_hash = getQueryParam(location.search, "token_hash");
+        const type = normalizeOtpType(getQueryParam(location.search, "type"));
 
-          if (access_token && refresh_token) {
-            setStatus("Confirmando sesión (token)…");
-            const { error: ssErr } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-            if (ssErr) throw ssErr;
+        if (token_hash) {
+          setStatus("Confirmando sesión (token_hash)…");
+          const { error: vErr } = await supabase.auth.verifyOtp({
+            type: type as any,
+            token_hash,
+          });
+          if (vErr) throw vErr;
+        } else {
+          // 2) PKCE: ?code=...
+          const code = getQueryParam(location.search, "code");
+          if (code) {
+            setStatus("Confirmando sesión (code)…");
+            const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+            if (exErr) throw exErr;
           } else {
-            // 3) Si no vino code ni tokens, intentamos getSession por si ya está hidratada
-            setStatus("Confirmando sesión…");
+            // 3) Implicit: #access_token=...&refresh_token=...
+            const access_token = hp.access_token || "";
+            const refresh_token = hp.refresh_token || "";
+
+            if (access_token && refresh_token) {
+              setStatus("Confirmando sesión (token)…");
+              const { error: ssErr } = await supabase.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+              if (ssErr) throw ssErr;
+            } else {
+              // 4) Si no vino nada, intentamos getSession por si ya está hidratada
+              setStatus("Confirmando sesión…");
+            }
           }
         }
 
-        // 4) Obtener sesión desde el cliente
+        // 5) Obtener sesión desde el cliente
         const { data } = await supabase.auth.getSession();
         const session = data?.session;
 
@@ -142,7 +185,7 @@ export default function AuthCallback() {
           throw new Error("No se pudo establecer sesión desde el callback.");
         }
 
-        // 5) Bootstrap cookies (tg_at/tg_rt)
+        // 6) Bootstrap cookies (tg_at/tg_rt)
         setStatus("Creando cookies seguras…");
         await bootstrapCookie(
           session.access_token,
@@ -150,7 +193,7 @@ export default function AuthCallback() {
           typeof session.expires_in === "number" ? session.expires_in : undefined
         );
 
-        // 6) Redirigir al panel (hard redirect)
+        // 7) Redirigir al panel (hard redirect)
         setStatus("Entrando…");
         if (!alive) return;
         window.location.assign(next);
@@ -172,7 +215,6 @@ export default function AuthCallback() {
   }, [location.search, next]);
 
   const onGoLogin = () => {
-    // Puedes ajustar la ruta si tu login vive en otro path
     window.location.assign(`/login?next=${encodeURIComponent(next)}`);
   };
 
