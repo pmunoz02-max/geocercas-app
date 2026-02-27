@@ -4,6 +4,10 @@
 // Auth por cookie HttpOnly: tg_at
 // Contexto: SELECT memberships (NO RPC bootstrap)
 //
+// FIX universal:
+// - Lee SUPABASE_URL / SUPABASE_ANON_KEY con fallback a VITE_... (Vercel)
+// - Cache headers anti-parpadeo
+//
 // NOTA DE ESQUEMA (según tu DB):
 // - activities.tenant_id: uuid NOT NULL  -> lo llenamos con orgId resuelto
 // - activities.org_id: uuid NULLABLE     -> lo llenamos por compatibilidad
@@ -11,10 +15,29 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-function json(res, status, payload) {
-  res.status(status);
+const VERSION = "actividades-api-v2-env-fallback-memberships";
+
+/* =========================
+   Headers + helpers
+========================= */
+
+function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(JSON.stringify(payload));
+
+  res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("CDN-Cache-Control", "no-store");
+  res.setHeader("Surrogate-Control", "no-store");
+
+  res.setHeader("Vary", "Cookie");
+  res.setHeader("X-Api-Version", VERSION);
+}
+
+function json(res, status, payload) {
+  setHeaders(res);
+  res.statusCode = status;
+  res.end(JSON.stringify({ ...payload, version: VERSION }));
 }
 
 function getCookie(req, name) {
@@ -35,15 +58,12 @@ function safeJson(x) {
   }
 }
 
-function buildSupabaseForUser(accessToken) {
-  const url = process.env.SUPABASE_URL;
-  const anon = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars");
-
-  return createClient(url, anon, {
-    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
+function getEnv(nameList) {
+  for (const n of nameList) {
+    const v = process.env[n];
+    if (v && String(v).trim()) return String(v).trim();
+  }
+  return null;
 }
 
 function normalizeRole(v) {
@@ -51,31 +71,55 @@ function normalizeRole(v) {
   return String(v).trim().toLowerCase();
 }
 
+/* =========================
+   Supabase client (user JWT)
+========================= */
+
+function buildSupabaseForUser(accessToken) {
+  const url = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
+  const anon = getEnv([
+    "SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  ]);
+
+  if (!url || !anon) {
+    throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars");
+  }
+
+  return createClient(url, anon, {
+    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+/* =========================
+   Context resolver
+========================= */
+
 async function resolveContext(req) {
   const accessToken = getCookie(req, "tg_at");
   if (!accessToken) return { ok: false, status: 401, error: "No session cookie (tg_at)" };
 
   const supabase = buildSupabaseForUser(accessToken);
 
-  // 1) Validar sesión (JWT)
+  // Validar sesión
   const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
   if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
 
   const user = userData.user;
 
-  // 2) Resolver org/role desde memberships (CANÓNICO)
-  //    Tomamos la default si existe, si no la primera.
+  // Resolver org/role desde memberships (default si existe)
   const { data: mRow, error: mErr } = await supabase
     .from("memberships")
-    .select("org_id, role, is_default")
+    .select("org_id, role, is_default, revoked_at")
     .eq("user_id", user.id)
+    .is("revoked_at", null)
     .order("is_default", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (mErr) {
-    return { ok: false, status: 500, error: mErr.message || "memberships lookup failed" };
-  }
+  if (mErr) return { ok: false, status: 500, error: mErr.message || "memberships lookup failed" };
 
   const orgId = mRow?.org_id || null;
   const role = normalizeRole(mRow?.role);
@@ -83,8 +127,23 @@ async function resolveContext(req) {
   return { ok: true, status: 200, supabase, user, orgId, role };
 }
 
+/* =========================
+   Handler
+========================= */
+
 export default async function handler(req, res) {
   try {
+    if (req.method === "OPTIONS") {
+      setHeaders(res);
+      res.statusCode = 204;
+      return res.end();
+    }
+    if (req.method === "HEAD") {
+      setHeaders(res);
+      res.statusCode = 200;
+      return res.end();
+    }
+
     const ctx = await resolveContext(req);
     if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error });
 
@@ -125,7 +184,7 @@ export default async function handler(req, res) {
 
       const payload = {
         tenant_id: tenantId, // ✅ NOT NULL
-        org_id: tenantId,    // ✅ compatibilidad
+        org_id: tenantId, // ✅ compat
         name,
         description: body?.description ?? null,
         active: body?.active ?? true,
@@ -144,7 +203,7 @@ export default async function handler(req, res) {
       return json(res, 201, { ok: true, data });
     }
 
-    // Requiere id
+    // Requiere id para PUT/PATCH/DELETE
     if (!id) return json(res, 400, { ok: false, error: "Missing id query param (?id=...)" });
 
     // ---------- PUT ----------
@@ -196,17 +255,14 @@ export default async function handler(req, res) {
 
     // ---------- DELETE ----------
     if (req.method === "DELETE") {
-      const { error } = await supabase
-        .from("activities")
-        .delete()
-        .eq("id", id)
-        .eq("tenant_id", tenantId);
+      const { error } = await supabase.from("activities").delete().eq("id", id).eq("tenant_id", tenantId);
 
       if (error) return json(res, 400, { ok: false, error: error.message });
 
       return json(res, 200, { ok: true });
     }
 
+    res.setHeader("Allow", "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD");
     return json(res, 405, { ok: false, error: "Method not allowed" });
   } catch (e) {
     console.error("[api/actividades] fatal:", e);
