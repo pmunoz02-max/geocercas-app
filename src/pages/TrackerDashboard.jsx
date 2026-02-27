@@ -485,6 +485,7 @@ export default function TrackerDashboard() {
     geofencePolys: 0,
     geofenceCircles: 0,
     positionsFound: 0,
+    positionsSource: null,
     lastAssignmentsError: null,
     lastGeofencesError: null,
     lastPositionsError: null,
@@ -739,7 +740,8 @@ export default function TrackerDashboard() {
 
       try {
         if (showSpinner) setLoading(true);
-        setDiag((d) => ({ ...d, lastPositionsError: null }));
+        setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
+        setErrorMsg("");
 
         const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
         const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
@@ -757,25 +759,52 @@ export default function TrackerDashboard() {
           if (selectedTrackerId !== "all") targetIds = [String(selectedTrackerId)];
         }
 
-        let q = supabase
-          .from("tracker_positions")
-          .select("id, org_id, user_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at")
-          .eq("org_id", currentOrgId)
-          .gte("recorded_at", fromIso)
-          .order("recorded_at", { ascending: false })
-          .limit(500);
+        const selectCols =
+          "id, org_id, user_id, personal_id, asignacion_id, lat, lng, accuracy, speed, heading, battery, is_mock, source, recorded_at, created_at";
 
-        if (Array.isArray(targetIds) && targetIds.length) {
-          q = q.in("user_id", targetIds);
+        const queryTable = async (tableName) => {
+          let q = supabase
+            .from(tableName)
+            .select(selectCols)
+            .eq("org_id", currentOrgId)
+            .gte("recorded_at", fromIso)
+            .order("recorded_at", { ascending: false })
+            .limit(500);
+
+          if (Array.isArray(targetIds) && targetIds.length) {
+            q = q.in("user_id", targetIds);
+          }
+          return await q;
+        };
+
+        // Prefer view/table tracker_positions if exists, but fallback to canonical public.positions.
+        let tableUsed = "tracker_positions";
+        let res = await queryTable("tracker_positions");
+
+        const shouldFallback =
+          !!res.error ||
+          (Array.isArray(res.data) && res.data.length === 0); // common when view is empty but positions has rows
+
+        if (shouldFallback) {
+          const res2 = await queryTable("positions");
+          if (!res2.error) {
+            tableUsed = "positions";
+            res = res2;
+          } else {
+            // Keep the most informative error
+            const e1 = res.error?.message || String(res.error || "");
+            const e2 = res2.error?.message || String(res2.error || "");
+            res = { data: null, error: new Error(`tracker_positions: ${e1}; positions: ${e2}`) };
+            tableUsed = "positions";
+          }
         }
 
-        const { data, error } = await q;
+        const { data, error } = res;
 
         if (error) {
-          setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error) }));
+          setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error), positionsFound: 0, positionsSource: tableUsed }));
           setPositions([]);
-          setDiag((d) => ({ ...d, positionsFound: 0 }));
-          setErrorMsg("Error al cargar posiciones (tracker_positions).");
+          setErrorMsg("Error al cargar posiciones.");
           return;
         }
 
@@ -786,7 +815,10 @@ export default function TrackerDashboard() {
             const ts = r.recorded_at || r.created_at || null;
             return {
               id: r.id,
+              org_id: r.org_id ? String(r.org_id) : null,
               user_id: r.user_id ? String(r.user_id) : null,
+              personal_id: r.personal_id ? String(r.personal_id) : null,
+              asignacion_id: r.asignacion_id ? String(r.asignacion_id) : null,
               lat,
               lng,
               recorded_at: ts,
@@ -794,6 +826,7 @@ export default function TrackerDashboard() {
               speed: r.speed ?? null,
               heading: r.heading ?? null,
               battery: r.battery ?? null,
+              is_mock: r.is_mock ?? null,
               source: r.source ?? null,
               _valid: isValidLatLng(lat, lng),
             };
@@ -801,11 +834,13 @@ export default function TrackerDashboard() {
           .filter((p) => p._valid);
 
         setPositions(normalized);
-        setDiag((d) => ({ ...d, positionsFound: normalized.length }));
+        setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
       } finally {
         if (showSpinner) setLoading(false);
       }
     },
+    [assignmentTrackers, selectedTrackerId, timeWindowId]
+  );},
     [assignmentTrackers, selectedTrackerId, timeWindowId]
   );
 
