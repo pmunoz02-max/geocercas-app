@@ -578,6 +578,9 @@ export default function AsignacionesPage() {
             <AsignacionesTable
               asignaciones={filteredAsignaciones}
               loading={loading}
+              people={personalOptions}
+              geofences={geocercaOptions}
+              activities={activityOptions}
               onEdit={(a) => {
                 setEditingId(a.id);
                 setSelectedPersonalId(a.personal_id || "");
@@ -604,7 +607,11 @@ export default function AsignacionesPage() {
 
                 const resp = await deleteAsignacion(id);
                 if (resp.error) {
-                  setError(t("asignaciones.messages.deleteError", { defaultValue: "Could not delete the assignment." }));
+                  setError(
+                    t("asignaciones.messages.deleteError", {
+                      defaultValue: "Could not delete the assignment.",
+                    })
+                  );
                 } else {
                   setSuccessMessage(t("asignaciones.banner.deleted", { defaultValue: "Assignment deleted." }));
                   loadAll();
