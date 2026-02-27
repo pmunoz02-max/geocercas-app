@@ -209,40 +209,27 @@ async function loadCatalogs(supaSrv, { orgId }) {
 
     if (!r.error) personal = r.data || [];
   }
-
-  // Geocercas (universal: intenta activo/active, si no, sin filtro)
+  // Geofences (CATÁLOGO CANÓNICO)
+  // Fuente única = public.geofences (igual que /geocerca)
   let geocercas = [];
   {
-    // 1) activo=true
-    let r = await supaSrv
-      .from("geocercas")
-      .select("id,nombre,org_id,activo")
+    const r = await supaSrv
+      .from("geofences")
+      .select("id,name,org_id,active")
       .eq("org_id", orgId)
-      .eq("activo", true)
-      .order("nombre", { ascending: true });
+      .eq("active", true)
+      .order("name", { ascending: true });
 
-    // 2) active=true
-    if (r.error) {
-      r = await supaSrv
-        .from("geocercas")
-        .select("id,nombre,org_id,active")
-        .eq("org_id", orgId)
-        .eq("active", true)
-        .order("nombre", { ascending: true });
+    if (!r.error) {
+      // compat UI: AsignacionesPage espera { id, nombre }
+      geocercas = (r.data || []).map((g) => ({
+        id: g.id,
+        nombre: g.name,
+        org_id: g.org_id,
+        active: g.active,
+      }));
     }
-
-    // 3) fallback sin filtro (no romper)
-    if (r.error) {
-      r = await supaSrv
-        .from("geocercas")
-        .select("id,nombre,org_id")
-        .eq("org_id", orgId)
-        .order("nombre", { ascending: true });
-    }
-
-    if (!r.error) geocercas = r.data || [];
   }
-
   // Activities
   let activities = [];
   {
