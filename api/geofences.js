@@ -1,10 +1,10 @@
 // api/geofences.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "geofences-api-v1-memberships-canonical-userjwt-fallback";
+const VERSION = "geofences-api-v2-org-only";
 
 /* =========================
-   Cookies + Headers
+   Helpers
 ========================= */
 
 function getCookie(req, name) {
@@ -18,13 +18,7 @@ function getCookie(req, name) {
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-
   res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("CDN-Cache-Control", "no-store");
-  res.setHeader("Surrogate-Control", "no-store");
-
   res.setHeader("Vary", "Cookie");
   res.setHeader("X-Api-Version", VERSION);
 }
@@ -52,37 +46,13 @@ function requireWriteRole(role) {
   return r === "owner" || r === "admin";
 }
 
-function getQuery(req) {
-  try {
-    const url = new URL(req.url, "http://localhost");
-    const q = {};
-    url.searchParams.forEach((v, k) => (q[k] = v));
-    return q;
-  } catch {
-    return {};
-  }
-}
-
-function normalizeBoolFlag(v, defaultValue) {
-  if (v === undefined || v === null || v === "") return defaultValue;
-  const s = String(v).toLowerCase();
-  if (["1", "true", "yes", "y", "on"].includes(s)) return true;
-  if (["0", "false", "no", "n", "off"].includes(s)) return false;
-  return defaultValue;
-}
-
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string") {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return {};
-    }
-  }
+
   const chunks = [];
   for await (const c of req) chunks.push(c);
   const raw = Buffer.concat(chunks).toString("utf8");
+
   if (!raw) return {};
   try {
     return JSON.parse(raw);
@@ -92,165 +62,84 @@ async function readBody(req) {
 }
 
 /* =========================
-   Sanitizers (server-owned)
+   Strip server-owned
 ========================= */
 
 function stripServerOwned(payload) {
   const p = payload && typeof payload === "object" ? payload : {};
   const out = { ...p };
 
-  // 🔒 no permitir que se cuele en row
   delete out.action;
 
-  // server-owned / generated / audit (no enviar)
-  delete out.bbox;
-  delete out.geom;
-  delete out.created_at;
-  delete out.updated_at;
-  delete out.deleted_at;
-  delete out.revoked_at;
-  delete out.created_by;
-  delete out.updated_by;
-
-  // multi-tenant / ownership (siempre desde ctx)
   delete out.org_id;
   delete out.tenant_id;
   delete out.user_id;
-  delete out.owner_id;
-  delete out.usuario_id;
-
-  // compat: NO permitir orgId enviado
-  delete out.orgId;
+  delete out.created_at;
+  delete out.updated_at;
+  delete out.created_by;
+  delete out.updated_by;
+  delete out.geom;
+  delete out.bbox;
 
   return out;
 }
 
 /* =========================
-   Context Resolver (CANÓNICO)
+   Context
 ========================= */
 
 async function resolveContext(req) {
-  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
-  const SUPABASE_ANON_KEY = getEnv([
-    "SUPABASE_ANON_KEY",
-    "VITE_SUPABASE_ANON_KEY",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  ]);
-
-  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
+  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL"]);
+  const SUPABASE_ANON_KEY = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY"]);
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return {
-      ok: false,
-      status: 500,
-      error: "Server misconfigured",
-      details: {
-        has: {
-          SUPABASE_URL: Boolean(SUPABASE_URL),
-          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-          SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
-        },
-      },
-    };
+    return { ok: false, status: 500, error: "Server misconfigured" };
   }
 
   const accessToken = getCookie(req, "tg_at");
   if (!accessToken) {
-    return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
+    return { ok: false, status: 401, error: "Not authenticated" };
   }
 
   const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    auth: { persistSession: false },
   });
 
   const { data: u1, error: uerr } = await sbUser.auth.getUser();
-  const user = u1?.user ? { id: u1.user.id, email: u1.user.email } : null;
-  if (!user || uerr) {
-    return { ok: false, status: 401, error: "Invalid session", details: uerr?.message || "No user" };
+  if (uerr || !u1?.user) {
+    return { ok: false, status: 401, error: "Invalid session" };
   }
+
+  const user = u1.user;
 
   const sbSrv = SUPABASE_SERVICE_ROLE_KEY
-    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      })
-    : null;
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    : sbUser;
 
-  async function tryMaybeSingle(client, builderFn) {
-    try {
-      const { data, error } = await builderFn(client);
-      if (error) return { ok: false, error };
-      return { ok: true, data };
-    } catch (e) {
-      return { ok: false, error: { message: String(e?.message || e) } };
-    }
+  const { data: membership } = await sbSrv
+    .from("memberships")
+    .select("org_id, role")
+    .eq("user_id", user.id)
+    .is("revoked_at", null)
+    .order("is_default", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!membership?.org_id) {
+    return { ok: false, status: 403, error: "No membership" };
   }
 
-  let currentOrgId = null;
-  const ucoQuery = (c) => c.from("user_current_org").select("org_id").eq("user_id", user.id).maybeSingle();
-
-  if (sbSrv) {
-    const r1 = await tryMaybeSingle(sbSrv, ucoQuery);
-    if (r1.ok && r1.data?.org_id) currentOrgId = String(r1.data.org_id);
-  }
-  if (!currentOrgId) {
-    const r2 = await tryMaybeSingle(sbUser, ucoQuery);
-    if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
-  }
-
-  const membershipForOrg = (orgId) => (c) =>
-    c
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", user.id)
-      .eq("org_id", orgId)
-      .is("revoked_at", null)
-      .maybeSingle();
-
-  const membershipDefault = (c) =>
-    c
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", user.id)
-      .is("revoked_at", null)
-      .order("is_default", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-  async function resolveMembership() {
-    if (currentOrgId) {
-      if (sbSrv) {
-        const r = await tryMaybeSingle(sbSrv, membershipForOrg(currentOrgId));
-        if (r.ok && r.data?.org_id) return r.data;
-      }
-      const r2 = await tryMaybeSingle(sbUser, membershipForOrg(currentOrgId));
-      if (r2.ok && r2.data?.org_id) return r2.data;
-    }
-
-    if (sbSrv) {
-      const r = await tryMaybeSingle(sbSrv, membershipDefault);
-      if (r.ok && r.data?.org_id) return r.data;
-    }
-    const r2 = await tryMaybeSingle(sbUser, membershipDefault);
-    if (r2.ok && r2.data?.org_id) return r2.data;
-
-    return null;
-  }
-
-  const mRow = await resolveMembership();
-  if (!mRow?.org_id) {
-    return { ok: false, status: 403, error: "No membership", details: "User has no active membership" };
-  }
-
-  const ctx = {
-    org_id: String(mRow.org_id),
-    tenant_id: String(mRow.org_id),
-    role: String(mRow.role || "member"),
+  return {
+    ok: true,
+    ctx: {
+      org_id: String(membership.org_id),
+      role: String(membership.role || "member"),
+    },
+    user,
+    sbDb: sbSrv,
   };
-
-  const sbDb = sbSrv || sbUser;
-
-  return { ok: true, ctx, user, sbDb };
 }
 
 /* =========================
@@ -259,142 +148,82 @@ async function resolveContext(req) {
 
 export default async function handler(req, res) {
   try {
-    if (req.method === "OPTIONS") {
-      setHeaders(res);
-      res.statusCode = 204;
-      return res.end();
-    }
-    if (req.method === "HEAD") {
-      setHeaders(res);
-      res.statusCode = 200;
-      return res.end();
-    }
-
     const ctxRes = await resolveContext(req);
-    if (!ctxRes.ok) return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
+    if (!ctxRes.ok)
+      return send(res, ctxRes.status, { ok: false, error: ctxRes.error });
 
     const { ctx, sbDb, user } = ctxRes;
-    const org_id = String(ctx.org_id);
-    const tenant_id = String(ctx.tenant_id || ctx.org_id);
-    const user_id = String(user.id);
+    const org_id = ctx.org_id;
+    const user_id = user.id;
 
-    // GET
+    /* =========================
+       GET
+    ========================= */
+
     if (req.method === "GET") {
-      const q = getQuery(req);
-      const action = String(q.action || "list");
+      const { data, error } = await sbDb
+        .from("geofences")
+        .select("*")
+        .eq("org_id", org_id);
 
-      if (action === "list") {
-        const onlyActive = normalizeBoolFlag(q.onlyActive, true);
-        const limit = Math.min(Number(q.limit || 2000), 2000);
+      if (error)
+        return send(res, 500, { ok: false, error: error.message });
 
-        const { data, error } = await sbDb.from("geofences").select("*").eq("org_id", org_id).limit(limit);
+      return ok(res, { ok: true, items: data || [] });
+    }
 
-        if (error) return ok(res, { ok: false, items: [], error: "Supabase error", details: error.message });
+    /* =========================
+       POST (upsert)
+    ========================= */
 
-        const items = Array.isArray(data) ? data : [];
-        if (!onlyActive) return ok(res, { ok: true, items });
+    if (req.method === "POST") {
+      const raw = await readBody(req);
+      const payload = stripServerOwned(raw);
 
-        const filtered = items.filter((row) => {
-          const j = row || {};
-          const deletedAt = j.deleted_at ?? null;
-          if (deletedAt) return false;
-          const a = j.is_active ?? j.active;
-          if (typeof a === "boolean") return a === true;
-          return true;
-        });
-
-        return ok(res, { ok: true, items: filtered });
+      if (!requireWriteRole(ctx.role)) {
+        return send(res, 403, { ok: false, error: "Forbidden" });
       }
 
-      if (action === "get") {
-        const id = q.id ? String(q.id) : null;
-        if (!id) return send(res, 400, { ok: false, error: "id is required" });
+      const item = payload.item || payload;
+
+      const row = {
+        ...item,
+        org_id,
+        user_id,
+        updated_at: new Date().toISOString(),
+        updated_by: user_id,
+      };
+
+      if (row.id) {
+        const id = row.id;
+        delete row.id;
 
         const { data, error } = await sbDb
           .from("geofences")
-          .select("*")
+          .update(row)
           .eq("org_id", org_id)
           .eq("id", id)
-          .maybeSingle();
+          .select("*");
 
-        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
-        return ok(res, { ok: true, item: data || null });
+        if (error)
+          return send(res, 500, { ok: false, error: error.message });
+
+        return ok(res, { ok: true, item: data?.[0] || null });
       }
 
-      return send(res, 400, { ok: false, error: "Unsupported action", action });
+      const { data, error } = await sbDb
+        .from("geofences")
+        .insert(row)
+        .select("*");
+
+      if (error)
+        return send(res, 500, { ok: false, error: error.message });
+
+      return ok(res, { ok: true, item: data?.[0] || null });
     }
 
-    // POST
-    if (req.method === "POST") {
-      const rawPayload = await readBody(req);
-      const payload = stripServerOwned(rawPayload);
-      const action = String(rawPayload?.action || payload?.action || "upsert").toLowerCase();
-
-      if (!requireWriteRole(ctx.role)) {
-        return send(res, 403, { ok: false, error: "Forbidden", details: "Requires owner/admin role" });
-      }
-
-      if (action === "upsert") {
-        const item0 = payload?.item && typeof payload.item === "object" ? payload.item : payload;
-
-        // 🔒 blindaje extra: por si "action" venía dentro de item
-        const item = { ...item0 };
-        delete item.action;
-
-        const name = item?.name ?? item?.nombre ?? null;
-
-        const row = {
-          ...item,
-          name: name ? String(name).trim() : item?.name,
-          org_id,
-          tenant_id,
-          updated_at: new Date().toISOString(),
-          updated_by: user_id,
-        };
-
-        delete row.source_geocerca_id;
-
-        if (row.id) {
-          const id = String(row.id);
-          delete row.id;
-
-          const { data, error } = await sbDb
-            .from("geofences")
-            .update(row)
-            .eq("org_id", org_id)
-            .eq("id", id)
-            .select("*");
-
-          if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
-          const arr = Array.isArray(data) ? data : data ? [data] : [];
-          return ok(res, { ok: true, saved: arr.length, items: arr, item: arr[0] || null });
-        }
-
-        const { data, error } = await sbDb.from("geofences").insert(row).select("*");
-        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
-
-        const arr = Array.isArray(data) ? data : data ? [data] : [];
-        return ok(res, { ok: true, saved: arr.length, items: arr, item: arr[0] || null });
-      }
-
-      if (action === "delete") {
-        const id = payload?.id ? String(payload.id) : null;
-        if (!id) return send(res, 400, { ok: false, error: "id is required" });
-
-        const { data, error } = await sbDb.from("geofences").delete().eq("org_id", org_id).eq("id", id).select("*");
-
-        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
-
-        const arr = Array.isArray(data) ? data : data ? [data] : [];
-        return ok(res, { ok: true, deleted: arr.length, items: arr });
-      }
-
-      return send(res, 400, { ok: false, error: "Unsupported action", action });
-    }
-
-    res.setHeader("Allow", "GET,POST,OPTIONS,HEAD");
     return send(res, 405, { ok: false, error: "Method not allowed" });
   } catch (e) {
-    return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
+    return send(res, 500, { ok: false, error: String(e.message || e) });
   }
 }
