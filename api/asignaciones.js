@@ -1,7 +1,7 @@
 // api/asignaciones.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-api-v9-fix-geocercaid-notnull-client-compat";
+const VERSION = "asignaciones-api-v10-resolve-legacy-geocerca-from-geofences";
 
 /* =========================
    Headers / Cookies / Query
@@ -27,7 +27,6 @@ function send(res, status, obj) {
   res.statusCode = status;
   res.end(JSON.stringify({ ...(obj || {}), version: VERSION }));
 }
-
 function ok(res, obj) {
   return send(res, 200, obj);
 }
@@ -137,7 +136,6 @@ async function resolveContext(req) {
       })
     : null;
 
-  // Resolver org_id desde memberships (default primero)
   const sbDb = sbSrv || sbUser;
 
   const { data: mRow, error: mErr } = await sbDb
@@ -149,30 +147,19 @@ async function resolveContext(req) {
     .limit(1)
     .maybeSingle();
 
-  if (mErr) {
-    return { ok: false, status: 500, error: "Membership lookup failed", details: mErr.message };
-  }
-  if (!mRow?.org_id) {
-    return { ok: false, status: 403, error: "No membership", details: "User has no active membership" };
-  }
+  if (mErr) return { ok: false, status: 500, error: "Membership lookup failed", details: mErr.message };
+  if (!mRow?.org_id) return { ok: false, status: 403, error: "No membership" };
 
-  const ctx = {
-    org_id: String(mRow.org_id),
-    tenant_id: String(mRow.org_id),
-    role: String(mRow.role || "member"),
-  };
-
-  return { ok: true, ctx, user, sbDb };
+  return { ok: true, ctx: { org_id: String(mRow.org_id) }, user, sbDb };
 }
 
 /* =========================
-   Catalog loaders (robust)
+   Catalog loaders
 ========================= */
 
 async function loadCatalogs(sbDb, orgId) {
-  const catalogs = { personal: [], geocercas: [], activities: [], people: [] };
+  const catalogs = { personal: [], geocercas: [], activities: [] };
 
-  // Personal
   try {
     const r = await sbDb
       .from("personal")
@@ -180,22 +167,14 @@ async function loadCatalogs(sbDb, orgId) {
       .eq("org_id", orgId)
       .order("nombre", { ascending: true })
       .limit(500);
-    if (!r.error) {
-      catalogs.personal = (r.data || []).map((p) => ({
-        id: p.id,
-        nombre: p.nombre || p.name || "",
-        apellido: p.apellido || "",
-        email: p.email || "",
-        active: p.active,
-      }));
-    }
+    if (!r.error) catalogs.personal = r.data || [];
   } catch {}
 
-  // Geofences → catalogs.geocercas (compat UI)
+  // UI usa geofences para escoger; devolvemos en geocercas por compat
   try {
     const r = await sbDb
       .from("geofences")
-      .select("id,name,org_id,active")
+      .select("id,name,org_id,active,source_geocerca_id")
       .eq("org_id", orgId)
       .eq("active", true)
       .order("name", { ascending: true })
@@ -205,11 +184,11 @@ async function loadCatalogs(sbDb, orgId) {
         id: g.id,
         nombre: g.name,
         active: g.active,
+        source_geocerca_id: g.source_geocerca_id || null,
       }));
     }
   } catch {}
 
-  // Activities
   try {
     const r = await sbDb
       .from("activities")
@@ -217,48 +196,52 @@ async function loadCatalogs(sbDb, orgId) {
       .eq("org_id", orgId)
       .order("name", { ascending: true })
       .limit(500);
-    if (!r.error) {
-      catalogs.activities = (r.data || []).map((a) => ({
-        id: a.id,
-        nombre: a.name,
-        active: a.active,
-      }));
-    }
+    if (!r.error) catalogs.activities = (r.data || []).map((a) => ({ id: a.id, nombre: a.name, active: a.active }));
   } catch {}
 
   return catalogs;
 }
 
 /* =========================
-   Normalización IDs (CRÍTICO)
+   Resolver geocerca_id legacy
 ========================= */
 
-/**
- * Tabla asignaciones en tu DB exige:
- * - geocerca_id NOT NULL
- *
- * Por compat:
- * - la UI puede mandar geofence_id (id de geofences)
- * - la UI puede mandar geocerca_id (legacy)
- *
- * Política segura:
- * - nunca nullificamos geocerca_id
- * - si viene geofence_id y no viene geocerca_id => geocerca_id = geofence_id
- *   (porque la columna NOT NULL requiere un id; en tu modelo actual, el selector de geocerca usa geofences)
- */
-function normalizeIds(payload) {
+async function resolveLegacyGeocercaId(sbDb, orgId, payload) {
   const p = payload && typeof payload === "object" ? payload : {};
 
-  // aceptar camelCase
+  // camelCase compat
   if (p.geofenceId && !p.geofence_id) p.geofence_id = p.geofenceId;
   if (p.geocercaId && !p.geocerca_id) p.geocerca_id = p.geocercaId;
 
-  // si solo viene geofence_id, úsalo para llenar geocerca_id (NOT NULL)
-  if (!p.geocerca_id && p.geofence_id) {
-    p.geocerca_id = p.geofence_id;
+  // Si ya viene geocerca_id, lo dejamos (pero lo validamos)
+  if (p.geocerca_id) {
+    const r = await sbDb.from("geocercas").select("id").eq("id", p.geocerca_id).maybeSingle();
+    if (!r.error && r.data?.id) return String(p.geocerca_id);
+    throw new Error("geocerca_id no existe en geocercas (FK).");
   }
 
-  return p;
+  // Si viene geofence_id, mapear a source_geocerca_id
+  if (p.geofence_id) {
+    const r = await sbDb
+      .from("geofences")
+      .select("id,org_id,source_geocerca_id")
+      .eq("org_id", orgId)
+      .eq("id", p.geofence_id)
+      .maybeSingle();
+
+    if (r.error) throw new Error(r.error.message || "No se pudo leer geofences.");
+    if (!r.data?.id) throw new Error("geofence_id no existe.");
+    if (!r.data?.source_geocerca_id)
+      throw new Error("Este geofence no tiene source_geocerca_id. Falta vincularlo a geocercas (legacy).");
+
+    // validar que exista en geocercas
+    const r2 = await sbDb.from("geocercas").select("id").eq("id", r.data.source_geocerca_id).maybeSingle();
+    if (r2.error || !r2.data?.id) throw new Error("source_geocerca_id no existe en geocercas (FK).");
+
+    return String(r.data.source_geocerca_id);
+  }
+
+  throw new Error("Falta geofence_id o geocerca_id.");
 }
 
 /* =========================
@@ -289,7 +272,6 @@ export default async function handler(req, res) {
 
     // GET bundle/list
     if (req.method === "GET" && (action === "bundle" || action === "list")) {
-      let asignaciones = [];
       const r = await sbDb
         .from("asignaciones")
         .select(
@@ -301,54 +283,65 @@ export default async function handler(req, res) {
         .limit(500);
 
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
-      asignaciones = r.data || [];
 
-      if (action === "list") return ok(res, { ok: true, data: asignaciones, asignaciones });
+      if (action === "list") return ok(res, { ok: true, data: r.data || [] });
 
       const catalogs = await loadCatalogs(sbDb, orgId);
-      return ok(res, { ok: true, data: { asignaciones, catalogs } });
+      return ok(res, { ok: true, data: { asignaciones: r.data || [], catalogs } });
     }
 
     // POST create
     if (req.method === "POST") {
-      const payload0 = await readBody(req);
-      const payload = normalizeIds(payload0 || {});
+      const body = await readBody(req);
+      if (!body?.personal_id) return send(res, 400, { ok: false, error: "personal_id is required" });
 
-      if (!payload.personal_id) return send(res, 400, { ok: false, error: "personal_id is required" });
-      if (!payload.geocerca_id)
-        return send(res, 400, { ok: false, error: "geocerca_id is required (NOT NULL)" });
+      let geocerca_id;
+      try {
+        geocerca_id = await resolveLegacyGeocercaId(sbDb, orgId, body);
+      } catch (e) {
+        return send(res, 400, { ok: false, error: "Invalid geofence/geocerca", details: String(e?.message || e) });
+      }
 
-      // enforce org_id
-      payload.org_id = orgId;
+      const row = {
+        ...body,
+        org_id: orgId,
+        geocerca_id, // ✅ FK legacy
+      };
 
-      // blindaje: no aceptar is_deleted desde cliente
-      delete payload.is_deleted;
+      // si quieres guardar también geofence_id (si existe la columna), lo dejamos si viene
+      // pero nunca lo inventamos
+      delete row.is_deleted;
 
-      stripUndefined(payload);
+      stripUndefined(row);
 
-      const r = await sbDb.from("asignaciones").insert(payload).select("*").single();
+      const r = await sbDb.from("asignaciones").insert(row).select("*").single();
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
 
-      // ✅ compat con cliente: responde en data
-      return ok(res, { ok: true, data: r.data, item: r.data });
+      return ok(res, { ok: true, data: r.data });
     }
 
-    // PATCH update (cliente manda { id, patch })
+    // PATCH update (cliente manda {id, patch})
     if (req.method === "PATCH") {
       const body = await readBody(req);
-      const id = String(body?.id || q.id || "");
+      const id = String(body?.id || "");
       const patch0 = body?.patch && typeof body.patch === "object" ? body.patch : body;
 
       if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
-      const patch = normalizeIds({ ...(patch0 || {}) });
+      const patch = { ...(patch0 || {}) };
       delete patch.id;
       delete patch.patch;
 
-      // enforce org_id
-      patch.org_id = orgId;
+      // si intentan cambiar geofence/geocerca, resolver otra vez
+      if (patch.geofence_id || patch.geocerca_id || patch.geofenceId || patch.geocercaId) {
+        try {
+          patch.geocerca_id = await resolveLegacyGeocercaId(sbDb, orgId, patch);
+        } catch (e) {
+          return send(res, 400, { ok: false, error: "Invalid geofence/geocerca", details: String(e?.message || e) });
+        }
+      }
 
-      // no permitir soft-delete desde patch (solo DELETE)
+      patch.org_id = orgId;
       delete patch.is_deleted;
 
       stripUndefined(patch);
@@ -356,13 +349,13 @@ export default async function handler(req, res) {
       const r = await sbDb.from("asignaciones").update(patch).eq("id", id).eq("org_id", orgId).select("*").single();
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
 
-      return ok(res, { ok: true, data: r.data, item: r.data });
+      return ok(res, { ok: true, data: r.data });
     }
 
-    // DELETE (cliente manda { id }) → soft delete (is_deleted=true)
+    // DELETE soft
     if (req.method === "DELETE") {
       const body = await readBody(req);
-      const id = String(body?.id || q.id || "");
+      const id = String(body?.id || "");
       if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
       const r = await sbDb
@@ -375,7 +368,7 @@ export default async function handler(req, res) {
 
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
 
-      return ok(res, { ok: true, data: r.data, item: r.data });
+      return ok(res, { ok: true, data: r.data });
     }
 
     return send(res, 405, { ok: false, error: "Method not allowed", method: req.method });
