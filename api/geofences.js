@@ -99,6 +99,9 @@ function stripServerOwned(payload) {
   const p = payload && typeof payload === "object" ? payload : {};
   const out = { ...p };
 
+  // 🔒 no permitir que se cuele en row
+  delete out.action;
+
   // server-owned / generated / audit (no enviar)
   delete out.bbox;
   delete out.geom;
@@ -284,26 +287,18 @@ export default async function handler(req, res) {
         const onlyActive = normalizeBoolFlag(q.onlyActive, true);
         const limit = Math.min(Number(q.limit || 2000), 2000);
 
-        // Nota: no filtramos por columnas "active/is_active/deleted_at" porque varían.
-        // Se filtra en el frontend con heurística (universal).
-        const { data, error } = await sbDb
-          .from("geofences")
-          .select("*")
-          .eq("org_id", org_id)
-          .limit(limit);
+        const { data, error } = await sbDb.from("geofences").select("*").eq("org_id", org_id).limit(limit);
 
         if (error) return ok(res, { ok: false, items: [], error: "Supabase error", details: error.message });
 
         const items = Array.isArray(data) ? data : [];
         if (!onlyActive) return ok(res, { ok: true, items });
 
-        // Filtro universal: si existe deleted_at => excluir no-null
-        // si existe active/is_active => exigir true
         const filtered = items.filter((row) => {
           const j = row || {};
           const deletedAt = j.deleted_at ?? null;
           if (deletedAt) return false;
-          const a = (j.is_active ?? j.active);
+          const a = j.is_active ?? j.active;
           if (typeof a === "boolean") return a === true;
           return true;
         });
@@ -333,16 +328,19 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const rawPayload = await readBody(req);
       const payload = stripServerOwned(rawPayload);
-      const action = String(payload?.action || "upsert").toLowerCase();
+      const action = String(rawPayload?.action || payload?.action || "upsert").toLowerCase();
 
       if (!requireWriteRole(ctx.role)) {
         return send(res, 403, { ok: false, error: "Forbidden", details: "Requires owner/admin role" });
       }
 
       if (action === "upsert") {
-        const item = payload?.item && typeof payload.item === "object" ? payload.item : payload;
+        const item0 = payload?.item && typeof payload.item === "object" ? payload.item : payload;
 
-        // Campos mínimos esperados
+        // 🔒 blindaje extra: por si "action" venía dentro de item
+        const item = { ...item0 };
+        delete item.action;
+
         const name = item?.name ?? item?.nombre ?? null;
 
         const row = {
@@ -354,13 +352,12 @@ export default async function handler(req, res) {
           updated_by: user_id,
         };
 
-        // NO permitimos setear source_geocerca_id desde UI (server-owned bridge)
         delete row.source_geocerca_id;
 
-        // Insert vs Update manual (sin ON CONFLICT)
         if (row.id) {
           const id = String(row.id);
           delete row.id;
+
           const { data, error } = await sbDb
             .from("geofences")
             .update(row)
@@ -384,12 +381,7 @@ export default async function handler(req, res) {
         const id = payload?.id ? String(payload.id) : null;
         if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
-        const { data, error } = await sbDb
-          .from("geofences")
-          .delete()
-          .eq("org_id", org_id)
-          .eq("id", id)
-          .select("*");
+        const { data, error } = await sbDb.from("geofences").delete().eq("org_id", org_id).eq("id", id).select("*");
 
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
