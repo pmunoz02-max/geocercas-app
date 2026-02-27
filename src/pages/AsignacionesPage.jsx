@@ -45,11 +45,46 @@ async function fetchJsonSafe(url) {
   const txt = await res.text();
   let payload = null;
   try { payload = txt ? JSON.parse(txt) : null; } catch { payload = null; }
-  if (!res.ok || payload?.ok === false) {
-    const msg = payload?.error || payload?.message || `HTTP ${res.status}`;
-    return { data: null, error: { message: msg } };
+
+  // common shapes:
+  // - { ok:true, data:[...] }
+  // - { ok:true, data:{...} }
+  // - [...]
+  if (!res.ok) return { data: null, error: { message: `HTTP ${res.status}` } };
+  if (payload && typeof payload === "object" && payload.ok === false) {
+    return { data: null, error: { message: payload.error || payload.message || "API error" } };
   }
-  return { data: payload?.data ?? payload ?? null, error: null };
+  const data = (payload && typeof payload === "object" && "data" in payload) ? payload.data : payload;
+  return { data, error: null };
+}
+
+function normalizePersonRow(p) {
+  if (!p || typeof p !== "object") return null;
+  const id = p.id || p.personal_id || p.org_people_id || p.user_id;
+  if (!id) return null;
+
+  const full =
+    p.full_name ||
+    p.display_name ||
+    p.nombre_completo ||
+    p.name ||
+    p.nombre;
+
+  let nombre = p.nombre || p.first_name || p.nombres || "";
+  let apellido = p.apellido || p.last_name || p.apellidos || "";
+
+  if ((!nombre || !apellido) && full && typeof full === "string") {
+    const parts = full.trim().split(/\s+/);
+    if (!nombre && parts.length) nombre = parts[0];
+    if (!apellido && parts.length > 1) apellido = parts.slice(1).join(" ");
+  }
+
+  return {
+    id: String(id),
+    nombre: String(nombre || ""),
+    apellido: String(apellido || ""),
+    email: p.email || p.correo || "",
+  };
 }
 
 export default function AsignacionesPage() {
@@ -87,72 +122,51 @@ export default function AsignacionesPage() {
     setLoading(true);
     setError(null);
 
-    const { data, error } = await getAsignacionesBundle();
-    if (error) {
-      console.error("[AsignacionesPage] bundle error:", error);
-      setError(
-        error.message ||
-          t("asignaciones.messages.loadError", {
-            defaultValue: "Error loading assignments.",
-          })
-      );
-      setAsignaciones([]);
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setActivityOptions([]);
-      setLoading(false);
-      return;
+    // 1) Bundle (asignaciones + catalogs) - NO bloquear UI si falla
+    let bundleRows = [];
+    let bundleCatalogs = {};
+    try {
+      const { data, error } = await getAsignacionesBundle();
+      if (!error) {
+        const bundle = data || {};
+        bundleRows = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
+        bundleCatalogs = bundle.catalogs || {};
+      } else {
+        console.error("[AsignacionesPage] bundle error:", error);
+      }
+    } catch (e) {
+      console.error("[AsignacionesPage] bundle exception:", e);
     }
+    setAsignaciones(bundleRows);
 
-    const bundle = data || {};
-    const rows = bundle.asignaciones || [];
-    const catalogs = bundle.catalogs || {};
-
-    setAsignaciones(Array.isArray(rows) ? rows : []);
-
-    const personal = Array.isArray(catalogs.personal) ? catalogs.personal : [];
-    const fallback = Array.isArray(catalogs.people) ? catalogs.people : [];
-
-    // Fallback táctico (nuevo): si el bundle no trae catálogos, los cargamos desde APIs canónicas
-    // - Personal: /api/personal
-    // - Geocercas: /api/geofences (mismas que /geocerca)
-    let personalFromApi = [];
-    if (personal.length === 0 && fallback.length === 0) {
-      const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
-      if (!rP.error && Array.isArray(rP.data)) personalFromApi = rP.data;
-    }
-
-    let geofencesFromApi = [];
-    if (!Array.isArray(catalogs.geocercas) || catalogs.geocercas.length === 0) {
-      const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
-      if (!rG.error && Array.isArray(rG.data)) geofencesFromApi = rG.data;
-    }
-
-    const normalizedPersonal =
-      personal.length > 0
-        ? personal
-        : personalFromApi.length > 0
-        ? personalFromApi
-        : fallback.map((p) => ({
-            id: p.org_people_id,
-            nombre: p.nombre,
-            apellido: p.apellido,
-            email: p.email,
-          }));
-
+    // 2) Personal: SIEMPRE desde /api/personal (fuente canónica para dropdown)
+    const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
+    const personalArr = Array.isArray(rP.data) ? rP.data : Array.isArray(rP.data?.personal) ? rP.data.personal : [];
+    const normalizedPersonal = personalArr.map(normalizePersonRow).filter(Boolean);
     setPersonalOptions(normalizedPersonal);
-    const geoOpts = Array.isArray(catalogs.geocercas) && catalogs.geocercas.length > 0
-      ? catalogs.geocercas
-      : geofencesFromApi.map((g) => ({ id: g.id, nombre: g.name || g.nombre || "" }));
-    setGeocercaOptions(geoOpts);
-    setActivityOptions(Array.isArray(catalogs.activities) ? catalogs.activities : []);
 
-    if (!selectedActivityId && Array.isArray(catalogs.activities) && catalogs.activities.length === 1) {
-      setSelectedActivityId(catalogs.activities[0].id);
+    // 3) Geocercas: SIEMPRE desde /api/geofences (mismas que /geocerca)
+    const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
+    const geoArr = Array.isArray(rG.data) ? rG.data : Array.isArray(rG.data?.geofences) ? rG.data.geofences : [];
+    const geoOpts = geoArr.map((g) => ({
+      id: g.id,
+      nombre: g.name || g.nombre || "",
+      active: g.active,
+      is_default: g.is_default,
+    }));
+    setGeocercaOptions(geoOpts);
+
+    // 4) Activities: usar bundle si viene (si no, vacío)
+    setActivityOptions(Array.isArray(bundleCatalogs.activities) ? bundleCatalogs.activities : []);
+
+    // default activity (si existe)
+    if (!selectedActivityId && Array.isArray(bundleCatalogs.activities) && bundleCatalogs.activities.length > 0) {
+      setSelectedActivityId(bundleCatalogs.activities[0].id);
     }
 
     setLoading(false);
   }
+
 
   useEffect(() => {
     if (!ready || !orgId) return;
