@@ -85,7 +85,12 @@ function centroidFeatureFromGeojson(fc) {
     const bounds = layer.getBounds();
     if (!bounds?.isValid?.()) return null;
     const c = bounds.getCenter();
-    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [c.lng, c.lat] } }] };
+    return {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [c.lng, c.lat] } },
+      ],
+    };
   } catch {
     return null;
   }
@@ -207,9 +212,9 @@ export default function NuevaGeocerca() {
   const refreshGeofenceList = useCallback(async () => {
     const orgId = currentOrg?.id || null;
     if (!orgId) return;
+
     const items = await listGeofences({ orgId, onlyActive: true, limit: 500 });
 
-    // Normalizamos nombre: name (preferido) y fallback legacy
     const normalized = (items || [])
       .map((x) => ({
         ...x,
@@ -335,8 +340,7 @@ export default function NuevaGeocerca() {
         fc = { type: "FeatureCollection", features: [draftFeature] };
       } else {
         const map = mapRef.current;
-        const layerToSave =
-          selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
+        const layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
 
         if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
           showErr(
@@ -367,8 +371,7 @@ export default function NuevaGeocerca() {
         return unique;
       });
 
-      // ✅ Insert/Update en geofences
-      // IMPORTANT:
+      // Guardar en geofences:
       // - polygon_geojson obligatorio
       // - radius_m NOT NULL (aunque sea polígono)
       await upsertGeofence({
@@ -389,7 +392,10 @@ export default function NuevaGeocerca() {
       setGeofenceName("");
       showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
     } catch (e) {
-      showErr(t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca. Intenta nuevamente." }), e);
+      showErr(
+        t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca. Intenta nuevamente." }),
+        e
+      );
       try {
         await refreshGeofenceList();
       } catch {}
@@ -402,16 +408,13 @@ export default function NuevaGeocerca() {
       return;
     }
 
-    const confirmed = window.confirm(
-      t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
-    );
+    const confirmed = window.confirm(t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" }));
     if (!confirmed) return;
 
     const orgId = currentOrg?.id || null;
     const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
 
     try {
-      // Borrado: por id (en geofences no tenemos bulk por nombres acá)
       for (const nm of names) {
         const row = geofenceList.find((g) => String(g.name) === nm);
         const id = row?.id;
@@ -461,7 +464,6 @@ export default function NuevaGeocerca() {
         if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
         const row = await getGeofence({ id: item.id, orgId });
 
-        // preferimos polygon_geojson; fallback si tu tabla tiene geometry/geojson
         const geo = normalizeGeojson(row?.polygon_geojson || row?.geojson || row?.geometry);
         if (geo) geos.push(geo);
       }
@@ -491,7 +493,8 @@ export default function NuevaGeocerca() {
 
   const pointStyle = useMemo(
     () => ({
-      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
+      pointToLayer: (_feature, latlng) =>
+        L.circleMarker(latlng, { radius: 4, weight: 1, opacity: 1, fillOpacity: 0.8 }),
     }),
     []
   );
@@ -578,7 +581,9 @@ export default function NuevaGeocerca() {
           <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle")}</h2>
 
           <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
-            {geofenceList.length === 0 && <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>}
+            {geofenceList.length === 0 && (
+              <div className="text-xs text-slate-400">{t("geocercas.noGeofences")}</div>
+            )}
 
             {geofenceList.map((g) => (
               <label
@@ -609,7 +614,9 @@ export default function NuevaGeocerca() {
               className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
               type="button"
             >
-              {showLoading ? t("common.actions.loading", { defaultValue: "Cargando..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
+              {showLoading
+                ? t("common.actions.loading", { defaultValue: "Cargando..." })
+                : t("geocercas.buttonShowOnMap", { defaultValue: "Mostrar en mapa" })}
             </button>
 
             <button
@@ -676,7 +683,9 @@ export default function NuevaGeocerca() {
                     <GeoJSON
                       key={`view-marker-${viewId}`}
                       data={viewCentroid}
-                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                      pointToLayer={(_f, latlng) =>
+                        L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })
+                      }
                     />
                   )}
                 </>
@@ -749,7 +758,9 @@ export default function NuevaGeocerca() {
             </h2>
 
             <p className="text-xs text-slate-400">
-              {t("geocercas.modalHintRule", { defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono" })}
+              {t("geocercas.modalHintRule", {
+                defaultValue: "1 punto = cuadrado pequeño | 2 puntos = rectángulo | 3+ = polígono",
+              })}
               <br />
               {t("geocercas.modalInstruction", { defaultValue: "Formato:" })}{" "}
               <span className="font-mono text-[11px]">lat,lng</span>{" "}

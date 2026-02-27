@@ -1,6 +1,6 @@
 // src/lib/geofencesApi.js
 // API-first (server-owned) - Geofences v1 ctx-org
-// Blindaje: NUNCA enviar columnas computadas / generated (ej: bbox, geom)
+// Blindaje: NUNCA enviar columnas computadas / generated (bbox, geom, audit)
 
 function getJsonHeaders(extra = {}) {
   return {
@@ -39,24 +39,25 @@ async function requestJson(url, { method = "GET", body = null, headers = {} } = 
   return data;
 }
 
-/**
- * Columnas que NO se deben enviar nunca porque son server-owned / generated
- * (bbox/geom/created_at/etc)
- */
 const STRIP_FIELDS = new Set([
+  // generated/computed
   "bbox",
   "geom",
+  // audit
   "created_at",
   "updated_at",
   "deleted_at",
   "revoked_at",
   "created_by",
   "updated_by",
+  // tenancy/ownership (server ctx)
   "org_id",
   "tenant_id",
   "user_id",
   "owner_id",
   "usuario_id",
+  // bridge (server-owned)
+  "source_geocerca_id",
 ]);
 
 function stripComputedFields(obj) {
@@ -95,7 +96,7 @@ export async function upsertGeofence(payload = {}) {
     body: { action: "upsert", ...clean },
   });
 
-  // tu API devuelve items[], aquí devolvemos el primero
+  // api/geofences.js retorna item (y también items[])
   if (data?.item) return data.item;
   if (Array.isArray(data?.items) && data.items.length) return data.items[0];
   return null;
