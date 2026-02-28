@@ -4,15 +4,15 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * Supabase client — FRONTEND (Vite)
  * Arquitectura universal (Preview/Prod):
- * - Preview debe apuntar SIEMPRE a Supabase Preview
- * - Producción debe apuntar SIEMPRE a Supabase Prod
+ * - Preview -> Supabase Preview
+ * - Prod    -> Supabase Prod
  *
  * ✅ PKCE para Magic Links (móvil/WebView)
  *
- * v8: Eliminación TOTAL de VITE_SUPABASE_PROJECT_REF (legacy) para evitar mezclas de JWT.
+ * FIX 2026-02-28:
+ * - BUILD_MARKER dinámico (no "PREVIEW" hardcode)
+ * - Export debug en window.__TG_SUPABASE_INFO__ para inspección rápida
  */
-
-const BUILD_MARKER = "BUILD_MARKER_PREVIEW_20260226_SUPABASE_ENV_V8";
 
 function normUrl(u) {
   return String(u || "")
@@ -44,40 +44,25 @@ function normRef(r) {
 
 /**
  * Determina el "tipo de entorno" por hostname (fuente de verdad).
- * Esto evita depender de import.meta.env.PROD (que puede ser true en preview).
  */
 function detectEnvKind() {
   if (typeof window === "undefined") return "unknown";
   const h = String(window.location.hostname || "").toLowerCase();
 
-  // ✅ Canon: preview.tugeocercas.com
   if (h === "preview.tugeocercas.com" || h.startsWith("preview.")) return "preview";
-
-  // Opcional: staging si lo usas
   if (h === "staging.tugeocercas.com" || h.startsWith("staging.")) return "staging";
-
-  // ✅ Canon prod: app.tugeocercas.com
   if (h === "app.tugeocercas.com" || h === "tugeocercas.com") return "production";
-
-  // vercel.app: normalmente preview
   if (h.endsWith(".vercel.app")) return "preview";
 
   return "unknown";
 }
 
-/**
- * Refs esperados por entorno:
- * - Preferimos variables explícitas por entorno (recomendado)
- * - Si no están, caemos a defaults del proyecto (permanece estable)
- * - En "unknown": NO inventamos ref ni leemos legacy; usamos el ref inferido de SUPABASE_URL.
- */
 function expectedRefByHostname(currentRef) {
   const envKind = detectEnvKind();
 
   const fromEnvPreview = normRef(import.meta.env.VITE_SUPABASE_PREVIEW_PROJECT_REF);
   const fromEnvProd = normRef(import.meta.env.VITE_SUPABASE_PROD_PROJECT_REF);
 
-  // Defaults estables del proyecto
   const DEFAULT_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
   const DEFAULT_PROD_REF = "wpaixkvokdkudymgjoua";
 
@@ -88,7 +73,6 @@ function expectedRefByHostname(currentRef) {
     return fromEnvProd || DEFAULT_PROD_REF;
   }
 
-  // unknown: no bloquear por no saber el entorno; validamos solo si la URL es supabase válida.
   return currentRef || "";
 }
 
@@ -110,47 +94,42 @@ const currentRef = projectRefFromUrl(SUPABASE_URL);
 const envKind = detectEnvKind();
 const EXPECTED_PROJECT_REF = expectedRefByHostname(currentRef);
 
+const BUILD_MARKER = `BUILD_MARKER_${envKind.toUpperCase()}_${import.meta.env.MODE}_${currentRef || "NOREF"}`;
+
 /**
- * Política de seguridad anti-mezcla:
- * - En preview/staging: si apunta a PROD => BLOQUEAR
- * - En prod: si apunta a PREVIEW => BLOQUEAR
- * - En unknown: no bloqueamos por ambiente, pero exigimos coherencia básica (URL válida => ref presente)
+ * Política anti-mezcla:
+ * - preview/staging: si apunta a PROD => BLOQUEAR
+ * - production: si apunta a PREVIEW => BLOQUEAR
  */
 function assertRefSafety() {
   if (!currentRef) {
     throw new Error("[supabaseClient] No se pudo inferir project_ref desde VITE_SUPABASE_URL.");
   }
 
-  // Si no hay expected (caso raro), no hacemos comparación estricta.
   if (!EXPECTED_PROJECT_REF) return;
 
   if (currentRef !== EXPECTED_PROJECT_REF) {
-    // Preview/staging: bloquear si no coincide (evita mezclar con prod)
     if (envKind === "preview" || envKind === "staging") {
       throw new Error(
-        `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`,
+        `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
       );
     }
 
-    // Production: bloquear siempre
     if (envKind === "production") {
       throw new Error(
-        `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`,
+        `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
       );
     }
 
-    // unknown: comportamiento seguro pero no destructivo
-    // (no sabemos si es preview/prod, así que no forzamos bloqueo por mismatch)
     console.warn(
-      `[supabaseClient] [unknown env] URL ref=${currentRef} no coincide con expected=${EXPECTED_PROJECT_REF}. ` +
-        `Revisa VITE_SUPABASE_URL / VITE_SUPABASE_PREVIEW_PROJECT_REF / VITE_SUPABASE_PROD_PROJECT_REF.`,
+      `[supabaseClient] [unknown env] ref=${currentRef} != expected=${EXPECTED_PROJECT_REF}. Revisa VITE_SUPABASE_URL/REFs.`
     );
   }
 }
 
 assertRefSafety();
 
-// ✅ Token en memoria (para adjuntar Bearer al backend si hace falta)
+// ✅ Token en memoria (para adjuntar Bearer si hace falta)
 let __memoryAccessToken = null;
 
 export function setMemoryAccessToken(token) {
@@ -170,7 +149,6 @@ function toHeaders(h) {
 const wrappedFetch = async (url, options = {}) => {
   const headers = toHeaders(options.headers);
 
-  // ✅ Adjunta Bearer desde memoria si no existe Authorization
   if (__memoryAccessToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${__memoryAccessToken}`);
   }
@@ -227,6 +205,7 @@ if (typeof window !== "undefined") {
     SOURCE: "src/lib/supabaseClient.js",
   };
 
+  window.__TG_SUPABASE_INFO__ = info; // ✅ para inspección rápida
   window.__TG_BUILD_MARKERS__ = window.__TG_BUILD_MARKERS__ || [];
   window.__TG_BUILD_MARKERS__.push({
     marker: BUILD_MARKER,
@@ -236,10 +215,9 @@ if (typeof window !== "undefined") {
 
   if (!window.__TG_SUPABASE_ENV_LOGGED__) {
     window.__TG_SUPABASE_ENV_LOGGED__ = true;
-    console.info(`[${BUILD_MARKER}] [ENV CHECK v8 - NO LEGACY PROJECT_REF]`, info);
+    console.info(`[${BUILD_MARKER}] [ENV CHECK]`, info);
     console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
-  // debug: útil en preview
   window.__supabase__ = supabase;
 }

@@ -14,10 +14,15 @@ import React, {
  * Fuente: /api/auth/session (cookie HttpOnly tg_at)
  * Multi-tenant safe
  * Reset-password safe
+ *
+ * FIX 2026-02-28:
+ * - Evitar contaminación de org global por roles tracker (multi-rol owner+tracker)
+ * - localStorage tg_current_org_id solo aplica a orgs NO-tracker
  */
 
 const AuthContext = createContext(null);
 
+// Key legacy (se mantiene por compatibilidad)
 const LS_ORG_KEY = "tg_current_org_id";
 
 /* =========================
@@ -49,6 +54,12 @@ function isPublicAuthPath(pathname) {
   if (p === "/tracker-gps" || p.startsWith("/tracker-gps")) return true;
 
   return false;
+}
+
+function isTrackerUiPath(pathname) {
+  const p = String(pathname || "/").toLowerCase();
+  // Ajusta si tu ruta real de dashboard tracker es otra
+  return p === "/tracker" || p.startsWith("/tracker");
 }
 
 async function fetchJson(url, opts = {}) {
@@ -127,6 +138,28 @@ function extractOrganizations(data) {
     .filter(Boolean);
 }
 
+function isNonTrackerRole(role) {
+  const r = normalizeRole(role);
+  return r && r !== "tracker";
+}
+
+/**
+ * Decide si un orgId guardado en localStorage es aceptable como "org global".
+ * Regla universal: NO permitimos que el org global quede en una org donde el rol sea tracker.
+ */
+function sanitizePreferredOrgId(preferredOrgId, orgs) {
+  if (!preferredOrgId) return null;
+  if (!Array.isArray(orgs) || orgs.length === 0) return preferredOrgId;
+
+  const found = orgs.find((o) => o?.id === preferredOrgId);
+  if (!found) return null;
+
+  // Si el rol es tracker, NO lo usamos como org global
+  if (!isNonTrackerRole(found?.role)) return null;
+
+  return found.id;
+}
+
 /* =========================
    PROVIDER
 ========================= */
@@ -175,77 +208,108 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("popstate", onNav);
   }, []);
 
+  /**
+   * selectOrg = selección explícita del usuario desde selector de org.
+   * Regla universal: solo persistimos como "org global" si NO es tracker.
+   */
   const selectOrg = useCallback(
     (orgIdToSelect) => {
       if (!orgIdToSelect) return;
 
-      try {
-        localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
-      } catch {}
-
       const found = organizations.find((o) => o?.id === orgIdToSelect);
 
+      // Siempre actualiza el estado
       setCurrentOrg(found || { id: orgIdToSelect });
 
       setOrganizations((prev) => {
         if (prev.some((o) => o?.id === orgIdToSelect)) return prev;
         return [{ id: orgIdToSelect }, ...prev];
       });
+
+      // Persistencia SOLO si no es tracker
+      if (isNonTrackerRole(found?.role)) {
+        try {
+          localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
+        } catch {}
+      }
     },
     [organizations]
   );
 
-  const applySessionData = useCallback((data) => {
-    setUser(data?.user ?? null);
-    setIsAppRoot(Boolean(data?.is_app_root ?? data?.isAppRoot ?? false));
+  /**
+   * Aplica session data sin contaminar org global por tracker.
+   */
+  const applySessionData = useCallback(
+    (data) => {
+      setUser(data?.user ?? null);
+      setIsAppRoot(Boolean(data?.is_app_root ?? data?.isAppRoot ?? false));
 
-    const serverOrgId = extractServerOrgId(data);
-    const orgs = extractOrganizations(data);
+      const serverOrgId = extractServerOrgId(data);
+      const orgs = extractOrganizations(data);
 
-    let preferredOrgId = null;
-    try {
-      preferredOrgId = localStorage.getItem(LS_ORG_KEY);
-    } catch {}
+      // Lee preferencia (legacy), pero la sanitiza contra orgs/roles
+      let preferredOrgId = null;
+      try {
+        preferredOrgId = localStorage.getItem(LS_ORG_KEY);
+      } catch {}
 
-    const finalOrgId = preferredOrgId || serverOrgId || null;
+      // Si estamos en UI tracker, NO forzamos org global desde LS.
+      // (El dashboard tracker resuelve su org por su RPC y debe ser local.)
+      const allowPreferred =
+        !isTrackerUiPath(path);
 
-    if (orgs.length > 0) {
-      setOrganizations(orgs);
+      const safePreferredOrgId =
+        allowPreferred ? sanitizePreferredOrgId(preferredOrgId, orgs) : null;
 
-      const pickedId =
-        (finalOrgId && orgs.find((o) => o?.id === finalOrgId)?.id) ||
-        orgs[0]?.id ||
-        null;
+      // Org final global: preferencia segura (no tracker) > serverOrgId > null
+      const finalOrgId = safePreferredOrgId || serverOrgId || null;
 
-      const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
+      if (orgs.length > 0) {
+        setOrganizations(orgs);
 
-      setCurrentOrg(orgObj || null);
+        // pickedId: si finalOrgId existe y es parte de orgs => úsalo; si no, usa el primer org NO-tracker si existe
+        let pickedId =
+          (finalOrgId && orgs.find((o) => o?.id === finalOrgId)?.id) || null;
 
-      if (pickedId) {
-        try {
-          localStorage.setItem(LS_ORG_KEY, pickedId);
-        } catch {}
+        if (!pickedId) {
+          const firstNonTracker = orgs.find((o) => isNonTrackerRole(o?.role));
+          pickedId = firstNonTracker?.id || orgs[0]?.id || null;
+        }
+
+        const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
+
+        setCurrentOrg(orgObj || null);
+
+        // Persistir SOLO si NO tracker y NO estamos en UI tracker
+        if (pickedId && isNonTrackerRole(orgObj?.role) && !isTrackerUiPath(path)) {
+          try {
+            localStorage.setItem(LS_ORG_KEY, pickedId);
+          } catch {}
+        }
+
+        setCurrentRole(extractServerRole(data) || normalizeRole(orgObj?.role));
+
+        return;
       }
 
-      setCurrentRole(extractServerRole(data) || normalizeRole(orgObj?.role));
+      // Sin orgs list: solo setea si hay finalOrgId
+      if (finalOrgId) {
+        setOrganizations([{ id: finalOrgId }]);
+        setCurrentOrg({ id: finalOrgId });
+      } else {
+        setOrganizations([]);
+        setCurrentOrg(null);
+      }
 
-      return;
-    }
-
-    if (finalOrgId) {
-      setOrganizations([{ id: finalOrgId }]);
-      setCurrentOrg({ id: finalOrgId });
-    } else {
-      setOrganizations([]);
-      setCurrentOrg(null);
-    }
-
-    setCurrentRole(extractServerRole(data));
-  }, []);
+      setCurrentRole(extractServerRole(data));
+    },
+    [path]
+  );
 
   const applyEnsureContext = useCallback((payload) => {
     const org_id = payload?.data?.org_id ?? payload?.org_id ?? null;
     const roleRaw = payload?.data?.role ?? payload?.role ?? null;
+    const roleNorm = normalizeRole(roleRaw);
 
     if (org_id) {
       setCurrentOrg({ id: org_id });
@@ -254,15 +318,18 @@ export function AuthProvider({ children }) {
         return [{ id: org_id }, ...prev];
       });
 
-      try {
-        localStorage.setItem(LS_ORG_KEY, org_id);
-      } catch {}
+      // Persistencia SOLO si NO tracker y NO estamos en UI tracker
+      if (isNonTrackerRole(roleNorm) && !isTrackerUiPath(path)) {
+        try {
+          localStorage.setItem(LS_ORG_KEY, org_id);
+        } catch {}
+      }
     }
 
     if (roleRaw) {
-      setCurrentRole(normalizeRole(roleRaw));
+      setCurrentRole(roleNorm);
     }
-  }, []);
+  }, [path]);
 
   const bootstrap = useCallback(async () => {
     if (isPublicAuthPath(path)) {
@@ -409,8 +476,7 @@ const SAFE_FALLBACK = {
   logout: async () => {},
 };
 
-// 🔥 CAMBIO UNIVERSAL:
-// NO tiramos throw (evita pantalla negra). Logueamos fingerprint para detectar duplicación.
+// 🔥 NO throw, evita pantalla negra
 export function useAuth() {
   const ctx = useContext(AuthContext);
 
@@ -419,7 +485,8 @@ export function useAuth() {
       // eslint-disable-next-line no-console
       console.error("[AUTHCTX] useAuth() without provider!", {
         instance: AUTH_CTX_INSTANCE_ID,
-        mountedProviderFor: typeof window !== "undefined" ? window.__TG_AUTH_PROVIDER_MOUNTED : null,
+        mountedProviderFor:
+          typeof window !== "undefined" ? window.__TG_AUTH_PROVIDER_MOUNTED : null,
         seenInstances: typeof window !== "undefined" ? window.__TG_AUTHCTX_IDS : null,
         path: typeof window !== "undefined" ? window.location?.pathname : null,
       });
