@@ -603,8 +603,6 @@ export default function TrackerDashboard() {
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
 
-    // Si hay asignaciones activas, filtrar por esas geocercas.
-    // Si NO hay asignaciones, mostrar SOLO la(s) geocerca(s) default (is_default=true).
     const assignedIds = Array.from(
       new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
     );
@@ -616,11 +614,8 @@ export default function TrackerDashboard() {
       .eq("active", true);
 
     if (assignedIds.length > 0) {
-      // Con asignaciones activas: solo las geocercas asignadas.
       q = q.in("id", assignedIds);
     } else {
-      // ✅ Sin asignaciones: mostramos TODAS las geocercas activas,
-      // pero preseleccionamos la(s) default para una vista inicial coherente.
       q = q.order("is_default", { ascending: false }).order("updated_at", { ascending: false }).order("created_at", { ascending: false });
     }
 
@@ -644,9 +639,6 @@ export default function TrackerDashboard() {
 
     let rows = Array.isArray(res.data) ? res.data : [];
 
-    // ✅ Universal fallback (permanent):
-    // If there are NO active assignments and there is NO default geofence for the org,
-    // pick ONE active geofence so the dashboard never stays empty.
     let pickedFallbackFirstActive = false;
     if (assignedIds.length === 0 && rows.length === 0) {
       const fb = await supabase
@@ -663,7 +655,6 @@ export default function TrackerDashboard() {
         pickedFallbackFirstActive = true;
       }
     }
-
 
     const normalized = rows
       .filter((r) => r.active === true)
@@ -685,14 +676,11 @@ export default function TrackerDashboard() {
 
     setGeofenceRows(normalized);
 
-    // ✅ Selección inicial:
-    // - Con asignaciones: por defecto mostramos todas las asignadas (selectedIds=[] => todas)
-    // - Sin asignaciones: preseleccionamos la(s) default (si existe), para que el mapa enfoque algo representativo.
     if (assignedIds.length === 0) {
       const defaultIds = normalized.filter((g) => g.is_default === true).map((g) => String(g.id));
       setSelectedGeofenceIds(defaultIds.length ? defaultIds : []);
     } else {
-      setSelectedGeofenceIds([]); // mostrar todas las asignadas
+      setSelectedGeofenceIds([]);
     }
 
     setDiag((d) => ({
@@ -733,6 +721,8 @@ export default function TrackerDashboard() {
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
+  // ✅ FIX UNIVERSAL: recorded_at puede venir NULL en PROD
+  // Filtramos por (recorded_at >= from) OR (recorded_at IS NULL AND created_at >= from)
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
@@ -762,13 +752,18 @@ export default function TrackerDashboard() {
         const selectCols =
           "id, org_id, user_id, personal_id, asignacion_id, lat, lng, accuracy, speed, heading, battery, is_mock, source, recorded_at, created_at";
 
+        // OR universal: recorded_at >= from OR (recorded_at is null AND created_at >= from)
+        const orTime =
+          `recorded_at.gte.${fromIso},and(recorded_at.is.null,created_at.gte.${fromIso})`;
+
         const queryTable = async (tableName) => {
           let q = supabase
             .from(tableName)
             .select(selectCols)
             .eq("org_id", currentOrgId)
-            .gte("recorded_at", fromIso)
-            .order("recorded_at", { ascending: false })
+            .or(orTime)
+            .order("recorded_at", { ascending: false, nullsFirst: false })
+            .order("created_at", { ascending: false })
             .limit(500);
 
           if (Array.isArray(targetIds) && targetIds.length) {
@@ -777,13 +772,12 @@ export default function TrackerDashboard() {
           return await q;
         };
 
-        // Prefer view/table tracker_positions if exists, but fallback to canonical public.positions.
         let tableUsed = "tracker_positions";
         let res = await queryTable("tracker_positions");
 
         const shouldFallback =
           !!res.error ||
-          (Array.isArray(res.data) && res.data.length === 0); // common when view is empty but positions has rows
+          (Array.isArray(res.data) && res.data.length === 0);
 
         if (shouldFallback) {
           const res2 = await queryTable("positions");
@@ -791,7 +785,6 @@ export default function TrackerDashboard() {
             tableUsed = "positions";
             res = res2;
           } else {
-            // Keep the most informative error
             const e1 = res.error?.message || String(res.error || "");
             const e2 = res2.error?.message || String(res2.error || "");
             res = { data: null, error: new Error(`tracker_positions: ${e1}; positions: ${e2}`) };
@@ -839,7 +832,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [supabase, assignmentTrackers, selectedTrackerId, timeWindowId]
+    [assignmentTrackers, selectedTrackerId, timeWindowId]
   );
 
   useEffect(() => {
@@ -936,6 +929,7 @@ export default function TrackerDashboard() {
               <Badge>polys: {diag.geofencePolys}</Badge>
               <Badge>circles: {diag.geofenceCircles}</Badge>
               <Badge>posiciones: {diag.positionsFound}</Badge>
+              {diag.positionsSource && <Badge>src: {diag.positionsSource}</Badge>}
             </div>
 
             {orgResolveError && (
