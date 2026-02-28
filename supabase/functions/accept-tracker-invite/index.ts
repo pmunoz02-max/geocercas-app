@@ -1,10 +1,53 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-function json(status: number, obj: unknown) {
+/**
+ * CORS universal + whitelist.
+ * - Siempre devolver headers CORS (éxito y error).
+ * - Soporta OPTIONS correctamente.
+ */
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+
+  // ✅ Ajusta aquí si quieres ser más estricto.
+  // Incluimos producción, previews de Vercel y localhost.
+  const allowlist = [
+    "https://app.tugeocercas.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ];
+
+  // Permitir previews de Vercel (*.vercel.app) y tu dominio preview si aplica.
+  const isVercelPreview =
+    origin.endsWith(".vercel.app") ||
+    origin.includes("vercel.app");
+
+  const isAllowed = allowlist.includes(origin) || isVercelPreview;
+
+  // Si no hay origin (curl/server-to-server), no bloqueamos.
+  const allowOrigin = origin && isAllowed ? origin : (origin ? "" : "*");
+
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, apikey, content-type, x-proxy-ts, x-proxy-signature",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
+
+  if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin;
+
+  return headers;
+}
+
+function json(req: Request, status: number, obj: unknown) {
+  const cors = getCorsHeaders(req);
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      ...cors,
+      "Content-Type": "application/json; charset=utf-8",
+    },
   });
 }
 
@@ -22,22 +65,26 @@ async function hmacHex(secret: string, msg: string) {
 }
 
 serve(async (req) => {
-  const build_tag = "accept-tracker-invite-v7_hmac_nojwt_20260224";
+  const build_tag = "accept-tracker-invite-v8_cors_always_20260227";
 
   try {
-    if (req.method === "OPTIONS") return json(200, { ok: true, build_tag });
-
-    if (req.method !== "POST") {
-      return json(405, { ok: false, build_tag, error: "METHOD_NOT_ALLOWED" });
+    // ✅ CORS preflight
+    if (req.method === "OPTIONS") {
+      // responder sin depender del body
+      return json(req, 200, { ok: true, build_tag });
     }
 
-    // ✅ Secrets (recuerda: Supabase no permite SUPABASE_*)
+    if (req.method !== "POST") {
+      return json(req, 405, { ok: false, build_tag, error: "METHOD_NOT_ALLOWED" });
+    }
+
+    // ✅ Secrets (Supabase no permite SUPABASE_*)
     const SB_URL = Deno.env.get("SB_URL");
     const SB_SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE");
     const TRACKER_PROXY_SECRET = Deno.env.get("TRACKER_PROXY_SECRET");
 
     if (!SB_URL || !SB_SERVICE_ROLE || !TRACKER_PROXY_SECRET) {
-      return json(500, {
+      return json(req, 500, {
         ok: false,
         build_tag,
         error: "Missing env",
@@ -59,7 +106,7 @@ serve(async (req) => {
     const expected = await hmacHex(TRACKER_PROXY_SECRET, `${fn}.${ts}.${rawBody}`);
 
     if (!ts || !signature || expected !== signature) {
-      return json(401, {
+      return json(req, 401, {
         ok: false,
         build_tag,
         error: "Invalid proxy signature",
@@ -77,7 +124,7 @@ serve(async (req) => {
     const user_id = body?.user_id; // recomendado: mandar user_id
     const email = body?.email;     // fallback si mandas email
 
-    if (!org_id) return json(400, { ok: false, build_tag, error: "Missing org_id" });
+    if (!org_id) return json(req, 400, { ok: false, build_tag, error: "Missing org_id" });
 
     const admin = createClient(SB_URL, SB_SERVICE_ROLE);
 
@@ -92,13 +139,18 @@ serve(async (req) => {
         .maybeSingle();
 
       if (error) {
-        return json(500, { ok: false, build_tag, error: "Resolve user by email failed", detail: error.message });
+        return json(req, 500, {
+          ok: false,
+          build_tag,
+          error: "Resolve user by email failed",
+          detail: error.message,
+        });
       }
       resolvedUserId = data?.id;
     }
 
     if (!resolvedUserId) {
-      return json(400, { ok: false, build_tag, error: "Missing user_id (or email not found)" });
+      return json(req, 400, { ok: false, build_tag, error: "Missing user_id (or email not found)" });
     }
 
     // ✅ Upsert membership tracker
@@ -110,11 +162,15 @@ serve(async (req) => {
       );
 
     if (upsertErr) {
-      return json(500, { ok: false, build_tag, error: "Upsert failed", detail: upsertErr.message });
+      return json(req, 500, { ok: false, build_tag, error: "Upsert failed", detail: upsertErr.message });
     }
 
-    return json(200, { ok: true, build_tag, user_id: resolvedUserId, org_id });
+    return json(req, 200, { ok: true, build_tag, user_id: resolvedUserId, org_id });
   } catch (e) {
-    return json(500, { ok: false, build_tag: "accept-tracker-invite-v7_hmac_nojwt_20260224", error: String((e as any)?.message ?? e) });
+    return json(req, 500, {
+      ok: false,
+      build_tag,
+      error: String((e as any)?.message ?? e),
+    });
   }
 });
