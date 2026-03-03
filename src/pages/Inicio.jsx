@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
+import UpgradeToProButton from "../components/Billing/UpgradeToProButton.jsx";
 
 function HelpCard({ title, description, to }) {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ function HelpCard({ title, description, to }) {
       <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       <div className="mt-4 text-sm font-medium text-blue-700">
-        {t("home.open", { defaultValue: "Abrir â†’" })}
+        {t("home.open", { defaultValue: "Abrir →" })}
       </div>
     </div>
   );
@@ -48,7 +49,6 @@ export default function Inicio() {
       await supabase.auth.signOut();
 
       // 2) Intento best-effort de limpiar cookie tg_at (si existe endpoint)
-      // No rompe si no existe.
       try {
         await fetch("/api/auth/logout", {
           method: "POST",
@@ -62,24 +62,27 @@ export default function Inicio() {
 
       // 3) volver a inicio / login
       navigate("/inicio", { replace: true });
-
-      // En algunas arquitecturas el estado tarda en refrescar: forzamos reload suave
       window.location.reload();
     } finally {
       setSigningOut(false);
     }
   }
 
+  async function getAccessToken() {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+  }
+
   // 1) Loader mientras AuthContext hidrata
   if (loading || !ready) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
-        {t("home.loadingPermissions", { defaultValue: "Resolviendo permisosâ€¦" })}
+        {t("home.loadingPermissions", { defaultValue: "Resolviendo permisos…" })}
       </div>
     );
   }
 
-  // 2) No autenticado â†’ login (botÃ³n legible)
+  // 2) No autenticado → login (botón legible)
   if (!authenticated || !user) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center px-6">
@@ -89,7 +92,7 @@ export default function Inicio() {
           </h1>
 
           <p className="mt-2 text-slate-600">
-            {t("home.loginToContinue", { defaultValue: "Inicia sesiÃ³n para continuar." })}
+            {t("home.loginToContinue", { defaultValue: "Inicia sesión para continuar." })}
           </p>
 
           <div className="mt-5 flex flex-col sm:flex-row gap-3">
@@ -107,7 +110,7 @@ export default function Inicio() {
               onClick={() => navigate("/login")}
               type="button"
             >
-              {t("home.goToLogin", { defaultValue: "Iniciar sesiÃ³n" })}
+              {t("home.goToLogin", { defaultValue: "Iniciar sesión" })}
             </button>
 
             <button
@@ -123,7 +126,7 @@ export default function Inicio() {
               onClick={() => navigate("/help/instructions")}
               type="button"
             >
-              {t("home.quickStart", { defaultValue: "Ver guÃ­a rÃ¡pida" })}
+              {t("home.quickStart", { defaultValue: "Ver guía rápida" })}
             </button>
           </div>
         </div>
@@ -134,16 +137,14 @@ export default function Inicio() {
   // 3) Rol efectivo
   const roleLower = useMemo(() => String(role || "").toLowerCase().trim(), [role]);
 
-  // 4) Estado anÃ³malo (sesiÃ³n sin rol u org)
+  // 4) Estado anómalo (sesión sin rol u org)
   if (!roleLower || !currentOrgId) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
           <div className="flex items-start justify-between gap-3">
             <h1 className="text-xl font-semibold text-slate-900">
-              {t("home.missingContextTitle", {
-                defaultValue: "SesiÃ³n iniciada, pero falta contexto",
-              })}
+              {t("home.missingContextTitle", { defaultValue: "Sesión iniciada, pero falta contexto" })}
             </h1>
 
             <button
@@ -158,18 +159,18 @@ export default function Inicio() {
               onClick={onLogout}
               disabled={signingOut}
               type="button"
-              title={t("common.actions.logout", { defaultValue: "Cerrar sesiÃ³n" })}
+              title={t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
             >
               {signingOut
-                ? t("common.actions.processing", { defaultValue: "Saliendoâ€¦" })
-                : t("common.actions.logout", { defaultValue: "Cerrar sesiÃ³n" })}
+                ? t("common.actions.processing", { defaultValue: "Saliendo…" })
+                : t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
             </button>
           </div>
 
           <p className="text-sm text-slate-600">
             {t("home.missingContextBody", {
               defaultValue:
-                "La sesiÃ³n existe ({{email}}), pero aÃºn no se pudo determinar tu rol u organizaciÃ³n activa.",
+                "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
               email: user.email,
             })}
           </p>
@@ -179,12 +180,12 @@ export default function Inicio() {
               <b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}
             </div>
             <div>
-              <b>{t("home.labels.organization", { defaultValue: "OrganizaciÃ³n:" })}</b>{" "}
+              <b>{t("home.labels.organization", { defaultValue: "Organización:" })}</b>{" "}
               {t("home.orgNotResolved", { defaultValue: "(no resuelta)" })}
             </div>
             <div>
               <b>{t("home.labels.role", { defaultValue: "Rol:" })}</b>{" "}
-              {t("home.roleEmpty", { defaultValue: "(vacÃ­o)" })}
+              {t("home.roleEmpty", { defaultValue: "(vacío)" })}
             </div>
           </div>
 
@@ -214,8 +215,7 @@ export default function Inicio() {
             </h1>
 
             <p className="text-slate-600 mt-2">
-              {t("home.sessionAs", { defaultValue: "SesiÃ³n iniciada como" })}{" "}
-              <b>{roleLower}</b>
+              {t("home.sessionAs", { defaultValue: "Sesión iniciada como" })} <b>{roleLower}</b>
             </p>
 
             <div className="mt-4 text-sm text-slate-700 space-y-1">
@@ -223,8 +223,8 @@ export default function Inicio() {
                 <b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}
               </div>
               <div>
-                <b>{t("home.labels.orgId", { defaultValue: "OrganizaciÃ³n ID:" })}</b>{" "}
-                {currentOrgId}
+                <b>{t("home.labels.orgId", { defaultValue: "Organización ID:" })}</b>{" "}
+                <span className="font-mono">{currentOrgId}</span>
               </div>
             </div>
           </div>
@@ -259,9 +259,38 @@ export default function Inicio() {
               type="button"
             >
               {signingOut
-                ? t("common.actions.processing", { defaultValue: "Saliendoâ€¦" })
-                : t("common.actions.logout", { defaultValue: "Cerrar sesiÃ³n" })}
+                ? t("common.actions.processing", { defaultValue: "Saliendo…" })
+                : t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ✅ Monetización / Plan */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Administrar plan</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Puedes entrar a la página Billing para ver y manejar tu suscripción.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/billing")}
+            className="
+              mt-4
+              rounded-xl
+              border border-slate-300
+              bg-white hover:bg-slate-50
+              text-slate-900 font-medium
+              px-5 py-3
+              transition
+            "
+          >
+            Ir a Billing
+          </button>
+          <div className="mt-3 text-xs text-slate-500">
+            Nota: PREVIEW/TEST. No afecta producción.
           </div>
         </div>
       </div>
@@ -274,34 +303,26 @@ export default function Inicio() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <HelpCard
-            title={t("home.help.quick", { defaultValue: "GuÃ­a rÃ¡pida" })}
-            description={t("home.help.quickDesc", {
-              defaultValue: "Aprende cÃ³mo usar la app paso a paso.",
-            })}
+            title={t("home.help.quick", { defaultValue: "Guía rápida" })}
+            description={t("home.help.quickDesc", { defaultValue: "Aprende cómo usar la app paso a paso." })}
             to="/help/instructions"
           />
 
           <HelpCard
             title={t("home.help.faq", { defaultValue: "Preguntas frecuentes" })}
-            description={t("home.help.faqDesc", {
-              defaultValue: "Respuestas a las dudas mÃ¡s comunes.",
-            })}
+            description={t("home.help.faqDesc", { defaultValue: "Respuestas a las dudas más comunes." })}
             to="/help/faq"
           />
 
           <HelpCard
             title={t("home.help.support", { defaultValue: "Soporte" })}
-            description={t("home.help.supportDesc", {
-              defaultValue: "Â¿Tienes un problema o consulta? ContÃ¡ctanos.",
-            })}
+            description={t("home.help.supportDesc", { defaultValue: "¿Tienes un problema o consulta? Contáctanos." })}
             to="/help/support"
           />
 
           <HelpCard
             title={t("home.help.news", { defaultValue: "Novedades" })}
-            description={t("home.help.newsDesc", {
-              defaultValue: "Cambios, mejoras y actualizaciones recientes.",
-            })}
+            description={t("home.help.newsDesc", { defaultValue: "Cambios, mejoras y actualizaciones recientes." })}
             to="/help/changelog"
           />
         </div>
@@ -309,4 +330,3 @@ export default function Inicio() {
     </div>
   );
 }
-

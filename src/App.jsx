@@ -31,6 +31,11 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
+// ✅ Billing pages (NEW)
+import Billing from "./pages/Billing.jsx";
+import BillingSuccess from "./pages/BillingSuccess.jsx";
+import BillingCancel from "./pages/BillingCancel.jsx";
+
 // Help pages
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
@@ -147,6 +152,19 @@ function AppRoutes() {
         }
       >
         <Route path="/inicio" element={<Inicio />} />
+
+        {/* ✅ Billing routes (protected; Billing requiere org para comprar) */}
+        <Route
+          path="/billing"
+          element={
+            <RequireOrg>
+              <Billing />
+            </RequireOrg>
+          }
+        />
+        <Route path="/billing/success" element={<BillingSuccess />} />
+        <Route path="/billing/cancel" element={<BillingCancel />} />
+
         <Route
           path="/geocerca"
           element={
