@@ -131,12 +131,22 @@ export default function TrackerGpsPage() {
   const PRIMARY = supabase;
 
   useEffect(() => {
-    try {
-      setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
-    } catch {
+  try {
+    const sp = new URLSearchParams(location.search || "");
+    const forceDisclosure =
+      sp.get("show_disclosure") === "1" ||
+      sp.get("force_disclosure") === "1";
+
+    if (forceDisclosure) {
       setDisclosureAccepted(false);
+      return;
     }
-  }, []);
+
+    setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
+  } catch {
+    setDisclosureAccepted(false);
+  }
+}, [location.search]);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
