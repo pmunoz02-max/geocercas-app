@@ -151,14 +151,22 @@ export default function TrackerGpsPage() {
         sp.get("show_disclosure") === "1" ||
         sp.get("force_disclosure") === "1";
 
+      const { access_token, refresh_token } = parseHashTokens(window.location.hash);
+      const hasMagicLinkTokens =
+        !!access_token && !!refresh_token && looksLikeJwt(access_token);
+
       const forceOnceFromSession =
         sessionStorage.getItem(SS_FORCE_DISCLOSURE) === "1";
 
-      if (forceDisclosure || forceOnceFromSession) {
+      if (forceDisclosure || hasMagicLinkTokens || forceOnceFromSession) {
         setDisclosureAccepted(false);
 
         try {
-          sessionStorage.removeItem(SS_FORCE_DISCLOSURE);
+          if (hasMagicLinkTokens) {
+            sessionStorage.setItem(SS_FORCE_DISCLOSURE, "1");
+          } else {
+            sessionStorage.removeItem(SS_FORCE_DISCLOSURE);
+          }
         } catch {}
 
         return;
@@ -169,16 +177,6 @@ export default function TrackerGpsPage() {
       setDisclosureAccepted(false);
     }
   }, [location.search]);
-
-  useEffect(() => {
-    try {
-      const { access_token, refresh_token } = parseHashTokens(window.location.hash);
-
-      if (access_token && refresh_token && looksLikeJwt(access_token)) {
-        sessionStorage.setItem(SS_FORCE_DISCLOSURE, "1");
-      }
-    } catch {}
-  }, []);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
@@ -361,6 +359,10 @@ export default function TrackerGpsPage() {
     if (!access_token || !refresh_token || !looksLikeJwt(access_token)) return;
 
     didHashSessionRef.current = true;
+
+    try {
+      sessionStorage.setItem(SS_FORCE_DISCLOSURE, "1");
+    } catch {}
 
     (async () => {
       try {
@@ -703,6 +705,7 @@ export default function TrackerGpsPage() {
             onClick={() => {
               try {
                 localStorage.setItem(LS_DISCLOSURE_ACCEPTED, "1");
+                sessionStorage.removeItem(SS_FORCE_DISCLOSURE);
               } catch {}
               setDisclosureAccepted(true);
               setLastError(null);
