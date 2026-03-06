@@ -131,22 +131,22 @@ export default function TrackerGpsPage() {
   const PRIMARY = supabase;
 
   useEffect(() => {
-  try {
-    const sp = new URLSearchParams(location.search || "");
-    const forceDisclosure =
-      sp.get("show_disclosure") === "1" ||
-      sp.get("force_disclosure") === "1";
+    try {
+      const sp = new URLSearchParams(location.search || "");
+      const forceDisclosure =
+        sp.get("show_disclosure") === "1" ||
+        sp.get("force_disclosure") === "1";
 
-    if (forceDisclosure) {
+      if (forceDisclosure) {
+        setDisclosureAccepted(false);
+        return;
+      }
+
+      setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
+    } catch {
       setDisclosureAccepted(false);
-      return;
     }
-
-    setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
-  } catch {
-    setDisclosureAccepted(false);
-  }
-}, [location.search]);
+  }, [location.search]);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
@@ -704,9 +704,9 @@ export default function TrackerGpsPage() {
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
-      {!disclosureAccepted && trackerReady && hasSession ? (
+  if (trackerReady && hasSession && !disclosureAccepted) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
         <LocationDisclosure
           onAccepted={() => {
             setDisclosureAccepted(true);
@@ -732,8 +732,12 @@ export default function TrackerGpsPage() {
             defaultValue: "Continuar",
           })}
         />
-      ) : null}
+      </div>
+    );
+  }
 
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
       <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-4">
         <h1 className="text-lg font-semibold text-center">
           {t("trackerGps.title", { defaultValue: "Tracker GPS" })}
