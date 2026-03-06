@@ -1,18 +1,28 @@
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
-const BUILD_TAG = "accept-tracker-invite-proxy-v1_preview_20260305";
+const BUILD_TAG = "accept-tracker-invite-proxy-v2_env_fallback_20260305";
 
 function json(res, status, payload) {
-  res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
-  res.send(JSON.stringify(payload));
+  res
+    .status(status)
+    .setHeader("Content-Type", "application/json; charset=utf-8")
+    .send(JSON.stringify(payload));
+}
+
+function getEnvFirst(...names) {
+  for (const n of names) {
+    const v = String(process.env[n] || "").trim();
+    if (v) return v;
+  }
+  return "";
 }
 
 function getSupabaseFunctionsBaseUrl() {
-  const explicit = String(process.env.SUPABASE_FUNCTIONS_URL || "").trim();
+  const explicit = getEnvFirst("SUPABASE_FUNCTIONS_URL", "VITE_SUPABASE_FUNCTIONS_URL");
   if (explicit) return explicit.replace(/\/+$/, "");
 
-  const sbUrl = String(process.env.SUPABASE_URL || "").trim();
+  const sbUrl = getEnvFirst("SUPABASE_URL", "VITE_SUPABASE_URL");
   if (!sbUrl) return "";
 
   try {
@@ -52,10 +62,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
-    const SUPABASE_ANON_KEY = String(process.env.SUPABASE_ANON_KEY || "").trim();
+    const SUPABASE_URL = getEnvFirst("SUPABASE_URL", "VITE_SUPABASE_URL");
+    const SUPABASE_ANON_KEY = getEnvFirst("SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY");
     const SUPABASE_FUNCTIONS_BASE = getSupabaseFunctionsBaseUrl();
-    const TRACKER_PROXY_SECRET = String(process.env.TRACKER_PROXY_SECRET || "").trim();
+    const TRACKER_PROXY_SECRET = getEnvFirst("TRACKER_PROXY_SECRET", "VITE_TRACKER_PROXY_SECRET");
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_FUNCTIONS_BASE || !TRACKER_PROXY_SECRET) {
       return json(res, 500, {
@@ -67,6 +77,16 @@ export default async function handler(req, res) {
           has_SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY,
           has_SUPABASE_FUNCTIONS_BASE: !!SUPABASE_FUNCTIONS_BASE,
           has_TRACKER_PROXY_SECRET: !!TRACKER_PROXY_SECRET,
+          env_names_checked: {
+            SUPABASE_URL: !!String(process.env.SUPABASE_URL || "").trim(),
+            VITE_SUPABASE_URL: !!String(process.env.VITE_SUPABASE_URL || "").trim(),
+            SUPABASE_ANON_KEY: !!String(process.env.SUPABASE_ANON_KEY || "").trim(),
+            VITE_SUPABASE_ANON_KEY: !!String(process.env.VITE_SUPABASE_ANON_KEY || "").trim(),
+            SUPABASE_FUNCTIONS_URL: !!String(process.env.SUPABASE_FUNCTIONS_URL || "").trim(),
+            VITE_SUPABASE_FUNCTIONS_URL: !!String(process.env.VITE_SUPABASE_FUNCTIONS_URL || "").trim(),
+            TRACKER_PROXY_SECRET: !!String(process.env.TRACKER_PROXY_SECRET || "").trim(),
+            VITE_TRACKER_PROXY_SECRET: !!String(process.env.VITE_TRACKER_PROXY_SECRET || "").trim(),
+          },
         },
       });
     }
@@ -89,7 +109,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Validar usuario con JWT real del tracker
     const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: {
         headers: {
