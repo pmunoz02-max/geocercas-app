@@ -2,14 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
-import { LS_DISCLOSURE_ACCEPTED } from "../components/LocationDisclosure";
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
 
 const LS_TRACKER_ORG_KEY = "geocercas_tracker_org_id";
 const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
-const SS_FORCE_DISCLOSURE = "geocercas_force_disclosure_once";
 
 function isUuid(v) {
   const s = String(v ?? "").trim();
@@ -50,28 +48,6 @@ function parseHashTokens(hash) {
     access_token: hp.get("access_token") || "",
     refresh_token: hp.get("refresh_token") || "",
   };
-}
-
-function hasMagicLinkInHash(hash) {
-  const { access_token, refresh_token } = parseHashTokens(hash);
-  return !!access_token && !!refresh_token && looksLikeJwt(access_token);
-}
-
-function shouldForceDisclosureNow(search, hash) {
-  try {
-    const sp = new URLSearchParams(search || "");
-    const forceDisclosure =
-      sp.get("show_disclosure") === "1" || sp.get("force_disclosure") === "1";
-
-    const forceOnceFromSession =
-      sessionStorage.getItem(SS_FORCE_DISCLOSURE) === "1";
-
-    const hasMagicLinkTokens = hasMagicLinkInHash(hash);
-
-    return forceDisclosure || forceOnceFromSession || hasMagicLinkTokens;
-  } catch {
-    return hasMagicLinkInHash(hash);
-  }
 }
 
 function sleep(ms) {
@@ -134,26 +110,8 @@ export default function TrackerGpsPage() {
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
 
-  const [disclosureAccepted, setDisclosureAccepted] = useState(() => {
-    try {
-      const forced = shouldForceDisclosureNow(
-        window.location.search,
-        window.location.hash
-      );
-      if (forced) return false;
-      return localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1";
-    } catch {
-      return false;
-    }
-  });
-
-  const [mustShowDisclosure, setMustShowDisclosure] = useState(() => {
-    try {
-      return shouldForceDisclosureNow(window.location.search, window.location.hash);
-    } catch {
-      return false;
-    }
-  });
+  // Universal: cada entrada al tracker exige disclosure
+  const [disclosureAccepted, setDisclosureAccepted] = useState(false);
 
   const [debug, setDebug] = useState({
     session_exists: null,
@@ -173,7 +131,7 @@ export default function TrackerGpsPage() {
     last_invoke_token_len: 0,
     last_token_ttl_sec: null,
     last_http_status: null,
-    must_show_disclosure: null,
+    disclosure_mode: "always-on-entry",
   });
 
   const watchIdRef = useRef(null);
@@ -191,29 +149,168 @@ export default function TrackerGpsPage() {
   }, [lang]);
 
   useEffect(() => {
-    try {
-      const forced = shouldForceDisclosureNow(
-        window.location.search,
-        window.location.hash
+    if (!PRIMARY) {
+      setTrackerReady(false);
+      setHasSession(false);
+      setStatus(
+        tt("trackerGps.errors.notConfigured", "Tracker is not configured in this deployment.")
       );
+      setLastError(
+        tt("trackerGps.errors.noSupabaseClient", "Primary Supabase client not found.")
+      );
+      return;
+    }
 
-      if (forced) {
-        setMustShowDisclosure(true);
-        setDisclosureAccepted(false);
-      } else {
-        setMustShowDisclosure(false);
-        setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
+    setTrackerReady(true);
+    setDebug((d) => ({
+      ...d,
+      supabase_url: (import.meta.env.VITE_SUPABASE_URL || "").trim(),
+    }));
+  }, [PRIMARY, lang]);
+
+  useEffect(() => {
+    const pOrg = String(params?.orgId || "").trim();
+    const qOrg = pickOrgIdFromSearch(location?.search || "");
+    const picked = isUuid(pOrg) ? pOrg : isUuid(qOrg) ? qOrg : "";
+
+    setDebug((d) => ({
+      ...d,
+      router_search: location?.search || "",
+      path_orgId: pOrg || "",
+      org_source: isUuid(pOrg) ? "path" : isUuid(qOrg) ? "query" : "none",
+    }));
+
+    if (picked) {
+      setOrgId(picked);
+      try {
+        localStorage.setItem(LS_TRACKER_ORG_KEY, picked);
+      } catch {}
+      return;
+    }
+
+    setOrgId(null);
+    setMembershipStatus("failed");
+    setMembershipDetail(
+      tt(
+        "trackerGps.membership.missingOrgId",
+        "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>."
+      )
+    );
+  }, [location.search, params?.orgId, lang]);
+
+  useEffect(() => {
+    if (!trackerReady || !PRIMARY) return;
+    if (didHashSessionRef.current) return;
+
+    const { access_token, refresh_token } = parseHashTokens(window.location.hash);
+    if (!access_token || !refresh_token || !looksLikeJwt(access_token)) return;
+
+    didHashSessionRef.current = true;
+
+    (async () => {
+      try {
+        setStatus(tt("trackerGps.status.processingMagicLink", "Processing Tracker Magic Link…"));
+
+        const { error } = await PRIMARY.auth.setSession({ access_token, refresh_token });
+        if (error) {
+          setLastError(`${tt("trackerGps.errors.setSession", "setSession error:")} ${error.message}`);
+          return;
+        }
+
+        for (let i = 0; i < 10; i++) {
+          const { data } = await PRIMARY.auth.getSession();
+          if (data?.session?.access_token && looksLikeJwt(data.session.access_token)) break;
+          await sleep(200);
+        }
+
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname + window.location.search
+        );
+
+        setLastError(null);
+        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
+      } catch (e) {
+        setLastError(
+          `${tt("trackerGps.errors.hashSession", "hash session error:")} ${String(e?.message || e)}`
+        );
       }
+    })();
+  }, [trackerReady, PRIMARY, lang]);
 
+  useEffect(() => {
+    if (!trackerReady || !PRIMARY) return;
+
+    let cancelled = false;
+
+    const updateDebugFromToken = (token) => {
+      const payload = token ? decodeJwtPayload(token) : null;
       setDebug((d) => ({
         ...d,
-        must_show_disclosure: forced,
+        token_looks_jwt: looksLikeJwt(token),
+        token_iss: payload?.iss ? String(payload.iss) : "",
+        token_sub: payload?.sub ? String(payload.sub) : "",
+        client_used: "supabase",
       }));
-    } catch {
-      setMustShowDisclosure(false);
-      setDisclosureAccepted(false);
-    }
-  }, [location.search]);
+      setTokenIss(payload?.iss ? String(payload.iss) : "");
+    };
+
+    (async () => {
+      setStatus(tt("trackerGps.status.readingSession", "Reading tracker session…"));
+
+      let session = null;
+      for (let i = 0; i < 15; i++) {
+        const { data } = await PRIMARY.auth.getSession();
+        session = data?.session ?? null;
+        if (session?.access_token) break;
+        await sleep(150);
+      }
+      if (cancelled) return;
+
+      const tokenB = session?.access_token || "";
+      const ok = !!tokenB && looksLikeJwt(tokenB);
+
+      setDebug((d) => ({ ...d, session_exists: !!session }));
+      updateDebugFromToken(tokenB);
+
+      if (!ok) {
+        setHasSession(false);
+        setStatus(tt("trackerGps.status.noSession", "No active tracker session."));
+        setLastError(
+          tt(
+            "trackerGps.errors.openFromMagicLinkOnly",
+            "Open this page only from your Tracker Magic Link."
+          )
+        );
+        return;
+      }
+
+      setHasSession(true);
+      setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
+      setLastError(null);
+    })();
+
+    const { data: sub } = PRIMARY.auth.onAuthStateChange((_event, session) => {
+      const tokenB = session?.access_token || "";
+      setDebug((d) => ({ ...d, session_exists: !!session }));
+      updateDebugFromToken(tokenB);
+
+      if (tokenB && looksLikeJwt(tokenB)) {
+        setHasSession(true);
+        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
+        setLastError(null);
+      }
+    });
+
+    const unsub = sub?.subscription;
+    return () => {
+      cancelled = true;
+      try {
+        unsub?.unsubscribe?.();
+      } catch {}
+    };
+  }, [trackerReady, PRIMARY, lang]);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
@@ -336,177 +433,6 @@ export default function TrackerGpsPage() {
 
     return j;
   }
-
-  useEffect(() => {
-    setDebug((d) => ({
-      ...d,
-      supabase_url: (import.meta.env.VITE_SUPABASE_URL || "").trim(),
-    }));
-
-    if (!PRIMARY) {
-      setTrackerReady(false);
-      setHasSession(false);
-      setStatus(
-        tt("trackerGps.errors.notConfigured", "Tracker is not configured in this deployment.")
-      );
-      setLastError(
-        tt("trackerGps.errors.noSupabaseClient", "Primary Supabase client not found.")
-      );
-      return;
-    }
-
-    setTrackerReady(true);
-  }, [PRIMARY, lang]);
-
-  useEffect(() => {
-    const pOrg = String(params?.orgId || "").trim();
-    const qOrg = pickOrgIdFromSearch(location?.search || "");
-    const picked = isUuid(pOrg) ? pOrg : isUuid(qOrg) ? qOrg : "";
-
-    setDebug((d) => ({
-      ...d,
-      router_search: location?.search || "",
-      path_orgId: pOrg || "",
-      org_source: isUuid(pOrg) ? "path" : isUuid(qOrg) ? "query" : "none",
-    }));
-
-    if (picked) {
-      setOrgId(picked);
-      try {
-        localStorage.setItem(LS_TRACKER_ORG_KEY, picked);
-      } catch {}
-      return;
-    }
-
-    setOrgId(null);
-    setMembershipStatus("failed");
-    setMembershipDetail(
-      tt(
-        "trackerGps.membership.missingOrgId",
-        "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>."
-      )
-    );
-  }, [location?.search, params?.orgId, lang]);
-
-  useEffect(() => {
-    if (!trackerReady || !PRIMARY) return;
-    if (didHashSessionRef.current) return;
-
-    const { access_token, refresh_token } = parseHashTokens(window.location.hash);
-    if (!access_token || !refresh_token || !looksLikeJwt(access_token)) return;
-
-    didHashSessionRef.current = true;
-
-    try {
-      sessionStorage.setItem(SS_FORCE_DISCLOSURE, "1");
-      setMustShowDisclosure(true);
-      setDisclosureAccepted(false);
-    } catch {}
-
-    (async () => {
-      try {
-        setStatus(tt("trackerGps.status.processingMagicLink", "Processing Tracker Magic Link…"));
-
-        const { error } = await PRIMARY.auth.setSession({ access_token, refresh_token });
-        if (error) {
-          setLastError(`${tt("trackerGps.errors.setSession", "setSession error:")} ${error.message}`);
-          return;
-        }
-
-        for (let i = 0; i < 10; i++) {
-          const { data } = await PRIMARY.auth.getSession();
-          if (data?.session?.access_token && looksLikeJwt(data.session.access_token)) break;
-          await sleep(200);
-        }
-
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname + window.location.search
-        );
-
-        setLastError(null);
-        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
-      } catch (e) {
-        setLastError(
-          `${tt("trackerGps.errors.hashSession", "hash session error:")} ${String(e?.message || e)}`
-        );
-      }
-    })();
-  }, [trackerReady, PRIMARY, lang]);
-
-  useEffect(() => {
-    if (!trackerReady || !PRIMARY) return;
-
-    let cancelled = false;
-
-    const updateDebugFromToken = (token) => {
-      const payload = token ? decodeJwtPayload(token) : null;
-      setDebug((d) => ({
-        ...d,
-        token_looks_jwt: looksLikeJwt(token),
-        token_iss: payload?.iss ? String(payload.iss) : "",
-        token_sub: payload?.sub ? String(payload.sub) : "",
-        client_used: "supabase",
-      }));
-      setTokenIss(payload?.iss ? String(payload.iss) : "");
-    };
-
-    (async () => {
-      setStatus(tt("trackerGps.status.readingSession", "Reading tracker session…"));
-
-      let session = null;
-      for (let i = 0; i < 15; i++) {
-        const { data } = await PRIMARY.auth.getSession();
-        session = data?.session ?? null;
-        if (session?.access_token) break;
-        await sleep(150);
-      }
-      if (cancelled) return;
-
-      const tokenB = session?.access_token || "";
-      const ok = !!tokenB && looksLikeJwt(tokenB);
-
-      setDebug((d) => ({ ...d, session_exists: !!session }));
-      updateDebugFromToken(tokenB);
-
-      if (!ok) {
-        setHasSession(false);
-        setStatus(tt("trackerGps.status.noSession", "No active tracker session."));
-        setLastError(
-          tt(
-            "trackerGps.errors.openFromMagicLinkOnly",
-            "Open this page only from your Tracker Magic Link."
-          )
-        );
-        return;
-      }
-
-      setHasSession(true);
-      setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
-      setLastError(null);
-    })();
-
-    const { data: sub } = PRIMARY.auth.onAuthStateChange((_event, session) => {
-      const tokenB = session?.access_token || "";
-      setDebug((d) => ({ ...d, session_exists: !!session }));
-      updateDebugFromToken(tokenB);
-
-      if (tokenB && looksLikeJwt(tokenB)) {
-        setHasSession(true);
-        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
-        setLastError(null);
-      }
-    });
-
-    const unsub = sub?.subscription;
-    return () => {
-      cancelled = true;
-      try {
-        unsub?.unsubscribe?.();
-      } catch {}
-    };
-  }, [trackerReady, PRIMARY, lang]);
 
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
@@ -714,10 +640,8 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, orgId, membershipStatus, disclosureAccepted]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
-  const shouldRenderDisclosure =
-    trackerReady && hasSession && (mustShowDisclosure || !disclosureAccepted);
 
-  if (shouldRenderDisclosure) {
+  if (trackerReady && hasSession && !disclosureAccepted) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
         <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5">
@@ -744,11 +668,6 @@ export default function TrackerGpsPage() {
           <button
             type="button"
             onClick={() => {
-              try {
-                localStorage.setItem(LS_DISCLOSURE_ACCEPTED, "1");
-                sessionStorage.removeItem(SS_FORCE_DISCLOSURE);
-              } catch {}
-              setMustShowDisclosure(false);
               setDisclosureAccepted(true);
               setLastError(null);
               setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
