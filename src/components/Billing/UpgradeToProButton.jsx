@@ -4,6 +4,11 @@ import React, { useMemo, useState } from "react";
 /**
  * Botón universal para abrir Stripe Checkout (PREVIEW/TEST).
  * Requiere orgId (UUID). Usa getAccessToken() para obtener JWT.
+ *
+ * Mejoras:
+ * - Envía success_url y cancel_url explícitas basadas en window.location.origin
+ * - Muestra detail real devuelto por la Edge Function
+ * - Mantiene todo aislado a preview
  */
 export default function UpgradeToProButton({
   orgId,
@@ -25,7 +30,38 @@ export default function UpgradeToProButton({
       String(v || "").trim()
     );
 
-  const disabled = loading || !orgId || !isUuid(orgId) || typeof getAccessToken !== "function";
+  function getOriginSafe() {
+    try {
+      if (typeof window !== "undefined" && window.location?.origin) {
+        return window.location.origin;
+      }
+    } catch (_) {
+      // no-op
+    }
+    return "";
+  }
+
+  function buildUrls() {
+    const origin = getOriginSafe();
+    return {
+      success_url: origin ? `${origin}/billing/success` : "",
+      cancel_url: origin ? `${origin}/billing/cancel` : "",
+    };
+  }
+
+  function stringifyDetail(detail) {
+    if (!detail) return "";
+    if (typeof detail === "string") return detail;
+
+    try {
+      return JSON.stringify(detail, null, 2);
+    } catch (_) {
+      return String(detail);
+    }
+  }
+
+  const disabled =
+    loading || !orgId || !isUuid(orgId) || typeof getAccessToken !== "function";
 
   async function startCheckout() {
     setMsg(null);
@@ -35,6 +71,7 @@ export default function UpgradeToProButton({
         setMsg("Org ID inválido. Revisa que exista una organización activa.");
         return;
       }
+
       if (typeof getAccessToken !== "function") {
         setMsg("No se pudo obtener sesión. Re-login e intenta de nuevo.");
         return;
@@ -48,20 +85,56 @@ export default function UpgradeToProButton({
         return;
       }
 
+      const { success_url, cancel_url } = buildUrls();
+
+      if (!success_url || !cancel_url) {
+        setMsg("No se pudo resolver la URL base del entorno preview.");
+        return;
+      }
+
+      const payload = {
+        plan: String(plan || "PRO").trim().toUpperCase(),
+        org_id: String(orgId || "").trim(),
+        success_url,
+        cancel_url,
+      };
+
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan, org_id: orgId }),
+        body: JSON.stringify(payload),
       });
 
-      const out = await res.json().catch(async () => ({ raw: await res.text() }));
+      const out = await res.json().catch(async () => {
+        try {
+          const raw = await res.text();
+          return { raw };
+        } catch (_) {
+          return { raw: "No response body" };
+        }
+      });
 
       if (!res.ok) {
-        const m = out?.message || out?.error || JSON.stringify(out);
-        setMsg(`Error ${res.status}: ${m}`);
+        const baseMessage =
+          out?.message ||
+          out?.error ||
+          out?.raw ||
+          "Error desconocido al crear Checkout.";
+
+        const detailText =
+          stringifyDetail(out?.detail) ||
+          stringifyDetail(out?.raw) ||
+          "";
+
+        const debugBits = [
+          `Error ${res.status}: ${baseMessage}`,
+          detailText ? `Detalle: ${detailText}` : "",
+        ].filter(Boolean);
+
+        setMsg(debugBits.join("\n\n"));
         return;
       }
 
@@ -70,7 +143,9 @@ export default function UpgradeToProButton({
         return;
       }
 
-      setMsg("Respuesta inesperada (no vino url). Revisa logs de stripe-create-checkout.");
+      setMsg(
+        "Respuesta inesperada: no vino url desde stripe-create-checkout. Revisa logs de la función."
+      );
     } catch (e) {
       setMsg(`Error: ${String(e?.message ?? e)}`);
     } finally {
@@ -92,6 +167,14 @@ export default function UpgradeToProButton({
           <b>Org ID:</b> <span className="font-mono">{orgId || "(no resuelta)"}</span>
         </div>
 
+        <div className="text-xs text-slate-500 break-all">
+          Endpoint: <code className="font-mono">{endpoint}</code>
+        </div>
+
+        <div className="text-xs text-slate-500 break-all">
+          Return URL base: <code className="font-mono">{typeof window !== "undefined" ? window.location.origin : "(sin window)"}</code>
+        </div>
+
         <button
           type="button"
           onClick={startCheckout}
@@ -108,12 +191,8 @@ export default function UpgradeToProButton({
           {loading ? "Abriendo Stripe..." : "Suscribirme a PRO"}
         </button>
 
-        <div className="text-xs text-slate-500">
-          Endpoint: <code className="font-mono">{endpoint}</code>
-        </div>
-
         {msg && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 whitespace-pre-wrap break-words">
             {msg}
           </div>
         )}
