@@ -1,30 +1,21 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-/**
- * CORS universal + whitelist.
- * - Siempre devolver headers CORS (éxito y error).
- * - Soporta OPTIONS correctamente.
- */
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
 
-  // ✅ Ajusta aquí si quieres ser más estricto.
-  // Incluimos producción, previews de Vercel y localhost.
   const allowlist = [
     "https://app.tugeocercas.com",
+    "https://preview.tugeocercas.com",
     "http://localhost:5173",
     "http://localhost:3000",
   ];
 
-  // Permitir previews de Vercel (*.vercel.app) y tu dominio preview si aplica.
   const isVercelPreview =
-    origin.endsWith(".vercel.app") ||
-    origin.includes("vercel.app");
+    origin.endsWith(".vercel.app") || origin.includes("vercel.app");
 
   const isAllowed = allowlist.includes(origin) || isVercelPreview;
 
-  // Si no hay origin (curl/server-to-server), no bloqueamos.
   const allowOrigin = origin && isAllowed ? origin : (origin ? "" : "*");
 
   const headers: Record<string, string> = {
@@ -61,24 +52,27 @@ async function hmacHex(secret: string, msg: string) {
     ["sign"],
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(msg));
-  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 serve(async (req) => {
-  const build_tag = "accept-tracker-invite-v8_cors_always_20260227";
+  const build_tag = "accept-tracker-invite-v9_memberships_canonical_20260305";
 
   try {
-    // ✅ CORS preflight
     if (req.method === "OPTIONS") {
-      // responder sin depender del body
       return json(req, 200, { ok: true, build_tag });
     }
 
     if (req.method !== "POST") {
-      return json(req, 405, { ok: false, build_tag, error: "METHOD_NOT_ALLOWED" });
+      return json(req, 405, {
+        ok: false,
+        build_tag,
+        error: "METHOD_NOT_ALLOWED",
+      });
     }
 
-    // ✅ Secrets (Supabase no permite SUPABASE_*)
     const SB_URL = Deno.env.get("SB_URL");
     const SB_SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE");
     const TRACKER_PROXY_SECRET = Deno.env.get("TRACKER_PROXY_SECRET");
@@ -96,14 +90,15 @@ serve(async (req) => {
       });
     }
 
-    // ✅ Validate proxy signature (same pattern as send_position)
     const ts = req.headers.get("X-Proxy-Ts") || "";
     const signature = req.headers.get("X-Proxy-Signature") || "";
 
-    const rawBody = await req.text(); // exact bytes as received
+    const rawBody = await req.text();
     const fn = "accept-tracker-invite";
-
-    const expected = await hmacHex(TRACKER_PROXY_SECRET, `${fn}.${ts}.${rawBody}`);
+    const expected = await hmacHex(
+      TRACKER_PROXY_SECRET,
+      `${fn}.${ts}.${rawBody}`,
+    );
 
     if (!ts || !signature || expected !== signature) {
       return json(req, 401, {
@@ -121,16 +116,22 @@ serve(async (req) => {
     }
 
     const org_id = body?.org_id;
-    const user_id = body?.user_id; // recomendado: mandar user_id
-    const email = body?.email;     // fallback si mandas email
+    const user_id = body?.user_id;
+    const email = body?.email;
 
-    if (!org_id) return json(req, 400, { ok: false, build_tag, error: "Missing org_id" });
+    if (!org_id) {
+      return json(req, 400, {
+        ok: false,
+        build_tag,
+        error: "Missing org_id",
+      });
+    }
 
     const admin = createClient(SB_URL, SB_SERVICE_ROLE);
 
-    let resolvedUserId = user_id;
+    let resolvedUserId = user_id ?? null;
 
-    // Fallback: si no hay user_id, intentamos resolver por email en profiles (si tu modelo lo permite)
+    // Fallback por email si no vino user_id
     if (!resolvedUserId && email) {
       const { data, error } = await admin
         .from("profiles")
@@ -146,31 +147,97 @@ serve(async (req) => {
           detail: error.message,
         });
       }
-      resolvedUserId = data?.id;
+
+      resolvedUserId = data?.id ?? null;
     }
 
     if (!resolvedUserId) {
-      return json(req, 400, { ok: false, build_tag, error: "Missing user_id (or email not found)" });
+      return json(req, 400, {
+        ok: false,
+        build_tag,
+        error: "Missing user_id (or email not found)",
+      });
     }
 
-    // ✅ Upsert membership tracker
-    const { error: upsertErr } = await admin
-      .from("user_organizations")
-      .upsert(
-        { user_id: resolvedUserId, org_id, role: "tracker" },
-        { onConflict: "user_id,org_id" },
-      );
+    // 1) CANÓNICO: memberships
+    // PK real: (org_id, user_id)
+    const membershipRow = {
+      org_id,
+      user_id: resolvedUserId,
+      role: "tracker",
+      is_default: true,
+      revoked_at: null,
+    };
 
-    if (upsertErr) {
-      return json(req, 500, { ok: false, build_tag, error: "Upsert failed", detail: upsertErr.message });
+    const { error: membershipsErr } = await admin
+      .from("memberships")
+      .upsert(membershipRow, { onConflict: "org_id,user_id" });
+
+    if (membershipsErr) {
+      return json(req, 500, {
+        ok: false,
+        build_tag,
+        error: "Upsert memberships failed",
+        detail: membershipsErr.message,
+      });
     }
 
-    return json(req, 200, { ok: true, build_tag, user_id: resolvedUserId, org_id });
-  } catch (e) {
+    // 2) ORG ACTIVA persistente (best-effort, no fatal)
+    let setOrgOk = false;
+    let setOrgError: string | null = null;
+
+    try {
+      const { error } = await admin.rpc("set_current_org", { p_org_id: org_id });
+      if (error) {
+        setOrgError = error.message;
+      } else {
+        setOrgOk = true;
+      }
+    } catch (e: any) {
+      setOrgError = e?.message ?? String(e);
+    }
+
+    // 3) LEGACY COMPAT: user_organizations (best-effort, no fatal)
+    let legacyOk = false;
+    let legacyError: string | null = null;
+
+    try {
+      const { error } = await admin
+        .from("user_organizations")
+        .upsert(
+          {
+            user_id: resolvedUserId,
+            org_id,
+            role: "tracker",
+          },
+          { onConflict: "org_id,user_id" },
+        );
+
+      if (error) {
+        legacyError = error.message;
+      } else {
+        legacyOk = true;
+      }
+    } catch (e: any) {
+      legacyError = e?.message ?? String(e);
+    }
+
+    return json(req, 200, {
+      ok: true,
+      build_tag,
+      user_id: resolvedUserId,
+      org_id,
+      canonical_membership: true,
+      current_org_persisted: setOrgOk,
+      current_org_error: setOrgError,
+      legacy_user_organizations_ok: legacyOk,
+      legacy_user_organizations_error: legacyError,
+    });
+  } catch (e: any) {
     return json(req, 500, {
       ok: false,
       build_tag,
-      error: String((e as any)?.message ?? e),
+      error: e?.message ?? String(e),
     });
   }
 });

@@ -1,17 +1,7 @@
-﻿// src/pages/TrackerPage.jsx
-// PÃ¡gina mÃ­nima para el TRACKER:
-// - Se usa como destino del Magic Link (/tracker).
-// - Detecta la organizaciÃ³n automÃ¡ticamente.
-// - Muestra un mensaje sencillo y monta el componente <Tracker /> para
-//   empezar a enviar posiciones.
-//
-// IMPORTANTE: Ajusta la ruta de import de useAuth y de Tracker si en tu
-// proyecto real estÃ¡n en otra carpeta.
-
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
-import Tracker from "./Tracker.jsx"; // si Tracker.jsx estÃ¡ en otra carpeta, corrige el path
+import Tracker from "./Tracker.jsx";
 
 export default function TrackerPage() {
   const { user, currentOrg, setCurrentOrg } = useAuth();
@@ -19,9 +9,6 @@ export default function TrackerPage() {
   const [resolviendoOrg, setResolviendoOrg] = useState(true);
   const [error, setError] = useState(null);
 
-  // ------------------------------------------------------------
-  // 1. Resolver automÃ¡ticamente la organizaciÃ³n del tracker
-  // ------------------------------------------------------------
   useEffect(() => {
     let cancelado = false;
 
@@ -31,86 +18,118 @@ export default function TrackerPage() {
         return;
       }
 
-      // Ya hay organizaciÃ³n activa â†’ no hacemos nada mÃ¡s
       if (currentOrg && currentOrg.id) {
         setResolviendoOrg(false);
         return;
       }
 
       try {
-        // A) memberships en user_organizations
-        const { data: memberships, error: memErr } = await supabase
-          .from("user_organizations")
-          .select("org_id, role")
-          .eq("user_id", user.id);
+        let orgId = null;
+        let role = null;
 
-        if (memErr) {
-          console.error("[TrackerPage] memberships error:", memErr);
-          throw memErr;
+        // 1) CANÓNICO: memberships
+        const { data: membership, error: membershipErr } = await supabase
+          .from("memberships")
+          .select("org_id, role, is_default, revoked_at")
+          .eq("user_id", user.id)
+          .is("revoked_at", null)
+          .order("is_default", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (membershipErr) {
+          console.warn("[TrackerPage] memberships error:", membershipErr);
         }
 
-        const lista = memberships || [];
-        if (lista.length === 0) {
-          setError(
-            "Tu usuario no tiene ninguna organizaciÃ³n asignada. Contacta al administrador."
-          );
-          setResolviendoOrg(false);
+        if (membership?.org_id) {
+          orgId = membership.org_id;
+          role = membership.role || "tracker";
+        }
+
+        // 2) Fallback legacy solo si memberships no resolvió nada
+        if (!orgId) {
+          const { data: legacyRows, error: legacyErr } = await supabase
+            .from("user_organizations")
+            .select("org_id, role")
+            .eq("user_id", user.id)
+            .limit(1);
+
+          if (legacyErr) {
+            console.warn("[TrackerPage] user_organizations fallback error:", legacyErr);
+          }
+
+          const legacy = Array.isArray(legacyRows) ? legacyRows[0] : null;
+          if (legacy?.org_id) {
+            orgId = legacy.org_id;
+            role = legacy.role || "tracker";
+          }
+        }
+
+        if (!orgId) {
+          if (!cancelado) {
+            setError(
+              "Tu usuario no tiene ninguna organización activa asignada. Contacta al administrador."
+            );
+          }
           return;
         }
 
-        // Para el tracker asumimos que solo pertenece a una org; tomamos la primera
-        const m = lista[0];
-
-        // B) Traer info de esa organizaciÃ³n
+        // 3) Leer datos de organización
         const { data: orgData, error: orgErr } = await supabase
           .from("organizations")
           .select("id, name, slug")
-          .eq("id", m.org_id)
+          .eq("id", orgId)
           .maybeSingle();
 
         if (orgErr) {
-          console.error("[TrackerPage] organizations error:", orgErr);
-          throw orgErr;
+          console.warn("[TrackerPage] organizations error:", orgErr);
         }
 
         const orgObj = {
-          id: orgData?.id || m.org_id,
+          id: orgData?.id || orgId,
           name: orgData?.name || "(sin nombre)",
           code: orgData?.slug || null,
-          role: m.role || "TRACKER",
+          role: role || "tracker",
         };
 
         if (!cancelado) {
           setCurrentOrg(orgObj);
         }
+
+        // 4) Persistir org activa (best-effort)
+        try {
+          await supabase.rpc("set_current_org", { p_org_id: orgId });
+        } catch (e) {
+          console.warn("[TrackerPage] set_current_org warning:", e);
+        }
       } catch (e) {
         if (!cancelado) {
-          console.error("[TrackerPage] error resolviendo organizaciÃ³n:", e);
+          console.error("[TrackerPage] error resolviendo organización:", e);
           setError(
-            "No se pudo determinar tu organizaciÃ³n. Contacta al administrador."
+            "No se pudo determinar tu organización. Contacta al administrador."
           );
         }
       } finally {
-        if (!cancelado) setResolviendoOrg(false);
+        if (!cancelado) {
+          setResolviendoOrg(false);
+        }
       }
     }
 
     ensureOrg();
+
     return () => {
       cancelado = true;
     };
   }, [user, currentOrg, setCurrentOrg]);
 
-  // ------------------------------------------------------------
-  // 2. Render segÃºn estado
-  // ------------------------------------------------------------
   if (!user) {
     return (
       <div className="p-6 max-w-xl mx-auto">
         <h1 className="text-2xl font-semibold mb-2">Acceso al tracker</h1>
         <p className="text-gray-600 text-sm">
-          No se encontrÃ³ una sesiÃ³n activa. Abre el enlace de Magic Link que
-          recibiste en tu correo para comenzar a enviar tu ubicaciÃ³n.
+          No se encontró una sesión activa. Abre el enlace de Magic Link que
+          recibiste en tu correo para comenzar a enviar tu ubicación.
         </p>
       </div>
     );
@@ -119,16 +138,16 @@ export default function TrackerPage() {
   if (resolviendoOrg) {
     return (
       <div className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Preparando trackerâ€¦</h1>
+        <h1 className="text-2xl font-semibold mb-2">Preparando tracker…</h1>
         <p className="text-gray-600 text-sm">
-          Estamos verificando tu organizaciÃ³n y preparando el envÃ­o de tu
-          ubicaciÃ³n. Por favor, espera un momento.
+          Estamos verificando tu organización y preparando el envío de tu
+          ubicación. Por favor, espera un momento.
         </p>
       </div>
     );
   }
 
-  const orgName = currentOrg?.name || "tu organizaciÃ³n";
+  const orgName = currentOrg?.name || "tu organización";
 
   return (
     <div className="p-6 max-w-xl mx-auto">
@@ -140,18 +159,15 @@ export default function TrackerPage() {
         </div>
       ) : (
         <div className="border border-emerald-300 bg-emerald-50 text-emerald-800 rounded px-4 py-3 text-sm mb-4">
-          {/* Mensaje principal que quieres */}
-          Usted estÃ¡ enviando su posiciÃ³n a la organizaciÃ³n{" "}
+          Usted está enviando su posición a la organización{" "}
           <span className="font-semibold">{orgName}</span>{" "}
           a la que usted pertenece.
         </div>
       )}
 
       <div className="border rounded-xl p-3 bg-white">
-        {/* AquÃ­ se monta el componente que realmente hace el envÃ­o de posiciones */}
         <Tracker />
       </div>
     </div>
   );
 }
-
