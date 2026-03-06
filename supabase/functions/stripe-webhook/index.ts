@@ -1,20 +1,18 @@
-﻿// C:\dev\geocercas-app-starter\geocercas-app\supabase\functions\stripe-webhook\index.ts
+﻿// supabase/functions/stripe-webhook/index.ts
 import Stripe from "npm:stripe@16.2.0";
 
 /**
  * Stripe Webhook - App Geocercas (PREVIEW)
- * - Verifica firma Stripe-Signature (ASYNC en Deno)
- * - Extrae org_id desde metadata (session/subscription/invoice)
- * - Si invoice llega "parcial", re-trae invoice con expand y vuelve a buscar org_id
- * - Llama RPC (service_role) para aplicar estado a org_billing
+ *
+ * Mejoras:
+ * - Logs claros en cada fase
+ * - Respuestas explícitas para Missing stripe-signature / Invalid signature / RPC failed
+ * - Mantiene guard de preview por metadata.env
+ * - Convierte epoch -> ISO para RPC timestamptz
  *
  * IMPORTANTE:
- * - PREVIEW guard: si metadata.env existe y NO coincide con "preview", se ignora el evento (200 OK).
- * - La RPC espera:
- *   p_current_period_end timestamptz
- *   p_trial_end timestamptz
- *   p_canceled_at timestamptz
- *   (NO epoch seconds). Por eso convertimos epoch -> ISO.
+ * - Esta función debe tener verify_jwt = false
+ * - STRIPE_WEBHOOK_SECRET debe ser el whsec_... del webhook exacto configurado en Stripe TEST
  */
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
@@ -36,6 +34,18 @@ function mustGet(name: string, value: string) {
   return value;
 }
 
+function logInfo(message: string, extra: Record<string, unknown> = {}) {
+  console.log(JSON.stringify({ level: "info", message, ...extra }));
+}
+
+function logWarn(message: string, extra: Record<string, unknown> = {}) {
+  console.warn(JSON.stringify({ level: "warn", message, ...extra }));
+}
+
+function logError(message: string, extra: Record<string, unknown> = {}) {
+  console.error(JSON.stringify({ level: "error", message, ...extra }));
+}
+
 function asString(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
@@ -48,34 +58,25 @@ function asNumberOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Convierte epoch seconds (Stripe) -> ISO string (timestamptz).
- * Si ya viene string ISO, la deja.
- */
 function toIsoTimestamptz(v: unknown): string | null {
   if (v === null || v === undefined) return null;
 
-  // si viene Date
   if (v instanceof Date) {
     const t = v.getTime();
     return Number.isFinite(t) ? new Date(t).toISOString() : null;
   }
 
-  // si viene number/epoch seconds
   const n = asNumberOrNull(v);
   if (n !== null) {
-    // Stripe usa seconds
     const ms = Math.round(n * 1000);
     const d = new Date(ms);
     const t = d.getTime();
     return Number.isFinite(t) ? d.toISOString() : null;
   }
 
-  // si viene string (intentamos parsear)
   const s = asString(v);
   if (!s) return null;
 
-  // si es dígito puro, tratarlo como epoch seconds string
   if (/^\d+$/.test(s)) {
     const nn = asNumberOrNull(s);
     if (nn === null) return null;
@@ -84,7 +85,6 @@ function toIsoTimestamptz(v: unknown): string | null {
     return Number.isFinite(t) ? d.toISOString() : null;
   }
 
-  // parse ISO normal
   const d = new Date(s);
   const t = d.getTime();
   return Number.isFinite(t) ? d.toISOString() : null;
@@ -162,18 +162,24 @@ type ApplyRpcInput = {
   p_stripe_price_id: string | null;
   p_status: string | null;
 
-  // RPC espera timestamptz:
   p_current_period_end: string | null;
   p_trial_end: string | null;
   p_canceled_at: string | null;
 
   p_cancel_at_period_end: boolean | null;
-
-  p_payload: unknown; // jsonb
+  p_payload: unknown;
 };
 
 async function callApplyRpc(payload: ApplyRpcInput) {
   const url = `${SB_URL}/rest/v1/rpc/apply_stripe_subscription_to_org_billing`;
+
+  logInfo("Calling billing RPC", {
+    event_id: payload.p_event_id,
+    event_type: payload.p_event_type,
+    org_id: payload.p_org_id,
+    stripe_subscription_id: payload.p_stripe_subscription_id,
+    stripe_customer_id: payload.p_stripe_customer_id,
+  });
 
   const res = await fetch(url, {
     method: "POST",
@@ -185,14 +191,30 @@ async function callApplyRpc(payload: ApplyRpcInput) {
     body: JSON.stringify(payload),
   });
 
+  const text = await res.text().catch(() => "");
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    logError("Billing RPC failed", {
+      status: res.status,
+      status_text: res.statusText,
+      body: text,
+      event_id: payload.p_event_id,
+      org_id: payload.p_org_id,
+    });
     throw new Error(`RPC failed: ${res.status} ${res.statusText} :: ${text}`);
   }
 
-  const ct = res.headers.get("content-type") ?? "";
-  if (ct.includes("application/json")) return await res.json().catch(() => ({}));
-  return {};
+  logInfo("Billing RPC applied", {
+    status: res.status,
+    event_id: payload.p_event_id,
+    org_id: payload.p_org_id,
+  });
+
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {};
+  }
 }
 
 Deno.serve(async (req) => {
@@ -202,12 +224,28 @@ Deno.serve(async (req) => {
     mustGet("SB_URL", SB_URL);
     mustGet("SB_SERVICE_ROLE", SB_SERVICE_ROLE);
 
-    if (req.method !== "POST") return json(405, { error: "Method not allowed" });
+    if (req.method !== "POST") {
+      logWarn("Method not allowed", { method: req.method });
+      return json(405, { error: "Method not allowed" });
+    }
 
     const sig = req.headers.get("stripe-signature");
-    if (!sig) return json(400, { error: "Missing stripe-signature header" });
+    if (!sig) {
+      logWarn("Missing stripe-signature header", {
+        user_agent: req.headers.get("user-agent"),
+        content_length: req.headers.get("content-length"),
+      });
+      return json(400, { error: "Missing stripe-signature header" });
+    }
 
     const rawBody = new TextDecoder().decode(await req.arrayBuffer());
+
+    logInfo("Webhook received", {
+      has_signature: true,
+      body_length: rawBody.length,
+      user_agent: req.headers.get("user-agent"),
+      host: req.headers.get("host"),
+    });
 
     const stripe = new Stripe(STRIPE_SECRET_KEY, {
       apiVersion: "2024-06-20",
@@ -222,13 +260,23 @@ Deno.serve(async (req) => {
         STRIPE_WEBHOOK_SECRET,
       );
     } catch (err) {
+      const detail = String((err as any)?.message ?? err);
+      logError("Invalid webhook signature", {
+        detail,
+        webhook_secret_prefix: STRIPE_WEBHOOK_SECRET ? STRIPE_WEBHOOK_SECRET.slice(0, 8) : null,
+      });
       return json(400, {
         error: "Invalid signature",
-        detail: String((err as any)?.message ?? err),
+        detail,
       });
     }
 
     const type = event.type;
+
+    logInfo("Webhook verified", {
+      event_id: event.id,
+      type,
+    });
 
     const interesting = new Set<string>([
       "checkout.session.completed",
@@ -240,6 +288,10 @@ Deno.serve(async (req) => {
     ]);
 
     if (!interesting.has(type)) {
+      logInfo("Webhook ignored: event not tracked", {
+        event_id: event.id,
+        type,
+      });
       return json(200, { received: true, ignored: type });
     }
 
@@ -252,8 +304,13 @@ Deno.serve(async (req) => {
         ? `metadata.env=${env} differs from expected=${EXPECTED_ENV}`
         : null;
 
-    // 🔒 PREVIEW guard: si viene env explícito y NO es preview, ignoramos.
     if (env && env !== EXPECTED_ENV) {
+      logWarn("Webhook ignored: env mismatch", {
+        event_id: event.id,
+        type,
+        env,
+        expected_env: EXPECTED_ENV,
+      });
       return json(200, { received: true, ignored: type, env_warning });
     }
 
@@ -262,15 +319,18 @@ Deno.serve(async (req) => {
     let stripe_price_id: string | null = null;
     let status: string | null = null;
 
-    // campos opcionales de sub
     let cancel_at_period_end: boolean | null = null;
-
-    // ✅ OJO: aquí guardamos epoch en variables, pero luego convertimos a ISO para RPC
     let canceled_at_epoch: number | null = null;
     let trial_end_epoch: number | null = null;
     let current_period_end_epoch: number | null = null;
 
     const hydrateFromSubscription = async (subId: string) => {
+      logInfo("Hydrating from Stripe subscription", {
+        event_id: event.id,
+        type,
+        subscription_id: subId,
+      });
+
       const sub = await stripe.subscriptions.retrieve(subId);
 
       org_id = org_id ?? pickOrgIdFromAny(sub);
@@ -301,6 +361,13 @@ Deno.serve(async (req) => {
       stripe_customer_id = obj?.customer ? asString(obj.customer) : null;
       stripe_subscription_id = obj?.subscription ? asString(obj.subscription) : null;
 
+      logInfo("Processing checkout.session.completed", {
+        event_id: event.id,
+        stripe_customer_id,
+        stripe_subscription_id,
+        org_id,
+      });
+
       if (stripe_subscription_id) {
         await hydrateFromSubscription(stripe_subscription_id);
       }
@@ -323,6 +390,15 @@ Deno.serve(async (req) => {
       current_period_end_epoch =
         obj?.current_period_end !== undefined ? asNumberOrNull(obj.current_period_end) : null;
 
+      logInfo("Processing customer.subscription event", {
+        event_id: event.id,
+        type,
+        stripe_customer_id,
+        stripe_subscription_id,
+        org_id,
+        status,
+      });
+
       if (!org_id && stripe_subscription_id) {
         await hydrateFromSubscription(stripe_subscription_id);
       }
@@ -330,10 +406,22 @@ Deno.serve(async (req) => {
       stripe_customer_id = obj?.customer ? asString(obj.customer) : null;
       stripe_subscription_id = pickSubscriptionIdFromInvoice(obj);
 
-      // ✅ Si invoice llegó parcial, lo re-traemos expandido para metadata
+      logInfo("Processing invoice event", {
+        event_id: event.id,
+        type,
+        stripe_customer_id,
+        stripe_subscription_id,
+        org_id,
+      });
+
       if (!org_id) {
         const invoiceId = obj?.id ? asString(obj.id) : null;
         if (invoiceId) {
+          logInfo("Hydrating full invoice for metadata", {
+            event_id: event.id,
+            invoice_id: invoiceId,
+          });
+
           const invFull = await stripe.invoices.retrieve(invoiceId, {
             expand: ["lines.data", "parent.subscription_details"],
           });
@@ -347,6 +435,11 @@ Deno.serve(async (req) => {
     }
 
     if (!org_id) {
+      logWarn("org_id not found in metadata", {
+        event_id: event.id,
+        type,
+        env,
+      });
       return json(200, {
         received: true,
         warning: "org_id not found in metadata",
@@ -355,12 +448,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ✅ Convertimos epoch -> ISO (timestamptz) para la RPC
     const p_current_period_end = toIsoTimestamptz(current_period_end_epoch);
     const p_trial_end = toIsoTimestamptz(trial_end_epoch);
     const p_canceled_at = toIsoTimestamptz(canceled_at_epoch);
 
-    // payload completo para auditoría / debug en SQL
     const fullPayload = {
       stripe_event: event,
       extracted: {
@@ -395,6 +486,16 @@ Deno.serve(async (req) => {
       p_payload: fullPayload,
     });
 
+    logInfo("Webhook applied successfully", {
+      event_id: event.id,
+      type,
+      org_id,
+      stripe_customer_id,
+      stripe_subscription_id,
+      stripe_price_id,
+      status,
+    });
+
     return json(200, {
       received: true,
       ok: true,
@@ -411,9 +512,11 @@ Deno.serve(async (req) => {
       env_warning,
     });
   } catch (e) {
+    const detail = String((e as any)?.message ?? e);
+    logError("Webhook fatal error", { detail });
     return json(500, {
       error: "Webhook error",
-      detail: String((e as any)?.message ?? e),
+      detail,
     });
   }
 });
